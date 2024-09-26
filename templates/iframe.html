@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic iFrame with Movable & Hideable Controls</title>
+    <style>
+        /* Set iframe to fill the entire window */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Movable control panel */
+        #controls {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            z-index: 100;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        /* Draggable handle inside the controls */
+        #dragHandle {
+            width: 100%;
+            background-color: #ccc;
+            padding: 5px;
+            cursor: move;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        /* Button to toggle visibility of controls */
+        #toggleBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 101;
+            background-color: #f1f1f1;
+            padding: 5px 10px;
+            border: none;
+            cursor: move;
+            border-radius: 5px;
+        }
+
+        /* Hide button style */
+        #controls.hidden {
+            display: none;
+        }
+    </style>
+
+    <script>
+        // Function to update the iframe URL based on the text box input
+        function updateIframe() {
+            let url = document.getElementById('urlInput').value;
+            document.getElementById('iframe').src = url;
+        }
+
+        // Function to toggle visibility of the controls
+        function toggleControls() {
+            const controls = document.getElementById('controls');
+            controls.classList.toggle('hidden');
+        }
+
+        // Function to make elements draggable using a handle
+        function makeDraggable(elmnt, handle) {
+            var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e = e || window.event;
+                e.preventDefault();
+                // Get the mouse cursor position at startup:
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e = e || window.event;
+                e.preventDefault();
+                // Calculate the new cursor position:
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                // Set the element's new position:
+                elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+                elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+            }
+
+            function closeDragElement() {
+                // Stop moving when mouse button is released:
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        }
+
+        window.onload = function() {
+            // Make the controls draggable using the drag handle
+            makeDraggable(document.getElementById("controls"), document.getElementById("dragHandle"));
+            makeDraggable(document.getElementById("toggleBtn"), document.getElementById("toggleBtn"));
+        }
+    </script>
+</head>
+<body>
+
+    <!-- Toggle Button to show/hide the controls -->
+    <button id="toggleBtn" onclick="toggleControls()">Toggle Controls</button>
+
+    <!-- Input and button controls -->
+    <div id="controls">
+        <div id="dragHandle">Drag here</div> <!-- Handle for dragging -->
+        <label for="urlInput">Enter URL: </label>
+        <input type="text" id="urlInput" placeholder="Enter a URL" style="width: 300px;">
+        <button onclick="updateIframe()">Update iFrame</button>
+    </div>
+
+    <!-- The iFrame that will load the URL -->
+    <iframe id="iframe" src="https://example.com"></iframe>
+
+</body>
+</html>
