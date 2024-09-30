@@ -5,8 +5,10 @@ from cellmap_flow.settings import MODEL_YAML
 import os
 import zarr
 
+from cellmap_flow.server import start, App
 
-def check_zarr_data(path):
+
+def check_zarr_data(container_path,dataset_path):
     """
     Checks if the given path is a valid Zarr dataset with a shape attribute.
 
@@ -16,6 +18,7 @@ def check_zarr_data(path):
     Returns:
         bool: True if the path is a valid Zarr dataset with a shape attribute, False otherwise.
     """
+    path = os.path.join(container_path, dataset_path)
     if not os.path.exists(path):
         return False
 
@@ -84,7 +87,14 @@ def start():
         )
     valid = False
     while not valid:
-        data_path = click.prompt("Enter the path to the data dataset", type=str)
-        valid = check_zarr_data(data_path)
+        container_path = click.prompt("Enter the container .zarr path", type=str)
+        dataset_path = click.prompt("Enter the path to the dataset", type=str)
+        valid = check_zarr_data(container_path,dataset_path)
         if not valid:
             click.echo("Invalid data path. Please try again..")
+    
+    click.echo(f"Starting Cellmap Flow with model {model} and checkpoint {checkpoint}")
+
+
+    app = App(checkpoint.path, container_path, dataset_path)
+    start(app)

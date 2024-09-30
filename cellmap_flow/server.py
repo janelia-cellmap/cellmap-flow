@@ -1,10 +1,11 @@
-import argparse
-from http import HTTPStatus
-from flask import Flask, jsonify
-from flask_cors import CORS
+# import argparse
+# from http import HTTPStatus
+# from flask import Flask, jsonify
+# from flask_cors import CORS
 
 import numpy as np
 import numcodecs
+import json
 from zarr.n5 import N5ChunkWrapper
 import torch
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,8 @@ from pydantic import BaseModel
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from starlette.responses import Response
+from fastapi.encoders import jsonable_encoder
+from cellmap_flow.settings import KEY_SSL, CERT_SSL
 
 # NOTE: Normally we would just load in run but here we have to recreate it to save time since our run has so many points
 from funlib.geometry import Coordinate
@@ -21,9 +24,9 @@ from dacapo.experiments.architectures import CNNectomeUNetConfig
 
 from dacapo.experiments.tasks import DistanceTaskConfig
 import gc
-
-app = Flask(__name__)
-CORS(app)
+import uvicorn
+# app = Flask(__name__)
+# CORS(app)
 
 
 # This demo produces an RGB volume for aesthetic purposes.
@@ -55,7 +58,7 @@ class StartServerSequest(ActiveBaseModel):
 
 class App(FastAPI):
 
-    def __init__(self, model=None, ds=None) -> None:
+    def __init__(self, model_path, ds_container,ds_dataset) -> None:
         super().__init__(
             title="Cellmap Flow backend server API",
             description=description,
@@ -80,10 +83,7 @@ class App(FastAPI):
         # global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
         # CONFIG_STORE = create_config_store()
         # WEIGHTS_STORE = create_weights_store()
-        DS = open_ds(
-            "/nrs/cellmap/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr",
-            "recon-1/em/fibsem-uint8/s1",
-        )
+        DS = open_ds(ds_container, ds_dataset)
         VOL_SHAPE = np.array([20_000 * 8, 20_000 * 8, 20_000 * 8, NUM_CHANNELS])
 
         INPUT_VOXEL_SIZE = [16, 16, 16]
@@ -117,42 +117,12 @@ class App(FastAPI):
         #     "finetuned_3d_lsdaffs_weight_ratio_0.5_jrc_22ak351-leaf-3m_plasmodesmata_all_training_points_unet_default_trainer_lr_0.00005_bs_2__0",
         #     265000,
         # )
-        path_to_weights = "/nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000"
-        weights = torch.load(path_to_weights, map_location="cuda")
+        path_to_weights = model_path
+        # weights = torch.load(path_to_weights, map_location="cuda")
+        weights = torch.load(path_to_weights,torch.device('cpu'))
         MODEL.load_state_dict(weights.model)
-        MODEL.to("cuda")
+        # MODEL.to("cuda")
         MODEL.eval()
-
-        @self.get("/data/{name}/{path:path}")
-        async def get_kleio_data(name: str, path: str):
-            print(f" data {name} - path {path}")
-
-            if name not in self._deployed_data:
-                raise HTTPException(status_code=404, detail="Don't exist")
-            try:
-                reader = self._deployed_data[name].reader
-                data_type = self._deployed_data[name].data_type
-
-                print(f"Got reader {reader}")
-
-                is_chunk = False
-                last_element = path.split("/")[-1]
-
-                if last_element.isdigit() or last_element.split(".")[-1].isdigit():
-                    print("is chunk")
-                    is_chunk = True
-
-                if is_chunk:
-                    if data_type is DataType.kleio:
-                        path = format_chunk_n5_to_zarr_key(path)
-                    result = reader[path]
-                    return Response(result, media_type="binary/octet-stream")
-                else:
-                    result = reader[path]
-                    print(f"Got result {result}")
-                    return json.loads(result.decode())
-            except Exception as e:
-                raise HTTPException(status_code=404, detail=f"error {e}")
 
         @self.get("/attributes.json")
         async def top_level_attributes():
@@ -168,7 +138,8 @@ class App(FastAPI):
                 "units": ["nm", "nm", "nm", ""],
                 "translate": [0, 0, 0, 0],
             }
-            return json.loads(attr)
+            return jsonable_encoder(attr)
+
 
         @self.get("/s<int:scale>/attributes.json")
         def attributes(scale):
@@ -189,7 +160,7 @@ class App(FastAPI):
                 "dimensions": (VOL_SHAPE[:3] // 2**scale).tolist()
                 + [int(VOL_SHAPE[3])],
             }
-            return json.loads(attr)
+            return jsonable_encoder(attr)
 
         @self.get(
             "/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>"
@@ -207,7 +178,7 @@ class App(FastAPI):
             print(chunk_x, chunk_y, chunk_z, chunk_c)
             corner = BLOCK_SHAPE[:3] * np.array([chunk_x, chunk_y, chunk_z])
             box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
-            block_vol = gradient_data_for_chunk(scale, box)
+            block_vol = inference_for_chunk(scale, box)
             return Response(
                 CHUNK_ENCODER.encode(block_vol), media_type="binary/octet-stream"
             )
@@ -219,8 +190,16 @@ class App(FastAPI):
             # )
 
 
-def start(app, port=5000):
-    return uvicorn.run(app, host="0.0.0.1", port=port, log_level="info")
+def start(app, port=5007):
+
+    return uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port, 
+        log_level="info",
+        ssl_keyfile=KEY_SSL,
+        ssl_certfile=CERT_SSL,
+    )
 
 
 def gradient_data_for_chunk(scale, box):
@@ -283,7 +262,8 @@ def inference_for_chunk(scale, box):
     # prepend batch and channel dimensions
     data = data[np.newaxis, np.newaxis, ...].astype(np.float32)
     # move to cuda
-    data = torch.from_numpy(data).to("cuda")
+    data = torch.from_numpy(data)
+    # .to("cuda")
     with torch.no_grad():
         block_vol_czyx = MODEL(data)
         block_vol_czyx = block_vol_czyx.cpu().numpy()
@@ -291,6 +271,6 @@ def inference_for_chunk(scale, box):
         print(block_vol_czyx.shape)
     # block_vol_czyx = np.swapaxes(block_vol_czyx, 1, 3).copy()
     del data
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     gc.collect()
     return block_vol_czyx
