@@ -1,0 +1,33 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cellmap-flow"
+version = "0.1.0"
+description = "A CLI tool for Cellmap Flow"
+requires-python = ">=3.10"
+authors = [
+    { email = "ackermand@hhmi.org", name = "David Ackerman" },
+    { email = "zouinkhim@hhmi.org", name = "Marwan Zouinkhi" },
+]
+readme = "README.md"
+license = { text = "BSD 3-Clause License" }
+
+[project.scripts]
+cellmap-flow = "cellmap_flow.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["cellmap_flow"]
+
+dependencies = [
+    "universal-pathlib>=0.2.2,<1.0.0",
+    "zarr",
+    "click",
+    "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "numpy",
+    "starlette",
+    ]
