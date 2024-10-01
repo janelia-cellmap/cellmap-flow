@@ -43,6 +43,7 @@ You can browse the data in neuroglancer after configuring the viewer with the ap
 # Then can run like this:
 # gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:8000 --workers 2 --threads 1 example_virtual_n5:app
 # NOTE: You will probably have to access the host:8000 separately and say it is safe to go there
+# use this works with tensorstore: python example_virtual_n5_marwan.py
 
 from dacapo.store.create_store import create_config_store, create_weights_store
 from dacapo.experiments import Run
@@ -324,6 +325,87 @@ def update_equivalences():
             EQUIVALENCES.union(ids[i], ids[j])
     update_state()
 
+
+import tensorstore as ts
+
+TENSORSTORE = None
+
+LOADED_TENSORSTORE = False
+
+
+@app.before_request
+def open_tensorstore():
+    global TENSORSTORE, LOADED_TENSORSTORE
+    if not LOADED_TENSORSTORE:
+        LOADED_TENSORSTORE = True
+        print("Opening TensorStore")
+        try:
+            dataset_future = ts.open(
+                {
+                    "driver": "n5",
+                    "kvstore": {
+                        "driver": "http",
+                        "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
+                    },
+                    "context": {
+                        "cache_pool": {"total_bytes_limit": 100_000_000},
+                        "data_copy_concurrency": {"limit": 1},
+                        "file_io_concurrency": {"limit": 1},
+                    },
+                    "recheck_cached_data": "open",
+                }
+            )
+            TENSORSTORE = dataset_future.result()
+            with VIEWER.txn() as s:
+                s.layers[f"inference and postprocessing"] = (
+                    neuroglancer.SegmentationLayer(
+                        source=neuroglancer.LocalVolume(
+                            data=TENSORSTORE,
+                            dimensions=neuroglancer.CoordinateSpace(
+                                names=["x", "y", "z", "c^"],
+                                units=["nm", "nm", "nm", ""],
+                                scales=[*OUTPUT_VOXEL_SIZE, 1],
+                                coordinate_arrays=[
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                ],
+                                voxel_offset=(0, 0, 0, 0),
+                            ),
+                        ),
+                    )
+                )
+            print("TensorStore opened:", TENSORSTORE)
+        except Exception as e:
+            print(f"Error opening TensorStore: {e}")
+
+
+# with app.app_context():
+#     dataset_future = ts.open(
+#         {
+#             "driver": "n5",
+#             "kvstore": {
+#                 "driver": "http",
+#                 "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
+#             },
+#             "context": {"cache_pool": {"total_bytes_limit": 100_000_000}},
+#             "recheck_cached_data": "open",
+#         }
+#     ).result()
+# print(dataset_future)
+# from threading import Thread
+
+
+# def start_open_tensorstore():
+#     # Start the open_tensorstore function in a new thread
+#     thread = Thread(target=open_tensorstore)
+#     thread.start()
+
+#     return jsonify("TensorStore opening initiated"), HTTPStatus.OK
+
+
+# start_open_tensorstore()
 
 # %%
 if __name__ == "__main__":
