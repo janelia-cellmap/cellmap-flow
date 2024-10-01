@@ -1,3 +1,4 @@
+# %%
 """
 # Example Virtual N5
 
@@ -43,9 +44,12 @@ You can browse the data in neuroglancer after configuring the viewer with the ap
 # gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:8000 --workers 2 --threads 1 example_virtual_n5:app
 # NOTE: You will probably have to access the host:8000 separately and say it is safe to go there
 
+from dacapo.store.create_store import create_config_store, create_weights_store
+from dacapo.experiments import Run
+
 import argparse
 from http import HTTPStatus
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 
 import numpy as np
@@ -55,15 +59,15 @@ import torch
 from funlib.persistence import open_ds
 from funlib.geometry import Roi
 import numpy as np
-from dacapo.store.create_store import create_config_store, create_weights_store
+
+from skimage.measure import label
+from scipy import spatial
+import neuroglancer
+import time
 
 # NOTE: Normally we would just load in run but here we have to recreate it to save time since our run has so many points
-from funlib.geometry import Coordinate
-from dacapo.experiments.tasks import AffinitiesTaskConfig, AffinitiesTask, DistanceTask
-from dacapo.experiments.architectures import CNNectomeUNetConfig, CNNectomeUNet
-
-from dacapo.experiments.tasks import DistanceTaskConfig
 import gc
+import socket
 
 app = Flask(__name__)
 CORS(app)
@@ -72,13 +76,94 @@ CORS(app)
 # This demo produces an RGB volume for aesthetic purposes.
 # Note that this is 3 (virtual) teravoxels per channel.
 NUM_CHANNELS = 1
-BLOCK_SHAPE = np.array([68, 68, 68, NUM_CHANNELS])
+BLOCK_SHAPE = np.array([36, 36, 36, NUM_CHANNELS])
 MAX_SCALE = 0
 
-CHUNK_ENCODER = N5ChunkWrapper(np.float32, BLOCK_SHAPE, compressor=numcodecs.GZip())
+CHUNK_ENCODER = N5ChunkWrapper(np.uint64, BLOCK_SHAPE, compressor=numcodecs.GZip())
 
 MODEL = None
 DS = None
+EDGE_VOXEL_POSITION_TO_VAL_DICT = {}
+EQUIVALENCES = neuroglancer.equivalence_map.EquivalenceMap()
+
+# %%
+ZARR_PATH = "/nrs/cellmap/data/jrc_c-elegans-bw-1/jrc_c-elegans-bw-1_normalized.zarr"
+DATASET = "recon-1/em/fibsem-uint8"
+# load raw data
+DS = open_ds(
+    ZARR_PATH,
+    f"{DATASET}/s2",
+)
+VOL_SHAPE_ZYX = np.array(DS.shape)
+VOL_SHAPE = np.array([*VOL_SHAPE_ZYX[::-1], NUM_CHANNELS])
+VOL_SHAPE_ZYX_IN_BLOCKS = np.ceil(VOL_SHAPE_ZYX / BLOCK_SHAPE[:3]).astype(int)
+
+
+neuroglancer.set_server_bind_address("0.0.0.0")
+VIEWER = neuroglancer.Viewer()
+ip_address = socket.getfqdn()
+
+with VIEWER.txn() as s:
+    s.layers["raw"] = neuroglancer.ImageLayer(
+        source=f'zarr://http://cellmap-vm1.int.janelia.org/{ZARR_PATH.replace("/nrs/cellmap", "/nrs")}/{DATASET}',
+    )
+    s.layers[f"inference and postprocessing"] = neuroglancer.SegmentationLayer(
+        source=f"n5://http://{ip_address}:8000/test.n5/test",
+        equivalences=EQUIVALENCES.to_json(),
+    )
+    s.cross_section_scale = 1e-9
+    s.projection_scale = 500e-9
+print(VIEWER)
+
+
+PREVIOUS_UPDATE_TIME = 0
+
+
+def update_state():
+    global PREVIOUS_UPDATE_TIME
+    if time.time() - PREVIOUS_UPDATE_TIME > 2:
+        with VIEWER.txn() as s:
+            s.layers[f"inference and postprocessing"].equivalences = (
+                EQUIVALENCES.to_json()
+            )
+        PREVIOUS_UPDATE_TIME = time.time()
+
+
+update_state()
+# global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
+
+INPUT_VOXEL_SIZE = [16, 16, 16]
+OUTPUT_VOXEL_SIZE = [16, 16, 16]
+CONFIG_STORE = create_config_store()
+WEIGHTS_STORE = create_weights_store()
+run_name = "20240925_mito_setup04_no_upsample_16_16_0"
+run_config = CONFIG_STORE.retrieve_run_config(run_name)
+
+run = Run(run_config)  # , load_starter_model=False)
+task = run.task
+MODEL = run.model
+# print(MODEL.architecture)
+# path_to_weights = "/nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000"
+# weights = torch.load(path_to_weights, map_location="cuda")
+weights = WEIGHTS_STORE.retrieve_weights(
+    run_name,
+    80000,
+)
+MODEL.load_state_dict(weights.model)
+# MODEL.load_state_dict(weights.model)
+MODEL.to("cuda")
+MODEL.eval()
+# %%
+
+
+# @app.route("/home")
+# def home():
+
+#     print(VIEWER)
+#     # print(neuroglancer.to_url(viewer.state))
+#     # s.position = VOL_SHAPE_ZYX[::-1] / 2
+
+#     return render_template("iframe.html", url=VIEWER)
 
 
 def main():
@@ -95,73 +180,26 @@ def main():
     )
 
 
-# global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
-# CONFIG_STORE = create_config_store()
-# WEIGHTS_STORE = create_weights_store()
-DS = open_ds(
-    "/nrs/cellmap/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr",
-    "recon-1/em/fibsem-uint8/s1",
-)
-VOL_SHAPE = np.array([20_000 * 8, 20_000 * 8, 20_000 * 8, NUM_CHANNELS])
-
-INPUT_VOXEL_SIZE = [16, 16, 16]
-OUTPUT_VOXEL_SIZE = [8, 8, 8]
-task_config = DistanceTaskConfig(
-    name="cosem_distance_task_mito_8nm_v3",
-    channels=["mito"],
-    clip_distance=10 * OUTPUT_VOXEL_SIZE,
-    tol_distance=10 * OUTPUT_VOXEL_SIZE,
-    scale_factor=20 * OUTPUT_VOXEL_SIZE,
-    mask_distances=False,
-)
-
-architecture_config = CNNectomeUNetConfig(
-    name="attention-upsample-unet",
-    input_shape=Coordinate(216, 216, 216),
-    eval_shape_increase=Coordinate(72, 72, 72),
-    fmaps_in=1,
-    num_fmaps=12,
-    fmaps_out=72,
-    fmap_inc_factor=6,
-    downsample_factors=[(2, 2, 2), (3, 3, 3), (3, 3, 3)],
-    constant_upsample=True,
-    upsample_factors=[(2, 2, 2)],
-    use_attention=True,
-)
-task = task_config.task_type(task_config)
-architecture = architecture_config.architecture_type(architecture_config)
-MODEL = task.create_model(architecture)
-# weights = WEIGHTS_STORE.retrieve_weights(
-#     "finetuned_3d_lsdaffs_weight_ratio_0.5_jrc_22ak351-leaf-3m_plasmodesmata_all_training_points_unet_default_trainer_lr_0.00005_bs_2__0",
-#     265000,
-# )
-path_to_weights = "/nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000"
-weights = torch.load(path_to_weights, map_location="cuda")
-MODEL.load_state_dict(weights.model)
-MODEL.to("cuda")
-MODEL.eval()
-
-
-@app.route("/attributes.json")
+@app.route("/test.n5/test/attributes.json")
 def top_level_attributes():
     scales = [[2**s, 2**s, 2**s, 1] for s in range(MAX_SCALE + 1)]
     attr = {
         "pixelResolution": {"dimensions": [*OUTPUT_VOXEL_SIZE, 1.0], "unit": "nm"},
         "ordering": "C",
         "scales": scales,
-        "axes": ["x", "y", "z", "c"],
+        "axes": ["x", "y", "z", "c^"],
         "units": ["nm", "nm", "nm", ""],
         "translate": [0, 0, 0, 0],
     }
     return jsonify(attr), HTTPStatus.OK
 
 
-@app.route("/s<int:scale>/attributes.json")
+@app.route("/test.n5/test/s<int:scale>/attributes.json")
 def attributes(scale):
     attr = {
         "transform": {
             "ordering": "C",
-            "axes": ["x", "y", "z", "c"],
+            "axes": ["x", "y", "z", "c^"],
             "scale": [
                 *OUTPUT_VOXEL_SIZE,
                 1,
@@ -171,13 +209,15 @@ def attributes(scale):
         },
         "compression": {"type": "gzip", "useZlib": False, "level": -1},
         "blockSize": BLOCK_SHAPE.tolist(),
-        "dataType": "float32",
+        "dataType": "uint64",
         "dimensions": (VOL_SHAPE[:3] // 2**scale).tolist() + [int(VOL_SHAPE[3])],
     }
     return jsonify(attr), HTTPStatus.OK
 
 
-@app.route("/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>")
+@app.route(
+    "/test.n5/test/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>"
+)
 def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
     """
     Serve up a single chunk at the requested scale and location.
@@ -185,11 +225,20 @@ def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
     This 'virtual N5' will just display a color gradient,
     fading from black at (0,0,0) to white at (max,max,max).
     """
+
     assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
     print(chunk_x, chunk_y, chunk_z, chunk_c)
-    corner = BLOCK_SHAPE[:3] * np.array([chunk_x, chunk_y, chunk_z])
+    corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
     box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
-    block_vol = inference_for_chunk(scale, box)
+
+    global_id_offset = np.prod(BLOCK_SHAPE[:3]) * (
+        VOL_SHAPE_ZYX_IN_BLOCKS[0] * VOL_SHAPE_ZYX_IN_BLOCKS[1] * chunk_x
+        + VOL_SHAPE_ZYX_IN_BLOCKS[0] * chunk_y
+        + chunk_z
+    )
+    block_vol = postprocess_for_chunk(
+        inference_for_chunk(scale, box), global_id_offset, corner
+    )
 
     return (
         # Encode to N5 chunk format (header + compressed data)
@@ -199,63 +248,19 @@ def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
     )
 
 
-def gradient_data_for_chunk(scale, box):
-    """
-    Return the demo gradient data for a single chunk.
-
-    Args:
-        scale:
-            Which downscale level is being requested
-        box:
-            The bounding box of the requested chunk,
-            specified in units of the chunk's own scale.
-    """
-    # Compute the portion of the box that is actually populated.
-    # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
-    # where the chunk may extend beyond the bounding box of the entire volume.
-    box = box.copy()
-    box[1] = np.minimum(box[1], VOL_SHAPE[:3] // 2**scale)
-
-    # Same as box, but in chunk-relative coordinates.
-    rel_box = box - box[0]
-
-    # Same as box, but in scale-0 coordinates.
-    box_s0 = (2**scale) * box
-
-    # Allocate the chunk.
-    shape_czyx = BLOCK_SHAPE[::-1]
-    block_vol_czyx = np.zeros(shape_czyx, np.float32)
-
-    # For convenience below, we want to address the
-    # chunk via [X,Y,Z,C] indexing (F-order).
-    block_vol = block_vol_czyx.T
-
-    # Interpolate along each axis and write the results
-    # into separate channels (X=red, Y=green, Z=blue).
-    for c in [0, 1, 2]:
-        # This is the min/max color value in the chunk for this channel/axis.
-        v0, v1 = np.interp(box_s0[:, c], [0, VOL_SHAPE[c]], [0, 1.0])
-
-        # Write the gradient for this channel.
-        i0, i1 = rel_box[:, c]
-        view = np.moveaxis(block_vol[..., c], c, -1)
-        view[..., i0:i1] = np.linspace(v0, v1, i1 - i0, False)
-
-    # Return the C-order view
-    return block_vol_czyx
-
-
 def inference_for_chunk(scale, box):
+
     # Compute the portion of the box that is actually populated.
     # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
     # where the chunk may extend beyond the bounding box of the entire volume.
     box = box.copy()
     # box[1] = np.minimum(box[0] + box[1], VOL_SHAPE[:3] // 2**scale)
     print(f"{box=}")
-    grow_by = 91 * INPUT_VOXEL_SIZE[0]
-    roi = Roi(box[0][::-1], box[1]).grow(grow_by, grow_by)
+    grow_by = 90 * INPUT_VOXEL_SIZE[0]
+    roi = Roi(box[0], box[1]).grow(grow_by, grow_by)
     print(f"{roi=} after grow")
     data = DS.to_ndarray(roi) / 255.0
+    # create random array with floats between 0 and 1
     # prepend batch and channel dimensions
     data = data[np.newaxis, np.newaxis, ...].astype(np.float32)
     # move to cuda
@@ -264,13 +269,62 @@ def inference_for_chunk(scale, box):
         block_vol_czyx = MODEL(data)
         block_vol_czyx = block_vol_czyx.cpu().numpy()
         block_vol_czyx = block_vol_czyx[0, :NUM_CHANNELS, ...]
-        print(block_vol_czyx.shape)
     # block_vol_czyx = np.swapaxes(block_vol_czyx, 1, 3).copy()
     del data
+
     torch.cuda.empty_cache()
     gc.collect()
     return block_vol_czyx
 
 
+# %%
+def postprocess_for_chunk(chunk, id_offset, corner):
+    global EDGE_VOXEL_POSITION_TO_VAL_DICT
+    # do connected components on thresholded chunk
+    thresholded = chunk > 0
+    postprocessed, num = label(thresholded, return_num=True)
+    postprocessed = postprocessed.astype(np.uint64)
+    if num == 0:
+        return postprocessed.astype(np.uint64)
+
+    postprocessed[postprocessed > 0] += id_offset
+
+    postprocessed_squeezed = postprocessed[0, ...]
+    mask = np.zeros_like(postprocessed_squeezed, dtype=bool)
+    mask[1:-1, 1:-1, 1:-1] = True
+    postprocessed_squeezed_ma = np.ma.masked_array(postprocessed_squeezed, mask)
+    z, y, x = np.ma.where(postprocessed_squeezed_ma > 0)
+    values = postprocessed_squeezed_ma[z, y, x]
+    EDGE_VOXEL_POSITION_TO_VAL_DICT.update(
+        dict(
+            zip(
+                zip(
+                    z + corner[0],
+                    y + corner[1],
+                    x + corner[2],
+                ),
+                values,
+            )
+        )
+    )
+    update_equivalences()
+    return postprocessed
+
+
+# %%
+def update_equivalences():
+    global EQUIVALENCES
+
+    positions = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.keys())
+    ids = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.values())
+    tree = spatial.cKDTree(positions)
+    neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+    for i in range(len(neighbors)):
+        for j in neighbors[i]:
+            EQUIVALENCES.union(ids[i], ids[j])
+    update_state()
+
+
+# %%
 if __name__ == "__main__":
     main()
