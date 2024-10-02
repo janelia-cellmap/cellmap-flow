@@ -45,9 +45,6 @@ You can browse the data in neuroglancer after configuring the viewer with the ap
 # NOTE: You will probably have to access the host:8000 separately and say it is safe to go there
 # use this works with tensorstore: python example_virtual_n5_marwan.py
 
-from dacapo.store.create_store import create_config_store, create_weights_store
-from dacapo.experiments import Run
-
 import argparse
 from http import HTTPStatus
 from flask import Flask, jsonify, render_template
@@ -72,7 +69,7 @@ import socket
 
 app = Flask(__name__)
 CORS(app)
-
+DEBUG = False
 
 # This demo produces an RGB volume for aesthetic purposes.
 # Note that this is 3 (virtual) teravoxels per channel.
@@ -98,7 +95,37 @@ DS = open_ds(
 VOL_SHAPE_ZYX = np.array(DS.shape)
 VOL_SHAPE = np.array([*VOL_SHAPE_ZYX[::-1], NUM_CHANNELS])
 VOL_SHAPE_ZYX_IN_BLOCKS = np.ceil(VOL_SHAPE_ZYX / BLOCK_SHAPE[:3]).astype(int)
+PREDICTION_THRESHOLD = 0
 
+# update_state()
+# global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
+
+INPUT_VOXEL_SIZE = [16, 16, 16]
+OUTPUT_VOXEL_SIZE = [16, 16, 16]
+
+if not DEBUG:
+    from dacapo.store.create_store import create_config_store, create_weights_store
+    from dacapo.experiments import Run
+
+    CONFIG_STORE = create_config_store()
+    WEIGHTS_STORE = create_weights_store()
+    run_name = "20240925_mito_setup04_no_upsample_16_16_0"
+    run_config = CONFIG_STORE.retrieve_run_config(run_name)
+
+    run = Run(run_config)  # , load_starter_model=False)
+    task = run.task
+    MODEL = run.model
+    # print(MODEL.architecture)
+    # path_to_weights = "/nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000"
+    # weights = torch.load(path_to_weights, map_location="cuda")
+    weights = WEIGHTS_STORE.retrieve_weights(
+        run_name,
+        80000,
+    )
+    MODEL.load_state_dict(weights.model)
+    # MODEL.load_state_dict(weights.model)
+    MODEL.to("cuda")
+    MODEL.eval()
 
 neuroglancer.set_server_bind_address("0.0.0.0")
 VIEWER = neuroglancer.Viewer()
@@ -107,10 +134,19 @@ ip_address = socket.getfqdn()
 with VIEWER.txn() as s:
     s.layers["raw"] = neuroglancer.ImageLayer(
         source=f'zarr://http://cellmap-vm1.int.janelia.org/{ZARR_PATH.replace("/nrs/cellmap", "/nrs")}/{DATASET}',
+        shader="""#uicontrol invlerp normalized
+#uicontrol float prediction_threshold slider(min=-1, max=1, step=0.1)
+
+void main() {
+emitGrayscale(normalized());
+}""",
+        shaderControls={"prediction_threshold": PREDICTION_THRESHOLD},
     )
-    s.layers[f"inference and postprocessing"] = neuroglancer.SegmentationLayer(
-        source=f"n5://http://{ip_address}:8000/test.n5/test",
-        equivalences=EQUIVALENCES.to_json(),
+    s.layers[f"inference_and_postprocessing_{PREDICTION_THRESHOLD}"] = (
+        neuroglancer.SegmentationLayer(
+            source=f"n5://http://{ip_address}:8000/test.n5/inference_and_postprocessing_{PREDICTION_THRESHOLD}",
+            equivalences=EQUIVALENCES.to_json(),
+        )
     )
     s.cross_section_scale = 1e-9
     s.projection_scale = 500e-9
@@ -121,39 +157,31 @@ PREVIOUS_UPDATE_TIME = 0
 
 
 def update_state():
-    global PREVIOUS_UPDATE_TIME
-    if time.time() - PREVIOUS_UPDATE_TIME > 2:
+    global PREVIOUS_UPDATE_TIME, PREDICTION_THRESHOLD, EQUIVALENCES, EDGE_VOXEL_POSITION_TO_VAL_DICT
+    current_prediction_threshold = VIEWER.state.layers["raw"].shaderControls.get(
+        "prediction_threshold", 0
+    )
+    if current_prediction_threshold != PREDICTION_THRESHOLD:
         with VIEWER.txn() as s:
-            s.layers[f"inference and postprocessing"].equivalences = (
-                EQUIVALENCES.to_json()
+            s.layers.__delitem__(f"inference_and_postprocessing_{PREDICTION_THRESHOLD}")
+            PREDICTION_THRESHOLD = current_prediction_threshold
+            EDGE_VOXEL_POSITION_TO_VAL_DICT = {}
+            EQUIVALENCES = neuroglancer.equivalence_map.EquivalenceMap()
+            s.layers[f"inference_and_postprocessing_{PREDICTION_THRESHOLD}"] = (
+                neuroglancer.SegmentationLayer(
+                    source=f"n5://http://{ip_address}:8000/test.n5/inference_and_postprocessing_{PREDICTION_THRESHOLD}",
+                )
             )
-        PREVIOUS_UPDATE_TIME = time.time()
+
+    with VIEWER.txn() as s:
+        print(f"{EQUIVALENCES.to_json()=}")
+        s.layers[
+            f"inference_and_postprocessing_{PREDICTION_THRESHOLD}"
+        ].equivalences = EQUIVALENCES.to_json()
+        # LOCAL_VOLUME.invalidate()
+    PREVIOUS_UPDATE_TIME = time.time()
 
 
-update_state()
-# global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
-
-INPUT_VOXEL_SIZE = [16, 16, 16]
-OUTPUT_VOXEL_SIZE = [16, 16, 16]
-CONFIG_STORE = create_config_store()
-WEIGHTS_STORE = create_weights_store()
-run_name = "20240925_mito_setup04_no_upsample_16_16_0"
-run_config = CONFIG_STORE.retrieve_run_config(run_name)
-
-run = Run(run_config)  # , load_starter_model=False)
-task = run.task
-MODEL = run.model
-# print(MODEL.architecture)
-# path_to_weights = "/nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000"
-# weights = torch.load(path_to_weights, map_location="cuda")
-weights = WEIGHTS_STORE.retrieve_weights(
-    run_name,
-    80000,
-)
-MODEL.load_state_dict(weights.model)
-# MODEL.load_state_dict(weights.model)
-MODEL.to("cuda")
-MODEL.eval()
 # %%
 
 
@@ -181,8 +209,8 @@ def main():
     )
 
 
-@app.route("/test.n5/test/attributes.json")
-def top_level_attributes():
+@app.route("/test.n5/<string:dataset>/attributes.json")
+def top_level_attributes(dataset):
     scales = [[2**s, 2**s, 2**s, 1] for s in range(MAX_SCALE + 1)]
     attr = {
         "pixelResolution": {"dimensions": [*OUTPUT_VOXEL_SIZE, 1.0], "unit": "nm"},
@@ -195,8 +223,8 @@ def top_level_attributes():
     return jsonify(attr), HTTPStatus.OK
 
 
-@app.route("/test.n5/test/s<int:scale>/attributes.json")
-def attributes(scale):
+@app.route("/test.n5/<string:dataset>/s<int:scale>/attributes.json")
+def attributes(dataset, scale):
     attr = {
         "transform": {
             "ordering": "C",
@@ -217,9 +245,9 @@ def attributes(scale):
 
 
 @app.route(
-    "/test.n5/test/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>"
+    "/test.n5/<string:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>"
 )
-def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
+def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
     """
     Serve up a single chunk at the requested scale and location.
 
@@ -228,102 +256,119 @@ def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
     """
 
     assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
-    print(chunk_x, chunk_y, chunk_z, chunk_c)
-    corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
-    box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
-
-    global_id_offset = np.prod(BLOCK_SHAPE[:3]) * (
-        VOL_SHAPE_ZYX_IN_BLOCKS[0] * VOL_SHAPE_ZYX_IN_BLOCKS[1] * chunk_x
-        + VOL_SHAPE_ZYX_IN_BLOCKS[0] * chunk_y
-        + chunk_z
-    )
-    block_vol = postprocess_for_chunk(
-        inference_for_chunk(scale, box), global_id_offset, corner
-    )
-
-    return (
-        # Encode to N5 chunk format (header + compressed data)
-        CHUNK_ENCODER.encode(block_vol),
-        HTTPStatus.OK,
-        {"Content-Type": "application/octet-stream"},
-    )
+    if dataset == f"inference_and_postprocessing_{PREDICTION_THRESHOLD}":
+        print(dataset, chunk_x, chunk_y, chunk_z, chunk_c, 0)
+        corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
+        print(dataset, chunk_x, chunk_y, chunk_z, chunk_c, 1)
+        global_id_offset = np.prod(BLOCK_SHAPE[:3]) * (
+            VOL_SHAPE_ZYX_IN_BLOCKS[0] * VOL_SHAPE_ZYX_IN_BLOCKS[1] * chunk_x
+            + VOL_SHAPE_ZYX_IN_BLOCKS[0] * chunk_y
+            + chunk_z
+        )
+        print(dataset, chunk_x, chunk_y, chunk_z, chunk_c, 2)
+        block_vol = postprocess_for_chunk(
+            dataset, inference_for_chunk(scale, box), global_id_offset, corner
+        )
+        print(dataset, chunk_x, chunk_y, chunk_z, chunk_c, 3)
+        print(corner / 16)
+        return (
+            # Encode to N5 chunk format (header + compressed data)
+            CHUNK_ENCODER.encode(block_vol),
+            HTTPStatus.OK,
+            {"Content-Type": "application/octet-stream"},
+        )
+    else:
+        return jsonify(dataset), HTTPStatus.OK
 
 
 def inference_for_chunk(scale, box):
+    if not DEBUG:
 
-    # Compute the portion of the box that is actually populated.
-    # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
-    # where the chunk may extend beyond the bounding box of the entire volume.
-    box = box.copy()
-    # box[1] = np.minimum(box[0] + box[1], VOL_SHAPE[:3] // 2**scale)
-    print(f"{box=}")
-    grow_by = 90 * INPUT_VOXEL_SIZE[0]
-    roi = Roi(box[0], box[1]).grow(grow_by, grow_by)
-    print(f"{roi=} after grow")
-    data = DS.to_ndarray(roi) / 255.0
-    # create random array with floats between 0 and 1
-    # prepend batch and channel dimensions
-    data = data[np.newaxis, np.newaxis, ...].astype(np.float32)
-    # move to cuda
-    data = torch.from_numpy(data).to("cuda")
-    with torch.no_grad():
-        block_vol_czyx = MODEL(data)
-        block_vol_czyx = block_vol_czyx.cpu().numpy()
-        block_vol_czyx = block_vol_czyx[0, :NUM_CHANNELS, ...]
-    # block_vol_czyx = np.swapaxes(block_vol_czyx, 1, 3).copy()
-    del data
+        # Compute the portion of the box that is actually populated.
+        # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
+        # where the chunk may extend beyond the bounding box of the entire volume.
+        box = box.copy()
+        # box[1] = np.minimum(box[0] + box[1], VOL_SHAPE[:3] // 2**scale)
+        print(f"{box=}")
+        grow_by = 90 * INPUT_VOXEL_SIZE[0]
+        roi = Roi(box[0], box[1]).grow(grow_by, grow_by)
+        print(f"{(roi/16)=} after grow")
+        data = DS.to_ndarray(roi) / 255.0
+        # create random array with floats between 0 and 1
+        # prepend batch and channel dimensions
+        data = data[np.newaxis, np.newaxis, ...].astype(np.float32)
+        # move to cuda
+        data = torch.from_numpy(data).to("cuda")
+        with torch.no_grad():
+            block_vol_czyx = MODEL(data)
+            block_vol_czyx = block_vol_czyx.cpu().numpy()
+            block_vol_czyx = block_vol_czyx[0, :NUM_CHANNELS, ...]
+        # block_vol_czyx = np.swapaxes(block_vol_czyx, 1, 3).copy()
+        del data
 
-    torch.cuda.empty_cache()
-    gc.collect()
-    return block_vol_czyx
+        torch.cuda.empty_cache()
+        gc.collect()
+        return block_vol_czyx
+    else:
+        print("inference_for_chunk", 4)
+        return np.random.random((1, *BLOCK_SHAPE[:3])) * 2 - 1
 
 
 # %%
-def postprocess_for_chunk(chunk, id_offset, corner):
-    global EDGE_VOXEL_POSITION_TO_VAL_DICT
-    # do connected components on thresholded chunk
-    thresholded = chunk > 0
-    postprocessed, num = label(thresholded, return_num=True)
-    postprocessed = postprocessed.astype(np.uint64)
-    if num == 0:
-        return postprocessed.astype(np.uint64)
+def postprocess_for_chunk(dataset, chunk, id_offset, corner):
+    global EDGE_VOXEL_POSITION_TO_VAL_DICT, PREDICTION_THRESHOLD
+    if dataset == f"inference_and_postprocessing_{PREDICTION_THRESHOLD}":
+        # do connected components on thresholded chunk
+        thresholded = chunk > PREDICTION_THRESHOLD
+        postprocessed, num = label(thresholded, return_num=True)
+        postprocessed = postprocessed.astype(np.uint64)
+        if num == 0:
+            return postprocessed.astype(np.uint64)
 
-    postprocessed[postprocessed > 0] += id_offset
+        postprocessed[postprocessed > 0] += id_offset
 
-    postprocessed_squeezed = postprocessed[0, ...]
-    mask = np.zeros_like(postprocessed_squeezed, dtype=bool)
-    mask[1:-1, 1:-1, 1:-1] = True
-    postprocessed_squeezed_ma = np.ma.masked_array(postprocessed_squeezed, mask)
-    z, y, x = np.ma.where(postprocessed_squeezed_ma > 0)
-    values = postprocessed_squeezed_ma[z, y, x]
-    EDGE_VOXEL_POSITION_TO_VAL_DICT.update(
-        dict(
-            zip(
+        postprocessed_squeezed = postprocessed[0, ...]
+        mask = np.zeros_like(postprocessed_squeezed, dtype=bool)
+        mask[1:-1, 1:-1, 1:-1] = True
+        postprocessed_squeezed_ma = np.ma.masked_array(postprocessed_squeezed, mask)
+        z, y, x = np.ma.where(postprocessed_squeezed_ma > 0)
+        values = postprocessed_squeezed_ma[z, y, x]
+        EDGE_VOXEL_POSITION_TO_VAL_DICT.update(
+            dict(
                 zip(
-                    z + corner[0],
-                    y + corner[1],
-                    x + corner[2],
-                ),
-                values,
+                    zip(
+                        z + corner[0],
+                        y + corner[1],
+                        x + corner[2],
+                    ),
+                    values,
+                )
             )
         )
-    )
-    update_equivalences()
-    return postprocessed
+        update_equivalences()
+        return postprocessed
+    else:
+        print("postprocessed", 5)
+        return np.zeros((1, *BLOCK_SHAPE[:3]), dtype=np.uint64)
 
 
 # %%
 def update_equivalences():
-    global EQUIVALENCES
-
-    positions = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.keys())
-    ids = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.values())
-    tree = spatial.cKDTree(positions)
-    neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
-    for i in range(len(neighbors)):
-        for j in neighbors[i]:
-            EQUIVALENCES.union(ids[i], ids[j])
-    update_state()
+    global PREVIOUS_UPDATE_TIME, EDGE_VOXEL_POSITION_TO_VAL_DICT, EQUIVALENCES
+    if time.time() - PREVIOUS_UPDATE_TIME > 5:
+        print("Updating equivalences")
+        positions = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.keys())
+        ids = list(EDGE_VOXEL_POSITION_TO_VAL_DICT.values())
+        tree = spatial.cKDTree(positions)
+        neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+        for i in range(len(neighbors)):
+            for j in neighbors[i]:
+                EQUIVALENCES.union(ids[i], ids[j])
+        update_state()
+        PREVIOUS_UPDATE_TIME = time.time()
+        print("Updated equivalences")
+    # update_state()
 
 
 import tensorstore as ts
@@ -332,53 +377,56 @@ TENSORSTORE = None
 
 LOADED_TENSORSTORE = False
 
+LOCAL_VOLUME = None
 
-@app.before_request
-def open_tensorstore():
-    global TENSORSTORE, LOADED_TENSORSTORE
-    if not LOADED_TENSORSTORE:
-        LOADED_TENSORSTORE = True
-        print("Opening TensorStore")
-        try:
-            dataset_future = ts.open(
-                {
-                    "driver": "n5",
-                    "kvstore": {
-                        "driver": "http",
-                        "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
-                    },
-                    "context": {
-                        "cache_pool": {"total_bytes_limit": 100_000_000},
-                        "data_copy_concurrency": {"limit": 1},
-                        "file_io_concurrency": {"limit": 1},
-                    },
-                    "recheck_cached_data": "open",
-                }
-            )
-            TENSORSTORE = dataset_future.result()
-            with VIEWER.txn() as s:
-                s.layers[f"inference and postprocessing"] = (
-                    neuroglancer.SegmentationLayer(
-                        source=neuroglancer.LocalVolume(
-                            data=TENSORSTORE,
-                            dimensions=neuroglancer.CoordinateSpace(
-                                names=["x", "y", "z", "c^"],
-                                units=["nm", "nm", "nm", ""],
-                                scales=[*OUTPUT_VOXEL_SIZE, 1],
-                                coordinate_arrays=[
-                                    None,
-                                    None,
-                                    None,
-                                    None,
-                                ],
-                                voxel_offset=(0, 0, 0, 0),
-                            ),
-                        ),
-                    )
-                )
-            print("TensorStore opened:", TENSORSTORE)
-        except Exception as e:
-            print(f"Error opening TensorStore: {e}")
+
+# @app.route("/open_tensorstore")
+# def open_tensorstore():
+#     global TENSORSTORE, LOADED_TENSORSTORE, LOCAL_VOLUME
+#     if not LOADED_TENSORSTORE:
+#         LOADED_TENSORSTORE = True
+#         print("Opening TensorStore")
+#         try:
+#             dataset_future = ts.open(
+#                 {
+#                     "driver": "n5",
+#                     "kvstore": {
+#                         "driver": "http",
+#                         "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
+#                     },
+#                     "context": {
+#                         "cache_pool": {"total_bytes_limit": 1_000_000_000},
+#                         "data_copy_concurrency": {"limit": 1},
+#                         "file_io_concurrency": {"limit": 1},
+#                     },
+#                     "recheck_cached_data": "open",
+#                 }
+#             )
+#             TENSORSTORE = dataset_future.result()
+#             LOCAL_VOLUME = neuroglancer.LocalVolume(
+#                 data=TENSORSTORE,
+#                 dimensions=neuroglancer.CoordinateSpace(
+#                     names=["x", "y", "z", "c^"],
+#                     units=["nm", "nm", "nm", ""],
+#                     scales=[*OUTPUT_VOXEL_SIZE, 1],
+#                     coordinate_arrays=[
+#                         None,
+#                         None,
+#                         None,
+#                         None,
+#                     ],
+#                 ),
+#             )
+#             with VIEWER.txn() as s:
+#                 s.layers[f"inference and postprocessing"] = (
+#                     neuroglancer.SegmentationLayer(
+#                         source=LOCAL_VOLUME,
+#                     )
+#                 )
+#             print("TensorStore opened:", TENSORSTORE)
+#         except Exception as e:
+#             print(f"Error opening TensorStore: {e}")
+#     return jsonify(VIEWER.get_viewer_url()), HTTPStatus.OK
 
 
 # with app.app_context():
