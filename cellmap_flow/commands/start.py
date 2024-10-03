@@ -5,7 +5,7 @@ from cellmap_flow.settings import MODEL_YAML
 import os
 import zarr
 
-from cellmap_flow.server import start, App
+from cellmap_flow.server import start_server, App
 
 
 def check_zarr_data(container_path,dataset_path):
@@ -96,5 +96,5 @@ def start():
     click.echo(f"Starting Cellmap Flow with model {model} and checkpoint {checkpoint}")
 
 
-    app = App(checkpoint.path, container_path, dataset_path)
-    start(app)
+    app = App(model,checkpoint.number,checkpoint.path, container_path, dataset_path)
+    start_server(app)

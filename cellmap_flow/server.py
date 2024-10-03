@@ -46,7 +46,7 @@ This is a CellMap Flow Neuroglancer data server that serves up real time predict
 
 class App(FastAPI):
 
-    def __init__(self, model_path, ds_container,ds_dataset) -> None:
+    def __init__(self, run_name, checkpoint_number, model_path, ds_container,ds_dataset) -> None:
         super().__init__(
             title="Cellmap Flow backend server API",
             description=description,
@@ -70,50 +70,37 @@ class App(FastAPI):
 
         # global DS, CONFIG_STORE, WEIGHTS_STORE, MODEL
         # CONFIG_STORE = create_config_store()
-        # WEIGHTS_STORE = create_weights_store()
+        # 
         DS = open_ds(ds_container, ds_dataset)
-        VOL_SHAPE = np.array([20_000 * 8, 20_000 * 8, 20_000 * 8, NUM_CHANNELS])
+        shape = DS.shape
+        VOL_SHAPE = np.array([shape[0] * 8, shape[1] * 8, shape[2] * 8, NUM_CHANNELS])
 
         INPUT_VOXEL_SIZE = [16, 16, 16]
         OUTPUT_VOXEL_SIZE = [8, 8, 8]
-        task_config = DistanceTaskConfig(
-            name="cosem_distance_task_mito_8nm_v3",
-            channels=["mito"],
-            clip_distance=10 * OUTPUT_VOXEL_SIZE,
-            tol_distance=10 * OUTPUT_VOXEL_SIZE,
-            scale_factor=20 * OUTPUT_VOXEL_SIZE,
-            mask_distances=False,
-        )
+        from dacapo.store.create_store import create_config_store, create_weights_store
+        from dacapo.experiments.run import Run
 
-        architecture_config = CNNectomeUNetConfig(
-            name="attention-upsample-unet",
-            input_shape=Coordinate(216, 216, 216),
-            eval_shape_increase=Coordinate(72, 72, 72),
-            fmaps_in=1,
-            num_fmaps=12,
-            fmaps_out=72,
-            fmap_inc_factor=6,
-            downsample_factors=[(2, 2, 2), (3, 3, 3), (3, 3, 3)],
-            constant_upsample=True,
-            upsample_factors=[(2, 2, 2)],
-            use_attention=True,
+        config_store = create_config_store()
+        WEIGHTS_STORE = create_weights_store()
+
+
+        MODEL = Run(config_store.retrieve_run_config(run_name)).model
+
+        # MODEL = task.create_model(architecture)
+        weights = WEIGHTS_STORE.retrieve_weights(
+            run_name,
+            checkpoint_number,
         )
-        task = task_config.task_type(task_config)
-        architecture = architecture_config.architecture_type(architecture_config)
-        MODEL = task.create_model(architecture)
-        # weights = WEIGHTS_STORE.retrieve_weights(
-        #     "finetuned_3d_lsdaffs_weight_ratio_0.5_jrc_22ak351-leaf-3m_plasmodesmata_all_training_points_unet_default_trainer_lr_0.00005_bs_2__0",
-        #     265000,
-        # )
-        path_to_weights = model_path
+        # path_to_weights = model_path
         # weights = torch.load(path_to_weights, map_location="cuda")
-        weights = torch.load(path_to_weights,torch.device('cpu'))
+        # weights = torch.load(path_to_weights,torch.device('cpu'))
         MODEL.load_state_dict(weights.model)
-        # MODEL.to("cuda")
+        MODEL.to("cuda")
         MODEL.eval()
 
         @self.get("/attributes.json")
         async def top_level_attributes():
+            print("top_level_attributes")
             scales = [[2**s, 2**s, 2**s, 1] for s in range(MAX_SCALE + 1)]
             attr = {
                 "pixelResolution": {
@@ -129,8 +116,9 @@ class App(FastAPI):
             return jsonable_encoder(attr)
 
 
-        @self.get("/s<int:scale>/attributes.json")
-        def attributes(scale):
+        @self.get("/s{scale}/attributes.json")
+        def attributes(scale: int):
+            print("attributes", scale)
             attr = {
                 "transform": {
                     "ordering": "C",
@@ -148,12 +136,14 @@ class App(FastAPI):
                 "dimensions": (VOL_SHAPE[:3] // 2**scale).tolist()
                 + [int(VOL_SHAPE[3])],
             }
+            print(f"s{scale} attributes: {attr}")
             return jsonable_encoder(attr)
 
         @self.get(
             "/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>"
         )
         def chunk(scale, chunk_x, chunk_y, chunk_z, chunk_c):
+            print("chunk", scale, chunk_x, chunk_y, chunk_z, chunk_c)
             """
             Serve up a single chunk at the requested scale and location.
 
@@ -178,15 +168,15 @@ class App(FastAPI):
             # )
 
 
-def start(app, port=5007):
+def start_server(app, host="0.0.0.0", port=5007):
 
     return uvicorn.run(
         app, 
-        host="0.0.0.0", 
+        host=host, 
         port=port, 
         log_level="info",
         ssl_keyfile=KEY_SSL,
-        ssl_certfile=CERT_SSL,
+        ssl_certfile=CERT_SSL
     )
 
 def gradient_data_for_chunk(scale, box):

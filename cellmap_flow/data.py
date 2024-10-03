@@ -1,5 +1,5 @@
 import yaml
-from typing import List
+from typing import List, Dict
 
 
 class Checkpoint:
@@ -48,12 +48,12 @@ class Model:
 
 def generate_from_yaml(path: str) -> List[Model]:
     with open(path, "r") as file:
-        data = yaml.safe_load(file)
+        data = yaml.safe_load(file)["models"] 
         models = [Model.from_dict(model) for model in data]
         return {model.name: model for model in models}
 
 
 def serialize_to_yaml(models: List[Model], path: str):
     with open(path, "w") as file:
-        data = [model.to_dict() for model in models]
+        data = {"models": [model.to_dict() for model in models]} 
         yaml.safe_dump(data, file)

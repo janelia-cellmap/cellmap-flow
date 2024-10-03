@@ -1,12 +1,9 @@
-- checkpoints:
-  - number: 1
-    path: path1
-  - number: 2
-    path: path2
-  name: model1
-- checkpoints:
-  - number: 345000
-    path: /nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000
-  - number: 2
-    path: path2
-  name: v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1
+models:
+  - name: v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1
+    checkpoints:
+      - number: 345000
+        path: /nrs/cellmap/zouinkhim/crop_num_experiment_v2/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1/checkpoints/iterations/345000
+  - name: 20240925_mito_setup04_no_upsample_16_16_0
+    checkpoints:
+      - number: 80000
+        path: /groups/cellmap/cellmap/zouinkhim/c-elegen/dacapo_files/20240925_mito_setup04_no_upsample_16_16_0/checkpoints/iterations/80000
