@@ -25,8 +25,7 @@ from dacapo.experiments.architectures import CNNectomeUNetConfig
 from dacapo.experiments.tasks import DistanceTaskConfig
 import gc
 import uvicorn
-# app = Flask(__name__)
-# CORS(app)
+
 
 
 # This demo produces an RGB volume for aesthetic purposes.
@@ -44,17 +43,6 @@ INPUT_VOXEL_SIZE = None
 description = """
 This is a CellMap Flow Neuroglancer data server that serves up real time predictions from a trained model.
 """
-
-
-class ActiveBaseModel(BaseModel):
-    class Config:
-        orm_mode = True
-
-
-class StartServerSequest(ActiveBaseModel):
-    ds: str
-    model: str
-
 
 class App(FastAPI):
 
@@ -201,76 +189,35 @@ def start(app, port=5007):
         ssl_certfile=CERT_SSL,
     )
 
-
 def gradient_data_for_chunk(scale, box):
-    """
-    Return the demo gradient data for a single chunk.
-
-    Args:
-        scale:
-            Which downscale level is being requested
-        box:
-            The bounding box of the requested chunk,
-            specified in units of the chunk's own scale.
-    """
-    # Compute the portion of the box that is actually populated.
-    # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
-    # where the chunk may extend beyond the bounding box of the entire volume.
     box = box.copy()
     box[1] = np.minimum(box[1], VOL_SHAPE[:3] // 2**scale)
-
-    # Same as box, but in chunk-relative coordinates.
     rel_box = box - box[0]
-
-    # Same as box, but in scale-0 coordinates.
     box_s0 = (2**scale) * box
-
-    # Allocate the chunk.
     shape_czyx = BLOCK_SHAPE[::-1]
     block_vol_czyx = np.zeros(shape_czyx, np.float32)
-
-    # For convenience below, we want to address the
-    # chunk via [X,Y,Z,C] indexing (F-order).
     block_vol = block_vol_czyx.T
-
-    # Interpolate along each axis and write the results
-    # into separate channels (X=red, Y=green, Z=blue).
     for c in [0, 1, 2]:
-        # This is the min/max color value in the chunk for this channel/axis.
         v0, v1 = np.interp(box_s0[:, c], [0, VOL_SHAPE[c]], [0, 1.0])
-
-        # Write the gradient for this channel.
         i0, i1 = rel_box[:, c]
         view = np.moveaxis(block_vol[..., c], c, -1)
         view[..., i0:i1] = np.linspace(v0, v1, i1 - i0, False)
-
-    # Return the C-order view
     return block_vol_czyx
 
-
 def inference_for_chunk(scale, box):
-    # Compute the portion of the box that is actually populated.
-    # It will differ from [(0,0,0), BLOCK_SHAPE] at higher scales,
-    # where the chunk may extend beyond the bounding box of the entire volume.
     box = box.copy()
-    # box[1] = np.minimum(box[0] + box[1], VOL_SHAPE[:3] // 2**scale)
     print(f"{box=}")
     grow_by = 91 * INPUT_VOXEL_SIZE[0]
     roi = Roi(box[0][::-1], box[1]).grow(grow_by, grow_by)
     print(f"{roi=} after grow")
     data = DS.to_ndarray(roi) / 255.0
-    # prepend batch and channel dimensions
     data = data[np.newaxis, np.newaxis, ...].astype(np.float32)
-    # move to cuda
     data = torch.from_numpy(data)
-    # .to("cuda")
     with torch.no_grad():
         block_vol_czyx = MODEL(data)
         block_vol_czyx = block_vol_czyx.cpu().numpy()
         block_vol_czyx = block_vol_czyx[0, :NUM_CHANNELS, ...]
         print(block_vol_czyx.shape)
-    # block_vol_czyx = np.swapaxes(block_vol_czyx, 1, 3).copy()
     del data
-    # torch.cuda.empty_cache()
     gc.collect()
     return block_vol_czyx
