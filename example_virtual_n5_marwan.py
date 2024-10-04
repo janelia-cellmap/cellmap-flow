@@ -109,7 +109,7 @@ if not DEBUG:
 
     CONFIG_STORE = create_config_store()
     WEIGHTS_STORE = create_weights_store()
-    run_name = "20240925_mito_setup04_no_upsample_16_16_0"
+    run_name = "20240924_mito_setup04_no_upsample_16_16_0"
     run_config = CONFIG_STORE.retrieve_run_config(run_name)
 
     run = Run(run_config)  # , load_starter_model=False)
@@ -368,92 +368,7 @@ def update_equivalences():
         update_state()
         PREVIOUS_UPDATE_TIME = time.time()
         print("Updated equivalences")
-    # update_state()
 
-
-import tensorstore as ts
-
-TENSORSTORE = None
-
-LOADED_TENSORSTORE = False
-
-LOCAL_VOLUME = None
-
-
-# @app.route("/open_tensorstore")
-# def open_tensorstore():
-#     global TENSORSTORE, LOADED_TENSORSTORE, LOCAL_VOLUME
-#     if not LOADED_TENSORSTORE:
-#         LOADED_TENSORSTORE = True
-#         print("Opening TensorStore")
-#         try:
-#             dataset_future = ts.open(
-#                 {
-#                     "driver": "n5",
-#                     "kvstore": {
-#                         "driver": "http",
-#                         "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
-#                     },
-#                     "context": {
-#                         "cache_pool": {"total_bytes_limit": 1_000_000_000},
-#                         "data_copy_concurrency": {"limit": 1},
-#                         "file_io_concurrency": {"limit": 1},
-#                     },
-#                     "recheck_cached_data": "open",
-#                 }
-#             )
-#             TENSORSTORE = dataset_future.result()
-#             LOCAL_VOLUME = neuroglancer.LocalVolume(
-#                 data=TENSORSTORE,
-#                 dimensions=neuroglancer.CoordinateSpace(
-#                     names=["x", "y", "z", "c^"],
-#                     units=["nm", "nm", "nm", ""],
-#                     scales=[*OUTPUT_VOXEL_SIZE, 1],
-#                     coordinate_arrays=[
-#                         None,
-#                         None,
-#                         None,
-#                         None,
-#                     ],
-#                 ),
-#             )
-#             with VIEWER.txn() as s:
-#                 s.layers[f"inference and postprocessing"] = (
-#                     neuroglancer.SegmentationLayer(
-#                         source=LOCAL_VOLUME,
-#                     )
-#                 )
-#             print("TensorStore opened:", TENSORSTORE)
-#         except Exception as e:
-#             print(f"Error opening TensorStore: {e}")
-#     return jsonify(VIEWER.get_viewer_url()), HTTPStatus.OK
-
-
-# with app.app_context():
-#     dataset_future = ts.open(
-#         {
-#             "driver": "n5",
-#             "kvstore": {
-#                 "driver": "http",
-#                 "base_url": "http://ackermand-ws2:8000/test.n5/test/s0",
-#             },
-#             "context": {"cache_pool": {"total_bytes_limit": 100_000_000}},
-#             "recheck_cached_data": "open",
-#         }
-#     ).result()
-# print(dataset_future)
-# from threading import Thread
-
-
-# def start_open_tensorstore():
-#     # Start the open_tensorstore function in a new thread
-#     thread = Thread(target=open_tensorstore)
-#     thread.start()
-
-#     return jsonify("TensorStore opening initiated"), HTTPStatus.OK
-
-
-# start_open_tensorstore()
 
 # %%
 if __name__ == "__main__":
