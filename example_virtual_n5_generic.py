@@ -71,6 +71,7 @@ import neuroglancer
 import socket
 import skimage
 from image_data_interface import ImageDataInterface
+import logging
 
 app = Flask(__name__)
 CORS(app)
@@ -84,7 +85,8 @@ import socket
 hostname = socket.gethostname()
 
 # Get the local IP address
-print(f"Host name: {hostname}:8000")
+
+print(f"Host name: {hostname}", flush=True)
 
 
 def main():
@@ -94,7 +96,7 @@ def main():
     args = parser.parse_args()
     app.run(
         host="0.0.0.0",
-        port=args.port,
+        # port=args.port,
         debug=args.debug,
         threaded=not args.debug,
         use_reloader=args.debug,
@@ -123,13 +125,13 @@ MODEL = None
 # determined-chimpmunk is edges
 # kind-seashell is mito
 # happy-elephant is cells
-@app.route("/test.n5/<string:dataset>/attributes.json")
+@app.route("/<string:dataset>/attributes.json")
 def top_level_attributes(dataset):
     global OUTPUT_VOXEL_SIZE, BLOCK_SHAPE, VOL_SHAPE, CHUNK_ENCODER, IDI_RAW, MODEL
     # SCALE_LEVEL = 2
 
-    dataset_name, BMZ_MODEL_ID, s = dataset.split("__")
-    SCALE_LEVEL = int(s)
+    dataset_name, s, BMZ_MODEL_ID = dataset.split("__")
+    SCALE_LEVEL = int(s[1:])
     # BMZ_MODEL_ID = "determined-chipmunk"  # "happy-elephant"  # "determined-chipmunk"  # "kind-seashell"  # "affable-shark"
     MODEL = load_description(BMZ_MODEL_ID)
 
@@ -142,7 +144,7 @@ def top_level_attributes(dataset):
     OUTPUT_VOXEL_SIZE = IDI_RAW.voxel_size
 
     # %%
-    BLOCK_SHAPE = np.array([128, 128, 128, 9])
+    BLOCK_SHAPE = np.array([64, 64, 64, 9])
     MAX_SCALE = 0
 
     VOL_SHAPE_ZYX = np.array(IDI_RAW.ds.shape)
@@ -168,7 +170,7 @@ def top_level_attributes(dataset):
     return jsonify(attr), HTTPStatus.OK
 
 
-@app.route("/test.n5/<string:dataset>/s<int:scale>/attributes.json")
+@app.route("/<string:dataset>/s<int:scale>/attributes.json")
 def attributes(dataset, scale):
     attr = {
         "transform": {
@@ -190,7 +192,7 @@ def attributes(dataset, scale):
 
 
 @app.route(
-    "/test.n5/<string:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/"
+    "/<string:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/"
 )
 def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
     """
@@ -213,6 +215,9 @@ def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
     )
 
 
-# %%
+# # %%
+# import multiprocessing as mp
+
 if __name__ == "__main__":
+    #    mp.set_start_method("spawn")
     main()
