@@ -16,6 +16,8 @@ hosts = []
 security = "http"
 import subprocess
 
+neuroglancer.set_server_bind_address("0.0.0.0")
+
 
 def is_bsub_available():
     try:
@@ -107,16 +109,11 @@ def submit_bsub_job(
     job_name="my_job",
 ):
     if security == "https":
-        command = "gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
+        command = "pixi run gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
     else:
-        command = "gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
+        command = "pixi run gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
     # Get the current Conda environment
-    conda_env = os.environ.get("CONDA_DEFAULT_ENV")
-    if not conda_env:
-        raise EnvironmentError(
-            "No active Conda environment found. Activate a Conda environment and try again."
-        )
-
+    current_directory = os.getcwd()
     # Create the bsub command
     bsub_command = [
         "bsub",
@@ -134,7 +131,7 @@ def submit_bsub_job(
         "num=1",
         "bash",
         "-c",
-        f"source ~/.bashrc && conda activate {conda_env} && hostname && {command}",
+        f"cd {current_directory} && hostname && pwd && {command}",
     ]
 
     # Submit the job
@@ -153,28 +150,45 @@ def submit_bsub_job(
     return result
 
 
-def generate_neuroglancer_link(dataset, inference_dict):
+def generate_neuroglancer_link(dataset_path, inference_dict):
     # Create a new viewer
-    viewer = neuroglancer.Viewer()
+    viewer = neuroglancer.UnsynchronizedViewer()
 
     # Add a layer to the viewer
     with viewer.txn() as s:
-        s.layers["raw"] = neuroglancer.ImageLayer(
-            source=f"zarr://https://cellmap-vm1.int.janelia.org/nrs/data/{dataset}/{dataset}.zarr/recon-1/em/fibsem-uint8",
-        )
+        if ".zarr" in dataset_path:
+            filetype = "zarr"
+        elif ".n5" in dataset_path:
+            filetype = "n5"
+        else:
+            filetype = "precomputed"
+        if dataset_path.startswith("/"):
+            dataset_path = dataset_path.replace("/nrs/cellmap/", "/nrs/").replace(
+                "/groups/cellmap/cellmap/", "/dm11/"
+            )
+            s.layers["raw"] = neuroglancer.ImageLayer(
+                source=f"{filetype}://https://cellmap-vm1.int.janelia.org/{dataset_path}",
+            )
+        else:
+            s.layers["raw"] = neuroglancer.ImageLayer(
+                source=f"{filetype}://{dataset_path}",
+            )
 
-        print("Inference dict:", inference_dict)
         for host, model in inference_dict.items():
             s.layers[model] = neuroglancer.ImageLayer(source=f"n5://{host}/{model}")
-    print(neuroglancer.to_url(viewer.state))
+        print(viewer)  # neuroglancer.to_url(viewer.state))
+        while True:
+            pass
 
 
 def run_locally():
     # Command to execute
     command = [
+        "pixi",
+        "run",
         "gunicorn",
-        "--certfile=host.cert",
-        "--keyfile=host.key",
+        # "--certfile=host.cert",
+        # "--keyfile=host.key",
         "--bind",
         "0.0.0.0:0",
         "--workers",
@@ -238,9 +252,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-d",
-        "--dataset",
+        "--dataset_path",
         type=str,
-        help="Name of the dataset, including scale",
+        help="Data path, including scale",
         required=True,
     )
     parser.add_argument(
@@ -253,12 +267,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     models = args.models.split(",")
     scale = args.scale
-    dataset = args.dataset
-    if dataset.endswith("/"):
-        dataset = dataset[:-1]
-
+    dataset_path = args.dataset_path
+    if dataset_path.endswith("/"):
+        dataset_path = dataset_path[:-1]
+    print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
     logging.info("Starting hosts...")
+    print("starting_hosts")
     start_hosts(num_hosts=len(models))
+    print("started hosts")
+
     logging.info("Starting hosts completed!")
     inference_dict = {}
     if len(hosts) != len(models):
@@ -268,17 +285,22 @@ if __name__ == "__main__":
 
     print(hosts, models)
     for host, model in zip(hosts, models):
-        inference_dict[host] = f"{dataset}__{scale}__{model}"
+        inference_dict[host] = f"{dataset_path}__{scale}__{model}"
 
-    generate_neuroglancer_link(dataset, inference_dict)
+    generate_neuroglancer_link(dataset_path, inference_dict)
+# %%
+# import neuroglancer
+# import time
+
+# neuroglancer.set_server_bind_address("0.0.0.0")
+
+viewer = neuroglancer.UnsynchronizedViewer()
+with viewer.txn() as s:
+    s.layers["raw"] = neuroglancer.ImageLayer(
+        source="precomputed://gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg"
+    )
+    # s.layers["raw2"] = neuroglancer.LocalVolume()
+    print(viewer)
     while True:
         pass
-# %%
-import neuroglancer
-import time
-
-neuroglancer.set_server_bind_address("0.0.0.0")
-
-viewer = neuroglancer.Viewer()
-print(viewer)
 # %%
