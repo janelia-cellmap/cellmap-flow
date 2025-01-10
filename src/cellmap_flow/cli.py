@@ -264,7 +264,6 @@ def start_hosts(num_hosts=1):
 
 
 if __name__ == "__main__":
-    # parse input arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-d",
@@ -286,11 +285,9 @@ if __name__ == "__main__":
     dataset_path = args.dataset_path
     if dataset_path.endswith("/"):
         dataset_path = dataset_path[:-1]
-    print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
+    # print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
     logging.info("Starting hosts...")
-    print("starting_hosts")
     start_hosts(num_hosts=len(models))
-    print("started hosts")
 
     logging.info("Starting hosts completed!")
     inference_dict = {}
@@ -299,7 +296,7 @@ if __name__ == "__main__":
             "Number of hosts and models should be the same, but something went wrong"
         )
 
-    print(hosts, models)
+    # print(hosts, models)
     for host, model in zip(hosts, models):
         inference_dict[host] = f"{dataset_path}__{scale}__{model}"
 
