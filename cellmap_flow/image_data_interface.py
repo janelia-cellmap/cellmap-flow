@@ -82,7 +82,7 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
     else:
         kvstore = {
             "driver": "file",
-            "path": dataset_path,
+            "path": os.path.normpath(dataset_path),
         }
 
     if concurrency_limit:
@@ -327,8 +327,9 @@ class ImageDataInterface:
         self.ts = None
         return res
 
-    def to_ndarray_ds(self, roi=None):
-        return self.ds.to_ndarray(roi)
+    # ds not found
+    # def to_ndarray_ds(self, roi=None):
+    #     return self.ds.to_ndarray(roi)
 
 
 # %%

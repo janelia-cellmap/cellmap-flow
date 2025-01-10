@@ -31,8 +31,6 @@ Or, for better performance, use a proper http server:
     gunicorn --bind 0.0.0.0:8000 --workers 8 --threads 1 example_virtual_n5:app
 
 You can browse the data in neuroglancer after configuring the viewer with the appropriate layer [settings][1].
-
-[1]: http://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22z%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B5000.5%2C7500.5%2C10000.5%5D%2C%22crossSectionScale%22:25%2C%22projectionScale%22:32767.999999999996%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%7B%22url%22:%22n5://http://127.0.0.1:8000%22%2C%22transform%22:%7B%22outputDimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22z%22:%5B1e-9%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%7D%7D%2C%22tab%22:%22rendering%22%2C%22opacity%22:0.42%2C%22shader%22:%22void%20main%28%29%20%7B%5Cn%20%20emitRGB%28%5Cn%20%20%20%20vec3%28%5Cn%20%20%20%20%20%20getDataValue%280%29%2C%5Cn%20%20%20%20%20%20getDataValue%281%29%2C%5Cn%20%20%20%20%20%20getDataValue%282%29%5Cn%20%20%20%20%29%5Cn%20%20%29%3B%5Cn%7D%5Cn%22%2C%22channelDimensions%22:%7B%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22name%22:%22colorful-data%22%7D%5D%2C%22layout%22:%224panel%22%7D
 """
 
 # %%
@@ -45,10 +43,8 @@ You can browse the data in neuroglancer after configuring the viewer with the ap
 # NOTE: You will probably have to access the host:8000 separately and say it is safe to go there
 
 # %% load image zoo
-from bioimageio.core import load_description
-from bioimageio.core import predict  # , predict_many
 
-
+from cellmap_flow.utils import load_safe_config
 import argparse
 from http import HTTPStatus
 from flask import Flask, jsonify
@@ -58,26 +54,20 @@ import numpy as np
 import numcodecs
 from scipy import spatial
 from zarr.n5 import N5ChunkWrapper
-from funlib.persistence import open_ds
 from funlib.geometry import Roi
 import numpy as np
-from funlib.geometry import Coordinate
-from skimage.morphology import erosion
-from scipy.ndimage import binary_dilation
+import logging
 
+logger = logging.getLogger(__name__)
 
 # NOTE: Normally we would just load in run but here we have to recreate it to save time since our run has so many points
-import neuroglancer
 import socket
-import skimage
-from image_data_interface import ImageDataInterface
-import logging
+from cellmap_flow.image_data_interface import ImageDataInterface
 
 app = Flask(__name__)
 CORS(app)
 
-from bioimageio.core import Tensor
-from bioimagezoo_processor import process_chunk
+from cellmap_flow.inferencer import Inferencer
 
 import socket
 
@@ -103,10 +93,9 @@ def main():
     )
 
 
-# OUTPUT_VOXEL_SIZE = [8 * 2**SCALE_LEVEL, 8 * 2**SCALE_LEVEL, 8 * 2**SCALE_LEVEL]
-
-
 # %%
+script_path = "/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py"
+config = load_safe_config(script_path)
 SCALE_LEVEL = None
 IDI_RAW = None
 OUTPUT_VOXEL_SIZE = None
@@ -114,44 +103,52 @@ VOL_SHAPE_ZYX = None
 VOL_SHAPE = None
 VOL_SHAPE_ZYX_IN_BLOCKS = None
 VOXEL_SIZE = None
-BLOCK_SHAPE = None
+BLOCK_SHAPE = config.block_shape
 MAX_SCALE = None
 CHUNK_ENCODER = None
 EQUIVALENCES = None
 DS = None
-MODEL = None
+INFERENCER = Inferencer(script_path=script_path)
 
 
 # determined-chimpmunk is edges
 # kind-seashell is mito
 # happy-elephant is cells
-@app.route("/<string:dataset>/attributes.json")
+@app.route("/<path:dataset>/attributes.json")
 def top_level_attributes(dataset):
-    global OUTPUT_VOXEL_SIZE, BLOCK_SHAPE, VOL_SHAPE, CHUNK_ENCODER, IDI_RAW, MODEL
-    # SCALE_LEVEL = 2
+    if "__" not in dataset:
+        return jsonify({"n5": "2.1.0"}), HTTPStatus.OK
+
+    if not (dataset.startswith("gs://") or dataset.startswith("s3://")):
+        dataset = "/" + dataset
 
     dataset_name, s, BMZ_MODEL_ID = dataset.split("__")
-    SCALE_LEVEL = int(s[1:])
-    # BMZ_MODEL_ID = "determined-chipmunk"  # "happy-elephant"  # "determined-chipmunk"  # "kind-seashell"  # "affable-shark"
-    MODEL = load_description(BMZ_MODEL_ID)
 
-    # global SCALE_LEVEL, IDI_RAW, OUTPUT_VOXEL_SIZE, VOL_SHAPE_ZYX, VOL_SHAPE, VOL_SHAPE_ZYX_IN_BLOCKS, VOXEL_SIZE, BLOCK_SHAPE, MAX_SCALE, CHUNK_ENCODER
-    # SCALE_LEVEL = 1
-    # IDI_RAW = ImageDataInterface(f"/nrs/cellmap/data/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8/s{SCALE_LEVEL}")
-    IDI_RAW = ImageDataInterface(
-        f"/nrs/cellmap/data/{dataset_name}/{dataset_name}.zarr/recon-1/em/fibsem-uint8/s{SCALE_LEVEL}"
-    )
-    OUTPUT_VOXEL_SIZE = IDI_RAW.voxel_size
+    global OUTPUT_VOXEL_SIZE, BLOCK_SHAPE, VOL_SHAPE, CHUNK_ENCODER, IDI_RAW, INFERENCER
+    print(dataset_name, s, BMZ_MODEL_ID)
+    
+    
+    
+
+    # self.read_shape = config.read_shape
+    # self.write_shape = config.write_shape
+    
+    # self.context = (self.read_shape - self.write_shape) / 2
+    SCALE_LEVEL = int(s[1:])
+    
+    
+    # MODEL = Inferencer(BMZ_MODEL_ID)
+
+    IDI_RAW = ImageDataInterface(f"{dataset_name}/s{SCALE_LEVEL}")
+    OUTPUT_VOXEL_SIZE = config.output_voxel_size
 
     # %%
-    BLOCK_SHAPE = np.array([64, 64, 64, 9])
     MAX_SCALE = 0
 
-    VOL_SHAPE_ZYX = np.array(IDI_RAW.ds.shape)
-    print(VOL_SHAPE_ZYX)
-    VOL_SHAPE = np.array([*VOL_SHAPE_ZYX[::-1], 9])
-    VOL_SHAPE_ZYX_IN_BLOCKS = np.ceil(VOL_SHAPE_ZYX / BLOCK_SHAPE[:3]).astype(int)
-    VOXEL_SIZE = IDI_RAW.ds.voxel_size
+    VOL_SHAPE_ZYX = np.array(IDI_RAW.shape)
+    VOL_SHAPE = np.array([*VOL_SHAPE_ZYX[::-1], 8])
+    # VOL_SHAPE_ZYX_IN_BLOCKS = np.ceil(VOL_SHAPE_ZYX / BLOCK_SHAPE[:3]).astype(int)
+    # VOXEL_SIZE = IDI_RAW.voxel_size
 
     CHUNK_ENCODER = N5ChunkWrapper(np.uint8, BLOCK_SHAPE, compressor=numcodecs.GZip())
 
@@ -163,19 +160,19 @@ def top_level_attributes(dataset):
         },
         "ordering": "C",
         "scales": scales,
-        "axes": ["x", "y", "z", "c"],
+        "axes": ["x", "y", "z", "c^"],
         "units": ["nm", "nm", "nm", ""],
         "translate": [0, 0, 0, 0],
     }
     return jsonify(attr), HTTPStatus.OK
 
 
-@app.route("/<string:dataset>/s<int:scale>/attributes.json")
+@app.route("/<path:dataset>/s<int:scale>/attributes.json")
 def attributes(dataset, scale):
     attr = {
         "transform": {
             "ordering": "C",
-            "axes": ["x", "y", "z", "c"],
+            "axes": ["x", "y", "z", "c^"],
             "scale": [
                 *OUTPUT_VOXEL_SIZE,
                 1,
@@ -192,7 +189,7 @@ def attributes(dataset, scale):
 
 
 @app.route(
-    "/<string:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/"
+    "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/"
 )
 def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
     """
@@ -201,23 +198,24 @@ def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
     This 'virtual N5' will just display a color gradient,
     fading from black at (0,0,0) to white at (max,max,max).
     """
-    # assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
-    corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
-    box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
-    roi = Roi(box[0], box[1])
-    chunk = process_chunk(MODEL, IDI_RAW, roi)
-    print(chunk.shape)
-    return (
-        # Encode to N5 chunk format (header + compressed data)
-        CHUNK_ENCODER.encode(chunk),
-        HTTPStatus.OK,
-        {"Content-Type": "application/octet-stream"},
-    )
+    try:
+        # assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
+        corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
+        roi = Roi(box[0], box[1])
+        print("about_to_process_chunk")
+        chunk = INFERENCER.process_chunk_basic(IDI_RAW, roi)
+        # logger.error(f"chunk {chunk}")
+        print(chunk)
+        return (
+            # Encode to N5 chunk format (header + compressed data)
+            CHUNK_ENCODER.encode(chunk),
+            HTTPStatus.OK,
+            {"Content-Type": "application/octet-stream"},
+        )
+    except Exception as e:
+        return jsonify(error=str(e)), HTTPStatus.INTERNAL_SERVER_ERROR
 
-
-# # %%
-# import multiprocessing as mp
 
 if __name__ == "__main__":
-    #    mp.set_start_method("spawn")
     main()

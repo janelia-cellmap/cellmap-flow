@@ -1,12 +1,12 @@
-import argparse
 import subprocess
 import logging
 import neuroglancer
 import os
 import sys
 import signal
-
 import select
+import itertools
+import click
 
 logging.basicConfig()
 
@@ -109,11 +109,19 @@ def submit_bsub_job(
     job_name="my_job",
 ):
     if security == "https":
-        command = "pixi run gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
+        command = "gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
     else:
-        command = "pixi run gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic:app"
+        command = "gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
+    # if security == "https":
+    #     command = "pixi run gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
+    # else:
+    #     command = "pixi run gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
     # Get the current Conda environment
-    current_directory = os.getcwd()
+    conda_env = os.environ.get("CONDA_DEFAULT_ENV")
+    if not conda_env:
+        raise EnvironmentError(
+            "No active Conda environment found. Activate a Conda environment and try again."
+        )
     # Create the bsub command
     bsub_command = [
         "bsub",
@@ -131,7 +139,7 @@ def submit_bsub_job(
         "num=1",
         "bash",
         "-c",
-        f"cd {current_directory} && hostname && pwd && {command}",
+        f"cd /groups/cellmap/cellmap/zouinkhim/cellmap-flow/cellmap_flow && source ~/.bashrc && conda activate {conda_env} && hostname && {command}",
     ]
 
     # Submit the job
@@ -167,15 +175,22 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
                 "/groups/cellmap/cellmap/", "/dm11/"
             )
             s.layers["raw"] = neuroglancer.ImageLayer(
-                source=f"{filetype}://https://cellmap-vm1.int.janelia.org/{dataset_path}",
+                source=f"{filetype}://{security}://cellmap-vm1.int.janelia.org/{dataset_path}",
             )
         else:
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
             )
-
+        colors = ["red", "green", "blue"]
+        color_cycle = itertools.cycle(colors)
         for host, model in inference_dict.items():
-            s.layers[model] = neuroglancer.ImageLayer(source=f"n5://{host}/{model}")
+            color = next(color_cycle)
+            s.layers[model] = neuroglancer.ImageLayer(
+                source=f"n5://{host}/{model}",
+                shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
+#uicontrol vec3 color color(default="{color}");
+void main(){{emitRGB(color * normalized());}}""",
+            )
         print(viewer)  # neuroglancer.to_url(viewer.state))
         while True:
             pass
@@ -184,8 +199,8 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
 def run_locally():
     # Command to execute
     command = [
-        "pixi",
-        "run",
+        # "pixi",
+        # "run",
         "gunicorn",
         # "--certfile=host.cert",
         # "--keyfile=host.key",
@@ -195,7 +210,7 @@ def run_locally():
         "1",
         "--threads",
         "1",
-        "example_virtual_n5_generic:app",
+        "example_virtual_n5_generic_using_python_script:app",
     ]
 
     # Start the subprocess
@@ -247,34 +262,33 @@ def start_hosts(num_hosts=1):
         run_locally()
 
 
-if __name__ == "__main__":
-    # parse input arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-d",
-        "--dataset_path",
-        type=str,
-        help="Data path, including scale",
-        required=True,
-    )
-    parser.add_argument(
-        "-s", "--scale", type=str, help="Scale to apply models", required=True
-    )
-    parser.add_argument(
-        "-m", "--models", type=str, help="Comma-separated list of models", required=True
-    )
-
-    args = parser.parse_args()
-    models = args.models.split(",")
-    scale = args.scale
-    dataset_path = args.dataset_path
+@click.command()
+@click.option(
+    "-d",
+    "--dataset_path",
+    type=str,
+    help="Data path, including scale",
+    required=True,
+)
+@click.option(
+    "-s", "--scale", type=str, help="Scale to apply models", required=True
+)
+@click.option(
+    "-m", "--models", type=str, help="Comma-separated list of models", required=True
+)
+@click.option(
+    "-c",
+    "--code", type=str, help="Path to the script to run", required=False
+)
+def main(dataset_path, scale, models, code):
+    models = models.split(",")
+    code_script = code
+    
     if dataset_path.endswith("/"):
         dataset_path = dataset_path[:-1]
-    print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
+    # print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
     logging.info("Starting hosts...")
-    print("starting_hosts")
     start_hosts(num_hosts=len(models))
-    print("started hosts")
 
     logging.info("Starting hosts completed!")
     inference_dict = {}
@@ -283,24 +297,12 @@ if __name__ == "__main__":
             "Number of hosts and models should be the same, but something went wrong"
         )
 
-    print(hosts, models)
+    # print(hosts, models)
     for host, model in zip(hosts, models):
         inference_dict[host] = f"{dataset_path}__{scale}__{model}"
 
     generate_neuroglancer_link(dataset_path, inference_dict)
-# %%
-# import neuroglancer
-# import time
 
-# neuroglancer.set_server_bind_address("0.0.0.0")
 
-viewer = neuroglancer.UnsynchronizedViewer()
-with viewer.txn() as s:
-    s.layers["raw"] = neuroglancer.ImageLayer(
-        source="precomputed://gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg"
-    )
-    # s.layers["raw2"] = neuroglancer.LocalVolume()
-    print(viewer)
-    while True:
-        pass
-# %%
+if __name__ == "__main__":
+    main()

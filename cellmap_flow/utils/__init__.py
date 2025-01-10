@@ -1,0 +1,1 @@
+from .load_py import load_safe_config
