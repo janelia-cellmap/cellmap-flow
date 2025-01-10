@@ -1,29 +1,49 @@
-# %%
-# original dacapo i used: dacapo-ml                 0.3.1.dev428+g3abcf96          pypi_0    pypi
-# had to add skip_on_failure=True to @root_validators in cellmap-schema
 import numpy as np
-from dacapo.store.create_store import create_config_store, create_weights_store
-from dacapo.experiments import Run
 import torch
-from funlib.persistence import Array
+from pydantic import BaseModel
 
+from enum import Enum
 
+class ModelType(Enum):
+    DACAPO = 1
+    BIOIMAGEMODEL = 2
+    SCRIPT = 3
+
+class ModelConfig(BaseModel):
+    pass
+
+class BioModelConfig(ModelConfig):
+    model_name: str
+    model_type = ModelType.BIOIMAGEMODEL
+
+class ScriptModelConfig(ModelConfig):
+    script_path: str
+    model_type = ModelType.SCRIPT
+
+class DaCapoModelConfig(ModelConfig):
+    run_name: str
+    iteration: str = "best"
+    model_type = ModelType.DACAPO
 
 class Inferencer:
-    def __init__(self, model_name=None,script_path=None):
-        if model_name is None and script_path is None:
-            raise ValueError("Either model_name or script_path must be provided.")
-        if model_name is not None and script_path is not None:
-            raise ValueError("Only one of model_name or script_path can be provided.")
-        self.load_model(model_name=model_name, script_path=script_path)
+    def __init__(self, config: ModelConfig):
+        self.config = config
+        self.load_model(config)
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
         self.model.to(self.device)
         print(f"Using device: {self.device}")
-        self.is_bioimage_model = False
         
+    def process_chunk(self, idi, roi):
+        if isinstance(self.config, BioModelConfig):
+            return self.process_chunk_bioimagezoo(idi, roi)
+        elif isinstance(self.config, DaCapoModelConfig) or isinstance(self.config, ScriptModelConfig):
+            return self.process_chunk_basic(idi, roi)
+        else:
+            raise ValueError(f"Invalid model config type {type(self.config)}")
+
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
@@ -45,7 +65,6 @@ class Inferencer:
         write_data = predictions.to_ndarray(output_roi).clip(-1, 1)
         write_data = (write_data + 1) * 255.0 / 2.0
         return write_data.astype(np.uint8)
-
 
 
     # create random input tensor
@@ -92,54 +111,66 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
-
-    def process_chunk_dacapo(self, idi, roi):
-        return True
-
-    def process_chunk(self, idi, roi):
-        if self.is_bioimage_model:
-            return self.process_chunk_bioimagezoo(idi, roi)
+    
+    def load_model(self, config:ModelConfig):
+        if isinstance(config, DaCapoModelConfig):
+            self.load_dacapo_model(config.run_name, iteration=config.iteration)
+        elif isinstance(config, ScriptModelConfig):
+            self.load_script_model(config.script_path)
+        elif isinstance(config, BioModelConfig):
+            self.load_bio_model(config.model_name)
         else:
-            return self.process_chunk(idi, roi)
-
-    def load_model_dacapo(self, model_name, iteration="best"):
+            raise ValueError(f"Invalid model config type {type(config)}")
+        
+    def load_dacapo_model(self, bio_model_name, iteration="best"):
+        from dacapo.store.create_store import create_config_store, create_weights_store
+        from dacapo.experiments import Run
         config_store = create_config_store()
 
         weights_store = create_weights_store()
-        run_config = config_store.retrieve_run_config(model_name)
+        run_config = config_store.retrieve_run_config(bio_model_name)
 
         run = Run(run_config)
-        model = run.model
+        self.model = run.model
 
         weights = weights_store.retrieve_weights(
-            model_name,
+            bio_model_name,
             iteration,
         )
-        model.load_state_dict(weights.model)
-        model.to(self.device)
-        model.eval()
+        self.model.load_state_dict(weights.model)
+        self.model.eval()
+        # output_voxel_size = self.model.scale(input_voxel_size)
+        # input_shape = Coordinate(model.eval_input_shape)
+        # output_size = output_voxel_size * model.compute_output_shape(input_shape)[1]
 
-    def load_model(self, model_name=None,script_path=None):
-        if model_name is not None:
-            try:
-                from bioimageio.core import load_description
-                from bioimageio.core import predict  # , predict_many
-                from bioimageio.core import Tensor
-                from bioimageio.core import Sample
-                from bioimageio.core.digest_spec import get_member_ids
-                self.model = load_description(model_name)
-                self.is_bioimage_model = True
-            except:
-                self.model = self.load_model_dacapo(model_name, iteration="best")
-                self.is_bioimage_model = False
-        else:
-            from cellmap_flow.utils import load_safe_config
-            config = load_safe_config(script_path)
-            self.model = config.model
-            self.read_shape = config.read_shape
-            self.write_shape = config.write_shape
-            self.output_voxel_size = config.output_voxel_size
-            self.context = (self.read_shape - self.write_shape) / 2
+        # context = (input_size - output_size) / 2
+        # TODO load this part from dacapo
+        # self.read_shape = config.read_shape
+        # self.write_shape = config.write_shape
+        # self.output_voxel_size = config.output_voxel_size
+        # self.context = (self.read_shape - self.write_shape) / 2
+
+
+
+
+    def load_bio_model(self, bio_model_name):
+        from bioimageio.core import load_description
+        from bioimageio.core import predict  # , predict_many
+        from bioimageio.core import Tensor
+        from bioimageio.core import Sample
+        from bioimageio.core.digest_spec import get_member_ids
+        self.model = load_description(bio_model_name)
+
+
+    def load_script_model(self, script_path):
+        from funlib.persistence import Array
+        from cellmap_flow.utils import load_safe_config
+        config = load_safe_config(script_path)
+        self.model = config.model
+        self.read_shape = config.read_shape
+        self.write_shape = config.write_shape
+        self.output_voxel_size = config.output_voxel_size
+        self.context = (self.read_shape - self.write_shape) / 2
 
 
 
