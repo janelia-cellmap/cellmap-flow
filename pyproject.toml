@@ -78,7 +78,8 @@ allow-direct-references = true
 packages = ["cellmap_flow"]
 
 [project.scripts]
-cellmap_flow = "cellmap_flow.cli:cli"
+cellmap_flow = "cellmap_flow.cli:main"
+cellmap_flow_server = "cellmap_flow.server:main"
 
 # https://github.com/charliermarsh/ruff
 [tool.ruff]

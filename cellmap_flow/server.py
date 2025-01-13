@@ -13,7 +13,11 @@ from funlib.geometry import Roi
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from funlib.geometry.coordinate import Coordinate
+from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig
+import click
+
 logger = logging.getLogger(__name__)
+
 
 # ------------------------------------------------------------------------------
 # Example usage:
@@ -36,9 +40,7 @@ class CellMapFlowServer:
     """
 
     def __init__(self, dataset_name: str, 
-                 output_channels: int,
-                 output_voxel_size: tuple,
-                 script_path: str, block_shape=(64, 64, 64)):
+                 model_config: ModelConfig):
         """
         Initialize the server.
 
@@ -46,14 +48,14 @@ class CellMapFlowServer:
             script_path (str): Path to the Python script containing model specification
             block_shape (tuple): Shape of the blocks used for chunking
         """
-        self.script_path = script_path
-        self.block_shape = block_shape
+        self.block_shape = [(int(x)) for x in model_config.config.block_shape]
+        self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
+        self.output_channels = model_config.config.output_channels
 
-        self.output_voxel_size = Coordinate(output_voxel_size)
-        self.inferencer = Inferencer(script_path=self.script_path)
+        self.inferencer = Inferencer(model_config)
 
         self.idi_raw = ImageDataInterface(dataset_name)
-        self.vol_shape = np.array([*np.array(self.idi_raw.shape)[::-1], output_channels]) # converting from z,y,x order to x,y,z order zarr to n5
+        self.vol_shape = np.array([*np.array(self.idi_raw.shape)[::-1], self.output_channels]) # converting from z,y,x order to x,y,z order zarr to n5
 
         self.chunk_encoder = N5ChunkWrapper(np.uint8, self.block_shape, compressor=numcodecs.GZip())
 
@@ -139,6 +141,7 @@ class CellMapFlowServer:
             "dataType": "uint8",
             "dimensions": self.vol_shape.tolist(),
         }
+        print(f"Attributes: {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
     def chunk(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
@@ -146,46 +149,60 @@ class CellMapFlowServer:
         Serve up a single chunk at the requested scale and location.
         This 'virtual N5' will just run an inference function and return the data.
         """
-        try:
+        # try:
             # assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
-            corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-            box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
-            roi = Roi(box[0], box[1])
+        corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
+        roi = Roi(box[0], box[1])
 
-            chunk = self.inferencer.process_chunk_basic(self.idi_raw, roi)
-            return (
-                # Encode to N5 chunk format (header + compressed data)
-                self.chunk_encoder.encode(chunk),
-                HTTPStatus.OK,
-                {"Content-Type": "application/octet-stream"},
-            )
-        except Exception as e:
-            return jsonify(error=str(e)), HTTPStatus.INTERNAL_SERVER_ERROR
+        chunk = self.inferencer.process_chunk_basic(self.idi_raw, roi)
+        return (
+            # Encode to N5 chunk format (header + compressed data)
+            self.chunk_encoder.encode(chunk),
+            HTTPStatus.OK,
+            {"Content-Type": "application/octet-stream"},
+        )
+        # except Exception as e:
+        #     return jsonify(error=str(e)), HTTPStatus.INTERNAL_SERVER_ERROR
 
-    def run(self, debug=False, port=8000):
+    def run(self, debug=False, port=8000, certfile=None, keyfile=None):
         """
-        Run the Flask development server (for local testing).
-
-        Args:
-            debug (bool): Whether to run in Flask debug mode
-            port (int): Port to serve on
+        Run the Flask development server with optional SSL cert/key.
         """
+        ssl_context = None
+        if certfile and keyfile:
+            # (certfile, keyfile) tuple enables HTTPS in the built-in dev server
+            ssl_context = (certfile, keyfile)
+        
         self.app.run(
             host="0.0.0.0",
             port=port,
             debug=debug,
-            threaded=not debug,
             use_reloader=debug,
+            ssl_context=ssl_context,  # <-- pass SSL context to Flask dev server
         )
 
 
 # Create a global instance (so that gunicorn can point to `app`)
 
 
+@click.command()
+@click.option("-d", "--dataset_name", type=str, required=True, help="Name of the dataset.")
+@click.option("-c", "--config", type=str, required=True, help="Path to the model config file.")
+@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("-p", "--port", default=8000, type=int, help="Port to listen on.")
+@click.option("--certfile", default=None, help="Path to SSL certificate file.")
+@click.option("--keyfile", default=None, help="Path to SSL private key file.")
+def main(dataset_name, config, debug, port, certfile, keyfile):
+    dataset = dataset_name
+    model_config = ScriptModelConfig(script_path=config)
+    server = CellMapFlowServer(dataset, model_config)
+    server.run(
+        debug=debug,
+        port=port,
+        certfile=certfile,
+        keyfile=keyfile,
+    )
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--debug", action="store_true", help="Run in debug mode.")
-    parser.add_argument("-p", "--port", default=8000, type=int, help="Port to listen on.")
-    args = parser.parse_args()
-    server = CellMapFlowServer(script_path="/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py")
-    server.run(debug=args.debug, port=args.port)
+    main()

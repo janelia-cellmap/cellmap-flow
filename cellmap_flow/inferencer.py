@@ -1,34 +1,12 @@
 import numpy as np
 import torch
-from pydantic import BaseModel
-
-from enum import Enum
-
-class ModelType(Enum):
-    DACAPO = 1
-    BIOIMAGEMODEL = 2
-    SCRIPT = 3
-
-class ModelConfig(BaseModel):
-    pass
-
-class BioModelConfig(ModelConfig):
-    model_name: str
-    model_type = ModelType.BIOIMAGEMODEL
-
-class ScriptModelConfig(ModelConfig):
-    script_path: str
-    model_type = ModelType.SCRIPT
-
-class DaCapoModelConfig(ModelConfig):
-    run_name: str
-    iteration: str = "best"
-    model_type = ModelType.DACAPO
+from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig
+from funlib.persistence import Array
 
 class Inferencer:
-    def __init__(self, config: ModelConfig):
-        self.config = config
-        self.load_model(config)
+    def __init__(self, model_config: ModelConfig):
+        self.model_config = model_config
+        self.load_model(model_config)
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
@@ -116,7 +94,7 @@ class Inferencer:
         if isinstance(config, DaCapoModelConfig):
             self.load_dacapo_model(config.run_name, iteration=config.iteration)
         elif isinstance(config, ScriptModelConfig):
-            self.load_script_model(config.script_path)
+            self.load_script_model(config)
         elif isinstance(config, BioModelConfig):
             self.load_bio_model(config.model_name)
         else:
@@ -162,10 +140,8 @@ class Inferencer:
         self.model = load_description(bio_model_name)
 
 
-    def load_script_model(self, script_path):
-        from funlib.persistence import Array
-        from cellmap_flow.utils import load_safe_config
-        config = load_safe_config(script_path)
+    def load_script_model(self, model_config:ScriptModelConfig):
+        config = model_config.config
         self.model = config.model
         self.read_shape = config.read_shape
         self.write_shape = config.write_shape

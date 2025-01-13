@@ -10,6 +10,8 @@ import click
 
 logging.basicConfig()
 
+logger = logging.getLogger(__name__)
+
 processes = []
 job_ids = []
 hosts = []
@@ -54,10 +56,13 @@ signal.signal(signal.SIGTERM, cleanup)  # Handle termination
 
 
 def get_host_from_stdout(output):
+    logger.error(f"Output: {output}")
+
     # Print or parse the output line-by-line
-    if "Host name: " in output and f"Listening at: {security}://" in output:
-        host_name = output.split("Host name: ")[1].strip()
-        port = output.split(f"Listening at: {security}://0.0.0.0:")[1].split(" (")[0]
+    if "Host name: " in output and f"* Running on {security}://" in output:
+        print("Host found!")
+        host_name = output.split("Host name: ")[1].split("\n")[0].strip()
+        port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
 
         hosts.append(f"{security}://{host_name}:{port}")
         print(f"{hosts=}")
@@ -72,6 +77,7 @@ def parse_bpeek_output(job_id):
     try:
         # Process the output in real-time
         while True:
+            # logger.error(f"Running command: {command}")
             process = subprocess.Popen(
                 command,
                 shell=True,
@@ -82,16 +88,21 @@ def parse_bpeek_output(job_id):
 
             output = process.stdout.read()
             error_output = process.stderr.read()
+            # logger.error(f"Output: {output} {error_output}")
             if (
                 output == ""
                 and process.poll() is not None
                 and f"Job <{job_id}> : Not yet started." not in error_output
             ):
+                logger.error(f"Job <{job_id}> has finished.")
                 break  # End of output
             if output:
                 # Print or parse the output line-by-line
+                logger.error(output)
                 if get_host_from_stdout(output):
+
                     break
+
                 # Example: Parse a specific pattern (e.g., errors or warnings)
                 if "error" in output.lower():
                     print(f"Error found: {output.strip()}")
@@ -106,17 +117,10 @@ def parse_bpeek_output(job_id):
 
 
 def submit_bsub_job(
+    sc,
     job_name="my_job",
+    
 ):
-    if security == "https":
-        command = "gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
-    else:
-        command = "gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
-    # if security == "https":
-    #     command = "pixi run gunicorn --certfile=host.cert --keyfile=host.key --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
-    # else:
-    #     command = "pixi run gunicorn --bind 0.0.0.0:0 --workers 1 --threads 1 example_virtual_n5_generic_using_python_script:app"
-    # Get the current Conda environment
     conda_env = os.environ.get("CONDA_DEFAULT_ENV")
     if not conda_env:
         raise EnvironmentError(
@@ -139,7 +143,7 @@ def submit_bsub_job(
         "num=1",
         "bash",
         "-c",
-        f"cd /groups/cellmap/cellmap/zouinkhim/cellmap-flow/cellmap_flow && source ~/.bashrc && conda activate {conda_env} && hostname && {command}",
+        f"cd /groups/cellmap/cellmap/zouinkhim/cellmap-flow/cellmap_flow && source ~/.bashrc && conda activate {conda_env} && hostname && {sc}",
     ]
 
     # Submit the job
@@ -196,22 +200,9 @@ void main(){{emitRGB(color * normalized());}}""",
             pass
 
 
-def run_locally():
+def run_locally(sc):
     # Command to execute
-    command = [
-        # "pixi",
-        # "run",
-        "gunicorn",
-        # "--certfile=host.cert",
-        # "--keyfile=host.key",
-        "--bind",
-        "0.0.0.0:0",
-        "--workers",
-        "1",
-        "--threads",
-        "1",
-        "example_virtual_n5_generic_using_python_script:app",
-    ]
+    command = sc.split(" ")
 
     # Start the subprocess
     process = subprocess.Popen(
@@ -251,15 +242,22 @@ def run_locally():
     #     process.wait()  # Wait for the process to terminate
 
 
-def start_hosts(num_hosts=1):
+def start_hosts(dataset,
+    script_path,
+    num_hosts=1):
+    if security == "https":
+        sc = f"cellmap_flow_server:app -d {dataset} -c {script_path} --certfile=host.cert --keyfile=host.key"
+    else: 
+        sc = f"cellmap_flow_server -d {dataset} -c {script_path}"
+    
     if is_bsub_available():
         for _ in range(num_hosts):
-            result = submit_bsub_job(job_name="example_job")
+            result = submit_bsub_job(sc,job_name="example_job")
             job_ids.append(result.stdout.split()[1][1:-1])
         for job_id in job_ids:
             parse_bpeek_output(job_id)
     else:
-        run_locally()
+        run_locally(sc)
 
 
 @click.command()
@@ -271,27 +269,20 @@ def start_hosts(num_hosts=1):
     required=True,
 )
 @click.option(
-    "-s", "--scale", type=str, help="Scale to apply models", required=True
-)
-@click.option(
-    "-m", "--models", type=str, help="Comma-separated list of models", required=True
-)
-@click.option(
     "-c",
     "--code", type=str, help="Path to the script to run", required=False
 )
-def main(dataset_path, scale, models, code):
-    models = models.split(",")
-    code_script = code
+def main(dataset_path, code):
     
     if dataset_path.endswith("/"):
         dataset_path = dataset_path[:-1]
     # print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
     logging.info("Starting hosts...")
-    start_hosts(num_hosts=len(models))
+    start_hosts(dataset_path,code,num_hosts=1)
 
     logging.info("Starting hosts completed!")
     inference_dict = {}
+    models = ["model"]
     if len(hosts) != len(models):
         raise ValueError(
             "Number of hosts and models should be the same, but something went wrong"
@@ -299,7 +290,7 @@ def main(dataset_path, scale, models, code):
 
     # print(hosts, models)
     for host, model in zip(hosts, models):
-        inference_dict[host] = f"{dataset_path}__{scale}__{model}"
+        inference_dict[host] = f"{dataset_path}"
 
     generate_neuroglancer_link(dataset_path, inference_dict)
 
