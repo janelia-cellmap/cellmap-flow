@@ -98,7 +98,7 @@ def parse_bpeek_output(job_id):
                 break  # End of output
             if output:
                 # Print or parse the output line-by-line
-                logger.error(output)
+                # logger.error(output)
                 if get_host_from_stdout(output):
 
                     break
@@ -168,6 +168,9 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
 
     # Add a layer to the viewer
     with viewer.txn() as s:
+        # if multiscale dataset
+        if dataset_path.split("/")[-1].startswith("s") and dataset_path.split("/")[-1][1:].isdigit():
+            dataset_path = dataset_path.rsplit("/", 1)[0]
         if ".zarr" in dataset_path:
             filetype = "zarr"
         elif ".n5" in dataset_path:
@@ -175,8 +178,8 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
         else:
             filetype = "precomputed"
         if dataset_path.startswith("/"):
-            dataset_path = dataset_path.replace("/nrs/cellmap/", "/nrs/").replace(
-                "/groups/cellmap/cellmap/", "/dm11/"
+            dataset_path = dataset_path.replace("/nrs/cellmap/", "nrs/").replace(
+                "/groups/cellmap/cellmap/", "dm11/"
             )
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{security}://cellmap-vm1.int.janelia.org/{dataset_path}",
@@ -196,6 +199,7 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
 void main(){{emitRGB(color * normalized());}}""",
             )
         print(viewer)  # neuroglancer.to_url(viewer.state))
+        logger.error(f"link : {viewer}")
         while True:
             pass
 

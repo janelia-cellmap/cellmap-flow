@@ -185,18 +185,28 @@ class CellMapFlowServer:
 
 # Create a global instance (so that gunicorn can point to `app`)
 
+def get_free_port():
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('localhost', 0))  # Bind to port 0 to get a random free port
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
 
 @click.command()
 @click.option("-d", "--dataset_name", type=str, required=True, help="Name of the dataset.")
 @click.option("-c", "--config", type=str, required=True, help="Path to the model config file.")
 @click.option("--debug", is_flag=True, help="Run in debug mode.")
-@click.option("-p", "--port", default=8000, type=int, help="Port to listen on.")
+@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def main(dataset_name, config, debug, port, certfile, keyfile):
     dataset = dataset_name
     model_config = ScriptModelConfig(script_path=config)
     server = CellMapFlowServer(dataset, model_config)
+    if port == 0:
+        port = get_free_port()
+        
     server.run(
         debug=debug,
         port=port,

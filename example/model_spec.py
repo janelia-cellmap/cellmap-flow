@@ -30,5 +30,5 @@ output_channels = 8  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:l
 model = load_eval_model(output_channels, CHECKPOINT_PATH)
 block_shape = np.array((56, 56, 56,8))
 # %%
-print("model loaded",model)
+# print("model loaded",model)
 # %%
