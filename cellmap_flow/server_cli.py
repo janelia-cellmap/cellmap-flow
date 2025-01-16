@@ -1,7 +1,7 @@
 import click
 import logging
 
-from cellmap_flow.utils.data import ScriptModelConfig
+from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
 
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
     "-r", "--run-name", required=True, type=str, help="The NAME of the run to train."
 )
 @click.option(
-    "-i","--iteration", required=False, type=int, help="The iteration at which to train the run."
+    "-i","--iteration", required=False, type=int, help="The iteration at which to train the run.",
     default=0
 )
 @click.option(
@@ -57,7 +57,9 @@ logger = logging.getLogger(__name__)
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
-    raise NotImplementedError("This command is not yet implemented.")
+    """Run the CellMapFlow server with a DaCapo model."""
+    model_config = DaCapoModelConfig(run_name=run_name, iteration=iteration)
+    run_server(model_config,data_path,debug,port,certfile,keyfile)
 
 
 @cli.command()
@@ -72,6 +74,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def script(script_path, data_path, debug, port, certfile, keyfile):
+    """Run the CellMapFlow server with a custom script."""
     model_config = ScriptModelConfig(script_path=script_path)
     run_server(model_config,data_path,debug,port,certfile,keyfile)
 
@@ -90,6 +93,7 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def bioimage(model_path, data_path, debug, port, certfile, keyfile):
+    """Run the CellMapFlow server with a bioimage-io model."""
     raise NotImplementedError("This command is not yet implemented.")
 
 

@@ -197,36 +197,3 @@ class CellMapFlowServer:
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         logger.error(IP_PATTERN.format(ip_address=address))
         print(IP_PATTERN.format(ip_address=address), flush=True)
-
-
-# Create a global instance (so that gunicorn can point to `app`
-
-
-@click.command()
-@click.option(
-    "-d", "--dataset_name", type=str, required=True, help="Name of the dataset."
-)
-@click.option(
-    "-c", "--config", type=str, required=True, help="Path to the model config file."
-)
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
-@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
-@click.option("--certfile", default=None, help="Path to SSL certificate file.")
-@click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def main(dataset_name, config, debug, port, certfile, keyfile):
-    dataset = dataset_name
-    model_config = ScriptModelConfig(script_path=config)
-    server = CellMapFlowServer(dataset, model_config)
-    if port == 0:
-        port = get_free_port()
-
-    server.run(
-        debug=debug,
-        port=port,
-        certfile=certfile,
-        keyfile=keyfile,
-    )
-
-
-if __name__ == "__main__":
-    main()

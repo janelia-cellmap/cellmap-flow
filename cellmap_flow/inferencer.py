@@ -98,7 +98,8 @@ class Inferencer:
 
     def load_model(self, config: ModelConfig):
         if isinstance(config, DaCapoModelConfig):
-            self.load_dacapo_model(config.run_name, iteration=config.iteration)
+            # self.load_dacapo_model(config.run_name, iteration=config.iteration)
+            self.load_script_model(config)
         elif isinstance(config, ScriptModelConfig):
             self.load_script_model(config)
         elif isinstance(config, BioModelConfig):
