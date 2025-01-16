@@ -5,6 +5,7 @@ from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioMod
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
 
+
 @click.group()
 @click.option(
     "--log-level",
@@ -25,7 +26,7 @@ def cli(log_level):
         cellmap_flow_server dacapo -r my_run -i iteration -d data_path
         ```
 
-        To use custom script 
+        To use custom script
         ```
         cellmap_flow_server script -s script_path -d data_path
         ```
@@ -46,8 +47,12 @@ logger = logging.getLogger(__name__)
     "-r", "--run-name", required=True, type=str, help="The NAME of the run to train."
 )
 @click.option(
-    "-i","--iteration", required=False, type=int, help="The iteration at which to train the run.",
-    default=0
+    "-i",
+    "--iteration",
+    required=False,
+    type=int,
+    help="The iteration at which to train the run.",
+    default=0,
 )
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
@@ -59,12 +64,16 @@ logger = logging.getLogger(__name__)
 def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
     """Run the CellMapFlow server with a DaCapo model."""
     model_config = DaCapoModelConfig(run_name=run_name, iteration=iteration)
-    run_server(model_config,data_path,debug,port,certfile,keyfile)
+    run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
 @cli.command()
 @click.option(
-    "-s", "--script_path", required=True, type=str, help="The path to the script to run."
+    "-s",
+    "--script_path",
+    required=True,
+    type=str,
+    help="The path to the script to run.",
 )
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
@@ -76,9 +85,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 def script(script_path, data_path, debug, port, certfile, keyfile):
     """Run the CellMapFlow server with a custom script."""
     model_config = ScriptModelConfig(script_path=script_path)
-    run_server(model_config,data_path,debug,port,certfile,keyfile)
-
-
+    run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
 @cli.command()
@@ -97,11 +104,11 @@ def bioimage(model_path, data_path, debug, port, certfile, keyfile):
     raise NotImplementedError("This command is not yet implemented.")
 
 
-def run_server(model_config,data_path,debug,port,certfile,keyfile):
+def run_server(model_config, data_path, debug, port, certfile, keyfile):
     server = CellMapFlowServer(data_path, model_config)
     if port == 0:
         port = get_free_port()
-        
+
     server.run(
         debug=debug,
         port=port,

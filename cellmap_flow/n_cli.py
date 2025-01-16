@@ -1,6 +1,7 @@
 import click
 import logging
 
+
 @click.group()
 @click.option(
     "--log-level",
@@ -21,7 +22,7 @@ def cli(log_level):
         cellmap_flow dacapo -r my_run -i iteration -d data_path
         ```
 
-        To use custom script 
+        To use custom script
         ```
         cellmap_flow script -s script_path -d data_path
         ```
@@ -42,8 +43,12 @@ logger = logging.getLogger(__name__)
     "-r", "--run-name", required=True, type=str, help="The NAME of the run to train."
 )
 @click.option(
-    "-i","--iteration", required=False, type=int, help="The iteration at which to train the run."
-    default=0
+    "-i",
+    "--iteration",
+    required=False,
+    type=int,
+    help="The iteration at which to train the run.",
+    default=0,
 )
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
@@ -51,15 +56,21 @@ logger = logging.getLogger(__name__)
 def dacapo(run_name, iteration, data_path):
     raise NotImplementedError("This command is not yet implemented.")
 
+
 @cli.command()
 @click.option(
-    "-s", "--script_path", required=True, type=str, help="The path to the script to run."
+    "-s",
+    "--script_path",
+    required=True,
+    type=str,
+    help="The path to the script to run.",
 )
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
 def script(script_path, data_path):
     raise NotImplementedError("This command is not yet implemented.")
+
 
 @cli.command()
 @click.option(
@@ -70,4 +81,3 @@ def script(script_path, data_path):
 )
 def bioimage(model_path, data_path):
     raise NotImplementedError("This command is not yet implemented.")
-
