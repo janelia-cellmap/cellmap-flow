@@ -16,11 +16,9 @@ class ModelConfig:
     def config(self):
         if self._config is None:
             self._config = self._get_config()
-        self.check_config(self._config)
+        check_config(self._config)
         return self._config
 
-    def check_config(self, config):
-        pass
 
 
 class BioModelConfig(ModelConfig):
@@ -35,29 +33,9 @@ class ScriptModelConfig(ModelConfig):
         super().__init__()
         self.script_path = script_path
 
-    def check_config(self, config):
-        assert hasattr(config, "model"), f"Model not found in config {self.script_path}"
-        assert hasattr(
-            config, "read_shape"
-        ), f"read_shape not found in config {self.script_path}"
-        assert hasattr(
-            config, "write_shape"
-        ), f"write_shape not found in config {self.script_path}"
-        assert hasattr(
-            config, "output_voxel_size"
-        ), f"output_voxel_size not found in config {self.script_path}"
-        assert hasattr(
-            config, "output_channels"
-        ), f"output_channels not found in config {self.script_path}"
-        assert hasattr(
-            config, "block_shape"
-        ), f"block_shape not found in config {self.script_path}"
-
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
-
         config = load_safe_config(self.script_path)
-        self.check_config(config)
         return config
 
 
@@ -103,17 +81,26 @@ class DaCapoModelConfig(ModelConfig):
         return config
 
 
-from torch.nn import Module
-
+def check_config(config):
+    assert hasattr(config, "model"), f"Model not found in config"
+    assert hasattr(
+        config, "read_shape"
+    ), f"read_shape not found in config"
+    assert hasattr(
+        config, "write_shape"
+    ), f"write_shape not found in config"
+    assert hasattr(
+        config, "output_voxel_size"
+    ), f"output_voxel_size not found in config"
+    assert hasattr(
+        config, "output_channels"
+    ), f"output_channels not found in config"
+    assert hasattr(
+        config, "block_shape"
+    ), f"block_shape not found in config"
 
 class Config:
-    model: Module
-    read_shape: tuple
-    write_shape: tuple
-    input_voxel_size: tuple
-    output_voxel_size: tuple
-    output_channels: int
-    block_shape: tuple
+    pass
 
 
 def get_dacapo_channels(task):

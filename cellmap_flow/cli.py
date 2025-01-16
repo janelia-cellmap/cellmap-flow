@@ -254,7 +254,7 @@ def run_locally(sc):
 
 def start_hosts(dataset, script_path, num_hosts=1):
     if security == "https":
-        sc = f"cellmap_flow_server:app -d {dataset} -c {script_path} --certfile=host.cert --keyfile=host.key"
+        sc = f"cellmap_flow_server -d {dataset} -c {script_path} --certfile=host.cert --keyfile=host.key"
     else:
         sc = f"cellmap_flow_server -d {dataset} -c {script_path}"
 
