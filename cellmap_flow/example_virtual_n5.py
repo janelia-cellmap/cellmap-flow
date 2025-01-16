@@ -55,6 +55,10 @@ MAX_SCALE = 9
 
 CHUNK_ENCODER = N5ChunkWrapper(np.float32, BLOCK_SHAPE, compressor=numcodecs.GZip())
 
+import os
+
+environ = os.environ
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -70,13 +74,33 @@ def main():
     )
 
 
+@app.route("/tester")
+def tester():
+    return render_template("iframe.html", url="https://wikipedia.org")
+
+
 @app.route("/home")
 def home():
     return render_template("iframe.html")
 
 
+@app.route("/glb_loader")
+def glb_loader():
+    return render_template("glbs.html")
+
+
 @app.route("/attributes.json")
 def top_level_attributes():
+    # if environ["REQUEST_METHOD"] == "OPTIONS":
+    #     # Respuesta para las solicitudes preflight (OPTIONS)
+    #     response_headers = [
+    #         ("Access-Control-Allow-Origin", "*"),
+    #         ("Access-Control-Allow-Methods", "POST, OPTIONS"),
+    #         ("Access-Control-Allow-Headers", "Content-Type"),
+    #     ]
+    #     start_response("200 OK", response_headers)
+    #     print("a responder")
+    #     return []
     scales = [[2**s, 2**s, 2**s, 1] for s in range(MAX_SCALE + 1)]
     attr = {
         "pixelResolution": {"dimensions": [1.0, 1.0, 1.0, 1.0], "unit": "nm"},

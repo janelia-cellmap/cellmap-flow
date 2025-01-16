@@ -1,0 +1,190 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "cellmap-flow"
+description = "Realtime prediction using neuroglancer"
+readme = "README.md"
+requires-python = ">=3.10"
+# license = { text = "BSD 3-Clause License" }
+authors = [
+    { email = "ackermand@hhmi.org", name = "David Ackerman" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+dependencies = [
+    "dacapo-ml @ git+https://github.com/janelia-cellmap/dacapo.git@cellmap_stable",
+    "funlib.persistence==0.4.0",
+    "numpy",
+    # "PyYAML",
+    "gunicorn",
+    "flask",
+    "flask-cors",
+    "tensorstore",
+    "daisy",
+    "bioimageio.core[onnx,pytorch]==0.6.1",
+    "marshmallow",
+    "scikit-image",
+    "funlib.segment @ git+https://github.com/funkelab/funlib.segment.git",
+    "funlib.show.neuroglancer @ git+https://github.com/funkelab/funlib.show.neuroglancer.git@0c609d2cbf09af976bda998fff17a0454e2782ee"
+        ]
+
+# extras
+# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov", "pytest-lazy-fixtures"]
+dev = [
+    "black",
+    "mypy",
+    "pdbpp",
+    "rich",
+    "ruff",
+    "pre-commit",
+]
+docs = [
+    "sphinx-autodoc-typehints",
+    "sphinx-autoapi",
+    "sphinx-click",
+    "sphinx-rtd-theme",
+    "myst-parser",
+]
+
+[project.urls]
+homepage = "https://github.io/janelia-cellmap/process_blockwise"
+repository = "https://github.com/janelia-cellmap/process_blockwise"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+
+# https://hatch.pypa.io/latest/config/build/#file-selection
+# [tool.hatch.build.targets.sdist]
+# include = ["/src", "/tests"]
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["cellmap_flow"]
+
+[project.scripts]
+cellmap_flow = "cellmap_flow.n_cli:cli"
+cellmap_flow_server = "cellmap_flow.server_cli:cli"
+
+# https://github.com/charliermarsh/ruff
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["cellmap_flow"]
+
+[tool.ruff.lint]
+# https://beta.ruff.rs/docs/rules/
+# We may want to enable some of these options later
+select = [
+    "E",    # style errors
+#    "W",    # style warnings
+    "F",    # flakes
+#    "D",    # pydocstyle
+#    "I",    # isort
+#    "UP",   # pyupgrade
+#    "C4",   # flake8-comprehensions
+#    "B",    # flake8-bugbear
+#    "A001", # flake8-builtins
+#    "RUF",  # ruff-specific rules
+]
+extend-ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+"__init__.py" = ["F401"]
+
+# https://docs.pytest.org/en/6.2.x/customize.html
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    ]
+    
+# https://mypy.readthedocs.io/en/stable/config_file.html
+[tool.mypy]
+files = "cellmap_flow/**/"
+strict = false
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+exclude = [
+    "scratch/*",
+    "examples/*",
+]
+
+
+# # module specific overrides
+[[tool.mypy.overrides]]
+module = [
+    "cellmap_models.*",
+    "funlib.*",
+    "toml.*", 
+    "gunpowder.*",
+    "scipy.*",
+    "augment.*",
+    "tifffile.*",
+    "daisy.*",
+    "lazy_property.*",
+    "skimage.*",
+    "fibsem_tools.*",
+    "neuroglancer.*",
+    "tqdm.*",
+    "zarr.*",
+    "pymongo.*",
+    "bson.*",
+    "affogato.*",
+    "SimpleITK.*",
+    "bokeh.*",
+    "lsd.*",
+    "yaml.*",
+    "pytest_lazyfixture.*",
+    "neuclease.dvid.*",
+    "mwatershed.*",
+    "numpy_indexed.*",
+    "empanada_napari.*",
+    "napari.*",
+    "empanada.*",
+    "IPython.*",
+]
+ignore_missing_imports = true
+
+# https://coverage.readthedocs.io/en/6.4/config.html
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "except ImportError",
+    "\\.\\.\\.",
+    "raise NotImplementedError()",
+]
+[tool.coverage.run]
+source = ["process_blockwise"]
+
+# https://github.com/mgedmin/check-manifest#configuration
+[tool.check-manifest]
+ignore = [
+    ".github_changelog_generator",
+    ".pre-commit-config.yaml",
+    ".ruff_cache/**/*",
+    "tests/**/*",
+]
+
