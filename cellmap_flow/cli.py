@@ -121,11 +121,6 @@ def submit_bsub_job(
     job_name="my_job",
     
 ):
-    conda_env = os.environ.get("CONDA_DEFAULT_ENV")
-    if not conda_env:
-        raise EnvironmentError(
-            "No active Conda environment found. Activate a Conda environment and try again."
-        )
     # Create the bsub command
     bsub_command = [
         "bsub",
@@ -143,7 +138,7 @@ def submit_bsub_job(
         "num=1",
         "bash",
         "-c",
-        f"cd /groups/cellmap/cellmap/zouinkhim/cellmap-flow/cellmap_flow && source ~/.bashrc && conda activate {conda_env} && hostname && {sc}",
+       sc,
     ]
 
     # Submit the job
@@ -162,7 +157,7 @@ def submit_bsub_job(
     return result
 
 
-def generate_neuroglancer_link(dataset_path, inference_dict):
+def generate_neuroglancer_link(dataset_path, inference_dict,output_channels):
     # Create a new viewer
     viewer = neuroglancer.UnsynchronizedViewer()
 
@@ -188,7 +183,7 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
             )
-        colors = ["red", "green", "blue"]
+        colors = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta"]
         color_cycle = itertools.cycle(colors)
         for host, model in inference_dict.items():
             color = next(color_cycle)
@@ -276,7 +271,10 @@ def start_hosts(dataset,
     "-c",
     "--code", type=str, help="Path to the script to run", required=False
 )
-def main(dataset_path, code):
+@click.option(
+    "-ch",
+    "--output_channels", type=int, help="Number of output channels", required=False, default=0)
+def main(dataset_path, code,output_channels):
     
     if dataset_path.endswith("/"):
         dataset_path = dataset_path[:-1]
@@ -296,7 +294,7 @@ def main(dataset_path, code):
     for host, model in zip(hosts, models):
         inference_dict[host] = f"{dataset_path}"
 
-    generate_neuroglancer_link(dataset_path, inference_dict)
+    generate_neuroglancer_link(dataset_path, inference_dict, output_channels)
 
 
 if __name__ == "__main__":

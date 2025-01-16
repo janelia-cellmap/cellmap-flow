@@ -13,7 +13,8 @@ from funlib.geometry import Roi
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from funlib.geometry.coordinate import Coordinate
-from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig
+from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig, IP_PATTERN
+from cellmap_flow.utils.web_utils import get_free_port, get_public_ip
 import click
 
 logger = logging.getLogger(__name__)
@@ -55,8 +56,12 @@ class CellMapFlowServer:
         self.inferencer = Inferencer(model_config)
 
         self.idi_raw = ImageDataInterface(dataset_name)
-        self.vol_shape = np.array([*np.array(self.idi_raw.shape)[::-1], self.output_channels]) # converting from z,y,x order to x,y,z order zarr to n5
-
+        if ".zarr" in dataset_name:
+            self.vol_shape = np.array([*np.array(self.idi_raw.shape)[::-1], self.output_channels]) # converting from z,y,x order to x,y,z order zarr to n5
+            self.axis = ["x", "y", "z", "c^"]
+        else:
+            self.vol_shape = np.array([*np.array(self.idi_raw.shape), self.output_channels])
+            self.axis = ["z", "y", "x", "c^"]
         self.chunk_encoder = N5ChunkWrapper(np.uint8, self.block_shape, compressor=numcodecs.GZip())
 
         # Create and configure Flask
@@ -117,7 +122,7 @@ class CellMapFlowServer:
             },
             "ordering": "C",
             "scales": scales,
-            "axes": ["x", "y", "z", "c^"],
+            "axes": self.axis,
             "units": ["nm", "nm", "nm", ""],
             "translate": [0, 0, 0, 0],
         }
@@ -131,7 +136,7 @@ class CellMapFlowServer:
         attr = {
             "transform": {
                 "ordering": "C",
-                "axes": ["x", "y", "z", "c^"],
+                "axes": self.axis,
                 "scale": [*self.output_voxel_size, 1],
                 "units": ["nm", "nm", "nm", ""],
                 "translate": [0.0, 0.0, 0.0, 0.0],
@@ -181,17 +186,12 @@ class CellMapFlowServer:
             use_reloader=debug,
             ssl_context=ssl_context,  # <-- pass SSL context to Flask dev server
         )
+        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
+        logger.error(IP_PATTERN.format(ip_address=address))
+        print(IP_PATTERN.format(ip_address=address), flush=True)
 
 
-# Create a global instance (so that gunicorn can point to `app`)
-
-def get_free_port():
-    import socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(('localhost', 0))  # Bind to port 0 to get a random free port
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
+# Create a global instance (so that gunicorn can point to `app`
 
 @click.command()
 @click.option("-d", "--dataset_name", type=str, required=True, help="Name of the dataset.")

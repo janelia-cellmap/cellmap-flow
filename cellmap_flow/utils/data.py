@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 from enum import Enum
 
-
+IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 
 class ModelConfig:
     def __init__(self):

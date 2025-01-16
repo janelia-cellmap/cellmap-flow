@@ -2,10 +2,15 @@
 # pip install fly-organelles
 from daisy.coordinate import Coordinate
 import numpy as np
-voxel_size = (8, 8, 8)
+
+# voxel_size = (8, 8, 8)
+# output_voxel_size = Coordinate((8, 8, 8))
+
+voxel_size = (6, 6, 6)
+output_voxel_size = Coordinate((6, 6, 6))
 read_shape = Coordinate((178, 178, 178)) * Coordinate(voxel_size)
 write_shape = Coordinate((56, 56, 56)) * Coordinate(voxel_size)
-output_voxel_size = Coordinate((8, 8, 8))
+
 
 #%%
 import torch
