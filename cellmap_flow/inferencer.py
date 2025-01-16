@@ -1,7 +1,13 @@
 import numpy as np
 import torch
-from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig
+from cellmap_flow.utils.data import (
+    ModelConfig,
+    BioModelConfig,
+    DaCapoModelConfig,
+    ScriptModelConfig,
+)
 from funlib.persistence import Array
+
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig):
@@ -13,37 +19,37 @@ class Inferencer:
             self.device = torch.device("cpu")
         self.model.to(self.device)
         print(f"Using device: {self.device}")
-        
+
     def process_chunk(self, idi, roi):
         if isinstance(self.config, BioModelConfig):
             return self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.config, DaCapoModelConfig) or isinstance(self.config, ScriptModelConfig):
+        elif isinstance(self.config, DaCapoModelConfig) or isinstance(
+            self.config, ScriptModelConfig
+        ):
             return self.process_chunk_basic(idi, roi)
         else:
             raise ValueError(f"Invalid model config type {type(self.config)}")
 
-
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
-        
+
         input_roi = output_roi.grow(self.context, self.context)
         # input_roi = output_roi + context
         raw_input = idi.to_ndarray_ts(input_roi).astype(np.float32) / 255.0
         raw_input = np.expand_dims(raw_input, (0, 1))
-       
+
         with torch.no_grad():
             predictions = Array(
-                    self.model.forward(torch.from_numpy(raw_input).float().to(self.device))
-                    .detach()
-                    .cpu()
-                    .numpy()[0],
-                    output_roi,
-                    self.output_voxel_size,
-                )
+                self.model.forward(torch.from_numpy(raw_input).float().to(self.device))
+                .detach()
+                .cpu()
+                .numpy()[0],
+                output_roi,
+                self.output_voxel_size,
+            )
         write_data = predictions.to_ndarray(output_roi).clip(-1, 1)
         write_data = (write_data + 1) * 255.0 / 2.0
         return write_data.astype(np.uint8)
-
 
     # create random input tensor
     def process_chunk_bioimagezoo(self, idi, roi):
@@ -89,8 +95,8 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
-    
-    def load_model(self, config:ModelConfig):
+
+    def load_model(self, config: ModelConfig):
         if isinstance(config, DaCapoModelConfig):
             self.load_dacapo_model(config.run_name, iteration=config.iteration)
         elif isinstance(config, ScriptModelConfig):
@@ -99,10 +105,11 @@ class Inferencer:
             self.load_bio_model(config.model_name)
         else:
             raise ValueError(f"Invalid model config type {type(config)}")
-        
+
     def load_dacapo_model(self, bio_model_name, iteration="best"):
         from dacapo.store.create_store import create_config_store, create_weights_store
         from dacapo.experiments import Run
+
         config_store = create_config_store()
 
         weights_store = create_weights_store()
@@ -128,26 +135,22 @@ class Inferencer:
         # self.output_voxel_size = config.output_voxel_size
         # self.context = (self.read_shape - self.write_shape) / 2
 
-
-
-
     def load_bio_model(self, bio_model_name):
         from bioimageio.core import load_description
         from bioimageio.core import predict  # , predict_many
         from bioimageio.core import Tensor
         from bioimageio.core import Sample
         from bioimageio.core.digest_spec import get_member_ids
+
         self.model = load_description(bio_model_name)
 
-
-    def load_script_model(self, model_config:ScriptModelConfig):
+    def load_script_model(self, model_config: ScriptModelConfig):
         config = model_config.config
         self.model = config.model
         self.read_shape = config.read_shape
         self.write_shape = config.write_shape
         self.output_voxel_size = config.output_voxel_size
         self.context = (self.read_shape - self.write_shape) / 2
-
 
 
 # %%

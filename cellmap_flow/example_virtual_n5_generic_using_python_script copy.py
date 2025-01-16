@@ -1,4 +1,3 @@
-
 # %% load image zoo
 
 from cellmap_flow.utils import load_safe_config
@@ -25,9 +24,6 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 
 
-
-
-
 # %%
 script_path = "/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py"
 config = load_safe_config(script_path)
@@ -50,10 +46,8 @@ OUTPUT_VOXEL_SIZE = config.output_voxel_size
 
 # determined-chimpmunk is edges
 
-   
-    
 
-    # %%
+# %%
 MAX_SCALE = 0
 
 VOL_SHAPE_ZYX = np.array(IDI_RAW.shape)
@@ -79,7 +73,7 @@ attr = {
 
 attr
 
-#%%
+# %%
 
 attr = {
     "transform": {
@@ -104,8 +98,6 @@ chunk_y = 2
 chunk_z = 2
 
 
-  
-
 corner = BLOCK_SHAPE[:3] * np.array([chunk_z, chunk_y, chunk_x])
 box = np.array([corner, BLOCK_SHAPE[:3]]) * OUTPUT_VOXEL_SIZE
 roi = Roi(box[0], box[1])
@@ -113,7 +105,7 @@ print("about_to_process_chunk")
 chunk = INFERENCER.process_chunk_basic(IDI_RAW, roi)
 # logger.error(f"chunk {chunk}")
 print(chunk)
-x= (
+x = (
     # Encode to N5 chunk format (header + compressed data)
     CHUNK_ENCODER.encode(chunk),
     HTTPStatus.OK,

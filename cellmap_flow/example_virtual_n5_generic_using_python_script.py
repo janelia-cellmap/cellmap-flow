@@ -126,17 +126,13 @@ def top_level_attributes(dataset):
 
     global OUTPUT_VOXEL_SIZE, BLOCK_SHAPE, VOL_SHAPE, CHUNK_ENCODER, IDI_RAW, INFERENCER
     print(dataset_name, s, BMZ_MODEL_ID)
-    
-    
-    
 
     # self.read_shape = config.read_shape
     # self.write_shape = config.write_shape
-    
+
     # self.context = (self.read_shape - self.write_shape) / 2
     SCALE_LEVEL = int(s[1:])
-    
-    
+
     # MODEL = Inferencer(BMZ_MODEL_ID)
 
     IDI_RAW = ImageDataInterface(f"{dataset_name}/s{SCALE_LEVEL}")

@@ -13,7 +13,13 @@ from funlib.geometry import Roi
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from funlib.geometry.coordinate import Coordinate
-from cellmap_flow.utils.data import ModelConfig, BioModelConfig, DaCapoModelConfig, ScriptModelConfig, IP_PATTERN
+from cellmap_flow.utils.data import (
+    ModelConfig,
+    BioModelConfig,
+    DaCapoModelConfig,
+    ScriptModelConfig,
+    IP_PATTERN,
+)
 from cellmap_flow.utils.web_utils import get_free_port, get_public_ip
 import click
 
@@ -29,10 +35,11 @@ logger = logging.getLogger(__name__)
 #     python example_virtual_n5.py
 # ------------------------------------------------------------------------------
 
+
 class CellMapFlowServer:
     """
     Flask application hosting a "virtual N5" for neuroglancer.
-    
+
     Attributes:
         script_path (str): Path to a Python script containing the model specification
         block_shape (tuple): The block shape for chunking
@@ -40,8 +47,7 @@ class CellMapFlowServer:
         inferencer (Inferencer): Your CellMapFlow inferencer object
     """
 
-    def __init__(self, dataset_name: str, 
-                 model_config: ModelConfig):
+    def __init__(self, dataset_name: str, model_config: ModelConfig):
         """
         Initialize the server.
 
@@ -57,12 +63,18 @@ class CellMapFlowServer:
 
         self.idi_raw = ImageDataInterface(dataset_name)
         if ".zarr" in dataset_name:
-            self.vol_shape = np.array([*np.array(self.idi_raw.shape)[::-1], self.output_channels]) # converting from z,y,x order to x,y,z order zarr to n5
+            self.vol_shape = np.array(
+                [*np.array(self.idi_raw.shape)[::-1], self.output_channels]
+            )  # converting from z,y,x order to x,y,z order zarr to n5
             self.axis = ["x", "y", "z", "c^"]
         else:
-            self.vol_shape = np.array([*np.array(self.idi_raw.shape), self.output_channels])
+            self.vol_shape = np.array(
+                [*np.array(self.idi_raw.shape), self.output_channels]
+            )
             self.axis = ["z", "y", "x", "c^"]
-        self.chunk_encoder = N5ChunkWrapper(np.uint8, self.block_shape, compressor=numcodecs.GZip())
+        self.chunk_encoder = N5ChunkWrapper(
+            np.uint8, self.block_shape, compressor=numcodecs.GZip()
+        )
 
         # Create and configure Flask
         self.app = Flask(__name__)
@@ -84,23 +96,19 @@ class CellMapFlowServer:
         self.app.add_url_rule(
             "/<path:dataset>/attributes.json",
             view_func=self.top_level_attributes,
-            methods=["GET"]
+            methods=["GET"],
         )
 
         # Scale-level attributes
         self.app.add_url_rule(
             "/<path:dataset>/s<int:scale>/attributes.json",
             view_func=self.attributes,
-            methods=["GET"]
+            methods=["GET"],
         )
 
         # Chunk data route
         chunk_route = "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/"
-        self.app.add_url_rule(
-            chunk_route,
-            view_func=self.chunk,
-            methods=["GET"]
-        )
+        self.app.add_url_rule(chunk_route, view_func=self.chunk, methods=["GET"])
 
     def top_level_attributes(self, dataset):
         """
@@ -112,7 +120,7 @@ class CellMapFlowServer:
         max_scale = 0
         # We define the chunk encoder
         # Prepare scales array
-        scales = [[2 ** s, 2 ** s, 2 ** s, 1] for s in range(max_scale + 1)]
+        scales = [[2**s, 2**s, 2**s, 1] for s in range(max_scale + 1)]
 
         # Construct top-level attributes
         attr = {
@@ -155,7 +163,7 @@ class CellMapFlowServer:
         This 'virtual N5' will just run an inference function and return the data.
         """
         # try:
-            # assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
+        # assert chunk_c == 0, "neuroglancer requires that all blocks include all channels"
         corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
@@ -178,7 +186,7 @@ class CellMapFlowServer:
         if certfile and keyfile:
             # (certfile, keyfile) tuple enables HTTPS in the built-in dev server
             ssl_context = (certfile, keyfile)
-        
+
         self.app.run(
             host="0.0.0.0",
             port=port,
@@ -193,9 +201,14 @@ class CellMapFlowServer:
 
 # Create a global instance (so that gunicorn can point to `app`
 
+
 @click.command()
-@click.option("-d", "--dataset_name", type=str, required=True, help="Name of the dataset.")
-@click.option("-c", "--config", type=str, required=True, help="Path to the model config file.")
+@click.option(
+    "-d", "--dataset_name", type=str, required=True, help="Name of the dataset."
+)
+@click.option(
+    "-c", "--config", type=str, required=True, help="Path to the model config file."
+)
 @click.option("--debug", is_flag=True, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
@@ -206,13 +219,14 @@ def main(dataset_name, config, debug, port, certfile, keyfile):
     server = CellMapFlowServer(dataset, model_config)
     if port == 0:
         port = get_free_port()
-        
+
     server.run(
         debug=debug,
         port=port,
         certfile=certfile,
         keyfile=keyfile,
     )
+
 
 if __name__ == "__main__":
     main()

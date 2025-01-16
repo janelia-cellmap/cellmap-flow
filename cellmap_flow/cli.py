@@ -119,7 +119,6 @@ def parse_bpeek_output(job_id):
 def submit_bsub_job(
     sc,
     job_name="my_job",
-    
 ):
     # Create the bsub command
     bsub_command = [
@@ -138,7 +137,7 @@ def submit_bsub_job(
         "num=1",
         "bash",
         "-c",
-       sc,
+        sc,
     ]
 
     # Submit the job
@@ -157,14 +156,17 @@ def submit_bsub_job(
     return result
 
 
-def generate_neuroglancer_link(dataset_path, inference_dict,output_channels):
+def generate_neuroglancer_link(dataset_path, inference_dict, output_channels):
     # Create a new viewer
     viewer = neuroglancer.UnsynchronizedViewer()
 
     # Add a layer to the viewer
     with viewer.txn() as s:
         # if multiscale dataset
-        if dataset_path.split("/")[-1].startswith("s") and dataset_path.split("/")[-1][1:].isdigit():
+        if (
+            dataset_path.split("/")[-1].startswith("s")
+            and dataset_path.split("/")[-1][1:].isdigit()
+        ):
             dataset_path = dataset_path.rsplit("/", 1)[0]
         if ".zarr" in dataset_path:
             filetype = "zarr"
@@ -183,7 +185,16 @@ def generate_neuroglancer_link(dataset_path, inference_dict,output_channels):
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
             )
-        colors = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta"]
+        colors = [
+            "red",
+            "green",
+            "blue",
+            "yellow",
+            "purple",
+            "orange",
+            "cyan",
+            "magenta",
+        ]
         color_cycle = itertools.cycle(colors)
         for host, model in inference_dict.items():
             color = next(color_cycle)
@@ -241,17 +252,15 @@ def run_locally(sc):
     #     process.wait()  # Wait for the process to terminate
 
 
-def start_hosts(dataset,
-    script_path,
-    num_hosts=1):
+def start_hosts(dataset, script_path, num_hosts=1):
     if security == "https":
         sc = f"cellmap_flow_server:app -d {dataset} -c {script_path} --certfile=host.cert --keyfile=host.key"
-    else: 
+    else:
         sc = f"cellmap_flow_server -d {dataset} -c {script_path}"
-    
+
     if is_bsub_available():
         for _ in range(num_hosts):
-            result = submit_bsub_job(sc,job_name="example_job")
+            result = submit_bsub_job(sc, job_name="example_job")
             job_ids.append(result.stdout.split()[1][1:-1])
         for job_id in job_ids:
             parse_bpeek_output(job_id)
@@ -268,19 +277,23 @@ def start_hosts(dataset,
     required=True,
 )
 @click.option(
-    "-c",
-    "--code", type=str, help="Path to the script to run", required=False
+    "-c", "--code", type=str, help="Path to the script to run", required=False
 )
 @click.option(
     "-ch",
-    "--output_channels", type=int, help="Number of output channels", required=False, default=0)
-def main(dataset_path, code,output_channels):
-    
+    "--output_channels",
+    type=int,
+    help="Number of output channels",
+    required=False,
+    default=0,
+)
+def main(dataset_path, code, output_channels):
+
     if dataset_path.endswith("/"):
         dataset_path = dataset_path[:-1]
     # print(f"Dataset: {dataset_path}, Scale: {scale}, Models: {models}")
     logging.info("Starting hosts...")
-    start_hosts(dataset_path,code,num_hosts=1)
+    start_hosts(dataset_path, code, num_hosts=1)
 
     logging.info("Starting hosts completed!")
     inference_dict = {}
