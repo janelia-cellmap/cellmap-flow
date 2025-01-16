@@ -3,19 +3,19 @@
 #  cellmap-flow 
 
 ```bash
-$ cellmap_flow_server
+$ cellmap_flow
 
-Usage: cellmap_flow_server [OPTIONS] COMMAND [ARGS]...
+Usage: cellmap_flow [OPTIONS] COMMAND [ARGS]...
 
   Examples:     
     To use Dacapo run the following commands:  
-    cellmap_flow_server dacapo -r my_run -i iteration -d data_path
+    cellmap_flow dacapo -r my_run -i iteration -d data_path
 
     To use custom script
-    cellmap_flow_server script -s script_path -d data_path
+    cellmap_flow script -s script_path -d data_path
 
     To use bioimage-io model 
-    cellmap_flow_server bioimage -m model_path -d data_path
+    cellmap_flow bioimage -m model_path -d data_path
 
 
 Commands:
