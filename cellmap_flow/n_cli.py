@@ -1,16 +1,10 @@
 import click
 import logging
-
-import neuroglancer
-import os
-import sys
-import signal
-import select
-import itertools
 import click
 
-from cellmap_flow.utils.bsub_utils import is_bsub_available, submit_bsub_job, parse_bpeek_output, run_locally, job_ids, security
+from cellmap_flow.utils.bsub_utils import is_bsub_available, submit_bsub_job, parse_bpeek_output, run_locally, start_hosts, job_ids, security
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
+
 
 logging.basicConfig()
 
@@ -94,7 +88,6 @@ def script(script_path, data_path):
     run(command,data_path)
     raise NotImplementedError("This command is not yet implemented.")
 
-
 @cli.command()
 @click.option(
     "-m", "--model_path", required=True, type=str, help="The path to the model."
@@ -104,8 +97,6 @@ def script(script_path, data_path):
 )
 def bioimage(model_path, data_path):
     raise NotImplementedError("This command is not yet implemented.")
-
-
 
 def run(command,dataset_path):
 
@@ -117,17 +108,3 @@ def run(command,dataset_path):
 
     generate_neuroglancer_link(dataset_path, inference_dict)
 
-def start_hosts(command):
-    if security == "https":
-        command = f"{command} --certfile=host.cert --keyfile=host.key"
-
-
-    if is_bsub_available():
-        result = submit_bsub_job(command, job_name="example_job")
-        job_id = result.stdout.split()[1][1:-1]
-        job_ids.append(job_id)
-        host = parse_bpeek_output(job_id)
-    else:
-        host= run_locally(command)
-
-    return host

@@ -172,4 +172,17 @@ def run_locally(sc):
     processes.append(process)
     return host
 
+def start_hosts(command,job_name="example_job"):
+    if security == "https":
+        command = f"{command} --certfile=host.cert --keyfile=host.key"
 
+
+    if is_bsub_available():
+        result = submit_bsub_job(command, job_name=job_name)
+        job_id = result.stdout.split()[1][1:-1]
+        job_ids.append(job_id)
+        host = parse_bpeek_output(job_id)
+    else:
+        host= run_locally(command)
+
+    return host

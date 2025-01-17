@@ -9,6 +9,14 @@ class ModelConfig:
     def __init__(self):
         self._config = None
 
+    def __str__(self)-> str:
+        attributes = vars(self)
+        elms = ', '.join(f"{key}: {value}" for key, value in attributes.items())
+        return f"{type(self)} : {elms}"
+    
+    def __repr__(self)-> str:
+        return self.__str__()
+
     def _get_config(self):
         raise NotImplementedError()
 
@@ -22,16 +30,26 @@ class ModelConfig:
 
 
 class BioModelConfig(ModelConfig):
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, name = None):
         super().__init__()
         self.model_name = model_name
+        self.name = name
+
+    @property
+    def command(self):
+        return f"bioimage -m {self.model_name}"
 
 
 class ScriptModelConfig(ModelConfig):
 
-    def __init__(self, script_path):
+    def __init__(self, script_path, name = None):
         super().__init__()
         self.script_path = script_path
+        self.name = name
+
+    @property
+    def command(self):
+        return f"script -s {self.script_path}"
 
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
@@ -41,10 +59,15 @@ class ScriptModelConfig(ModelConfig):
 
 class DaCapoModelConfig(ModelConfig):
 
-    def __init__(self, run_name: str, iteration: int):
+    def __init__(self, run_name: str, iteration: int, name = None):
         super().__init__()
         self.run_name = run_name
         self.iteration = iteration
+        self.name = name
+
+    @property
+    def command(self):
+        return f"dacapo -r {self.run_name} -i {self.iteration}"
 
     def _get_config(self):
         from daisy.coordinate import Coordinate
