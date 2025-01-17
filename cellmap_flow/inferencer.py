@@ -107,34 +107,6 @@ class Inferencer:
         else:
             raise ValueError(f"Invalid model config type {type(config)}")
 
-    def load_dacapo_model(self, bio_model_name, iteration="best"):
-        from dacapo.store.create_store import create_config_store, create_weights_store
-        from dacapo.experiments import Run
-
-        config_store = create_config_store()
-
-        weights_store = create_weights_store()
-        run_config = config_store.retrieve_run_config(bio_model_name)
-
-        run = Run(run_config)
-        self.model = run.model
-
-        weights = weights_store.retrieve_weights(
-            bio_model_name,
-            iteration,
-        )
-        self.model.load_state_dict(weights.model)
-        self.model.eval()
-        # output_voxel_size = self.model.scale(input_voxel_size)
-        # input_shape = Coordinate(model.eval_input_shape)
-        # output_size = output_voxel_size * model.compute_output_shape(input_shape)[1]
-
-        # context = (input_size - output_size) / 2
-        # TODO load this part from dacapo
-        # self.read_shape = config.read_shape
-        # self.write_shape = config.write_shape
-        # self.output_voxel_size = config.output_voxel_size
-        # self.context = (self.read_shape - self.write_shape) / 2
 
     def load_bio_model(self, bio_model_name):
         from bioimageio.core import load_description

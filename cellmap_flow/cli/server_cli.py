@@ -101,7 +101,8 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def bioimage(model_path, data_path, debug, port, certfile, keyfile):
     """Run the CellMapFlow server with a bioimage-io model."""
-    raise NotImplementedError("This command is not yet implemented.")
+    model_config = BioModelConfig(model_name=model_path)
+    run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
 def run_server(model_config, data_path, debug, port, certfile, keyfile):

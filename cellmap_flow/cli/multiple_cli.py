@@ -3,11 +3,13 @@
 import sys
 from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig
 import logging
-from cellmap_flow.utils.bsub_utils import is_bsub_available, submit_bsub_job, parse_bpeek_output, run_locally, start_hosts, job_ids, security
+from cellmap_flow.utils.bsub_utils import start_hosts, job_ids, security
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
 
 
 data_args = ["-d", "--data-path"]
+SERVER_COMMAND = "cellmap_flow_server"
+
 logger = logging.getLogger(__name__)
 def main():
    """
@@ -66,7 +68,7 @@ def main():
                if args[j] in ("-r", "--run-name"):
                   run_name = args[j+1]
                   j += 2
-               elif args[j] in ("-it", "--iteration"):
+               elif args[j] in ("-i", "--iteration"):
                   iteration = int(args[j+1])
                   j += 2
                elif args[j] in ("-n", "--name"):
@@ -77,6 +79,7 @@ def main():
 
          if not run_name:
                logger.error("Missing -r/--run-name for --dacapo sub-command.")
+               sys.exit(1)
 
          models.append(DaCapoModelConfig(run_name, iteration, name=name))
          i = j
@@ -100,6 +103,7 @@ def main():
 
          if not script_path:
                logger.error("Missing -s/--script_path for --script sub-command.")
+               sys.exit(1)
 
          models.append(ScriptModelConfig(script_path, name=name))
          i = j
@@ -123,6 +127,7 @@ def main():
 
          if not model_path:
                logger.error("Missing -m/--model_path for --bioimage sub-command.")
+               sys.exit(1)
 
          models.append(BioModelConfig(model_path, name=name))
          i = j
@@ -145,7 +150,7 @@ if __name__ == "__main__":
 def run_multiple(models,dataset_path):
    inference_dict = {}
    for model in models:
-      command = f"{model.command} -d {dataset_path}"
+      command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
       host = start_hosts(command,job_name=model.name)
       if host is None:
          raise Exception("Could not start host")
