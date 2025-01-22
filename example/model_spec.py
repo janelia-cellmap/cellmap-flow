@@ -6,7 +6,7 @@ voxel_size = (8, 8, 8)
 read_shape = Coordinate((178, 178, 178)) * Coordinate(voxel_size)
 write_shape = Coordinate((56, 56, 56)) * Coordinate(voxel_size)
 output_voxel_size = Coordinate((8, 8, 8))
-
+input_voxel_size = Coordinate((8, 8, 8))
 #%%
 import torch
 from fly_organelles.model import StandardUnet

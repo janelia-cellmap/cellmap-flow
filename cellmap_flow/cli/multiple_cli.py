@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
-
 import sys
 from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig
 import logging
-from cellmap_flow.utils.bsub_utils import start_hosts, job_ids, security
+from cellmap_flow.utils.bsub_utils import start_hosts
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
 
 

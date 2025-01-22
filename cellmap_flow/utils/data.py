@@ -113,6 +113,9 @@ def check_config(config):
         config, "write_shape"
     ), f"write_shape not found in config"
     assert hasattr(
+        config, "input_voxel_size"
+    ), f"input_voxel_size not found in config"
+    assert hasattr(
         config, "output_voxel_size"
     ), f"output_voxel_size not found in config"
     assert hasattr(
