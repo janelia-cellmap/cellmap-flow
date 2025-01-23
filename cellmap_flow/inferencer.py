@@ -13,12 +13,13 @@ class Inferencer:
     def __init__(self, model_config: ModelConfig):
         self.model_config = model_config
         self.load_model(model_config)
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-        self.model.to(self.device)
-        print(f"Using device: {self.device}")
+        if self.model:
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            else:
+                self.device = torch.device("cpu")
+            self.model.to(self.device)
+            print(f"Using device: {self.device}")
 
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
@@ -26,7 +27,13 @@ class Inferencer:
         elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
             self.model_config, ScriptModelConfig
         ):
-            return self.process_chunk_basic(idi, roi)
+            # check if process_chunk is in self.config
+            if getattr(self.model_config.config, "process_chunk", None) and callable(
+                self.model_config.config.process_chunk
+            ):
+                return self.model_config.config.process_chunk(idi, roi)
+            else:
+                return self.process_chunk_basic(idi, roi)
         else:
             raise ValueError(f"Invalid model config type {type(self.config)}")
 
@@ -106,7 +113,6 @@ class Inferencer:
             self.load_bio_model(config.model_name)
         else:
             raise ValueError(f"Invalid model config type {type(config)}")
-
 
     def load_bio_model(self, bio_model_name):
         from bioimageio.core import load_description
