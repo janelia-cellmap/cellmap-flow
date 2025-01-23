@@ -11,13 +11,12 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
-
 SERVER_COMMAND = "cellmap_flow_server"
 
 
 @click.group()
 @click.option(
-    "--log-level",x
+    "--log-level",
     type=click.Choice(
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
     ),
@@ -68,7 +67,7 @@ logger = logging.getLogger(__name__)
 )
 def dacapo(run_name, iteration, data_path):
     command = f"{SERVER_COMMAND} dacapo -r {run_name} -i {iteration} -d {data_path}"
-    run(command,data_path)
+    run(command, data_path)
     raise NotImplementedError("This command is not yet implemented.")
 
 
@@ -85,7 +84,8 @@ def dacapo(run_name, iteration, data_path):
 )
 def script(script_path, data_path):
     command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
-    run(command,data_path)
+    run(command, data_path)
+
 
 @cli.command()
 @click.option(
@@ -96,15 +96,15 @@ def script(script_path, data_path):
 )
 def bioimage(model_path, data_path):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path}"
-    run(command,data_path)
+    run(command, data_path)
 
-def run(command,dataset_path):
+
+def run(command, dataset_path):
 
     host = start_hosts(command)
     if host is None:
         raise Exception("Could not start host")
 
-    inference_dict = {host:"prediction"}
+    inference_dict = {host: "prediction"}
 
     generate_neuroglancer_link(dataset_path, inference_dict)
-
