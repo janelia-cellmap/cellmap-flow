@@ -62,10 +62,10 @@ class Inferencer:
         print(f"Using device: {self.device}")
 
     def process_chunk(self, idi, roi):
-        if isinstance(self.config, BioModelConfig):
+        if isinstance(self.model_config, BioModelConfig):
             return self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.config, DaCapoModelConfig) or isinstance(
-            self.config, ScriptModelConfig
+        elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
+            self.model_config, ScriptModelConfig
         ):
             return self.process_chunk_basic(idi, roi)
         else:
