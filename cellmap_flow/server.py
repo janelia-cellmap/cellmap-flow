@@ -168,7 +168,7 @@ class CellMapFlowServer:
         box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
 
-        chunk = self.inferencer.process_chunk_basic(self.idi_raw, roi)
+        chunk = self.inferencer.process_chunk(self.idi_raw, roi)
         return (
             # Encode to N5 chunk format (header + compressed data)
             self.chunk_encoder.encode(chunk),
