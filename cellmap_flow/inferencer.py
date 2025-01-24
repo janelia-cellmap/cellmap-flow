@@ -69,10 +69,10 @@ class Inferencer:
             self.model_config, ScriptModelConfig
         ):
             # check if process_chunk is in self.config
-            if getattr(self.model_config.config, "process_chunk", None) and callable(
-                self.model_config.config.process_chunk
+            if getattr(self.model_config, "process_chunk", None) and callable(
+                self.model_config.process_chunk
             ):
-                return self.model_config.config.process_chunk(idi, roi)
+                return self.model_config.process_chunk(idi, roi)
             else:
                 return self.process_chunk_basic(idi, roi)
         else:

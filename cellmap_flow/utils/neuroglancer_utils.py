@@ -4,6 +4,8 @@ import itertools
 import logging
 from funlib.persistence import open_ds
 from funlib.show.neuroglancer import add_layer
+import os
+import glob
 
 neuroglancer.set_server_bind_address("0.0.0.0")
 
@@ -14,10 +16,15 @@ def get_ds(dataset_path, filetype):
     container = dataset_path.split(f".{filetype}")[0]+f".{filetype}"
     dataset = dataset_path.split(f".{filetype}")[1].lstrip("/").rstrip("/")
 
-    print(f" Opening container: {container} dataset: {dataset}")
+    scales = [f for f in os.listdir(dataset_path) if f.startswith("s") and f[1:].isdigit()]
+    if len(scales) == 0:
+        # one scale
+        print(f"Opening {container} - {dataset}")
+        return open_ds(container, dataset)
+    else:
+        # multiscale
+        return [open_ds(container, os.path.join(dataset,s)) for s in scales]
 
-    array = open_ds(container, dataset)
-    return array
 
 def generate_neuroglancer_link(dataset_path, inference_dict):
     # Create a new viewer
@@ -26,11 +33,11 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
     # Add a layer to the viewer
     with viewer.txn() as s:
         # if multiscale dataset
-        # if (
-        #     dataset_path.split("/")[-1].startswith("s")
-        #     and dataset_path.split("/")[-1][1:].isdigit()
-        # ):
-        #     dataset_path = dataset_path.rsplit("/", 1)[0]
+        if (
+            dataset_path.split("/")[-1].startswith("s")
+            and dataset_path.split("/")[-1][1:].isdigit()
+        ):
+            dataset_path = dataset_path.rsplit("/", 1)[0]
         if ".zarr" in dataset_path:
             filetype = "zarr"
         elif ".n5" in dataset_path:
