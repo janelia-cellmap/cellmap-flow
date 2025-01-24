@@ -11,8 +11,8 @@ output_voxel_size = Coordinate((8, 8, 8))
 voxel_size = Coordinate((8, 8, 8))
 input_voxel_size = Coordinate((8, 8, 8))
 
-read_shape = Coordinate((268, 268, 268)) * Coordinate(voxel_size)
-write_shape = Coordinate((164, 164, 164)) * Coordinate(output_voxel_size)
+read_shape = Coordinate((268, 268, 268)) * voxel_size
+write_shape = Coordinate((164, 164, 164)) * output_voxel_size
 context = (read_shape - write_shape) / 2
 
 output_channels = 10
