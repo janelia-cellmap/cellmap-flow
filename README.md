@@ -43,6 +43,9 @@ cellmap_flow dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_
 ## Using bioimage-io model:
 still in development
 
+## Using TensorFlow model:
+To run TensorFlow models, we suggest installing TensorFlow via conda: `conda install tensorflow-gpu==2.16.1`
+
 ##  Run multiple model at once: 
 ```bash
 cellmap_flow_multiple --script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -n script_base --dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -n using_dacapo -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0

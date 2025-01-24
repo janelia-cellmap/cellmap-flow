@@ -7,18 +7,6 @@ from funlib.geometry import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi
 
-output_voxel_size = Coordinate((8, 8, 8))
-voxel_size = Coordinate((8, 8, 8))
-input_voxel_size = Coordinate((8, 8, 8))
-
-read_shape = Coordinate((268, 268, 268)) * voxel_size
-write_shape = Coordinate((164, 164, 164)) * output_voxel_size
-context = (read_shape - write_shape) / 2
-
-output_channels = 10
-block_shape = np.array((164, 164, 164, output_channels))
-model = None
-
 
 def load_eval_model(setup_dir, checkpoint, device=None):
     graph = tf.Graph()
@@ -33,10 +21,19 @@ def load_eval_model(setup_dir, checkpoint, device=None):
     return session
 
 
-# from https://github.com/neptunes5thmoon/lsd/blob/modern/lsd/tutorial/example_nets/fib25/lsd/inference.py
-# /groups/saalfeld/home/heinrichl/Brew/miniconda/envs/fly-organelles-lsd/bin/python /groups/saalfeld/home/heinrichl/dev/fly-organelles-lsd/lsd/lsd/tutorial/example_nets/fib25/lsd/inference.py predict --setup_dir /nrs/saalfeld/heinrichl/fly_organelles/lsd/networks/fib25/lsd --checkpoint train_net_checkpoint_400000 -input_tensor raw -output_tensor embedding -no 1 -cs 0-10:embedding/s0 -vs 8 8 8 -oc jrc_fly-vnc-1.zarr -od 400000_contrast -ic /nrs/cellmap/data/jrc_fly-vnc-1/jrc_fly-vnc-1.zarr -id recon-1/em/fibsem-uint8/s1 --min-raw 158 --max-raw 233
-setup_dir = "/nrs/cellmap/ackermand/downsample_larissas_networks/lsd"
+output_voxel_size = Coordinate((8, 8, 8))
+voxel_size = Coordinate((8, 8, 8))
+input_voxel_size = Coordinate((8, 8, 8))
 
+read_shape = Coordinate((268, 268, 268)) * voxel_size
+write_shape = Coordinate((164, 164, 164)) * output_voxel_size
+context = (read_shape - write_shape) / 2
+
+output_channels = 10
+block_shape = np.array((164, 164, 164, output_channels))
+model = None
+
+setup_dir = "/nrs/cellmap/ackermand/downsample_larissas_networks/lsd"
 checkpoint_lsd = "train_net_checkpoint_400000"
 input_tensor_lsd = ["raw"]
 output_tensor_lsd = ["embedding"]

@@ -21,21 +21,6 @@ def load_eval_model(setup_dir, checkpoint, device=None):
     return session
 
 
-def process_lsd(
-    chunk,
-    session,
-    input_tensorname=["raw"],
-    output_tensorname=["embedding"],
-):
-    inputs = [rescale_data(chunk, 158, 233)]
-    output_data = session.run(
-        {ot: ot for ot in output_tensorname},
-        feed_dict={k: v for k, v in zip(input_tensorname, inputs)},
-    )
-    output_data = output_data[output_tensorname[0]].clip(0, 1) * 255.0
-    return output_data.astype(np.uint8)
-
-
 output_voxel_size = Coordinate((8, 8, 8))
 voxel_size = Coordinate((8, 8, 8))
 input_voxel_size = Coordinate((8, 8, 8))
@@ -52,9 +37,6 @@ output_channels = 3
 block_shape = np.array((56, 56, 56, output_channels))
 model = None
 
-
-# from https://github.com/neptunes5thmoon/lsd/blob/modern/lsd/tutorial/example_nets/fib25/lsd/inference.py
-# /groups/saalfeld/home/heinrichl/Brew/miniconda/envs/fly-organelles-lsd/bin/python /groups/saalfeld/home/heinrichl/dev/fly-organelles-lsd/lsd/lsd/tutorial/example_nets/fib25/lsd/inference.py predict --setup_dir /nrs/saalfeld/heinrichl/fly_organelles/lsd/networks/fib25/lsd --checkpoint train_net_checkpoint_400000 -input_tensor raw -output_tensor embedding -no 1 -cs 0-10:embedding/s0 -vs 8 8 8 -oc jrc_fly-vnc-1.zarr -od 400000_contrast -ic /nrs/cellmap/data/jrc_fly-vnc-1/jrc_fly-vnc-1.zarr -id recon-1/em/fibsem-uint8/s1 --min-raw 158 --max-raw 233
 setup_dir_lsd = "/nrs/cellmap/ackermand/downsample_larissas_networks/lsd"
 checkpoint_lsd = "train_net_checkpoint_400000"
 input_tensor_lsd = ["raw"]
@@ -68,7 +50,6 @@ output_tensor_acrlsd = ["affs"]
 session_acrlsd = load_eval_model(setup_dir_acrlsd, checkpoint_acrlsd)
 
 
-# /groups/saalfeld/home/heinrichl/Brew/miniconda/envs/fly-organelles-lsd/bin/python /groups/saalfeld/home/heinrichl/dev/fly-organelles-lsd/lsd/lsd/tutorial/example_nets/fib25/acrlsd/inference.py predict --setup_dir /nrs/saalfeld/heinrichl/fly_organelles/lsd/networks/fib25/acrlsd --checkpoint train_net_checkpoint_300000 -input_tensor raw -output_tensor affs -input_tensor pretrained_lsd -no 1 -cs 0-3:affs/s0 -vs 8 8 8 -oc jrc_fly-vnc-1.zarr -od 400000 -ic /nrs/cellmap/data/jrc_fly-vnc-1/jrc_fly-vnc-1.zarr -id recon-1/em/fibsem-uint8/s1 -ic /nrs/saalfeld/heinrichl/fly_organelles/lsd/networks/fib25/lsd/jrc_fly-vnc-1.zarr -id 400000/embedding/s0 --min-raw 158 --max-raw 233 --min-raw 0 --max-raw 255 --local
 def process_lsd(
     chunk,
 ):
@@ -111,23 +92,20 @@ def process_chunk(idi, input_roi):
 
     # process lsd
     lsd_output = process_lsd(chunk)
-    print(f"{lsd_output.shape=}")
+
     # trim lsd_output
     excess_voxels = (lsd_output_shape - read_shape_acrlsd) / (
         Coordinate(2, 2, 2) * voxel_size
     )
     slicer = np.s_[excess_voxels[0] : -excess_voxels[0]]
     lsd_output = lsd_output[:, slicer, slicer, slicer]
-    print(f"{lsd_output.shape=}")
 
     # trim raw
     excess_voxels = (read_shape_lsd - read_shape_acrlsd) / (
         Coordinate(2, 2, 2) * voxel_size
     )
-    print(excess_voxels)
     slicer = np.s_[excess_voxels[0] : -excess_voxels[0]]
     chunk = chunk[slicer, slicer, slicer]
-    print(f"{chunk.shape=}")
 
     inputs = [
         rescale_data(chunk, 153, 233),
