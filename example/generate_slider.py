@@ -40,7 +40,7 @@ def generate_script(num_channels=2):
 if __name__ == "__main__":
     # Generate a script for 2 channels (default)
     script_2_channels = generate_script(8)
-    print("Generated script for 2 channels:")
+    print("Generated script for 8 channels:")
     print(script_2_channels)
     
     # print("\n" + "-"*50 + "\n")
