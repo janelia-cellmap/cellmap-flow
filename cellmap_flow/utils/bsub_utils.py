@@ -14,6 +14,7 @@ processes = []
 job_ids = []
 security = "http"
 
+
 def cleanup(signum, frame):
     print(f"Script is being killed. Received signal: {signum}")
     if is_bsub_available():
@@ -25,10 +26,12 @@ def cleanup(signum, frame):
             process.kill()
     sys.exit(0)
 
+
 signal.signal(signal.SIGINT, cleanup)  # Handle Ctrl+C
-signal.signal(signal.SIGTERM, cleanup) 
+signal.signal(signal.SIGTERM, cleanup)
 
 logger = logging.getLogger(__name__)
+
 
 def is_bsub_available():
     try:
@@ -47,16 +50,16 @@ def is_bsub_available():
 
 def submit_bsub_job(
     command,
+    queue="gpu_h100",
+    charge_group=None,
     job_name="my_job",
 ):
-    bsub_command = [
-        "bsub",
-        "-J",
-        job_name,
-        "-P",
-        "cellmap",
+    bsub_command = ["bsub", "-J", job_name]
+    if charge_group:
+        bsub_command += ["-P", charge_group]
+    bsub_command += [
         "-q",
-        "gpu_h100",
+        queue,
         "-gpu",
         "num=1",
         "bash",
@@ -128,6 +131,7 @@ def parse_bpeek_output(job_id):
 #         return host
 #     return None
 
+
 def get_host_from_stdout(output):
     if "Host name: " in output and f"* Running on {security}://" in output:
         host_name = output.split("Host name: ")[1].split("\n")[0].strip()
@@ -172,17 +176,17 @@ def run_locally(sc):
     processes.append(process)
     return host
 
-def start_hosts(command,job_name="example_job"):
+
+def start_hosts(command, queue="gpu_h100", charge_group=None, job_name="example_job"):
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
-
     if is_bsub_available():
-        result = submit_bsub_job(command, job_name=job_name)
+        result = submit_bsub_job(command, queue, charge_group, job_name=job_name)
         job_id = result.stdout.split()[1][1:-1]
         job_ids.append(job_id)
         host = parse_bpeek_output(job_id)
     else:
-        host= run_locally(command)
+        host = run_locally(command)
 
     return host
