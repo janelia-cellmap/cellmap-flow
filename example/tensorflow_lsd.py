@@ -65,9 +65,9 @@ def get_tensor_names(setup_dir, input_tensor, output_tensor):
 
 def process_lsd(
     chunk,
-    session=session,
-    input_tensorname=["raw"],
-    output_tensorname=["embedding"],
+    session,
+    input_tensorname,
+    output_tensorname,
 ):
     inputs = [rescale_data(chunk, 158, 233)]
     output_data = session.run(
