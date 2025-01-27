@@ -1,0 +1,98 @@
+<h3>Normalization Methods</h3>
+<form id="inputForm">
+
+  <!-- Simple (x/255) -->
+  <div class="form-check mb-2">
+    <input
+      class="form-check-input"
+      type="checkbox"
+      value=""
+      id="methodSimple"
+    />
+    <label class="form-check-label" for="methodSimple">
+      Simple Normalization
+    </label>
+  </div>
+  <!-- No parameters, but you could add some if needed -->
+  <div id="simpleParams" style="display: none; margin-left: 20px;">
+      <label for="simpleValue" class="form-label">
+        normalization formula input is x. e.g. x/255.0
+      </label>
+      <input
+        type="text"
+        class="form-control"
+        id="simpleValue"
+        value="x/255.0"
+
+      />
+
+    </div>
+
+  <hr/>
+
+  <!-- Contrast -->
+  <div class="form-check mb-2">
+    <input
+      class="form-check-input"
+      type="checkbox"
+      value=""
+      id="methodContrast"
+    />
+    <label class="form-check-label" for="methodContrast">
+      Contrast
+    </label>
+  </div>
+  <div id="contrastParams" class="ps-4" style="display: none;">
+    <div class="mb-3">
+      <label for="contrastValue" class="form-label">Contrast Value</label>
+      <input
+        type="number"
+        step="0.01"
+        class="form-control"
+        id="contrastValue"
+        value="1.0"
+      />
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- Standardization -->
+  <div class="form-check mb-2">
+    <input
+      class="form-check-input"
+      type="checkbox"
+      value=""
+      id="methodStandardization"
+    />
+    <label class="form-check-label" for="methodStandardization">
+      Standardization
+    </label>
+  </div>
+  <div id="standardizationParams" class="ps-4" style="display: none;">
+    <div class="mb-3">
+      <label for="mean" class="form-label">Mean</label>
+      <input
+        type="number"
+        step="0.01"
+        class="form-control"
+        id="mean"
+        value="0.0"
+      />
+    </div>
+    <div class="mb-3">
+      <label for="std" class="form-label">Std</label>
+      <input
+        type="number"
+        step="0.01"
+        class="form-control"
+        id="std"
+        value="1.0"
+      />
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-primary mt-3" id="submitInput">
+    Submit Input
+  </button>
+</form>
