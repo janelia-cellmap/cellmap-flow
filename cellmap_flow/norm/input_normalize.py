@@ -12,6 +12,13 @@ class InputNormalizer:
         logger.error("InputNormalizer.normalize not implemented")
         return data
     
+    def to_dict(self):
+        result = {"name": self.name()}
+        for k, v in self.__dict__.items():
+            result[k] = v
+        return result
+        
+    
 
 class MinMaxNormalizer(InputNormalizer):
 
@@ -27,3 +34,16 @@ class MinMaxNormalizer(InputNormalizer):
         data = data.astype(np.float32)
         data.clip(self.min_value, self.max_value)
         return ((data - self.min_value) / (self.max_value - self.min_value)).astype(np.float32) 
+    
+NormalizationMethods = [f.name() for f in InputNormalizer.__subclasses__()]
+
+def get_normalization(elms : dict)-> InputNormalizer:
+    if "name" not in elms:
+        raise ValueError(f"Normalization method name not specified in {elms}")
+    name = elms["name"]
+    rest_elm = elms.copy()
+    rest_elm.pop("name")
+    for nm in NormalizationMethods:
+        if nm.name() == name:
+            return nm(**rest_elm)
+    raise ValueError(f"Normalization method {name} not found")
