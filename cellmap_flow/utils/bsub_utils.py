@@ -75,11 +75,13 @@ def submit_bsub_job(
         )
         print("Job submitted successfully:")
         print(result.stdout)
-    except subprocess.CalledProcessError as e:
+        return result
+    except Exception as e:
         print("Error submitting job:")
-        print(e.stderr)
+        print("It can be that you didn't define the charge group. -P <charge_group>")
+        raise(e)
 
-    return result
+
 
 
 def parse_bpeek_output(job_id):
