@@ -6,10 +6,12 @@ from cellmap_flow.utils.data import (
     DaCapoModelConfig,
     ScriptModelConfig,
 )
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from funlib.persistence import Array
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 def normalize_output(data):
     # Default normalization if no one is provided
@@ -17,9 +19,6 @@ def normalize_output(data):
     data = (data + 1) * 255.0 / 2.0
     return data.astype(np.uint8)
 
-def normalize_input(data):
-    # Default normalization if no one is provided
-    return data.astype(np.float32)  / 255.0
 
 
 def predict(read_roi,write_roi, config,**kwargs):
@@ -33,7 +32,7 @@ def predict(read_roi,write_roi, config,**kwargs):
         
     raw_input = idi.to_ndarray_ts(read_roi)
     # raw_input = np.expand_dims(raw_input, (0, 1))
-    raw_input = config.normalize_input(raw_input).astype(np.float32) 
+    raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
@@ -45,9 +44,10 @@ class Inferencer:
         self.model_config = model_config.config
         self.load_model(model_config)
 
-        if not hasattr(self.model_config, 'normalize_input'):
+        if not hasattr(self.model_config, 'input_normalizer'):
             logger.warning("No input normalization function provided, using default")
-            self.model_config.normalize_input = normalize_input
+            self.model_config.input_normalizer = MinMaxNormalizer()
+
         if not hasattr(self.model_config, 'normalize_output'):
             logger.warning("No output normalization function provided, using default")
             self.model_config.normalize_output = normalize_output
@@ -76,7 +76,7 @@ class Inferencer:
             else:
                 return self.process_chunk_basic(idi, roi)
         else:
-            raise ValueError(f"Invalid model config type {type(self.config)}")
+            raise ValueError(f"Invalid model config type {type(self.model_config)}")
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi

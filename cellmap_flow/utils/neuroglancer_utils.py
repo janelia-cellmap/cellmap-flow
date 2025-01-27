@@ -46,20 +46,20 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
             filetype = "precomputed"
         if dataset_path.startswith("/"):
             # TODO should be done better
-            ds = get_ds(dataset_path, filetype)
-            add_layer(s, ds, "raw")
-            # if "nrs/cellmap" in dataset_path:
-            #     security = "https"
-            #     dataset_path = dataset_path.replace("/nrs/cellmap/", "nrs/")
-            # elif "/groups/cellmap/cellmap" in dataset_path:
-            #     security = "http"
-            #     dataset_path = dataset_path.replace("/groups/cellmap/cellmap/", "dm11/")
-            # else:
-            #     raise ValueError("Currently only supporting nrs/cellmap and /groups/cellmap/cellmap")
+            # ds = get_ds(dataset_path, filetype)
+            # add_layer(s, ds, "raw")
+            if "nrs/cellmap" in dataset_path:
+                security = "https"
+                dataset_path = dataset_path.replace("/nrs/cellmap/", "nrs/")
+            elif "/groups/cellmap/cellmap" in dataset_path:
+                security = "http"
+                dataset_path = dataset_path.replace("/groups/cellmap/cellmap/", "dm11/")
+            else:
+                raise ValueError("Currently only supporting nrs/cellmap and /groups/cellmap/cellmap")
             
-            # s.layers["raw"] = neuroglancer.ImageLayer(
-            #     source=f"{filetype}://{security}://cellmap-vm1.int.janelia.org/{dataset_path}",
-            # )
+            s.layers["raw"] = neuroglancer.ImageLayer(
+                source=f"{filetype}://{security}://cellmap-vm1.int.janelia.org/{dataset_path}",
+            )
         else:
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",

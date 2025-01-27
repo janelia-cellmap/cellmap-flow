@@ -50,8 +50,8 @@ def is_bsub_available():
 
 def submit_bsub_job(
     command,
-    queue="gpu_h100",
-    charge_group=None,
+    queue="gpu_a100",
+    charge_group="cellmap",
     job_name="my_job",
 ):
     bsub_command = ["bsub", "-J", job_name]
@@ -75,11 +75,12 @@ def submit_bsub_job(
         )
         print("Job submitted successfully:")
         print(result.stdout)
+        return result
     except subprocess.CalledProcessError as e:
         print("Error submitting job:")
-        print(e.stderr)
+        raise e
 
-    return result
+    
 
 
 def parse_bpeek_output(job_id):
@@ -177,7 +178,7 @@ def run_locally(sc):
     return host
 
 
-def start_hosts(command, queue="gpu_h100", charge_group=None, job_name="example_job"):
+def start_hosts(command, queue="gpu_a100", charge_group="cellmap", job_name="example_job"):
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
