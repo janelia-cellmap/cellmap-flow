@@ -1,8 +1,17 @@
-## Still in development
+**🚧 This repository is still under construction. 🚧**
+Please feel free to explore and contribute, but note that there may be frequent changes.
+
+
+<div align="center">
+
 ![CellMapFlow Logo](img/CMFLO_dark.png)
 
 ### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
+[![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
+---
 
+
+</div>
 
 ```bash
 $ cellmap_flow
