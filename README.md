@@ -1,6 +1,8 @@
 ## Still in development
+![CellMapFlow Logo](img/CMFLO_dark.png)
 
-#  cellmap-flow 
+### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
+
 
 ```bash
 $ cellmap_flow
