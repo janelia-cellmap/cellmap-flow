@@ -45,6 +45,7 @@ cellmap_flow script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/mo
 ```
 
 ### Script keywords:
+Define these variables in your script (`cellmap_flow script -s path/to/your_script.py`):
 - **model**: 
   The PyTorch model to be used for inference. 
 - **read_shape**: 
@@ -58,7 +59,7 @@ cellmap_flow script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/mo
 - **output_channels**:
   The number of channels in the output of the model.
 - **process_chunk** (optional):
-  (Optional) A function that takes an ImageDataInterface and an ROI and returns the data to be display.
+  (Optional) A function that takes an ImageDataInterface and an ROI and returns the data to be display. This can be used to run a TensorFlow model or do other custom data processing.
 
 ## Using Dacapo model:
 which enable inference using a Dacapo model by providing the run name and iteration number
