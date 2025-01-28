@@ -178,7 +178,7 @@ def run_locally(sc):
     return host
 
 
-def start_hosts(command, queue="gpu_a100", charge_group="cellmap", job_name="example_job"):
+def start_hosts(command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"):
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
