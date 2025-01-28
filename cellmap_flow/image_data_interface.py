@@ -327,5 +327,3 @@ class ImageDataInterface:
         )
         self.ts = None
         return res
-
-

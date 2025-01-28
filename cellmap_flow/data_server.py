@@ -52,7 +52,7 @@ class CellMapFlowDataServer:
             block_shape (tuple): Shape of the blocks used for chunking
         """
 
-        path = dataset_name.split(".zarr")[0]+".zarr"
+        path = dataset_name.split(".zarr")[0] + ".zarr"
         filename = dataset_name.split(".zarr")[1].lstrip("/").rstrip("/")
 
         self.ds = open_ds(path, filename)

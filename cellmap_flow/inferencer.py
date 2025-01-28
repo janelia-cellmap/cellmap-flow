@@ -15,28 +15,32 @@ logger = logging.getLogger(__name__)
 
 def normalize_output(data):
     # Default normalization if no one is provided
-    data =data.clip(-1, 1)
+    data = data.clip(-1, 1)
     data = (data + 1) * 255.0 / 2.0
     return data.astype(np.uint8)
 
 
-
-def predict(read_roi,write_roi, config,**kwargs):
-    idi = kwargs.get('idi')
+def predict(read_roi, write_roi, config, **kwargs):
+    idi = kwargs.get("idi")
     if idi is None:
         raise ValueError("idi must be provided in kwargs")
-    
-    device = kwargs.get('device')
+
+    device = kwargs.get("device")
     if device is None:
         raise ValueError("device must be provided in kwargs")
-        
+
     raw_input = idi.to_ndarray_ts(read_roi)
     # raw_input = np.expand_dims(raw_input, (0, 1))
     raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
-        return config.model.forward(torch.from_numpy(raw_input).float().to(device)).detach().cpu().numpy()[0]
+        return (
+            config.model.forward(torch.from_numpy(raw_input).float().to(device))
+            .detach()
+            .cpu()
+            .numpy()[0]
+        )
 
 
 class Inferencer:
@@ -44,14 +48,14 @@ class Inferencer:
         self.model_config = model_config.config
         self.load_model(model_config)
 
-        if not hasattr(self.model_config, 'input_normalizer'):
+        if not hasattr(self.model_config, "input_normalizer"):
             logger.warning("No input normalization function provided, using default")
             self.model_config.input_normalizer = MinMaxNormalizer()
 
-        if not hasattr(self.model_config, 'normalize_output'):
+        if not hasattr(self.model_config, "normalize_output"):
             logger.warning("No output normalization function provided, using default")
             self.model_config.normalize_output = normalize_output
-        if not hasattr(self.model_config, 'predict'):
+        if not hasattr(self.model_config, "predict"):
             logger.warning("No predict function provided, using default")
             self.model_config.predict = predict
         if self.model:
@@ -82,7 +86,9 @@ class Inferencer:
         output_roi = roi
 
         input_roi = output_roi.grow(self.context, self.context)
-        result = self.model_config.predict(input_roi, output_roi, self.model_config, idi=idi, device=self.device)
+        result = self.model_config.predict(
+            input_roi, output_roi, self.model_config, idi=idi, device=self.device
+        )
 
         predictions = Array(
             result,

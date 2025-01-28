@@ -9,12 +9,12 @@ class ModelConfig:
     def __init__(self):
         self._config = None
 
-    def __str__(self)-> str:
+    def __str__(self) -> str:
         attributes = vars(self)
-        elms = ', '.join(f"{key}: {value}" for key, value in attributes.items())
+        elms = ", ".join(f"{key}: {value}" for key, value in attributes.items())
         return f"{type(self)} : {elms}"
-    
-    def __repr__(self)-> str:
+
+    def __repr__(self) -> str:
         return self.__str__()
 
     def _get_config(self):
@@ -28,9 +28,8 @@ class ModelConfig:
         return self._config
 
 
-
 class BioModelConfig(ModelConfig):
-    def __init__(self, model_name: str, name = None):
+    def __init__(self, model_name: str, name=None):
         super().__init__()
         self.model_name = model_name
         self.name = name
@@ -42,7 +41,7 @@ class BioModelConfig(ModelConfig):
 
 class ScriptModelConfig(ModelConfig):
 
-    def __init__(self, script_path, name = None):
+    def __init__(self, script_path, name=None):
         super().__init__()
         self.script_path = script_path
         self.name = name
@@ -53,13 +52,14 @@ class ScriptModelConfig(ModelConfig):
 
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
+
         config = load_safe_config(self.script_path)
         return config
 
 
 class DaCapoModelConfig(ModelConfig):
 
-    def __init__(self, run_name: str, iteration: int, name = None):
+    def __init__(self, run_name: str, iteration: int, name=None):
         super().__init__()
         self.run_name = run_name
         self.iteration = iteration
@@ -106,24 +106,15 @@ class DaCapoModelConfig(ModelConfig):
 
 def check_config(config):
     assert hasattr(config, "model"), f"Model not found in config"
-    assert hasattr(
-        config, "read_shape"
-    ), f"read_shape not found in config"
-    assert hasattr(
-        config, "write_shape"
-    ), f"write_shape not found in config"
-    assert hasattr(
-        config, "input_voxel_size"
-    ), f"input_voxel_size not found in config"
+    assert hasattr(config, "read_shape"), f"read_shape not found in config"
+    assert hasattr(config, "write_shape"), f"write_shape not found in config"
+    assert hasattr(config, "input_voxel_size"), f"input_voxel_size not found in config"
     assert hasattr(
         config, "output_voxel_size"
     ), f"output_voxel_size not found in config"
-    assert hasattr(
-        config, "output_channels"
-    ), f"output_channels not found in config"
-    assert hasattr(
-        config, "block_shape"
-    ), f"block_shape not found in config"
+    assert hasattr(config, "output_channels"), f"output_channels not found in config"
+    assert hasattr(config, "block_shape"), f"block_shape not found in config"
+
 
 class Config:
     pass

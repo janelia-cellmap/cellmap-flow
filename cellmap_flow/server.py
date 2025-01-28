@@ -13,10 +13,7 @@ from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import (
-    ModelConfig,
-    IP_PATTERN
-)
+from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
 from cellmap_flow.utils.web_utils import get_public_ip
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 
@@ -168,8 +165,9 @@ class CellMapFlowServer:
             if not all([norm_type, min_value is not None, max_value is not None]):
                 return {"error": "Missing one or more required parameters"}, 400
 
-            return self._input_normalize_impl(norm_type, float(min_value), float(max_value))
-
+            return self._input_normalize_impl(
+                norm_type, float(min_value), float(max_value)
+            )
 
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
@@ -340,6 +338,7 @@ if __name__ == "__main__":
         block_shape = (32, 32, 32)
         output_voxel_size = (4, 4, 4)
         output_channels = 1
+
     dummy_model_config = ModelConfig(config=DummyConfig())
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
