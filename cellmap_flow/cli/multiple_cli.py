@@ -32,7 +32,8 @@ def main():
 
    if "--dacapo" not in args and "--script" not in args and "--bioimage" not in args:
       logger.error("Missing required argument at least one should exist: --dacapo, --script, or --bioimage")
-      sys.exit(1)
+      logger.error("Example: cellmap_flow_multiple --data-path /some/shared/path --dacapo -r run_1 -it 60 --dacapo -r run_2 -it 50 --script -s /path/to/script")
+      logger.error("Now we will just open the raw data ..")
 
    # Extract data path
    data_path = None

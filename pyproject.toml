@@ -23,6 +23,7 @@ dependencies = [
     "bioimageio.core[onnx,pytorch]==0.6.1",
     "marshmallow",
     "scikit-image",
+    "flasgger",
     "funlib.show.neuroglancer @ git+https://github.com/funkelab/funlib.show.neuroglancer.git@0c609d2cbf09af976bda998fff17a0454e2782ee"
         ]
 

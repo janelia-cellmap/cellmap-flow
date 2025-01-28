@@ -271,6 +271,7 @@ def get_ds_info(path):
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
     else:
         path, filename = split_dataset_path(path)
+        logger.error(f"Opening {path} {filename}")
         ds = open_ds(path, filename)
         voxel_size = ds.voxel_size
         chunk_shape = ds.chunk_shape
@@ -327,63 +328,4 @@ class ImageDataInterface:
         self.ts = None
         return res
 
-    # ds not found
-    # def to_ndarray_ds(self, roi=None):
-    #     return self.ds.to_ndarray(roi)
 
-
-# %%
-# multiscale_attrs = zarr_dataset["/recon-1/em/fibsem-uint8"].attrs.asdict()
-# if "multiscales" in multiscale_attrs:
-#     multiscales = multiscale_attrs["multiscales"][0]
-#     axes = [axis["name"] for axis in multiscales["axes"]]
-#     for scale_info in multiscale_attrs["multiscales"][0]["datasets"]:
-#         if scale_info["path"] == "s2":
-#             voxel_size = Coordinate(scale_info["coordinateTransformations"][0]["scale"])
-# print(multiscales)
-# chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-# roi = Roi((0, 0, 0), Coordinate(ts_info.shape) * voxel_size)
-
-# # %%
-# idi = ImageDataInterface(
-#     "gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg/"
-# )
-# # %%
-
-# em_8nm = ts.open(
-#     {
-#         "driver": "neuroglancer_precomputed",
-#         "kvstore": "gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg",
-#     },
-#     read=True,
-#     dimension_units=["16 nm", "16 nm", "16 nm", None],
-# ).result()
-# em_8nm.spec().transform.input_labels
-# # # %%
-# # from tensorstore import Unit
-
-# # u = Unit(8, "nm")
-# # print(ts_info.dimension_units[0].to_json())
-
-# # # %%
-# idi = ImageDataInterface(
-#     "gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg/"
-# )
-# print(idi.voxel_size)
-# idi = ImageDataInterface(
-#     "s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8/s0",  # /recon-1/em/fibsem-uint8/s0",
-# )
-# print(idi.voxel_size)
-idi = ImageDataInterface(
-    "/nrs/cellmap/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr/recon-1/em/fibsem-uint8/s1",
-)
-
-# print(idi.voxel_size)
-# # %%
-# id
-# %%
-# %%
-# voxel_size = Coordinate(1, 1, 3)
-# voxel_size = voxel_size[::-1]
-# type(voxel_size)
-# %%

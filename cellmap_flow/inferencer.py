@@ -6,13 +6,54 @@ from cellmap_flow.utils.data import (
     DaCapoModelConfig,
     ScriptModelConfig,
 )
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from funlib.persistence import Array
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def normalize_output(data):
+    # Default normalization if no one is provided
+    data =data.clip(-1, 1)
+    data = (data + 1) * 255.0 / 2.0
+    return data.astype(np.uint8)
+
+
+
+def predict(read_roi,write_roi, config,**kwargs):
+    idi = kwargs.get('idi')
+    if idi is None:
+        raise ValueError("idi must be provided in kwargs")
+    
+    device = kwargs.get('device')
+    if device is None:
+        raise ValueError("device must be provided in kwargs")
+        
+    raw_input = idi.to_ndarray_ts(read_roi)
+    # raw_input = np.expand_dims(raw_input, (0, 1))
+    raw_input = config.input_normalizer.normalize(raw_input)
+    raw_input = np.expand_dims(raw_input, (0, 1))
+
+    with torch.no_grad():
+        return config.model.forward(torch.from_numpy(raw_input).float().to(device)).detach().cpu().numpy()[0]
 
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig):
-        self.model_config = model_config
+        self.model_config = model_config.config
         self.load_model(model_config)
+
+        if not hasattr(self.model_config, 'input_normalizer'):
+            logger.warning("No input normalization function provided, using default")
+            self.model_config.input_normalizer = MinMaxNormalizer()
+
+        if not hasattr(self.model_config, 'normalize_output'):
+            logger.warning("No output normalization function provided, using default")
+            self.model_config.normalize_output = normalize_output
+        if not hasattr(self.model_config, 'predict'):
+            logger.warning("No predict function provided, using default")
+            self.model_config.predict = predict
         if self.model:
             if torch.cuda.is_available():
                 self.device = torch.device("cuda")
@@ -28,34 +69,33 @@ class Inferencer:
             self.model_config, ScriptModelConfig
         ):
             # check if process_chunk is in self.config
-            if getattr(self.model_config.config, "process_chunk", None) and callable(
-                self.model_config.config.process_chunk
+            if getattr(self.model_config, "process_chunk", None) and callable(
+                self.model_config.process_chunk
             ):
-                return self.model_config.config.process_chunk(idi, roi)
+                return self.model_config.process_chunk(idi, roi)
             else:
                 return self.process_chunk_basic(idi, roi)
         else:
-            raise ValueError(f"Invalid model config type {type(self.config)}")
+            raise ValueError(f"Invalid model config type {type(self.model_config)}")
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
 
         input_roi = output_roi.grow(self.context, self.context)
-        # input_roi = output_roi + context
-        raw_input = idi.to_ndarray_ts(input_roi).astype(np.float32) / 255.0
-        raw_input = np.expand_dims(raw_input, (0, 1))
+        result = self.model_config.predict(input_roi, output_roi, self.model_config, idi=idi, device=self.device)
 
-        with torch.no_grad():
-            predictions = Array(
-                self.model.forward(torch.from_numpy(raw_input).float().to(self.device))
-                .detach()
-                .cpu()
-                .numpy()[0],
-                output_roi,
-                self.output_voxel_size,
+        predictions = Array(
+            result,
+            output_roi,
+            self.output_voxel_size,
+        )
+        write_data = predictions.to_ndarray(output_roi)
+        write_data = self.model_config.normalize_output(write_data)
+
+        if write_data.dtype != np.uint8:
+            logger.error(
+                f"Model output is not of type uint8, converting to uint8. Output type: {write_data.dtype}"
             )
-        write_data = predictions.to_ndarray(output_roi).clip(-1, 1)
-        write_data = (write_data + 1) * 255.0 / 2.0
         return write_data.astype(np.uint8)
 
     # create random input tensor
