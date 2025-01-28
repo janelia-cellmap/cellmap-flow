@@ -294,8 +294,7 @@ class CellMapFlowServer:
         corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
-
-        chunk_data = self.inferencer.process_chunk_basic(self.idi_raw, roi)
+        chunk = self.inferencer.process_chunk(self.idi_raw, roi)
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,

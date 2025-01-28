@@ -26,7 +26,7 @@ def cli(log_level):
     """
     Command-line interface for the Cellmap flo application.
 
-    Args:x
+    Args:
         log_level (str): The desired log level for the application.
     Examples:
         To use Dacapo run the following commands:
@@ -65,9 +65,30 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-def dacapo(run_name, iteration, data_path):
+@click.option(
+    "-q",
+    "--queue",
+    required=False,
+    type=str,
+    help="The queue to use when submitting",
+    default="gpu_h100",
+)
+@click.option(
+    "-P",
+    "--charge_group",
+    required=False,
+    type=str,
+    help="The chargeback group to use when submitting",
+    default=None,
+)
+def dacapo(run_name, iteration, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} dacapo -r {run_name} -i {iteration} -d {data_path}"
-    run(command, data_path)
+    run(
+        command,
+        data_path,
+        queue,
+        charge_group,
+    )
     raise NotImplementedError("This command is not yet implemented.")
 
 
@@ -82,9 +103,25 @@ def dacapo(run_name, iteration, data_path):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-def script(script_path, data_path):
+@click.option(
+    "-q",
+    "--queue",
+    required=False,
+    type=str,
+    help="The queue to use when submitting",
+    default="gpu_h100",
+)
+@click.option(
+    "-P",
+    "--charge_group",
+    required=False,
+    type=str,
+    help="The chargeback group to use when submitting",
+    default=None,
+)
+def script(script_path, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
-    run(command, data_path)
+    run(command, data_path, queue, charge_group)
 
 
 @cli.command()
@@ -94,14 +131,35 @@ def script(script_path, data_path):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-def bioimage(model_path, data_path):
+@click.option(
+    "-q",
+    "--queue",
+    required=False,
+    type=str,
+    help="The queue to use when submitting",
+    default="gpu_h100",
+)
+@click.option(
+    "-P",
+    "--charge_group",
+    required=False,
+    type=str,
+    help="The chargeback group to use when submitting",
+    default=None,
+)
+def bioimage(model_path, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path}"
-    run(command, data_path)
+    run(command, data_path, queue, charge_group)
 
 
-def run(command, dataset_path):
+def run(
+    command,
+    dataset_path,
+    queue,
+    charge_group,
+):
 
-    host = start_hosts(command)
+    host = start_hosts(command, queue, charge_group)
     if host is None:
         raise Exception("Could not start host")
 
