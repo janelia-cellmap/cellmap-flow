@@ -45,19 +45,19 @@ def predict(read_roi, write_roi, config, **kwargs):
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig):
-        self.model_config = model_config.config
+        self.model_config = model_config
         self.load_model(model_config)
 
-        if not hasattr(self.model_config, "input_normalizer"):
+        if not hasattr(self.model_config.config, "input_normalizer"):
             logger.warning("No input normalization function provided, using default")
-            self.model_config.input_normalizer = MinMaxNormalizer()
+            self.model_config.config.input_normalizer = MinMaxNormalizer()
 
-        if not hasattr(self.model_config, "normalize_output"):
+        if not hasattr(self.model_config.config, "normalize_output"):
             logger.warning("No output normalization function provided, using default")
-            self.model_config.normalize_output = normalize_output
-        if not hasattr(self.model_config, "predict"):
+            self.model_config.config.normalize_output = normalize_output
+        if not hasattr(self.model_config.config, "predict"):
             logger.warning("No predict function provided, using default")
-            self.model_config.predict = predict
+            self.model_config.config.predict = predict
         if self.model:
             if torch.cuda.is_available():
                 self.device = torch.device("cuda")
@@ -73,10 +73,10 @@ class Inferencer:
             self.model_config, ScriptModelConfig
         ):
             # check if process_chunk is in self.config
-            if getattr(self.model_config, "process_chunk", None) and callable(
-                self.model_config.process_chunk
+            if getattr(self.model_config.config, "process_chunk", None) and callable(
+                self.model_config.config.process_chunk
             ):
-                return self.model_config.process_chunk(idi, roi)
+                return self.model_config.config.process_chunk(idi, roi)
             else:
                 return self.process_chunk_basic(idi, roi)
         else:
@@ -86,8 +86,8 @@ class Inferencer:
         output_roi = roi
 
         input_roi = output_roi.grow(self.context, self.context)
-        result = self.model_config.predict(
-            input_roi, output_roi, self.model_config, idi=idi, device=self.device
+        result = self.model_config.config.predict(
+            input_roi, output_roi, self.model_config.config, idi=idi, device=self.device
         )
 
         predictions = Array(
@@ -96,7 +96,7 @@ class Inferencer:
             self.output_voxel_size,
         )
         write_data = predictions.to_ndarray(output_roi)
-        write_data = self.model_config.normalize_output(write_data)
+        write_data = self.model_config.config.normalize_output(write_data)
 
         if write_data.dtype != np.uint8:
             logger.error(
@@ -177,5 +177,3 @@ class Inferencer:
         self.output_voxel_size = config.output_voxel_size
         self.context = (self.read_shape - self.write_shape) / 2
 
-
-# %%

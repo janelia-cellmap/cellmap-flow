@@ -11,8 +11,7 @@ authors = [
 ]
 
 dependencies = [
-    "dacapo-ml @ git+https://github.com/janelia-cellmap/dacapo.git@cellmap_stable",
-    "funlib.persistence==0.4.0",
+    "dacapo-ml",
     "numpy",
     # "PyYAML",
     "gunicorn",
@@ -24,8 +23,7 @@ dependencies = [
     "marshmallow",
     "scikit-image",
     "flasgger",
-    "funlib.show.neuroglancer @ git+https://github.com/funkelab/funlib.show.neuroglancer.git@0c609d2cbf09af976bda998fff17a0454e2782ee"
-        ]
+    ]
 
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies

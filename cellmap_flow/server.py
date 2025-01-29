@@ -31,13 +31,14 @@ class CellMapFlowServer:
         Initialize the server and set up routes via decorators.
         """
         self.block_shape = [int(x) for x in model_config.config.block_shape]
+        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
 
         self.inferencer = Inferencer(model_config)
 
         # Load or initialize your dataset
-        self.idi_raw = ImageDataInterface(dataset_name)
+        self.idi_raw = ImageDataInterface(dataset_name, target_resolution = self.input_voxel_size)
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
             self.vol_shape = np.array(
@@ -292,7 +293,7 @@ class CellMapFlowServer:
         corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
-        chunk = self.inferencer.process_chunk(self.idi_raw, roi)
+        chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
@@ -310,6 +311,10 @@ class CellMapFlowServer:
         if certfile and keyfile:
             ssl_context = (certfile, keyfile)
 
+        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
+        logger.error(IP_PATTERN.format(ip_address=address))
+        print(IP_PATTERN.format(ip_address=address), flush=True)
+
         self.app.run(
             host="0.0.0.0",
             port=port,
@@ -318,9 +323,7 @@ class CellMapFlowServer:
             ssl_context=ssl_context,
         )
 
-        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
-        logger.error(IP_PATTERN.format(ip_address=address))
-        print(IP_PATTERN.format(ip_address=address), flush=True)
+
 
 
 # ------------------------------------
