@@ -7,6 +7,7 @@ from cellmap_flow.utils.data import (
     ScriptModelConfig,
 )
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from funlib.geometry import Coordinate
 from funlib.persistence import Array
 import logging
 
@@ -28,19 +29,24 @@ def predict(read_roi, write_roi, config, **kwargs):
     device = kwargs.get("device")
     if device is None:
         raise ValueError("device must be provided in kwargs")
+    
+    use_half_prediction = kwargs.get("use_half_prediction", False)
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
-        raw_input_torch = torch.from_numpy(raw_input).float().half()
+        raw_input_torch = torch.from_numpy(raw_input).float()
+        if use_half_prediction:
+            raw_input_torch = raw_input_torch.half()
         raw_input_torch = raw_input_torch.to(device, non_blocking=True)
         return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+        self.use_half_prediction = use_half_prediction
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
         _ = self.model_config.config
@@ -49,8 +55,8 @@ class Inferencer:
             self.model_config.config, "write_shape"
         ):
             self.context = (
-                self.model_config.config.read_shape
-                - self.model_config.config.write_shape
+               Coordinate(self.model_config.config.read_shape)
+                - Coordinate(self.model_config.config.write_shape)
             ) / 2
 
         self.optimize_model()
@@ -66,7 +72,7 @@ class Inferencer:
             logger.warning("No predict function provided, using default")
             self.model_config.config.predict = predict
 
-    def optimize_model(self, use_half_prediction=True):
+    def optimize_model(self):
         if not hasattr(self.model_config.config, "model"):
             logger.error("Model is not loaded, cannot optimize")
             return
@@ -80,9 +86,10 @@ class Inferencer:
             self.device = torch.device("cpu")
             logger.error("No GPU available, using CPU")
         self.model_config.config.model.to(self.device)
-        if use_half_prediction:
+        if self.use_half_prediction:
             self.model_config.config.model.half()
         print(f"Using device: {self.device}")
+        # DIDN'T WORK with unet model
         # if torch.__version__ >= "2.0":
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)
         # print("Model compiled")
@@ -109,7 +116,7 @@ class Inferencer:
 
         input_roi = output_roi.grow(self.context, self.context)
         result = self.model_config.config.predict(
-            input_roi, output_roi, self.model_config.config, idi=idi, device=self.device
+            input_roi, output_roi, self.model_config.config, idi=idi, device=self.device, use_half_prediction=self.use_half_prediction
         )
         write_data = self.model_config.config.normalize_output(result)
 
