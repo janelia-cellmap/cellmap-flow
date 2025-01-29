@@ -37,10 +37,10 @@ class BioModelConfig(ModelConfig):
     @property
     def command(self):
         return f"bioimage -m {self.model_name}"
-    
-    
+
     def _get_config(self):
         from bioimageio.core import load_description
+
         config = Config()
         config.model = load_description(self.model_name)
         return config
@@ -116,7 +116,9 @@ def check_config(config):
     assert hasattr(config, "read_shape"), f"read_shape not found in config"
     assert hasattr(config, "write_shape"), f"write_shape not found in config"
     assert hasattr(config, "input_voxel_size"), f"input_voxel_size not found in config"
-    assert hasattr(config, "output_voxel_size"), f"output_voxel_size not found in config"
+    assert hasattr(
+        config, "output_voxel_size"
+    ), f"output_voxel_size not found in config"
     assert hasattr(config, "output_channels"), f"output_channels not found in config"
     assert hasattr(config, "block_shape"), f"block_shape not found in config"
 

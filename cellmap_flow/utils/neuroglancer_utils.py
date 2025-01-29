@@ -11,7 +11,6 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 logger = logging.getLogger(__name__)
 
 
-
 def generate_neuroglancer_link(dataset_path, inference_dict):
     # Create a new viewer
     viewer = neuroglancer.UnsynchronizedViewer()

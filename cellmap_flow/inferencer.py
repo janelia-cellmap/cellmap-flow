@@ -36,15 +36,8 @@ def predict(read_roi, write_roi, config, **kwargs):
     with torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).float().half()
         raw_input_torch = raw_input_torch.to(device, non_blocking=True)
-        return (
-            config.model.forward(raw_input_torch)
-            .detach()
-            .cpu()
-            .numpy()[0]
-        )
+        return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
 
-
-    
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig):
@@ -52,11 +45,15 @@ class Inferencer:
         # condig is lazy so one call is needed to get the config
         _ = self.model_config.config
 
-        if hasattr(self.model_config.config, "read_shape") and hasattr(self.model_config.config, "write_shape"):
-            self.context = (self.model_config.config.read_shape - self.model_config.config.write_shape) / 2
-        
-        self.optimize_model()
+        if hasattr(self.model_config.config, "read_shape") and hasattr(
+            self.model_config.config, "write_shape"
+        ):
+            self.context = (
+                self.model_config.config.read_shape
+                - self.model_config.config.write_shape
+            ) / 2
 
+        self.optimize_model()
 
         if not hasattr(self.model_config.config, "input_normalizer"):
             logger.warning("No input normalization function provided, using default")
@@ -68,17 +65,15 @@ class Inferencer:
         if not hasattr(self.model_config.config, "predict"):
             logger.warning("No predict function provided, using default")
             self.model_config.config.predict = predict
-        
-
 
     def optimize_model(self, use_half_prediction=True):
         if not hasattr(self.model_config.config, "model"):
             logger.error("Model is not loaded, cannot optimize")
-            return 
+            return
         if not isinstance(self.model_config.config.model, torch.nn.Module):
             logger.error("Model is not a nn.Module, we only optimize torch models")
-            return 
-        
+            return
+
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
@@ -90,7 +85,7 @@ class Inferencer:
         print(f"Using device: {self.device}")
         # if torch.__version__ >= "2.0":
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)
-            # print("Model compiled")
+        # print("Model compiled")
         self.model_config.config.model.eval()
 
     def process_chunk(self, idi, roi):
@@ -130,6 +125,7 @@ class Inferencer:
         from bioimageio.core import Tensor
         from bioimageio.core import Sample
         from bioimageio.core.digest_spec import get_member_ids
+
         input_image = idi.to_ndarray_ts(roi)
         if len(self.model_config.config.model.outputs[0].axes) == 5:
             input_image = input_image[np.newaxis, np.newaxis, ...].astype(np.float32)
@@ -151,7 +147,9 @@ class Inferencer:
             id="sample-from-numpy",
         )
         prediction: Sample = predict(
-            model=self.model_config.config.model, inputs=sample, skip_preprocessing=sample.stat is not None
+            model=self.model_config.config.model,
+            inputs=sample,
+            skip_preprocessing=sample.stat is not None,
         )
         ndim = prediction.members[sample_output_id].data.ndim
         output = prediction.members[sample_output_id].data.to_numpy()
@@ -172,4 +170,3 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
-    

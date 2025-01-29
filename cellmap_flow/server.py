@@ -38,7 +38,9 @@ class CellMapFlowServer:
         self.inferencer = Inferencer(model_config)
 
         # Load or initialize your dataset
-        self.idi_raw = ImageDataInterface(dataset_name, target_resolution = self.input_voxel_size)
+        self.idi_raw = ImageDataInterface(
+            dataset_name, target_resolution=self.input_voxel_size
+        )
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
             self.vol_shape = np.array(
@@ -322,8 +324,6 @@ class CellMapFlowServer:
             use_reloader=debug,
             ssl_context=ssl_context,
         )
-
-
 
 
 # ------------------------------------

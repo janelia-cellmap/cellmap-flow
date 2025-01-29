@@ -1,4 +1,9 @@
-from cellmap_flow.utils.ds import get_ds_info, open_ds_tensorstore, to_ndarray_tensorstore
+from cellmap_flow.utils.ds import (
+    get_ds_info,
+    open_ds_tensorstore,
+    to_ndarray_tensorstore,
+)
+
 
 class ImageDataInterface:
     def __init__(

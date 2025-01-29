@@ -1,4 +1,4 @@
-#%%
+# %%
 import zarr
 from pathlib import Path
 from zarr.util import TreeNode
@@ -312,13 +312,13 @@ def to_ndarray_tensorstore(
 #         group = Path(group)
 #     if not isinstance(resolution, tuple):
 #         raise ValueError(f"resolution must be a tuple got {resolution} ({type(resolution).__name__})")
-    
+
 #     if type(resolution) is tuple:
 #         resolution = Coordinate(resolution)
 
 #     if not isinstance(zarr.open(group), zarr.hierarchy.Group):
 #         raise ValueError(f"{group} is not a zarr group")
-    
+
 #     subfolders = get_resolutions(group)
 #     for s_r in subfolders:
 #         # TODO
@@ -329,9 +329,6 @@ def to_ndarray_tensorstore(
 #         if equals:
 #             return group / s_r
 #     raise ValueError(f"no resolution found for {resolution} in {group}")
-
-
-
 
 
 def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
@@ -720,7 +717,7 @@ def get_ds_info(path: str, mode: str = "r"):
     """
     # TODO
     swap_axes = False
-    
+
     filename, ds_name = split_dataset_path(path)
 
     if filename.endswith(".zarr") or filename.endswith(".zip"):
@@ -779,11 +776,8 @@ def get_ds_info(path: str, mode: str = "r"):
         with open(filename, "r") as f:
             spec = json.load(f)
         assert "container" in spec, "JSON spec must contain 'container' key"
-        return get_ds_info(
-            spec["container"], ds_name, mode=mode
-        )
+        return get_ds_info(spec["container"], ds_name, mode=mode)
 
     else:
         logger.error("don't know data format of %s in %s", ds_name, filename)
         raise RuntimeError("Unknown file format for %s" % filename)
-
