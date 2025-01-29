@@ -11,8 +11,36 @@ Please feel free to explore and contribute, but note that there may be frequent 
 [![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
 ---
 
-
 </div>
+
+
+## Installation
+
+To install CellMapFlow, you can use pip:
+
+```bash
+pip install cellmap_flow
+```
+
+Note that the basic installation does not include DaCapo and BioImage.io core dependencies. To install CellMapFlow with DaCapo support, use the following command:
+
+```bash
+pip install cellmap_flow[dacapo]
+```
+
+To install CellMapFlow with BioImage.io support, use the following command:
+
+```bash
+pip install cellmap_flow[bioimage]
+```
+
+To install CellMapFlow with both DaCapo and BioImage.io support, use the following command:
+
+```bash
+pip install cellmap_flow[dacapo,bioimage]
+```
+
+## Usage
 
 ```bash
 $ cellmap_flow
