@@ -166,10 +166,10 @@ class Inferencer:
     def load_script_model(self, model_config: ScriptModelConfig):
         config = model_config.config
         self.model = config.model
-        self.read_shape = config.read_shape
-        self.write_shape = config.write_shape
-        self.output_voxel_size = config.output_voxel_size
-        self.context = (self.read_shape - self.write_shape) / 2
+        self.read_shape = np.array(config.read_shape)
+        self.write_shape = np.array(config.write_shape)
+        self.output_voxel_size = np.array(config.output_voxel_size)
+        self.context = (self.read_shape - self.write_shape) // 2
 
 
 # %%
