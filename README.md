@@ -5,14 +5,42 @@ Please feel free to explore and contribute, but note that there may be frequent 
 
 <div align="center">
 
-![CellMapFlow Logo](img/CMFLO_dark.png)
+![CellMapFlow Logo](https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png)
 
 ### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
 [![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
 ---
 
-
 </div>
+
+
+## Installation
+
+To install CellMapFlow, you can use pip:
+
+```bash
+pip install cellmap_flow
+```
+
+Note that the basic installation does not include DaCapo and BioImage.io core dependencies. To install CellMapFlow with DaCapo support, use the following command:
+
+```bash
+pip install cellmap_flow[dacapo]
+```
+
+To install CellMapFlow with BioImage.io support, use the following command:
+
+```bash
+pip install cellmap_flow[bioimage]
+```
+
+To install CellMapFlow with both DaCapo and BioImage.io support, use the following command:
+
+```bash
+pip install cellmap_flow[dacapo,bioimage]
+```
+
+## Usage
 
 ```bash
 $ cellmap_flow
@@ -54,6 +82,8 @@ Define these variables in your script (`cellmap_flow script -s path/to/your_scri
   The voxel shape of the data in output by the PyTorch model.
 - **block_shape**: 
   The shape of the block output by the PyTorch model (i.e. `(*write_shape, output_channels)`).
+- **input_voxel_size**: 
+  The voxel size of the data input to the model.
 - **output_voxel_size**: 
   The voxel size of the data output by the model.
 - **output_channels**:

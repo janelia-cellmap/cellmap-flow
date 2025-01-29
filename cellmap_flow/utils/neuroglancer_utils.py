@@ -1,4 +1,3 @@
-
 import neuroglancer
 import itertools
 import logging
@@ -10,20 +9,6 @@ import glob
 neuroglancer.set_server_bind_address("0.0.0.0")
 
 logger = logging.getLogger(__name__)
-
-def get_ds(dataset_path, filetype):
-
-    container = dataset_path.split(f".{filetype}")[0]+f".{filetype}"
-    dataset = dataset_path.split(f".{filetype}")[1].lstrip("/").rstrip("/")
-
-    scales = [f for f in os.listdir(dataset_path) if f.startswith("s") and f[1:].isdigit()]
-    if len(scales) == 0:
-        # one scale
-        print(f"Opening {container} - {dataset}")
-        return open_ds(container, dataset)
-    else:
-        # multiscale
-        return [open_ds(container, os.path.join(dataset,s)) for s in scales]
 
 
 def generate_neuroglancer_link(dataset_path, inference_dict):
@@ -45,9 +30,6 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
         else:
             filetype = "precomputed"
         if dataset_path.startswith("/"):
-            # TODO should be done better
-            # ds = get_ds(dataset_path, filetype)
-            # add_layer(s, ds, "raw")
             if "nrs/cellmap" in dataset_path:
                 security = "https"
                 dataset_path = dataset_path.replace("/nrs/cellmap/", "nrs/")
@@ -55,8 +37,10 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
                 security = "http"
                 dataset_path = dataset_path.replace("/groups/cellmap/cellmap/", "dm11/")
             else:
-                raise ValueError("Currently only supporting nrs/cellmap and /groups/cellmap/cellmap")
-            
+                raise ValueError(
+                    "Currently only supporting nrs/cellmap and /groups/cellmap/cellmap"
+                )
+
             s.layers["raw"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{security}://cellmap-vm1.int.janelia.org/{dataset_path}",
             )
