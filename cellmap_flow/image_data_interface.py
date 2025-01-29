@@ -271,7 +271,7 @@ def get_ds_info(path):
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
     else:
         path, filename = split_dataset_path(path)
-        logger.error(f"Opening {path} {filename}")
+        logger.info(f"Opening {path} {filename}")
         ds = open_ds(path, filename)
         voxel_size = ds.voxel_size
         chunk_shape = ds.chunk_shape
@@ -327,5 +327,3 @@ class ImageDataInterface:
         )
         self.ts = None
         return res
-
-
