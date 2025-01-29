@@ -30,23 +30,33 @@ def predict(read_roi, write_roi, config, **kwargs):
         raise ValueError("device must be provided in kwargs")
 
     raw_input = idi.to_ndarray_ts(read_roi)
-    # raw_input = np.expand_dims(raw_input, (0, 1))
     raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
+        raw_input_torch = torch.from_numpy(raw_input).float().half()
+        raw_input_torch = raw_input_torch.to(device, non_blocking=True)
         return (
-            config.model.forward(torch.from_numpy(raw_input).float().to(device))
+            config.model.forward(raw_input_torch)
             .detach()
             .cpu()
             .numpy()[0]
         )
 
 
+    
+
 class Inferencer:
     def __init__(self, model_config: ModelConfig):
         self.model_config = model_config
-        self.load_model(model_config)
+        # condig is lazy so one call is needed to get the config
+        _ = self.model_config.config
+
+        if hasattr(self.model_config.config, "read_shape") and hasattr(self.model_config.config, "write_shape"):
+            self.context = (self.model_config.config.read_shape - self.model_config.config.write_shape) / 2
+        
+        self.optimize_model()
+
 
         if not hasattr(self.model_config.config, "input_normalizer"):
             logger.warning("No input normalization function provided, using default")
@@ -58,13 +68,30 @@ class Inferencer:
         if not hasattr(self.model_config.config, "predict"):
             logger.warning("No predict function provided, using default")
             self.model_config.config.predict = predict
-        if self.model:
-            if torch.cuda.is_available():
-                self.device = torch.device("cuda")
-            else:
-                self.device = torch.device("cpu")
-            self.model.to(self.device)
-            print(f"Using device: {self.device}")
+        
+
+
+    def optimize_model(self, use_half_prediction=True):
+        if not hasattr(self.model_config.config, "model"):
+            logger.error("Model is not loaded, cannot optimize")
+            return 
+        if not isinstance(self.model_config.config.model, torch.nn.Module):
+            logger.error("Model is not a nn.Module, we only optimize torch models")
+            return 
+        
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+            logger.error("No GPU available, using CPU")
+        self.model_config.config.model.to(self.device)
+        if use_half_prediction:
+            self.model_config.config.model.half()
+        print(f"Using device: {self.device}")
+        # if torch.__version__ >= "2.0":
+        #     self.model_config.config.model = torch.compile(self.model_config.config.model)
+            # print("Model compiled")
+        self.model_config.config.model.eval()
 
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
@@ -89,14 +116,7 @@ class Inferencer:
         result = self.model_config.config.predict(
             input_roi, output_roi, self.model_config.config, idi=idi, device=self.device
         )
-
-        predictions = Array(
-            result,
-            output_roi,
-            self.output_voxel_size,
-        )
-        write_data = predictions.to_ndarray(output_roi)
-        write_data = self.model_config.config.normalize_output(write_data)
+        write_data = self.model_config.config.normalize_output(result)
 
         if write_data.dtype != np.uint8:
             logger.error(
@@ -106,8 +126,12 @@ class Inferencer:
 
     # create random input tensor
     def process_chunk_bioimagezoo(self, idi, roi):
+        from bioimageio.core import predict  # , predict_many
+        from bioimageio.core import Tensor
+        from bioimageio.core import Sample
+        from bioimageio.core.digest_spec import get_member_ids
         input_image = idi.to_ndarray_ts(roi)
-        if len(self.model.outputs[0].axes) == 5:
+        if len(self.model_config.config.model.outputs[0].axes) == 5:
             input_image = input_image[np.newaxis, np.newaxis, ...].astype(np.float32)
             test_input_tensor = Tensor.from_numpy(
                 input_image, dims=["batch", "c", "z", "y", "x"]
@@ -118,8 +142,8 @@ class Inferencer:
             test_input_tensor = Tensor.from_numpy(
                 input_image, dims=["batch", "c", "y", "x"]
             )
-        sample_input_id = get_member_ids(self.model.inputs)[0]
-        sample_output_id = get_member_ids(self.model.outputs)[0]
+        sample_input_id = get_member_ids(self.model_config.config.model.inputs)[0]
+        sample_output_id = get_member_ids(self.model_config.config.model.outputs)[0]
 
         sample = Sample(
             members={sample_input_id: test_input_tensor},
@@ -127,14 +151,14 @@ class Inferencer:
             id="sample-from-numpy",
         )
         prediction: Sample = predict(
-            model=self.model, inputs=sample, skip_preprocessing=sample.stat is not None
+            model=self.model_config.config.model, inputs=sample, skip_preprocessing=sample.stat is not None
         )
         ndim = prediction.members[sample_output_id].data.ndim
         output = prediction.members[sample_output_id].data.to_numpy()
-        if ndim < 5 and len(self.model.outputs) > 1:
+        if ndim < 5 and len(self.model_config.config.model.outputs) > 1:
             if len(self.model.outputs) > 1:
                 outputs = []
-                for id in get_member_ids(self.model.outputs):
+                for id in get_member_ids(self.model_config.config.model.outputs):
                     output = prediction.members[id].data.to_numpy()
                     if output.ndim == 3:
                         output = output[:, np.newaxis, ...]
@@ -148,32 +172,4 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
-
-    def load_model(self, config: ModelConfig):
-        if isinstance(config, DaCapoModelConfig):
-            # self.load_dacapo_model(config.run_name, iteration=config.iteration)
-            self.load_script_model(config)
-        elif isinstance(config, ScriptModelConfig):
-            self.load_script_model(config)
-        elif isinstance(config, BioModelConfig):
-            self.load_bio_model(config.model_name)
-        else:
-            raise ValueError(f"Invalid model config type {type(config)}")
-
-    def load_bio_model(self, bio_model_name):
-        from bioimageio.core import load_description
-        from bioimageio.core import predict  # , predict_many
-        from bioimageio.core import Tensor
-        from bioimageio.core import Sample
-        from bioimageio.core.digest_spec import get_member_ids
-
-        self.model = load_description(bio_model_name)
-
-    def load_script_model(self, model_config: ScriptModelConfig):
-        config = model_config.config
-        self.model = config.model
-        self.read_shape = config.read_shape
-        self.write_shape = config.write_shape
-        self.output_voxel_size = config.output_voxel_size
-        self.context = (self.read_shape - self.write_shape) / 2
-
+    
