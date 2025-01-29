@@ -3,7 +3,7 @@ name = "cellmap-flow"
 description = "Realtime prediction using neuroglancer"
 readme = "README.md"
 requires-python = ">=3.10"
-version = "0.1.1"
+version = "0.1.2"
 license = { text = "BSD 3-Clause License" }
 authors = [
     { email = "ackermand@hhmi.org", name = "David Ackerman" },
