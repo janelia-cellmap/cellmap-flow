@@ -13,10 +13,7 @@ from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import (
-    ModelConfig,
-    IP_PATTERN
-)
+from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
 from cellmap_flow.utils.web_utils import get_public_ip
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 
@@ -34,13 +31,16 @@ class CellMapFlowServer:
         Initialize the server and set up routes via decorators.
         """
         self.block_shape = [int(x) for x in model_config.config.block_shape]
+        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
 
         self.inferencer = Inferencer(model_config)
 
         # Load or initialize your dataset
-        self.idi_raw = ImageDataInterface(dataset_name)
+        self.idi_raw = ImageDataInterface(
+            dataset_name, target_resolution=self.input_voxel_size
+        )
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
             self.vol_shape = np.array(
@@ -168,8 +168,9 @@ class CellMapFlowServer:
             if not all([norm_type, min_value is not None, max_value is not None]):
                 return {"error": "Missing one or more required parameters"}, 400
 
-            return self._input_normalize_impl(norm_type, float(min_value), float(max_value))
-
+            return self._input_normalize_impl(
+                norm_type, float(min_value), float(max_value)
+            )
 
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
@@ -294,7 +295,7 @@ class CellMapFlowServer:
         corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
-        chunk = self.inferencer.process_chunk(self.idi_raw, roi)
+        chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
@@ -312,6 +313,10 @@ class CellMapFlowServer:
         if certfile and keyfile:
             ssl_context = (certfile, keyfile)
 
+        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
+        logger.error(IP_PATTERN.format(ip_address=address))
+        print(IP_PATTERN.format(ip_address=address), flush=True)
+
         self.app.run(
             host="0.0.0.0",
             port=port,
@@ -319,10 +324,6 @@ class CellMapFlowServer:
             use_reloader=debug,
             ssl_context=ssl_context,
         )
-
-        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
-        logger.error(IP_PATTERN.format(ip_address=address))
-        print(IP_PATTERN.format(ip_address=address), flush=True)
 
 
 # ------------------------------------
@@ -340,6 +341,7 @@ if __name__ == "__main__":
         block_shape = (32, 32, 32)
         output_voxel_size = (4, 4, 4)
         output_channels = 1
+
     dummy_model_config = ModelConfig(config=DummyConfig())
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
