@@ -1,10 +1,6 @@
 import neuroglancer
 import itertools
 import logging
-from funlib.persistence import open_ds
-from funlib.show.neuroglancer import add_layer
-import os
-import glob
 
 neuroglancer.set_server_bind_address("0.0.0.0")
 

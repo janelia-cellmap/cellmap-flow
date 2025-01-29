@@ -1,7 +1,5 @@
 # %%
 import zarr
-from pathlib import Path
-from zarr.util import TreeNode
 from funlib.geometry import Coordinate
 import logging
 import tensorstore as ts
@@ -9,7 +7,6 @@ import numpy as np
 from funlib.geometry import Coordinate
 from funlib.geometry import Roi
 import os
-import s3fs
 import re
 import zarr
 from skimage.measure import block_reduce
