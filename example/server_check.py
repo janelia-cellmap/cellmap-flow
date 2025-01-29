@@ -18,6 +18,8 @@ def server_check(script_path, dataset):
 
     server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
 
+    print("Server check passed")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test run a CellMapFlow server")
