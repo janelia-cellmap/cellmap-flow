@@ -8,7 +8,6 @@ from cellmap_flow.utils.data import (
 )
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from funlib.geometry import Coordinate
-from funlib.persistence import Array
 import logging
 
 logger = logging.getLogger(__name__)
