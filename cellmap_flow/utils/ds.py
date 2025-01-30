@@ -69,6 +69,13 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
     )
     extra_args = {}
 
+    if dataset_path.startswith("http://"):
+        path = dataset_path.split("http://")[1]
+        kvstore = {
+            "driver": "http",
+            "base_url": "http://",
+            "path": path,
+        }
     if dataset_path.startswith("s3://"):
         kvstore = {
             "driver": "s3",
