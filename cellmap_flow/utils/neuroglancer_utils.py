@@ -1,4 +1,3 @@
-import webbrowser
 import neuroglancer
 import itertools
 import logging
