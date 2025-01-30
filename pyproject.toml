@@ -21,6 +21,7 @@ dependencies = [
     "marshmallow",
     "scikit-image",
     "flasgger",
+    "h5py",
     ]
 
 # extras
