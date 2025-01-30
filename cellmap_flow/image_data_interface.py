@@ -51,5 +51,4 @@ class ImageDataInterface:
             self.swap_axes,
             self.custom_fill_value,
         )
-        self.ts = None
         return res
