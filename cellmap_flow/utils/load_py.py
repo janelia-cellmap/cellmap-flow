@@ -1,8 +1,6 @@
 ## copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/a9525b31502abb7ea01e10c16340bbc1056cf1fc/src/cellmap_segmentation_challenge/utils/security.py
 
 import ast
-import importlib
-from importlib.machinery import SourceFileLoader
 import os
 
 from upath import UPath
