@@ -1,6 +1,7 @@
 IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 
 import logging
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,47 @@ class ScriptModelConfig(ModelConfig):
         from cellmap_flow.utils.load_py import load_safe_config
 
         config = load_safe_config(self.script_path)
+        if not hasattr(config, "model"):
+            assert hasattr(config, "process_chunk"), "Model not found in config and no custom process_chunk function found to use."
+        if not hasattr(config, "read_shape"):
+            assert hasattr(config, "input_array_info"), "read_shape not found in config."
+            config.read_shape = config.input_array_info.get("shape")
+        if not hasattr(config, "input_voxel_size"):
+            assert hasattr(config, "input_array_info"), "input_voxel_size not found in config."
+            config.input_voxel_size = config.input_array_info.get("scale", config.input_array_info.get("voxel_size"))
+        if not hasattr(config, "write_shape"):
+            if hasattr(config, "output_array_info"):
+                config.write_shape = config.output_array_info.get("shape")
+            elif hasattr(config, "target_array_info"):
+                config.write_shape = config.target_array_info.get("shape")
+            elif isinstance(config.model, torch.nn.Module):
+                # Infer write_shape from model output
+                test_array = torch.ones((1, 1, *config.read_shape))
+                with torch.no_grad():
+                    out = config.model(test_array)
+                config.write_shape = out.shape[2:]
+                config.output_channels = out.shape[1]
+            else:
+                raise ValueError("write_shape not found in config and was not able to infer.")
+        if not hasattr(config, "output_channels"):
+            try:
+                # Infer write_shape from model output
+                test_array = torch.ones((1, 1, *config.read_shape))
+                with torch.no_grad():
+                    out = config.model(test_array)
+                config.output_channels = out.shape[1]
+            except:
+                raise ValueError("output_channels not found in config and was not able to infer.")
+        if not hasattr(config, "output_voxel_size"):            
+            if hasattr(config, "output_array_info"):
+                config.output_voxel_size = config.output_array_info.get("scale", config.output_array_info.get("voxel_size"))
+            elif hasattr(config, "target_array_info"):
+                config.output_voxel_size = config.target_array_info.get("scale", config.target_array_info.get("voxel_size"))
+            else:
+                raise ValueError("output_voxel_size not found in config.")
+        if not hasattr(config, "block_shape"):
+            config.block_shape = (*config.write_shape, config.output_channels)   
+        
         return config
 
 
