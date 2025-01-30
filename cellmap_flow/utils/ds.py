@@ -732,7 +732,11 @@ def get_ds_info(path: str, mode: str = "r"):
         try:
             order = ds.attrs["order"]
         except KeyError:
-            order = ds.order
+            try:
+                order = ds.order
+            except Exception:
+                logger.error("no order attribute found in %s set default C" % ds_name)
+                order = "C"
         voxel_size, offset = _read_voxel_size_offset(ds, order)
         shape = Coordinate(ds.shape[-len(voxel_size) :])
         roi = Roi(offset, voxel_size * shape)
