@@ -60,7 +60,14 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
     )
     extra_args = {}
 
-    if dataset_path.startswith("s3://"):
+    if dataset_path.startswith("http://"):
+        path = dataset_path.split("http://")[1]
+        kvstore = {
+            "driver": "http",
+            "base_url": "http://",
+            "path": path,
+        }
+    elif dataset_path.startswith("s3://"):
         kvstore = {
             "driver": "s3",
             "bucket": dataset_path.split("/")[2],
@@ -329,3 +336,20 @@ class ImageDataInterface:
         return res
 
 
+# %%
+# import neuroglancer
+# from neuroglancer.local_volume import LocalVolume
+
+# neuroglancer.set_server_bind_address("0.0.0.0")
+# viewer = neuroglancer.Viewer()
+# vol = LocalVolume(
+#     open_ds_tensorstore(
+#         "http://cellmap-vm1.int.janelia.org/nrs/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr/recon-1/em/fibsem-uint8/s0"
+#     )
+# )
+# with viewer.txn() as s:
+#     s.layers["image"] = neuroglancer.ImageLayer(source=vol)
+# print(viewer)
+# # %%
+# vol.invalidate()
+# %%
