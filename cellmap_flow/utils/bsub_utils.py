@@ -1,12 +1,9 @@
 import subprocess
 import logging
-import neuroglancer
 import os
 import sys
 import signal
 import select
-import itertools
-import click
 
 from cellmap_flow.utils.data import IP_PATTERN
 
@@ -79,7 +76,8 @@ def submit_bsub_job(
     except Exception as e:
         print("Error submitting job:")
         print("It can be that you didn't define the charge group. -P <charge_group>")
-        raise(e)
+        raise (e)
+
 
 def parse_bpeek_output(job_id):
     command = f"bpeek {job_id}"
@@ -176,7 +174,9 @@ def run_locally(sc):
     return host
 
 
-def start_hosts(command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"):
+def start_hosts(
+    command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"
+):
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
