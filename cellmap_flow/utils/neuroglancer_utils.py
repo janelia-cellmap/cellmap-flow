@@ -1,3 +1,4 @@
+import webbrowser
 import neuroglancer
 import itertools
 import logging
@@ -7,6 +8,8 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 logger = logging.getLogger(__name__)
 
 from cellmap_flow.image_data_interface import ImageDataInterface
+
+
 # TODO support multiresolution datasets
 def get_raw_layer(dataset_path, filetype):
     if filetype == "zarr":
@@ -23,8 +26,8 @@ def get_raw_layer(dataset_path, filetype):
                 scales=image.voxel_size,
             ),
             voxel_offset=image.offset,
-            )
         )
+    )
 
 
 def generate_neuroglancer_link(dataset_path, inference_dict):
@@ -100,3 +103,4 @@ def show(viewer):
     print("**********************************************")
     print()
     print()
+    print("\033[32mPress Ctrl+C to exit\033[0m")
