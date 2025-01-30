@@ -1,12 +1,9 @@
 import subprocess
 import logging
-import neuroglancer
 import os
 import sys
 import signal
 import select
-import itertools
-import click
 
 from cellmap_flow.utils.data import IP_PATTERN
 

@@ -20,7 +20,7 @@ class ImageDataInterface:
             "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
         )
         self.swap_axes = self.filetype == "n5"
-        self.ts = None
+        self._ts = None
         self.voxel_size, self.chunk_shape, self.shape, self.roi, self.swap_axes = (
             get_ds_info(dataset_path)
         )
@@ -31,12 +31,17 @@ class ImageDataInterface:
             self.output_voxel_size = output_voxel_size
         else:
             self.output_voxel_size = self.voxel_size
+        
 
-    def to_ndarray_ts(self, roi=None):
-        if not self.ts:
-            self.ts = open_ds_tensorstore(
+    @property
+    def ts(self):
+        if not self._ts:
+            self._ts = open_ds_tensorstore(
                 self.path, concurrency_limit=self.concurrency_limit
             )
+        return self._ts
+
+    def to_ndarray_ts(self, roi=None):
         res = to_ndarray_tensorstore(
             self.ts,
             roi,
@@ -46,5 +51,4 @@ class ImageDataInterface:
             self.swap_axes,
             self.custom_fill_value,
         )
-        self.ts = None
         return res
