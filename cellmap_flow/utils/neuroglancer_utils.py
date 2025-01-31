@@ -11,7 +11,7 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 
 # TODO support multiresolution datasets
 def get_raw_layer(dataset_path, filetype):
-    if filetype == "zarr":
+    if filetype == "n5":
         axis = ["x", "y", "z"]
     else:
         axis = ["z", "y", "x"]
