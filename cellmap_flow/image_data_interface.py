@@ -31,7 +31,6 @@ class ImageDataInterface:
             self.output_voxel_size = output_voxel_size
         else:
             self.output_voxel_size = self.voxel_size
-        
 
     @property
     def ts(self):
