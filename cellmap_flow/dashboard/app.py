@@ -1,6 +1,7 @@
 import socket
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from cellmap_flow.utils.web_utils import get_free_port
 
 app = Flask(__name__)
 CORS(app)
@@ -39,8 +40,9 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     NEUROGLANCER_URL = neuroglancer_url
     INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
+    port = get_free_port()
     print(f"Host name: {hostname}", flush=True)
-    app.run(host="0.0.0.0", port=0, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)
 
 
 if __name__ == "__main__":
