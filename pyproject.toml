@@ -21,6 +21,12 @@ dependencies = [
     "marshmallow",
     "scikit-image",
     "flasgger",
+    "numcodecs",
+    "zarr==2.18.4",
+    "h5py",
+    "torch",    
+    "universal_pathlib",
+    "neuroglancer",
     ]
 
 # extras
