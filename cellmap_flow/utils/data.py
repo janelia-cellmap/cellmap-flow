@@ -63,17 +63,25 @@ class ScriptModelConfig(ModelConfig):
 
         config = load_safe_config(self.script_path)
         if not hasattr(config, "model"):
-            assert hasattr(config, "process_chunk"), "Model not found in config and no custom process_chunk function found to use."
+            assert hasattr(
+                config, "process_chunk"
+            ), "Model not found in config and no custom `process_chunk` function found to use."
+
         if not hasattr(config, "read_shape"):
-            assert hasattr(config, "input_array_info"), "read_shape not found in config."
+            assert hasattr(
+                config, "input_array_info"
+            ), "Read shape not found in config. Should be specified by `read_shape` or `input_array_info['shape']`."
             config.read_shape = config.input_array_info.get("shape")
+
         if not hasattr(config, "input_voxel_size"):
-            assert hasattr(config, "input_array_info"), "input_voxel_size not found in config."
-            config.input_voxel_size = config.input_array_info.get("scale", config.input_array_info.get("voxel_size"))
+            assert (
+                hasattr(config, "input_array_info")
+                and "scale" in config.input_array_info
+            ), "Input voxel size not found in config. Should be specified by `input_voxel_size` or `input_array_info['scale']`."
+            config.input_voxel_size = config.input_array_info.get("scale")
+
         if not hasattr(config, "write_shape"):
-            if hasattr(config, "output_array_info"):
-                config.write_shape = config.output_array_info.get("shape")
-            elif hasattr(config, "target_array_info"):
+            if hasattr(config, "target_array_info"):
                 config.write_shape = config.target_array_info.get("shape")
             elif isinstance(config.model, torch.nn.Module):
                 # Infer write_shape from model output
@@ -83,7 +91,10 @@ class ScriptModelConfig(ModelConfig):
                 config.write_shape = out.shape[2:]
                 config.output_channels = out.shape[1]
             else:
-                raise ValueError("write_shape not found in config and was not able to infer.")
+                raise ValueError(
+                    "Write shape not found in config and was not able to infer from a supplied PyTorch model. Should be specified by `write_shape` or `target_array_info['shape']`."
+                )
+
         if not hasattr(config, "output_channels"):
             try:
                 # Infer write_shape from model output
@@ -92,17 +103,21 @@ class ScriptModelConfig(ModelConfig):
                     out = config.model(test_array)
                 config.output_channels = out.shape[1]
             except:
-                raise ValueError("output_channels not found in config and was not able to infer.")
-        if not hasattr(config, "output_voxel_size"):            
-            if hasattr(config, "output_array_info"):
-                config.output_voxel_size = config.output_array_info.get("scale", config.output_array_info.get("voxel_size"))
-            elif hasattr(config, "target_array_info"):
-                config.output_voxel_size = config.target_array_info.get("scale", config.target_array_info.get("voxel_size"))
+                raise ValueError(
+                    "Output channels not found in config and was not able to infer from a supplied PyTorch model. Should be specified by `output_channels`."
+                )
+
+        if not hasattr(config, "output_voxel_size"):
+            if hasattr(config, "target_array_info"):
+                config.output_voxel_size = config.target_array_info.get("scale")
             else:
-                raise ValueError("output_voxel_size not found in config.")
+                raise ValueError(
+                    "Output voxel size not found in config. Should be specified by `output_voxel_size` or `target_array_info['scale']`."
+                )
+
         if not hasattr(config, "block_shape"):
-            config.block_shape = (*config.write_shape, config.output_channels)   
-        
+            config.block_shape = (*config.write_shape, config.output_channels)
+
         return config
 
 
