@@ -95,12 +95,14 @@
       role="tabpanel"
       aria-labelledby="postprocessing-tab"
     >
-    {% include "_postprocess_tab.html" %}
+    {% include "_postprocessing_tab.html" %}
     </div>
 
   </div>
 </div>
-
+<iframe src="{{ neuroglancer_url }}" style="width:100%;height:100vh;" title="Example IFrame" id="my_iframe">
+  Your browser does not support iframes.
+</iframe>
 <!-- Bootstrap 5 JS (Optional) -->
 <script
   src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
@@ -139,45 +141,65 @@
     toggleVisibility(chkStandardization, standardizationParams);
 
     // Handle Input form submission
+    // document.getElementById('submitInput').addEventListener('click', function() {
+    //   // We'll create an array of methods
+    //   let methods = [];
+
+    //   // 1. Simple Normalization
+    //   if (chkSimple.checked) {
+    //     methods.push({
+    //       name: 'simple' // x/255.0
+    //       // no extra parameters
+    //     });
+    //   }
+
+    //   // 2. Contrast
+    //   if (chkContrast.checked) {
+    //     let contrastValue = parseFloat(document.getElementById('contrastValue').value);
+    //     methods.push({
+    //       name: 'contrast',
+    //       contrastValue: contrastValue
+    //     });
+    //   }
+
+    //   // 3. Standardization
+    //   if (chkStandardization.checked) {
+    //     let meanVal = parseFloat(document.getElementById('mean').value);
+    //     let stdVal = parseFloat(document.getElementById('std').value);
+    //     methods.push({
+    //       name: 'standardization',
+    //       mean: meanVal,
+    //       std: stdVal
+    //     });
+    //   }
+
+    //   // Build JSON payload
+    //   let data = {
+    //     methods: methods
+    //   };
+
+    //   // POST to Flask endpoint
+    //   fetch('/api/process', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify(data),
+    //   })
+    //     .then(response => response.json())
+    //     .then(responseData => {
+    //       console.log(responseData);
+    //       alert("Data submitted (Input): " + JSON.stringify(responseData));
+    //     })
+    //     .catch(error => {
+    //       console.error(error);
+    //     });
+    // });
+
     document.getElementById('submitInput').addEventListener('click', function() {
-      // We'll create an array of methods
-      let methods = [];
-
-      // 1. Simple Normalization
-      if (chkSimple.checked) {
-        methods.push({
-          name: 'simple' // x/255.0
-          // no extra parameters
-        });
-      }
-
-      // 2. Contrast
-      if (chkContrast.checked) {
-        let contrastValue = parseFloat(document.getElementById('contrastValue').value);
-        methods.push({
-          name: 'contrast',
-          contrastValue: contrastValue
-        });
-      }
-
-      // 3. Standardization
-      if (chkStandardization.checked) {
-        let meanVal = parseFloat(document.getElementById('mean').value);
-        let stdVal = parseFloat(document.getElementById('std').value);
-        methods.push({
-          name: 'standardization',
-          mean: meanVal,
-          std: stdVal
-        });
-      }
-
-      // Build JSON payload
-      let data = {
-        methods: methods
-      };
-
-      // POST to Flask endpoint
-      fetch('/api/process', {
+      data = {"norm_type":"min_max",
+        "min_value": 200,
+        "max_value": 255};
+      console.log(data);
+      fetch("{{ inference_servers }}/input_normalize", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -190,8 +212,11 @@
         .catch(error => {
           console.error(error);
         });
+  
+      var iframe = document.getElementById('my_iframe');
+      iframe.src = iframe.src;
+      console.log('Iframe refreshed');
     });
-
     // Handle Output form submission
     document.getElementById('submitOutput').addEventListener('click', function() {
       const data = {
@@ -213,7 +238,8 @@
         });
     });
   });
-</script>
 
+
+</script>
 </body>
 </html>

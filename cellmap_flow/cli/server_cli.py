@@ -1,6 +1,7 @@
 import click
 import logging
 
+from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
@@ -116,3 +117,14 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
         certfile=certfile,
         keyfile=keyfile,
     )
+
+
+@cli.command()
+@click.option(
+    "-n", "--neuroglancer_url", required=True, type=str, help="Neuroglancer viewer url."
+)
+@click.option(
+    "-i", "--inference_host", required=True, type=str, help="Inference host(s)"
+)
+def run_ui_server(neuroglancer_url, inference_host):
+    create_and_run_app(neuroglancer_url, inference_host)

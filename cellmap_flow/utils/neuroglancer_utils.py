@@ -7,6 +7,8 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 logger = logging.getLogger(__name__)
 
 from cellmap_flow.image_data_interface import ImageDataInterface
+
+
 # TODO support multiresolution datasets
 def get_raw_layer(dataset_path, filetype):
     if filetype == "zarr":
@@ -23,13 +25,13 @@ def get_raw_layer(dataset_path, filetype):
                 scales=image.voxel_size,
             ),
             voxel_offset=image.offset,
-            )
         )
+    )
 
 
-def generate_neuroglancer_link(dataset_path, inference_dict):
+def generate_neuroglancer_url(dataset_path, inference_dict):
     # Create a new viewer
-    viewer = neuroglancer.UnsynchronizedViewer()
+    viewer = neuroglancer.Viewer()
 
     # Add a layer to the viewer
     with viewer.txn() as s:
@@ -84,11 +86,7 @@ def generate_neuroglancer_link(dataset_path, inference_dict):
 #uicontrol vec3 color color(default="{color}");
 void main(){{emitRGB(color * normalized());}}""",
             )
-        # print(viewer)  # neuroglancer.to_url(viewer.state))
-        show(str(viewer))
-        # logger.error(f"\n \n \n link : {viewer}")
-        while True:
-            pass
+    return viewer
 
 
 def show(viewer):
