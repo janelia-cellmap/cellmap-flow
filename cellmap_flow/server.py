@@ -279,7 +279,7 @@ class CellMapFlowServer:
     def _input_normalize_impl(self, norm_type, min_value, max_value):
         print(f"Input normalization: {norm_type}, {min_value}, {max_value}", flush=True)
         if norm_type == MinMaxNormalizer.name():
-            self.inferencer.model_config.input_normalizer = MinMaxNormalizer(
+            self.inferencer.model_config.config.input_normalizer = MinMaxNormalizer(
                 min_value, max_value
             )
             return jsonify(success=True), HTTPStatus.OK

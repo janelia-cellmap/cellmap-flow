@@ -196,8 +196,8 @@
 
     document.getElementById('submitInput').addEventListener('click', function() {
       data = {"norm_type":"min_max",
-        "min_value": 200,
-        "max_value": 255};
+        "min_value": 0,
+        "max_value": 1};
       console.log(data);
       fetch("{{ inference_servers }}/input_normalize", {
         method: 'POST',
