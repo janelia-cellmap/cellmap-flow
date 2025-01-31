@@ -200,3 +200,5 @@ def run_multiple(models, dataset_path, charge_back, queue):
             raise Exception("Could not start host")
         inference_dict[host] = model.name
     generate_neuroglancer_url(dataset_path, inference_dict)
+    while True:
+        pass

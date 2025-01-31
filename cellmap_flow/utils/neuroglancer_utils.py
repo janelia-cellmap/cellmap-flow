@@ -86,6 +86,7 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
 #uicontrol vec3 color color(default="{color}");
 void main(){{emitRGB(color * normalized());}}""",
             )
+    show(viewer)
     return viewer
 
 

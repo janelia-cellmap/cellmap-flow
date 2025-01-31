@@ -1,36 +1,26 @@
-<!-- Custom CSS for dark tabs -->
-<style>
-    /* Dark background on the tabs */
-    .nav-tabs .nav-link {
-      background-color: #444;
-      color: #ddd;
-      border: 1px solid #555;
-    }
-    /* Active tab styling */
-    .nav-tabs .nav-link.active {
-      background-color: #222;
-      color: #fff;
-      border-color: #555 #555 #222;
-    }
-    /* Dark background on tab panes */
-    .tab-pane {
-      background-color: #333;
-    }
-  </style>
-  
+
   <div class="container my-4 bg-dark text-light" style="border-radius: 0.25rem; min-height: 80vh;">
     <div class="text-center my-3">
-      <img 
-        src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
-        alt="CellMap Flow"
-        style="max-width: 60%;"
-      />
       <h3>Dashboard</h3>
     </div>
   
     <!-- Nav Tabs -->
     <ul class="nav nav-tabs" id="myTab" role="tablist">
       <!-- Input Tab -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="model-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#models"
+          type="button"
+          role="tab"
+          aria-controls="models"
+          aria-selected="true"
+        >
+          Models
+        </button>
+      </li>
       <li class="nav-item" role="presentation">
         <button
           class="nav-link active"
@@ -81,7 +71,14 @@
   
     <!-- Tab Contents -->
     <div class="tab-content" id="myTabContent">
-      <!-- Input Tab Content -->
+        <div
+        class="tab-pane fade show active p-3"
+        id="models"
+        role="tabpanel"
+        aria-labelledby="models-tab"
+      >
+        {% include "_models_tab.html" %}
+      </div>
       <div
         class="tab-pane fade show active p-3"
         id="input"

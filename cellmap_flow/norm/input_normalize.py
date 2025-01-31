@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +9,7 @@ class InputNormalizer:
 
     @classmethod
     def name(cls):
-        return "basic"
+        return cls.__name__
 
     def normalize(self, data):
         logger.error("InputNormalizer.normalize not implemented")
@@ -23,10 +24,6 @@ class InputNormalizer:
 
 class MinMaxNormalizer(InputNormalizer):
 
-    @classmethod
-    def name(cls):
-        return "min_max"
-
     def __init__(self, min_value=0.0, max_value=255.0):
         self.min_value = min_value
         self.max_value = max_value
@@ -40,6 +37,30 @@ class MinMaxNormalizer(InputNormalizer):
 
 
 NormalizationMethods = [f.name() for f in InputNormalizer.__subclasses__()]
+
+
+def get_normalizers():
+    normalizer_classes = InputNormalizer.__subclasses__()
+    normalizers = []
+    for norm_cls in normalizer_classes:
+        norm_name = norm_cls.__name__
+        sig = inspect.signature(norm_cls.__init__)
+        params = {}
+        for param_name, param_obj in sig.parameters.items():
+            if param_name == "self":
+                continue
+            default_val = param_obj.default
+            if default_val is inspect._empty:
+                default_val = ""
+            params[param_name] = default_val
+        normalizers.append(
+            {
+                "class_name": norm_cls.__name__,
+                "name": norm_name,
+                "params": params,
+            }
+        )
+    return normalizers
 
 
 def get_normalization(elms: dict) -> InputNormalizer:

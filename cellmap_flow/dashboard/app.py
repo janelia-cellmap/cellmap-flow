@@ -2,37 +2,65 @@ import socket
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from cellmap_flow.utils.web_utils import get_free_port
+from cellmap_flow.norm.input_normalize import get_normalizers, InputNormalizer
+import os
+from cellmap_flow.utils.load_py import load_safe_config
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
 
+CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
+
 
 @app.route("/")
 def index():
     # Render the main page with tabs
+    input_norms = get_normalizers()
+
     return render_template(
         "index.html",
         neuroglancer_url=NEUROGLANCER_URL,
         inference_servers=INFERENCE_SERVER,
+        input_normalizers=input_norms,
     )
 
 
 @app.route("/api/process", methods=["POST"])
 def process():
-    """
-    Example endpoint to receive JSON data from the form submission.
-    Just echoes back the received data in this example.
-    """
-
     data = request.get_json()
-    # Here you could add logic to process the data, e.g.:
-    # - if "method" in data: handle input normalization
-    # - if "outputChannel" in data: handle output settings
-    # - etc.
+    print(f"Data received: {data}", flush=True)
 
-    return jsonify({"message": "Data received successfully", "received_data": data})
+    # 1) Extract user code from the payload, if present
+    custom_code = data.get("custom_code", None)
+    if custom_code:
+
+        try:
+            # Save custom code to a file with date and time
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"custom_code_{timestamp}.py"
+            filepath = os.path.join(CustomCodeFolder, filename)
+
+            with open(filepath, "w") as file:
+                file.write(custom_code)
+
+            config = load_safe_config(filepath)
+            print(f"Custom code loaded successfully: {config}")
+
+            print(get_normalizers())
+
+        except Exception as e:
+            print(f"Error executing custom code: {e}")
+
+    return jsonify(
+        {
+            "message": "Data received successfully",
+            "received_data": data,
+            "found_custom_normalizer": get_normalizers(),
+        }
+    )
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

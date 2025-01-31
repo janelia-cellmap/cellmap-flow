@@ -12,6 +12,22 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dark.css') }}" />
 </head>
 <body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <img 
+      src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
+      alt="CellMap Flow"
+      width="200"
+    />
+      <button
+        class="btn btn-outline-light"
+        type="button"
+        onclick="toggleDashboard()"
+      >
+        Toggle Dashboard
+      </button>
+    </div>
+  </nav>
 
   <div class="row bg-dark text-light" style="height: 100vh;">
     <div class="col-9" id="iframe-column">
@@ -22,12 +38,14 @@
     <div class="col-3" id="dashboard-column">
       {% include "_dashboard.html" %}
     </div>
+  
   </div>
 
 <script
   src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
 ></script>
 <script src="{{ url_for('static', filename='js/dashboard_script.js') }}"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
 </body>
 </html>
