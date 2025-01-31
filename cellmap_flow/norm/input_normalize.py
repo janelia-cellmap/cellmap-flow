@@ -33,13 +33,13 @@ class MinMaxNormalizer(InputNormalizer):
 
     def normalize(self, data: np.ndarray) -> np.ndarray:
         data = data.astype(np.float32)
-        data.clip(self.min_value, self.max_value)
+        data = data.clip(self.min_value, self.max_value)
         return ((data - self.min_value) / (self.max_value - self.min_value)).astype(
             np.float32
         )
 
 
-NormalizationMethods = [f.name() for f in InputNormalizer.__subclasses__()]
+NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
 
 
 def get_normalization(elms: dict) -> InputNormalizer:
