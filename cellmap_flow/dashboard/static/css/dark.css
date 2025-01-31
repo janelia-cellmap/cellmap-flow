@@ -1,0 +1,25 @@
+/* Container styling */
+.container.my-4.bg-dark.text-light {
+    border-radius: 0.25rem;
+    min-height: 80vh;
+  }
+  
+  /* Dark background on the nav tabs */
+  .nav-tabs .nav-link {
+    background-color: #444;
+    color: #ddd;
+    border: 1px solid #555;
+  }
+  
+  /* Active tab styling */
+  .nav-tabs .nav-link.active {
+    background-color: #222;
+    color: #fff;
+    border-color: #555 #555 #222;
+  }
+  
+  /* Dark background on tab panes */
+  .tab-pane {
+    background-color: #333;
+  }
+  

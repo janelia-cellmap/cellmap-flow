@@ -47,4 +47,4 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
 
 if __name__ == "__main__":
     # app.run(debug=True)
-    create_and_run_app(neuroglancer_url=None)
+    create_and_run_app(neuroglancer_url="https://neuroglancer-demo.appspot.com/")

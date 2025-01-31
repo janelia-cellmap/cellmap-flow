@@ -1,6 +1,32 @@
-
-<div class="container my-4">
-    <h1>Flask App with Tabs</h1>
+<!-- Custom CSS for dark tabs -->
+<style>
+    /* Dark background on the tabs */
+    .nav-tabs .nav-link {
+      background-color: #444;
+      color: #ddd;
+      border: 1px solid #555;
+    }
+    /* Active tab styling */
+    .nav-tabs .nav-link.active {
+      background-color: #222;
+      color: #fff;
+      border-color: #555 #555 #222;
+    }
+    /* Dark background on tab panes */
+    .tab-pane {
+      background-color: #333;
+    }
+  </style>
+  
+  <div class="container my-4 bg-dark text-light" style="border-radius: 0.25rem; min-height: 80vh;">
+    <div class="text-center my-3">
+      <img 
+        src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
+        alt="CellMap Flow"
+        style="max-width: 60%;"
+      />
+      <h3>Dashboard</h3>
+    </div>
   
     <!-- Nav Tabs -->
     <ul class="nav nav-tabs" id="myTab" role="tablist">
@@ -55,7 +81,6 @@
   
     <!-- Tab Contents -->
     <div class="tab-content" id="myTabContent">
-  
       <!-- Input Tab Content -->
       <div
         class="tab-pane fade show active p-3"
@@ -63,7 +88,7 @@
         role="tabpanel"
         aria-labelledby="input-tab"
       >
-      {% include "_input_tab.html" %}
+        {% include "_input_tab.html" %}
       </div>
   
       <!-- Output Tab Content -->
@@ -73,7 +98,7 @@
         role="tabpanel"
         aria-labelledby="output-tab"
       >
-      {% include "_output_tab.html" %}
+        {% include "_output_tab.html" %}
       </div>
   
       <!-- Postprocessing Tab Content -->
@@ -83,8 +108,8 @@
         role="tabpanel"
         aria-labelledby="postprocessing-tab"
       >
-      {% include "_postprocessing_tab.html" %}
+        {% include "_postprocessing_tab.html" %}
       </div>
-  
     </div>
   </div>
+  
