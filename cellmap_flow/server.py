@@ -16,6 +16,7 @@ from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
 from cellmap_flow.utils.web_utils import get_public_ip
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.utils.load_py import load_safe_config
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,12 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
+            config = load_safe_config(
+                "/groups/cellmap/cellmap/ackermand/Programming/cellmap-flow/test.py"
+            )
+            self._input_normalize_impl(
+                config.norm_type, config.min_value, config.max_value
+            )
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -192,7 +199,7 @@ class CellMapFlowServer:
                 schema:
                   type: integer
               - in: path
-                name: chunk_x
+                name: chunk_xfm
                 schema:
                   type: integer
               - in: path
@@ -346,3 +353,5 @@ if __name__ == "__main__":
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
     server.run(debug=True, port=8000)
+
+#
