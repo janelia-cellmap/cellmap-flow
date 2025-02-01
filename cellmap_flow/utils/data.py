@@ -1,6 +1,8 @@
 IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 
 import logging
+from typing import List
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +152,64 @@ def get_dacapo_run_model(run_name, iteration):
         run.model.load_state_dict(weights.model)
 
     return run
+
+
+def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
+    """
+    Reads a YAML file that defines a list of model configs.
+    Validates them manually, then returns a list of constructed ModelConfig objects.
+    """
+    with open(yaml_file_path, "r") as f:
+        data = yaml.safe_load(f)
+
+    if not isinstance(data, list):
+        raise ValueError("Top-level YAML structure must be a list.")
+
+    configs: List[ModelConfig] = []
+
+    for idx, model_def in enumerate(data):
+        # Common checks:
+        if "type" not in model_def:
+            raise ValueError(f"Missing 'type' field in model definition #{idx+1}")
+
+        model_type = model_def["type"]
+        name = model_def.get("name")
+
+        if model_type == "bio":
+            # Expect "model_name"
+            if "model_name" not in model_def:
+                raise ValueError(f"Missing 'model_name' in bio model #{idx+1}")
+            config = BioModelConfig(
+                model_name=model_def["model_name"],
+                name=name,
+            )
+
+        elif model_type == "script":
+            # Expect "script_path"
+            if "script_path" not in model_def:
+                raise ValueError(f"Missing 'script_path' in script model #{idx+1}")
+            config = ScriptModelConfig(
+                script_path=model_def["script_path"],
+                name=name,
+            )
+
+        elif model_type == "dacapo":
+            # Expect "run_name" and "iteration"
+            if "run_name" not in model_def or "iteration" not in model_def:
+                raise ValueError(
+                    f"Missing 'run_name' or 'iteration' in dacapo model #{idx+1}"
+                )
+            config = DaCapoModelConfig(
+                run_name=model_def["run_name"],
+                iteration=model_def["iteration"],
+                name=name,
+            )
+
+        else:
+            raise ValueError(
+                f"Invalid 'type' field '{model_type}' in model definition #{idx+1}"
+            )
+
+        configs.append(config)
+
+    return configs
