@@ -36,7 +36,7 @@ class MinMaxNormalizer(InputNormalizer):
         )
 
 
-NormalizationMethods = [f.name() for f in InputNormalizer.__subclasses__()]
+NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
 
 
 def get_normalizers():

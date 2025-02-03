@@ -1,32 +1,59 @@
 import neuroglancer
 import itertools
 import logging
+import os
 
-neuroglancer.set_server_bind_address("0.0.0.0")
+from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.utils.scale_pyramid import ScalePyramid
+from cellmap_flow.dashboard.app import create_and_run_app
+
 
 logger = logging.getLogger(__name__)
 
-from cellmap_flow.image_data_interface import ImageDataInterface
+neuroglancer.set_server_bind_address("0.0.0.0")
 
 
 # TODO support multiresolution datasets
-def get_raw_layer(dataset_path, filetype):
+def get_raw_layer(dataset_path, filetype, is_multiscale=False):
     if filetype == "n5":
         axis = ["x", "y", "z"]
     else:
         axis = ["z", "y", "x"]
-    image = ImageDataInterface(dataset_path)
-    return neuroglancer.ImageLayer(
-        source=neuroglancer.LocalVolume(
-            data=image.ts,
-            dimensions=neuroglancer.CoordinateSpace(
-                names=axis,
-                units="nm",
-                scales=image.voxel_size,
-            ),
-            voxel_offset=image.offset,
+
+    layers = []
+
+    if is_multiscale:
+        scales = [
+            f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
+        ]
+        scales.sort(key=lambda x: int(x[1:]))
+        for scale in scales:
+            image = ImageDataInterface(f"{os.path.join(dataset_path, scale)}")
+            layers.append(
+                neuroglancer.LocalVolume(
+                    data=image.ts,
+                    dimensions=neuroglancer.CoordinateSpace(
+                        names=axis,
+                        units="nm",
+                        scales=image.voxel_size,
+                    ),
+                    voxel_offset=image.offset,
+                )
+            )
+        return ScalePyramid(layers)
+    else:
+        image = ImageDataInterface(dataset_path)
+        return neuroglancer.ImageLayer(
+            source=neuroglancer.LocalVolume(
+                data=image.ts,
+                dimensions=neuroglancer.CoordinateSpace(
+                    names=axis,
+                    units="nm",
+                    scales=image.voxel_size,
+                ),
+                voxel_offset=image.offset,
+            )
         )
-    )
 
 
 def generate_neuroglancer_url(dataset_path, inference_dict):
@@ -35,12 +62,15 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
 
     # Add a layer to the viewer
     with viewer.txn() as s:
+        is_multi_scale = False
         # if multiscale dataset
-        # if (
-        #     dataset_path.split("/")[-1].startswith("s")
-        #     and dataset_path.split("/")[-1][1:].isdigit()
-        # ):
-        #     dataset_path = dataset_path.rsplit("/", 1)[0]
+        if (
+            dataset_path.split("/")[-1].startswith("s")
+            and dataset_path.split("/")[-1][1:].isdigit()
+        ):
+            dataset_path = dataset_path.rsplit("/", 1)[0]
+            is_multi_scale = True
+
         if ".zarr" in dataset_path:
             filetype = "zarr"
         elif ".n5" in dataset_path:
@@ -48,7 +78,8 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
         else:
             filetype = "precomputed"
         if dataset_path.startswith("/"):
-            s.layers["raw"] = get_raw_layer(dataset_path, filetype)
+            layer = get_raw_layer(dataset_path, filetype, is_multi_scale)
+            s.layers.append("raw", layer)
             # if "nrs/cellmap" in dataset_path:
             #     security = "https"
             #     dataset_path = dataset_path.replace("/nrs/cellmap/", "nrs/")
@@ -86,8 +117,10 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
 #uicontrol vec3 color color(default="{color}");
 void main(){{emitRGB(color * normalized());}}""",
             )
-    show(viewer)
-    return viewer
+    # show(viewer)
+    url = create_and_run_app(neuroglancer_url=str(viewer))
+    show(url)
+    return url
 
 
 def show(viewer):
