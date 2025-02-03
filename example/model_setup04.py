@@ -1,14 +1,32 @@
 # %%
-# pip install fly-organelles
-from daisy.coordinate import Coordinate
-import numpy as np
 
-output_voxel_size = Coordinate((4, 4, 4))
-input_voxel_size = voxel_size = Coordinate((8, 8, 8))
-
-read_shape = Coordinate((216, 216, 216)) * Coordinate(voxel_size)
-write_shape = Coordinate((68, 68, 68)) * Coordinate(output_voxel_size)
-
+input_array_info = {"shape": (216, 216, 216), "scale": (8, 8, 8)}
+target_array_info = {
+    "shape": (68, 68, 68),
+    "scale": (4, 4, 4),
+    "channels": 14,
+    "classes": {
+        i: v
+        for i, v in enumerate(
+            [
+                "ecs",
+                "pm",
+                "mito",
+                "mito_mem",
+                "ves",
+                "ves_mem",
+                "endo",
+                "endo_mem",
+                "er",
+                "er_mem",
+                "eres",
+                "nuc",
+                "mt",
+                "mt_out",
+            ]
+        )
+    },
+}
 
 # %%
 import torch
@@ -24,8 +42,5 @@ else:
 
 model.to(device)
 model.eval()
-
-
-output_channels = 14  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
-block_shape = np.array((68, 68, 68, 14))
+print("device:", device)
 # # %%

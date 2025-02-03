@@ -51,7 +51,6 @@ def get_raw_layer(dataset_path, filetype, is_multiscale=False):
                 voxel_offset=image.offset,
             )
         )
-    )
 
 
 def generate_neuroglancer_link(dataset_path, inference_dict):
