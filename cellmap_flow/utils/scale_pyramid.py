@@ -8,6 +8,7 @@ import numpy as np
 
 
 logger = logging.getLogger(__name__)
+import globals as g
 
 
 class ScalePyramid(neuroglancer.LocalVolume):
@@ -102,9 +103,12 @@ class ScalePyramid(neuroglancer.LocalVolume):
         assert closest_scale is not None
         relative_scale = np.array(scale) // np.array(closest_scale)
 
-        return self.volume_layers[closest_scale].get_encoded_subvolume(
+        result = self.volume_layers[closest_scale].get_encoded_subvolume(
             data_format, start, end, scale_key=",".join(map(str, relative_scale))
         )
+        for n in g.input_norms:
+            result = n(result)
+        return result
 
     def get_object_mesh(self, object_id):
         return self.volume_layers[(1,) * self.dims].get_object_mesh(object_id)

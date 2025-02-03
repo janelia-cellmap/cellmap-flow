@@ -11,7 +11,10 @@ class InputNormalizer:
     def name(cls):
         return cls.__name__
 
-    def normalize(self, data):
+    def __call__(self, data: np.ndarray) -> np.ndarray:
+        return self.normalize(data)
+
+    def normalize(self, data: np.ndarray) -> np.ndarray:
         logger.error("InputNormalizer.normalize not implemented")
         return data
 
@@ -34,6 +37,17 @@ class MinMaxNormalizer(InputNormalizer):
         return ((data - self.min_value) / (self.max_value - self.min_value)).astype(
             np.float32
         )
+
+
+class ZScoreNormalizer(InputNormalizer):
+
+    def __init__(self, mean=0.0, std=1.0):
+        self.mean = mean
+        self.std = std
+
+    def normalize(self, data: np.ndarray) -> np.ndarray:
+        data = data.astype(np.float32)
+        return ((data - self.mean) / self.std).astype(np.float32)
 
 
 NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]

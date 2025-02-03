@@ -6,7 +6,7 @@ import os
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.utils.scale_pyramid import ScalePyramid
 from cellmap_flow.dashboard.app import create_and_run_app
-
+import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,8 @@ def get_raw_layer(dataset_path, filetype, is_multiscale=False):
                     voxel_offset=image.offset,
                 )
             )
-        return ScalePyramid(layers)
+        g.raw = ScalePyramid(layers)
+        return g.raw
     else:
         image = ImageDataInterface(dataset_path)
         return neuroglancer.ImageLayer(
