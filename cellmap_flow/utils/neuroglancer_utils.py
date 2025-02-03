@@ -119,6 +119,7 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
 void main(){{emitRGB(color * normalized());}}""",
             )
     # show(viewer)
+    g.viewer = viewer
     url = create_and_run_app(neuroglancer_url=str(viewer))
     show(url)
     return url

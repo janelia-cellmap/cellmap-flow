@@ -8,7 +8,7 @@ import numpy as np
 
 
 logger = logging.getLogger(__name__)
-import globals as g
+import cellmap_flow.globals as g
 
 
 class ScalePyramid(neuroglancer.LocalVolume):
@@ -106,8 +106,9 @@ class ScalePyramid(neuroglancer.LocalVolume):
         result = self.volume_layers[closest_scale].get_encoded_subvolume(
             data_format, start, end, scale_key=",".join(map(str, relative_scale))
         )
-        for n in g.input_norms:
-            result = n(result)
+        print("result", type(result))
+        # for n in g.input_norms:
+        #     result = n(result)
         return result
 
     def get_object_mesh(self, object_id):

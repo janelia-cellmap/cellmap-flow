@@ -77,13 +77,15 @@ def get_normalizers():
     return normalizers
 
 
-def get_normalization(elms: dict) -> InputNormalizer:
-    if "name" not in elms:
-        raise ValueError(f"Normalization method name not specified in {elms}")
-    name = elms["name"]
-    rest_elm = elms.copy()
-    rest_elm.pop("name")
-    for nm in NormalizationMethods:
-        if nm.name() == name:
-            return nm(**rest_elm)
-    raise ValueError(f"Normalization method {name} not found")
+def get_normalizations(elms: dict) -> InputNormalizer:
+    result = []
+    for norm_name in elms:
+        found = False
+        for nm in NormalizationMethods:
+            if nm.name() == norm_name:
+                result.append(nm(**elms[norm_name]))
+                found = True
+                break
+        if not found:
+            raise ValueError(f"Normalization method {norm_name} not found")
+    return result

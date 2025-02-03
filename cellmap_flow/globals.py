@@ -2,6 +2,8 @@ models_config = []
 
 servers = []
 
-inputs = []
+raw = None
 
 input_norms = []
+
+viewer = None
