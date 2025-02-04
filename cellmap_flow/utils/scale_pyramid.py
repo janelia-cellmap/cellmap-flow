@@ -3,12 +3,73 @@
 import neuroglancer
 import operator
 import logging
-
 import numpy as np
+import os
 
+from cellmap_flow.image_data_interface import ImageDataInterface
 
 logger = logging.getLogger(__name__)
-import cellmap_flow.globals as g
+
+
+def get_raw_layer(dataset_path):
+    is_multiscale = False
+    # if multiscale dataset
+    if (
+        dataset_path.split("/")[-1].startswith("s")
+        and dataset_path.split("/")[-1][1:].isdigit()
+    ):
+        dataset_path = dataset_path.rsplit("/", 1)[0]
+        is_multiscale = True
+
+    if ".zarr" in dataset_path:
+        filetype = "zarr"
+    elif ".n5" in dataset_path:
+        filetype = "n5"
+    else:
+        filetype = "precomputed"
+
+    if filetype == "n5":
+        axis = ["x", "y", "z"]
+    else:
+        axis = ["z", "y", "x"]
+
+    layers = []
+
+    if is_multiscale:
+        scales = [
+            f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
+        ]
+        scales.sort(key=lambda x: int(x[1:]))
+        for scale in scales:
+            image = ImageDataInterface(f"{os.path.join(dataset_path, scale)}")
+            layers.append(
+                neuroglancer.LocalVolume(
+                    data=image.ts,
+                    dimensions=neuroglancer.CoordinateSpace(
+                        names=axis,
+                        units="nm",
+                        scales=image.voxel_size,
+                    ),
+                    voxel_offset=image.offset,
+                )
+            )
+
+        return neuroglancer.ImageLayer(
+            dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers))
+        )
+    else:
+        image = ImageDataInterface(dataset_path)
+        return neuroglancer.ImageLayer(
+            source=neuroglancer.LocalVolume(
+                data=image.ts,
+                dimensions=neuroglancer.CoordinateSpace(
+                    names=axis,
+                    units="nm",
+                    scales=image.voxel_size,
+                ),
+                voxel_offset=image.offset,
+            )
+        )
 
 
 class ScalePyramid(neuroglancer.LocalVolume):

@@ -9,8 +9,10 @@ from cellmap_flow.norm.input_normalize import (
 )
 import os
 from cellmap_flow.utils.load_py import load_safe_config
+from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from datetime import datetime
 import cellmap_flow.globals as g
+import neuroglancer
 
 app = Flask(__name__)
 CORS(app)
@@ -36,14 +38,19 @@ def index():
 @app.route("/api/process", methods=["POST"])
 def process():
     data = request.get_json()
+    print(f"Data received: {type(data)} - {data.keys()} -{data}", flush=True)
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:
         del data["custom_code"]
     print(f"Data received: {type(data)} - {data.keys()} -{data}", flush=True)
     g.input_norms = get_normalizations(data)
-    g.raw.invalidate()
 
-    # 1) Extract user code from the payload, if present
+    with g.viewer.txn() as s:
+        # g.raw.invalidate()
+        g.raw = get_raw_layer(g.dataset_path)
+        s.layers["raw"] = g.raw
+
+    print(f"Input normalizers: {g.input_norms}", flush=True)
 
     if custom_code:
 
