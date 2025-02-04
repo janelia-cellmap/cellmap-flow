@@ -87,7 +87,7 @@ class Inferencer:
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
             self.model_config.config.model.half()
-        print(f"Using device: {self.device}")
+        logger.info(f"Using device: {self.device}")
         # DIDN'T WORK with unet model
         # if torch.__version__ >= "2.0":
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)

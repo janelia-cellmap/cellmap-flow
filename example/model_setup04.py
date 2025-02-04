@@ -1,4 +1,8 @@
-# %%
+import cellmap_models.pytorch.cosem as cosem_models
+
+model = cosem_models.load_model("setup04/1820500")
+
+# # %%
 
 input_array_info = {"shape": (216, 216, 216), "scale": (8, 8, 8)}
 target_array_info = {
@@ -29,18 +33,3 @@ target_array_info = {
 }
 
 # %%
-import torch
-import cellmap_models.pytorch.cosem as cosem_models
-
-model = cosem_models.load_model("setup04/1820500")
-
-# %%
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
-
-model.to(device)
-model.eval()
-print("device:", device)
-# # %%

@@ -1,7 +1,6 @@
 IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 
 import logging
-import torch
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,9 @@ class ScriptModelConfig(ModelConfig):
 
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
+        import torch
+
+        logger.info(f"Loading config from script: {self.script_path}")
 
         config = load_safe_config(self.script_path)
         if not hasattr(config, "model"):
@@ -76,6 +78,17 @@ class ScriptModelConfig(ModelConfig):
 
         if not hasattr(config, "block_shape"):
             config.block_shape = (*config.write_shape, config.output_channels)
+
+        logger.debug(f"Config loaded: {config}")
+
+        if hasattr(config, "model"):
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
+            config.model.to(device)
+            config.model.eval()
+            logger.info(f"device: {device}")
 
         return config
 
@@ -104,7 +117,7 @@ class DaCapoModelConfig(ModelConfig):
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
-        print("device:", device)
+        logger.info("device:", device)
 
         run.model.to(device)
         run.model.eval()
