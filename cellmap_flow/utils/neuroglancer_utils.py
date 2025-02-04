@@ -120,7 +120,9 @@ void main(){{emitRGB(color * normalized());}}""",
             )
     # show(viewer)
     g.viewer = viewer
-    url = create_and_run_app(neuroglancer_url=str(viewer))
+    viewer_url = str(viewer).replace("zouinkhim-lm1", "192.168.1.167")
+    print("viewer", viewer_url)
+    url = create_and_run_app(neuroglancer_url=viewer_url)
     show(url)
     return url
 

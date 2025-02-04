@@ -14,9 +14,22 @@ class InputNormalizer:
     def __call__(self, data: np.ndarray) -> np.ndarray:
         return self.normalize(data)
 
-    def normalize(self, data: np.ndarray) -> np.ndarray:
-        logger.error("InputNormalizer.normalize not implemented")
-        return data
+    def normalize(self, data) -> np.ndarray:
+        if not isinstance(data, np.ndarray):
+            data = np.array(data)
+        if data.dtype.kind in {"U", "O"}:
+            try:
+                data = data.astype(self.dtype)
+            except ValueError:
+                raise TypeError(
+                    f"Cannot convert non-numeric data to float. Found dtype: {data.dtype}"
+                )
+
+        data = self._process(data)
+        return data.astype(self.dtype)
+
+    def _process(self, data):
+        raise NotImplementedError("Subclasses must implement this method")
 
     def to_dict(self):
         result = {"name": self.name()}
@@ -24,19 +37,23 @@ class InputNormalizer:
             result[k] = v
         return result
 
+    @property
+    def dtype(self):
+        return np.uint8
+
 
 class MinMaxNormalizer(InputNormalizer):
-
     def __init__(self, min_value=0.0, max_value=255.0):
-        self.min_value = min_value
-        self.max_value = max_value
+        self.min_value = float(min_value)
+        self.max_value = float(max_value)
 
-    def normalize(self, data: np.ndarray) -> np.ndarray:
-        data = data.astype(np.float32)
+    @property
+    def dtype(self):
+        return np.float32
+
+    def _process(self, data) -> np.ndarray:
         data = data.clip(self.min_value, self.max_value)
-        return ((data - self.min_value) / (self.max_value - self.min_value)).astype(
-            np.float32
-        )
+        return (data - self.min_value) / (self.max_value - self.min_value)
 
 
 class ZScoreNormalizer(InputNormalizer):
@@ -45,9 +62,12 @@ class ZScoreNormalizer(InputNormalizer):
         self.mean = mean
         self.std = std
 
+    @property
+    def dtype(self):
+        return np.float32
+
     def normalize(self, data: np.ndarray) -> np.ndarray:
-        data = data.astype(np.float32)
-        return ((data - self.mean) / self.std).astype(np.float32)
+        return (data - self.mean) / self.std
 
 
 NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]

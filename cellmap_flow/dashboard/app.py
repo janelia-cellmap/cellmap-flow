@@ -2,11 +2,15 @@ import socket
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from cellmap_flow.utils.web_utils import get_free_port
-from cellmap_flow.norm.input_normalize import get_normalizers, InputNormalizer, get_normalizations
+from cellmap_flow.norm.input_normalize import (
+    get_normalizers,
+    InputNormalizer,
+    get_normalizations,
+)
 import os
 from cellmap_flow.utils.load_py import load_safe_config
 from datetime import datetime
-import cellmap_flow.globals as g  
+import cellmap_flow.globals as g
 
 app = Flask(__name__)
 CORS(app)
@@ -39,9 +43,8 @@ def process():
     g.input_norms = get_normalizations(data)
     g.raw.invalidate()
 
-
     # 1) Extract user code from the payload, if present
-    
+
     if custom_code:
 
         try:

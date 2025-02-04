@@ -4,6 +4,8 @@ servers = []
 
 raw = None
 
-input_norms = []
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+
+input_norms = [MinMaxNormalizer(250, 255)]
 
 viewer = None
