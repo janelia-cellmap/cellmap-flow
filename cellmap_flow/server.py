@@ -30,7 +30,8 @@ class CellMapFlowServer:
         """
         Initialize the server and set up routes via decorators.
         """
-        self.block_shape = [int(x) for x in model_config.config.block_shape]
+        self.n5_block_shape = [int(x) for x in model_config.config.block_shape]
+        self.read_block_shape = self.n5_block_shape.copy()
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
@@ -40,6 +41,12 @@ class CellMapFlowServer:
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
+        )
+
+        # we want our chunk shapes to be swapped to correspond to the zyx of tensorstore reads?
+        self.n5_block_shape[0], self.n5_block_shape[2] = (
+            self.n5_block_shape[2],
+            self.n5_block_shape[0],
         )
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
@@ -56,7 +63,7 @@ class CellMapFlowServer:
 
         # Chunk encoding for N5
         self.chunk_encoder = N5ChunkWrapper(
-            np.uint8, self.block_shape, compressor=numcodecs.GZip()
+            np.uint8, self.n5_block_shape, compressor=numcodecs.GZip()
         )
 
         # Create and configure Flask
@@ -269,7 +276,7 @@ class CellMapFlowServer:
                 "translate": [0.0, 0.0, 0.0, 0.0],
             },
             "compression": {"type": "gzip", "useZlib": False, "level": -1},
-            "blockSize": list(self.block_shape),
+            "blockSize": list(self.n5_block_shape),
             "dataType": "uint8",
             "dimensions": self.vol_shape.tolist(),
         }
@@ -292,8 +299,8 @@ class CellMapFlowServer:
             )
 
     def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-        corner = self.block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, self.block_shape[:3]]) * self.output_voxel_size
+        corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
         return (
