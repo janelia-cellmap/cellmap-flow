@@ -29,20 +29,51 @@ class ModelConfig:
 
 
 class BioModelConfig(ModelConfig):
-    def __init__(self, model_name: str, name=None):
+    def __init__(self, model_name: str, voxel_size, name=None):
         super().__init__()
         self.model_name = model_name
+        self.voxel_size = voxel_size
         self.name = name
+
+    @staticmethod
+    def get_axes_names_from_model(model):
+        def get_axes_names(axes):
+            if type(axes) is str:
+                # assume "b" should be batch
+                return [axis if axis != "b" else "batch" for axis in list(axes)]
+            else:
+                return [axis.id for axis in axes]
+
+        input_axes = get_axes_names(model.inputs[0].axes)
+        output_axes = get_axes_names(model.outputs[0].axes)
+        return input_axes, output_axes
 
     @property
     def command(self):
         return f"bioimage -m {self.model_name}"
 
     def _get_config(self):
+        from funlib.geometry import Coordinate
         from bioimageio.core import load_description
 
         config = Config()
         config.model = load_description(self.model_name)
+        config.input_axes, config.output_axes = self.get_axes_names_from_model(
+            config.model
+        )
+        config.input_voxel_size = self.voxel_size
+        config.output_voxel_size = self.voxel_size
+
+        config.input_voxel_size = Coordinate(self.voxel_size)
+        config.read_shape = Coordinate(in_shape) * Coordinate(self.voxel_size)
+        config.write_shape = Coordinate(out_shape) * Coordinate(self.voxel_size)
+        config.output_voxel_size = Coordinate(self.voxel_size)
+
+        config.output_channels = len(
+            channels
+        )  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
+        config.block_shape = np.array(tuple(out_shape) + (len(channels),))
+
         return config
 
 

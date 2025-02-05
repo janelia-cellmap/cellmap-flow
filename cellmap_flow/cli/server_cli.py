@@ -1,6 +1,7 @@
 import click
 import logging
 
+from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
@@ -101,7 +102,9 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
 def bioimage(model_path, data_path, debug, port, certfile, keyfile):
     """Run the CellMapFlow server with a bioimage-io model."""
-    model_config = BioModelConfig(model_name=model_path)
+    model_config = BioModelConfig(
+        model_name=model_path, voxel_size=ImageDataInterface(data_path).voxel_size
+    )
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
