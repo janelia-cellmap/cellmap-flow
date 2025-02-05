@@ -30,8 +30,17 @@ class CellMapFlowServer:
         """
         Initialize the server and set up routes via decorators.
         """
-        self.n5_block_shape = [int(x) for x in model_config.config.block_shape]
-        self.read_block_shape = self.n5_block_shape.copy()
+
+        # this is zyx
+        self.read_block_shape = [int(x) for x in model_config.config.block_shape]
+
+        # this needs to have z and x swapped
+        self.n5_block_shape = self.read_block_shape.copy()
+        self.n5_block_shape[0], self.n5_block_shape[2] = (
+            self.n5_block_shape[2],
+            self.n5_block_shape[0],
+        )
+
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
@@ -43,11 +52,6 @@ class CellMapFlowServer:
             dataset_name, target_resolution=self.input_voxel_size
         )
 
-        # we want our chunk shapes to be swapped to correspond to the zyx of tensorstore reads?
-        self.n5_block_shape[0], self.n5_block_shape[2] = (
-            self.n5_block_shape[2],
-            self.n5_block_shape[0],
-        )
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
             self.vol_shape = np.array(
