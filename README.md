@@ -76,18 +76,19 @@ cellmap_flow script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/mo
 Define these variables in your script (`cellmap_flow script -s path/to/your_script.py`):
 - **model**: 
   The PyTorch model to be used for inference. 
-- **read_shape**: 
-  The voxel shape of the data to be input to the PyTorch model.
-- **write_shape**: 
-  The voxel shape of the data in output by the PyTorch model.
-- **block_shape**: 
-  The shape of the block output by the PyTorch model (i.e. `(*write_shape, output_channels)`).
-- **input_voxel_size**: 
-  The voxel size of the data input to the model.
-- **output_voxel_size**: 
-  The voxel size of the data output by the model.
-- **output_channels**:
-  The number of channels in the output of the model.
+  
+- **input_array_info**:
+  A dictionary containing the input array information. 
+  - **shape**: The shape of the input array in voxels.
+  - **scale**: The scale of the input array in nm/voxel (i.e. resolution).
+
+- **target_array_info**:
+  A dictionary containing the output array information. 
+  - **shape**: The shape of the output array in voxels.
+  - **scale**: The scale of the output array in nm/voxel (i.e. resolution).
+  - **channels**: The number of channels in the models output.
+  - **classes** (Optional): A dictionary mapping class indices to class names.
+
 - **process_chunk** (optional):
   (Optional) A function that takes an ImageDataInterface and an ROI and returns the data to be display. This can be used to run a TensorFlow model or do other custom data processing.
 

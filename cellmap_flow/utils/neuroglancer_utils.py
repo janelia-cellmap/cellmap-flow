@@ -17,7 +17,6 @@ def get_raw_layer(dataset_path, filetype, is_multiscale=False):
         axis = ["x", "y", "z"]
     else:
         axis = ["z", "y", "x"]
-
     layers = []
 
     if is_multiscale:
@@ -131,3 +130,4 @@ def show(viewer):
     print("**********************************************")
     print()
     print()
+    print("\033[32mPress Ctrl+C to exit\033[0m")

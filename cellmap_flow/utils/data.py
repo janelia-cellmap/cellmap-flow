@@ -59,8 +59,37 @@ class ScriptModelConfig(ModelConfig):
 
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
+        import torch
+
+        logger.info(f"Loading config from script: {self.script_path}")
 
         config = load_safe_config(self.script_path)
+        if not hasattr(config, "model"):
+            assert hasattr(
+                config, "process_chunk"
+            ), "Model not found in config and no custom `process_chunk` function found to use."
+
+        config.read_shape = config.input_array_info.get("shape")
+        config.input_voxel_size = config.input_array_info.get("scale")
+
+        config.write_shape = config.target_array_info.get("shape")
+        config.output_voxel_size = config.target_array_info.get("scale")
+        config.output_channels = config.target_array_info.get("channels")
+
+        if not hasattr(config, "block_shape"):
+            config.block_shape = (*config.write_shape, config.output_channels)
+
+        logger.debug(f"Config loaded: {config}")
+
+        if hasattr(config, "model"):
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
+            config.model.to(device)
+            config.model.eval()
+            logger.info(f"device: {device}")
+
         return config
 
 
@@ -88,7 +117,7 @@ class DaCapoModelConfig(ModelConfig):
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
-        print("device:", device)
+        logger.info("device:", device)
 
         run.model.to(device)
         run.model.eval()
