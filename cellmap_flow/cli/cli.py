@@ -2,7 +2,9 @@ import click
 import logging
 import click
 
+from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.bsub_utils import start_hosts
+from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
 
 
@@ -150,6 +152,26 @@ def script(script_path, data_path, queue, charge_group):
 def bioimage(model_path, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path}"
     run(command, data_path, queue, charge_group)
+
+
+@cli.command()
+@click.option(
+    "--script_path",
+    "-s",
+    type=str,
+    help="Path to the Python script containing model specification",
+)
+@click.option("--dataset", "-d", type=str, help="Path to the dataset")
+def script_server_check(script_path, dataset):
+    model_config = ScriptModelConfig(script_path=script_path)
+    server = CellMapFlowServer(dataset, model_config)
+    chunk_x = 2
+    chunk_y = 2
+    chunk_z = 2
+
+    server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
+
+    print("Server check passed")
 
 
 def run(
