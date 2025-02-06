@@ -91,6 +91,13 @@ class ScriptModelConfig(ModelConfig):
         if not hasattr(config, "block_shape"):
             config.block_shape = (*config.write_shape, config.output_channels)
 
+        config.write_shape = tuple(
+            [sh * sc for sh, sc in zip(config.write_shape, config.output_voxel_size)]
+        )
+        config.read_shape = tuple(
+            [sh * sc for sh, sc in zip(config.read_shape, config.input_voxel_size)]
+        )
+
         logger.debug(f"Config loaded: {config}")
 
         if hasattr(config, "model"):
