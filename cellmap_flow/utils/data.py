@@ -69,12 +69,24 @@ class ScriptModelConfig(ModelConfig):
                 config, "process_chunk"
             ), "Model not found in config and no custom `process_chunk` function found to use."
 
-        config.read_shape = config.input_array_info.get("shape")
         config.input_voxel_size = config.input_array_info.get("scale")
+        config.read_shape = config.input_array_info.get("shape")
 
-        config.write_shape = config.target_array_info.get("shape")
         config.output_voxel_size = config.target_array_info.get("scale")
-        config.output_channels = config.target_array_info.get("channels")
+        if not (
+            hasattr(config.target_array_info, "shape")
+            and hasattr(config.target_array_info, "channels")
+        ):
+            # Find the output shape from the model if necessary
+            input = torch.ones((1, 1, *config.read_shape))
+            output = config.model(input)
+            if isinstance(output, tuple):
+                output = output[0]
+            config.write_shape = output.shape[2:]
+            config.output_channels = output.shape[1]
+        else:
+            config.write_shape = config.target_array_info.get("shape")
+            config.output_channels = config.target_array_info.get("channels")
 
         if not hasattr(config, "block_shape"):
             config.block_shape = (*config.write_shape, config.output_channels)
