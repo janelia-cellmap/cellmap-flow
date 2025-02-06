@@ -4,7 +4,6 @@ from flask_cors import CORS
 from cellmap_flow.utils.web_utils import get_free_port
 from cellmap_flow.norm.input_normalize import (
     get_normalizers,
-    InputNormalizer,
     get_normalizations,
 )
 import os
@@ -13,6 +12,8 @@ from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from datetime import datetime
 import cellmap_flow.globals as g
 import neuroglancer
+# import requests
+from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, INPUT_NORM_KEY
 
 app = Flask(__name__)
 CORS(app)
@@ -20,7 +21,6 @@ NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
 
 CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
-
 
 @app.route("/")
 def index():
@@ -45,10 +45,19 @@ def process():
     print(f"Data received: {type(data)} - {data.keys()} -{data}", flush=True)
     g.input_norms = get_normalizations(data)
 
+
+
     with g.viewer.txn() as s:
         # g.raw.invalidate()
         g.raw = get_raw_layer(g.dataset_path)
         s.layers["raw"] = g.raw
+        for model,host in g.models_host.items():
+            # response = requests.post(f"{host}/input_normalize", json=data)
+            # print(f"Response from {host}: {response.json()}")
+            st_data = encode_to_str(data)
+            s.layers[model] = neuroglancer.ImageLayer(
+                source=f"n5://{host}/{model}{INPUT_NORM_KEY}{st_data}{INPUT_NORM_KEY}",
+            )
 
     print(f"Input normalizers: {g.input_norms}", flush=True)
 

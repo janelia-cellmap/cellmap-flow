@@ -219,6 +219,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
+        for norm in g.input_norms:
+            print(f"Applying norm: {norm}")
+            data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
         for s, valid_slice in zip(roi_slices, valid_slices)

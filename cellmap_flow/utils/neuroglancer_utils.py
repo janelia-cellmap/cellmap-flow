@@ -42,6 +42,7 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
         ]
         color_cycle = itertools.cycle(colors)
         for host, model in inference_dict.items():
+            g.models_host[model] = host
             color = next(color_cycle)
             s.layers[model] = neuroglancer.ImageLayer(
                 source=f"n5://{host}/{model}",
