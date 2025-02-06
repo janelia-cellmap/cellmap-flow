@@ -43,16 +43,19 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
         )
+        shape = self.idi_raw.shape
+        if self.input_voxel_size != self.output_voxel_size:
+            shape = shape * self.input_voxel_size / self.output_voxel_size
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
             self.vol_shape = np.array(
-                [*np.array(self.idi_raw.shape)[::-1], self.output_channels]
+                [*np.array(shape)[::-1], self.output_channels]
             )
             self.axis = ["x", "y", "z", "c^"]
         else:
             # For non-Zarr data
             self.vol_shape = np.array(
-                [*np.array(self.idi_raw.shape), self.output_channels]
+                [*np.array(shape), self.output_channels]
             )
             self.axis = ["z", "y", "x", "c^"]
 

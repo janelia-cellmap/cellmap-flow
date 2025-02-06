@@ -8,11 +8,13 @@ from funlib.geometry import Coordinate
 from onnx2torch import convert
 import torch
 
-output_voxel_size = Coordinate((8, 8, 8))
-# voxel_size = Coordinate((8, 8, 8))
-input_voxel_size = Coordinate((16, 16, 16))
+# output_voxel_size = Coordinate((8, 8, 8))
+# # voxel_size = Coordinate((8, 8, 8))
+# input_voxel_size = Coordinate((16, 16, 16))
 
-
+# for hideo data
+output_voxel_size = Coordinate((6, 6, 6))
+input_voxel_size = Coordinate((12, 12, 12))
 
 read_shape = Coordinate((216, 216, 216)) * input_voxel_size
 write_shape = Coordinate((68, 68, 68)) * output_voxel_size
