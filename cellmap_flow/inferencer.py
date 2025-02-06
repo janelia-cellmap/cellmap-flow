@@ -136,11 +136,6 @@ class Inferencer:
         from bioimageio.core import predict  # , predict_many
         from bioimageio.core import Tensor
         from bioimageio.core import Sample
-        from bioimageio.core.digest_spec import get_member_ids
-
-        test_input_tensor = Tensor.from_numpy(
-            input_image, dims=["batch", "c", "z", "y", "x"]
-        )
 
         # assume that our input data is always 3d, zyx and only has one channel
         slicer = []
@@ -192,83 +187,3 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
-
-
-# from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
-# from bioimageio.core import load_description
-# from bioimageio.spec.utils import download
-# from bioimageio.core.digest_spec import create_sample_for_model
-
-# model = load_description("kind-seashell")  # affable-shark")
-
-# # model_config = BioModelConfig(model_name="happy-elephant")
-# # model_config.config
-# print(model.inputs[0].axes)
-# print(model.outputs[0])
-# print(model.inputs[0].preprocessing)
-
-
-# def get_axes_names_from_model(model):
-#     def get_axes_names(axes):
-#         if type(axes) is str:
-#             # assume "b" should be batch
-#             return [axis if axis != "b" else "batch" for axis in list(axes)]
-#         else:
-#             return [axis.id for axis in axes]
-
-#     input_axes = get_axes_names(model.inputs[0].axes)
-#     output_axes = get_axes_names(model.outputs[0].axes)
-#     return input_axes, output_axes
-
-
-# input_axes, output_axes = get_axes_names_from_model(model)
-
-
-# # %%
-
-# print(input_axes)
-
-# slicer = []
-# for input_axis in input_axes:
-#     if input_axis == "c":
-#         slicer.append(np.newaxis)
-#     elif input_axis == "batch":
-#         if "z" not in input_axes:
-#             slicer.append(slice(None))
-#         else:
-#             slicer.append(np.newaxis)
-#     else:
-#         slicer.append(slice(None))
-
-# slicer = tuple(
-#     [
-#         np.newaxis if a == "c" or a == "batch" and "z" in input_axes else slice(None)
-#         for a in input_axes
-#     ]
-# )
-# # slicer = tuple(slicer)
-# print(slicer)
-# # create random 3d array
-# a = np.random.rand(10, 10, 10).astype(np.float32)
-# print(a[slicer])
-# # %%
-# print(slicer)
-# # %%
-# from importlib import reload
-# import cellmap_flow.utils.data
-
-# reload(cellmap_flow.utils.data)
-# from cellmap_flow.utils.data import BioModelConfig
-# from bioimageio.core import load_description
-# from bioimageio.core.digest_spec import create_sample_for_model
-
-# model = load_description("happy-elephant")
-# BioModelConfig.get_axes_names_from_model(model)
-
-# print(model.inputs[0].shape)
-# print(model.outputs[0].shape)
-# create_sample_for_model(model)
-# # bmc = BioModelConfig(model_name="happy-elephant", voxel_size=Coordinate(5, 5, 5))
-# # bmc.config
-# # %%
-# # %%
