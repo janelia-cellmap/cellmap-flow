@@ -1,98 +1,187 @@
+
 <h3>Normalization Methods</h3>
 <form id="inputForm">
-
-  <!-- Simple (x/255) -->
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value=""
-      id="methodSimple"
-    />
-    <label class="form-check-label" for="methodSimple">
-      Simple Normalization
-    </label>
-  </div>
-  <!-- No parameters, but you could add some if needed -->
-  <div id="simpleParams" style="display: none; margin-left: 20px;">
-      <label for="simpleValue" class="form-label">
-        normalization formula input is x. e.g. x/255.0
+  {% for normalizer in input_normalizers %}
+    <!-- We use normalizer.name as a unique prefix to avoid collisions -->
+    <div class="form-check mb-2">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        id="method_{{ normalizer.name }}"
+        name="method_{{ normalizer.name }}"
+        value="{{ normalizer.name }}"
+      />
+      <label class="form-check-label" for="method_{{ normalizer.name }}">
+        {{ normalizer.name }}
       </label>
-      <input
-        type="text"
-        class="form-control"
-        id="simpleValue"
-        value="x/255.0"
-
-      />
-
     </div>
 
-  <hr/>
+    <!-- Parameter area, hidden initially; show if the method checkbox is checked -->
+    <div id="{{ normalizer.name }}Params" class="ps-4" style="display: none;">
+      {% for param_name, default_val in normalizer.params.items() %}
+        <div class="mb-3">
+          <label for="{{ normalizer.name }}_{{ param_name }}" class="form-label">
+            {{ param_name }}
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="{{ normalizer.name }}_{{ param_name }}"
+            name="{{ normalizer.name }}_{{ param_name }}"
+            value="{{ default_val }}"
+          />
+        </div>
+      {% endfor %}
+    </div>
+    <hr />
+  {% endfor %}
 
-  <!-- Contrast -->
   <div class="form-check mb-2">
     <input
       class="form-check-input"
       type="checkbox"
-      value=""
-      id="methodContrast"
+      value="custom_code"
+      id="customCodeCheckbox"
     />
-    <label class="form-check-label" for="methodContrast">
-      Contrast
+    <label class="form-check-label" for="customCodeCheckbox">
+      Custom Code
     </label>
   </div>
-  <div id="contrastParams" class="ps-4" style="display: none;">
-    <div class="mb-3">
-      <label for="contrastValue" class="form-label">Contrast Value</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="contrastValue"
-        value="1.0"
-      />
-    </div>
-  </div>
 
-  <hr/>
-
-  <!-- Standardization -->
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value=""
-      id="methodStandardization"
-    />
-    <label class="form-check-label" for="methodStandardization">
-      Standardization
-    </label>
+  <!-- Custom Code Editor (hidden by default) -->
+  <div id="customCodeParams" style="display: none; margin-left: 20px;">
+    <h3>Python Code Editor</h3>
+    <textarea
+      id="pythonEditor"
+      class="form-control"
+      rows="5"
+      placeholder="Enter Python code here..."
+    ></textarea>
+    <div id="errorMsg" class="text-danger mt-2"></div>
   </div>
-  <div id="standardizationParams" class="ps-4" style="display: none;">
-    <div class="mb-3">
-      <label for="mean" class="form-label">Mean</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="mean"
-        value="0.0"
-      />
-    </div>
-    <div class="mb-3">
-      <label for="std" class="form-label">Std</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="std"
-        value="1.0"
-      />
-    </div>
-  </div>
-
+  
   <button type="button" class="btn btn-primary mt-3" id="submitInput">
     Submit Input
   </button>
+  <div class="mt-3">
+    <!-- <h5>Submission Log</h5> -->
+    <textarea id="submissionLog" class="form-control" rows="5" readonly style="color: gray; font-size: x-small; background-color: transparent; border: 1px solid gray;"></textarea>
+  </div>
+  
 </form>
+
+<!-- Example JavaScript to toggle parameter fields when checkboxes are checked -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+        // 1) Show/hide normalizer parameter fields when checkboxes are toggled
+        const normalizerCheckboxes = document.querySelectorAll(
+          ".form-check-input[type='checkbox']"
+        );
+        normalizerCheckboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", function () {
+            const paramDiv = document.getElementById(this.value + "Params");
+            if (paramDiv) {
+              paramDiv.style.display = this.checked ? "block" : "none";
+            }
+          });
+        });
+
+        // 2) Handle the custom code checkbox
+        const customCodeCheckbox = document.getElementById("customCodeCheckbox");
+        const customCodeParams = document.getElementById("customCodeParams");
+        customCodeCheckbox.addEventListener("change", function () {
+          customCodeParams.style.display = this.checked ? "block" : "none";
+        });
+
+        // 3) Optional: Live syntax checking with Skulpt
+        const editor = document.getElementById("pythonEditor");
+        const errorMsg = document.getElementById("errorMsg");
+        const logArea = document.getElementById("submissionLog");
+
+        function appendLog(message) {
+          logArea.value += message + "\n";
+          logArea.scrollTop = logArea.scrollHeight; // Auto-scroll to the latest log
+        }
+        
+
+        function checkSyntax() {
+          if (typeof Sk === "undefined") {
+            // If Skulpt isn't loaded, skip
+            return;
+          }
+          const code = editor.value;
+          try {
+            // parse for syntax errors only, don't execute
+            Sk.parse("user_code.py", code);
+            errorMsg.textContent = "";
+          } catch (err) {
+            errorMsg.textContent = err.toString();
+          }
+        }
+
+        function debounce(func, delay) {
+          let timeout;
+          return function () {
+            clearTimeout(timeout);
+            timeout = setTimeout(func, delay);
+          };
+        }
+
+        // Listen for changes in editor
+        editor.addEventListener("input", debounce(checkSyntax, 500));
+
+        // 4) Submit form data to the server
+        const submitBtn = document.getElementById("submitInput");
+        submitBtn.addEventListener("click", function () {
+          const payload = {};
+
+          // Gather each normalizer's checked status and parameters
+          normalizerCheckboxes.forEach((cb) => {
+            if (cb.checked && cb !== customCodeCheckbox) {
+              // Example "min_max" => create an object in the payload
+              const baseName = cb.value;
+              payload[baseName] = {};
+
+              const paramDiv = document.getElementById(baseName + "Params");
+              const inputs = paramDiv.querySelectorAll("input");
+              inputs.forEach((inp) => {
+                // paramName is the portion after baseName_
+                const paramName = inp.id.replace(baseName + "_", "");
+                payload[baseName][paramName] = inp.value;
+              });
+            }
+          });
+
+          // If "Custom Code" is checked, store the code in the payload
+          if (customCodeCheckbox.checked) {
+            payload.custom_code = editor.value;
+          }
+
+          console.log("Form payload:", payload);
+
+          appendLog("Submitting data...");
+
+          // Post to /api/process
+          fetch("/api/process", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              console.log("Response from server:", data);
+              appendLog("Response from server:");
+              appendLog(JSON.stringify(data, null, 0));
+              appendLog("--------------------------");
+              // window.location.reload();
+              // alert("Data submitted successfully!");
+            })
+            .catch((err) => {
+              console.error("Error:", err);
+              alert("Error submitting data");
+            });
+        });
+      });
+</script>

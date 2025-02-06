@@ -47,7 +47,7 @@ def is_bsub_available():
 
 def submit_bsub_job(
     command,
-    queue="gpu_a100",
+    queue="gpu_h100",
     charge_group="cellmap",
     job_name="my_job",
 ):
@@ -142,7 +142,6 @@ def get_host_from_stdout(output):
 
 def run_locally(sc):
     command = sc.split(" ")
-
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )

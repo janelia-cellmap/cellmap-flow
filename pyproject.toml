@@ -12,7 +12,7 @@ authors = [
 
 dependencies = [
     "numpy",
-    # "PyYAML",
+    "PyYAML",
     "gunicorn",
     "flask",
     "flask-cors",
