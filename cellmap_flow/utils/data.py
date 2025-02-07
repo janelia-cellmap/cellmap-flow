@@ -99,11 +99,20 @@ class DaCapoModelConfig(ModelConfig):
 
 
 class BioModelConfig(ModelConfig):
-    def __init__(self, model_name: str, voxel_size, name=None):
+    def __init__(
+        self,
+        model_name: str,
+        voxel_size,
+        edge_length_to_process=None,
+        name=None,
+    ):
         super().__init__()
         self.model_name = model_name
         self.voxel_size = voxel_size
         self.name = name
+        self.voxels_to_process = None
+        if edge_length_to_process:
+            self.voxels_to_process = edge_length_to_process**3
 
     @property
     def command(self):
@@ -122,6 +131,7 @@ class BioModelConfig(ModelConfig):
             config.input_axes,
             config.input_spatial_dims,
             config.input_slicer,
+            is_2d_with_batch,
         ) = self.load_input_information(config.model)
 
         (
@@ -131,6 +141,18 @@ class BioModelConfig(ModelConfig):
             config.output_spatial_dims,
             config.output_channels,
         ) = self.load_output_information(config.model)
+
+        if self.voxels_to_process and not is_2d_with_batch:
+            raise Warning("edge_length_to_process is only supported for 2D models")
+
+        if self.voxels_to_process and is_2d_with_batch:
+            batch_size = max(
+                1,
+                self.voxels_to_process // np.prod(config.input_spatial_dims),
+            )
+            config.input_spatial_dims[config.input_axes.index("z")] = batch_size
+            config.output_spatial_dims[0] = batch_size  # output dims is always zyx
+            config.block_shape[0] = batch_size  # block shape is always zyxc
 
         config.input_voxel_size = Coordinate(self.voxel_size)
         config.output_voxel_size = Coordinate(self.voxel_size)
@@ -152,17 +174,26 @@ class BioModelConfig(ModelConfig):
         if len(input_sample.members) > 1:
             raise ValueError("Only one input tensor is supported")
 
-        input_name, input_axes, input_dims = self.get_axes_and_dims(input_sample)
+        input_name, input_axes, input_dims, is_2d_with_batch = self.get_axes_and_dims(
+            input_sample
+        )
         input_spatial_dims = self.get_spatial_dims(input_axes, input_dims)
+
         input_slicer = self.get_input_slicer(input_axes)
-        return input_name, input_axes, input_spatial_dims, input_slicer
+        return (
+            input_name,
+            input_axes,
+            input_spatial_dims,
+            input_slicer,
+            is_2d_with_batch,
+        )
 
     def load_output_information(self, model):
         from bioimageio.core.digest_spec import get_test_outputs
 
         output_sample = get_test_outputs(model)
 
-        output_names, output_axes, _ = self.get_axes_and_dims(output_sample)
+        output_names, output_axes, _, _ = self.get_axes_and_dims(output_sample)
         finalized_output, finalized_output_axes = format_output_bioimage(
             None, output_sample, output_names, copy.deepcopy(output_axes)
         )
@@ -188,23 +219,25 @@ class BioModelConfig(ModelConfig):
         sample_axis_to_dims_dicts = list(sample.shape.values())
         sample_axes = []
         sample_dims = []
+        is_2d_with_batch = False
         for sample_axis_to_dim_dict in sample_axis_to_dims_dicts:
             # simplify batches--> 'b' and channels--> 'c'. if 'z' isn't present use it instead of batch
-            current_sample_axis_to_dim_dict = sample_axis_to_dim_dict.keys()
+            current_sample_axes = sample_axis_to_dim_dict.keys()
+            if [
+                "b" in current_sample_axes or "batch" in current_sample_axes
+            ] and "z" not in current_sample_axes:
+                is_2d_with_batch = True
+
             sample_axes.append(
                 [
-                    (
-                        "z"
-                        if (a[0] == "b" and "z" not in current_sample_axis_to_dim_dict)
-                        else a[0]
-                    )
-                    for a in current_sample_axis_to_dim_dict
+                    ("z" if (a[0] == "b" and "z" not in current_sample_axes) else a[0])
+                    for a in current_sample_axes
                 ]
             )
             sample_dims.append(list(sample_axis_to_dim_dict.values()))
         if len(sample_names) == 1:
-            return sample_names[0], sample_axes[0], sample_dims[0]
-        return sample_names, sample_axes, sample_dims
+            return sample_names[0], sample_axes[0], sample_dims[0], is_2d_with_batch
+        return sample_names, sample_axes, sample_dims, is_2d_with_batch
 
     def get_spatial_dims(self, axes, dims):
         spatial_axes = []
@@ -290,8 +323,6 @@ def concat_along_c(arrs, axes_list, channel_axis_name="c"):
     out_axes : list of str
         The list of axis names for the output array.
     """
-    for i, arr in enumerate(arrs):
-        print(i, arr.shape)
     # 1. Find the channel axis index if it exists in any of the arrays
     c_index = None
     for i, axes in enumerate(axes_list):
@@ -388,7 +419,6 @@ def process_chunk_bioimage(self, idi: ImageDataInterface, input_roi: Roi):
 
     input_image = idi.to_ndarray_ts(input_roi.grow(self.context, self.context))
     input_image = input_image[self.input_slicer].astype(np.float32)
-
     input_sample = Sample(
         members={self.input_name: Tensor.from_numpy(input_image, dims=self.input_axes)},
         stat={},
@@ -420,28 +450,3 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
     )
     output = np.ascontiguousarray(output).clip(0, 1) * 255.0
     return output.astype(np.uint8), reordered_axes
-
-
-# from funlib.geometry import Coordinate, Roi
-
-# for n in [
-#     # "impartial-shrimp",
-#     # "affable-shark",
-#     # "happy-elephant",
-#     "kind-seashell",
-# ]:  # "impartial-shrimp", "affable-shark",
-#     print("starting", n)
-#     b = BioModelConfig(n, Coordinate(16, 16, 16))
-#     b = b.config
-#     o = b.process_chunk(
-#         ImageDataInterface(
-#             "/nrs/cellmap/data/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8/s1"
-#         ),
-#         input_roi=Roi((16000, 16000, 16000), b.read_shape),
-#     )
-#     print(b, b.output_voxel_size, b.read_shape, b.write_shape, b.block_shape, o.shape)
-#     print("stopped", n)
-# # %%
-
-
-# %%
