@@ -96,10 +96,12 @@ class Inferencer:
         self.model_config.config.model.eval()
 
     def process_chunk(self, idi, roi):
-        if isinstance(self.model_config, BioModelConfig):
-            return self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
-            self.model_config, ScriptModelConfig
+        # if isinstance(self.model_config, BioModelConfig):
+        #     return self.process_chunk_bioimagezoo(idi, roi)
+        if (
+            isinstance(self.model_config, DaCapoModelConfig)
+            or isinstance(self.model_config, ScriptModelConfig)
+            or isinstance(self.model_config, BioModelConfig)
         ):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
@@ -130,60 +132,3 @@ class Inferencer:
                 f"Model output is not of type uint8, converting to uint8. Output type: {write_data.dtype}"
             )
         return write_data.astype(np.uint8)
-
-    # create random input tensor
-    def process_chunk_bioimagezoo(self, idi, roi):
-        from bioimageio.core import predict  # , predict_many
-        from bioimageio.core import Tensor
-        from bioimageio.core import Sample
-
-        # assume that our input data is always 3d, zyx and only has one channel
-        slicer = []
-        input_axes = self.model_config.config.input_axes
-        slicer = tuple(
-            [
-                (
-                    np.newaxis
-                    if a == "c" or a == "batch" and "z" in input_axes
-                    else slice(None)
-                )
-                for a in input_axes
-            ]
-        )
-
-        input_image = idi.to_ndarray_ts(roi)
-        input_image = input_image[slicer].astype(np.float32)
-        test_input_tensor = Tensor.from_numpy(input_image, dims=input_axes)
-
-        sample_input_id = get_member_ids(self.model_config.config.model.inputs)[0]
-        sample_output_id = get_member_ids(self.model_config.config.model.outputs)[0]
-
-        sample = Sample(
-            members={sample_input_id: test_input_tensor},
-            stat={},
-            id="sample-from-numpy",
-        )
-        prediction: Sample = predict(
-            model=self.model_config.config.model,
-            inputs=sample,
-            skip_preprocessing=sample.stat is not None,
-        )
-        ndim = prediction.members[sample_output_id].data.ndim
-        output = prediction.members[sample_output_id].data.to_numpy()
-        if ndim < 5 and len(self.model_config.config.model.outputs) > 1:
-            if len(self.model.outputs) > 1:
-                outputs = []
-                for id in get_member_ids(self.model_config.config.model.outputs):
-                    output = prediction.members[id].data.to_numpy()
-                    if output.ndim == 3:
-                        output = output[:, np.newaxis, ...]
-                    outputs.append(output)
-                output = np.concatenate(outputs, axis=1)
-            output = np.ascontiguousarray(np.swapaxes(output, 1, 0))
-
-        else:
-            output = output[0, ...]
-
-        output = 255 * output
-        output = output.astype(np.uint8)
-        return output
