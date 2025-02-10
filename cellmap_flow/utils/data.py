@@ -1,6 +1,7 @@
 IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 # %%
 import logging
+import warnings
 import numpy as np
 
 from cellmap_flow.image_data_interface import ImageDataInterface
@@ -143,7 +144,7 @@ class BioModelConfig(ModelConfig):
         ) = self.load_output_information(config.model)
 
         if self.voxels_to_process and not is_2d_with_batch:
-            raise Warning("edge_length_to_process is only supported for 2D models")
+            warnings.warn("edge_length_to_process is only supported for 2D models")
 
         if self.voxels_to_process and is_2d_with_batch:
             batch_size = max(
@@ -433,6 +434,26 @@ def process_chunk_bioimage(self, idi: ImageDataInterface, input_roi: Roi):
     return output
 
 
+def process_chunk_bioimage_test(self, idi: ImageDataInterface, input_roi: Roi):
+    from bioimageio.core import predict, create_prediction_pipeline, Sample, Tensor
+    from bioimageio.core.digest_spec import get_io_sample_block_metas
+
+    input_image = idi.to_ndarray_ts(input_roi.grow(self.context, self.context))
+    input_image = input_image[self.input_slicer].astype(np.float32)
+    input_axes = ["batch", "channel", "z", "y", "x"]
+    input_sample = Sample(
+        members={self.input_name: Tensor.from_numpy(input_image, dims=input_axes)},
+        stat={},
+        id="sample",
+    )
+    pp = create_prediction_pipeline(self.model)
+    print(pp._default_input_halo)
+    output = pp.predict_sample_without_blocking(input_sample)
+    print(output.shape)
+    output, _ = self.format_output_bioimage(output)
+    return output
+
+
 def format_output_bioimage(self, output_sample, output_names=None, output_axes=None):
     if output_names is None:
         output_names = self.output_names
@@ -450,3 +471,35 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
     )
     output = np.ascontiguousarray(output).clip(0, 1) * 255.0
     return output.astype(np.uint8), reordered_axes
+
+
+# from funlib.geometry import Coordinate, Roi
+# from bioimageio.core import predict, create_prediction_pipeline, Sample, Tensor
+
+# for n in [
+#     "impartial-shrimp",
+#     "affable-shark",
+#     "happy-elephant",
+#     "kind-seashell",
+# ]:  # "impartial-shrimp", "affable-shark",
+#     print("starting", n)
+#     b = BioModelConfig(n, Coordinate(16, 16, 16))
+#     b = b.config
+#     from bioimageio.core.digest_spec import get_test_inputs, get_test_outputs
+
+#     pp = create_prediction_pipeline(b.model)
+
+#     print(b.model.outputs[0].axes)
+
+#     o = b.process_chunk(
+#         ImageDataInterface(
+#             "/nrs/cellmap/data/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8/s1"
+#         ),
+#         input_roi=Roi((16000, 16000, 16000), b.read_shape),
+#     )
+#     print(b, b.output_voxel_size, b.read_shape, b.write_shape, b.block_shape, o.shape)
+#     # print("stopped", n)
+
+# # %%
+# b.model.inputs
+# # %%
