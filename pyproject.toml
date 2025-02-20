@@ -11,6 +11,7 @@ authors = [
 ]
 
 dependencies = [
+    "cellpose==2.0",
     "numpy",
     # "PyYAML",
     "gunicorn",
