@@ -15,7 +15,7 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
 from cellmap_flow.utils.web_utils import get_public_ip
-from cellmap_flow.norm.input_normalize import get_normalizations
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer, get_norm_dataset
 import cellmap_flow.globals as g
 from cellmap_flow.norm.input_normalize import get_norm_dataset
 
@@ -53,10 +53,6 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
         )
-        if ".zarr" in dataset_name:
-            # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.vol_shape = np.array(
-                [*np.array(shape)[::-1], self.output_channels]
         output_shape = (
             np.array(self.idi_raw.shape)
             * np.array(self.input_voxel_size)
@@ -75,7 +71,6 @@ class CellMapFlowServer:
         else:
             # For non-Zarr data
             self.vol_shape = np.array([*output_shape, self.output_channels])
-
             self.axis = ["z", "y", "x", "c^"]
 
         # Chunk encoding for N5
@@ -126,7 +121,6 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
-            
             g.input_norms = get_norm_dataset(dataset)
             return self._top_level_attributes_impl(dataset)
 
@@ -152,7 +146,7 @@ class CellMapFlowServer:
             """
             g.input_norms = get_norm_dataset(dataset)
             return self._attributes_impl(dataset, scale)
-    
+
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
             methods=["GET"],
@@ -173,7 +167,7 @@ class CellMapFlowServer:
                 schema:
                   type: integer
               - in: path
-                name: chunk_xfm
+                name: chunk_x
                 schema:
                   type: integer
               - in: path
@@ -312,5 +306,3 @@ if __name__ == "__main__":
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
     server.run(debug=True, port=8000)
-
-#
