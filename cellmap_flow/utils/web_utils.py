@@ -33,4 +33,7 @@ def decode_to_json(encoded_str):
     return json.loads(json_str)  # Convert back to JSON
 
 
-INPUT_NORM_KEY= "__input_norm__"
+ARGS_KEY= "__CFLOW_ARGS__"
+
+INPUT_NORM_DICT_KEY = "input_norm"
+POSTPROCESS_DICT_KEY = "postprocess"

@@ -7,6 +7,7 @@ raw = None
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 
 input_norms = [MinMaxNormalizer()]
+postprocess = []
 # input_norms = []
 
 viewer = None

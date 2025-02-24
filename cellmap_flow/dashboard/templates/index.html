@@ -47,5 +47,64 @@
 <script src="{{ url_for('static', filename='js/dashboard_script.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
+<!-- shared_submit.js or inside a <script> tag in your base layout -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Find all elements with id="submitAll" (there could be 2 if both partials exist)
+      const submitAllButtons = document.querySelectorAll("#submitAll");
+    
+      // A single function that merges data & sends the fetch
+      function handleSubmitAll() {
+        // 1) Gather data from input_norm partial
+        const inputNorm = (window.gatherInputNormData)
+          ? window.gatherInputNormData()
+          : {};
+    
+        // 2) Gather data from postprocess partial
+        const postprocess = (window.gatherPostProcessData)
+          ? window.gatherPostProcessData()
+          : {};
+    
+        // 3) Build final combined payload
+        const finalPayload = {
+          input_norm: inputNorm,
+          postprocess: postprocess,
+        };
+    
+        console.log("Combined Payload:", finalPayload);
+    
+        // 4) Submit via fetch
+        fetch("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(finalPayload),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            console.log("Server response:", data);
+            // Optionally, update logs on each partial if desired:
+            const logAreaNorm = document.getElementById("submissionLog_inputNorm");
+            if (logAreaNorm) {
+              logAreaNorm.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+            }
+    
+            const logAreaPost = document.getElementById("submissionLog_postProcess");
+            if (logAreaPost) {
+              logAreaPost.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+            }
+          })
+          .catch((err) => {
+            console.error("Error:", err);
+            alert("Error submitting combined data");
+          });
+      }
+    
+      // Attach the same handler to each #submitAll
+      submitAllButtons.forEach((btn) => {
+        btn.addEventListener("click", handleSubmitAll);
+      });
+    });
+    </script>
+    
 </body>
 </html>

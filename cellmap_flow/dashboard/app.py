@@ -1,19 +1,20 @@
+import os
 import socket
+import neuroglancer
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+
 from cellmap_flow.utils.web_utils import get_free_port
 from cellmap_flow.norm.input_normalize import (
-    get_normalizers,
+    get_input_normalizers,
     get_normalizations,
 )
-import os
+from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from datetime import datetime
+from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, ARGS_KEY, INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
 import cellmap_flow.globals as g
-import neuroglancer
-# import requests
-from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, INPUT_NORM_KEY
 
 app = Flask(__name__)
 CORS(app)
@@ -25,13 +26,15 @@ CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/exampl
 @app.route("/")
 def index():
     # Render the main page with tabs
-    input_norms = get_normalizers()
+    input_norms = get_input_normalizers()
+    output_postprocessors = get_postprocessors_list()
 
     return render_template(
         "index.html",
         neuroglancer_url=NEUROGLANCER_URL,
         inference_servers=INFERENCE_SERVER,
         input_normalizers=input_norms,
+        output_postprocessors = output_postprocessors,
     )
 
 
@@ -43,7 +46,8 @@ def process():
     if "custom_code" in data:
         del data["custom_code"]
     print(f"Data received: {type(data)} - {data.keys()} -{data}", flush=True)
-    g.input_norms = get_normalizations(data)
+    g.input_norms = get_normalizations(data["input_norm"])
+    g.postprocess = get_postprocessors(data["postprocess"])
 
 
 
@@ -56,7 +60,7 @@ def process():
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)
             s.layers[model] = neuroglancer.ImageLayer(
-                source=f"n5://{host}/{model}{INPUT_NORM_KEY}{st_data}{INPUT_NORM_KEY}",
+                source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
             )
 
     print(f"Input normalizers: {g.input_norms}", flush=True)
@@ -75,7 +79,7 @@ def process():
             config = load_safe_config(filepath)
             print(f"Custom code loaded successfully: {config}")
 
-            print(get_normalizers())
+            print(get_input_normalizers())
 
         except Exception as e:
             print(f"Error executing custom code: {e}")
@@ -84,7 +88,7 @@ def process():
         {
             "message": "Data received successfully",
             "received_data": data,
-            "found_custom_normalizer": get_normalizers(),
+            "found_custom_normalizer": get_input_normalizers(),
         }
     )
 
