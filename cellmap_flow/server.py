@@ -15,7 +15,9 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
 from cellmap_flow.utils.web_utils import get_public_ip
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer, get_norm_dataset
+import cellmap_flow.globals as g
+from cellmap_flow.norm.input_normalize import get_norm_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,7 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
+            g.input_norms = get_norm_dataset(dataset)
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -141,53 +144,8 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
+            g.input_norms = get_norm_dataset(dataset)
             return self._attributes_impl(dataset, scale)
-
-        @self.app.route("/input_normalize", methods=["POST"])
-        def input_normalize():
-            """
-            Update input normalization parameters for inference.
-            ---
-            tags:
-              - Normalization
-            requestBody:
-              required: true
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      norm_type:
-                        type: string
-                        description: Normalization type
-                        example: "scale"
-                      min_value:
-                        type: number
-                        description: Minimum value
-                        example: 0.0
-                      max_value:
-                        type: number
-                        description: Maximum value
-                        example: 1.0
-            responses:
-              200:
-                description: Success
-              400:
-                description: Invalid request or missing parameters
-            """
-            data = request.get_json()
-
-            # Extract parameters from JSON body
-            norm_type = data.get("norm_type")
-            min_value = data.get("min_value")
-            max_value = data.get("max_value")
-
-            if not all([norm_type, min_value is not None, max_value is not None]):
-                return {"error": "Missing one or more required parameters"}, 400
-
-            return self._input_normalize_impl(
-                norm_type, float(min_value), float(max_value)
-            )
 
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
@@ -292,21 +250,6 @@ class CellMapFlowServer:
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
-
-    def _input_normalize_impl(self, norm_type, min_value, max_value):
-        print(f"Input normalization: {norm_type}, {min_value}, {max_value}", flush=True)
-        if norm_type == MinMaxNormalizer.name():
-            self.inferencer.model_config.input_normalizer = MinMaxNormalizer(
-                min_value, max_value
-            )
-            return jsonify(success=True), HTTPStatus.OK
-        else:
-            return (
-                jsonify(
-                    error=f"Invalid normalization type, only supports {MinMaxNormalizer.name()}"
-                ),
-                HTTPStatus.BAD_REQUEST,
-            )
 
     def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])

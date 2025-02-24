@@ -2,218 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CellMap Flo Dashboard</title>
+  <title>CellMap Flow Dashboard</title>
   <!-- Bootstrap 5 (optional, for styling) -->
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
     rel="stylesheet"
   />
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dark.css') }}" />
 </head>
 <body>
-
-<div class="container my-4">
-  <h1>Flask App with Tabs</h1>
-
-  <!-- Nav Tabs -->
-  <ul class="nav nav-tabs" id="myTab" role="tablist">
-    <!-- Input Tab -->
-    <li class="nav-item" role="presentation">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <img 
+      src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
+      alt="CellMap Flow"
+      width="200"
+    />
       <button
-        class="nav-link active"
-        id="input-tab"
-        data-bs-toggle="tab"
-        data-bs-target="#input"
+        class="btn btn-outline-light"
         type="button"
-        role="tab"
-        aria-controls="input"
-        aria-selected="true"
+        onclick="toggleDashboard()"
       >
-        Input
+        Toggle Dashboard
       </button>
-    </li>
-
-    <!-- Output Tab -->
-    <li class="nav-item" role="presentation">
-      <button
-        class="nav-link"
-        id="output-tab"
-        data-bs-toggle="tab"
-        data-bs-target="#output"
-        type="button"
-        role="tab"
-        aria-controls="output"
-        aria-selected="false"
-      >
-        Output
-      </button>
-    </li>
-
-    <!-- Postprocessing Tab -->
-    <li class="nav-item" role="presentation">
-      <button
-        class="nav-link"
-        id="postprocessing-tab"
-        data-bs-toggle="tab"
-        data-bs-target="#postprocessing"
-        type="button"
-        role="tab"
-        aria-controls="postprocessing"
-        aria-selected="false"
-      >
-        Postprocessing
-      </button>
-    </li>
-  </ul>
-
-  <!-- Tab Contents -->
-  <div class="tab-content" id="myTabContent">
-
-    <!-- Input Tab Content -->
-    <div
-      class="tab-pane fade show active p-3"
-      id="input"
-      role="tabpanel"
-      aria-labelledby="input-tab"
-    >
-    {% include "_input_tab.html" %}
     </div>
+  </nav>
 
-    <!-- Output Tab Content -->
-    <div
-      class="tab-pane fade p-3"
-      id="output"
-      role="tabpanel"
-      aria-labelledby="output-tab"
-    >
-    {% include "_output_tab.html" %}
+  <div class="row bg-dark text-light" style="height: 100vh;">
+    <div class="col-9" id="iframe-column">
+      <iframe src="{{ neuroglancer_url }}" style="width:100%;height:100vh;" title="Example IFrame" id="my_iframe">
+        Your browser does not support iframes.
+      </iframe>
     </div>
-
-    <!-- Postprocessing Tab Content -->
-    <div
-      class="tab-pane fade p-3"
-      id="postprocessing"
-      role="tabpanel"
-      aria-labelledby="postprocessing-tab"
-    >
-    {% include "_postprocess_tab.html" %}
+    <div class="col-3" id="dashboard-column">
+      {% include "_dashboard.html" %}
     </div>
-
+  
   </div>
-</div>
 
-<!-- Bootstrap 5 JS (Optional) -->
 <script
   src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
 ></script>
-
-<script>
-  // Wait until DOM is loaded
-  document.addEventListener('DOMContentLoaded', function() {
-    // Get references to checkboxes
-    const chkSimple = document.getElementById('methodSimple');
-    const chkContrast = document.getElementById('methodContrast');
-    const chkStandardization = document.getElementById('methodStandardization');
-
-    // Parameter sections
-    const simpleParams = document.getElementById('simpleParams');
-    const contrastParams = document.getElementById('contrastParams');
-    const standardizationParams = document.getElementById('standardizationParams');
-
-    // Show/hide parameter sections based on checkbox
-    function toggleVisibility(checkbox, paramsDiv) {
-      if (checkbox.checked) {
-        paramsDiv.style.display = 'block';
-      } else {
-        paramsDiv.style.display = 'none';
-      }
-    }
-
-    // Event listeners for each checkbox
-    chkSimple.addEventListener('change', () => toggleVisibility(chkSimple, simpleParams));
-    chkContrast.addEventListener('change', () => toggleVisibility(chkContrast, contrastParams));
-    chkStandardization.addEventListener('change', () => toggleVisibility(chkStandardization, standardizationParams));
-
-    // Initialize display state
-    toggleVisibility(chkSimple, simpleParams);
-    toggleVisibility(chkContrast, contrastParams);
-    toggleVisibility(chkStandardization, standardizationParams);
-
-    // Handle Input form submission
-    document.getElementById('submitInput').addEventListener('click', function() {
-      // We'll create an array of methods
-      let methods = [];
-
-      // 1. Simple Normalization
-      if (chkSimple.checked) {
-        methods.push({
-          name: 'simple' // x/255.0
-          // no extra parameters
-        });
-      }
-
-      // 2. Contrast
-      if (chkContrast.checked) {
-        let contrastValue = parseFloat(document.getElementById('contrastValue').value);
-        methods.push({
-          name: 'contrast',
-          contrastValue: contrastValue
-        });
-      }
-
-      // 3. Standardization
-      if (chkStandardization.checked) {
-        let meanVal = parseFloat(document.getElementById('mean').value);
-        let stdVal = parseFloat(document.getElementById('std').value);
-        methods.push({
-          name: 'standardization',
-          mean: meanVal,
-          std: stdVal
-        });
-      }
-
-      // Build JSON payload
-      let data = {
-        methods: methods
-      };
-
-      // POST to Flask endpoint
-      fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-        .then(response => response.json())
-        .then(responseData => {
-          console.log(responseData);
-          alert("Data submitted (Input): " + JSON.stringify(responseData));
-        })
-        .catch(error => {
-          console.error(error);
-        });
-    });
-
-    // Handle Output form submission
-    document.getElementById('submitOutput').addEventListener('click', function() {
-      const data = {
-        outputChannel: document.getElementById('outputChannel').value
-      };
-
-      fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-        .then(response => response.json())
-        .then(responseData => {
-          console.log(responseData);
-          alert("Data submitted (Output): " + JSON.stringify(responseData));
-        })
-        .catch(error => {
-          console.error(error);
-        });
-    });
-  });
-</script>
-
+<script src="{{ url_for('static', filename='js/dashboard_script.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
 </body>
 </html>

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 from typing import Union, Sequence
+import cellmap_flow.globals as g
 
 
 # Ensure tensorstore does not attempt to use GCE credentials
@@ -60,6 +61,31 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         dataset += f"/s{scale}"
 
     return filename + splitter, dataset
+
+
+def apply_norms(data):
+    if hasattr(data, "read"):
+        data = data.read().result()
+    for norm in g.input_norms:
+        data = norm(data)
+    return data
+
+
+class LazyNormalization:
+    def __init__(self, ts_dataset):
+        self.ts_dataset = ts_dataset
+
+    def __getitem__(self, index):
+        result = self.ts_dataset[index]
+        return apply_norms(result)
+
+    def __getattr__(self, attr):
+        at = getattr(self.ts_dataset, attr)
+        if attr == "dtype":
+            if len(g.input_norms) > 0:
+                return np.dtype(g.input_norms[-1].dtype)
+            return np.dtype(at.numpy_dtype)
+        return at
 
 
 def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
@@ -114,9 +140,12 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
 
     if dataset_path.startswith("gs://"):
         # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
-        return dataset_future.result()[ts.d["channel"][0]]
+        ts_dataset = dataset_future.result()[ts.d["channel"][0]]
     else:
-        return dataset_future.result()
+        ts_dataset = dataset_future.result()
+
+    # return ts_dataset
+    return LazyNormalization(ts_dataset)
 
 
 def to_ndarray_tensorstore(
@@ -190,6 +219,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
+        for norm in g.input_norms:
+            print(f"Applying norm: {norm}")
+            data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
         for s, valid_slice in zip(roi_slices, valid_slices)

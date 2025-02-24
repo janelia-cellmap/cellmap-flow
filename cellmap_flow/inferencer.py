@@ -32,7 +32,6 @@ def predict(read_roi, write_roi, config, **kwargs):
     use_half_prediction = kwargs.get("use_half_prediction", False)
 
     raw_input = idi.to_ndarray_ts(read_roi)
-    raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
@@ -59,10 +58,6 @@ class Inferencer:
             ) / 2
 
         self.optimize_model()
-
-        if not hasattr(self.model_config.config, "input_normalizer"):
-            logger.warning("No input normalization function provided, using default")
-            self.model_config.config.input_normalizer = MinMaxNormalizer()
 
         if not hasattr(self.model_config.config, "normalize_output"):
             logger.warning("No output normalization function provided, using default")
