@@ -1,23 +1,23 @@
 import numpy as np
 import torch
+from funlib.geometry import Coordinate
+import logging
 from cellmap_flow.utils.data import (
     ModelConfig,
     BioModelConfig,
     DaCapoModelConfig,
     ScriptModelConfig,
 )
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
-from funlib.geometry import Coordinate
-import logging
+import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
 
+def apply_postprocess(data):
+    for pross in g.postprocess:
+        data = pross(data)
+    return data
 
-def normalize_output(data):
-    # Default normalization if no one is provided
-    data = data.clip(-1, 1)
-    data = (data + 1) * 255.0 / 2.0
-    return data.astype(np.uint8)
+
 
 
 def predict(read_roi, write_roi, config, **kwargs):
@@ -58,10 +58,6 @@ class Inferencer:
             ) / 2
 
         self.optimize_model()
-
-        if not hasattr(self.model_config.config, "normalize_output"):
-            logger.warning("No output normalization function provided, using default")
-            self.model_config.config.normalize_output = normalize_output
         if not hasattr(self.model_config.config, "predict"):
             logger.warning("No predict function provided, using default")
             self.model_config.config.predict = predict
@@ -117,13 +113,8 @@ class Inferencer:
             device=self.device,
             use_half_prediction=self.use_half_prediction,
         )
-        write_data = self.model_config.config.normalize_output(result)
-
-        if write_data.dtype != np.uint8:
-            logger.error(
-                f"Model output is not of type uint8, converting to uint8. Output type: {write_data.dtype}"
-            )
-        return write_data.astype(np.uint8)
+        result = apply_postprocess(result)
+        return result
 
     # create random input tensor
     def process_chunk_bioimagezoo(self, idi, roi):

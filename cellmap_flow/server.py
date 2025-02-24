@@ -22,6 +22,12 @@ import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
 
+def get_output_dtype():
+    if len(g.postprocess) == 0:
+      dtype = np.float32
+    else:
+      dtype = g.postprocess[-1].dtype
+    return dtype
 
 def get_process_dataset(dataset:str):
     if ARGS_KEY not in dataset:
@@ -251,6 +257,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
+        dtype = get_output_dtype().__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -261,7 +268,7 @@ class CellMapFlowServer:
             },
             "compression": {"type": "gzip", "useZlib": False, "level": -1},
             "blockSize": list(self.n5_block_shape),
-            "dataType": "uint8",
+            "dataType": dtype,
             "dimensions": self.vol_shape.tolist(),
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
@@ -272,6 +279,8 @@ class CellMapFlowServer:
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+        chunk_data = chunk_data.astype(get_output_dtype())
+
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,

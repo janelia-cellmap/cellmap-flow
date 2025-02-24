@@ -42,6 +42,23 @@ class PostProcessor:
     def dtype(self):
         return np.uint8
 
+class DefaultPostprocessor(PostProcessor):
+    def __init__(self):
+        pass
+
+    def _process(self, data):
+        data = data.clip(-1, 1)
+        data = (data + 1) * 255.0 / 2.0
+        return data.astype(np.uint8) 
+    
+    def to_dict(self):
+        return {"name": self.name()}
+    
+    @property
+    def dtype(self):
+        return np.uint8
+
+
 
 class LambdaPostprocessor(PostProcessor):
     def __init__(self, expression: str):
