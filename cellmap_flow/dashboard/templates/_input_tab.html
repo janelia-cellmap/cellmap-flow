@@ -1,7 +1,8 @@
-<!-- input_norm.html -->
 <h3>Input Normalization Methods</h3>
 <form id="inputNormForm">
   {% for normalizer in input_normalizers %}
+    {% set is_checked = normalizer.name in default_input_norm and normalizer.name != 'custom_code' %}
+
     <div class="form-check mb-2">
       <input
         class="form-check-input inputNormCheckbox"
@@ -9,6 +10,7 @@
         id="inputNormMethod_{{ normalizer.name }}"
         name="inputNormMethod_{{ normalizer.name }}"
         value="{{ normalizer.name }}"
+        {% if is_checked %}checked{% endif %}
       />
       <label
         class="form-check-label"
@@ -21,9 +23,15 @@
     <div
       id="inputNorm_{{ normalizer.name }}Params"
       class="ps-4"
-      style="display: none;"
+      {% if is_checked %}style="display: block;"{% else %}style="display: none;"{% endif %}
     >
       {% for param_name, default_val in normalizer.params.items() %}
+        {% if is_checked and param_name in default_input_norm[normalizer.name] %}
+          {% set param_val = default_input_norm[normalizer.name][param_name] %}
+        {% else %}
+          {% set param_val = default_val %}
+        {% endif %}
+
         <div class="mb-3">
           <label
             for="inputNorm_{{ normalizer.name }}_{{ param_name }}"
@@ -36,7 +44,7 @@
             class="form-control"
             id="inputNorm_{{ normalizer.name }}_{{ param_name }}"
             name="inputNorm_{{ normalizer.name }}_{{ param_name }}"
-            value="{{ default_val }}"
+            value="{{ param_val }}"
           />
         </div>
       {% endfor %}
@@ -44,13 +52,15 @@
     <hr />
   {% endfor %}
 
-  <!-- Custom Code for Input Norm -->
+  <!-- Handle custom code checkbox and editor -->
+  {% set is_custom_code_checked = 'custom_code' in default_input_norm %}
   <div class="form-check mb-2">
     <input
       class="form-check-input"
       type="checkbox"
       value="custom_code"
       id="customCodeCheckbox_inputNorm"
+      {% if is_custom_code_checked %}checked{% endif %}
     />
     <label
       class="form-check-label"
@@ -62,7 +72,7 @@
 
   <div
     id="customCodeParams_inputNorm"
-    style="display: none; margin-left: 20px;"
+    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
   >
     <h3>Python Code Editor (Input Norm)</h3>
     <textarea
@@ -70,11 +80,11 @@
       class="form-control"
       rows="5"
       placeholder="Enter Python code here..."
-    ></textarea>
+    >{% if is_custom_code_checked %}{{ default_input_norm['custom_code'] }}{% endif %}</textarea>
     <div id="errorMsg_inputNorm" class="text-danger mt-2"></div>
   </div>
 
-  <!-- Same "Submit All" button ID as in postprocess partial -->
+  <!-- "Submit All" button -->
   <button type="button" class="btn btn-primary mt-3" id="submitAll">
     Submit All
   </button>
@@ -98,9 +108,7 @@ document.addEventListener("DOMContentLoaded", function () {
   );
   normalizerCheckboxes.forEach((checkbox) => {
     checkbox.addEventListener("change", function () {
-      const paramDiv = document.getElementById(
-        "inputNorm_" + this.value + "Params"
-      );
+      const paramDiv = document.getElementById("inputNorm_" + this.value + "Params");
       if (paramDiv) {
         paramDiv.style.display = this.checked ? "block" : "none";
       }
@@ -108,9 +116,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // Toggle custom code
-  const customCodeCheckbox = document.getElementById(
-    "customCodeCheckbox_inputNorm"
-  );
+  const customCodeCheckbox = document.getElementById("customCodeCheckbox_inputNorm");
   const customCodeParams = document.getElementById("customCodeParams_inputNorm");
   customCodeCheckbox.addEventListener("change", function () {
     customCodeParams.style.display = this.checked ? "block" : "none";
@@ -121,7 +127,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const errorMsg = document.getElementById("errorMsg_inputNorm");
   const logArea = document.getElementById("submissionLog_inputNorm");
 
-  // If you want to keep the real-time syntax checking:
   function checkSyntax() {
     if (typeof Sk === "undefined") {
       return; // If Skulpt isn't loaded, skip
@@ -151,19 +156,15 @@ document.addEventListener("DOMContentLoaded", function () {
         const baseName = cb.value;
         payload[baseName] = {};
 
-        const paramDiv = document.getElementById(
-          "inputNorm_" + baseName + "Params"
-        );
+        const paramDiv = document.getElementById("inputNorm_" + baseName + "Params");
         const inputs = paramDiv.querySelectorAll("input");
         inputs.forEach((inp) => {
-          const paramName = inp.id.replace(
-            "inputNorm_" + baseName + "_",
-            ""
-          );
+          const paramName = inp.id.replace("inputNorm_" + baseName + "_", "");
           payload[baseName][paramName] = inp.value;
         });
       }
     });
+
     // If custom code is checked
     if (customCodeCheckbox.checked) {
       payload.custom_code = editor.value;

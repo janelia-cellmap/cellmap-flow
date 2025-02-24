@@ -1,7 +1,9 @@
-<!-- output_postprocess.html -->
 <h3>Post-Processing</h3>
 <form id="postProcessForm">
   {% for normalizer in output_postprocessors %}
+    {# Check if this post-processor is in the default_post_process dict #}
+    {% set is_checked = normalizer.name in default_post_process and normalizer.name != 'custom_code' %}
+
     <div class="form-check mb-2">
       <input
         class="form-check-input postProcessCheckbox"
@@ -9,26 +11,29 @@
         id="postProcessMethod_{{ normalizer.name }}"
         name="postProcessMethod_{{ normalizer.name }}"
         value="{{ normalizer.name }}"
+        {% if is_checked %}checked{% endif %}
       />
-      <label
-        class="form-check-label"
-        for="postProcessMethod_{{ normalizer.name }}"
-      >
+      <label class="form-check-label" for="postProcessMethod_{{ normalizer.name }}">
         {{ normalizer.name }}
       </label>
     </div>
 
+    <!-- Show or hide the param div based on whether it's checked by default -->
     <div
       id="postProcess_{{ normalizer.name }}Params"
       class="ps-4"
-      style="display: none;"
+      {% if is_checked %} style="display: block;" {% else %} style="display: none;" {% endif %}
     >
       {% for param_name, default_val in normalizer.params.items() %}
+        {# If there's an override in the dict, use that; otherwise fallback #}
+        {% if is_checked and param_name in default_post_process[normalizer.name] %}
+          {% set param_val = default_post_process[normalizer.name][param_name] %}
+        {% else %}
+          {% set param_val = default_val %}
+        {% endif %}
+
         <div class="mb-3">
-          <label
-            for="postProcess_{{ normalizer.name }}_{{ param_name }}"
-            class="form-label"
-          >
+          <label for="postProcess_{{ normalizer.name }}_{{ param_name }}" class="form-label">
             {{ param_name }}
           </label>
           <input
@@ -36,7 +41,7 @@
             class="form-control"
             id="postProcess_{{ normalizer.name }}_{{ param_name }}"
             name="postProcess_{{ normalizer.name }}_{{ param_name }}"
-            value="{{ default_val }}"
+            value="{{ param_val }}"
           />
         </div>
       {% endfor %}
@@ -44,25 +49,24 @@
     <hr />
   {% endfor %}
 
-  <!-- Custom Code -->
+  <!-- Handle custom code checkbox and editor -->
+  {% set is_custom_code_checked = 'custom_code' in default_post_process %}
   <div class="form-check mb-2">
     <input
       class="form-check-input"
       type="checkbox"
       value="custom_code"
       id="customCodeCheckbox_postProcess"
+      {% if is_custom_code_checked %}checked{% endif %}
     />
-    <label
-      class="form-check-label"
-      for="customCodeCheckbox_postProcess"
-    >
+    <label class="form-check-label" for="customCodeCheckbox_postProcess">
       Custom Code (PostProcess)
     </label>
   </div>
 
   <div
     id="customCodeParams_postProcess"
-    style="display: none; margin-left: 20px;"
+    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
   >
     <h3>Python Code Editor (PostProcess)</h3>
     <textarea
@@ -70,11 +74,11 @@
       class="form-control"
       rows="5"
       placeholder="Enter Python code here..."
-    ></textarea>
+    >{% if is_custom_code_checked %}{{ default_post_process['custom_code'] }}{% endif %}</textarea>
     <div id="errorMsg_postProcess" class="text-danger mt-2"></div>
   </div>
 
-  <!-- Same "Submit All" button ID as in input_norm.html -->
+  <!-- "Submit All" button -->
   <button type="button" class="btn btn-primary mt-3" id="submitAll">
     Submit All
   </button>
@@ -98,9 +102,7 @@ document.addEventListener("DOMContentLoaded", function () {
   );
   postProcessCheckboxes.forEach((checkbox) => {
     checkbox.addEventListener("change", function () {
-      const paramDiv = document.getElementById(
-        "postProcess_" + this.value + "Params"
-      );
+      const paramDiv = document.getElementById("postProcess_" + this.value + "Params");
       if (paramDiv) {
         paramDiv.style.display = this.checked ? "block" : "none";
       }
@@ -108,20 +110,15 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // Toggle custom code
-  const customCodeCheckbox = document.getElementById(
-    "customCodeCheckbox_postProcess"
-  );
-  const customCodeParams = document.getElementById(
-    "customCodeParams_postProcess"
-  );
+  const customCodeCheckbox = document.getElementById("customCodeCheckbox_postProcess");
+  const customCodeParams = document.getElementById("customCodeParams_postProcess");
   customCodeCheckbox.addEventListener("change", function () {
     customCodeParams.style.display = this.checked ? "block" : "none";
   });
 
-  // Optional: Skulpt-based syntax checking
+  // Optional Skulpt-based syntax checking
   const editor = document.getElementById("pythonEditor_postProcess");
   const errorMsg = document.getElementById("errorMsg_postProcess");
-  const logArea = document.getElementById("submissionLog_postProcess");
 
   function checkSyntax() {
     if (typeof Sk === "undefined") {
@@ -142,9 +139,10 @@ document.addEventListener("DOMContentLoaded", function () {
       timeout = setTimeout(func, delay);
     };
   }
+
   editor.addEventListener("input", debounce(checkSyntax, 500));
 
-  // Helper function to gather "postprocess" data
+  // Gather post-process data for submission
   window.gatherPostProcessData = function () {
     const payload = {};
     postProcessCheckboxes.forEach((cb) => {
@@ -152,23 +150,20 @@ document.addEventListener("DOMContentLoaded", function () {
         const baseName = cb.value;
         payload[baseName] = {};
 
-        const paramDiv = document.getElementById(
-          "postProcess_" + baseName + "Params"
-        );
+        const paramDiv = document.getElementById("postProcess_" + baseName + "Params");
         const inputs = paramDiv.querySelectorAll("input");
         inputs.forEach((inp) => {
-          const paramName = inp.id.replace(
-            "postProcess_" + baseName + "_",
-            ""
-          );
+          const paramName = inp.id.replace("postProcess_" + baseName + "_", "");
           payload[baseName][paramName] = inp.value;
         });
       }
     });
+
     // If custom code is checked
     if (customCodeCheckbox.checked) {
       payload.custom_code = editor.value;
     }
+
     return payload;
   };
 });
