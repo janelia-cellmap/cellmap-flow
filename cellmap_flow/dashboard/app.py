@@ -20,6 +20,7 @@ from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+from cellmap_flow.models.cellmap_models import update_run_models
 import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ def submit_models():
     data = request.get_json()
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     selected_models = data.get("selected_models", [])
+    update_run_models(selected_models)
     logger.warning(f"Selected models: {selected_models}")
     return jsonify(
         {

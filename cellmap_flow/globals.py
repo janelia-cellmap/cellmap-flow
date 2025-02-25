@@ -1,8 +1,13 @@
+processes = []
+job_ids = []
+
 models_config = []
 
 servers = []
 
 raw = None
+
+cellmap_models_running = {} # name of the model , job_id
 
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor

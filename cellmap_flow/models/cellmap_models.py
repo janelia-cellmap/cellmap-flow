@@ -77,6 +77,7 @@ class CellmapModel:
     def onnx_model(self):
         """
         If 'model.onnx' exists, lazily load it as an ONNX Runtime InferenceSession.
+        Use GPU if available (requires onnxruntime-gpu installed), otherwise CPU.
         Returns None if the file doesn't exist or onnxruntime isn't installed.
         """
         if self._onnx_model is None:
@@ -84,10 +85,19 @@ class CellmapModel:
             if ort is None:
                 # onnxruntime is not installed
                 return None
+
             if os.path.exists(model_path):
-                self._onnx_model = ort.InferenceSession(model_path)
+                # Check available execution providers
+                available_providers = ort.get_available_providers()
+                if "CUDAExecutionProvider" in available_providers:
+                    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                else:
+                    providers = ["CPUExecutionProvider"]
+
+                self._onnx_model = ort.InferenceSession(model_path, providers=providers)
             else:
                 self._onnx_model = None
+
         return self._onnx_model
 
     @property
@@ -181,3 +191,8 @@ class CellmapModels:
         that contain 'metadata.json').
         """
         return list(self._models.keys())
+
+import cellmap_flow.globals as g
+from cellmap_flow.utils.bsub_utils import kill_jobs
+def update_run_models(names : List[str]):
+    to_be_killed = [k for k in g.cellmap_models_running if k not in names]

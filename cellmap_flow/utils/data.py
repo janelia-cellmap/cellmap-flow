@@ -213,3 +213,91 @@ def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
         configs.append(config)
 
     return configs
+
+from cellmap_flow.models.cellmap_models import CellmapModel
+from typing import Optional
+
+class CellMapModelConfig(ModelConfig):
+    """
+    Configuration class for a CellmapModel.
+    Similar to DaCapoModelConfig, but uses a CellmapModel object
+    to populate the necessary metadata and define a prediction function.
+    """
+
+    def __init__(self, cellmap_model: CellmapModel, name: Optional[str] = None):
+        """
+        :param cellmap_model: An instance of CellmapModel containing metadata 
+                              and references to ONNX, TorchScript, or PyTorch models.
+        :param name: Optional name for this configuration.
+        """
+        super().__init__()
+        self.cellmap_model = cellmap_model
+        self.name = name
+
+    @property
+    def command(self) -> str:
+        """
+        You can either return a placeholder command or remove this property if not needed.
+        For consistency with your DaCapoModelConfig, we return something minimal here.
+        """
+        if self.name:
+            return f"cellmap-run {self.name}"
+        return "cellmap-run"
+
+    def _get_config(self) -> Config:
+        """
+        Build and return a `Config` object populated using the CellmapModel's metadata and ONNX runtime.
+        """
+        config = Config()
+
+        # Access metadata from the CellmapModel
+        metadata = self.cellmap_model.metadata
+
+        # If you want to store any of these metadata fields into your config object, do so here:
+        config.model_name = metadata.model_name
+        config.model_type = metadata.model_type
+        config.framework = metadata.framework
+        config.spatial_dims = metadata.spatial_dims
+        config.in_channels = metadata.in_channels
+        config.out_channels = metadata.out_channels
+        config.iteration = metadata.iteration
+        config.input_voxel_size = metadata.input_voxel_size
+        config.output_voxel_size = metadata.output_voxel_size
+        config.channels_names = metadata.channels_names
+        config.input_shape = metadata.input_shape
+        config.output_shape = metadata.output_shape
+        # ... add or remove as needed ...
+
+        # If you need a block shape or other derived parameters:
+        # config.block_shape = some_computed_value
+
+        # Define the predict function using the ONNX Runtime session
+        def predict(input_data: np.ndarray) -> np.ndarray:
+            """
+            Run inference on a NumPy array using the loaded ONNX model.
+            Assumes a single input and single output; adjust as needed.
+            """
+            onnx_session = self.cellmap_model.onnx_model
+            if onnx_session is None:
+                raise RuntimeError("No ONNX model loaded or onnxruntime not installed.")
+
+            # Typically, you retrieve input/output names from the session
+            input_name = onnx_session.get_inputs()[0].name
+            output_names = [o.name for o in onnx_session.get_outputs()]
+
+            # Run the inference
+            result = onnx_session.run(output_names, {input_name: input_data})
+
+            # If there's only one output, result might be [output_ndarray]. 
+            # Return as you see fit
+            return result[0] if len(result) == 1 else result
+
+        # Attach predict method to the config
+        config.predict = predict
+
+        # If you also want to set `config.model` to be the PyTorch model or something else:
+        # config.model = self.cellmap_model.pytorch_model
+        # or
+        # config.model = self.cellmap_model.ts_model
+
+        return config
