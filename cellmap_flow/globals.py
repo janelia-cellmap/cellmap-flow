@@ -15,3 +15,10 @@ viewer = None
 dataset_path = None
 
 models_host = {}
+
+from cellmap_flow.models.model_yaml import load_model_paths
+
+# TODO: as a parameter to the app
+model_catalog = load_model_paths(
+    "/Users/zouinkhim/Desktop/cellmap/flo/cellmap-flow/example/models.yaml"
+)
