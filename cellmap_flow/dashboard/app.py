@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import neuroglancer
@@ -15,13 +16,13 @@ from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, ARGS_KEY, INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
 import cellmap_flow.globals as g
+import numpy as np
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
-
 CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
 
 @app.route("/")
@@ -50,9 +51,20 @@ def is_output_segmentation():
         return True
     return False
 
+@app.route("/update/equivalences", methods=["POST"])
+def update_equivalences():
+    equivalences = [[np.uint64(item) for item in sublist] for sublist in json.loads(request.get_json())]
+    print(f"Equivalences: {equivalences}")
+    with g.viewer.txn() as s:
+        s.layers[-1].equivalences = equivalences
+    return jsonify({"message": "Equivalences updated successfully"})
+
 @app.route("/api/process", methods=["POST"])
 def process():
     data = request.get_json()
+
+    # add dashboard url to data so we can update the state from the server
+    data["dashboard_url"] = request.host_url
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:
@@ -71,6 +83,7 @@ def process():
             # response = requests.post(f"{host}/input_normalize", json=data)
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)
+            
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
                     source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",

@@ -1,3 +1,4 @@
+# %%
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -9,6 +10,8 @@ from cellmap_flow.utils.data import (
     ScriptModelConfig,
 )
 import cellmap_flow.globals as g
+import neuroglancer
+from scipy import spatial
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,9 @@ class Inferencer:
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
         _ = self.model_config.config
+
+        # for equivalences and block merging
+        self.equivalences = None
 
         if hasattr(self.model_config.config, "read_shape") and hasattr(
             self.model_config.config, "write_shape"
@@ -100,8 +106,11 @@ class Inferencer:
         else:
             raise ValueError(f"Invalid model config type {type(self.model_config)}")
 
-        chunk_corner = roi.get_begin()//self.model_config.config.output_voxel_size
-        return apply_postprocess(result,chunk_corner)
+        chunk_corner = roi.get_begin() // self.model_config.config.output_voxel_size
+        postprocessed = apply_postprocess(result, chunk_corner)
+        if hasattr(g.postprocess[-1], "equivalences"):
+            self.equivalences = g.postprocess[-1].equivalences
+        return postprocessed
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
@@ -169,3 +178,28 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
+
+    # def calculate_equivalences(self):
+    #     g.postprocess[-1].calculate_equivalences(self.equivalences)
+    #     # ids = list(self.edge_voxel_position_to_id_dict.values())
+    #     # tree = spatial.cKDTree(positions)
+    #     # neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+    #     # for i in range(len(neighbors)):
+    #     #     for j in neighbors[i]:
+    #     #         self.equivalences.union(ids[i], ids[j])
+
+
+# %%
+import numpy as np
+
+# rreate random array of size 66352 x 3
+data = np.random.random((66352, 3))
+tree = spatial.cKDTree(data)
+# neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+
+# %%
+a = {1: 2}
+b = a.copy()
+a.update({3: 4})
+print(b)
+# %%

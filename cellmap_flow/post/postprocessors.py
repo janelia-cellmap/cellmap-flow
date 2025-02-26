@@ -1,9 +1,10 @@
 import logging
+import time
 import numpy as np
 import inspect
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 import ast
-#import cellmap_flow.globals as g
+import neuroglancer
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +15,10 @@ class PostProcessor:
     def name(cls):
         return cls.__name__
 
-    def __call__(self, data: np.ndarray) -> np.ndarray:
-        return self.process(data)
+    def __call__(self, data: np.ndarray, chunk_corner=None) -> np.ndarray:
+        return self.process(data, chunk_corner)
 
-    def process(self, data, chunk_corner=None) -> np.ndarray:
+    def process(self, data, chunk_corner) -> np.ndarray:
         if not isinstance(data, np.ndarray):
             data = np.array(data)
         if data.dtype.kind in {"U", "O"}:
@@ -29,11 +30,11 @@ class PostProcessor:
                 )
 
         sig = inspect.signature(self._process)
-        if 'chunk_corner' in sig.parameters:
+        if "chunk_corner" in sig.parameters:
             data = self._process(data, chunk_corner)
         else:
             data = self._process(data)
-    
+
         return data.astype(self.dtype)
 
     def _process(self, data, chunk_corner=None):
@@ -128,6 +129,7 @@ class LabelPostprocessor(PostProcessor):
 
 import mwatershed as mws
 from scipy.ndimage import measurements
+import fastremap
 
 
 class AffinityPostprocessor(PostProcessor):
@@ -153,30 +155,31 @@ class AffinityPostprocessor(PostProcessor):
         data = data / 255.0
         n_channels = data.shape[0]
         self.neighborhood = self.neighborhood[:n_channels]
-        #raise Exception(data.max(), data.min(), self.neighborhood)
+        # raise Exception(data.max(), data.min(), self.neighborhood)
 
-        data[0] = mws.agglom(
+        segmentation = mws.agglom(
             data.astype(np.float64) - self.bias,
             self.neighborhood,
         )
-
-
         # filter fragments
-        # average_affs = np.mean(data, axis=0)
+        average_affs = np.mean(data, axis=0)
 
-        # filtered_fragments = []
+        filtered_fragments = []
 
-        # fragment_ids = np.unique(segmentation)
+        fragment_ids = fastremap.unique(segmentation[segmentation > 0])
 
-        # for fragment, mean in zip(
-        #     fragment_ids, measurements.mean(average_affs, segmentation, fragment_ids)
-        # ):
-        #     if mean < self.bias:
-        #         filtered_fragments.append(fragment)
+        for fragment, mean in zip(
+            fragment_ids, measurements.mean(average_affs, segmentation, fragment_ids)
+        ):
+            if mean >= self.bias:
+                filtered_fragments.append(fragment)
 
+        data = data.astype(np.uint64)
+        fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
+        data[0] = segmentation
         # filtered_fragments = np.array(filtered_fragments, dtype=segmentation.dtype)
         # data[self.channel] = to_process
-        return data.astype(np.uint64)
+        return data
 
     def to_dict(self):
         return {"name": self.name()}
@@ -189,19 +192,33 @@ class AffinityPostprocessor(PostProcessor):
     def is_segmentation(self):
         return True
 
+
 class SimpleBlockwiseMerger(PostProcessor):
     def __init__(
         self,
     ):
-        pass
+        self.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
+        self.edge_voxel_position_to_id_dict = {}
 
     def _process(self, data, chunk_corner):
         mask = np.zeros_like(data[0], dtype=bool)
         mask[1:-1, 1:-1, 1:-1] = True
-        data_masked = np.ma.masked_array(data, mask)
+        data_masked = np.ma.masked_array(data[0], mask)
         z, y, x = np.ma.where(data_masked > 0)
         segmented_ids = data_masked[z, y, x]
-        g.edge_voxel_position_to_id_dict.update(
+        # current_edge_voxel_position_to_id_dict = dict(
+        #     zip(
+        #         zip(
+        #             z + chunk_corner[0],
+        #             y + chunk_corner[1],
+        #             x + chunk_corner[2],
+        #         ),
+        #         segmented_ids,
+        #     )
+        # )
+        t = time.time()
+        before_len = len(self.edge_voxel_position_to_id_dict)
+        self.edge_voxel_position_to_id_dict.update(
             dict(
                 zip(
                     zip(
@@ -213,10 +230,36 @@ class SimpleBlockwiseMerger(PostProcessor):
                 )
             )
         )
-        return data.astype(np.uint64)
+        t1 = time.time()
+        after_len = len(self.edge_voxel_position_to_id_dict)
+        self.calculate_equivalences()
+        t2 = time.time()
+        raise Exception(t1 - t, t2 - t1, before_len, after_len)
+        # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
+        return data
 
     def to_dict(self):
         return {"name": self.name()}
+
+    def calculate_equivalences(self):
+        # copy because otherwise it can change sizes in loop since postprocessing may begin elsewhere
+        edge_voxel_position_to_id_dict = self.edge_voxel_position_to_id_dict.copy()
+        # Neighboring offsets (±1 in x, y, or z)
+        offsets = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+        for position, id in edge_voxel_position_to_id_dict.items():
+            for offset in offsets:
+                neighbor = (
+                    position[0] + offset[0],
+                    position[1] + offset[1],
+                    position[2] + offset[2],
+                )
+                if (
+                    neighbor_id := edge_voxel_position_to_id_dict.get(neighbor)
+                ) not in (None, id):
+                    self.equivalences.union(
+                        id,
+                        neighbor_id,
+                    )
 
     @property
     def dtype(self):
@@ -225,6 +268,7 @@ class SimpleBlockwiseMerger(PostProcessor):
     @property
     def is_segmentation(self):
         return True
+
 
 class LambdaPostprocessor(PostProcessor):
     def __init__(self, expression: str):
@@ -282,3 +326,86 @@ def get_postprocessors(elms: dict) -> PostProcessor:
 
 
 PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]
+
+# # %%
+# import fastremap
+# import numpy as np
+
+
+# a = np.array([1, 2, 3])
+# component_map = fastremap.component_map([1], [0])
+# fastremap.mask_except(a, [1])
+# # # %%
+# # %%
+# class Temp:
+#     def __init__(self):
+#         self.list = []
+
+#     def __call__(self):
+#         print("blah")
+#         return self.process()
+
+#     def process(self):
+#         print("yo")
+#         self.list.append(4)
+
+# o =Temp()
+# o()
+# # %%
+# o()
+# o.list
+# %%
+# create large random dictionary
+import numpy as np
+
+# Parameters
+num_entries = 1_000_000  # Number of key-value pairs
+
+# Generate random coordinates and segmented IDs
+x = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+y = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+z = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+segmented_ids = np.random.randint(1, 10000, num_entries).astype(np.uint64)
+
+# Create the first large dictionary
+dict1 = {(z[i], y[i], x[i]): segmented_ids[i] for i in range(num_entries)}
+
+# Generate another set for the second dictionary
+x2 = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+y2 = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+z2 = np.random.randint(0, 1000, num_entries, dtype=np.uint64)
+segmented_ids2 = np.random.randint(1, 10000, num_entries).astype(np.uint64)
+
+
+# # Create the second large dictionary
+dict2 = {(z2[i], y2[i], x2[i]): segmented_ids2[i] for i in range(num_entries)}
+# # %%
+# # %%
+import neuroglancer
+def calculate_it():
+    equivalences = neuroglancer.equivalence_map.EquivalenceMap()
+    offsets = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+
+    edge_voxel_position_to_id_dict = dict1.copy()
+    precomputed_neighbors = {
+        position: [
+            (position[0] + dx, position[1] + dy, position[2] + dz) for dx, dy, dz in offsets
+        ]
+        for position in edge_voxel_position_to_id_dict
+    }
+    local_get = edge_voxel_position_to_id_dict.get
+    for position, id in edge_voxel_position_to_id_dict.items():
+        neighbors = precomputed_neighbors[position]
+        # for neighbor in neighbors:
+        #     if (neighbor_id := local_get(neighbor)) not in (
+        #         None,
+        #         id,
+        #     ):
+        #         equivalences.union(
+        #             id,
+        #             neighbor_id,
+        #         )
+calculate_it()
+# # %%
+# dict1.update(dict2)
+# %%
