@@ -196,8 +196,10 @@ class Annotator(object):
 
         viewer.actions.add('anno-save', lambda s: self.save())
         viewer.actions.add('anno-mark-pre', lambda s: self.mark_synapse(s, layer='pre', add=True))
+        viewer.actions.add('anno-mark-pre-sphere', lambda s: self.mark_synapse_sphere(s, layer='pre', add=True))
         viewer.actions.add('anno-unmark-pre', lambda s: self.unmark_synapse(s, layer='pre', add=False))
         viewer.actions.add('anno-mark-post', lambda s: self.mark_synapse(s, layer='post', add=True))
+        viewer.actions.add('anno-mark-post-sphere', lambda s: self.mark_synapse_sphere(s, layer='post', add=True))
         viewer.actions.add('anno-unmark-post', lambda s: self.unmark_synapse(s, layer='post', add=False))
         viewer.actions.add('anno-decrease-block-size', self.decrease_block_size)
         viewer.actions.add('anno-increase-block-size', self.increase_block_size)
@@ -207,8 +209,11 @@ class Annotator(object):
             s.input_event_bindings.data_view['bracketright'] = 'anno-increase-block-size'
             s.input_event_bindings.data_view['control+keys'] = 'anno-save'
             s.input_event_bindings.data_view['keyt'] = 'anno-mark-pre'
+            s.input_event_bindings.data_view['keyj'] = 'anno-mark-pre-sphere'
             s.input_event_bindings.data_view['control+shift+mousedown0'] = 'anno-unmark-pre'
             s.input_event_bindings.data_view['control+mousedown2'] = 'anno-mark-post'
+            s.input_event_bindings.viewer['keyk'] = 'anno-mark-post-sphere'
+
             s.input_event_bindings.data_view['control+shift+mousedown2'] = 'anno-unmark-post'
 
         self.cur_message = None
@@ -253,9 +258,38 @@ void main() {
             new_annotations = make_annotations_from_mask(mask=mask, block_size=block_size)
             t5 = time.time()
             print("Time to make annotations from mask: ", t5 - t4)
-            print(level)
+            print(level, new_annotations)
             s.layers[layer].annotations = new_annotations
             print("asdfadf")
+
+    def mark_synapse_sphere(self, s, layer, add):
+        voxel_coordinates = s.mouse_voxel_coordinates
+        print(voxel_coordinates)
+        if voxel_coordinates is None:
+            return
+        block_size = self.false_merge_block_size
+        level = self.cur_block_level
+        with self.viewer.txn() as s:
+            if s.layers.index(layer) == -1:
+                s.layers[layer] = neuroglancer.LocalAnnotationLayer(
+                    dimensions=s.dimensions,
+                    shader='''
+void main() {
+  setBoundingBoxBorderWidth(0.0);
+  setBoundingBoxFillColor(defaultColor());
+  setEllipsoidFillColor(defaultColor());
+}
+''',
+                    annotation_color = '#0f0' if layer == 'pre' else '#00f',
+                )
+            annotations = list(s.layers[layer].annotations)
+            t1  = time.time()
+            annotations.append(neuroglancer.EllipsoidAnnotation(
+                center=voxel_coordinates,
+                radii=[2**level, 2**level, 2**level],
+                id = uuid.uuid4().hex,
+            ))
+            s.layers[layer].annotations = annotations
 
     def update_message(self):
         message = '[Block size: %d vx] ' % (self.false_merge_block_size[0] )#* 2**self.false_merge_block_level)
@@ -331,4 +365,9 @@ anno.viewer.set_state(neuroglancer.parse_url(url))
 #         )
 anno.show()
 
+# %%
+import neuroglancer
+import uuid
+print(neuroglancer.EllipsoidAnnotation(center=[0, 0, 0], radii=[1, 1, 1], id = uuid.uuid4().hex))
+print(neuroglancer.AxisAlignedBoundingBoxAnnotation(point_a=[0, 0, 0], point_b=[1, 1, 1]))
 # %%
