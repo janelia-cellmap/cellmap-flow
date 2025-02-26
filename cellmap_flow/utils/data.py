@@ -3,6 +3,10 @@ IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 import logging
 from typing import List
 import yaml
+import numpy as np
+from funlib.geometry.coordinate import Coordinate
+import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,7 @@ class ModelConfig:
     def config(self):
         if self._config is None:
             self._config = self._get_config()
-        check_config(self._config)
+            check_config(self._config)
         return self._config
 
 
@@ -79,9 +83,7 @@ class DaCapoModelConfig(ModelConfig):
         return f"dacapo -r {self.run_name} -i {self.iteration}"
 
     def _get_config(self):
-        from daisy.coordinate import Coordinate
-        import numpy as np
-        import torch
+
 
         config = Config()
 
@@ -114,7 +116,7 @@ class DaCapoModelConfig(ModelConfig):
 
 
 def check_config(config):
-    assert hasattr(config, "model"), f"Model not found in config"
+    assert hasattr(config, "model") or hasattr(config,"predict"), f"Model or predict not found in config"
     assert hasattr(config, "read_shape"), f"read_shape not found in config"
     assert hasattr(config, "write_shape"), f"write_shape not found in config"
     assert hasattr(config, "input_voxel_size"), f"input_voxel_size not found in config"
@@ -224,14 +226,14 @@ class CellMapModelConfig(ModelConfig):
     to populate the necessary metadata and define a prediction function.
     """
 
-    def __init__(self, cellmap_model: CellmapModel, name: Optional[str] = None):
+    def __init__(self, folder_path,name):
         """
         :param cellmap_model: An instance of CellmapModel containing metadata 
                               and references to ONNX, TorchScript, or PyTorch models.
         :param name: Optional name for this configuration.
         """
         super().__init__()
-        self.cellmap_model = cellmap_model
+        self.cellmap_model = CellmapModel(folder_path=folder_path)
         self.name = name
 
     @property
@@ -240,9 +242,7 @@ class CellMapModelConfig(ModelConfig):
         You can either return a placeholder command or remove this property if not needed.
         For consistency with your DaCapoModelConfig, we return something minimal here.
         """
-        if self.name:
-            return f"cellmap-run {self.name}"
-        return "cellmap-run"
+        return "cellmap-model -f {self.cellmap_model.folder_path} -n {self.name}"
 
     def _get_config(self) -> Config:
         """
@@ -259,45 +259,22 @@ class CellMapModelConfig(ModelConfig):
         config.framework = metadata.framework
         config.spatial_dims = metadata.spatial_dims
         config.in_channels = metadata.in_channels
-        config.out_channels = metadata.out_channels
+        config.output_channels = metadata.out_channels
         config.iteration = metadata.iteration
-        config.input_voxel_size = metadata.input_voxel_size
-        config.output_voxel_size = metadata.output_voxel_size
+        config.input_voxel_size = Coordinate(metadata.input_voxel_size)
+        config.output_voxel_size = Coordinate(metadata.output_voxel_size)
         config.channels_names = metadata.channels_names
-        config.input_shape = metadata.input_shape
-        config.output_shape = metadata.output_shape
-        # ... add or remove as needed ...
+        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
+        config.block_shape = [*metadata.output_shape, metadata.out_channels]
+        config.model = self.cellmap_model.pytorch_model
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        print("device:", device)
 
-        # If you need a block shape or other derived parameters:
-        # config.block_shape = some_computed_value
-
-        # Define the predict function using the ONNX Runtime session
-        def predict(input_data: np.ndarray) -> np.ndarray:
-            """
-            Run inference on a NumPy array using the loaded ONNX model.
-            Assumes a single input and single output; adjust as needed.
-            """
-            onnx_session = self.cellmap_model.onnx_model
-            if onnx_session is None:
-                raise RuntimeError("No ONNX model loaded or onnxruntime not installed.")
-
-            # Typically, you retrieve input/output names from the session
-            input_name = onnx_session.get_inputs()[0].name
-            output_names = [o.name for o in onnx_session.get_outputs()]
-
-            # Run the inference
-            result = onnx_session.run(output_names, {input_name: input_data})
-
-            # If there's only one output, result might be [output_ndarray]. 
-            # Return as you see fit
-            return result[0] if len(result) == 1 else result
-
-        # Attach predict method to the config
-        config.predict = predict
-
-        # If you also want to set `config.model` to be the PyTorch model or something else:
-        # config.model = self.cellmap_model.pytorch_model
-        # or
-        # config.model = self.cellmap_model.ts_model
-
+        config.model.to(device)
+        config.model.eval()
         return config
+    

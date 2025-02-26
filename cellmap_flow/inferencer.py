@@ -7,6 +7,7 @@ from cellmap_flow.utils.data import (
     BioModelConfig,
     DaCapoModelConfig,
     ScriptModelConfig,
+    CellMapModelConfig,
 )
 import cellmap_flow.globals as g
 
@@ -44,6 +45,12 @@ def predict(read_roi, write_roi, config, **kwargs):
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+            logger.error("No GPU available, using CPU")
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
@@ -69,12 +76,6 @@ class Inferencer:
         if not isinstance(self.model_config.config.model, torch.nn.Module):
             logger.error("Model is not a nn.Module, we only optimize torch models")
             return
-
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-            logger.error("No GPU available, using CPU")
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
             self.model_config.config.model.half()
@@ -90,7 +91,7 @@ class Inferencer:
             return self.process_chunk_bioimagezoo(idi, roi)
         elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
             self.model_config, ScriptModelConfig
-        ):
+        ) or isinstance(self.model_config, CellMapModelConfig):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk

@@ -17,7 +17,7 @@ dependencies = [
     "flask",
     "flask-cors",
     "tensorstore",
-    "daisy",
+    "funlib.geometry",
     "marshmallow",
     "scikit-image",
     "flasgger",

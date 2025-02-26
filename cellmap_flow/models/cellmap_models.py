@@ -195,4 +195,16 @@ class CellmapModels:
 import cellmap_flow.globals as g
 from cellmap_flow.utils.bsub_utils import kill_jobs
 def update_run_models(names : List[str]):
-    to_be_killed = [k for k in g.cellmap_models_running if k not in names]
+    to_be_killed = [g.cellmap_models_running[k] for k in g.cellmap_models_running if k not in names]
+    kill_jobs(to_be_killed)
+    to_be_submitted_models = {}
+
+    for _,group in g.model_catalog.items():
+        for k,v in group:
+            if k in names and k not in g.cellmap_models_running:
+                to_be_submitted_models[k]=v
+
+    g.dataset_path
+    
+
+
