@@ -14,7 +14,13 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
-from cellmap_flow.utils.web_utils import get_public_ip, decode_to_json, ARGS_KEY, INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
+from cellmap_flow.utils.web_utils import (
+    get_public_ip,
+    decode_to_json,
+    ARGS_KEY,
+    INPUT_NORM_DICT_KEY,
+    POSTPROCESS_DICT_KEY,
+)
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
@@ -22,19 +28,23 @@ import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
 
+
 def get_output_dtype():
     if len(g.postprocess) == 0:
-      dtype = np.float32
+        dtype = np.uint8
     else:
-      dtype = g.postprocess[-1].dtype
+        dtype = g.postprocess[-1].dtype
     return dtype
 
-def get_process_dataset(dataset:str):
+
+def get_process_dataset(dataset: str):
     if ARGS_KEY not in dataset:
-        return [], [] # No normalization or postprocessing
+        return [], []  # No normalization or postprocessing
     norm_data = dataset.split(ARGS_KEY)
     if len(norm_data) != 3:
-        raise ValueError(f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}")
+        raise ValueError(
+            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}"
+        )
     encoded_data = norm_data[1]
     result = decode_to_json(encoded_data)
     logger.error(f"Decoded data: {result}")

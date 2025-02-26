@@ -12,12 +12,11 @@ import cellmap_flow.globals as g
 
 logger = logging.getLogger(__name__)
 
-def apply_postprocess(data):
+
+def apply_postprocess(data, chunk_corner=None):
     for pross in g.postprocess:
-        data = pross(data)
+        data = pross(data, chunk_corner)
     return data
-
-
 
 
 def predict(read_roi, write_roi, config, **kwargs):
@@ -87,7 +86,7 @@ class Inferencer:
 
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
-            return self.process_chunk_bioimagezoo(idi, roi)
+            result = self.process_chunk_bioimagezoo(idi, roi)
         elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
             self.model_config, ScriptModelConfig
         ):
@@ -95,11 +94,14 @@ class Inferencer:
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk
             ):
-                return self.model_config.config.process_chunk(idi, roi)
+                result = self.model_config.config.process_chunk(idi, roi)
             else:
-                return self.process_chunk_basic(idi, roi)
+                result = self.process_chunk_basic(idi, roi)
         else:
             raise ValueError(f"Invalid model config type {type(self.model_config)}")
+
+        chunk_corner = roi.get_begin()//self.model_config.config.output_voxel_size
+        return apply_postprocess(result,chunk_corner)
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
@@ -113,7 +115,7 @@ class Inferencer:
             device=self.device,
             use_half_prediction=self.use_half_prediction,
         )
-        result = apply_postprocess(result)
+        # result = apply_postprocess(result)
         return result
 
     # create random input tensor
