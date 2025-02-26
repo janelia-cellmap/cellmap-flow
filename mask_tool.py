@@ -339,35 +339,35 @@ if __name__ == '__main__':
         pass
 
 # %%
-import urllib
+# import urllib
 
-res = urllib.parse.urlparse('https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22z%22:%5B8e-9%2C%22m%22%5D%2C%22y%22:%5B8e-9%2C%22m%22%5D%2C%22x%22:%5B8e-9%2C%22m%22%5D%7D%2C%22position%22:%5B24822%2C10725%2C11800%5D%2C%22crossSectionScale%22:1%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22https://cellmap-vm1.int.janelia.org/nrs/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr/recon-1/em/fibsem-uint8/%7Czarr2:%22%2C%22tab%22:%22source%22%2C%22name%22:%22fibsem-uint8%22%7D%5D%2C%22selectedLayer%22:%7B%22visible%22:true%2C%22layer%22:%22fibsem-uint8%22%7D%2C%22layout%22:%224panel%22%7D')
-json_string = neuroglancer.url_state.url_fragment_to_json(res.fragment)
+# res = urllib.parse.urlparse('https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22z%22:%5B8e-9%2C%22m%22%5D%2C%22y%22:%5B8e-9%2C%22m%22%5D%2C%22x%22:%5B8e-9%2C%22m%22%5D%7D%2C%22position%22:%5B24822%2C10725%2C11800%5D%2C%22crossSectionScale%22:1%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22https://cellmap-vm1.int.janelia.org/nrs/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr/recon-1/em/fibsem-uint8/%7Czarr2:%22%2C%22tab%22:%22source%22%2C%22name%22:%22fibsem-uint8%22%7D%5D%2C%22selectedLayer%22:%7B%22visible%22:true%2C%22layer%22:%22fibsem-uint8%22%7D%2C%22layout%22:%224panel%22%7D')
+# json_string = neuroglancer.url_state.url_fragment_to_json(res.fragment)
 
-# %%
-json_string
-# %%
-anno = Annotator()
-url = 'https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22z%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B19998.5%2C3998.5%2C18624.5%5D%2C%22crossSectionOrientation%22:%5B1%2C0%2C0%2C0%5D%2C%22crossSectionScale%22:50%2C%22projectionOrientation%22:%5B1%2C0%2C0%2C0%5D%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22zarr://s3://janelia-cosem-datasets/jrc_macrophage-2/jrc_macrophage-2.zarr/recon-1/em/fibsem-uint8/%22%2C%22tab%22:%22rendering%22%2C%22opacity%22:1%2C%22blend%22:%22additive%22%2C%22shader%22:%22#uicontrol%20invlerp%20normalized%28range=%5B203%2C%20238%5D%2C%20window=%5B0%2C%20255%5D%29%5Cn#uicontrol%20vec3%20color%20color%28default=%5C%22white%5C%22%29%5Cnvoid%20main%28%29%7BemitRGB%28color%20%2A%20normalized%28%29%29%3B%7D%22%2C%22name%22:%22fibsem-uint16%22%7D%5D%2C%22selectedLayer%22:%7B%22visible%22:true%2C%22layer%22:%22fibsem-uint16%22%7D%2C%22crossSectionBackgroundColor%22:%22#000000%22%2C%22layout%22:%224panel%22%7D'
-anno.viewer.set_state(neuroglancer.parse_url(url))
-# layer = "pre"
-# with anno.viewer.txn() as s:
-#     if s.layers.index(layer) == -1:
-#         s.layers[layer] = neuroglancer.LocalAnnotationLayer(
-#             dimensions=s.dimensions,
-#             shader='''
-# void main() {
-# setBoundingBoxBorderWidth(0.0);
-# setBoundingBoxFillColor(defaultColor());
-# }
-# ''',
-#             annotation_color = '#0f0' if layer == 'pre' else '#00f',
-#         )
-anno.show()
+# # %%
+# json_string
+# # %%
+# anno = Annotator()
+# url = 'https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22z%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B19998.5%2C3998.5%2C18624.5%5D%2C%22crossSectionOrientation%22:%5B1%2C0%2C0%2C0%5D%2C%22crossSectionScale%22:50%2C%22projectionOrientation%22:%5B1%2C0%2C0%2C0%5D%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22zarr://s3://janelia-cosem-datasets/jrc_macrophage-2/jrc_macrophage-2.zarr/recon-1/em/fibsem-uint8/%22%2C%22tab%22:%22rendering%22%2C%22opacity%22:1%2C%22blend%22:%22additive%22%2C%22shader%22:%22#uicontrol%20invlerp%20normalized%28range=%5B203%2C%20238%5D%2C%20window=%5B0%2C%20255%5D%29%5Cn#uicontrol%20vec3%20color%20color%28default=%5C%22white%5C%22%29%5Cnvoid%20main%28%29%7BemitRGB%28color%20%2A%20normalized%28%29%29%3B%7D%22%2C%22name%22:%22fibsem-uint16%22%7D%5D%2C%22selectedLayer%22:%7B%22visible%22:true%2C%22layer%22:%22fibsem-uint16%22%7D%2C%22crossSectionBackgroundColor%22:%22#000000%22%2C%22layout%22:%224panel%22%7D'
+# anno.viewer.set_state(neuroglancer.parse_url(url))
+# # layer = "pre"
+# # with anno.viewer.txn() as s:
+# #     if s.layers.index(layer) == -1:
+# #         s.layers[layer] = neuroglancer.LocalAnnotationLayer(
+# #             dimensions=s.dimensions,
+# #             shader='''
+# # void main() {
+# # setBoundingBoxBorderWidth(0.0);
+# # setBoundingBoxFillColor(defaultColor());
+# # }
+# # ''',
+# #             annotation_color = '#0f0' if layer == 'pre' else '#00f',
+# #         )
+# anno.show()
 
-# %%
-import neuroglancer
-import uuid
-print(neuroglancer.EllipsoidAnnotation(center=[0, 0, 0], radii=[1, 1, 1], id = uuid.uuid4().hex))
-print(neuroglancer.AxisAlignedBoundingBoxAnnotation(point_a=[0, 0, 0], point_b=[1, 1, 1]))
+# # %%
+# import neuroglancer
+# import uuid
+# print(neuroglancer.EllipsoidAnnotation(center=[0, 0, 0], radii=[1, 1, 1], id = uuid.uuid4().hex))
+# print(neuroglancer.AxisAlignedBoundingBoxAnnotation(point_a=[0, 0, 0], point_b=[1, 1, 1]))
 # %%
