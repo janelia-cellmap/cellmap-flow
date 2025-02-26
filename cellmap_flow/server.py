@@ -1,7 +1,9 @@
+import json
 import logging
 import socket
 from http import HTTPStatus
 from flask import request
+import neuroglancer
 import numpy as np
 import numcodecs
 from flask import Flask, jsonify, redirect
@@ -25,6 +27,7 @@ from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
 import cellmap_flow.globals as g
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +51,11 @@ def get_process_dataset(dataset: str):
     encoded_data = norm_data[1]
     result = decode_to_json(encoded_data)
     logger.error(f"Decoded data: {result}")
+    dashboard_url = result["dashboard_url"]
     input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
     postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
     logger.error(f"Normalized data: {result}")
-    return input_norm_fns, postprocess_fns
+    return dashboard_url, input_norm_fns, postprocess_fns
 
 
 class CellMapFlowServer:
@@ -107,7 +111,7 @@ class CellMapFlowServer:
 
         # Chunk encoding for N5
         self.chunk_encoder = N5ChunkWrapper(
-            np.uint8, self.n5_block_shape, compressor=numcodecs.GZip()
+            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.GZip()
         )
 
         # Create and configure Flask
@@ -153,7 +157,7 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
-            g.input_norms, g.postprocess = get_process_dataset(dataset)
+            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -176,7 +180,9 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            g.input_norms, g.postprocess = get_process_dataset(dataset)
+            self.inferencer.edge_voxel_position_to_id_dict = {}
+            self.inferencer.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
+            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -290,7 +296,12 @@ class CellMapFlowServer:
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
         chunk_data = chunk_data.astype(get_output_dtype())
-
+        if hasattr(g.postprocess[-1], "edge_voxel_position_to_id_dict"):
+            equivalences = [
+                [int(item) for item in sublist]
+                for sublist in self.inferencer.equivalences.to_json()
+            ]
+            # response = requests.post(g.dashboard_url + "/update/equivalences", json=json.dumps(equivalences))
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
@@ -341,3 +352,10 @@ if __name__ == "__main__":
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
     server.run(debug=True, port=8000)
+
+# # %%
+# import neuroglancer
+# neuroglancer.set_server_bind_address("http://h06u01.int.janelia.org:19821/v/733c608c2ad97d2340bfc83f1f9459d5be4d9d49/")
+# with neuroglancer.Viewer().txn() as s:
+#     print(s.layers)
+# %%
