@@ -14,7 +14,13 @@ from cellmap_flow.norm.input_normalize import (
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, ARGS_KEY, INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
+from cellmap_flow.utils.web_utils import (
+    encode_to_str,
+    decode_to_json,
+    ARGS_KEY,
+    INPUT_NORM_DICT_KEY,
+    POSTPROCESS_DICT_KEY,
+)
 import cellmap_flow.globals as g
 import numpy as np
 
@@ -24,6 +30,7 @@ CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
 CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
+
 
 @app.route("/")
 def index():
@@ -43,21 +50,27 @@ def index():
         input_normalizers=input_norms,
         output_postprocessors=output_postprocessors,
         default_post_process=default_post_process,
-        default_input_norm=default_input_norm  # Pass it here
+        default_input_norm=default_input_norm,  # Pass it here
     )
+
 
 def is_output_segmentation():
     if len(g.postprocess) > 0 and g.postprocess[-1].is_segmentation:
         return True
     return False
 
+
 @app.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
-    equivalences = [[np.uint64(item) for item in sublist] for sublist in json.loads(request.get_json())]
+    equivalences = [
+        [np.uint64(item) for item in sublist]
+        for sublist in json.loads(request.get_json())
+    ]
     print(f"Equivalences: {equivalences}")
     with g.viewer.txn() as s:
         s.layers[-1].equivalences = equivalences
     return jsonify({"message": "Equivalences updated successfully"})
+
 
 @app.route("/api/process", methods=["POST"])
 def process():
@@ -73,17 +86,15 @@ def process():
     g.input_norms = get_normalizations(data["input_norm"])
     g.postprocess = get_postprocessors(data["postprocess"])
 
-
-
     with g.viewer.txn() as s:
         # g.raw.invalidate()
         g.raw = get_raw_layer(g.dataset_path)
         s.layers["raw"] = g.raw
-        for model,host in g.models_host.items():
+        for model, host in g.models_host.items():
             # response = requests.post(f"{host}/input_normalize", json=data)
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)
-            
+
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
                     source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",

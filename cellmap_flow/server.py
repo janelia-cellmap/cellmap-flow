@@ -28,6 +28,7 @@ from cellmap_flow.post.postprocessors import get_postprocessors
 
 import cellmap_flow.globals as g
 import requests
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,6 @@ class CellMapFlowServer:
 
         # this is zyx
         self.read_block_shape = [int(x) for x in model_config.config.block_shape]
-
         # this needs to have z and x swapped
         self.n5_block_shape = self.read_block_shape.copy()
         self.n5_block_shape[0], self.n5_block_shape[2] = (
@@ -89,6 +89,10 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
         )
+
+        # Refresh rate for custom state updates
+        self.refresh_rate_seconds = 5
+        self.previous_refresh_time = 0
         output_shape = (
             np.array(self.idi_raw.shape)
             * np.array(self.input_voxel_size)
@@ -180,8 +184,6 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            self.inferencer.edge_voxel_position_to_id_dict = {}
-            self.inferencer.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
@@ -296,12 +298,20 @@ class CellMapFlowServer:
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
         chunk_data = chunk_data.astype(get_output_dtype())
-        if hasattr(g.postprocess[-1], "edge_voxel_position_to_id_dict"):
+
+        current_time = time.time()
+        if (
+            hasattr(g.postprocess[-1], "equivalences")
+            and (current_time - self.previous_refresh_time) > self.refresh_rate_seconds
+        ):
             equivalences = [
                 [int(item) for item in sublist]
                 for sublist in self.inferencer.equivalences.to_json()
             ]
-            # response = requests.post(g.dashboard_url + "/update/equivalences", json=json.dumps(equivalences))
+            response = requests.post(
+                g.dashboard_url + "/update/equivalences", json=json.dumps(equivalences)
+            )
+            self.previous_refresh_time = current_time
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,

@@ -16,9 +16,9 @@ from scipy import spatial
 logger = logging.getLogger(__name__)
 
 
-def apply_postprocess(data, chunk_corner=None):
+def apply_postprocess(data, **kwargs):
     for pross in g.postprocess:
-        data = pross(data, chunk_corner)
+        data = pross(data, **kwargs)
     return data
 
 
@@ -106,8 +106,11 @@ class Inferencer:
         else:
             raise ValueError(f"Invalid model config type {type(self.model_config)}")
 
-        chunk_corner = roi.get_begin() // self.model_config.config.output_voxel_size
-        postprocessed = apply_postprocess(result, chunk_corner)
+        postprocessed = apply_postprocess(
+            result,
+            chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
+            chunk_num_voxels=np.prod(roi.get_shape() // idi.output_voxel_size),
+        )
         if hasattr(g.postprocess[-1], "equivalences"):
             self.equivalences = g.postprocess[-1].equivalences
         return postprocessed
@@ -198,8 +201,8 @@ tree = spatial.cKDTree(data)
 # neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
 
 # %%
-a = {1: 2}
-b = a.copy()
-a.update({3: 4})
-print(b)
+# a = {1: 2}
+# b = a.copy()
+# a.update({3: 4})
+# print(b)
 # %%
