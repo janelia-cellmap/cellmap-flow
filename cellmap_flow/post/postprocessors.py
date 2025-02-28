@@ -278,6 +278,30 @@ class SimpleBlockwiseMerger(PostProcessor):
         return True
 
 
+class SegmentationChannelSelectionPostprocessor(PostProcessor):
+    def __init__(self, channels: str = "0"):
+        self.channels = [int(channel) for channel in channels.split(",")]
+
+    def _process(self, data):
+        data = data[self.channels, :, :, :]
+        return data
+
+    def to_dict(self):
+        return {"name": self.name()}
+
+    @property
+    def dtype(self):
+        return np.uint64
+
+    @property
+    def is_segmentation(self):
+        return True
+
+    @property
+    def num_channels(self):
+        return len(self.channels)
+
+
 class LambdaPostprocessor(PostProcessor):
     def __init__(self, expression: str):
         self.expression = expression
