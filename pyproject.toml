@@ -11,6 +11,7 @@ authors = [
 ]
 
 dependencies = [
+    "pymorton",
     "numpy",
     "PyYAML",
     "gunicorn",
@@ -26,6 +27,7 @@ dependencies = [
     "h5py",
     "torch",    
     "universal_pathlib",
+    "mwatershed @ git+https://github.com/pattonw/mwatershed",
     "neuroglancer",
     ]
 
