@@ -66,7 +66,6 @@ def update_equivalences():
         [np.uint64(item) for item in sublist]
         for sublist in json.loads(request.get_json())
     ]
-    print(f"Equivalences: {equivalences}")
     with g.viewer.txn() as s:
         s.layers[-1].equivalences = equivalences
     return jsonify({"message": "Equivalences updated successfully"})
@@ -139,7 +138,7 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     NEUROGLANCER_URL = neuroglancer_url
     INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
-    port = get_free_port()
+    port = 0
     logger.warning(f"Host name: {hostname}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
