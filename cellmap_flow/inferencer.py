@@ -51,8 +51,6 @@ class Inferencer:
         # condig is lazy so one call is needed to get the config
         _ = self.model_config.config
 
-        # for equivalences and block merging
-        self.equivalences = None
 
         if hasattr(self.model_config.config, "read_shape") and hasattr(
             self.model_config.config, "write_shape"
@@ -111,8 +109,6 @@ class Inferencer:
             chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
             chunk_num_voxels=np.prod(roi.get_shape() // idi.output_voxel_size),
         )
-        if hasattr(g.postprocess[-1], "equivalences"):
-            self.equivalences = g.postprocess[-1].equivalences
         return postprocessed
 
     def process_chunk_basic(self, idi, roi):

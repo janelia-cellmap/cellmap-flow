@@ -15,5 +15,3 @@ viewer = None
 dataset_path = None
 
 models_host = {}
-
-edge_voxel_position_to_id_dict = {} 

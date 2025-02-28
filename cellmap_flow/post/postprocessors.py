@@ -7,6 +7,7 @@ import inspect
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 import ast
 import neuroglancer
+import pymorton
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +115,17 @@ class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)
 
-    def _process(self, data):
+    def _process(self, data, chunk_corner, chunk_num_voxels):
+        data = data.astype(np.uint64)
         to_process = data[self.channel]
 
-        to_process, num_features = label(to_process)
+        to_process, num_features = label(to_process, output=np.uint64)
+
+        morton_order_number = pymorton.interleave(*chunk_corner)
+        to_process[to_process > 0] += chunk_num_voxels * morton_order_number
+
+        # for exact ids, need the following: chunk_num_voxels * pymorton or cantor_number(chunk_corner), or pymorton?
+
         data[self.channel] = to_process
         return data
 
@@ -126,7 +134,7 @@ class LabelPostprocessor(PostProcessor):
 
     @property
     def dtype(self):
-        return np.uint8
+        return np.uint32
 
     @property
     def is_segmentation(self):
@@ -158,7 +166,7 @@ class AffinityPostprocessor(PostProcessor):
         self.bias = float(bias)
         self.neighborhood = ast.literal_eval(neighborhood)
 
-    def _process(self, data, chunk_corner, chunk_num_voxels):
+    def _process(self, data, chunk_num_voxels, chunk_corner):
         data = data / 255.0
         n_channels = data.shape[0]
         self.neighborhood = self.neighborhood[:n_channels]
@@ -168,6 +176,7 @@ class AffinityPostprocessor(PostProcessor):
             data.astype(np.float64) - self.bias,
             self.neighborhood,
         )
+
         # filter fragments
         average_affs = np.mean(data, axis=0)
 
@@ -181,14 +190,17 @@ class AffinityPostprocessor(PostProcessor):
             if mean >= self.bias:
                 filtered_fragments.append(fragment)
 
-        data = data.astype(np.uint64)
         fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
         fastremap.renumber(segmentation, in_place=True)
-        segmentation[segmentation > 0] += chunk_num_voxels * cantor_number(chunk_corner)
-        data[0] = segmentation
+
+        morton_order_number = pymorton.interleave(*chunk_corner)
+        segmentation[segmentation > 0] += chunk_num_voxels * morton_order_number
+        # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
+
         # filtered_fragments = np.array(filtered_fragments, dtype=segmentation.dtype)
         # data[self.channel] = to_process
-        return data
+        # insert empty dimension
+        return np.expand_dims(segmentation, axis=0)
 
     def to_dict(self):
         return {"name": self.name()}
@@ -201,11 +213,14 @@ class AffinityPostprocessor(PostProcessor):
     def is_segmentation(self):
         return True
 
+    @property
+    def num_channels(self):
+        return 1
+
 
 class SimpleBlockwiseMerger(PostProcessor):
-    def __init__(
-        self,
-    ):
+    def __init__(self, channel: int = 0):
+        self.channel = int(channel)
         self.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
         self.chunk_slice_position_to_coords_id_dict = {}
         # -1: for start and 1 for end
@@ -220,7 +235,7 @@ class SimpleBlockwiseMerger(PostProcessor):
         self.keys_to_skip = set()
 
     def _process(self, data, chunk_corner):
-        segmentation = data[0]
+        segmentation = data[self.channel]
         for slice_reference, slice in self.slices.items():
             slice_data = segmentation[slice]
             coord_0, coord_1 = np.where(slice_data > 0)
@@ -321,7 +336,7 @@ class LambdaPostprocessor(PostProcessor):
 def get_postprocessors_list() -> list[dict]:
     """Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor."""
     postprocess_classes = PostProcessor.__subclasses__()
-    postoricessors = []
+    postprocessors = []
     for post_cls in postprocess_classes:
         post_name = post_cls.__name__
         sig = inspect.signature(post_cls.__init__)
@@ -333,14 +348,14 @@ def get_postprocessors_list() -> list[dict]:
             if default_val is inspect._empty:
                 default_val = ""
             params[param_name] = default_val
-        postoricessors.append(
+        postprocessors.append(
             {
                 "class_name": post_cls.__name__,
                 "name": post_name,
                 "params": params,
             }
         )
-    return postoricessors
+    return postprocessors
 
 
 def get_postprocessors(elms: dict) -> PostProcessor:
@@ -483,5 +498,9 @@ PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]
 # %%
 
 # %%
+
+# import pymorton
+
+# print(pymorton.interleave(20000 // 64, 20000 // 64, 20000 // 64) * (100) / (2**32 - 1))
 
 # %%

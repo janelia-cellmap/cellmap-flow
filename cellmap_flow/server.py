@@ -43,7 +43,7 @@ def get_output_dtype():
 
 def get_process_dataset(dataset: str):
     if ARGS_KEY not in dataset:
-        return [], []  # No normalization or postprocessing
+        return None, [], []  # No normalization or postprocessing
     norm_data = dataset.split(ARGS_KEY)
     if len(norm_data) != 3:
         raise ValueError(
@@ -101,21 +101,20 @@ class CellMapFlowServer:
 
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.vol_shape = np.array(
-                [
-                    *output_shape[::-1],
-                    self.output_channels,
-                ]
-            )
+            self.vol_shape = [
+                *output_shape[::-1],
+                self.output_channels,
+            ]
+
             self.axis = ["x", "y", "z", "c^"]
         else:
             # For non-Zarr data
-            self.vol_shape = np.array([*output_shape, self.output_channels])
+            self.vol_shape = [*output_shape, self.output_channels]
             self.axis = ["z", "y", "x", "c^"]
 
         # Chunk encoding for N5
         self.chunk_encoder = N5ChunkWrapper(
-            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.GZip()
+            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
 
         # Create and configure Flask
@@ -162,6 +161,10 @@ class CellMapFlowServer:
                 description: Attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            for postprocess in g.postprocess:
+                if hasattr(postprocess, "num_channels"):
+                    self.vol_shape[-1] = postprocess.num_channels
+
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -185,6 +188,9 @@ class CellMapFlowServer:
                 description: Scale-level attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            for postprocess in g.postprocess:
+                if hasattr(postprocess, "num_channels"):
+                    self.vol_shape[-1] = postprocess.num_channels
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -284,10 +290,10 @@ class CellMapFlowServer:
                 "units": ["nm", "nm", "nm", ""],
                 "translate": [0.0, 0.0, 0.0, 0.0],
             },
-            "compression": {"type": "gzip", "useZlib": False, "level": -1},
+            "compression": {"type": "zstd"},
             "blockSize": list(self.n5_block_shape),
             "dataType": dtype,
-            "dimensions": self.vol_shape.tolist(),
+            "dimensions": self.vol_shape,
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
@@ -297,21 +303,30 @@ class CellMapFlowServer:
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+
         chunk_data = chunk_data.astype(get_output_dtype())
 
         current_time = time.time()
-        if (
-            hasattr(g.postprocess[-1], "equivalences")
-            and (current_time - self.previous_refresh_time) > self.refresh_rate_seconds
-        ):
-            equivalences = [
-                [int(item) for item in sublist]
-                for sublist in self.inferencer.equivalences.to_json()
-            ]
-            response = requests.post(
-                g.dashboard_url + "/update/equivalences", json=json.dumps(equivalences)
-            )
-            self.previous_refresh_time = current_time
+
+        # assume only one has equivalences
+        for postprocess in g.postprocess:
+            if (
+                hasattr(postprocess, "equivalences")
+                and postprocess.equivalences is not None
+                and (current_time - self.previous_refresh_time)
+                > self.refresh_rate_seconds
+            ):
+                equivalences = [
+                    [int(item) for item in sublist]
+                    for sublist in postprocess.equivalences.to_json()
+                ]
+                response = requests.post(
+                    g.dashboard_url + "/update/equivalences",
+                    json=json.dumps(equivalences),
+                )
+                self.previous_refresh_time = current_time
+                continue
+
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
@@ -321,7 +336,7 @@ class CellMapFlowServer:
     #
     # --- Server Runner ---
     #
-    def run(self, debug=False, port=8000, certfile=None, keyfile=None):
+    def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
         Run the Flask dev server with optional SSL certificate.
         """
@@ -332,6 +347,8 @@ class CellMapFlowServer:
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         logger.error(IP_PATTERN.format(ip_address=address))
         print(IP_PATTERN.format(ip_address=address), flush=True)
+        if port is None:
+            port = 0
 
         self.app.run(
             host="0.0.0.0",
