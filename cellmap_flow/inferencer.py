@@ -30,7 +30,7 @@ def predict(read_roi, write_roi, config, **kwargs):
     if device is None:
         raise ValueError("device must be provided in kwargs")
 
-    use_half_prediction = kwargs.get("use_half_prediction", False)
+    use_half_prediction = kwargs.get("use_half_prediction", True)
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
@@ -39,6 +39,7 @@ def predict(read_roi, write_roi, config, **kwargs):
         raw_input_torch = torch.from_numpy(raw_input).float()
         if use_half_prediction:
             raw_input_torch = raw_input_torch.half()
+        # raw_input_torch = raw_input_torch.to(device)
         raw_input_torch = raw_input_torch.to(device, non_blocking=True)
         return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
 
@@ -51,6 +52,9 @@ class Inferencer:
         else:
             self.device = torch.device("cpu")
             logger.error("No GPU available, using CPU")
+        torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
+        torch.backends.cudnn.enabled = True
+
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config

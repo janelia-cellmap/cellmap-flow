@@ -264,10 +264,12 @@ class CellMapModelConfig(ModelConfig):
         config.input_voxel_size = Coordinate(metadata.input_voxel_size)
         config.output_voxel_size = Coordinate(metadata.output_voxel_size)
         config.channels_names = metadata.channels_names
-        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
-        config.block_shape = [*metadata.output_shape, metadata.out_channels]
-        config.model = self.cellmap_model.pytorch_model
+        read_shape = metadata.inference_input_shape 
+        write_shape = metadata.inference_output_shape
+        config.read_shape = Coordinate(read_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(write_shape) * config.output_voxel_size
+        config.block_shape = [*write_shape, metadata.out_channels]
+        config.model = self.cellmap_model.ts_model
         if torch.cuda.is_available():
             device = torch.device("cuda")
         else:
