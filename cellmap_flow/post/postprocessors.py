@@ -134,7 +134,7 @@ class LabelPostprocessor(PostProcessor):
 
     @property
     def dtype(self):
-        return np.uint32
+        return np.uint64
 
     @property
     def is_segmentation(self):
@@ -219,6 +219,7 @@ class AffinityPostprocessor(PostProcessor):
 
 
 class SimpleBlockwiseMerger(PostProcessor):
+    # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
     def __init__(self, channel: int = 0):
         self.channel = int(channel)
         self.equivalences = neuroglancer.equivalence_map.EquivalenceMap()

@@ -34,9 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_output_dtype():
-    if len(g.postprocess) == 0:
-        dtype = np.uint8
-    else:
+    dtype = np.float32
+
+    if len(g.input_norms) > 0:
+        dtype = g.input_norms[-1].dtype
+
+    if len(g.postprocess) > 0:
         dtype = g.postprocess[-1].dtype
     return dtype
 
@@ -101,22 +104,21 @@ class CellMapFlowServer:
 
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.vol_shape = [
+            self.default_vol_shape = [
                 *output_shape[::-1],
                 self.output_channels,
             ]
-
             self.axis = ["x", "y", "z", "c^"]
+            self.vol_shape = self.default_vol_shape.copy()
         else:
             # For non-Zarr data
-            self.vol_shape = [*output_shape, self.output_channels]
+            self.default_vol_shape = [*output_shape, self.output_channels]
             self.axis = ["z", "y", "x", "c^"]
-
+            self.vol_shape = self.default_vol_shape.copy()
         # Chunk encoding for N5
         self.chunk_encoder = N5ChunkWrapper(
             get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
-
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
@@ -161,6 +163,10 @@ class CellMapFlowServer:
                 description: Attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+            )
+            self.vol_shape = self.default_vol_shape.copy()
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
@@ -188,6 +194,10 @@ class CellMapFlowServer:
                 description: Scale-level attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+            )
+            self.vol_shape = self.default_vol_shape.copy()
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
