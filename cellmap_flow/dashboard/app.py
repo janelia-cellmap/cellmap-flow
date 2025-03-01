@@ -21,6 +21,7 @@ from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+from cellmap_flow.models.cellmap_models import update_run_models
 import cellmap_flow.globals as g
 import numpy as np
 
@@ -37,9 +38,10 @@ def index():
     # Render the main page with tabs
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
-
+    model_catalog = g.model_catalog
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
+    logger.warning(f"Model catalog: {model_catalog}")
     logger.warning(f"Default postprocess: {default_post_process}")
     logger.warning(f"Default input norm: {default_input_norm}")
 
@@ -50,7 +52,8 @@ def index():
         input_normalizers=input_norms,
         output_postprocessors=output_postprocessors,
         default_post_process=default_post_process,
-        default_input_norm=default_input_norm,  # Pass it here
+        default_input_norm=default_input_norm,
+        model_catalog=model_catalog,
     )
 
 
@@ -69,6 +72,21 @@ def update_equivalences():
     with g.viewer.txn() as s:
         s.layers[-1].equivalences = equivalences
     return jsonify({"message": "Equivalences updated successfully"})
+
+
+@app.route("/api/models", methods=["POST"])
+def submit_models():
+    data = request.get_json()
+    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
+    selected_models = data.get("selected_models", [])
+    update_run_models(selected_models)
+    logger.warning(f"Selected models: {selected_models}")
+    return jsonify(
+        {
+            "message": "Data received successfully",
+            "models": selected_models,
+        }
+    )
 
 
 @app.route("/api/process", methods=["POST"])

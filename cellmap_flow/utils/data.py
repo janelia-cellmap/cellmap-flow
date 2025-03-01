@@ -3,6 +3,10 @@ IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
 import logging
 from typing import List
 import yaml
+import numpy as np
+from funlib.geometry.coordinate import Coordinate
+import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,7 @@ class ModelConfig:
     def config(self):
         if self._config is None:
             self._config = self._get_config()
-        check_config(self._config)
+            check_config(self._config)
         return self._config
 
 
@@ -79,9 +83,7 @@ class DaCapoModelConfig(ModelConfig):
         return f"dacapo -r {self.run_name} -i {self.iteration}"
 
     def _get_config(self):
-        from daisy.coordinate import Coordinate
-        import numpy as np
-        import torch
+
 
         config = Config()
 
@@ -114,7 +116,7 @@ class DaCapoModelConfig(ModelConfig):
 
 
 def check_config(config):
-    assert hasattr(config, "model"), f"Model not found in config"
+    assert hasattr(config, "model") or hasattr(config,"predict"), f"Model or predict not found in config"
     assert hasattr(config, "read_shape"), f"read_shape not found in config"
     assert hasattr(config, "write_shape"), f"write_shape not found in config"
     assert hasattr(config, "input_voxel_size"), f"input_voxel_size not found in config"
@@ -213,3 +215,68 @@ def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
         configs.append(config)
 
     return configs
+
+from cellmap_flow.models.cellmap_models import CellmapModel
+from typing import Optional
+
+class CellMapModelConfig(ModelConfig):
+    """
+    Configuration class for a CellmapModel.
+    Similar to DaCapoModelConfig, but uses a CellmapModel object
+    to populate the necessary metadata and define a prediction function.
+    """
+
+    def __init__(self, folder_path,name):
+        """
+        :param cellmap_model: An instance of CellmapModel containing metadata 
+                              and references to ONNX, TorchScript, or PyTorch models.
+        :param name: Optional name for this configuration.
+        """
+        super().__init__()
+        self.cellmap_model = CellmapModel(folder_path=folder_path)
+        self.name = name
+
+    @property
+    def command(self) -> str:
+        """
+        You can either return a placeholder command or remove this property if not needed.
+        For consistency with your DaCapoModelConfig, we return something minimal here.
+        """
+        return "cellmap-model -f {self.cellmap_model.folder_path} -n {self.name}"
+
+    def _get_config(self) -> Config:
+        """
+        Build and return a `Config` object populated using the CellmapModel's metadata and ONNX runtime.
+        """
+        config = Config()
+
+        # Access metadata from the CellmapModel
+        metadata = self.cellmap_model.metadata
+
+        # If you want to store any of these metadata fields into your config object, do so here:
+        config.model_name = metadata.model_name
+        config.model_type = metadata.model_type
+        config.framework = metadata.framework
+        config.spatial_dims = metadata.spatial_dims
+        config.in_channels = metadata.in_channels
+        config.output_channels = metadata.out_channels
+        config.iteration = metadata.iteration
+        config.input_voxel_size = Coordinate(metadata.input_voxel_size)
+        config.output_voxel_size = Coordinate(metadata.output_voxel_size)
+        config.channels_names = metadata.channels_names
+        read_shape = metadata.inference_input_shape 
+        write_shape = metadata.inference_output_shape
+        config.read_shape = Coordinate(read_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(write_shape) * config.output_voxel_size
+        config.block_shape = [*write_shape, metadata.out_channels]
+        config.model = self.cellmap_model.ts_model
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        print("device:", device)
+
+        config.model.to(device)
+        config.model.eval()
+        return config
+    

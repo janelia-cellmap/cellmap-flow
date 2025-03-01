@@ -6,20 +6,30 @@ import signal
 import select
 
 from cellmap_flow.utils.data import IP_PATTERN
+import cellmap_flow.globals as g
+import logging
 
-processes = []
-job_ids = []
+logger = logging.getLogger(__name__)
+
 security = "http"
 
-
-def cleanup(signum, frame):
-    print(f"Script is being killed. Received signal: {signum}")
+def kill_jobs(job_ids):
     if is_bsub_available():
         for job_id in job_ids:
             print(f"Killing job {job_id}")
             os.system(f"bkill {job_id}")
     else:
-        for process in processes:
+        logger.error("bsub is not available. Cannot kill jobs.")
+
+
+def cleanup(signum, frame):
+    print(f"Script is being killed. Received signal: {signum}")
+    if is_bsub_available():
+        for job_id in g.job_ids:
+            print(f"Killing job {job_id}")
+            os.system(f"bkill {job_id}")
+    else:
+        for process in g.processes:
             process.kill()
     sys.exit(0)
 
@@ -169,7 +179,7 @@ def run_locally(sc):
         # Check if the process has finished and no more output is available
         if process.poll() is not None and not rlist:
             break
-    processes.append(process)
+    g.processes.append(process)
     return host
 
 
@@ -182,7 +192,7 @@ def start_hosts(
     if is_bsub_available():
         result = submit_bsub_job(command, queue, charge_group, job_name=job_name)
         job_id = result.stdout.split()[1][1:-1]
-        job_ids.append(job_id)
+        g.job_ids.append(job_id)
         host = parse_bpeek_output(job_id)
     else:
         host = run_locally(command)

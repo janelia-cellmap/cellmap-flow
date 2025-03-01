@@ -8,6 +8,7 @@ from cellmap_flow.utils.data import (
     BioModelConfig,
     DaCapoModelConfig,
     ScriptModelConfig,
+    CellMapModelConfig,
 )
 import cellmap_flow.globals as g
 import neuroglancer
@@ -31,7 +32,7 @@ def predict(read_roi, write_roi, config, **kwargs):
     if device is None:
         raise ValueError("device must be provided in kwargs")
 
-    use_half_prediction = kwargs.get("use_half_prediction", False)
+    use_half_prediction = kwargs.get("use_half_prediction", True)
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
@@ -40,12 +41,22 @@ def predict(read_roi, write_roi, config, **kwargs):
         raw_input_torch = torch.from_numpy(raw_input).float()
         if use_half_prediction:
             raw_input_torch = raw_input_torch.half()
+        # raw_input_torch = raw_input_torch.to(device)
         raw_input_torch = raw_input_torch.to(device, non_blocking=True)
         return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
 
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+            logger.error("No GPU available, using CPU")
+        torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
+        torch.backends.cudnn.enabled = True
+
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
@@ -72,12 +83,6 @@ class Inferencer:
         if not isinstance(self.model_config.config.model, torch.nn.Module):
             logger.error("Model is not a nn.Module, we only optimize torch models")
             return
-
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-            logger.error("No GPU available, using CPU")
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
             self.model_config.config.model.half()
@@ -93,7 +98,7 @@ class Inferencer:
             result = self.process_chunk_bioimagezoo(idi, roi)
         elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
             self.model_config, ScriptModelConfig
-        ):
+        ) or isinstance(self.model_config, CellMapModelConfig):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk
