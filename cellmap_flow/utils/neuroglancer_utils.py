@@ -9,6 +9,7 @@ from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
+    get_norms_post_args,
     encode_to_str,
     )
 
@@ -16,30 +17,11 @@ logger = logging.getLogger(__name__)
 
 neuroglancer.set_server_bind_address("0.0.0.0")
 
-def list_cls_to_dict(ll):
-    args = {}
-    norms = {}
-    for n in ll:
-        name = n.name()
-        elms = n.to_dict()
-        elms.pop("name")
-        elms = {k: str(v) for k, v in elms.items()}
-        norms[name] = elms
 
-    return norms
-
-def get_norms_post_args():
-    args = {}
-    
-    args[INPUT_NORM_DICT_KEY] = list_cls_to_dict(g.input_norms)
-    args[POSTPROCESS_DICT_KEY] = list_cls_to_dict(g.postprocess)
-    st_data = encode_to_str(args)
-    return st_data
-
-def generate_neuroglancer_url(dataset_path, inference_dict):
+def generate_neuroglancer_url(dataset_path):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
-    st_data = get_norms_post_args()
+    st_data = get_norms_post_args(g.input_norms,g.postprocess)
 
     # Add a layer to the viewer
     with g.viewer.txn() as s:
@@ -67,8 +49,9 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
             "magenta",
         ]
         color_cycle = itertools.cycle(colors)
-        for host, model in inference_dict.items():
-            g.models_host[model] = host
+        for job  in g.jobs:
+            model = job.model_name
+            host = job.host
             color = next(color_cycle)
             s.layers[model] = neuroglancer.ImageLayer(
                 source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
@@ -83,6 +66,7 @@ def generate_neuroglancer_url(dataset_path, inference_dict):
     url = create_and_run_app(neuroglancer_url=viewer_url)
     show(url)
     return url
+
 
 
 def show(viewer):

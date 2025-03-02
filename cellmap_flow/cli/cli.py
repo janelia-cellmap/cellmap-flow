@@ -3,7 +3,7 @@ import logging
 import click
 
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.bsub_utils import run_locally, start_hosts
+from cellmap_flow.utils.bsub_utils import run_locally, start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
@@ -13,7 +13,7 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
-SERVER_COMMAND = "cellmap_flow_server"
+
 
 
 @click.group()
@@ -217,15 +217,9 @@ def run(
     charge_group,
     name
 ):
-    host = start_hosts(command, queue, charge_group,f"{name}_server")
-    if host is None:
-        raise Exception("Could not start host")
+    
+    start_hosts(command, queue, charge_group,name)
 
-    inference_dict = {host: "prediction"}
-    neuroglancer_url = generate_neuroglancer_url(dataset_path, inference_dict)
-    ui_host = run_locally(
-        f"cellmap_flow_server run-ui-server -n {neuroglancer_url} -i {host}"
-    )
-    print(host)
+    neuroglancer_url = generate_neuroglancer_url(dataset_path)
     while True:
         pass

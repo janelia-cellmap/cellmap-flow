@@ -1,7 +1,7 @@
 import sys
 from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig, CellMapModelConfig
 import logging
-from cellmap_flow.utils.bsub_utils import start_hosts
+from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
 
@@ -11,7 +11,6 @@ server_queue_arg = ["-q", "--queue"]
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
-SERVER_COMMAND = "cellmap_flow_server"
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,10 @@ def main():
     """
 
     args = sys.argv[1:]
+
+    if "--help" in args:
+        print(main.__doc__)
+        sys.exit(0)
 
     if not args:
         logger.error("No arguments provided.")
@@ -208,15 +211,11 @@ if __name__ == "__main__":
 
 
 def run_multiple(models, dataset_path, charge_back, queue):
-    inference_dict = {}
     for model in models:
         command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
-        host = start_hosts(
-            command, job_name=f"{model.name}_server", queue=queue, charge_group=charge_back
+        start_hosts(
+            command, job_name=model.name, queue=queue, charge_group=charge_back
         )
-        if host is None:
-            raise Exception("Could not start host")
-        inference_dict[host] = model.name
-    generate_neuroglancer_url(dataset_path, inference_dict)
+    generate_neuroglancer_url(dataset_path)
     while True:
         pass
