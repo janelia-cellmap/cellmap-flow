@@ -172,6 +172,10 @@ def to_ndarray_tensorstore(
             roi = Roi(roi.begin[::-1], roi.shape[::-1])
         if offset:
             offset = Coordinate(offset[::-1])
+        if voxel_size:
+            voxel_size = Coordinate(voxel_size[::-1])
+        if output_voxel_size:
+            output_voxel_size = Coordinate(output_voxel_size[::-1])
 
     if roi is None:
         with ts.Transaction() as txn:
@@ -476,7 +480,17 @@ def check_for_voxel_size(array, order):
         elif "scale" in item.attrs:
             return item.attrs["scale"]
         elif "pixelResolution" in item.attrs:
-            return item.attrs["pixelResolution"]["dimensions"]
+            downsampling_factors = [1, 1, 1]
+            if "downsamplingFactors" in item.attrs:
+                downsampling_factors = item.attrs["downsamplingFactors"]
+            if "dimensions" not in item.attrs["pixelResolution"]:
+                base_resolution = item.attrs["pixelResolution"]
+            else:
+                base_resolution = item.attrs["pixelResolution"]["dimensions"]
+            final_resolution = list(
+                np.array(base_resolution) * np.array(downsampling_factors)
+            )
+            return final_resolution
         elif "transform" in item.attrs:
             # Davis saves transforms in C order regardless of underlying
             # memory format (i.e. n5 or zarr). May be explicitly provided
@@ -543,7 +557,9 @@ def check_for_units(array, order):
 
         if "units" in item.attrs:
             return item.attrs["units"]
-        elif "pixelResolution" in item.attrs:
+        elif (
+            "pixelResolution" in item.attrs and "unit" in item.attrs["pixelResolution"]
+        ):
             unit = item.attrs["pixelResolution"]["unit"]
             return [unit for _ in range(len(array.shape))]
         elif "transform" in item.attrs:
@@ -720,6 +736,10 @@ def regularize_offset(voxel_size_float, offset_float):
 def _read_voxel_size_offset(ds, order="C"):
 
     voxel_size, offset, units = _read_attrs(ds, order)
+    for idx, unit in enumerate(units):
+        if unit == "um":
+            voxel_size[idx] = voxel_size[idx] * 1000
+            offset[idx] = offset[idx] * 1000
 
     return regularize_offset(voxel_size, offset)
 
