@@ -47,7 +47,7 @@ def predict(read_roi, write_roi, config, **kwargs):
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=True):
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -61,7 +61,6 @@ class Inferencer:
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
         _ = self.model_config.config
-
 
         if hasattr(self.model_config.config, "read_shape") and hasattr(
             self.model_config.config, "write_shape"
@@ -96,9 +95,11 @@ class Inferencer:
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
             result = self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
-            self.model_config, ScriptModelConfig
-        ) or isinstance(self.model_config, CellMapModelConfig):
+        elif (
+            isinstance(self.model_config, DaCapoModelConfig)
+            or isinstance(self.model_config, ScriptModelConfig)
+            or isinstance(self.model_config, CellMapModelConfig)
+        ):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk
