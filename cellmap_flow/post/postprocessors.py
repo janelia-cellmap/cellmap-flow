@@ -141,6 +141,31 @@ class LabelPostprocessor(PostProcessor):
         return True
 
 
+class MortonSegmentationRelabeling(PostProcessor):
+    def __init__(self, channel: int = 0):
+        self.channel = int(channel)
+
+    def _process(self, data, chunk_corner, chunk_num_voxels):
+        data = data.astype(np.uint64)
+        to_process = data[self.channel]
+
+        morton_order_number = pymorton.interleave(*chunk_corner)
+        to_process[to_process > 0] += chunk_num_voxels * morton_order_number
+        data[self.channel] = to_process
+        return data
+
+    def to_dict(self):
+        return {"name": self.name()}
+
+    @property
+    def dtype(self):
+        return np.uint64
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 import mwatershed as mws
 from scipy.ndimage import measurements
 import fastremap
