@@ -243,10 +243,14 @@ class AffinityPostprocessor(PostProcessor):
         return 1
 
 
+import fastmorph
+
+
 class SimpleBlockwiseMerger(PostProcessor):
     # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
-    def __init__(self, channel: int = 0):
+    def __init__(self, channel: int = 0, face_erosion_iterations: int = 0):
         self.channel = int(channel)
+        self.face_erosion_iterations = int(face_erosion_iterations)
         self.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
         self.chunk_slice_position_to_coords_id_dict = {}
         # -1: for start and 1 for end
@@ -264,6 +268,10 @@ class SimpleBlockwiseMerger(PostProcessor):
         segmentation = data[self.channel]
         for slice_reference, slice in self.slices.items():
             slice_data = segmentation[slice]
+            if self.face_erosion_iterations > 0:
+                slice_data = fastmorph.erode(
+                    slice_data, iterations=self.face_erosion_iterations
+                )
             coord_0, coord_1 = np.where(slice_data > 0)
             segmented_ids = slice_data[coord_0, coord_1]
             self.chunk_slice_position_to_coords_id_dict[

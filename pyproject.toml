@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "PyYAML",
     "gunicorn",
+    "fastmorph",
     "flask",
     "flask-cors",
     "tensorstore",
