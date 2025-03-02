@@ -108,8 +108,8 @@ def bioimage(model_path, data_path, debug, port, certfile, keyfile):
 
 def run_server(model_config, data_path, debug, port, certfile, keyfile):
     server = CellMapFlowServer(data_path, model_config)
-    if port == 0:
-        port = get_free_port()
+    # if port == 0:
+    #     port = get_free_port()
 
     server.run(
         debug=debug,

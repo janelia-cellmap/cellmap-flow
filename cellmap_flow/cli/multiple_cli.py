@@ -1,5 +1,5 @@
 import sys
-from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig
+from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig, CellMapModelConfig
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
@@ -47,7 +47,7 @@ def main():
         )
         args.extend([server_queue_arg[0], DEFAULT_SERVER_QUEUE])
 
-    if "--dacapo" not in args and "--script" not in args and "--bioimage" not in args:
+    if "--dacapo" not in args and "--script" not in args and "--bioimage" not in args and "--cellmap-model" not in args:
         logger.error(
             "Missing required argument at least one should exist: --dacapo, --script, or --bioimage"
         )
@@ -126,6 +126,24 @@ def main():
             i = j
             continue
 
+        if token == "--cellmap-model":
+            config_folder = None
+            name = None
+            j = i + 1
+            while j < len(args) and not args[j].startswith("--"):
+                if args[j] in ("-f", "--config_folder"):
+                    config_folder = args[j + 1]
+                    j += 2
+                elif args[j] in ("-n", "--name"):
+                    name = args[j + 1]
+                    j += 2
+                else:
+                    j += 1
+            if not config_folder:
+                logger.error("Missing -c/--config_folder for --celmmap-model sub-command.")
+                sys.exit(1)
+            models.append(CellMapModelConfig(config_folder, name=name))
+
         elif token == "--script":
             # We expect: --script -s script_path -n "some name"
             script_path = None
@@ -194,7 +212,7 @@ def run_multiple(models, dataset_path, charge_back, queue):
     for model in models:
         command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
         host = start_hosts(
-            command, job_name=model.name, queue=queue, charge_group=charge_back
+            command, job_name=f"{model.name}_server", queue=queue, charge_group=charge_back
         )
         if host is None:
             raise Exception("Could not start host")

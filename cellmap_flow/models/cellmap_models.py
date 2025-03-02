@@ -60,6 +60,7 @@ class CellmapModel:
         """Lazy load the metadata.json file and parse it into a ModelMetadata object."""
         if self._metadata is None:
             metadata_file = os.path.join(self.folder_path, "metadata.json")
+            metadata_file = os.path.normpath(metadata_file)
             with open(metadata_file, "r") as f:
                 data = json.load(f)
             self._metadata = ModelMetadata(**data)
@@ -74,6 +75,7 @@ class CellmapModel:
         """
         if self._onnx_model is None:
             model_path = os.path.join(self.folder_path, "model.onnx")
+            model_path = os.path.normpath(model_path)
             if ort is None:
                 # onnxruntime is not installed
                 return None
@@ -105,6 +107,7 @@ class CellmapModel:
                 # PyTorch is not installed
                 return None
             pt_path = os.path.join(self.folder_path, "model.pt")
+            pt_path = os.path.normpath(pt_path)
             if os.path.exists(pt_path):
                 # Load the entire model object. 
                 # If your file only has the state_dict, you'll need to do something like:
@@ -128,6 +131,7 @@ class CellmapModel:
                 # PyTorch is not installed
                 return None
             ts_path = os.path.join(self.folder_path, "model.ts")
+            ts_path = os.path.normpath(ts_path)
             if os.path.exists(ts_path):
                 self._ts_model = torch.jit.load(ts_path)
             else:
@@ -141,6 +145,7 @@ class CellmapModel:
         """
         if self._readme_content is None:
             readme_file = os.path.join(self.folder_path, "README.md")
+            readme_file = os.path.normpath(readme_file)
             if os.path.exists(readme_file):
                 with open(readme_file, "r", encoding="utf-8") as f:
                     self._readme_content = f.read()

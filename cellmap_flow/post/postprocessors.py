@@ -58,9 +58,6 @@ class DefaultPostprocessor(PostProcessor):
         data = (data + self.bias) * self.multiplier
         return data.astype(np.uint8) 
     
-    def to_dict(self):
-        return {"name": self.name()}
-    
     @property
     def dtype(self):
         return np.uint8
