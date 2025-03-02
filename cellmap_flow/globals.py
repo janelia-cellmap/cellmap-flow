@@ -20,9 +20,10 @@ dataset_path = None
 
 
 from cellmap_flow.models.model_yaml import load_model_paths
+import os
 
 model_catalog = load_model_paths(
-    "/groups/cellmap/cellmap/zouinkhim/cellmap-flow/models/models.yaml"
+    os.path.normpath(os.path.join(os.path.dirname(__file__), os.pardir, "models", "models.yaml"))
 )
 
 queue = "gpu_h100"
