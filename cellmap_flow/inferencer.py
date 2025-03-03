@@ -192,19 +192,3 @@ class Inferencer:
     #     # for i in range(len(neighbors)):
     #     #     for j in neighbors[i]:
     #     #         self.equivalences.union(ids[i], ids[j])
-
-
-# %%
-import numpy as np
-
-# rreate random array of size 66352 x 3
-data = np.random.random((66352, 3))
-tree = spatial.cKDTree(data)
-# neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
-
-# %%
-# a = {1: 2}
-# b = a.copy()
-# a.update({3: 4})
-# print(b)
-# %%
