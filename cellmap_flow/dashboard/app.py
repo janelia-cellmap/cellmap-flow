@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import neuroglancer
@@ -22,13 +23,13 @@ from cellmap_flow.utils.web_utils import (
 )
 from cellmap_flow.models.run import update_run_models
 import cellmap_flow.globals as g
+import numpy as np
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
-
 CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
 
 
@@ -62,6 +63,17 @@ def is_output_segmentation():
     return False
 
 
+@app.route("/update/equivalences", methods=["POST"])
+def update_equivalences():
+    equivalences = [
+        [np.uint64(item) for item in sublist]
+        for sublist in json.loads(request.get_json())
+    ]
+    with g.viewer.txn() as s:
+        s.layers[-1].equivalences = equivalences
+    return jsonify({"message": "Equivalences updated successfully"})
+
+
 @app.route("/api/models", methods=["POST"])
 def submit_models():
     data = request.get_json()
@@ -80,6 +92,9 @@ def submit_models():
 @app.route("/api/process", methods=["POST"])
 def process():
     data = request.get_json()
+
+    # add dashboard url to data so we can update the state from the server
+    data["dashboard_url"] = request.host_url
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:
@@ -98,6 +113,7 @@ def process():
             # response = requests.post(f"{host}/input_normalize", json=data)
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)
+
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
                     source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
@@ -142,7 +158,7 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     NEUROGLANCER_URL = neuroglancer_url
     INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
-    port = get_free_port()
+    port = 0
     logger.warning(f"Host name: {hostname}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 

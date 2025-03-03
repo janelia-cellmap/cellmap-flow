@@ -1,3 +1,4 @@
+# %%
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -10,15 +11,16 @@ from cellmap_flow.utils.data import (
     CellMapModelConfig,
 )
 import cellmap_flow.globals as g
+import neuroglancer
+from scipy import spatial
 
 logger = logging.getLogger(__name__)
 
-def apply_postprocess(data):
+
+def apply_postprocess(data, **kwargs):
     for pross in g.postprocess:
-        data = pross(data)
+        data = pross(data, **kwargs)
     return data
-
-
 
 
 def predict(read_roi, write_roi, config, **kwargs):
@@ -45,7 +47,7 @@ def predict(read_roi, write_roi, config, **kwargs):
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=True):
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -92,19 +94,28 @@ class Inferencer:
 
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
-            return self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
-            self.model_config, ScriptModelConfig
-        ) or isinstance(self.model_config, CellMapModelConfig):
+            result = self.process_chunk_bioimagezoo(idi, roi)
+        elif (
+            isinstance(self.model_config, DaCapoModelConfig)
+            or isinstance(self.model_config, ScriptModelConfig)
+            or isinstance(self.model_config, CellMapModelConfig)
+        ):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk
             ):
-                return self.model_config.config.process_chunk(idi, roi)
+                result = self.model_config.config.process_chunk(idi, roi)
             else:
-                return self.process_chunk_basic(idi, roi)
+                result = self.process_chunk_basic(idi, roi)
         else:
             raise ValueError(f"Invalid model config type {type(self.model_config)}")
+
+        postprocessed = apply_postprocess(
+            result,
+            chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
+            chunk_num_voxels=np.prod(roi.get_shape() // idi.output_voxel_size),
+        )
+        return postprocessed
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
@@ -118,7 +129,7 @@ class Inferencer:
             device=self.device,
             use_half_prediction=self.use_half_prediction,
         )
-        result = apply_postprocess(result)
+        # result = apply_postprocess(result)
         return result
 
     # create random input tensor
@@ -172,3 +183,28 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
+
+    # def calculate_equivalences(self):
+    #     g.postprocess[-1].calculate_equivalences(self.equivalences)
+    #     # ids = list(self.edge_voxel_position_to_id_dict.values())
+    #     # tree = spatial.cKDTree(positions)
+    #     # neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+    #     # for i in range(len(neighbors)):
+    #     #     for j in neighbors[i]:
+    #     #         self.equivalences.union(ids[i], ids[j])
+
+
+# %%
+import numpy as np
+
+# rreate random array of size 66352 x 3
+data = np.random.random((66352, 3))
+tree = spatial.cKDTree(data)
+# neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+
+# %%
+# a = {1: 2}
+# b = a.copy()
+# a.update({3: 4})
+# print(b)
+# %%
