@@ -8,6 +8,9 @@ from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 import ast
 import neuroglancer
 import pymorton
+import threading
+
+postprocessing_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -115,16 +118,8 @@ class LabelPostprocessor(PostProcessor):
         self.channel = int(channel)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
-        data = data.astype(np.uint64)
         to_process = data[self.channel]
-
-        to_process, num_features = label(to_process, output=np.uint64)
-
-        morton_order_number = pymorton.interleave(*chunk_corner)
-        to_process[to_process > 0] += chunk_num_voxels * morton_order_number
-
-        # for exact ids, need the following: chunk_num_voxels * pymorton or cantor_number(chunk_corner), or pymorton?
-
+        to_process, num_features = label(to_process)
         data[self.channel] = to_process
         return data
 
@@ -133,7 +128,46 @@ class LabelPostprocessor(PostProcessor):
 
     @property
     def dtype(self):
-        return np.uint64
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
+class MortonSegmentationRelabeling(PostProcessor):
+    def __init__(self, channel: int = 0):
+        use_exact = "True"
+        self.channel = int(channel)
+        self.num_previous_segments = 0
+        self.use_exact = use_exact == "True"
+
+    def _process(self, data, chunk_corner, chunk_num_voxels):
+        data = data.astype(np.uint64 if self.use_exact else np.uint16)
+        to_process = data[self.channel]
+        #        if self.use_exact:
+        morton_order_number = pymorton.interleave(*chunk_corner)
+        unique_increment = chunk_num_voxels * morton_order_number
+        if not self.use_exact:
+            mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
+            mixed ^= mixed >> 16
+            unique_increment = mixed & 0xFFFF
+            # with postprocessing_lock:
+            # unique_increment = self.num_previous_segments
+            # self.num_previous_segments += len(
+            #     fastremap.unique(to_process[to_process > 0])
+            # )
+
+        to_process[to_process > 0] += unique_increment
+        data[self.channel] = to_process
+        return data
+
+    def to_dict(self):
+        return {"name": self.name()}
+
+    @property
+    def dtype(self):
+        return np.uint64 if self.use_exact else np.uint16
 
     @property
     def is_segmentation(self):
@@ -162,8 +196,11 @@ class AffinityPostprocessor(PostProcessor):
                 [0, 0, 9],
             ]""",
     ):
+        use_exact = "True"
         self.bias = float(bias)
         self.neighborhood = ast.literal_eval(neighborhood)
+        self.use_exact = use_exact == "True"
+        self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
         data = data / 255.0
@@ -191,9 +228,18 @@ class AffinityPostprocessor(PostProcessor):
 
         fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
         fastremap.renumber(segmentation, in_place=True)
+        unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
+        if not self.use_exact:
+            unique_increment = np.random.randint(0, 256) * 256
+            # https://chatgpt.com/c/67c5db69-a3cc-8001-8be5-21d00cef0a8f
+            # mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
+            # mixed ^= mixed >> 16
+            # unique_increment = mixed & 0xFFFF  # with postprocessing_lock:
+            # unique_increment = self.num_previous_segments
+            # self.num_previous_segments += len(filtered_fragments)
 
-        morton_order_number = pymorton.interleave(*chunk_corner)
-        segmentation[segmentation > 0] += chunk_num_voxels * morton_order_number
+        segmentation[segmentation > 0] += unique_increment
+        segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
         # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
 
         # filtered_fragments = np.array(filtered_fragments, dtype=segmentation.dtype)
@@ -206,7 +252,7 @@ class AffinityPostprocessor(PostProcessor):
 
     @property
     def dtype(self):
-        return np.uint64
+        return np.uint64 if self.use_exact else np.uint16
 
     @property
     def is_segmentation(self):
@@ -217,10 +263,20 @@ class AffinityPostprocessor(PostProcessor):
         return 1
 
 
+import fastmorph
+
+
 class SimpleBlockwiseMerger(PostProcessor):
     # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
-    def __init__(self, channel: int = 0):
+    def __init__(
+        self,
+        channel: int = 0,
+        face_erosion_iterations: int = 0,
+    ):
+        use_exact = "True"
         self.channel = int(channel)
+        self.face_erosion_iterations = int(face_erosion_iterations)
+        self.use_exact = use_exact == "True"
         self.equivalences = neuroglancer.equivalence_map.EquivalenceMap()
         self.chunk_slice_position_to_coords_id_dict = {}
         # -1: for start and 1 for end
@@ -238,6 +294,10 @@ class SimpleBlockwiseMerger(PostProcessor):
         segmentation = data[self.channel]
         for slice_reference, slice in self.slices.items():
             slice_data = segmentation[slice]
+            if self.face_erosion_iterations > 0:
+                slice_data = fastmorph.erode(
+                    slice_data, iterations=self.face_erosion_iterations
+                )
             coord_0, coord_1 = np.where(slice_data > 0)
             segmented_ids = slice_data[coord_0, coord_1]
             self.chunk_slice_position_to_coords_id_dict[
@@ -252,7 +312,7 @@ class SimpleBlockwiseMerger(PostProcessor):
             self.chunk_slice_position_to_coords_id_dict.pop(key, None)
         self.calculate_equivalences()
         # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
-        return data
+        return data.astype(np.uint64 if self.use_exact else np.uint16)
 
     def to_dict(self):
         return {"name": self.name()}
@@ -286,7 +346,7 @@ class SimpleBlockwiseMerger(PostProcessor):
 
     @property
     def dtype(self):
-        return np.uint64
+        return np.uint64 if self.use_exact else np.uint16
 
     @property
     def is_segmentation(self):
@@ -503,4 +563,10 @@ PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]
 
 # print(pymorton.interleave(20000 // 64, 20000 // 64, 20000 // 64) * (100) / (2**32 - 1))
 
+# %%
+# %%
+mixed = (pymorton.interleave(202, 201, 300) * 2654435761) & 0xFFFFFFFF
+mixed ^= mixed >> 16
+uid = mixed & 0xFFFF
+print(uid, type(uid))
 # %%

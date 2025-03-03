@@ -159,10 +159,9 @@ def bioimage(model_path, data_path, queue, charge_group):
 
 @cli.command()
 @click.option(
-    "-f", "--config_folder", required=True, type=str, help="Path to the model folder")
-@click.option(
-    "-n","--name", required=True, type=str, help="Name of the model"
+    "-f", "--config_folder", required=True, type=str, help="Path to the model folder"
 )
+@click.option("-n", "--name", required=True, type=str, help="Name of the model")
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
@@ -188,7 +187,6 @@ def cellmap_model(config_folder, name, data_path, queue, charge_group):
     run(command, data_path, queue, charge_group,name)
 
 
-
 @cli.command()
 @click.option(
     "--script_path",
@@ -207,7 +205,6 @@ def script_server_check(script_path, dataset):
     server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
 
     print("Server check passed")
-
 
 
 def run(

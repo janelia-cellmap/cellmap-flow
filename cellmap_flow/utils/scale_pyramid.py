@@ -48,9 +48,15 @@ def get_raw_layer(dataset_path):
                     dimensions=neuroglancer.CoordinateSpace(
                         names=axis,
                         units="nm",
-                        scales=image.voxel_size,
+                        scales=(
+                            image.voxel_size[::-1]
+                            if filetype == "n5"
+                            else image.voxel_size
+                        ),
                     ),
-                    voxel_offset=image.offset,
+                    voxel_offset=(
+                        image.offset[::-1] if filetype == "n5" else image.offset
+                    ),
                 )
             )
 
