@@ -16,7 +16,7 @@ def run_model(model_path,name, st_data):
     command = f"{SERVER_COMMAND} cellmap-model -f {model_path} -n {name} -d {g.dataset_path}"
     logger.error(f"To be submitted command : {command}")
     job = start_hosts(
-        command, job_name=name, queue=g.queue, charge_group=g.charge_back
+        command, job_name=name, queue=g.queue, charge_group=g.charge_group
     )
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(

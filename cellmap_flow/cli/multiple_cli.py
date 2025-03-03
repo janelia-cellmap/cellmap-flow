@@ -6,7 +6,7 @@ from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
 
 data_args = ["-d", "--data-path"]
-charge_back_arg = ["-P", "--project"]
+charge_group_arg = ["-P", "--project"]
 server_queue_arg = ["-q", "--queue"]
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
@@ -40,7 +40,7 @@ def main():
         logger.error("Missing required argument: --data-path")
         sys.exit(1)
 
-    if charge_back_arg[0] not in args and charge_back_arg[1] not in args:
+    if charge_group_arg[0] not in args and charge_group_arg[1] not in args:
         logger.error("Missing required argument: --project")
         sys.exit(1)
 
@@ -61,16 +61,16 @@ def main():
 
     # Extract data path
     data_path = None
-    charge_back = None
+    charge_group = None
     queue = None
     models = []
 
     for i, arg in enumerate(args):
-        if arg in charge_back_arg:
-            if charge_back is not None:
+        if arg in charge_group_arg:
+            if charge_group is not None:
                 logger.error("Multiple charge back projects provided.")
                 sys.exit(1)
-            charge_back = args[i + 1]
+            charge_group = args[i + 1]
         if arg in server_queue_arg:
             if queue is not None:
                 logger.error("Multiple server queues provided.")
@@ -87,7 +87,7 @@ def main():
         logger.error("Data path not provided.")
         sys.exit(1)
 
-    if not charge_back:
+    if not charge_group:
         logger.error("Charge back project not provided.")
         sys.exit(1)
 
@@ -203,18 +203,18 @@ def main():
     for model in models:
         print(model)
 
-    run_multiple(models, data_path, charge_back, queue)
+    run_multiple(models, data_path, charge_group, queue)
 
 
 if __name__ == "__main__":
     main()
 
 
-def run_multiple(models, dataset_path, charge_back, queue):
+def run_multiple(models, dataset_path, charge_group, queue):
     for model in models:
         command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
         start_hosts(
-            command, job_name=model.name, queue=queue, charge_group=charge_back
+            command, job_name=model.name, queue=queue, charge_group=charge_group
         )
     generate_neuroglancer_url(dataset_path)
     while True:

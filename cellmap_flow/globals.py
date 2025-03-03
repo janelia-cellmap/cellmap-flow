@@ -27,5 +27,5 @@ model_catalog = load_model_paths(
 )
 
 queue = "gpu_h100"
-charge_back = "cellmap"
+charge_group = "cellmap"
 
