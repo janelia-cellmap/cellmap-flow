@@ -55,7 +55,7 @@ def get_process_dataset(dataset: str):
     encoded_data = norm_data[1]
     result = decode_to_json(encoded_data)
     logger.error(f"Decoded data: {result}")
-    dashboard_url = result["dashboard_url"]
+    dashboard_url = result.get("dashboard_url", None)
     input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
     postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
     logger.error(f"Normalized data: {result}")
