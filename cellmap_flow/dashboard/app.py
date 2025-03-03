@@ -21,7 +21,7 @@ from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
-from cellmap_flow.models.cellmap_models import update_run_models
+from cellmap_flow.models.run import update_run_models
 import cellmap_flow.globals as g
 import numpy as np
 
@@ -107,7 +107,9 @@ def process():
         # g.raw.invalidate()
         g.raw = get_raw_layer(g.dataset_path)
         s.layers["raw"] = g.raw
-        for model, host in g.models_host.items():
+        for job in g.jobs:
+            model = job.model_name
+            host = job.host
             # response = requests.post(f"{host}/input_normalize", json=data)
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)

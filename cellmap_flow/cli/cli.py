@@ -3,7 +3,7 @@ import logging
 import click
 
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.bsub_utils import run_locally, start_hosts
+from cellmap_flow.utils.bsub_utils import run_locally, start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
@@ -13,7 +13,7 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
-SERVER_COMMAND = "cellmap_flow_server"
+
 
 
 @click.group()
@@ -90,6 +90,7 @@ def dacapo(run_name, iteration, data_path, queue, charge_group):
         data_path,
         queue,
         charge_group,
+        run_name
     )
     raise NotImplementedError("This command is not yet implemented.")
 
@@ -123,7 +124,8 @@ def dacapo(run_name, iteration, data_path, queue, charge_group):
 )
 def script(script_path, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
-    run(command, data_path, queue, charge_group)
+    base_name = script_path.split("/")[-1].split(".")[0]
+    run(command, data_path, queue, charge_group,base_name)
 
 
 @cli.command()
@@ -151,7 +153,8 @@ def script(script_path, data_path, queue, charge_group):
 )
 def bioimage(model_path, data_path, queue, charge_group):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path}"
-    run(command, data_path, queue, charge_group)
+    base_name = model_path.split("/")[-1].split(".")[0]
+    run(command, data_path, queue, charge_group,base_name)
 
 
 @cli.command()
@@ -180,10 +183,8 @@ def bioimage(model_path, data_path, queue, charge_group):
 )
 def cellmap_model(config_folder, name, data_path, queue, charge_group):
     """Run the CellMapFlow with a CellMap model."""
-    command = (
-        f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
-    )
-    run(command, data_path, queue, charge_group)
+    command = f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
+    run(command, data_path, queue, charge_group,name)
 
 
 @cli.command()
@@ -211,16 +212,11 @@ def run(
     dataset_path,
     queue,
     charge_group,
+    name
 ):
-    host = start_hosts(command, queue, charge_group)
-    if host is None:
-        raise Exception("Could not start host")
+    
+    start_hosts(command, queue, charge_group,name)
 
-    inference_dict = {host: "prediction"}
-    neuroglancer_url = generate_neuroglancer_url(dataset_path, inference_dict)
-    ui_host = run_locally(
-        f"cellmap_flow_server run-ui-server -n {neuroglancer_url} -i {host}"
-    )
-    print(host)
+    neuroglancer_url = generate_neuroglancer_url(dataset_path)
     while True:
         pass

@@ -60,7 +60,7 @@
     <!-- Optional: an area to display logs or messages -->
     <div class="mt-3">
       <textarea
-        id="submissionLogModels"
+        id="modelSubmissionLogModels"
         class="form-control"
         rows="4"
         readonly
@@ -71,7 +71,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", function () {
       const submitBtn = document.getElementById("submitModelsBtn");
-      const logArea   = document.getElementById("submissionLogModels");
+      const logArea   = document.getElementById("modelSubmissionLogModels");
     
       submitBtn.addEventListener("click", function () {
         // Gather all checked checkboxes
