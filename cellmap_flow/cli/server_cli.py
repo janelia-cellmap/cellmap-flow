@@ -1,6 +1,9 @@
 import click
 import logging
 
+
+from cellmap_flow.image_data_interface import ImageDataInterface
+
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.data import (
     ScriptModelConfig,
@@ -8,6 +11,7 @@ from cellmap_flow.utils.data import (
     BioModelConfig,
     CellMapModelConfig,
 )
+
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
 
@@ -101,13 +105,26 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
+@click.option(
+    "-e",
+    "--edge_length_to_process",
+    required=False,
+    type=int,
+    help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
+)
 @click.option("--debug", is_flag=True, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def bioimage(model_path, data_path, debug, port, certfile, keyfile):
+def bioimage(
+    model_path, data_path, edge_length_to_process, debug, port, certfile, keyfile
+):
     """Run the CellMapFlow server with a bioimage-io model."""
-    model_config = BioModelConfig(model_name=model_path)
+    model_config = BioModelConfig(
+        model_name=model_path,
+        voxel_size=ImageDataInterface(data_path).voxel_size,
+        edge_length_to_process=edge_length_to_process,
+    )
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
