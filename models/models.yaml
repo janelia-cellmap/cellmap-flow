@@ -1,0 +1,7 @@
+cellmap:
+  jrc_mus-livers_16nm_to_8nm_mito: /nrs/cellmap/models/cellmap/jrc_mus-livers_16nm_to_8nm_mito
+  jrc_mus-livers_16nm_to_8nm_peroxisome: /nrs/cellmap/models/cellmap/jrc_mus-livers_16nm_to_8nm_peroxisome
+saalfeldlab:
+  fly_organelles_run07_432000: /nrs/cellmap/models/saalfeldlab/fly_organelles_run07_432000
+  fly_organelles_run07_700000: /nrs/cellmap/models/saalfeldlab/fly_organelles_run07_700000
+  fly_organelles_run08_438000: /nrs/cellmap/models/saalfeldlab/fly_organelles_run08_438000

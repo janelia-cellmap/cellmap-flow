@@ -1,7 +1,9 @@
+import json
 import logging
 import socket
 from http import HTTPStatus
 from flask import request
+import neuroglancer
 import numpy as np
 import numcodecs
 from flask import Flask, jsonify, redirect
@@ -14,10 +16,50 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
-from cellmap_flow.utils.web_utils import get_public_ip
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.utils.web_utils import (
+    get_public_ip,
+    decode_to_json,
+    ARGS_KEY,
+    INPUT_NORM_DICT_KEY,
+    POSTPROCESS_DICT_KEY,
+)
+from cellmap_flow.norm.input_normalize import get_normalizations
+from cellmap_flow.post.postprocessors import get_postprocessors
+
+import cellmap_flow.globals as g
+import requests
+import time
 
 logger = logging.getLogger(__name__)
+
+
+def get_output_dtype():
+    dtype = np.float32
+
+    if len(g.input_norms) > 0:
+        dtype = g.input_norms[-1].dtype
+
+    if len(g.postprocess) > 0:
+        dtype = g.postprocess[-1].dtype
+    return dtype
+
+
+def get_process_dataset(dataset: str):
+    if ARGS_KEY not in dataset:
+        return None, [], []  # No normalization or postprocessing
+    norm_data = dataset.split(ARGS_KEY)
+    if len(norm_data) != 3:
+        raise ValueError(
+            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}"
+        )
+    encoded_data = norm_data[1]
+    result = decode_to_json(encoded_data)
+    logger.error(f"Decoded data: {result}")
+    dashboard_url = result["dashboard_url"]
+    input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
+    postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
+    logger.error(f"Normalized data: {result}")
+    return dashboard_url, input_norm_fns, postprocess_fns
 
 
 class CellMapFlowServer:
@@ -33,7 +75,6 @@ class CellMapFlowServer:
 
         # this is zyx
         self.read_block_shape = [int(x) for x in model_config.config.block_shape]
-
         # this needs to have z and x swapped
         self.n5_block_shape = self.read_block_shape.copy()
         self.n5_block_shape[0], self.n5_block_shape[2] = (
@@ -51,6 +92,10 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
         )
+
+        # Refresh rate for custom state updates
+        self.refresh_rate_seconds = 5
+        self.previous_refresh_time = 0
         output_shape = (
             np.array(self.idi_raw.shape)
             * np.array(self.input_voxel_size)
@@ -59,23 +104,21 @@ class CellMapFlowServer:
 
         if ".zarr" in dataset_name:
             # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.vol_shape = np.array(
-                [
-                    *output_shape[::-1],
-                    self.output_channels,
-                ]
-            )
+            self.default_vol_shape = [
+                *output_shape[::-1],
+                self.output_channels,
+            ]
             self.axis = ["x", "y", "z", "c^"]
+            self.vol_shape = self.default_vol_shape.copy()
         else:
             # For non-Zarr data
-            self.vol_shape = np.array([*output_shape, self.output_channels])
+            self.default_vol_shape = [*output_shape, self.output_channels]
             self.axis = ["z", "y", "x", "c^"]
-
+            self.vol_shape = self.default_vol_shape.copy()
         # Chunk encoding for N5
         self.chunk_encoder = N5ChunkWrapper(
-            np.uint8, self.n5_block_shape, compressor=numcodecs.GZip()
+            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
-
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
@@ -119,6 +162,15 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
+            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+            )
+            self.vol_shape = self.default_vol_shape.copy()
+            for postprocess in g.postprocess:
+                if hasattr(postprocess, "num_channels"):
+                    self.vol_shape[-1] = postprocess.num_channels
+
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -141,53 +193,15 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            return self._attributes_impl(dataset, scale)
-
-        @self.app.route("/input_normalize", methods=["POST"])
-        def input_normalize():
-            """
-            Update input normalization parameters for inference.
-            ---
-            tags:
-              - Normalization
-            requestBody:
-              required: true
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      norm_type:
-                        type: string
-                        description: Normalization type
-                        example: "scale"
-                      min_value:
-                        type: number
-                        description: Minimum value
-                        example: 0.0
-                      max_value:
-                        type: number
-                        description: Maximum value
-                        example: 1.0
-            responses:
-              200:
-                description: Success
-              400:
-                description: Invalid request or missing parameters
-            """
-            data = request.get_json()
-
-            # Extract parameters from JSON body
-            norm_type = data.get("norm_type")
-            min_value = data.get("min_value")
-            max_value = data.get("max_value")
-
-            if not all([norm_type, min_value is not None, max_value is not None]):
-                return {"error": "Missing one or more required parameters"}, 400
-
-            return self._input_normalize_impl(
-                norm_type, float(min_value), float(max_value)
+            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
             )
+            self.vol_shape = self.default_vol_shape.copy()
+            for postprocess in g.postprocess:
+                if hasattr(postprocess, "num_channels"):
+                    self.vol_shape[-1] = postprocess.num_channels
+            return self._attributes_impl(dataset, scale)
 
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
@@ -277,6 +291,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
+        dtype = get_output_dtype().__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -285,34 +300,43 @@ class CellMapFlowServer:
                 "units": ["nm", "nm", "nm", ""],
                 "translate": [0.0, 0.0, 0.0, 0.0],
             },
-            "compression": {"type": "gzip", "useZlib": False, "level": -1},
+            "compression": {"type": "zstd"},
             "blockSize": list(self.n5_block_shape),
-            "dataType": "uint8",
-            "dimensions": self.vol_shape.tolist(),
+            "dataType": dtype,
+            "dimensions": self.vol_shape,
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
-
-    def _input_normalize_impl(self, norm_type, min_value, max_value):
-        print(f"Input normalization: {norm_type}, {min_value}, {max_value}", flush=True)
-        if norm_type == MinMaxNormalizer.name():
-            self.inferencer.model_config.input_normalizer = MinMaxNormalizer(
-                min_value, max_value
-            )
-            return jsonify(success=True), HTTPStatus.OK
-        else:
-            return (
-                jsonify(
-                    error=f"Invalid normalization type, only supports {MinMaxNormalizer.name()}"
-                ),
-                HTTPStatus.BAD_REQUEST,
-            )
 
     def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+
+        chunk_data = chunk_data.astype(get_output_dtype())
+
+        current_time = time.time()
+
+        # assume only one has equivalences
+        for postprocess in g.postprocess:
+            if (
+                hasattr(postprocess, "equivalences")
+                and postprocess.equivalences is not None
+                and (current_time - self.previous_refresh_time)
+                > self.refresh_rate_seconds
+            ):
+                equivalences = [
+                    [int(item) for item in sublist]
+                    for sublist in postprocess.equivalences.to_json()
+                ]
+                response = requests.post(
+                    g.dashboard_url + "/update/equivalences",
+                    json=json.dumps(equivalences),
+                )
+                self.previous_refresh_time = current_time
+                continue
+
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
@@ -322,7 +346,7 @@ class CellMapFlowServer:
     #
     # --- Server Runner ---
     #
-    def run(self, debug=False, port=8000, certfile=None, keyfile=None):
+    def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
         Run the Flask dev server with optional SSL certificate.
         """
@@ -333,6 +357,8 @@ class CellMapFlowServer:
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         logger.error(IP_PATTERN.format(ip_address=address))
         print(IP_PATTERN.format(ip_address=address), flush=True)
+        if port is None:
+            port = 0
 
         self.app.run(
             host="0.0.0.0",
@@ -363,3 +389,10 @@ if __name__ == "__main__":
 
     server = CellMapFlowServer("example.zarr", dummy_model_config)
     server.run(debug=True, port=8000)
+
+# # %%
+# import neuroglancer
+# neuroglancer.set_server_bind_address("http://h06u01.int.janelia.org:19821/v/733c608c2ad97d2340bfc83f1f9459d5be4d9d49/")
+# with neuroglancer.Viewer().txn() as s:
+#     print(s.layers)
+# %%

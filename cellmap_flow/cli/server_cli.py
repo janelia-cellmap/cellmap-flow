@@ -1,8 +1,17 @@
 import click
 import logging
 
+
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
+
+from cellmap_flow.dashboard.app import create_and_run_app
+from cellmap_flow.utils.data import (
+    ScriptModelConfig,
+    DaCapoModelConfig,
+    BioModelConfig,
+    CellMapModelConfig,
+)
+
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
 
@@ -121,8 +130,6 @@ def bioimage(
 
 def run_server(model_config, data_path, debug, port, certfile, keyfile):
     server = CellMapFlowServer(data_path, model_config)
-    if port == 0:
-        port = get_free_port()
 
     server.run(
         debug=debug,
@@ -130,3 +137,32 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
         certfile=certfile,
         keyfile=keyfile,
     )
+
+
+@cli.command()
+@click.option(
+    "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
+)
+@click.option("-n", "--name", required=True, type=str, help="Name of the model")
+@click.option(
+    "-d", "--data_path", required=True, type=str, help="The path to the data."
+)
+@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
+@click.option("--certfile", default=None, help="Path to SSL certificate file.")
+@click.option("--keyfile", default=None, help="Path to SSL private key file.")
+def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
+    """Run the CellMapFlow server with a CellMap model."""
+    model_config = CellMapModelConfig(folder_path=folder_path, name=name)
+    run_server(model_config, data_path, debug, port, certfile, keyfile)
+
+
+@cli.command()
+@click.option(
+    "-n", "--neuroglancer_url", required=True, type=str, help="Neuroglancer viewer url."
+)
+@click.option(
+    "-i", "--inference_host", required=True, type=str, help="Inference host(s)"
+)
+def run_ui_server(neuroglancer_url, inference_host):
+    create_and_run_app(neuroglancer_url, inference_host)

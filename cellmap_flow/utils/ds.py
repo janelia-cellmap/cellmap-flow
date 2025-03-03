@@ -19,6 +19,7 @@ import json
 import logging
 import os
 from typing import Union, Sequence
+import cellmap_flow.globals as g
 
 
 # Ensure tensorstore does not attempt to use GCE credentials
@@ -60,6 +61,31 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         dataset += f"/s{scale}"
 
     return filename + splitter, dataset
+
+
+def apply_norms(data):
+    if hasattr(data, "read"):
+        data = data.read().result()
+    for norm in g.input_norms:
+        data = norm(data)
+    return data
+
+
+class LazyNormalization:
+    def __init__(self, ts_dataset):
+        self.ts_dataset = ts_dataset
+
+    def __getitem__(self, index):
+        result = self.ts_dataset[index]
+        return apply_norms(result)
+
+    def __getattr__(self, attr):
+        at = getattr(self.ts_dataset, attr)
+        if attr == "dtype":
+            if len(g.input_norms) > 0:
+                return np.dtype(g.input_norms[-1].dtype)
+            return np.dtype(at.numpy_dtype)
+        return at
 
 
 def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
@@ -114,9 +140,12 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
 
     if dataset_path.startswith("gs://"):
         # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
-        return dataset_future.result()[ts.d["channel"][0]]
+        ts_dataset = dataset_future.result()[ts.d["channel"][0]]
     else:
-        return dataset_future.result()
+        ts_dataset = dataset_future.result()
+
+    # return ts_dataset
+    return LazyNormalization(ts_dataset)
 
 
 def to_ndarray_tensorstore(
@@ -143,6 +172,10 @@ def to_ndarray_tensorstore(
             roi = Roi(roi.begin[::-1], roi.shape[::-1])
         if offset:
             offset = Coordinate(offset[::-1])
+        if voxel_size:
+            voxel_size = Coordinate(voxel_size[::-1])
+        if output_voxel_size:
+            output_voxel_size = Coordinate(output_voxel_size[::-1])
 
     if roi is None:
         with ts.Transaction() as txn:
@@ -190,6 +223,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
+        for norm in g.input_norms:
+            print(f"Applying norm: {norm}")
+            data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
         for s, valid_slice in zip(roi_slices, valid_slices)
@@ -444,7 +480,17 @@ def check_for_voxel_size(array, order):
         elif "scale" in item.attrs:
             return item.attrs["scale"]
         elif "pixelResolution" in item.attrs:
-            return item.attrs["pixelResolution"]["dimensions"]
+            downsampling_factors = [1, 1, 1]
+            if "downsamplingFactors" in item.attrs:
+                downsampling_factors = item.attrs["downsamplingFactors"]
+            if "dimensions" not in item.attrs["pixelResolution"]:
+                base_resolution = item.attrs["pixelResolution"]
+            else:
+                base_resolution = item.attrs["pixelResolution"]["dimensions"]
+            final_resolution = list(
+                np.array(base_resolution) * np.array(downsampling_factors)
+            )
+            return final_resolution
         elif "transform" in item.attrs:
             # Davis saves transforms in C order regardless of underlying
             # memory format (i.e. n5 or zarr). May be explicitly provided
@@ -511,7 +557,9 @@ def check_for_units(array, order):
 
         if "units" in item.attrs:
             return item.attrs["units"]
-        elif "pixelResolution" in item.attrs:
+        elif (
+            "pixelResolution" in item.attrs and "unit" in item.attrs["pixelResolution"]
+        ):
             unit = item.attrs["pixelResolution"]["unit"]
             return [unit for _ in range(len(array.shape))]
         elif "transform" in item.attrs:
@@ -688,6 +736,10 @@ def regularize_offset(voxel_size_float, offset_float):
 def _read_voxel_size_offset(ds, order="C"):
 
     voxel_size, offset, units = _read_attrs(ds, order)
+    for idx, unit in enumerate(units):
+        if unit == "um":
+            voxel_size[idx] = voxel_size[idx] * 1000
+            offset[idx] = offset[idx] * 1000
 
     return regularize_offset(voxel_size, offset)
 
