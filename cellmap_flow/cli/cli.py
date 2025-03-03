@@ -127,6 +127,13 @@ def script(script_path, data_path, queue, charge_group):
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
 @click.option(
+    "-e",
+    "--edge_length_to_process",
+    required=False,
+    type=int,
+    help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
+)
+@click.option(
     "-q",
     "--queue",
     required=False,
@@ -142,8 +149,9 @@ def script(script_path, data_path, queue, charge_group):
     help="The chargeback group to use when submitting",
     default=None,
 )
-def bioimage(model_path, data_path, queue, charge_group):
-    command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path}"
+
+def bioimage(model_path, data_path, edge_length_to_process, queue, charge_group):
+    command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path} -e {edge_length_to_process}"
     base_name = model_path.split("/")[-1].split(".")[0]
     run(command, data_path, queue, charge_group, base_name)
 
@@ -178,6 +186,7 @@ def cellmap_model(config_folder, name, data_path, queue, charge_group):
         f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
     )
     run(command, data_path, queue, charge_group, name)
+
 
 
 @cli.command()
