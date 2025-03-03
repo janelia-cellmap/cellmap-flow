@@ -15,6 +15,7 @@ security = "http"
 
 SERVER_COMMAND = "cellmap_flow_server"
 
+
 class Job(BaseModel):
     job_id: str
     model_name: str
@@ -27,8 +28,6 @@ class Job(BaseModel):
             os.system(f"bkill {self.job_id}")
         else:
             logger.error("bsub is not available. Cannot kill jobs.")
-
-
 
 
 def cleanup(signum, frame):
@@ -202,7 +201,9 @@ def start_hosts(
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
     if is_bsub_available():
-        result = submit_bsub_job(command, queue, charge_group, job_name=f"{job_name}_server")
+        result = submit_bsub_job(
+            command, queue, charge_group, job_name=f"{job_name}_server"
+        )
         job_id = result.stdout.split()[1][1:-1]
         host = parse_bpeek_output(job_id)
         new_job = Job(job_id=job_id, model_name=job_name, host=host)

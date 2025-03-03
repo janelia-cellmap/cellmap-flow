@@ -81,9 +81,7 @@ class DefaultPostprocessor(PostProcessor):
     def _process(self, data):
         data = data.clip(self.clip_min, self.clip_max)
         data = (data + self.bias) * self.multiplier
-        return data.astype(np.uint8) 
-    
-
+        return data.astype(np.uint8)
 
     @property
     def dtype(self):

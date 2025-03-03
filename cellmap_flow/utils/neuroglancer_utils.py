@@ -11,7 +11,7 @@ from cellmap_flow.utils.web_utils import (
     POSTPROCESS_DICT_KEY,
     get_norms_post_args,
     encode_to_str,
-    )
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 def generate_neuroglancer_url(dataset_path):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
-    st_data = get_norms_post_args(g.input_norms,g.postprocess)
+    st_data = get_norms_post_args(g.input_norms, g.postprocess)
 
     # Add a layer to the viewer
     with g.viewer.txn() as s:
@@ -49,7 +49,7 @@ def generate_neuroglancer_url(dataset_path):
             "magenta",
         ]
         color_cycle = itertools.cycle(colors)
-        for job  in g.jobs:
+        for job in g.jobs:
             model = job.model_name
             host = job.host
             color = next(color_cycle)
@@ -66,7 +66,6 @@ def generate_neuroglancer_url(dataset_path):
     url = create_and_run_app(neuroglancer_url=viewer_url)
     show(url)
     return url
-
 
 
 def show(viewer):

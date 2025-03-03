@@ -1,5 +1,10 @@
 import sys
-from cellmap_flow.utils.data import DaCapoModelConfig, BioModelConfig, ScriptModelConfig, CellMapModelConfig
+from cellmap_flow.utils.data import (
+    DaCapoModelConfig,
+    BioModelConfig,
+    ScriptModelConfig,
+    CellMapModelConfig,
+)
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
@@ -50,7 +55,12 @@ def main():
         )
         args.extend([server_queue_arg[0], DEFAULT_SERVER_QUEUE])
 
-    if "--dacapo" not in args and "--script" not in args and "--bioimage" not in args and "--cellmap-model" not in args:
+    if (
+        "--dacapo" not in args
+        and "--script" not in args
+        and "--bioimage" not in args
+        and "--cellmap-model" not in args
+    ):
         logger.error(
             "Missing required argument at least one should exist: --dacapo, --script, or --bioimage"
         )
@@ -143,7 +153,9 @@ def main():
                 else:
                     j += 1
             if not config_folder:
-                logger.error("Missing -c/--config_folder for --celmmap-model sub-command.")
+                logger.error(
+                    "Missing -c/--config_folder for --celmmap-model sub-command."
+                )
                 sys.exit(1)
             models.append(CellMapModelConfig(config_folder, name=name))
 

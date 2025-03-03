@@ -41,6 +41,7 @@ ARGS_KEY = "__CFLOW_ARGS__"
 INPUT_NORM_DICT_KEY = "input_norm"
 POSTPROCESS_DICT_KEY = "postprocess"
 
+
 def list_cls_to_dict(ll):
     args = {}
     norms = {}
@@ -53,15 +54,17 @@ def list_cls_to_dict(ll):
 
     return norms
 
-def kill_n_remove_from_neuroglancer(jobs,s):
+
+def kill_n_remove_from_neuroglancer(jobs, s):
     for job in jobs:
         if job.model_name in s.layers:
             del s.layers[job.model_name]
         job.kill()
 
-def get_norms_post_args(input_norms,postprocess):
+
+def get_norms_post_args(input_norms, postprocess):
     args = {}
-    
+
     args[INPUT_NORM_DICT_KEY] = list_cls_to_dict(input_norms)
     args[POSTPROCESS_DICT_KEY] = list_cls_to_dict(postprocess)
     st_data = encode_to_str(args)

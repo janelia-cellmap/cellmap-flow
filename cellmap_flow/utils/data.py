@@ -84,7 +84,6 @@ class DaCapoModelConfig(ModelConfig):
 
     def _get_config(self):
 
-
         config = Config()
 
         run = get_dacapo_run_model(self.run_name, self.iteration)
@@ -116,7 +115,9 @@ class DaCapoModelConfig(ModelConfig):
 
 
 def check_config(config):
-    assert hasattr(config, "model") or hasattr(config,"predict"), f"Model or predict not found in config"
+    assert hasattr(config, "model") or hasattr(
+        config, "predict"
+    ), f"Model or predict not found in config"
     assert hasattr(config, "read_shape"), f"read_shape not found in config"
     assert hasattr(config, "write_shape"), f"write_shape not found in config"
     assert hasattr(config, "input_voxel_size"), f"input_voxel_size not found in config"
@@ -216,8 +217,10 @@ def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
 
     return configs
 
+
 from cellmap_flow.models.cellmap_models import CellmapModel
 from typing import Optional
+
 
 class CellMapModelConfig(ModelConfig):
     """
@@ -226,9 +229,9 @@ class CellMapModelConfig(ModelConfig):
     to populate the necessary metadata and define a prediction function.
     """
 
-    def __init__(self, folder_path,name):
+    def __init__(self, folder_path, name):
         """
-        :param cellmap_model: An instance of CellmapModel containing metadata 
+        :param cellmap_model: An instance of CellmapModel containing metadata
                               and references to ONNX, TorchScript, or PyTorch models.
         :param name: Optional name for this configuration.
         """
@@ -264,7 +267,7 @@ class CellMapModelConfig(ModelConfig):
         config.input_voxel_size = Coordinate(metadata.input_voxel_size)
         config.output_voxel_size = Coordinate(metadata.output_voxel_size)
         config.channels_names = metadata.channels_names
-        read_shape = metadata.inference_input_shape 
+        read_shape = metadata.inference_input_shape
         write_shape = metadata.inference_output_shape
         config.read_shape = Coordinate(read_shape) * config.input_voxel_size
         config.write_shape = Coordinate(write_shape) * config.output_voxel_size
@@ -279,4 +282,3 @@ class CellMapModelConfig(ModelConfig):
         config.model.to(device)
         config.model.eval()
         return config
-    

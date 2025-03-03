@@ -89,7 +89,7 @@ class ZScoreNormalizer(InputNormalizer):
 NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
 
 
-def get_input_normalizers()-> list[dict]:
+def get_input_normalizers() -> list[dict]:
     normalizer_classes = InputNormalizer.__subclasses__()
     normalizers = []
     for norm_cls in normalizer_classes:

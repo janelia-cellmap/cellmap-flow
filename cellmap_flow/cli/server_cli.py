@@ -2,7 +2,12 @@ import click
 import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig, CellMapModelConfig
+from cellmap_flow.utils.data import (
+    ScriptModelConfig,
+    DaCapoModelConfig,
+    BioModelConfig,
+    CellMapModelConfig,
+)
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.web_utils import get_free_port
 
@@ -116,12 +121,12 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
         keyfile=keyfile,
     )
 
+
 @cli.command()
 @click.option(
-    "-f", "--folder_path", required=True, type=str, help="Path to the model folder")
-@click.option(
-    "-n","--name", required=True, type=str, help="Name of the model"
+    "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
 )
+@click.option("-n", "--name", required=True, type=str, help="Name of the model")
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
