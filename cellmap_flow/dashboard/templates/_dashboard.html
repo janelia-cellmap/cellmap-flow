@@ -16,7 +16,7 @@
           type="button"
           role="tab"
           aria-controls="models"
-          aria-selected="true"
+          aria-selected="false"
         >
           Models
         </button>
@@ -48,23 +48,7 @@
           aria-controls="output"
           aria-selected="false"
         >
-          Output
-        </button>
-      </li>
-  
-      <!-- Postprocessing Tab -->
-      <li class="nav-item" role="presentation">
-        <button
-          class="nav-link"
-          id="postprocessing-tab"
-          data-bs-toggle="tab"
-          data-bs-target="#postprocessing"
-          type="button"
-          role="tab"
-          aria-controls="postprocessing"
-          aria-selected="false"
-        >
-          Postprocessing
+          Postprocess
         </button>
       </li>
     </ul>
@@ -72,7 +56,7 @@
     <!-- Tab Contents -->
     <div class="tab-content" id="myTabContent">
         <div
-        class="tab-pane fade show active p-3"
+        class="tab-pane fade p-3"
         id="models"
         role="tabpanel"
         aria-labelledby="models-tab"
@@ -96,16 +80,6 @@
         aria-labelledby="output-tab"
       >
         {% include "_output_tab.html" %}
-      </div>
-  
-      <!-- Postprocessing Tab Content -->
-      <div
-        class="tab-pane fade p-3"
-        id="postprocessing"
-        role="tabpanel"
-        aria-labelledby="postprocessing-tab"
-      >
-        {% include "_postprocessing_tab.html" %}
       </div>
     </div>
   </div>

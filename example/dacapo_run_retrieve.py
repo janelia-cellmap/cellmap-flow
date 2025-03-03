@@ -2,7 +2,7 @@
 
 from dacapo.experiments import Run
 from dacapo.store.create_store import create_config_store, create_weights_store
-from daisy.coordinate import Coordinate
+from funlib.geometry.coordinate import Coordinate
 import numpy as np
 
 def get_dacapo_run_model(run_name, iteration):

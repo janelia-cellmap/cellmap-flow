@@ -37,3 +37,80 @@
     margin-top: 5px;
     white-space: pre-wrap; /* Preserve formatting */
   }
+
+  /* -------------- */
+  body {
+    background-color: #121212;
+    color: #ffffff;
+  }
+
+  /* Accordion Items */
+  .accordion-item {
+    background-color: #1e1e1e;  /* dark gray */
+    border: none;
+  }
+
+  /* Accordion Button (header) */
+  .accordion-button {
+    background-color: #333333;
+    color: #ffffff;
+    border: none;
+  }
+
+  .accordion-button.collapsed {
+    color: #d2d2d2;
+    background-color: #575141;
+  }
+
+  .accordion-button:focus {
+    box-shadow: none; /* Remove focus outline */
+  }
+
+  /* When the accordion is open */
+  .accordion-button:not(.collapsed) {
+    color: #ffffff;
+    background-color: #444444;
+  }
+
+  /* Accordion Body */
+  .accordion-body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+  }
+
+  /* Form Elements */
+  .form-check-input {
+    background-color: #1e1e1e;
+    border: 1px solid #555;
+  }
+  .form-check-input:checked {
+    background-color: #0d6efd; /* Bootstrap primary color */
+    border-color: #0d6efd;
+  }
+  .form-check-label {
+    color: #ffffff;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+  }
+  .btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+  }
+
+  /* Textarea for logs */
+  #submissionLogModels {
+    background-color: #1e1e1e;
+    color: #cccccc;
+    border: 1px solid #555;
+    resize: none;
+  }
+
+  /* Spacing and overall styling */
+  .container {
+    max-width: 800px;
+    margin: 20px auto;
+  }

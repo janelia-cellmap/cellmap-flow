@@ -16,14 +16,17 @@ def get_public_ip():
     except:
         return None
 
+
 import json
 import base64
 
+
 def encode_to_str(data):
     """Encodes a JSON object into a URL-safe string without '/', '+', or '='."""
-    json_str = json.dumps(data, separators=(',', ':'))  # Minify JSON
+    json_str = json.dumps(data, separators=(",", ":"))  # Minify JSON
     encoded_bytes = base64.urlsafe_b64encode(json_str.encode())  # Base64 encode
-    return encoded_bytes.decode().rstrip('=')  # Remove padding ('=')
+    return encoded_bytes.decode().rstrip("=")  # Remove padding ('=')
+
 
 def decode_to_json(encoded_str):
     """Decodes a URL-safe string back into a JSON object."""
@@ -33,4 +36,7 @@ def decode_to_json(encoded_str):
     return json.loads(json_str)  # Convert back to JSON
 
 
-INPUT_NORM_KEY= "__input_norm__"
+ARGS_KEY = "__CFLOW_ARGS__"
+
+INPUT_NORM_DICT_KEY = "input_norm"
+POSTPROCESS_DICT_KEY = "postprocess"

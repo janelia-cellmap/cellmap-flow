@@ -89,7 +89,7 @@ class ZScoreNormalizer(InputNormalizer):
 NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
 
 
-def get_normalizers():
+def get_input_normalizers()-> list[dict]:
     normalizer_classes = InputNormalizer.__subclasses__()
     normalizers = []
     for norm_cls in normalizer_classes:
@@ -124,19 +124,4 @@ def get_normalizations(elms: dict) -> InputNormalizer:
                 break
         if not found:
             raise ValueError(f"Normalization method {norm_name} not found")
-    return result
-
-from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json, INPUT_NORM_KEY
-
-def get_norm_dataset(dataset:str):
-    if INPUT_NORM_KEY not in dataset:
-        return []
-    norm_data = dataset.split(INPUT_NORM_KEY)
-    if len(norm_data) != 3:
-        raise ValueError(f"Invalid dataset format. Expected two occurrences of {INPUT_NORM_KEY}. found {len(norm_data)} {dataset}")
-    encoded_data = norm_data[1]
-    result = decode_to_json(encoded_data)
-    logger.error(f"Decoded data: {result}")
-    result = get_normalizations(result)
-    logger.error(f"Normalized data: {result}")
     return result

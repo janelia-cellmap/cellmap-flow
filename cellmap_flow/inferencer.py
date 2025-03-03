@@ -1,23 +1,26 @@
+# %%
 import numpy as np
 import torch
+from funlib.geometry import Coordinate
+import logging
 from cellmap_flow.utils.data import (
     ModelConfig,
     BioModelConfig,
     DaCapoModelConfig,
     ScriptModelConfig,
+    CellMapModelConfig,
 )
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
-from funlib.geometry import Coordinate
-import logging
+import cellmap_flow.globals as g
+import neuroglancer
+from scipy import spatial
 
 logger = logging.getLogger(__name__)
 
 
-def normalize_output(data):
-    # Default normalization if no one is provided
-    data = data.clip(-1, 1)
-    data = (data + 1) * 255.0 / 2.0
-    return data.astype(np.uint8)
+def apply_postprocess(data, **kwargs):
+    for pross in g.postprocess:
+        data = pross(data, **kwargs)
+    return data
 
 
 def predict(read_roi, write_roi, config, **kwargs):
@@ -29,7 +32,7 @@ def predict(read_roi, write_roi, config, **kwargs):
     if device is None:
         raise ValueError("device must be provided in kwargs")
 
-    use_half_prediction = kwargs.get("use_half_prediction", False)
+    use_half_prediction = kwargs.get("use_half_prediction", True)
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
@@ -38,12 +41,22 @@ def predict(read_roi, write_roi, config, **kwargs):
         raw_input_torch = torch.from_numpy(raw_input).float()
         if use_half_prediction:
             raw_input_torch = raw_input_torch.half()
+        # raw_input_torch = raw_input_torch.to(device)
         raw_input_torch = raw_input_torch.to(device, non_blocking=True)
         return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=True):
+
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+            logger.error("No GPU available, using CPU")
+        torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
+        torch.backends.cudnn.enabled = True
+
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
         # condig is lazy so one call is needed to get the config
@@ -58,10 +71,6 @@ class Inferencer:
             ) / 2
 
         self.optimize_model()
-
-        if not hasattr(self.model_config.config, "normalize_output"):
-            logger.warning("No output normalization function provided, using default")
-            self.model_config.config.normalize_output = normalize_output
         if not hasattr(self.model_config.config, "predict"):
             logger.warning("No predict function provided, using default")
             self.model_config.config.predict = predict
@@ -73,12 +82,6 @@ class Inferencer:
         if not isinstance(self.model_config.config.model, torch.nn.Module):
             logger.error("Model is not a nn.Module, we only optimize torch models")
             return
-
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-            logger.error("No GPU available, using CPU")
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
             self.model_config.config.model.half()
@@ -91,19 +94,28 @@ class Inferencer:
 
     def process_chunk(self, idi, roi):
         if isinstance(self.model_config, BioModelConfig):
-            return self.process_chunk_bioimagezoo(idi, roi)
-        elif isinstance(self.model_config, DaCapoModelConfig) or isinstance(
-            self.model_config, ScriptModelConfig
+            result = self.process_chunk_bioimagezoo(idi, roi)
+        elif (
+            isinstance(self.model_config, DaCapoModelConfig)
+            or isinstance(self.model_config, ScriptModelConfig)
+            or isinstance(self.model_config, CellMapModelConfig)
         ):
             # check if process_chunk is in self.config
             if getattr(self.model_config.config, "process_chunk", None) and callable(
                 self.model_config.config.process_chunk
             ):
-                return self.model_config.config.process_chunk(idi, roi)
+                result = self.model_config.config.process_chunk(idi, roi)
             else:
-                return self.process_chunk_basic(idi, roi)
+                result = self.process_chunk_basic(idi, roi)
         else:
             raise ValueError(f"Invalid model config type {type(self.model_config)}")
+
+        postprocessed = apply_postprocess(
+            result,
+            chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
+            chunk_num_voxels=np.prod(roi.get_shape() // idi.output_voxel_size),
+        )
+        return postprocessed
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
@@ -117,13 +129,8 @@ class Inferencer:
             device=self.device,
             use_half_prediction=self.use_half_prediction,
         )
-        write_data = self.model_config.config.normalize_output(result)
-
-        if write_data.dtype != np.uint8:
-            logger.error(
-                f"Model output is not of type uint8, converting to uint8. Output type: {write_data.dtype}"
-            )
-        return write_data.astype(np.uint8)
+        # result = apply_postprocess(result)
+        return result
 
     # create random input tensor
     def process_chunk_bioimagezoo(self, idi, roi):
@@ -176,3 +183,28 @@ class Inferencer:
         output = 255 * output
         output = output.astype(np.uint8)
         return output
+
+    # def calculate_equivalences(self):
+    #     g.postprocess[-1].calculate_equivalences(self.equivalences)
+    #     # ids = list(self.edge_voxel_position_to_id_dict.values())
+    #     # tree = spatial.cKDTree(positions)
+    #     # neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+    #     # for i in range(len(neighbors)):
+    #     #     for j in neighbors[i]:
+    #     #         self.equivalences.union(ids[i], ids[j])
+
+
+# %%
+import numpy as np
+
+# rreate random array of size 66352 x 3
+data = np.random.random((66352, 3))
+tree = spatial.cKDTree(data)
+# neighbors = tree.query_ball_tree(tree, 1)  # distance of 1 voxel
+
+# %%
+# a = {1: 2}
+# b = a.copy()
+# a.update({3: 4})
+# print(b)
+# %%
