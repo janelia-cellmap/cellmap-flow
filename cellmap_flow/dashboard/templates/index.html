@@ -49,6 +49,13 @@
 <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
 <!-- shared_submit.js or inside a <script> tag in your base layout -->
   <script>
+    document.addEventListener('keydown', function(event) {
+      // Check if the key pressed is "Enter"
+      if (event.key === "Enter") {
+        // Trigger a click event on the button
+        document.getElementById("submitAll").click();
+      }
+    });
     document.addEventListener("DOMContentLoaded", function () {
       // Find all elements with id="submitAll" (there could be 2 if both partials exist)
       const submitAllButtons = document.querySelectorAll("#submitAll");

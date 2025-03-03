@@ -4,7 +4,7 @@ import os
 import sys
 import signal
 import select
-
+from pydantic import BaseModel
 from cellmap_flow.utils.data import IP_PATTERN
 import cellmap_flow.globals as g
 import logging
@@ -13,21 +13,31 @@ logger = logging.getLogger(__name__)
 
 security = "http"
 
-def kill_jobs(job_ids):
-    if is_bsub_available():
-        for job_id in job_ids:
-            print(f"Killing job {job_id}")
-            os.system(f"bkill {job_id}")
-    else:
-        logger.error("bsub is not available. Cannot kill jobs.")
+SERVER_COMMAND = "cellmap_flow_server"
+
+class Job(BaseModel):
+    job_id: str
+    model_name: str
+    status: str = "running"
+    host: str = None
+
+    def kill(self):
+        if is_bsub_available():
+            print(f"Killing job {self.job_id}")
+            os.system(f"bkill {self.job_id}")
+        else:
+            logger.error("bsub is not available. Cannot kill jobs.")
+
+
 
 
 def cleanup(signum, frame):
     print(f"Script is being killed. Received signal: {signum}")
     if is_bsub_available():
-        for job_id in g.job_ids:
-            print(f"Killing job {job_id}")
-            os.system(f"bkill {job_id}")
+        for job in g.jobs:
+            print(f"Killing job {job.job_id}")
+            os.system(f"bkill {job.job_id}")
+
     else:
         for process in g.processes:
             process.kill()
@@ -186,15 +196,18 @@ def run_locally(sc):
 def start_hosts(
     command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"
 ):
+    g.queue = queue
+    g.charge_group = charge_group
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
     if is_bsub_available():
-        result = submit_bsub_job(command, queue, charge_group, job_name=job_name)
+        result = submit_bsub_job(command, queue, charge_group, job_name=f"{job_name}_server")
         job_id = result.stdout.split()[1][1:-1]
-        g.job_ids.append(job_id)
         host = parse_bpeek_output(job_id)
+        new_job = Job(job_id=job_id, model_name=job_name, host=host)
+        g.jobs.append(new_job)
     else:
-        host = run_locally(command)
+        new_job = run_locally(command)
 
-    return host
+    return new_job
