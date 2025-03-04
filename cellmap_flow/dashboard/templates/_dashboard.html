@@ -1,0 +1,86 @@
+
+  <div class="container my-4 bg-dark text-light" style="border-radius: 0.25rem; min-height: 80vh;">
+    <div class="text-center my-3">
+      <h3>Dashboard</h3>
+    </div>
+  
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <!-- Input Tab -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="model-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#models"
+          type="button"
+          role="tab"
+          aria-controls="models"
+          aria-selected="false"
+        >
+          Models
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link active"
+          id="input-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#input"
+          type="button"
+          role="tab"
+          aria-controls="input"
+          aria-selected="true"
+        >
+          Input
+        </button>
+      </li>
+  
+      <!-- Output Tab -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="output-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#output"
+          type="button"
+          role="tab"
+          aria-controls="output"
+          aria-selected="false"
+        >
+          Postprocess
+        </button>
+      </li>
+    </ul>
+  
+    <!-- Tab Contents -->
+    <div class="tab-content" id="myTabContent">
+        <div
+        class="tab-pane fade p-3"
+        id="models"
+        role="tabpanel"
+        aria-labelledby="models-tab"
+      >
+        {% include "_models_tab.html" %}
+      </div>
+      <div
+        class="tab-pane fade show active p-3"
+        id="input"
+        role="tabpanel"
+        aria-labelledby="input-tab"
+      >
+        {% include "_input_tab.html" %}
+      </div>
+  
+      <!-- Output Tab Content -->
+      <div
+        class="tab-pane fade p-3"
+        id="output"
+        role="tabpanel"
+        aria-labelledby="output-tab"
+      >
+        {% include "_output_tab.html" %}
+      </div>
+    </div>
+  </div>
+  

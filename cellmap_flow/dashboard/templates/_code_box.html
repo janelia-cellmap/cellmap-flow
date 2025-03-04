@@ -1,0 +1,31 @@
+<h3>Python Code Editor</h3>
+<textarea
+    id="pythonEditor"
+    class="editor"
+    placeholder="Enter Python code here..."
+></textarea>
+<div id="errorMsg" class="error"></div>
+
+<script>
+    const editor = document.getElementById("pythonEditor");
+    const errorMsg = document.getElementById("errorMsg");
+    function checkSyntax() {
+    const code = editor.value;
+    try {
+        Sk.parse("user_code.py", code);
+        errorMsg.textContent = "";
+    } catch (err) {
+        errorMsg.textContent = err.toString();
+    }
+    }
+    function debounce(func, delay) {
+    let timeout;
+    return function () {
+        clearTimeout(timeout);
+        timeout = setTimeout(func, delay);
+    };
+    }
+    editor.addEventListener("input", debounce(checkSyntax, 500));
+</script>
+
+

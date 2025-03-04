@@ -1,6 +1,6 @@
 #%%
 # pip install fly-organelles
-from daisy.coordinate import Coordinate
+from funlib.geometry.coordinate import Coordinate
 import numpy as np
 voxel_size = (8, 8, 8)
 read_shape = Coordinate((178, 178, 178)) * Coordinate(voxel_size)
