@@ -65,18 +65,18 @@ def is_output_segmentation():
 
 @app.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
-    equivalences_info = json.loads(request.get_json())
+    equivalences_info = request.get_json()
     dataset = equivalences_info["dataset"]
     equivalences_str = equivalences_info["equivalences"]
     equivalences = [
         [np.uint64(item) for item in sublist] for sublist in equivalences_str
     ]
+
     with g.viewer.txn() as s:
         for layer in s.layers:
-            if layer.path == f"n5://{dataset}/raw":
+            if layer.source[0].url.endswith(dataset):
                 layer.equivalences = equivalences
                 break
-        s.layers[-1].equivalences = equivalences
     return jsonify({"message": "Equivalences updated successfully"})
 
 
