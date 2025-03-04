@@ -326,13 +326,16 @@ class CellMapFlowServer:
                 and (current_time - self.previous_refresh_time)
                 > self.refresh_rate_seconds
             ):
-                equivalences = [
-                    [int(item) for item in sublist]
-                    for sublist in postprocess.equivalences.to_json()
-                ]
+                equivalences_info = {
+                    "dataset_url": f"n5://host/{dataset}",
+                    "equivlaences": [
+                        [int(item) for item in sublist]
+                        for sublist in postprocess.equivalences.to_json()
+                    ],
+                }
                 response = requests.post(
                     g.dashboard_url + "/update/equivalences",
-                    json=json.dumps(equivalences),
+                    json=json.dumps(equivalences_info),
                 )
                 self.previous_refresh_time = current_time
                 continue
