@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
@@ -88,7 +88,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
@@ -112,7 +112,7 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
     type=int,
     help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
@@ -147,7 +147,7 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")

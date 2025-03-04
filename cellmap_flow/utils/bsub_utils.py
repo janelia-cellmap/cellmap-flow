@@ -146,7 +146,7 @@ def get_host_from_stdout(output):
     # parts = IP_PATTERN.split("ip_address")
 
     if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
-        host = output.split(IP_PATTERN[0])[1].IP_PATTERN(parts[1])[0]
+        host = output.split(IP_PATTERN[0])[1].split(IP_PATTERN[1])[0]
         return host
     return None
 
