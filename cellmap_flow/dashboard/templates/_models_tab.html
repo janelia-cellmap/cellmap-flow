@@ -33,6 +33,7 @@
                     name="selected_models"
                     id="chk_{{ group_name }}_{{ model_name }}"
                     value="{{ model_name }}"
+                    {% if model_name in default_models %}checked{% endif %}
                   />
                   <label
                     class="form-check-label"

@@ -3,7 +3,7 @@ import logging
 import click
 
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.bsub_utils import run_locally, start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 

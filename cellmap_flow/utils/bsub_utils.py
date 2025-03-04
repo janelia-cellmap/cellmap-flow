@@ -4,7 +4,6 @@ import os
 import sys
 import signal
 import select
-from pydantic import BaseModel
 import cellmap_flow.globals as g
 import logging
 
@@ -19,30 +18,35 @@ SERVER_COMMAND = "cellmap_flow_server"
 
 
 
-class Job(BaseModel):
-    job_id: str
-    model_name: str
-    status: str = "running"
-    host: str = None
+class Job:
+    def __init__(self, job_id=None, model_name=None, status="running", host=None, process=None):
+        self.job_id = job_id
+        self.model_name = model_name
+        self.status = status
+        self.host = host
+        self.process = process
 
     def kill(self):
-        if is_bsub_available():
-            print(f"Killing job {self.job_id}")
+        if self.job_id is None and self.process is None:
+            logger.error("Job is not running.")
+            return
+        if self.process is not None:
+            print(f"Killing process {self.process.pid}")
+            self.process.kill()
+            self.process = None
+            self.status = "killed"
+        if self.job_id is not None:
+            self.status = "killed"
             os.system(f"bkill {self.job_id}")
-        else:
-            logger.error("bsub is not available. Cannot kill jobs.")
+
 
 
 def cleanup(signum, frame):
     print(f"Script is being killed. Received signal: {signum}")
-    if is_bsub_available():
-        for job in g.jobs:
-            print(f"Killing job {job.job_id}")
-            os.system(f"bkill {job.job_id}")
+    for job in g.jobs:
+        print(f"Killing job {job.job_id}")
+        job.kill()
 
-    else:
-        for process in g.processes:
-            process.kill()
     sys.exit(0)
 
 
@@ -165,7 +169,7 @@ def get_host_from_stdout(output):
 #     return None
 
 
-def run_locally(sc):
+def run_locally(sc,name):
     command = sc.split(" ")
     print(f"Running command: {command}")
     process = subprocess.Popen(
@@ -198,7 +202,7 @@ def run_locally(sc):
         # Check if the process has finished and no more output is available
         if process.poll() is not None and not rlist:
             break
-    g.processes.append(process)
+    g.jobs.append(Job(model_name=name, host=host,process=process))
     return host
 
 
@@ -219,6 +223,6 @@ def start_hosts(
         new_job = Job(job_id=job_id, model_name=job_name, host=host)
         g.jobs.append(new_job)
     else:
-        new_job = run_locally(command)
+        new_job = run_locally(command, job_name)
 
     return new_job
