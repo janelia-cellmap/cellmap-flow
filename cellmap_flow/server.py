@@ -15,13 +15,14 @@ from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
+from cellmap_flow.utils.data import ModelConfig
 from cellmap_flow.utils.web_utils import (
     get_public_ip,
     decode_to_json,
     ARGS_KEY,
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
+    IP_PATTERN,
 )
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
@@ -29,6 +30,7 @@ from cellmap_flow.post.postprocessors import get_postprocessors
 import cellmap_flow.globals as g
 import requests
 import time
+from werkzeug.serving import make_server
 
 logger = logging.getLogger(__name__)
 
@@ -343,31 +345,52 @@ class CellMapFlowServer:
             {"Content-Type": "application/octet-stream"},
         )
 
-    #
-    # --- Server Runner ---
-    #
-    def run(self, debug=False, port=None, certfile=None, keyfile=None):
-        """
-        Run the Flask dev server with optional SSL certificate.
-        """
-        ssl_context = None
-        if certfile and keyfile:
-            ssl_context = (certfile, keyfile)
 
-        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
-        logger.error(IP_PATTERN.format(ip_address=address))
-        print(IP_PATTERN.format(ip_address=address), flush=True)
-        if port is None:
-            port = 0
 
-        self.app.run(
-            host="0.0.0.0",
-            port=port,
-            debug=debug,
-            use_reloader=debug,
-            ssl_context=ssl_context,
-        )
+def run(self, debug=False, port=None, certfile=None, keyfile=None):
+    """
+    Run the Flask dev server with optional SSL certificate,
+    grabbing the *actual* port from the OS if port=0.
+    """
+    # If port is None or 0, we let the OS decide
+    if not port:
+        port = 0
 
+    ssl_context = None
+    if certfile and keyfile:
+        ssl_context = (certfile, keyfile)
+
+    # Create the server manually using make_server
+    server = make_server(
+        host="0.0.0.0",
+        port=port,
+        app=self.app,
+        ssl_context=ssl_context
+    )
+
+    # Now that the server is created, the OS has bound a random free port
+    actual_port = server.socket.getsockname()[1]
+
+    # Build the address string using the *actual* port
+    # (Pseudo code for get_public_ip() / IP_PATTERN since that’s your existing logic)
+    protocol = "https" if ssl_context else "http"
+    address = f"{protocol}://{get_public_ip()}:{actual_port}"
+    output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
+
+    logger.error(output)
+    print(output, flush=True)
+
+    # If you want hot reloading, you need a reloader loop.
+    # If not, just serve forever:
+    if debug:
+        from werkzeug._reloader import run_with_reloader
+
+        def run_server():
+            server.serve_forever()
+
+        run_with_reloader(run_server)
+    else:
+        server.serve_forever()
 
 # ------------------------------------
 # Example usage (if run directly):

@@ -1,3 +1,9 @@
+ARGS_KEY = "__CFLOW_ARGS__"
+IP_PATTERN = ["CELLMAP_FLOW_SERVER_IP(",")CELLMAP_FLOW_SERVER_IP"]
+INPUT_NORM_DICT_KEY = "input_norm"
+POSTPROCESS_DICT_KEY = "postprocess"
+
+
 def get_free_port():
     import socket
 
@@ -34,12 +40,6 @@ def decode_to_json(encoded_str):
     encoded_str += "=" * (padding_needed % 4)  # Add padding back if needed
     json_str = base64.urlsafe_b64decode(encoded_str.encode()).decode()  # Decode Base64
     return json.loads(json_str)  # Convert back to JSON
-
-
-ARGS_KEY = "__CFLOW_ARGS__"
-
-INPUT_NORM_DICT_KEY = "input_norm"
-POSTPROCESS_DICT_KEY = "postprocess"
 
 
 def list_cls_to_dict(ll):

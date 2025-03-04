@@ -5,15 +5,18 @@ import sys
 import signal
 import select
 from pydantic import BaseModel
-from cellmap_flow.utils.data import IP_PATTERN
 import cellmap_flow.globals as g
 import logging
+
+
+from cellmap_flow.utils.web_utils import IP_PATTERN
 
 logger = logging.getLogger(__name__)
 
 security = "http"
 
 SERVER_COMMAND = "cellmap_flow_server"
+
 
 
 class Job(BaseModel):
@@ -139,34 +142,39 @@ def parse_bpeek_output(job_id):
     return host
 
 
-# def get_host_from_stdout(output):
-#     parts = IP_PATTERN.split("ip_address")
-
-#     if parts[0] in output and parts[1] in output:
-#         host = output.split(parts[0])[1].split(parts[1])[0]
-#         return host
-#     return None
-
-
 def get_host_from_stdout(output):
-    if "Host name: " in output and f"* Running on {security}://" in output:
-        host_name = output.split("Host name: ")[1].split("\n")[0].strip()
-        port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
+    # parts = IP_PATTERN.split("ip_address")
 
-        host = f"{security}://{host_name}:{port}"
-        print(f"{host}")
+    if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
+        host = output.split(IP_PATTERN[0])[1].IP_PATTERN(parts[1])[0]
         return host
     return None
 
 
+# def get_host_from_stdout(output):
+
+#     if "Host name: " in output and f"* Running on {security}://" in output:
+#         host_name = output.split("Host name: ")[1].split("\n")[0].strip()
+#         port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
+
+    
+
+#         host = f"{security}://{host_name}:{port}"
+#         print(f"{host}")
+#         return host
+#     return None
+
+
 def run_locally(sc):
     command = sc.split(" ")
+    print(f"Running command: {command}")
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
 
     output = ""
     while True:
+        # print("Waiting for output...")
         # Check if there is data available to read from stdout and stderr
         rlist, _, _ = select.select(
             [process.stdout, process.stderr], [], [], 0.1
@@ -182,6 +190,8 @@ def run_locally(sc):
         # Read from stderr if data is available
         if process.stderr in rlist:
             output += process.stderr.readline()
+        # print(output)
+        
         host = get_host_from_stdout(output)
         if host:
             break

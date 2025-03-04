@@ -1,4 +1,4 @@
-IP_PATTERN = "CELLMAP_FLOW_SERVER_IP(ip_address)CELLMAP_FLOW_SERVER_IP"
+
 # %%
 import logging
 import warnings
