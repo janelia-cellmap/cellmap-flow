@@ -15,13 +15,15 @@ from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
+from cellmap_flow.utils.data import ModelConfig
 from cellmap_flow.utils.web_utils import (
     get_public_ip,
     decode_to_json,
     ARGS_KEY,
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
+    IP_PATTERN,
+    get_free_port,
 )
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
@@ -354,11 +356,14 @@ class CellMapFlowServer:
         if certfile and keyfile:
             ssl_context = (certfile, keyfile)
 
+        
+        if port is None or port == 0:
+            port = get_free_port()
+        
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
-        logger.error(IP_PATTERN.format(ip_address=address))
-        print(IP_PATTERN.format(ip_address=address), flush=True)
-        if port is None:
-            port = 0
+        output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
+        logger.error(output)
+        print(output, flush=True)
 
         self.app.run(
             host="0.0.0.0",
