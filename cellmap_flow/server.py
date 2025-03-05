@@ -166,6 +166,8 @@ class CellMapFlowServer:
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
+            self.n5_block_shape[-1] = self.default_vol_shape[-1]
+
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
@@ -201,6 +203,8 @@ class CellMapFlowServer:
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
+            self.n5_block_shape[-1] = self.default_vol_shape[-1]
+
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
