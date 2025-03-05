@@ -25,6 +25,7 @@ from cellmap_flow.models.run import update_run_models
 import cellmap_flow.globals as g
 import numpy as np
 import time
+from cellmap_flow.utils.visualization import get_equivalences_shader
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
@@ -68,15 +69,16 @@ def is_output_segmentation():
 def update_equivalences():
     equivalences_info = request.get_json()
     dataset = equivalences_info["dataset"]
-    equivalences_str = equivalences_info["equivalences"]
-    equivalences = [
-        [np.uint64(item) for item in sublist] for sublist in equivalences_str
-    ]
+    equivalences = equivalences_info["equivalences"]
+    # equivalences = [[int(item) for item in sublist] for sublist in equivalences_str]
 
     with g.viewer.txn() as s:
         for layer in s.layers:
             if layer.source[0].url.endswith(dataset):
-                layer.equivalences = equivalences
+                if layer.type == "segmentation":
+                    layer.equivalences = equivalences
+                else:
+                    layer.shader = get_equivalences_shader(equivalences)
                 break
     return jsonify({"message": "Equivalences updated successfully"})
 
