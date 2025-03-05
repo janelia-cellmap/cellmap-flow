@@ -40,6 +40,7 @@ def index():
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
     model_catalog = g.model_catalog
+    model_catalog["User"] = {j.model_name:"" for j in g.jobs}
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
     logger.warning(f"Model catalog: {model_catalog}")
@@ -55,6 +56,7 @@ def index():
         default_post_process=default_post_process,
         default_input_norm=default_input_norm,
         model_catalog=model_catalog,
+        default_models=[j.model_name for j in g.jobs],
     )
 
 

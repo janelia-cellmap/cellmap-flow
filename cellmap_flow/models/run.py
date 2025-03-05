@@ -6,7 +6,6 @@ from cellmap_flow.utils.web_utils import (
     kill_n_remove_from_neuroglancer,
     get_norms_post_args,
 )
-from cellmap_flow.utils.data import CellMapModelConfig
 import neuroglancer
 import threading
 from typing import List
@@ -16,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 def run_model(model_path, name, st_data):
+    if model_path is None or model_path == "":
+        logger.error(f"Model path is empty for {name}")
+        return
     command = (
         f"{SERVER_COMMAND} cellmap-model -f {model_path} -n {name} -d {g.dataset_path}"
     )

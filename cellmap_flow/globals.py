@@ -1,4 +1,3 @@
-processes = []
 jobs = []
 
 models_config = []
