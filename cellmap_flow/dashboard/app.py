@@ -24,6 +24,7 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.models.run import update_run_models
 import cellmap_flow.globals as g
 import numpy as np
+import time
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
@@ -67,12 +68,18 @@ def is_output_segmentation():
 
 @app.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
+    equivalences_info = request.get_json()
+    dataset = equivalences_info["dataset"]
+    equivalences_str = equivalences_info["equivalences"]
     equivalences = [
-        [np.uint64(item) for item in sublist]
-        for sublist in json.loads(request.get_json())
+        [np.uint64(item) for item in sublist] for sublist in equivalences_str
     ]
+
     with g.viewer.txn() as s:
-        s.layers[-1].equivalences = equivalences
+        for layer in s.layers:
+            if layer.source[0].url.endswith(dataset):
+                layer.equivalences = equivalences
+                break
     return jsonify({"message": "Equivalences updated successfully"})
 
 
@@ -97,6 +104,10 @@ def process():
 
     # add dashboard url to data so we can update the state from the server
     data["dashboard_url"] = request.host_url
+
+    # we wanmt to set the time such that each request is unique
+    data["time"] = time.time()
+
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:

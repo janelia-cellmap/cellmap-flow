@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "PyYAML",
     "gunicorn",
+    "fastremap",
     "fastmorph",
     "flask",
     "flask-cors",
