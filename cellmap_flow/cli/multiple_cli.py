@@ -8,6 +8,7 @@ from cellmap_flow.utils.data import (
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+import cellmap_flow.globals as g
 
 
 data_args = ["-d", "--data-path"]
@@ -223,6 +224,8 @@ if __name__ == "__main__":
 
 
 def run_multiple(models, dataset_path, charge_group, queue):
+    g.queue = queue
+    g.charge_group = charge_group
     for model in models:
         command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
         start_hosts(

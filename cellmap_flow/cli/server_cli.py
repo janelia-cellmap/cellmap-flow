@@ -11,9 +11,7 @@ from cellmap_flow.utils.data import (
     BioModelConfig,
     CellMapModelConfig,
 )
-
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.web_utils import get_free_port
 
 
 @click.group()
