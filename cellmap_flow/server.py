@@ -165,13 +165,19 @@ class CellMapFlowServer:
                 description: Attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
-            )
             self.vol_shape = self.default_vol_shape.copy()
+            self.n5_block_shape[-1] = self.default_vol_shape[-1]
+
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
+                    self.n5_block_shape[-1] = postprocess.num_channels
+
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(),
+                self.n5_block_shape,
+                compressor=numcodecs.Zstd(),
+            )
 
             return self._top_level_attributes_impl(dataset)
 
@@ -196,13 +202,19 @@ class CellMapFlowServer:
                 description: Scale-level attributes in JSON
             """
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
-            )
             self.vol_shape = self.default_vol_shape.copy()
+            self.n5_block_shape[-1] = self.default_vol_shape[-1]
+
             for postprocess in g.postprocess:
                 if hasattr(postprocess, "num_channels"):
                     self.vol_shape[-1] = postprocess.num_channels
+                    self.n5_block_shape[-1] = postprocess.num_channels
+
+            self.chunk_encoder = N5ChunkWrapper(
+                get_output_dtype(),
+                self.n5_block_shape,
+                compressor=numcodecs.Zstd(),
+            )
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -328,13 +340,17 @@ class CellMapFlowServer:
                 and (current_time - self.previous_refresh_time)
                 > self.refresh_rate_seconds
             ):
-                equivalences = [
-                    [int(item) for item in sublist]
-                    for sublist in postprocess.equivalences.to_json()
-                ]
+                equivalences = {
+                    "dataset": dataset,
+                    "equivalences": [
+                        [int(item) for item in sublist]
+                        for sublist in postprocess.equivalences.to_json()
+                    ],
+                }
+
                 response = requests.post(
                     g.dashboard_url + "/update/equivalences",
-                    json=json.dumps(equivalences),
+                    json=equivalences,
                 )
                 self.previous_refresh_time = current_time
                 continue
@@ -356,10 +372,9 @@ class CellMapFlowServer:
         if certfile and keyfile:
             ssl_context = (certfile, keyfile)
 
-        
         if port is None or port == 0:
             port = get_free_port()
-        
+
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
         logger.error(output)
