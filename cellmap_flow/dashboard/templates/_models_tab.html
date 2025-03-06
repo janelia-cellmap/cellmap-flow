@@ -1,0 +1,102 @@
+<form id="modelSelectionForm">
+    <!-- Use a Bootstrap Accordion for collapsible groups -->
+    <div class="accordion" id="modelAccordion">
+      {% for group_name, models in model_catalog.items() %}
+        <div class="accordion-item">
+          <!-- Accordion Header -->
+          <h2 class="accordion-header" id="heading_{{ loop.index }}">
+            <button
+              class="accordion-button collapsed"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapse_{{ loop.index }}"
+              aria-expanded="false"
+              aria-controls="collapse_{{ loop.index }}"
+            >
+              {{ group_name }}
+            </button>
+          </h2>
+  
+          <!-- Accordion Body (the collapsible part) -->
+          <div
+            id="collapse_{{ loop.index }}"
+            class="accordion-collapse collapse"
+            aria-labelledby="heading_{{ loop.index }}"
+          >
+            <div class="accordion-body">
+              <!-- <p>Select the models you want from <strong>{{ group_name }}</strong>:</p> -->
+              {% for model_name in models %}
+                <div class="form-check mb-2">
+                  <input
+                    class="form-check-input model-checkbox"
+                    type="checkbox"
+                    name="selected_models"
+                    id="chk_{{ group_name }}_{{ model_name }}"
+                    value="{{ model_name }}"
+                    {% if model_name in default_models %}checked{% endif %}
+                  />
+                  <label
+                    class="form-check-label"
+                    for="chk_{{ group_name }}_{{ model_name }}"
+                  >
+                    {{ model_name }}
+                  </label>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  
+    <!-- Submit button -->
+    <button
+      type="button"
+      class="btn btn-primary mt-3"
+      id="submitModelsBtn"
+    >
+      Submit Models
+    </button>
+  
+    <!-- Optional: an area to display logs or messages -->
+    <div class="mt-3">
+      <textarea
+        id="modelSubmissionLogModels"
+        class="form-control"
+        rows="4"
+        readonly
+        style="color: gray; font-size: 0.9rem;"
+      ></textarea>
+    </div>
+  </form>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const submitBtn = document.getElementById("submitModelsBtn");
+      const logArea   = document.getElementById("modelSubmissionLogModels");
+    
+      submitBtn.addEventListener("click", function () {
+        // Gather all checked checkboxes
+        const checked = document.querySelectorAll("#modelSelectionForm input.model-checkbox:checked");
+        const selected = [];
+        checked.forEach((checkbox) => {
+          selected.push(checkbox.value);
+        });
+    
+        console.log("Selected models:", selected);
+        fetch("/api/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ selected_models: selected }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            console.log("Server response:", data);
+            logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+          })
+          .catch((err) => {
+            console.error("Error:", err);
+            alert("Error submitting model selection"+err);
+          });
+      });
+    });
+    </script>  

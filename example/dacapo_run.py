@@ -1,5 +1,5 @@
 #%%
-from daisy.coordinate import Coordinate
+from funlib.geometry.coordinate import Coordinate
 import numpy as np
 import torch
 

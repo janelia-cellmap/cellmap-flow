@@ -1,98 +1,175 @@
-<h3>Normalization Methods</h3>
-<form id="inputForm">
+<!-- <h3>Input Normalization Methods</h3> -->
+<form id="inputNormForm">
+  {% for normalizer in input_normalizers %}
+    {% set is_checked = normalizer.name in default_input_norm and normalizer.name != 'custom_code' %}
 
-  <!-- Simple (x/255) -->
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value=""
-      id="methodSimple"
-    />
-    <label class="form-check-label" for="methodSimple">
-      Simple Normalization
-    </label>
-  </div>
-  <!-- No parameters, but you could add some if needed -->
-  <div id="simpleParams" style="display: none; margin-left: 20px;">
-      <label for="simpleValue" class="form-label">
-        normalization formula input is x. e.g. x/255.0
+    <div class="form-check mb-2">
+      <input
+        class="form-check-input inputNormCheckbox"
+        type="checkbox"
+        id="inputNormMethod_{{ normalizer.name }}"
+        name="inputNormMethod_{{ normalizer.name }}"
+        value="{{ normalizer.name }}"
+        {% if is_checked %}checked{% endif %}
+      />
+      <label
+        class="form-check-label"
+        for="inputNormMethod_{{ normalizer.name }}"
+      >
+        {{ normalizer.name }}
       </label>
-      <input
-        type="text"
-        class="form-control"
-        id="simpleValue"
-        value="x/255.0"
-
-      />
-
     </div>
 
-  <hr/>
+    <div
+      id="inputNorm_{{ normalizer.name }}Params"
+      class="ps-4"
+      {% if is_checked %}style="display: block;"{% else %}style="display: none;"{% endif %}
+    >
+      {% for param_name, default_val in normalizer.params.items() %}
+        {% if is_checked and param_name in default_input_norm[normalizer.name] %}
+          {% set param_val = default_input_norm[normalizer.name][param_name] %}
+        {% else %}
+          {% set param_val = default_val %}
+        {% endif %}
 
-  <!-- Contrast -->
+        <div class="mb-3">
+          <label
+            for="inputNorm_{{ normalizer.name }}_{{ param_name }}"
+            class="form-label"
+          >
+            {{ param_name }}
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm_{{ normalizer.name }}_{{ param_name }}"
+            name="inputNorm_{{ normalizer.name }}_{{ param_name }}"
+            value="{{ param_val }}"
+          />
+        </div>
+      {% endfor %}
+    </div>
+    <hr />
+  {% endfor %}
+
+  <!-- Handle custom code checkbox and editor -->
+  {% set is_custom_code_checked = 'custom_code' in default_input_norm %}
   <div class="form-check mb-2">
     <input
       class="form-check-input"
       type="checkbox"
-      value=""
-      id="methodContrast"
+      value="custom_code"
+      id="customCodeCheckbox_inputNorm"
+      {% if is_custom_code_checked %}checked{% endif %}
     />
-    <label class="form-check-label" for="methodContrast">
-      Contrast
+    <label
+      class="form-check-label"
+      for="customCodeCheckbox_inputNorm"
+    >
+      Custom Code (Input Norm)
     </label>
   </div>
-  <div id="contrastParams" class="ps-4" style="display: none;">
-    <div class="mb-3">
-      <label for="contrastValue" class="form-label">Contrast Value</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="contrastValue"
-        value="1.0"
-      />
-    </div>
+
+  <div
+    id="customCodeParams_inputNorm"
+    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
+  >
+    <h3>Python Code Editor (Input Norm)</h3>
+    <textarea
+      id="pythonEditor_inputNorm"
+      class="form-control"
+      rows="5"
+      placeholder="Enter Python code here..."
+    >{% if is_custom_code_checked %}{{ default_input_norm['custom_code'] }}{% endif %}</textarea>
+    <div id="errorMsg_inputNorm" class="text-danger mt-2"></div>
   </div>
 
-  <hr/>
-
-  <!-- Standardization -->
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value=""
-      id="methodStandardization"
-    />
-    <label class="form-check-label" for="methodStandardization">
-      Standardization
-    </label>
-  </div>
-  <div id="standardizationParams" class="ps-4" style="display: none;">
-    <div class="mb-3">
-      <label for="mean" class="form-label">Mean</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="mean"
-        value="0.0"
-      />
-    </div>
-    <div class="mb-3">
-      <label for="std" class="form-label">Std</label>
-      <input
-        type="number"
-        step="0.01"
-        class="form-control"
-        id="std"
-        value="1.0"
-      />
-    </div>
-  </div>
-
-  <button type="button" class="btn btn-primary mt-3" id="submitInput">
-    Submit Input
+  <!-- "Submit All" button -->
+  <button type="button" class="btn btn-primary mt-3" id="submitAll">
+    Submit All
   </button>
+
+  <div class="mt-3">
+    <textarea
+      id="submissionLog_inputNorm"
+      class="form-control"
+      rows="5"
+      readonly
+      style="color: gray; font-size: x-small; background-color: transparent; border: 1px solid gray;"
+    ></textarea>
+  </div>
 </form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  // Show/hide parameter fields for input norm
+  const normalizerCheckboxes = document.querySelectorAll(
+    "#inputNormForm .inputNormCheckbox"
+  );
+  normalizerCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", function () {
+      const paramDiv = document.getElementById("inputNorm_" + this.value + "Params");
+      if (paramDiv) {
+        paramDiv.style.display = this.checked ? "block" : "none";
+      }
+    });
+  });
+
+  // Toggle custom code
+  const customCodeCheckbox = document.getElementById("customCodeCheckbox_inputNorm");
+  const customCodeParams = document.getElementById("customCodeParams_inputNorm");
+  customCodeCheckbox.addEventListener("change", function () {
+    customCodeParams.style.display = this.checked ? "block" : "none";
+  });
+
+  // Optional: Skulpt-based live syntax checking for input norm
+  const editor = document.getElementById("pythonEditor_inputNorm");
+  const errorMsg = document.getElementById("errorMsg_inputNorm");
+  const logArea = document.getElementById("submissionLog_inputNorm");
+
+  function checkSyntax() {
+    if (typeof Sk === "undefined") {
+      return; // If Skulpt isn't loaded, skip
+    }
+    try {
+      Sk.parse("user_code.py", editor.value);
+      errorMsg.textContent = "";
+    } catch (err) {
+      errorMsg.textContent = err.toString();
+    }
+  }
+
+  function debounce(func, delay) {
+    let timeout;
+    return function () {
+      clearTimeout(timeout);
+      timeout = setTimeout(func, delay);
+    };
+  }
+  editor.addEventListener("input", debounce(checkSyntax, 500));
+
+  // Helper function to gather "input_norm" data
+  window.gatherInputNormData = function () {
+    const payload = {};
+    normalizerCheckboxes.forEach((cb) => {
+      if (cb.checked && cb !== customCodeCheckbox) {
+        const baseName = cb.value;
+        payload[baseName] = {};
+
+        const paramDiv = document.getElementById("inputNorm_" + baseName + "Params");
+        const inputs = paramDiv.querySelectorAll("input");
+        inputs.forEach((inp) => {
+          const paramName = inp.id.replace("inputNorm_" + baseName + "_", "");
+          payload[baseName][paramName] = inp.value;
+        });
+      }
+    });
+
+    // If custom code is checked
+    if (customCodeCheckbox.checked) {
+      payload.custom_code = editor.value;
+    }
+    return payload;
+  };
+});
+</script>
