@@ -40,7 +40,7 @@ def index():
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
     model_catalog = g.model_catalog
-    model_catalog["User"] = {j.model_name:"" for j in g.jobs}
+    model_catalog["User"] = {j.model_name: "" for j in g.jobs}
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
     logger.warning(f"Model catalog: {model_catalog}")
@@ -61,9 +61,12 @@ def index():
 
 
 def is_output_segmentation():
-    if len(g.postprocess) > 0 and g.postprocess[-1].is_segmentation:
-        return True
-    return False
+    if len(g.postprocess) == 0:
+        return False
+
+    for postprocess in g.postprocess[::-1]:
+        if postprocess.is_segmentation is not None:
+            return postprocess.is_segmentation
 
 
 @app.route("/update/equivalences", methods=["POST"])
