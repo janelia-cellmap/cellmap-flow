@@ -34,13 +34,6 @@ class PostProcessor:
         sig = inspect.signature(self._process)
         [kwargs.pop(k) for k in list(kwargs.keys()) if k not in sig.parameters]
         data = self._process(data, **kwargs)
-
-        # sig = inspect.signature(self._process)
-        # if "chunk_corner" in sig.parameters:
-        #     data = self._process(data, chunk_corner)
-        # else:
-        #     data = self._process(data)
-
         return data.astype(self.dtype)
 
     def _process(self, data, **kwargs):
@@ -54,11 +47,11 @@ class PostProcessor:
 
     @property
     def dtype(self):
-        return np.uint8
+        return None
 
     @property
     def is_segmentation(self):
-        return False
+        return None
 
 
 class DefaultPostprocessor(PostProcessor):
@@ -82,6 +75,10 @@ class DefaultPostprocessor(PostProcessor):
     @property
     def dtype(self):
         return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return False
 
 
 class ThresholdPostprocessor(PostProcessor):
@@ -347,7 +344,7 @@ class SimpleBlockwiseMerger(PostProcessor):
         return True
 
 
-class SegmentationChannelSelectionPostprocessor(PostProcessor):
+class ChannelSelection(PostProcessor):
     def __init__(self, channels: str = "0"):
         self.channels = [int(channel) for channel in channels.split(",")]
 
@@ -357,14 +354,6 @@ class SegmentationChannelSelectionPostprocessor(PostProcessor):
 
     def to_dict(self):
         return {"name": self.name()}
-
-    @property
-    def dtype(self):
-        return np.uint64
-
-    @property
-    def is_segmentation(self):
-        return True
 
     @property
     def num_channels(self):
