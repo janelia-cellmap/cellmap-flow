@@ -1,25 +1,19 @@
 import json
-import os
 import socket
 import neuroglancer
-from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import logging
-from cellmap_flow.utils.web_utils import get_free_port
 from cellmap_flow.norm.input_normalize import (
     get_input_normalizers,
     get_normalizations,
 )
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
-from cellmap_flow.utils.load_py import load_safe_config
+from cellmap_flow.utils.load_py import load_custom_code_str
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import (
     encode_to_str,
-    decode_to_json,
     ARGS_KEY,
-    INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
 )
 from cellmap_flow.models.run import update_run_models
 import cellmap_flow.globals as g
@@ -30,19 +24,15 @@ app = Flask(__name__)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
-CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
 
 
 @app.route("/")
 def index():
-    # Render the main page with tabs
-    input_norms = get_input_normalizers()
-    output_postprocessors = get_postprocessors_list()
-    model_catalog = g.model_catalog
-    model_catalog["User"] = {j.model_name:"" for j in g.jobs}
+    
+    g.model_catalog["User"] = {j.model_name:"" for j in g.jobs}
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
-    logger.warning(f"Model catalog: {model_catalog}")
+    logger.warning(f"Model catalog: {g.model_catalog}")
     logger.warning(f"Default postprocess: {default_post_process}")
     logger.warning(f"Default input norm: {default_input_norm}")
 
@@ -50,11 +40,11 @@ def index():
         "index.html",
         neuroglancer_url=NEUROGLANCER_URL,
         inference_servers=INFERENCE_SERVER,
-        input_normalizers=input_norms,
-        output_postprocessors=output_postprocessors,
+        input_normalizers=g.input_norms_functions,
+        output_postprocessors=g.output_postprocessors_functions,
         default_post_process=default_post_process,
         default_input_norm=default_input_norm,
-        model_catalog=model_catalog,
+        model_catalog=g.model_catalog,
         default_models=[j.model_name for j in g.jobs],
     )
 
@@ -98,12 +88,7 @@ def process():
     # add dashboard url to data so we can update the state from the server
     data["dashboard_url"] = request.host_url
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
-    custom_code = data.get("custom_code", None)
-    if "custom_code" in data:
-        del data["custom_code"]
-    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
-    g.input_norms = get_normalizations(data["input_norm"])
-    g.postprocess = get_postprocessors(data["postprocess"])
+
 
     with g.viewer.txn() as s:
         # g.raw.invalidate()
@@ -125,32 +110,41 @@ def process():
                     source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 )
 
+    custom_code = None
+    for kk in ["input_norm", "postprocess"]:
+        if kk in data:
+            if "custom_code" in data[kk]:
+                custom_code = data[kk].get("custom_code", None)
+                del data[kk]["custom_code"]
+    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
+    g.input_norms = get_normalizations(data["input_norm"])
+    g.postprocess = get_postprocessors(data["postprocess"])
+
     logger.warning(f"Input normalizers: {g.input_norms}")
 
     if custom_code:
 
         try:
-            # Save custom code to a file with date and time
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"custom_code_{timestamp}.py"
-            filepath = os.path.join(CustomCodeFolder, filename)
-
-            with open(filepath, "w") as file:
-                file.write(custom_code)
-
-            config = load_safe_config(filepath)
-            logger.warning(f"Custom code loaded successfully: {config}")
-
+            load_custom_code_str(custom_code)
             logger.warning(get_input_normalizers())
 
+            g.input_norms_functions = get_input_normalizers()
+            g.output_postprocessors_functions = get_postprocessors_list()
+            
+
         except Exception as e:
-            logger.warning(f"Error executing custom code: {e}")
+            return jsonify(
+                {
+                    "message": "Error loading custom code",
+                    "error": str(e),
+                }
+            )
 
     return jsonify(
         {
             "message": "Data received successfully",
             "received_data": data,
-            "found_custom_normalizer": get_input_normalizers(),
+            "found_custom_code": True if custom_code else False,
         }
     )
 

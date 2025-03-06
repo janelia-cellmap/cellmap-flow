@@ -114,10 +114,13 @@ def get_input_normalizers() -> list[dict]:
 
 
 def get_normalizations(elms: dict) -> InputNormalizer:
+    methods = [f for f in InputNormalizer.__subclasses__()]
+    logger.warning(f"Normalization methods: {methods}")
+    logger.warning(f"Normalization elements: {get_input_normalizers()}")
     result = []
     for norm_name in elms:
         found = False
-        for nm in NormalizationMethods:
+        for nm in methods:
             if nm.name() == norm_name:
                 result.append(nm(**elms[norm_name]))
                 found = True

@@ -99,6 +99,9 @@
             if (logAreaPost) {
               logAreaPost.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
             }
+            if (data.found_custom_code === true) {
+            window.location.reload();
+          }
           })
           .catch((err) => {
             console.error("Error:", err);

@@ -2,13 +2,34 @@
 
 import ast
 import os
-
+import datetime
 from upath import UPath
+import logging
 
+logger = logging.getLogger(__name__)
 # Define restricted imports and functions
 DISALLOWED_IMPORTS = {"os", "subprocess", "sys"}
 # DISALLOWED_FUNCTIONS = {"eval", "exec", "open", "compile", "__import__"}
 DISALLOWED_FUNCTIONS = {"eval", "exec", "compile", "__import__"}
+
+
+
+def load_custom_code_str(custom_code):
+    CustomCodeFolder = os.path.join(os.path.expanduser("~"), "tmp")
+    if not os.path.exists(CustomCodeFolder):
+        os.makedirs(CustomCodeFolder)
+    # Save custom code to a file with date and time
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"custom_code_{timestamp}.py"
+    filepath = os.path.join(CustomCodeFolder, filename)
+
+    custom_code = "from cellmap_flow.norm.input_normalize import InputNormalizer\nfrom cellmap_flow.post.postprocessors import PostProcessor\n"+custom_code
+
+    with open(filepath, "w") as file:
+        file.write(custom_code)
+
+    config = load_safe_config(filepath)
+    logger.warning(f"Custom code loaded successfully: {config}")
 
 
 def analyze_script(filepath):

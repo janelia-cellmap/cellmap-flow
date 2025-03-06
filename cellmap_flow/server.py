@@ -2,8 +2,6 @@ import json
 import logging
 import socket
 from http import HTTPStatus
-from flask import request
-import neuroglancer
 import numpy as np
 import numcodecs
 from flask import Flask, jsonify, redirect
@@ -27,6 +25,7 @@ from cellmap_flow.utils.web_utils import (
 )
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
+from cellmap_flow.utils.load_py import load_custom_code_str
 
 import cellmap_flow.globals as g
 import requests
@@ -58,6 +57,20 @@ def get_process_dataset(dataset: str):
     result = decode_to_json(encoded_data)
     logger.error(f"Decoded data: {result}")
     dashboard_url = result.get("dashboard_url", None)
+    custom_code = None
+    for kk in ["input_norm", "postprocess"]:
+        if kk in result:
+            if "custom_code" in result[kk]:
+                custom_code = result[kk].get("custom_code", None)
+                del result[kk]["custom_code"]
+    logger.warning(f"Data received: {type(result)} - {result.keys()} -{result}")
+    if custom_code:
+        try:
+            load_custom_code_str(custom_code)
+        except Exception as e:
+            logger.error(f"Error loading custom code: {e}")
+
+
     input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
     postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
     logger.error(f"Normalized data: {result}")
@@ -368,7 +381,7 @@ class CellMapFlowServer:
         self.app.run(
             host="0.0.0.0",
             port=port,
-            debug=debug,
+            debug=True,
             use_reloader=debug,
             ssl_context=ssl_context,
         )
