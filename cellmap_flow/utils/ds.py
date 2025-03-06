@@ -20,6 +20,7 @@ import logging
 import os
 from typing import Union, Sequence
 import cellmap_flow.globals as g
+import s3fs
 
 
 # Ensure tensorstore does not attempt to use GCE credentials
@@ -767,8 +768,48 @@ def get_ds_info(path: str, mode: str = "r"):
     # TODO
     swap_axes = False
 
-    filename, ds_name = split_dataset_path(path)
+    if path.startswith("s3://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        path, filename = split_dataset_path(path)
+        filename, scale = filename.rsplit("/s")
+        scale = int(scale)
+        fs = s3fs.S3FileSystem(
+            anon=True
+        )  # Set anon=True if you don't need authentication
+        store = s3fs.S3Map(root=path, s3=fs)
+        zarr_dataset = zarr.open(
+            store,
+            mode="r",
+        )
+        multiscale_attrs = zarr_dataset[filename].attrs.asdict()
+        if "multiscales" in multiscale_attrs:
+            multiscales = multiscale_attrs["multiscales"][0]
+            axes = [axis["name"] for axis in multiscales["axes"]]
+            for scale_info in multiscale_attrs["multiscales"][0]["datasets"]:
+                if scale_info["path"] == f"s{scale}":
+                    voxel_size = Coordinate(
+                        scale_info["coordinateTransformations"][0]["scale"]
+                    )
+        if axes[:3] == ["x", "y", "z"]:
+            swap_axes = True
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi((0, 0, 0), Coordinate(shape) * voxel_size)
+        return voxel_size, chunk_shape, shape, roi, swap_axes
 
+    elif path.startswith("gs://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        voxel_size = Coordinate(
+            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
+        )
+        if ts_info.spec().transform.input_labels[:3] == ("x", "y", "z"):
+            swap_axes = True
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
+        return voxel_size, chunk_shape, shape, roi, swap_axes
+
+    filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip"):
         assert (
             not filename.endswith(".zip") or mode == "r"
