@@ -1,5 +1,4 @@
 # %%
-import s3fs
 import zarr
 from funlib.geometry import Coordinate
 import logging
