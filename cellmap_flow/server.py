@@ -39,10 +39,17 @@ def get_output_dtype():
     dtype = np.float32
 
     if len(g.input_norms) > 0:
-        dtype = g.input_norms[-1].dtype
+        for norm in g.input_norms[::-1]:
+            if norm.dtype:
+                dtype = norm.dtype
+                break
 
     if len(g.postprocess) > 0:
-        dtype = g.postprocess[-1].dtype
+        for postprocess in g.postprocess[::-1]:
+            if postprocess.dtype:
+                dtype = postprocess.dtype
+                break
+
     return dtype
 
 
