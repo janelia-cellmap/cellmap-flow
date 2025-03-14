@@ -1,0 +1,116 @@
+/* Container styling */
+.container.my-4.bg-dark.text-light {
+    border-radius: 0.25rem;
+    min-height: 80vh;
+  }
+  
+  /* Dark background on the nav tabs */
+  .nav-tabs .nav-link {
+    background-color: #444;
+    color: #ddd;
+    border: 1px solid #555;
+  }
+  
+  /* Active tab styling */
+  .nav-tabs .nav-link.active {
+    background-color: #222;
+    color: #fff;
+    border-color: #555 #555 #222;
+  }
+  
+  /* Dark background on tab panes */
+  .tab-pane {
+    background-color: #333;
+  }
+  
+  .editor {
+    width: 100%;
+    height: 300px;
+    border: 1px solid #ccc;
+    font-family: monospace;
+    font-size: 14px;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  .error {
+    color: red;
+    margin-top: 5px;
+    white-space: pre-wrap; /* Preserve formatting */
+  }
+
+  /* -------------- */
+  body {
+    background-color: #121212;
+    color: #ffffff;
+  }
+
+  /* Accordion Items */
+  .accordion-item {
+    background-color: #1e1e1e;  /* dark gray */
+    border: none;
+  }
+
+  /* Accordion Button (header) */
+  .accordion-button {
+    background-color: #333333;
+    color: #ffffff;
+    border: none;
+  }
+
+  .accordion-button.collapsed {
+    color: #d2d2d2;
+    background-color: #575141;
+  }
+
+  .accordion-button:focus {
+    box-shadow: none; /* Remove focus outline */
+  }
+
+  /* When the accordion is open */
+  .accordion-button:not(.collapsed) {
+    color: #ffffff;
+    background-color: #444444;
+  }
+
+  /* Accordion Body */
+  .accordion-body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+  }
+
+  /* Form Elements */
+  .form-check-input {
+    background-color: #1e1e1e;
+    border: 1px solid #555;
+  }
+  .form-check-input:checked {
+    background-color: #0d6efd; /* Bootstrap primary color */
+    border-color: #0d6efd;
+  }
+  .form-check-label {
+    color: #ffffff;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+  }
+  .btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+  }
+
+  /* Textarea for logs */
+  #submissionLogModels {
+    background-color: #1e1e1e;
+    color: #cccccc;
+    border: 1px solid #555;
+    resize: none;
+  }
+
+  /* Spacing and overall styling */
+  .container {
+    max-width: 800px;
+    margin: 20px auto;
+  }

@@ -1,0 +1,9 @@
+Cellmap:
+  livers_mito: /groups/cellmap/cellmap/zouinkhim/models/v21_mito_attention_finetuned_distances_8nm_mito_jrc_mus-livers_mito_8nm_attention-upsample-unet_default_one_label_1
+  livers_peroxi: /groups/cellmap/cellmap/zouinkhim/models/v22_peroxisome_funetuning_best_v20_1e4_finetuned_distances_8nm_peroxisome_jrc_mus-livers_peroxisome_8nm_attention-upsample-unet_default_one_label_finetuning_0
+Sallfeldlab:
+  fly_run07: /path/to/model3
+  ly_run08: /path/to/model4
+CellPose:
+  cellpose2: /path/to/model5
+  cellpose3: /path/to/model6

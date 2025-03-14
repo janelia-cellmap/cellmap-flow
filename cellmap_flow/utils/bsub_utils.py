@@ -4,23 +4,49 @@ import os
 import sys
 import signal
 import select
+import cellmap_flow.globals as g
+import logging
 
-from cellmap_flow.utils.data import IP_PATTERN
 
-processes = []
-job_ids = []
+from cellmap_flow.utils.web_utils import IP_PATTERN
+
+logger = logging.getLogger(__name__)
+
 security = "http"
+
+SERVER_COMMAND = "cellmap_flow_server"
+
+
+
+class Job:
+    def __init__(self, job_id=None, model_name=None, status="running", host=None, process=None):
+        self.job_id = job_id
+        self.model_name = model_name
+        self.status = status
+        self.host = host
+        self.process = process
+
+    def kill(self):
+        if self.job_id is None and self.process is None:
+            logger.error("Job is not running.")
+            return
+        if self.process is not None:
+            print(f"Killing process {self.process.pid}")
+            self.process.kill()
+            self.process = None
+            self.status = "killed"
+        if self.job_id is not None:
+            self.status = "killed"
+            os.system(f"bkill {self.job_id}")
+
 
 
 def cleanup(signum, frame):
     print(f"Script is being killed. Received signal: {signum}")
-    if is_bsub_available():
-        for job_id in job_ids:
-            print(f"Killing job {job_id}")
-            os.system(f"bkill {job_id}")
-    else:
-        for process in processes:
-            process.kill()
+    for job in g.jobs:
+        print(f"Killing job {job.job_id}")
+        job.kill()
+
     sys.exit(0)
 
 
@@ -47,7 +73,7 @@ def is_bsub_available():
 
 def submit_bsub_job(
     command,
-    queue="gpu_a100",
+    queue="gpu_h100",
     charge_group="cellmap",
     job_name="my_job",
 ):
@@ -120,35 +146,39 @@ def parse_bpeek_output(job_id):
     return host
 
 
-# def get_host_from_stdout(output):
-#     parts = IP_PATTERN.split("ip_address")
-
-#     if parts[0] in output and parts[1] in output:
-#         host = output.split(parts[0])[1].split(parts[1])[0]
-#         return host
-#     return None
-
-
 def get_host_from_stdout(output):
-    if "Host name: " in output and f"* Running on {security}://" in output:
-        host_name = output.split("Host name: ")[1].split("\n")[0].strip()
-        port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
+    # parts = IP_PATTERN.split("ip_address")
 
-        host = f"{security}://{host_name}:{port}"
-        print(f"{host}")
+    if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
+        host = output.split(IP_PATTERN[0])[1].split(IP_PATTERN[1])[0]
         return host
     return None
 
 
-def run_locally(sc):
-    command = sc.split(" ")
+# def get_host_from_stdout(output):
 
+#     if "Host name: " in output and f"* Running on {security}://" in output:
+#         host_name = output.split("Host name: ")[1].split("\n")[0].strip()
+#         port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
+
+    
+
+#         host = f"{security}://{host_name}:{port}"
+#         print(f"{host}")
+#         return host
+#     return None
+
+
+def run_locally(sc,name):
+    command = sc.split(" ")
+    print(f"Running command: {command}")
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
 
     output = ""
     while True:
+        # print("Waiting for output...")
         # Check if there is data available to read from stdout and stderr
         rlist, _, _ = select.select(
             [process.stdout, process.stderr], [], [], 0.1
@@ -164,28 +194,35 @@ def run_locally(sc):
         # Read from stderr if data is available
         if process.stderr in rlist:
             output += process.stderr.readline()
+        # print(output)
+        
         host = get_host_from_stdout(output)
         if host:
             break
         # Check if the process has finished and no more output is available
         if process.poll() is not None and not rlist:
             break
-    processes.append(process)
+    g.jobs.append(Job(model_name=name, host=host,process=process))
     return host
 
 
 def start_hosts(
     command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"
 ):
+    g.queue = queue
+    g.charge_group = charge_group
     if security == "https":
         command = f"{command} --certfile=host.cert --keyfile=host.key"
 
     if is_bsub_available():
-        result = submit_bsub_job(command, queue, charge_group, job_name=job_name)
+        result = submit_bsub_job(
+            command, queue, charge_group, job_name=f"{job_name}_server"
+        )
         job_id = result.stdout.split()[1][1:-1]
-        job_ids.append(job_id)
         host = parse_bpeek_output(job_id)
+        new_job = Job(job_id=job_id, model_name=job_name, host=host)
+        g.jobs.append(new_job)
     else:
-        host = run_locally(command)
+        new_job = run_locally(command, job_name)
 
-    return host
+    return new_job
