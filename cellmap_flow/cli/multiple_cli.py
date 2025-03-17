@@ -8,6 +8,7 @@ from cellmap_flow.utils.data import (
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+import threading
 import cellmap_flow.globals as g
 
 
@@ -217,6 +218,9 @@ def main():
         print(model)
 
     run_multiple(models, data_path, charge_group, queue)
+    generate_neuroglancer_url(data_path)
+    while True:
+        pass
 
 
 if __name__ == "__main__":
@@ -226,11 +230,15 @@ if __name__ == "__main__":
 def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
+    threads = []
     for model in models:
         command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
-        start_hosts(
-            command, job_name=model.name, queue=queue, charge_group=charge_group
-        )
-    generate_neuroglancer_url(dataset_path)
-    while True:
-        pass
+        thread = threading.Thread(target=start_hosts, args=(command, queue, charge_group, model.name))
+        thread.start()
+        threads.append(thread)
+
+    for thread in threads:
+        thread.join()
+
+        # generate_neuroglancer_url(dataset_path)
+

@@ -3,16 +3,9 @@ import numpy as np
 import torch
 from funlib.geometry import Coordinate
 import logging
-from cellmap_flow.utils.data import (
-    ModelConfig,
-    BioModelConfig,
-    DaCapoModelConfig,
-    ScriptModelConfig,
-    CellMapModelConfig,
-)
+from cellmap_flow.utils.data import ModelConfig
+
 import cellmap_flow.globals as g
-import neuroglancer
-from scipy import spatial
 
 logger = logging.getLogger(__name__)
 
@@ -93,24 +86,14 @@ class Inferencer:
         self.model_config.config.model.eval()
 
     def process_chunk(self, idi, roi):
-        # if isinstance(self.model_config, BioModelConfig):
-        #     return self.process_chunk_bioimagezoo(idi, roi)
-        if (
-            isinstance(self.model_config, DaCapoModelConfig)
-            or isinstance(self.model_config, ScriptModelConfig)
-            or isinstance(self.model_config, BioModelConfig)
-          or isinstance(self.model_config, CellMapModelConfig)
+        # check if process_chunk is in self.config
+        if getattr(self.model_config.config, "process_chunk", None) and callable(
+            self.model_config.config.process_chunk
         ):
-            # check if process_chunk is in self.config
-            if getattr(self.model_config.config, "process_chunk", None) and callable(
-                self.model_config.config.process_chunk
-            ):
-                result = self.model_config.config.process_chunk(idi, roi)
-            else:
-                result = self.process_chunk_basic(idi, roi)
+            result = self.model_config.config.process_chunk(idi, roi)
         else:
-            raise ValueError(f"Invalid model config type {type(self.model_config)}")
-
+            result = self.process_chunk_basic(idi, roi)
+    
         postprocessed = apply_postprocess(
             result,
             chunk_corner=tuple(roi.get_begin() // roi.get_shape()),

@@ -85,6 +85,8 @@ def submit_bsub_job(
         queue,
         "-gpu",
         "num=1",
+        "-n",
+        "4",
         "bash",
         "-c",
         command,
