@@ -91,9 +91,9 @@ class DaCapoModelConfig(ModelConfig):
         config.read_shape = Coordinate(in_shape) * Coordinate(voxel_size)
         config.write_shape = Coordinate(out_shape) * Coordinate(voxel_size)
         config.output_voxel_size = Coordinate(run.model.scale(voxel_size))
-        channels = get_dacapo_channels(run.task)
+        config.channels = get_dacapo_channels(run.task)
         config.output_channels = len(
-            channels
+            config.channels
         )  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
         config.block_shape = np.array(tuple(out_shape) + (len(channels),))
 
@@ -144,7 +144,7 @@ class FlyModelConfig(ModelConfig):
         config.read_shape = Coordinate(self.input_size) * Coordinate(self.input_voxel_size)
         config.write_shape = Coordinate(self.output_size) * Coordinate(self.input_voxel_size)
         config.output_voxel_size = Coordinate(self.output_voxel_size)
-
+        config.channels = self.channels
         config.output_channels = len(self.channels)
         config.block_shape = np.array(tuple(self.output_size) + (len(self.channels),))
 

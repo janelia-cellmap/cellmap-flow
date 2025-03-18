@@ -34,6 +34,7 @@ dependencies = [
     "funlib.math @ git+https://github.com/funkelab/funlib.math.git",
     "neuroglancer",
     "pydantic",
+    "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git@ome-ngff",
     ]
 
 # extras
@@ -71,3 +72,4 @@ cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
 cellmap_flow_multiple = "cellmap_flow.cli.multiple_cli:main"
 cellmap_flow_fly = "cellmap_flow.cli.fly_model:main"
+fly_processor = "cellmap_flow.blockwise.cli:cli"

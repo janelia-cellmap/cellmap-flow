@@ -1,5 +1,4 @@
 #%%
-yaml_file = "/groups/cellmap/cellmap/zouinkhim/c-elegen/v2/flow/generate_flow/nuc.yaml"
 #%%
 queue = "gpu_short"
 charge_group = "cellmap"
@@ -42,7 +41,10 @@ def find_target_scale(zarr_grp_path, target_resolution):
     return target_scale, offsets[target_scale], shapes[target_scale]
 
 
-def main(yaml_file):
+import sys
+def main():
+    args = sys.argv[1:]
+    yaml_file = args[0]
     with open(yaml_file, "r") as f:
         data = yaml.safe_load(f)
 
@@ -78,11 +80,3 @@ def main(yaml_file):
     generate_neuroglancer_url(data_path)
     while True:
         pass
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run fly model")
-    parser.add_argument("yaml_file", type=str, help="Path to the YAML file")
-    args = parser.parse_args()
-    main(args.yaml_file)
