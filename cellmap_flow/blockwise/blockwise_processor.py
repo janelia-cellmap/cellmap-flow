@@ -13,7 +13,7 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
-from funlib.persistence import prepare_ds, open_ds
+from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
 import cellmap_flow.globals as g
@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 def get_output_dtype():
     dtype = np.float32
-    if len(g.input_norms) > 0:
-        for norm in g.input_norms[::-1]:
-            if norm.dtype:
-                dtype = norm.dtype
-                break
+    # if len(g.input_norms) > 0:
+    #     for norm in g.input_norms[::-1]:
+    #         if norm.dtype:
+    #             dtype = norm.dtype
+    #             break
     if len(g.postprocess) > 0:
         for postprocess in g.postprocess[::-1]:
             if postprocess.dtype:
@@ -76,12 +76,15 @@ class CellMapFlowBlockwiseProcessor:
             / np.array(self.output_voxel_size)
         )
 
+        print(f"output_shape: {output_shape}")
+        print(f"type: {self.dtype}")
+        print(f"output_path: {output_path}")
         for channel in self.channels:
             if create:
                 array = prepare_ds(
                     DirectoryStore(output_path/ channel),
                     output_shape,
-                    dtype = get_output_dtype(),
+                    dtype = self.dtype,
                     chunk_shape = self.block_shape,
                     voxel_size=self.output_voxel_size,
                     axis_names = ["z", "y", "x"],
@@ -98,16 +101,27 @@ class CellMapFlowBlockwiseProcessor:
 
     def process_fn(self, block):
 
+        write_roi = block.write_roi.intersect(self.outout_arrays[0].roi)
+
+        if write_roi.empty:
+            print(f"empty write roi: {write_roi}")
+            return
+
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        if self.outout_arrays[0][block.write_roi].any():
-            return
+        # if self.outout_arrays[0][block.write_roi].any():
+        #     return
 
         for i, array in enumerate(self.outout_arrays):
-            
-            array[block.write_roi] = chunk_data[i]
+            predictions = Array(
+                    chunk_data[i],
+                    block.write_roi.offset,
+                    self.output_voxel_size,
+                )
+            array[write_roi] = predictions.to_ndarray(write_roi)
+        
 
     def client(self):
         client = daisy.Client()
@@ -119,19 +133,23 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-    def run(self, workers=16):
+    def run(self, workers=10):
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
-        context = (read_shape - write_shape) / 2
+
+        context = (
+                Coordinate(read_shape)
+                - Coordinate(write_shape)
+            ) / 2
 
         read_roi = daisy.Roi((0,0,0), read_shape)
         write_roi = read_roi.grow(-context, -context)
 
-        context = (read_shape - write_shape) / 2
 
-        total_read_roi = self.idi_raw.roi
-        total_write_roi = total_read_roi.grow(-context, -context)
+        total_write_roi = self.idi_raw.roi
+        # .snap_to_grid(self.output_voxel_size)
+        total_read_roi = total_write_roi.grow(context, context)
 
         task = daisy.Task(
         f"predict_{self.model_config.name}",

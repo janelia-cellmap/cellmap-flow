@@ -40,7 +40,7 @@ class ModelConfig:
 
 class ScriptModelConfig(ModelConfig):
 
-    def __init__(self, script_path, name):
+    def __init__(self, script_path, name=None):
         super().__init__()
         self.script_path = script_path
         self.name = name
@@ -107,7 +107,7 @@ def load_eval_model(num_channels, checkpoint_path):
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
-    checkpoint = torch.load(checkpoint_path, weights_only=True, map_location=device)
+    checkpoint = torch.load(checkpoint_path, weights_only=True, map_location= torch.device("cpu"))
     model_backbone.load_state_dict(checkpoint["model_state_dict"])
     model = torch.nn.Sequential(model_backbone, torch.nn.Sigmoid())
     model.to(device)

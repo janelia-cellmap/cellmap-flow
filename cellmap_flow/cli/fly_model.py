@@ -1,6 +1,6 @@
 #%%
 #%%
-queue = "gpu_short"
+queue = "gpu_h100"
 charge_group = "cellmap"
 #%%
 import argparse
