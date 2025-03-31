@@ -67,6 +67,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 exclude = ["ignore"]
 
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+cellmap_flow = ["models/*.yaml"]
+
 [project.scripts]
 cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
