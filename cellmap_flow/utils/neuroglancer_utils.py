@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 neuroglancer.set_server_bind_address("0.0.0.0")
 
 
-def generate_neuroglancer_url(dataset_path):
+def generate_neuroglancer_url(dataset_path, extras = []):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
     st_data = get_norms_post_args(g.input_norms, g.postprocess)
@@ -24,7 +24,7 @@ def generate_neuroglancer_url(dataset_path):
     with g.viewer.txn() as s:
         if dataset_path.startswith("/"):
             g.raw = get_raw_layer(dataset_path)
-            s.layers["raw"] = g.raw
+            s.layers["data"] = g.raw
         else:
             if ".zarr" in dataset_path:
                 filetype = "zarr"
@@ -32,9 +32,23 @@ def generate_neuroglancer_url(dataset_path):
                 filetype = "n5"
             else:
                 filetype = "precomputed"
-            s.layers["raw"] = neuroglancer.ImageLayer(
+            s.layers["data"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
             )
+        for i,extra in enumerate(extras):
+            logger.error(f" adding extra {i} {extra}")
+            if extra.startswith("/"):
+                s.layers[f"extra_{i}"] = get_raw_layer(extra,normalize=False)
+            else:
+                if ".zarr" in extra:
+                    filetype = "zarr"
+                elif ".n5" in extra:
+                    filetype = "n5"
+                else:
+                    filetype = "precomputed"
+                s.layers[f"extra_{i}"] = neuroglancer.ImageLayer(
+                    source=f"{filetype}://{extra}",
+                )
         colors = [
             "red",
             "green",

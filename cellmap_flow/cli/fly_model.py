@@ -58,7 +58,9 @@ def main():
         res = run_items["res"]
         res = (res, res, res)
         print(res)
-        scale,_,_ = find_target_scale(zarr_grp_path, res)
+        scale = run_items.get("scale", None)
+        if scale is None:
+            scale,_,_ = find_target_scale(zarr_grp_path, res)
         print(scale)
         data_path = os.path.join(zarr_grp_path, scale)
         model_config = FlyModelConfig(

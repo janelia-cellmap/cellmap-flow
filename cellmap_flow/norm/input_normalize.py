@@ -1,6 +1,8 @@
 import logging
 import numpy as np
 import inspect
+from skimage.morphology import dilation, cube
+from edt import edt
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,67 @@ class InputNormalizer:
         return np.uint8
 
 
+class Dilate(InputNormalizer):
+    def __init__(self, size=1):
+        self.size = int(size)
+    
+    def _process(self, data) -> np.ndarray:
+        return dilation(data, cube(self.size))
+    
+
+class EuclideanDistance(InputNormalizer):
+    def __init__(self, anisotropy=50, black_border=True, parallel=5, type='edt', activation = "tanh"):
+        import edt
+        if type not in ['edt', 'sdf']:
+            raise ValueError("type must be either 'edt' or 'sdf'")
+        self.anisotropy = tuple((int(anisotropy),int(anisotropy),int(anisotropy)))
+        if type == "edt":
+            self._func = edt.edt
+        elif type == "sdf":
+            self._func = edt.sdf
+        else:
+            raise ValueError("type must be either 'edt' or 'sdf'")
+        self.black_border = bool(black_border)
+        self.parallel = int(parallel)
+        self.activation = lambda x: x  # default to identity if no activation is specified
+        if activation is not None:
+            if activation == "tanh":
+                self.activation = lambda x: np.tanh(x)
+            elif activation == "relu":
+                self.activation = lambda x: np.maximum(0, x)
+            elif activation == "sigmoid":
+                self.activation = lambda x: 1 / (1 + np.exp(-x))
+            else:
+                raise ValueError("Unsupported activation function: {}".format(activation))
+    
+    def _process(self,data):
+        from edt import edt, sdf
+
+        if not isinstance(data, np.ndarray):
+            raise TypeError("Input data must be a numpy array.")
+
+        # Ensure the data is in uint8 format for distance transform
+        result = self._func(data, anisotropy=self.anisotropy, black_border=self.black_border, parallel=self.parallel)
+        return self.activation(result.astype(np.float32))
+    
+    @property
+    def dtype(self):
+        return np.float32
+
+
+
+    @property
+    def dtype(self):
+        return np.float32
+
+    def _process(self, data: np.ndarray, **kwargs) -> np.ndarray:
+
+        if not isinstance(data, np.ndarray):
+            raise TypeError("Input data must be a numpy array.")
+        
+        return edt(data.astype(np.uint8), anisotropy=self.anisotropy, black_border=True, parallel=5)
+    
+    
 class MinMaxNormalizer(InputNormalizer):
     def __init__(self, min_value=0.0, max_value=255.0):
         self.min_value = float(min_value)
@@ -75,8 +138,8 @@ class LambdaNormalizer(InputNormalizer):
 class ZScoreNormalizer(InputNormalizer):
 
     def __init__(self, mean=0.0, std=1.0):
-        self.mean = mean
-        self.std = std
+        self.mean = float(mean)
+        self.std = float(std)
 
     @property
     def dtype(self):
@@ -86,7 +149,6 @@ class ZScoreNormalizer(InputNormalizer):
         return (data - self.mean) / self.std
 
 
-NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
 
 
 def get_input_normalizers() -> list[dict]:
@@ -114,6 +176,7 @@ def get_input_normalizers() -> list[dict]:
 
 
 def get_normalizations(elms: dict) -> InputNormalizer:
+    NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
     result = []
     for norm_name in elms:
         found = False

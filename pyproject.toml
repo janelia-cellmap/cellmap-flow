@@ -30,8 +30,6 @@ dependencies = [
     "s3fs",
     "torch",    
     "universal_pathlib",
-    "mwatershed @ git+https://github.com/pattonw/mwatershed",
-    "funlib.math @ git+https://github.com/funkelab/funlib.math.git",
     "neuroglancer",
     "pydantic",
     "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git@ome-ngff",
@@ -59,6 +57,10 @@ docs = [
     "sphinx-rtd-theme",
     "myst-parser",
 ]
+
+postprocess = ["edt",
+    "mwatershed @ git+https://github.com/pattonw/mwatershed",
+    "funlib.math @ git+https://github.com/funkelab/funlib.math.git",]
 
 [build-system]
 requires = ["setuptools", "wheel"]

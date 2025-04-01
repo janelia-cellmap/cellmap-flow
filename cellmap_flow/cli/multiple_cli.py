@@ -15,6 +15,7 @@ import cellmap_flow.globals as g
 data_args = ["-d", "--data-path"]
 charge_group_arg = ["-P", "--project"]
 server_queue_arg = ["-q", "--queue"]
+extra_args = ["-e", "--extra"]
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
@@ -76,6 +77,7 @@ def main():
     charge_group = None
     queue = None
     models = []
+    extras = []
 
     for i, arg in enumerate(args):
         if arg in charge_group_arg:
@@ -94,6 +96,10 @@ def main():
                 logger.error("Multiple data paths provided.")
                 sys.exit(1)
             data_path = args[i + 1]
+        
+        if arg in extra_args:
+            logger.error(f"extra {args[i + 1]}")
+            extras.append(args[i + 1])
 
     if not data_path:
         logger.error("Data path not provided.")
@@ -218,7 +224,7 @@ def main():
         print(model)
 
     run_multiple(models, data_path, charge_group, queue)
-    generate_neuroglancer_url(data_path)
+    generate_neuroglancer_url(data_path,extras)
     while True:
         pass
 

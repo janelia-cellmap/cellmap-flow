@@ -14,6 +14,7 @@ class ImageDataInterface:
         output_voxel_size=None,
         custom_fill_value=None,
         concurrency_limit=1,
+        normalize = True,
     ):
         self.path = dataset_path
         self.filetype = (
@@ -31,12 +32,13 @@ class ImageDataInterface:
             self.output_voxel_size = output_voxel_size
         else:
             self.output_voxel_size = self.voxel_size
+        self.normalize = normalize
 
     @property
     def ts(self):
         if not self._ts:
             self._ts = open_ds_tensorstore(
-                self.path, concurrency_limit=self.concurrency_limit
+                self.path, concurrency_limit=self.concurrency_limit, normalize=self.normalize
             )
         return self._ts
 

@@ -122,7 +122,7 @@ def process():
     with g.viewer.txn() as s:
         # g.raw.invalidate()
         g.raw = get_raw_layer(g.dataset_path)
-        s.layers["raw"] = g.raw
+        s.layers["data"] = g.raw
         for job in g.jobs:
             model = job.model_name
             host = job.host

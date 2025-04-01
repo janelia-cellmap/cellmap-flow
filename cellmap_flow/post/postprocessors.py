@@ -5,6 +5,13 @@ import ast
 import neuroglancer
 import pymorton
 import threading
+from scipy.ndimage import label
+import mwatershed as mws
+from scipy.ndimage import measurements
+import fastremap
+from funlib.math import cantor_number
+import fastmorph
+
 
 postprocessing_lock = threading.Lock()
 
@@ -101,9 +108,6 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
-from scipy.ndimage import label
-
-
 class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)
@@ -163,12 +167,6 @@ class MortonSegmentationRelabeling(PostProcessor):
     @property
     def is_segmentation(self):
         return True
-
-
-import mwatershed as mws
-from scipy.ndimage import measurements
-import fastremap
-from funlib.math import cantor_number
 
 
 class AffinityPostprocessor(PostProcessor):
@@ -254,7 +252,7 @@ class AffinityPostprocessor(PostProcessor):
         return 1
 
 
-import fastmorph
+
 
 
 class SimpleBlockwiseMerger(PostProcessor):

@@ -10,7 +10,8 @@ raw = None
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
 
-input_norms = [MinMaxNormalizer(0,255)]
+input_norms = []
+# input_norms = [MinMaxNormalizer(0,255)]
 postprocess = []
 
 viewer = None
