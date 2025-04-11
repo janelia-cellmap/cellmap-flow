@@ -9,7 +9,7 @@ import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 import threading
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 
 
 data_args = ["-d", "--data-path"]
@@ -234,6 +234,7 @@ if __name__ == "__main__":
 
 
 def run_multiple(models, dataset_path, charge_group, queue):
+    g = Flow()
     g.queue = queue
     g.charge_group = charge_group
     threads = []

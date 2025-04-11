@@ -4,7 +4,7 @@ import os
 import sys
 import signal
 import select
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 import logging
 
 
@@ -42,6 +42,7 @@ class Job:
 
 
 def cleanup(signum, frame):
+    g = Flow()
     print(f"Script is being killed. Received signal: {signum}")
     for job in g.jobs:
         print(f"Killing job {job.job_id}")
@@ -204,13 +205,14 @@ def run_locally(sc,name):
         # Check if the process has finished and no more output is available
         if process.poll() is not None and not rlist:
             break
-    g.jobs.append(Job(model_name=name, host=host,process=process))
+    Flow().jobs.append(Job(model_name=name, host=host,process=process))
     return host
 
 
 def start_hosts(
     command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"
 ):
+    g = Flow()
     g.queue = queue
     g.charge_group = charge_group
     if security == "https":

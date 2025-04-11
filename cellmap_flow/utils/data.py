@@ -129,7 +129,7 @@ class FlyModelConfig(ModelConfig):
     
     @property
     def command(self):
-        return f"fly -c {self.chpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
+        return f"fly -c {self.chpoint_path} -ch {','.join(self.channels)} -ivs {','.join(map(str,self.input_voxel_size))} -ovs {','.join(map(str,self.output_voxel_size))}"
     
     @property
     def model(self):

@@ -26,6 +26,12 @@ class PostProcessor:
 
     def __call__(self, data: np.ndarray, **kwargs) -> np.ndarray:
         return self.process(data, **kwargs)
+    
+    def __str__(self):
+        return str(self.to_dict())
+    
+    def __repr__(self):
+        return str(self.to_dict())
 
     def process(self, data, **kwargs) -> np.ndarray:
         if not isinstance(data, np.ndarray):
@@ -47,10 +53,11 @@ class PostProcessor:
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_dict(self):
-        result = {"name": self.name()}
+        result = {}
+    #     result = {"name": self.name()}
         for k, v in self.__dict__.items():
             result[k] = v
-        return result
+        return {self.name():result}
 
     @property
     def dtype(self):
@@ -96,8 +103,8 @@ class ThresholdPostprocessor(PostProcessor):
         data = (data.astype(np.float32) > self.threshold).astype(np.uint8)
         return data
 
-    def to_dict(self):
-        return {"name": self.name(), "threshold": self.threshold}
+    # def to_dict(self):
+    #     return {"name": self.name(), "threshold": self.threshold}
 
     @property
     def dtype(self):
@@ -118,8 +125,8 @@ class LabelPostprocessor(PostProcessor):
         data[self.channel] = to_process
         return data
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -157,8 +164,8 @@ class MortonSegmentationRelabeling(PostProcessor):
         data[self.channel] = to_process
         return data
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -236,8 +243,8 @@ class AffinityPostprocessor(PostProcessor):
         # insert empty dimension
         return np.expand_dims(segmentation, axis=0)
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -250,9 +257,6 @@ class AffinityPostprocessor(PostProcessor):
     @property
     def num_channels(self):
         return 1
-
-
-
 
 
 class SimpleBlockwiseMerger(PostProcessor):
@@ -303,8 +307,8 @@ class SimpleBlockwiseMerger(PostProcessor):
         # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
         return data.astype(np.uint64 if self.use_exact else np.uint16)
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     def calculate_equivalences(self):
         chunk_slice_position_to_coords_id_dict = (
@@ -350,8 +354,8 @@ class ChannelSelection(PostProcessor):
         data = data[self.channels, :, :, :]
         return data
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def num_channels(self):
@@ -366,8 +370,8 @@ class LambdaPostprocessor(PostProcessor):
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))
 
-    def to_dict(self):
-        return {"name": self.name(), "expression": self.expression}
+    # def to_dict(self):
+    #     return {"name": self.name(), "expression": self.expression}
 
     @property
     def dtype(self):

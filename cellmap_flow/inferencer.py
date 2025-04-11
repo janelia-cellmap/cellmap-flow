@@ -5,13 +5,14 @@ from funlib.geometry import Coordinate
 import logging
 from cellmap_flow.utils.data import ModelConfig
 
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 
 logger = logging.getLogger(__name__)
 
 
 def apply_postprocess(data, **kwargs):
-    for pross in g.postprocess:
+    for pross in Flow().postprocess:
+        # logger.error(f"applying postprocess: {pross}")
         data = pross(data, **kwargs)
     return data
 

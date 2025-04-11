@@ -15,6 +15,12 @@ class InputNormalizer:
 
     def __call__(self, data: np.ndarray) -> np.ndarray:
         return self.normalize(data)
+    
+    def __str__(self):
+        return str(self.to_dict())
+    
+    def __repr__(self):
+        return str(self.to_dict())
 
     def normalize(self, data) -> np.ndarray:
         if not isinstance(data, np.ndarray):
@@ -34,10 +40,11 @@ class InputNormalizer:
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_dict(self):
-        result = {"name": self.name()}
+        result = {}
+    #     result = {"name": self.name()}
         for k, v in self.__dict__.items():
             result[k] = v
-        return result
+        return {self.name():result}
 
     @property
     def dtype(self):
@@ -106,17 +113,23 @@ class EuclideanDistance(InputNormalizer):
     
     
 class MinMaxNormalizer(InputNormalizer):
-    def __init__(self, min_value=0.0, max_value=255.0):
+    def __init__(self, min_value=0.0, max_value=255.0,invert=False):
         self.min_value = float(min_value)
         self.max_value = float(max_value)
-
+        if type(invert) == str:
+            self.invert = invert.lower() == "true"
+        else:
+            self.invert = bool(invert)
     @property
     def dtype(self):
         return np.float32
 
     def _process(self, data) -> np.ndarray:
         data = data.clip(self.min_value, self.max_value)
-        return (data - self.min_value) / (self.max_value - self.min_value)
+        result =  (data - self.min_value) / (self.max_value - self.min_value)
+        if self.invert:
+            result = 1 - result
+        return result.astype(np.float32)
 
 
 class LambdaNormalizer(InputNormalizer):

@@ -16,7 +16,8 @@ from cellmap_flow.post.postprocessors import get_postprocessors
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
+from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ def get_output_dtype():
     #         if norm.dtype:
     #             dtype = norm.dtype
     #             break
+    g = Flow()
     if len(g.postprocess) > 0:
         for postprocess in g.postprocess[::-1]:
             if postprocess.dtype:
@@ -44,7 +46,7 @@ def get_process_dataset(json_data: str):
 
 class CellMapFlowBlockwiseProcessor:
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True):
+    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True,output_channels=None,task_name=""):
         # this is zyx
         self.model_config = model_config
         self.input_path = dataset_name
@@ -56,10 +58,23 @@ class CellMapFlowBlockwiseProcessor:
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
         self.channels = model_config.config.channels
+        self.task_name = task_name
+        if output_channels:
+            self.output_channels = output_channels
+        else:
+            self.output_channels = self.channels
+        
         self.dtype = get_output_dtype()
 
+        g = Flow()
+
+        self.json_str = None
+
         if json_data:
+            if type(json_data) == str:
+                json_data = decode_to_json(json_data)
             g.input_norms, g.postprocess = get_process_dataset(json_data)
+            self.json_str = encode_to_str(json_data)
 
         self.inferencer = Inferencer(model_config)
 
@@ -79,7 +94,7 @@ class CellMapFlowBlockwiseProcessor:
         print(f"output_shape: {output_shape}")
         print(f"type: {self.dtype}")
         print(f"output_path: {output_path}")
-        for channel in self.channels:
+        for channel in self.output_channels:
             if create:
                 array = prepare_ds(
                     DirectoryStore(output_path/ channel),
@@ -92,10 +107,13 @@ class CellMapFlowBlockwiseProcessor:
                     offset = (0, 0, 0),
                 )
             else:
-                array = open_ds(
-                    DirectoryStore(output_path/ channel),
-                    "a",
-                )
+                try:
+                    array = open_ds(
+                        DirectoryStore(output_path/ channel),
+                        "a",
+                    )
+                except Exception as e:
+                    raise Exception(f"Failed to open {output_path/channel}\n{e}")
             self.outout_arrays.append(array)
         
 
@@ -115,11 +133,21 @@ class CellMapFlowBlockwiseProcessor:
         #     return
 
         for i, array in enumerate(self.outout_arrays):
-            predictions = Array(
-                    chunk_data[i],
+            if chunk_data.shape == 3:
+                if len(self.output_channels) > 1:
+                    raise ValueError("output channels should be 1")
+                predictions = Array(
+                    chunk_data,
                     block.write_roi.offset,
                     self.output_voxel_size,
                 )
+            else:
+                index = self.channels.index(self.output_channels[i])
+                predictions = Array(
+                        chunk_data[index],
+                        block.write_roi.offset,
+                        self.output_voxel_size,
+                    )
             array[write_roi] = predictions.to_ndarray(write_roi)
         
 
@@ -133,7 +161,7 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-    def run(self, workers=10):
+    def run(self, workers=15):
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
@@ -151,18 +179,22 @@ class CellMapFlowBlockwiseProcessor:
         # .snap_to_grid(self.output_voxel_size)
         total_read_roi = total_write_roi.grow(context, context)
 
+        name = f"predict_{self.model_config.name}{self.task_name}"
+
         task = daisy.Task(
-        f"predict_{self.model_config.name}",
+        name,
         total_roi=total_read_roi,
         read_roi=read_roi,
         write_roi=write_roi,
-        process_function=spawn_worker(
+        process_function=spawn_worker(name,
         self.chpoint_path,
         self.channels,
         self.input_voxel_size,
         self.output_voxel_size,
         self.input_path,
         self.output_path,
+        self.output_channels,
+        self.json_str
         ),
         read_write_conflict=True,
         fit="overhang",
@@ -177,13 +209,15 @@ class CellMapFlowBlockwiseProcessor:
         
 
 import subprocess
-def spawn_worker(
+def spawn_worker(name,
    checkpoint, 
    channels, 
    input_voxel_size, 
    output_voxel_size, 
    data_path, 
-   output_path
+   output_path,
+   output_channels,
+   json_str
 ):
     def run_worker():
         subprocess.run(
@@ -191,7 +225,7 @@ def spawn_worker(
              "-P",
              "cellmap",
              "-J",
-             "pred",
+             str(name),
              "-q",
              "gpu_h100",
              "-n",
@@ -216,7 +250,10 @@ def spawn_worker(
                 f"{data_path}",
                 "-o",
                 f"{output_path}",
-             ])
+             ]
+             +(["-outc",f"{','.join(output_channels)}"] if output_channels else [])
+             +(["-json",f"{json_str}"] if json_str else [])
+             )
 
 
     return run_worker

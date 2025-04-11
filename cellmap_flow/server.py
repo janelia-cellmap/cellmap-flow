@@ -28,7 +28,7 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 import requests
 import time
 
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 def get_output_dtype():
     dtype = np.float32
+    g = Flow()
 
     if len(g.input_norms) > 0:
         for norm in g.input_norms[::-1]:
@@ -171,6 +172,7 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
+            g = Flow()
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
             self.n5_block_shape[-1] = self.default_vol_shape[-1]
@@ -208,6 +210,7 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
+            g = Flow()
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
             self.n5_block_shape[-1] = self.default_vol_shape[-1]
@@ -330,6 +333,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
+        g = Flow()
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])

@@ -75,11 +75,18 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-s", "--is_server", required=False, type=bool, default=False, help="The path to the output."
 )
-def run(checkpoint, channels, input_voxel_size, output_voxel_size, data_path, output_path,is_server):
+@click.option(
+    "-outc", "--output_channels", required=False, type=str, default=None,help="The path to the output."
+)
+@click.option(
+    "-json", "--json_data", required=False, type=str, default=None,help="The path to the output."
+)
+def run(checkpoint, channels, input_voxel_size, output_voxel_size, data_path, output_path,is_server, output_channels,json_data):
     """Run the CellMapFlow server with a Fly model."""
     channels = channels.split(",")
     input_voxel_size = tuple(map(int, input_voxel_size.split(",")))
     output_voxel_size = tuple(map(int, output_voxel_size.split(",")))
+    output_channels = output_channels.split(",")
     
     model_config = FlyModelConfig(
         chpoint_path=checkpoint,
@@ -87,7 +94,7 @@ def run(checkpoint, channels, input_voxel_size, output_voxel_size, data_path, ou
         input_voxel_size=input_voxel_size,
         output_voxel_size=output_voxel_size,
     )
-    process = CellMapFlowBlockwiseProcessor(data_path,model_config, output_path,create=is_server)
+    process = CellMapFlowBlockwiseProcessor(data_path,model_config, output_path,create=is_server, output_channels=output_channels,json_data=json_data)
     if is_server:
         process.run()
     else:

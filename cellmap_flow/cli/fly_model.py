@@ -1,48 +1,22 @@
-#%%
-#%%
 queue = "gpu_h100"
 charge_group = "cellmap"
-#%%
-import argparse
+
 import os
 import yaml
-import zarr 
 
-from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.ds import find_target_scale
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 import threading
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 from cellmap_flow.utils.data import FlyModelConfig
-def get_scale_info(zarr_grp):
-    attrs = zarr_grp.attrs
-    resolutions = {}
-    offsets = {}
-    shapes = {}
-    for scale in attrs["multiscales"][0]["datasets"]:
-        resolutions[scale["path"]] = scale["coordinateTransformations"][0]["scale"]
-        offsets[scale["path"]] = scale["coordinateTransformations"][1]["translation"]
-        shapes[scale["path"]] = zarr_grp[scale["path"]].shape
-    return offsets, resolutions, shapes
 
-
-def find_target_scale(zarr_grp_path, target_resolution):
-    zarr_grp = zarr.open(zarr_grp_path,mode="r")
-    offsets, resolutions, shapes = get_scale_info(zarr_grp)
-    target_scale = None
-    for scale, res in resolutions.items():
-        if Coordinate(res) == Coordinate(target_resolution):
-            target_scale = scale
-            break
-    if target_scale is None:
-        msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
-        raise ValueError(msg)
-    return target_scale, offsets[target_scale], shapes[target_scale]
 
 
 import sys
 def main():
+    g = Flow()
     args = sys.argv[1:]
     yaml_file = args[0]
     with open(yaml_file, "r") as f:
