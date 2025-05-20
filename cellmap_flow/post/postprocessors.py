@@ -235,6 +235,7 @@ class AffinityPostprocessor(PostProcessor):
         fastremap.mask(fragments_data, filtered_fragments, in_place=True)
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
+        data[data < self.filter_val] = 0
         if data.dtype == np.uint8:
             logger.info("Assuming affinities are in [0,255]")
             max_affinity_value: float = 255.0
@@ -245,7 +246,7 @@ class AffinityPostprocessor(PostProcessor):
 
         data /= max_affinity_value
 
-        if data.max() < 1e-3:
+        if data.max() < 1e-4:
             segmentation = np.zeros(
                 data.shape, dtype=np.uint64 if self.use_exact else np.uint16
             )
@@ -257,10 +258,10 @@ class AffinityPostprocessor(PostProcessor):
         neighborhood = [self.neighborhood[channel] for channel in channels]
 
         data = data[channels]
-        random_noise: float = np.random.randn(*data.shape) * 0.001
+        random_noise: float = np.random.randn(*data.shape) * 0.0001
         smoothed_affs: np.ndarray = (
             gaussian_filter(data, sigma=(0, *(np.amax(neighborhood, axis=0) / 3))) - 0.5
-        ) * 0.01
+        ) * 0.001
         shift: np.ndarray = np.array(
             [
                 (
