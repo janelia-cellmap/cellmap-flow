@@ -178,9 +178,24 @@ def to_ndarray_tensorstore(
         if output_voxel_size:
             output_voxel_size = Coordinate(output_voxel_size[::-1])
 
+    channel_offset = 0
+    domain = dataset.domain
+    if len(domain) > 3:
+        # Determine how many dimensions to skip (channels dimension exists if channels > 0)
+        channel_offset = 1
+        channels = slice(domain[0].inclusive_min, domain[0].exclusive_max)
+        domain = domain[1:]
+    rescale_factor = 1
     if roi is None:
         with ts.Transaction() as txn:
-            return dataset.with_transaction(txn).read().result()
+            data = dataset.with_transaction(txn).read().result()
+        if rescale_factor > 1:
+            data = (
+                data.repeat(rescale_factor, axis=0 + channel_offset)
+                .repeat(rescale_factor, 1 + channel_offset)
+                .repeat(rescale_factor, 2 + channel_offset)
+            )
+        return data
 
     if offset is None:
         offset = Coordinate(np.zeros(roi.dims, dtype=int))
@@ -188,7 +203,6 @@ def to_ndarray_tensorstore(
     if output_voxel_size is None:
         output_voxel_size = voxel_size
 
-    rescale_factor = 1
     if voxel_size != output_voxel_size:
         # in the case where there is a mismatch in voxel sizes, we may need to extra pad to ensure that the output is a multiple of the output voxel size
         original_roi = roi
@@ -206,7 +220,6 @@ def to_ndarray_tensorstore(
     # Specify the range
     roi_slices = roi.to_slices()
 
-    domain = dataset.domain
     # Compute the valid range
     valid_slices = tuple(
         slice(max(s.start, inclusive_min), min(s.stop, exclusive_max))
@@ -215,6 +228,14 @@ def to_ndarray_tensorstore(
         )
     )
 
+    pad_width = [
+        [valid_slice.start - s.start, s.stop - valid_slice.stop]
+        for s, valid_slice in zip(roi_slices, valid_slices)
+    ]
+
+    if channel_offset > 0:
+        pad_width = [[0, 0]] + pad_width
+        valid_slices = (channels,) + valid_slices
     # Create an array to hold the requested data, filled with a default value (e.g., zeros)
     # output_shape = [s.stop - s.start for s in roi_slices]
 
@@ -227,10 +248,7 @@ def to_ndarray_tensorstore(
         for norm in g.input_norms:
             print(f"Applying norm: {norm}")
             data = norm(data)
-    pad_width = [
-        [valid_slice.start - s.start, s.stop - valid_slice.stop]
-        for s, valid_slice in zip(roi_slices, valid_slices)
-    ]
+
     if np.any(np.array(pad_width)):
         if fill_value == "edge":
             data = np.pad(
@@ -257,21 +275,26 @@ def to_ndarray_tensorstore(
     #     # Read the region of interest from the dataset
     #     padded_data[padded_slices] = dataset[valid_slices].read().result()
 
-    if rescale_factor > 1:
-        rescale_factor = voxel_size[0] / output_voxel_size[0]
-        data = (
-            data.repeat(rescale_factor, 0)
-            .repeat(rescale_factor, 1)
-            .repeat(rescale_factor, 2)
-        )
-        data = data[snapped_slices]
+    if rescale_factor != 1:
+        slices = (slice(None),) * channel_offset + snapped_slices
+        if rescale_factor > 1:
+            # Compute the upsampling factor based on the first spatial dimension
+            factor = voxel_size[0] / output_voxel_size[0]
+            # Upsample only along the spatial axes
+            data = (
+                data.repeat(factor, axis=channel_offset)
+                .repeat(factor, axis=channel_offset + 1)
+                .repeat(factor, axis=channel_offset + 2)
+            )
+        elif rescale_factor < 1:
+            # Create block_size that leaves the channel dimension unchanged and scales the spatial ones
+            block_size = (1,) * channel_offset + (int(1 / rescale_factor),) * 3
+            data = block_reduce(data, block_size=block_size, func=np.median)
 
-    elif rescale_factor < 1:
-        data = block_reduce(data, block_size=int(1 / rescale_factor), func=np.median)
-        data = data[snapped_slices]
+        data = data[slices]
 
     if swap_axes:
-        data = np.swapaxes(data, 0, 2)
+        data = np.swapaxes(data, 0 + channel_offset, 2 + channel_offset)
 
     return data
 
