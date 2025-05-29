@@ -8,6 +8,15 @@ Please feel free to explore and contribute, but note that there may be frequent 
 ![CellMapFlow Logo](https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png)
 
 ### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
+![CellMapFlow Logo](img/flow.gif)
+<br>
+<p align="center">
+  <span style="font-size:1.3em;">🚀 </span>
+  <span style="font-size:1.1em; color:#4CAF50;"><strong>Speed up your data processing from <s>months</s> to <u>minutes</u>!</strong></span>
+</p>
+
+![CellMapFlow Logo](img/jrc.gif)
+
 [![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
 ---
 
