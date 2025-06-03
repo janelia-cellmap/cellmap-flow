@@ -143,6 +143,7 @@ def main():
         if token == "--cellmap-model":
             config_folder = None
             name = None
+            scale = None
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
                 if args[j] in ("-f", "--config_folder"):
@@ -151,6 +152,9 @@ def main():
                 elif args[j] in ("-n", "--name"):
                     name = args[j + 1]
                     j += 2
+                elif args[j] in ("-s", "--scale"):
+                    scale = args[j + 1]
+                    j += 2
                 else:
                     j += 1
             if not config_folder:
@@ -158,12 +162,13 @@ def main():
                     "Missing -c/--config_folder for --celmmap-model sub-command."
                 )
                 sys.exit(1)
-            models.append(CellMapModelConfig(config_folder, name=name))
+            models.append(CellMapModelConfig(config_folder, name=name,scale=scale))
 
         elif token == "--script":
             # We expect: --script -s script_path -n "some name"
             script_path = None
             name = None
+            scale = None
 
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
@@ -173,6 +178,8 @@ def main():
                 elif args[j] in ("-n", "--name"):
                     name = args[j + 1]
                     j += 2
+                elif args[j] in ("-s","--scale"):
+                    scale = args[j + 1]
                 else:
                     j += 1
 
@@ -180,7 +187,7 @@ def main():
                 logger.error("Missing -s/--script_path for --script sub-command.")
                 sys.exit(1)
 
-            models.append(ScriptModelConfig(script_path, name=name))
+            models.append(ScriptModelConfig(script_path, name=name, scale=scale))
             i = j
             continue
 
@@ -227,7 +234,11 @@ def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
     for model in models:
-        command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
+        current_data_path = dataset_path
+        if hasattr(model, "scale"):
+            scale = model.scale
+            current_data_path = "/".join(dataset_path.split("/")[:-1]) + f"/{scale}"
+        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
         start_hosts(
             command, job_name=model.name, queue=queue, charge_group=charge_group
         )

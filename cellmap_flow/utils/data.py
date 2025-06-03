@@ -40,10 +40,11 @@ class ModelConfig:
 
 class ScriptModelConfig(ModelConfig):
 
-    def __init__(self, script_path, name=None):
+    def __init__(self, script_path, name=None, scale=None):
         super().__init__()
         self.script_path = script_path
         self.name = name
+        self.scale = scale
 
     @property
     def command(self):
@@ -580,7 +581,7 @@ class CellMapModelConfig(ModelConfig):
     to populate the necessary metadata and define a prediction function.
     """
 
-    def __init__(self, folder_path, name):
+    def __init__(self, folder_path, name,scale=None):
         """
         :param cellmap_model: An instance of CellmapModel containing metadata
                               and references to ONNX, TorchScript, or PyTorch models.
@@ -589,6 +590,7 @@ class CellMapModelConfig(ModelConfig):
         super().__init__()
         self.cellmap_model = CellmapModel(folder_path=folder_path)
         self.name = name
+        self.scale = scale
 
     @property
     def command(self) -> str:
