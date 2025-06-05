@@ -5,11 +5,11 @@ import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig
 from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+from cellmap_flow.utils.config_utils import load_config, build_models
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
@@ -21,20 +21,16 @@ from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
 
-def get_output_dtype():
-    dtype = np.float32
-    # if len(g.input_norms) > 0:
-    #     for norm in g.input_norms[::-1]:
-    #         if norm.dtype:
-    #             dtype = norm.dtype
-    #             break
+
+def get_output_dtype(model_output):
+    p_dtype = model_output
     g = Flow()
     if len(g.postprocess) > 0:
         for postprocess in g.postprocess[::-1]:
             if postprocess.dtype:
-                dtype = postprocess.dtype
+                p_dtype = postprocess.dtype
                 break
-    return dtype
+    return p_dtype
 
 
 def get_process_dataset(json_data: str):
@@ -46,25 +42,74 @@ def get_process_dataset(json_data: str):
 
 class CellMapFlowBlockwiseProcessor:
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True,output_channels=None,task_name=""):
-        # this is zyx
-        self.model_config = model_config
-        self.input_path = dataset_name
-        self.output_path = output_path
-        self.chpoint_path = model_config.chpoint_path
-        self.block_shape = [int(x) for x in model_config.config.block_shape][:3]
+    def __init__(self, yaml_config: str, create=True):
+        """Run the CellMapFlow server with a Fly model."""
+        self.config = load_config(yaml_config)
+        self.yaml_config = yaml_config
 
-        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
-        self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
-        self.output_channels = model_config.config.output_channels
-        self.channels = model_config.config.channels
+        self.input_path = self.config["data_path"]
+        self.charge_group = self.config["project"]
+        self.queue = self.config["queue"]
+
+        print("Data path:", self.input_path)
+
+        if "output_path" not in self.config:
+            logger.error("Missing required field in YAML: output_path")
+            return
+        self.output_path = self.config["output_path"]
+
+        # For debugging, print each model config
+        for model in models:
+            print(model)
+
+        output_channels = None
+        if "output_channels" in self.config:
+            output_channels = output_channels.split(",")
+
+        json_data = None
+        if "json_data" in self.config:
+            json_data = self.config["json_data"]
+
+        if "task_name" not in self.config:
+            logger.error("Missing required field in YAML: task_name")
+            return
+        if "workers" not in self.config:
+            logger.error("Missing required field in YAML: workers")
+            return
+        self.workers = self.config["workers"]
+        if self.workers <= 1:
+            logger.error("Workers should be greater than 1.")
+            return
+
+        task_name = self.config["task_name"]
+
+        # Build model configuration objects
+        models = build_models(self.config["models"])
+        if len(models) == 0:
+            logger.error("No models found in the configuration.")
+            return
+        if len(models) > 1:
+            logger.error(
+                "Multiple models is not currently supported by blockwise processor."
+            )
+            return
+        self.model_config = models[0]
+
+        # this is zyx
+
+        self.block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
+
+        self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
+        self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
+        self.output_channels = self.model_config.config.output_channels
+        self.channels = self.model_config.config.channels
         self.task_name = task_name
         if output_channels:
             self.output_channels = output_channels
         else:
             self.output_channels = self.channels
-        
-        self.dtype = get_output_dtype()
+
+        self.dtype = get_output_dtype(self.model_config.output_dtype)
 
         g = Flow()
 
@@ -76,10 +121,10 @@ class CellMapFlowBlockwiseProcessor:
             g.input_norms, g.postprocess = get_process_dataset(json_data)
             self.json_str = encode_to_str(json_data)
 
-        self.inferencer = Inferencer(model_config)
+        self.inferencer = Inferencer(self.model_config)
 
         self.idi_raw = ImageDataInterface(
-            dataset_name, target_resolution=self.input_voxel_size
+            self.input_path, target_resolution=self.input_voxel_size
         )
         self.outout_arrays = []
 
@@ -97,25 +142,24 @@ class CellMapFlowBlockwiseProcessor:
         for channel in self.output_channels:
             if create:
                 array = prepare_ds(
-                    DirectoryStore(output_path/ channel),
+                    DirectoryStore(output_path / channel),
                     output_shape,
-                    dtype = self.dtype,
-                    chunk_shape = self.block_shape,
+                    dtype=self.dtype,
+                    chunk_shape=self.block_shape,
                     voxel_size=self.output_voxel_size,
-                    axis_names = ["z", "y", "x"],
-                    units = ["nm", "nm", "nm"],
-                    offset = (0, 0, 0),
+                    axis_names=["z", "y", "x"],
+                    units=["nm", "nm", "nm"],
+                    offset=(0, 0, 0),
                 )
             else:
                 try:
                     array = open_ds(
-                        DirectoryStore(output_path/ channel),
+                        DirectoryStore(output_path / channel),
                         "a",
                     )
                 except Exception as e:
                     raise Exception(f"Failed to open {output_path/channel}\n{e}")
             self.outout_arrays.append(array)
-        
 
     def process_fn(self, block):
 
@@ -144,12 +188,11 @@ class CellMapFlowBlockwiseProcessor:
             else:
                 index = self.channels.index(self.output_channels[i])
                 predictions = Array(
-                        chunk_data[index],
-                        block.write_roi.offset,
-                        self.output_voxel_size,
-                    )
+                    chunk_data[index],
+                    block.write_roi.offset,
+                    self.output_voxel_size,
+                )
             array[write_roi] = predictions.to_ndarray(write_roi)
-        
 
     def client(self):
         client = daisy.Client()
@@ -161,19 +204,15 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-    def run(self, workers=15):
+    def run(self):
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
 
-        context = (
-                Coordinate(read_shape)
-                - Coordinate(write_shape)
-            ) / 2
+        context = (Coordinate(read_shape) - Coordinate(write_shape)) / 2
 
-        read_roi = daisy.Roi((0,0,0), read_shape)
+        read_roi = daisy.Roi((0, 0, 0), read_shape)
         write_roi = read_roi.grow(-context, -context)
-
 
         total_write_roi = self.idi_raw.roi
         # .snap_to_grid(self.output_voxel_size)
@@ -182,78 +221,53 @@ class CellMapFlowBlockwiseProcessor:
         name = f"predict_{self.model_config.name}{self.task_name}"
 
         task = daisy.Task(
-        name,
-        total_roi=total_read_roi,
-        read_roi=read_roi,
-        write_roi=write_roi,
-        process_function=spawn_worker(name,
-        self.chpoint_path,
-        self.channels,
-        self.input_voxel_size,
-        self.output_voxel_size,
-        self.input_path,
-        self.output_path,
-        self.output_channels,
-        self.json_str
-        ),
-        read_write_conflict=True,
-        fit="overhang",
-        max_retries=0,
-        timeout=None,
-        num_workers=workers,
+            name,
+            total_roi=total_read_roi,
+            read_roi=read_roi,
+            write_roi=write_roi,
+            process_function=spawn_worker(
+                name,
+                self.yaml_config,
+                self.queue,
+            ),
+            read_write_conflict=True,
+            fit="overhang",
+            max_retries=0,
+            timeout=None,
+            num_workers=self.workers,
         )
 
         daisy.run_blockwise([task])
         # , multiprocessing= False
 
-        
 
 import subprocess
-def spawn_worker(name,
-   checkpoint, 
-   channels, 
-   input_voxel_size, 
-   output_voxel_size, 
-   data_path, 
-   output_path,
-   output_channels,
-   json_str
-):
+
+
+def spawn_worker(name, yaml_config,queue,ncpu=12):
     def run_worker():
         subprocess.run(
-            ["bsub",
-             "-P",
-             "cellmap",
-             "-J",
-             str(name),
-             "-q",
-             "gpu_h100",
-             "-n",
-             "12",
-             "-gpu",
-             "num=1",
-             "-o",
-             f"prediction_logs/out.out",
-             "-e",
-             f"prediction_logs/out.err",
-             "fly_processor",
-             "run",
-                "-c",
-                f"{checkpoint}",
-                "-ch",
-                f"{','.join(channels)}",
-                "-ivs",
-                f"{','.join(map(str, input_voxel_size))}",
-                "-ovs",
-                f"{','.join(map(str, output_voxel_size))}",
-                "-d",
-                f"{data_path}",
+            [
+                "bsub",
+                "-P",
+                "cellmap",
+                "-J",
+                str(name),
+                "-q",
+                queue,
+                "-n",
+                str(ncpu),
+                "-gpu",
+                "num=1",
                 "-o",
-                f"{output_path}",
-             ]
-             +(["-outc",f"{','.join(output_channels)}"] if output_channels else [])
-             +(["-json",f"{json_str}"] if json_str else [])
-             )
-
+                f"prediction_logs/out.out",
+                "-e",
+                f"prediction_logs/out.err",
+                "cellmap_flow_blockwise_processor",
+                "run",
+                "-y",
+                f"{yaml_config}",
+            ]
+        )
 
     return run_worker

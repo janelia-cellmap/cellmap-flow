@@ -70,3 +70,5 @@ exclude = ["ignore"]
 cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
 cellmap_flow_multiple = "cellmap_flow.cli.multiple_cli:main"
+cellmap_flow_yaml = "cellmap_flow.cli.multiple_yaml_cli:main"
+cellmap_flow_blockwise_processor = "cellmap_flow.blockwise.cli:cli"

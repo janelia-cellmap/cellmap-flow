@@ -36,6 +36,19 @@ class ModelConfig:
             self._config = self._get_config()
             check_config(self._config)
         return self._config
+    
+    @property
+    def output_dtype(self):
+        """
+        Returns the output dtype of the model.
+        If not defined, defaults to np.float32.
+        """
+        if hasattr(self.config, "output_dtype"):
+            return self.config.output_dtype
+        logger.warning(
+            f"Model {self.name} does not define output_dtype, defaulting to np.float32"
+        )
+        return np.float32
 
 
 class ScriptModelConfig(ModelConfig):
