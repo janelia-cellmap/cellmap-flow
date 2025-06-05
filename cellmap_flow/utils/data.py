@@ -36,14 +36,28 @@ class ModelConfig:
             self._config = self._get_config()
             check_config(self._config)
         return self._config
+    
+    @property
+    def output_dtype(self):
+        """
+        Returns the output dtype of the model.
+        If not defined, defaults to np.float32.
+        """
+        if hasattr(self.config, "output_dtype"):
+            return self.config.output_dtype
+        logger.warning(
+            f"Model {self.name} does not define output_dtype, defaulting to np.float32"
+        )
+        return np.float32
 
 
 class ScriptModelConfig(ModelConfig):
 
-    def __init__(self, script_path, name=None):
+    def __init__(self, script_path, name=None, scale=None):
         super().__init__()
         self.script_path = script_path
         self.name = name
+        self.scale = scale
 
     @property
     def command(self):
@@ -580,7 +594,7 @@ class CellMapModelConfig(ModelConfig):
     to populate the necessary metadata and define a prediction function.
     """
 
-    def __init__(self, folder_path, name):
+    def __init__(self, folder_path, name,scale=None):
         """
         :param cellmap_model: An instance of CellmapModel containing metadata
                               and references to ONNX, TorchScript, or PyTorch models.
@@ -589,6 +603,7 @@ class CellMapModelConfig(ModelConfig):
         super().__init__()
         self.cellmap_model = CellmapModel(folder_path=folder_path)
         self.name = name
+        self.scale = scale
 
     @property
     def command(self) -> str:
