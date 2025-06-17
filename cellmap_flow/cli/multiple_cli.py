@@ -120,67 +120,77 @@ def main():
 
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
-                if args[j] in ("-r", "--run-name"):
+                if args[j] in ("-r"):
                     run_name = args[j + 1]
                     j += 2
-                elif args[j] in ("-i", "--iteration"):
+                elif args[j] in ("-i"):
                     iteration = int(args[j + 1])
                     j += 2
-                elif args[j] in ("-n", "--name"):
+                elif args[j] in ("-n"):
                     name = args[j + 1]
                     j += 2
                 else:
                     j += 1
 
             if not run_name:
-                logger.error("Missing -r/--run-name for --dacapo sub-command.")
+                logger.error("Missing -r for --dacapo sub-command.")
                 sys.exit(1)
 
             models.append(DaCapoModelConfig(run_name, iteration, name=name))
             i = j
             continue
 
-        if token == "--cellmap-model":
+        elif token == "--cellmap-model":
             config_folder = None
             name = None
+            scale = None
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
-                if args[j] in ("-f", "--config_folder"):
+                if args[j] in ("-f"):
                     config_folder = args[j + 1]
                     j += 2
-                elif args[j] in ("-n", "--name"):
+                elif args[j] in ("-n"):
                     name = args[j + 1]
+                    j += 2
+                elif args[j] in ("-r"):
+                    scale = args[j + 1]
                     j += 2
                 else:
                     j += 1
             if not config_folder:
                 logger.error(
-                    "Missing -c/--config_folder for --celmmap-model sub-command."
+                    "Missing -c for --celmmap-model sub-command."
                 )
                 sys.exit(1)
-            models.append(CellMapModelConfig(config_folder, name=name))
+            models.append(CellMapModelConfig(config_folder, name=name,scale=scale))
+            i = j
+            continue
 
         elif token == "--script":
             # We expect: --script -s script_path -n "some name"
             script_path = None
             name = None
+            scale = None
 
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
-                if args[j] in ("-s", "--script_path"):
+                if args[j] in ("-s"):
                     script_path = args[j + 1]
                     j += 2
-                elif args[j] in ("-n", "--name"):
+                elif args[j] in ("-n"):
                     name = args[j + 1]
+                    j += 2
+                elif args[j] in ("-r"):
+                    scale = args[j + 1]
                     j += 2
                 else:
                     j += 1
 
             if not script_path:
-                logger.error("Missing -s/--script_path for --script sub-command.")
+                logger.error("Missing -s for --script sub-command.")
                 sys.exit(1)
 
-            models.append(ScriptModelConfig(script_path, name=name))
+            models.append(ScriptModelConfig(script_path, name=name, scale=scale))
             i = j
             continue
 
@@ -191,17 +201,17 @@ def main():
 
             j = i + 1
             while j < len(args) and not args[j].startswith("--"):
-                if args[j] in ("-m", "--model_path"):
+                if args[j] in ("-m"):
                     model_path = args[j + 1]
                     j += 2
-                elif args[j] in ("-n", "--name"):
+                elif args[j] in ("-n"):
                     name = args[j + 1]
                     j += 2
                 else:
                     j += 1
 
             if not model_path:
-                logger.error("Missing -m/--model_path for --bioimage sub-command.")
+                logger.error("Missing -m for --bioimage sub-command.")
                 sys.exit(1)
 
             models.append(BioModelConfig(model_path, name=name))
@@ -212,7 +222,7 @@ def main():
             # If we don't recognize the token, just move on
             i += 1
 
-    # Print out the model configs for debugging
+    # Print out the model configs for debugging)
     for model in models:
         print(model)
 
@@ -227,7 +237,11 @@ def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
     for model in models:
-        command = f"{SERVER_COMMAND} {model.command} -d {dataset_path}"
+        current_data_path = dataset_path
+        if hasattr(model, "scale"):
+            scale = model.scale
+            current_data_path = "/".join(dataset_path.split("/")[:-1]) + f"/{scale}"
+        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
         start_hosts(
             command, job_name=model.name, queue=queue, charge_group=charge_group
         )

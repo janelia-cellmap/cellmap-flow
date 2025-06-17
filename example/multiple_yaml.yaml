@@ -1,0 +1,49 @@
+# Example YAML configuration file: config.yaml
+
+# Required: path to the dataset
+data_path: "/some/shared/path"
+
+# Required: project/charge group identifier
+charge_group: "my_project_name"
+
+# Optional: queue name (defaults to "gpu_h100" if omitted)
+queue: "gpu_h100"
+
+# List of models to run. Each entry must include a "type" field and the corresponding parameters.
+models:
+
+  # 1. DaCapo model entry
+  - type: "dacapo"
+    run_name: "run_1"
+    iteration: 60
+    name: "dacapo_model_1"
+
+  # 2. Another DaCapo model entry (iteration defaults to 0 if omitted)
+  - type: "dacapo"
+    run_name: "run_2"
+    name: "dacapo_model_2"
+
+  # 3. CellMap model entry
+  - type: "cellmap-model"
+    config_folder: "/path/to/cellmap/configs/folder"
+    name: "cellmap_model_1"
+    scale: "high_res"
+
+  # 4. Script-based model entry
+  - type: "script"
+    script_path: "/path/to/custom_script.py"
+    name: "script_model_1"
+    scale: "low_res"
+
+  # 5. BioImage model entry
+  - type: "bioimage"
+    model_path: "/path/to/bioimage/model.pth"
+    name: "bioimage_model_1"
+
+
+### blockwise
+output_path: "/some/shared/path/output"
+# optional output channel-if not set output all channels from model
+# output_channels:mito,ld
+task_name: "cellpose_task"
+workers: 4
