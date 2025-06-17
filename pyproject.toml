@@ -32,7 +32,7 @@ dependencies = [
     "universal_pathlib",
     "neuroglancer",
     "pydantic",
-    "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git@ome-ngff",
+    "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git",
     ]
 
 # extras

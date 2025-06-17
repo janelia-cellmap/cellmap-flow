@@ -9,7 +9,7 @@ class ImageDataInterface:
     def __init__(
         self,
         dataset_path,
-        target_resolution=None,
+        voxel_size=None,
         mode="r",
         output_voxel_size=None,
         custom_fill_value=None,
@@ -25,6 +25,8 @@ class ImageDataInterface:
         self.voxel_size, self.chunk_shape, self.shape, self.roi, self.swap_axes = (
             get_ds_info(dataset_path)
         )
+        if voxel_size is not None:
+            self.voxel_size = voxel_size
         self.offset = self.roi.offset
         self.custom_fill_value = custom_fill_value
         self.concurrency_limit = concurrency_limit

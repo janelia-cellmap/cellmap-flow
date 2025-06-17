@@ -100,7 +100,7 @@ class CellMapFlowServer:
 
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
-            dataset_name, target_resolution=self.input_voxel_size
+            dataset_name, voxel_size=self.input_voxel_size
         )
 
         # Refresh rate for custom state updates

@@ -1,4 +1,5 @@
 import logging
+import shutil
 import daisy
 from zarr.storage import DirectoryStore
 import numpy as np
@@ -46,7 +47,7 @@ def get_process_dataset(json_data: str):
 
 class CellMapFlowBlockwiseProcessor:
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True,output_channels=None,task_name=""):
+    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True,overwrite=False,output_channels=None,task_name=""):
         # this is zyx
         self.model_config = model_config
         self.input_path = dataset_name
@@ -81,7 +82,7 @@ class CellMapFlowBlockwiseProcessor:
         self.idi_raw = ImageDataInterface(
             dataset_name, target_resolution=self.input_voxel_size
         )
-        self.outout_arrays = []
+        self.output_arrays = []
 
         output_path = Path(output_path)
 
@@ -95,44 +96,78 @@ class CellMapFlowBlockwiseProcessor:
         print(f"type: {self.dtype}")
         print(f"output_path: {output_path}")
         for channel in self.output_channels:
-            if create:
-                array = prepare_ds(
-                    DirectoryStore(output_path/ channel),
-                    output_shape,
-                    dtype = self.dtype,
-                    chunk_shape = self.block_shape,
-                    voxel_size=self.output_voxel_size,
-                    axis_names = ["z", "y", "x"],
-                    units = ["nm", "nm", "nm"],
-                    offset = (0, 0, 0),
-                )
-            else:
-                try:
-                    array = open_ds(
-                        DirectoryStore(output_path/ channel),
-                        "a",
+            path = output_path / channel
+            exists = path.exists()
+
+            if exists:
+                if create and overwrite:
+                    # case (1,1,1): delete then prepare
+                    print(f"Deleting existing directory: {path}")
+                    shutil.rmtree(path)
+                    print(f"Creating directory: {path}")
+                    array = prepare_ds(
+                        DirectoryStore(path),
+                        output_shape,
+                        dtype=self.dtype,
+                        chunk_shape=self.block_shape,
+                        voxel_size=self.output_voxel_size,
+                        axis_names=["z", "y", "x"],
+                        units=["nm", "nm", "nm"],
+                        offset=(0, 0, 0),
                     )
-                except Exception as e:
-                    raise Exception(f"Failed to open {output_path/channel}\n{e}")
-            self.outout_arrays.append(array)
+                else:
+                    # all other exists=1 cases (0,0,1), (1,0,1), (0,1,1): just open
+                    print(f"Opening existing dataset: {path}")
+                    try:
+                        array = open_ds(
+                            DirectoryStore(path),
+                            "a",
+                        )
+                    except Exception as e:
+                        raise Exception(f"Failed to open {path}\n{e}")
+            else:
+                if create:
+                    # both (1,0,0) and (1,1,0): prepare
+                    print(f"Creating directory: {path}")
+                    array = prepare_ds(
+                        DirectoryStore(path),
+                        output_shape,
+                        dtype=self.dtype,
+                        chunk_shape=self.block_shape,
+                        voxel_size=self.output_voxel_size,
+                        axis_names=["z", "y", "x"],
+                        units=["nm", "nm", "nm"],
+                        offset=(0, 0, 0),
+                    )
+                else:
+                    # both (0,0,0) and (0,1,0): error
+                    raise FileNotFoundError(
+                        f"Directory {path} does not exist. Use create=True to create it."
+                    )
+
+            self.output_arrays.append(array)
         
 
     def process_fn(self, block):
 
-        write_roi = block.write_roi.intersect(self.outout_arrays[0].roi)
+        write_roi = block.write_roi.intersect(self.output_arrays[0].roi)
 
         if write_roi.empty:
             print(f"empty write roi: {write_roi}")
+            return
+        
+        if self.output_arrays[0].to_ndarray(write_roi).any():
+            print(f"write roi already filled: {write_roi}")
             return
 
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        # if self.outout_arrays[0][block.write_roi].any():
+        # if self.output_arrays[0][block.write_roi].any():
         #     return
 
-        for i, array in enumerate(self.outout_arrays):
+        for i, array in enumerate(self.output_arrays):
             if chunk_data.shape == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")
@@ -161,7 +196,7 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-    def run(self, workers=15):
+    def run(self, workers=15,timeout=60):
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
@@ -198,8 +233,8 @@ class CellMapFlowBlockwiseProcessor:
         ),
         read_write_conflict=True,
         fit="overhang",
-        max_retries=0,
-        timeout=None,
+        max_retries=2,
+        timeout=timeout,
         num_workers=workers,
         )
 

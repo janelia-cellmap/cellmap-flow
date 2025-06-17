@@ -41,10 +41,11 @@ class InputNormalizer:
 
     def to_dict(self):
         result = {}
-    #     result = {"name": self.name()}
+        result = {"name": self.name()}
         for k, v in self.__dict__.items():
             result[k] = v
-        return {self.name():result}
+        return result
+        # return {self.name():result}
 
     @property
     def dtype(self):
@@ -140,8 +141,7 @@ class LambdaNormalizer(InputNormalizer):
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))
 
-    def to_dict(self):
-        return {"name": self.name(), "expression": self.expression}
+
 
     @property
     def dtype(self):
