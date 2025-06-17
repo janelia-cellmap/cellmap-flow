@@ -160,7 +160,7 @@ class MortonSegmentationRelabeling(PostProcessor):
             #     fastremap.unique(to_process[to_process > 0])
             # )
 
-        to_process[to_process > 0] += unique_increment
+        to_process[to_process > 0] += unique_increment.astype(to_process.dtype)
         data[self.channel] = to_process
         return data
 

@@ -30,6 +30,8 @@ dependencies = [
     "s3fs",
     "torch",    
     "universal_pathlib",
+    "mwatershed",
+    "funlib.math",
     "neuroglancer",
     "pydantic",
     "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git",
@@ -80,4 +82,6 @@ cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
 cellmap_flow_multiple = "cellmap_flow.cli.multiple_cli:main"
 cellmap_flow_fly = "cellmap_flow.cli.fly_model:main"
-fly_processor = "cellmap_flow.blockwise.cli:cli"
+cellmap_flow_yaml = "cellmap_flow.cli.multiple_yaml_cli:main"
+cellmap_flow_blockwise_processor = "cellmap_flow.blockwise.cli:cli"
+

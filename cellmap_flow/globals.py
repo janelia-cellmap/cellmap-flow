@@ -51,6 +51,7 @@ class Flow:
         from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
         from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
+
         if input_normalizers is None:
             input_normalizers = []
         if post_processors is None:
@@ -58,6 +59,14 @@ class Flow:
 
         # Get the singleton instance (creates one if it doesn't exist)
         instance = cls()
+
+# input_norms = [MinMaxNormalizer()]
+# postprocess = [DefaultPostprocessor(0,200,0,1)]
+
+input_norms = []
+postprocess = []
+viewer = None
+
 
         # Update attributes
         instance.queue = queue
@@ -107,6 +116,15 @@ class Flow:
     @classmethod
     def delete(cls):
         cls._instance = None
+
+
+import os
+model_catalog = {}
+# model_catalog = load_model_paths(
+#   os.path.normpath(
+#      os.path.join(os.path.dirname(__file__), os.pardir, "models", "models.yaml")
+#  )
+# )
 
 
           

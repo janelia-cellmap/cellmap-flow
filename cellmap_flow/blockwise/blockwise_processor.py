@@ -1,41 +1,44 @@
 import logging
-import shutil
 import daisy
 from zarr.storage import DirectoryStore
 import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig
+
 from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+
+from cellmap_flow.utils.config_utils import load_config, build_models
+
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
-from cellmap_flow.globals import Flow
+
+# from cellmap_flow.globals import Flow
+import cellmap_flow.globals as g
+
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
 
-def get_output_dtype():
-    dtype = np.float32
-    # if len(g.input_norms) > 0:
-    #     for norm in g.input_norms[::-1]:
-    #         if norm.dtype:
-    #             dtype = norm.dtype
-    #             break
-    g = Flow()
+
+
+def get_output_dtype(model_output):
+    p_dtype = model_output
+    # g = Flow()
     if len(g.postprocess) > 0:
         for postprocess in g.postprocess[::-1]:
             if postprocess.dtype:
-                dtype = postprocess.dtype
+                p_dtype = postprocess.dtype
                 break
-    return dtype
+    return p_dtype
+
 
 
 def get_process_dataset(json_data: str):
@@ -47,27 +50,81 @@ def get_process_dataset(json_data: str):
 
 class CellMapFlowBlockwiseProcessor:
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, output_path,json_data: str = None, create=True,overwrite=False,output_channels=None,task_name=""):
-        # this is zyx
-        self.model_config = model_config
-        self.input_path = dataset_name
-        self.output_path = output_path
-        self.chpoint_path = model_config.chpoint_path
-        self.block_shape = [int(x) for x in model_config.config.block_shape][:3]
+    def __init__(self, yaml_config: str, create=True):
+        """Run the CellMapFlow server with a Fly model."""
+        self.config = load_config(yaml_config)
+        self.yaml_config = yaml_config
 
-        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
-        self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
-        self.output_channels = model_config.config.output_channels
-        self.channels = model_config.config.channels
+        self.input_path = self.config["data_path"]
+        self.charge_group = self.config["charge_group"]
+        self.queue = self.config["queue"]
+
+        print("Data path:", self.input_path)
+
+        if "output_path" not in self.config:
+            logger.error("Missing required field in YAML: output_path")
+            return
+        self.output_path = self.config["output_path"]
+        self.output_path = Path(self.output_path)
+
+
+        output_channels = None
+        if "output_channels" in self.config:
+            output_channels = self.config["output_channels"].split(",")
+
+        json_data = None
+        if "json_data" in self.config:
+            json_data = self.config["json_data"]
+
+        if "task_name" not in self.config:
+            logger.error("Missing required field in YAML: task_name")
+            return
+        if "workers" not in self.config:
+            logger.error("Missing required field in YAML: workers")
+            return
+        self.workers = self.config["workers"]
+        if self.workers <= 1:
+            logger.error("Workers should be greater than 1.")
+            return
+
+        task_name = self.config["task_name"]
+
+        # Build model configuration objects
+        models = build_models(self.config["models"])
+        # For debugging, print each model config
+        for model in models:
+            print(model)
+
+        if len(models) == 0:
+            logger.error("No models found in the configuration.")
+            return
+        if len(models) > 1:
+            logger.error(
+                "Multiple models is not currently supported by blockwise processor."
+            )
+            return
+        self.model_config = models[0]
+
+        # this is zyx
+
+        self.block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
+
+        self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
+        self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
+        self.output_channels = self.model_config.config.output_channels
+        self.channels = self.model_config.config.channels
+
         self.task_name = task_name
         if output_channels:
             self.output_channels = output_channels
         else:
             self.output_channels = self.channels
-        
-        self.dtype = get_output_dtype()
 
-        g = Flow()
+
+        self.dtype = get_output_dtype(self.model_config.output_dtype)
+
+        # g = Flow()
+
 
         self.json_str = None
 
@@ -77,14 +134,15 @@ class CellMapFlowBlockwiseProcessor:
             g.input_norms, g.postprocess = get_process_dataset(json_data)
             self.json_str = encode_to_str(json_data)
 
-        self.inferencer = Inferencer(model_config)
+
+        self.inferencer = Inferencer(self.model_config)
 
         self.idi_raw = ImageDataInterface(
-            dataset_name, target_resolution=self.input_voxel_size
+            self.input_path, target_resolution=self.input_voxel_size
         )
         self.output_arrays = []
 
-        output_path = Path(output_path)
+
 
         output_shape = (
             np.array(self.idi_raw.shape)
@@ -94,80 +152,48 @@ class CellMapFlowBlockwiseProcessor:
 
         print(f"output_shape: {output_shape}")
         print(f"type: {self.dtype}")
-        print(f"output_path: {output_path}")
+        print(f"output_path: {self.output_path}")
         for channel in self.output_channels:
-            path = output_path / channel
-            exists = path.exists()
-
-            if exists:
-                if create and overwrite:
-                    # case (1,1,1): delete then prepare
-                    print(f"Deleting existing directory: {path}")
-                    shutil.rmtree(path)
-                    print(f"Creating directory: {path}")
-                    array = prepare_ds(
-                        DirectoryStore(path),
-                        output_shape,
-                        dtype=self.dtype,
-                        chunk_shape=self.block_shape,
-                        voxel_size=self.output_voxel_size,
-                        axis_names=["z", "y", "x"],
-                        units=["nm", "nm", "nm"],
-                        offset=(0, 0, 0),
-                    )
-                else:
-                    # all other exists=1 cases (0,0,1), (1,0,1), (0,1,1): just open
-                    print(f"Opening existing dataset: {path}")
-                    try:
-                        array = open_ds(
-                            DirectoryStore(path),
-                            "a",
-                        )
-                    except Exception as e:
-                        raise Exception(f"Failed to open {path}\n{e}")
+            if create:
+                array = prepare_ds(
+                    DirectoryStore(self.output_path / channel/"s0"),
+                    output_shape,
+                    dtype=self.dtype,
+                    chunk_shape=self.block_shape,
+                    voxel_size=self.output_voxel_size,
+                    axis_names=["z", "y", "x"],
+                    units=["nm", "nm", "nm"],
+                    offset=(0, 0, 0),
+                )
             else:
-                if create:
-                    # both (1,0,0) and (1,1,0): prepare
-                    print(f"Creating directory: {path}")
-                    array = prepare_ds(
-                        DirectoryStore(path),
-                        output_shape,
-                        dtype=self.dtype,
-                        chunk_shape=self.block_shape,
-                        voxel_size=self.output_voxel_size,
-                        axis_names=["z", "y", "x"],
-                        units=["nm", "nm", "nm"],
-                        offset=(0, 0, 0),
+                try:
+                    array = open_ds(
+                        DirectoryStore(self.output_path / channel/"s0"),
+                        "a",
                     )
-                else:
-                    # both (0,0,0) and (0,1,0): error
-                    raise FileNotFoundError(
-                        f"Directory {path} does not exist. Use create=True to create it."
-                    )
-
-            self.output_arrays.append(array)
-        
+                except Exception as e:
+                    raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
+            self.outpout_arrays.append(array)
 
     def process_fn(self, block):
 
-        write_roi = block.write_roi.intersect(self.output_arrays[0].roi)
+        write_roi = block.write_roi.intersect(self.outpout_arrays[0].roi)
+
 
         if write_roi.empty:
             print(f"empty write roi: {write_roi}")
             return
-        
-        if self.output_arrays[0].to_ndarray(write_roi).any():
-            print(f"write roi already filled: {write_roi}")
-            return
+
 
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        # if self.output_arrays[0][block.write_roi].any():
+        # if self.outpout_arrays[0][block.write_roi].any():
         #     return
 
-        for i, array in enumerate(self.output_arrays):
+        for i, array in enumerate(self.outpout_arrays):
+
             if chunk_data.shape == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")
@@ -179,12 +205,12 @@ class CellMapFlowBlockwiseProcessor:
             else:
                 index = self.channels.index(self.output_channels[i])
                 predictions = Array(
-                        chunk_data[index],
-                        block.write_roi.offset,
-                        self.output_voxel_size,
-                    )
+                    chunk_data[index],
+                    block.write_roi.offset,
+                    self.output_voxel_size,
+                )
             array[write_roi] = predictions.to_ndarray(write_roi)
-        
+
 
     def client(self):
         client = daisy.Client()
@@ -196,17 +222,17 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-    def run(self, workers=15,timeout=60):
+
+    def run(self):
+
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
 
-        context = (
-                Coordinate(read_shape)
-                - Coordinate(write_shape)
-            ) / 2
 
-        read_roi = daisy.Roi((0,0,0), read_shape)
+        context = (Coordinate(read_shape) - Coordinate(write_shape)) / 2
+
+        read_roi = daisy.Roi((0, 0, 0), read_shape)
         write_roi = read_roi.grow(-context, -context)
 
 
@@ -217,78 +243,58 @@ class CellMapFlowBlockwiseProcessor:
         name = f"predict_{self.model_config.name}{self.task_name}"
 
         task = daisy.Task(
-        name,
-        total_roi=total_read_roi,
-        read_roi=read_roi,
-        write_roi=write_roi,
-        process_function=spawn_worker(name,
-        self.chpoint_path,
-        self.channels,
-        self.input_voxel_size,
-        self.output_voxel_size,
-        self.input_path,
-        self.output_path,
-        self.output_channels,
-        self.json_str
-        ),
-        read_write_conflict=True,
-        fit="overhang",
-        max_retries=2,
-        timeout=timeout,
-        num_workers=workers,
+
+            name,
+            total_roi=total_read_roi,
+            read_roi=read_roi,
+            write_roi=write_roi,
+            process_function=spawn_worker(
+                name,
+                self.yaml_config,
+                self.charge_group,
+                self.queue,
+            ),
+            read_write_conflict=True,
+            fit="overhang",
+            max_retries=0,
+            timeout=None,
+            num_workers=self.workers,
+
         )
 
         daisy.run_blockwise([task])
         # , multiprocessing= False
 
-        
+
 
 import subprocess
-def spawn_worker(name,
-   checkpoint, 
-   channels, 
-   input_voxel_size, 
-   output_voxel_size, 
-   data_path, 
-   output_path,
-   output_channels,
-   json_str
-):
+
+
+def spawn_worker(name, yaml_config,charge_group,queue,ncpu=12):
     def run_worker():
         subprocess.run(
-            ["bsub",
-             "-P",
-             "cellmap",
-             "-J",
-             str(name),
-             "-q",
-             "gpu_h100",
-             "-n",
-             "12",
-             "-gpu",
-             "num=1",
-             "-o",
-             f"prediction_logs/out.out",
-             "-e",
-             f"prediction_logs/out.err",
-             "fly_processor",
-             "run",
-                "-c",
-                f"{checkpoint}",
-                "-ch",
-                f"{','.join(channels)}",
-                "-ivs",
-                f"{','.join(map(str, input_voxel_size))}",
-                "-ovs",
-                f"{','.join(map(str, output_voxel_size))}",
-                "-d",
-                f"{data_path}",
+            [
+                "bsub",
+                "-P",
+                charge_group,
+                "-J",
+                str(name),
+                "-q",
+                queue,
+                "-n",
+                str(ncpu),
+                "-gpu",
+                "num=1",
                 "-o",
-                f"{output_path}",
-             ]
-             +(["-outc",f"{','.join(output_channels)}"] if output_channels else [])
-             +(["-json",f"{json_str}"] if json_str else [])
-             )
-
+                f"prediction_logs/out.out",
+                "-e",
+                f"prediction_logs/out.err",
+                "cellmap_flow_blockwise_processor",
+                "run",
+                "-y",
+                f"{yaml_config}",
+                "--client"
+            ]
+        )
 
     return run_worker
