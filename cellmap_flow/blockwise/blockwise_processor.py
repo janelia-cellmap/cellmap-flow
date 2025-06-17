@@ -129,7 +129,7 @@ class CellMapFlowBlockwiseProcessor:
         self.idi_raw = ImageDataInterface(
             self.input_path, target_resolution=self.input_voxel_size
         )
-        self.outpout_arrays = []
+        self.output_arrays = []
 
 
         output_shape = (
