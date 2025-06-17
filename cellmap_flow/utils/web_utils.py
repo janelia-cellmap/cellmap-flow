@@ -58,7 +58,10 @@ def list_cls_to_dict(ll):
     for n in ll:
         name = n.name()
         elms = n.to_dict()
-        elms.pop("name")
+        try:
+            elms.pop("name")
+        except KeyError:
+            raise ValueError(f"Normalizer {name} does not have a name key. {elms}")
         elms = {k: str(v) for k, v in elms.items()}
         norms[name] = elms
 

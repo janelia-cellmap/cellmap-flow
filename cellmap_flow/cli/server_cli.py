@@ -10,6 +10,7 @@ from cellmap_flow.utils.data import (
     DaCapoModelConfig,
     BioModelConfig,
     CellMapModelConfig,
+    FlyModelConfig,
 )
 from cellmap_flow.server import CellMapFlowServer
 
@@ -75,6 +76,49 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
+# return f"fly -c {self.chpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
+
+@cli.command()
+@click.option(
+    "-c", "--checkpoint", required=True, type=str, help="The path to the checkpoint."
+)
+@click.option(
+    "-ch",
+    "--channels",
+    required=True,
+    type=str,
+    help="The channels of the model. split by comma.",
+)
+@click.option(
+    "-ivs",
+    "--input_voxel_size",
+    required=True,
+    type=str,
+    help="The input voxel size of the model. split by comma.",
+)
+@click.option(
+    "-ovs",
+    "--output_voxel_size",
+    required=True,
+    type=str,
+    help="The output voxel size of the model. split by comma.",
+)
+@click.option(
+    "-d", "--data_path", required=True, type=str, help="The path to the data."
+)
+def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
+    """Run the CellMapFlow server with a Fly model."""
+    channels = channels.split(",")
+    input_voxel_size = tuple(map(int, input_voxel_size.split(",")))
+    output_voxel_size = tuple(map(int, output_voxel_size.split(",")))
+    model_config = FlyModelConfig(
+        chpoint_path=checkpoint,
+        channels=channels,
+        input_voxel_size=input_voxel_size,
+        output_voxel_size=output_voxel_size,
+    )
+    run_server(model_config, data_path)
+
 @cli.command()
 @click.option(
     "-s",
@@ -126,7 +170,7 @@ def bioimage(
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
-def run_server(model_config, data_path, debug, port, certfile, keyfile):
+def run_server(model_config, data_path, debug=False, port = 0, certfile = None, keyfile= None):
     server = CellMapFlowServer(data_path, model_config)
 
     server.run(
@@ -137,6 +181,7 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
     )
 
 
+        
 @cli.command()
 @click.option(
     "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
@@ -164,3 +209,4 @@ def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
 )
 def run_ui_server(neuroglancer_url, inference_host):
     create_and_run_app(neuroglancer_url, inference_host)
+

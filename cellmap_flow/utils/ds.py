@@ -19,8 +19,34 @@ import json
 import logging
 import os
 from typing import Union, Sequence
-import cellmap_flow.globals as g
+from cellmap_flow.globals import Flow
 import s3fs
+
+
+def get_scale_info(zarr_grp):
+    attrs = zarr_grp.attrs
+    resolutions = {}
+    offsets = {}
+    shapes = {}
+    for scale in attrs["multiscales"][0]["datasets"]:
+        resolutions[scale["path"]] = scale["coordinateTransformations"][0]["scale"]
+        offsets[scale["path"]] = scale["coordinateTransformations"][1]["translation"]
+        shapes[scale["path"]] = zarr_grp[scale["path"]].shape
+    return offsets, resolutions, shapes
+
+
+def find_target_scale(zarr_grp_path, target_resolution):
+    zarr_grp = zarr.open(zarr_grp_path,mode="r")
+    offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    target_scale = None
+    for scale, res in resolutions.items():
+        if Coordinate(res) == Coordinate(target_resolution):
+            target_scale = scale
+            break
+    if target_scale is None:
+        msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
+        raise ValueError(msg)
+    return target_scale, offsets[target_scale], shapes[target_scale]
 
 
 # Ensure tensorstore does not attempt to use GCE credentials
@@ -67,7 +93,9 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
 def apply_norms(data):
     if hasattr(data, "read"):
         data = data.read().result()
-    for norm in g.input_norms:
+    # logger.error("norm time")
+    for norm in Flow().input_norms:
+        # logger.error(f"applying norm: {norm}")
         data = norm(data)
     return data
 
@@ -83,13 +111,13 @@ class LazyNormalization:
     def __getattr__(self, attr):
         at = getattr(self.ts_dataset, attr)
         if attr == "dtype":
-            if len(g.input_norms) > 0:
-                return np.dtype(g.input_norms[-1].dtype)
+            if len(Flow().input_norms) > 0:
+                return np.dtype(Flow().input_norms[-1].dtype)
             return np.dtype(at.numpy_dtype)
         return at
 
 
-def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
+def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None, normalize = True):
     # open with zarr or n5 depending on extension
     filetype = (
         "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
@@ -153,7 +181,9 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
         ts_dataset = dataset_future.result()
 
     # return ts_dataset
-    return LazyNormalization(ts_dataset)
+    if normalize:
+        return LazyNormalization(ts_dataset)
+    return ts_dataset
 
 
 def to_ndarray_tensorstore(
@@ -231,8 +261,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
-        for norm in g.input_norms:
-            print(f"Applying norm: {norm}")
+        # logger.error("norm time")
+        for norm in Flow().input_norms:
+            # logger.error(f"Applying norm: {norm}")
             data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]

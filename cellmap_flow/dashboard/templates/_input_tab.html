@@ -1,8 +1,7 @@
 <!-- <h3>Input Normalization Methods</h3> -->
 <form id="inputNormForm">
   {% for normalizer in input_normalizers %}
-    {% set is_checked = normalizer.name in default_input_norm and normalizer.name != 'custom_code' %}
-
+    {% set is_checked = normalizer.name in default_input_norm %}
     <div class="form-check mb-2">
       <input
         class="form-check-input inputNormCheckbox"
@@ -31,7 +30,6 @@
         {% else %}
           {% set param_val = default_val %}
         {% endif %}
-
         <div class="mb-3">
           <label
             for="inputNorm_{{ normalizer.name }}_{{ param_name }}"
@@ -52,38 +50,6 @@
     <hr />
   {% endfor %}
 
-  <!-- Handle custom code checkbox and editor -->
-  {% set is_custom_code_checked = 'custom_code' in default_input_norm %}
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value="custom_code"
-      id="customCodeCheckbox_inputNorm"
-      {% if is_custom_code_checked %}checked{% endif %}
-    />
-    <label
-      class="form-check-label"
-      for="customCodeCheckbox_inputNorm"
-    >
-      Custom Code (Input Norm)
-    </label>
-  </div>
-
-  <div
-    id="customCodeParams_inputNorm"
-    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
-  >
-    <h3>Python Code Editor (Input Norm)</h3>
-    <textarea
-      id="pythonEditor_inputNorm"
-      class="form-control"
-      rows="5"
-      placeholder="Enter Python code here..."
-    >{% if is_custom_code_checked %}{{ default_input_norm['custom_code'] }}{% endif %}</textarea>
-    <div id="errorMsg_inputNorm" class="text-danger mt-2"></div>
-  </div>
-
   <!-- "Submit All" button -->
   <button type="button" class="btn btn-primary mt-3" id="submitAll">
     Submit All
@@ -103,9 +69,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   // Show/hide parameter fields for input norm
-  const normalizerCheckboxes = document.querySelectorAll(
-    "#inputNormForm .inputNormCheckbox"
-  );
+  const normalizerCheckboxes = document.querySelectorAll("#inputNormForm .inputNormCheckbox");
   normalizerCheckboxes.forEach((checkbox) => {
     checkbox.addEventListener("change", function () {
       const paramDiv = document.getElementById("inputNorm_" + this.value + "Params");
@@ -115,44 +79,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // Toggle custom code
-  const customCodeCheckbox = document.getElementById("customCodeCheckbox_inputNorm");
-  const customCodeParams = document.getElementById("customCodeParams_inputNorm");
-  customCodeCheckbox.addEventListener("change", function () {
-    customCodeParams.style.display = this.checked ? "block" : "none";
-  });
-
-  // Optional: Skulpt-based live syntax checking for input norm
-  const editor = document.getElementById("pythonEditor_inputNorm");
-  const errorMsg = document.getElementById("errorMsg_inputNorm");
-  const logArea = document.getElementById("submissionLog_inputNorm");
-
-  function checkSyntax() {
-    if (typeof Sk === "undefined") {
-      return; // If Skulpt isn't loaded, skip
-    }
-    try {
-      Sk.parse("user_code.py", editor.value);
-      errorMsg.textContent = "";
-    } catch (err) {
-      errorMsg.textContent = err.toString();
-    }
-  }
-
-  function debounce(func, delay) {
-    let timeout;
-    return function () {
-      clearTimeout(timeout);
-      timeout = setTimeout(func, delay);
-    };
-  }
-  editor.addEventListener("input", debounce(checkSyntax, 500));
-
   // Helper function to gather "input_norm" data
   window.gatherInputNormData = function () {
     const payload = {};
     normalizerCheckboxes.forEach((cb) => {
-      if (cb.checked && cb !== customCodeCheckbox) {
+      if (cb.checked) {
         const baseName = cb.value;
         payload[baseName] = {};
 
@@ -164,11 +95,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       }
     });
-
-    // If custom code is checked
-    if (customCodeCheckbox.checked) {
-      payload.custom_code = editor.value;
-    }
     return payload;
   };
 });
