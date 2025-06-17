@@ -63,7 +63,7 @@ class CellMapFlowBlockwiseProcessor:
 
         output_channels = None
         if "output_channels" in self.config:
-            output_channels = output_channels.split(",")
+            output_channels = self.config["output_channels"].split(",")
 
         json_data = None
         if "json_data" in self.config:
