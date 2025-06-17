@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
     help="The path to the YAML file.",
 )
 @click.option(
-    "-s",
-    "--is_server",
-    required=False,
-    type=bool,
+    "-c",
+    "--client",
+    is_flag=True,
     default=False,
-    help="The path to the output.",
+    help="Run as client if this flag is set.",
 )
-def run(yaml_config, is_server):
+def run(yaml_config, client):
+    is_server = not client
     process = CellMapFlowBlockwiseProcessor(yaml_config, create=is_server)
     if is_server:
         process.run()

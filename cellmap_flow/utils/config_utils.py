@@ -25,8 +25,8 @@ def load_config(path):
     if 'data_path' not in config:
         logger.error("Missing required field in YAML: data_path")
         sys.exit(1)
-    if 'project' not in config:
-        logger.error("Missing required field in YAML: project")
+    if 'charge_group' not in config:
+        logger.error("Missing required field in YAML: charge_group")
         sys.exit(1)
 
     # If queue is missing, set default

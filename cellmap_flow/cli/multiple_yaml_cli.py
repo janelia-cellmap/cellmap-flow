@@ -50,7 +50,7 @@ def main():
     config = load_config(config_path)
 
     data_path = config['data_path']
-    charge_group = config['project']
+    charge_group = config['charge_group']
     queue = config['queue']
 
     print("Data path:", data_path)

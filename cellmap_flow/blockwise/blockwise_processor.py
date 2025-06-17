@@ -16,7 +16,8 @@ from cellmap_flow.post.postprocessors import get_postprocessors
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
-from cellmap_flow.globals import Flow
+# from cellmap_flow.globals import Flow
+import cellmap_flow.globals as g
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def get_output_dtype(model_output):
     p_dtype = model_output
-    g = Flow()
+    # g = Flow()
     if len(g.postprocess) > 0:
         for postprocess in g.postprocess[::-1]:
             if postprocess.dtype:
@@ -48,7 +49,7 @@ class CellMapFlowBlockwiseProcessor:
         self.yaml_config = yaml_config
 
         self.input_path = self.config["data_path"]
-        self.charge_group = self.config["project"]
+        self.charge_group = self.config["charge_group"]
         self.queue = self.config["queue"]
 
         print("Data path:", self.input_path)
@@ -57,10 +58,8 @@ class CellMapFlowBlockwiseProcessor:
             logger.error("Missing required field in YAML: output_path")
             return
         self.output_path = self.config["output_path"]
+        self.output_path = Path(self.output_path)
 
-        # For debugging, print each model config
-        for model in models:
-            print(model)
 
         output_channels = None
         if "output_channels" in self.config:
@@ -85,6 +84,10 @@ class CellMapFlowBlockwiseProcessor:
 
         # Build model configuration objects
         models = build_models(self.config["models"])
+        # For debugging, print each model config
+        for model in models:
+            print(model)
+
         if len(models) == 0:
             logger.error("No models found in the configuration.")
             return
@@ -111,7 +114,7 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = get_output_dtype(self.model_config.output_dtype)
 
-        g = Flow()
+        # g = Flow()
 
         self.json_str = None
 
@@ -126,9 +129,8 @@ class CellMapFlowBlockwiseProcessor:
         self.idi_raw = ImageDataInterface(
             self.input_path, target_resolution=self.input_voxel_size
         )
-        self.outout_arrays = []
+        self.outpout_arrays = []
 
-        output_path = Path(output_path)
 
         output_shape = (
             np.array(self.idi_raw.shape)
@@ -138,11 +140,11 @@ class CellMapFlowBlockwiseProcessor:
 
         print(f"output_shape: {output_shape}")
         print(f"type: {self.dtype}")
-        print(f"output_path: {output_path}")
+        print(f"output_path: {self.output_path}")
         for channel in self.output_channels:
             if create:
                 array = prepare_ds(
-                    DirectoryStore(output_path / channel),
+                    DirectoryStore(self.output_path / channel/"s0"),
                     output_shape,
                     dtype=self.dtype,
                     chunk_shape=self.block_shape,
@@ -154,16 +156,16 @@ class CellMapFlowBlockwiseProcessor:
             else:
                 try:
                     array = open_ds(
-                        DirectoryStore(output_path / channel),
+                        DirectoryStore(self.output_path / channel/"s0"),
                         "a",
                     )
                 except Exception as e:
-                    raise Exception(f"Failed to open {output_path/channel}\n{e}")
-            self.outout_arrays.append(array)
+                    raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
+            self.outpout_arrays.append(array)
 
     def process_fn(self, block):
 
-        write_roi = block.write_roi.intersect(self.outout_arrays[0].roi)
+        write_roi = block.write_roi.intersect(self.outpout_arrays[0].roi)
 
         if write_roi.empty:
             print(f"empty write roi: {write_roi}")
@@ -173,10 +175,10 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        # if self.outout_arrays[0][block.write_roi].any():
+        # if self.outpout_arrays[0][block.write_roi].any():
         #     return
 
-        for i, array in enumerate(self.outout_arrays):
+        for i, array in enumerate(self.outpout_arrays):
             if chunk_data.shape == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")
@@ -228,6 +230,7 @@ class CellMapFlowBlockwiseProcessor:
             process_function=spawn_worker(
                 name,
                 self.yaml_config,
+                self.charge_group,
                 self.queue,
             ),
             read_write_conflict=True,
@@ -244,13 +247,13 @@ class CellMapFlowBlockwiseProcessor:
 import subprocess
 
 
-def spawn_worker(name, yaml_config,queue,ncpu=12):
+def spawn_worker(name, yaml_config,charge_group,queue,ncpu=12):
     def run_worker():
         subprocess.run(
             [
                 "bsub",
                 "-P",
-                "cellmap",
+                charge_group,
                 "-J",
                 str(name),
                 "-q",
@@ -267,6 +270,7 @@ def spawn_worker(name, yaml_config,queue,ncpu=12):
                 "run",
                 "-y",
                 f"{yaml_config}",
+                "--client"
             ]
         )
 
