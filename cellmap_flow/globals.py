@@ -3,6 +3,7 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
 from cellmap_flow.models.model_yaml import load_model_paths
 import os
+import threading
 
 
 class Flow:
@@ -47,10 +48,9 @@ class Flow:
             charge_group="cellmap", 
             input_normalizers=None, 
             post_processors=None):
-        import threading
+
         from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
         from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-
 
         if input_normalizers is None:
             input_normalizers = []
@@ -59,16 +59,6 @@ class Flow:
 
         # Get the singleton instance (creates one if it doesn't exist)
         instance = cls()
-
-# input_norms = [MinMaxNormalizer()]
-# postprocess = [DefaultPostprocessor(0,200,0,1)]
-
-input_norms = []
-postprocess = []
-viewer = None
-
-
-        # Update attributes
         instance.queue = queue
         instance.charge_group = charge_group
         instance.dataset_path = zarr_path
@@ -127,4 +117,9 @@ model_catalog = {}
 # )
 
 
-          
+# input_norms = [MinMaxNormalizer()]
+# postprocess = [DefaultPostprocessor(0,200,0,1)]
+
+input_norms = []
+postprocess = []
+viewer = None
