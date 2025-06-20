@@ -1,0 +1,4 @@
+include cellmap_flow/dashboard/templates/*.html
+include cellmap_flow/dashboard/static/css/*.css
+include cellmap_flow/dashboard/static/js/*.js
+include cellmap_flow/dashboard/static/img/*
