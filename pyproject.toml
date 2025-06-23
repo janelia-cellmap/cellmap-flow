@@ -66,6 +66,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 exclude = ["ignore"]
 
+[tool.setuptools.package-data]
+"cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
+
 [project.scripts]
 cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
