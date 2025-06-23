@@ -24,21 +24,6 @@ Please feel free to explore and contribute, but note that there may be frequent 
 
 </div>
 
-## Prerequisites
-
-This package requires Rust and Cargo to compile native extensions. Please ensure you have Rust installed before proceeding.
-
-1. **Install Rust:**
-Visit [rustup.rs](https://rustup.rs/) and follow the instructions to install Rust. This installation will also include Cargo, Rust’s package manager.
-
-2. **Verify Cargo Installation:**
-Open your terminal and run:
-     ```bash
-     cargo --version
-     ```
-You should see the Cargo version output, which confirms that Cargo is installed and accessible.
-
-
 ## Installation
 
 To install CellMapFlow, you can use pip:

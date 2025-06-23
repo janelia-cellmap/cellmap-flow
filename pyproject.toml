@@ -30,8 +30,8 @@ dependencies = [
     "s3fs",
     "torch",    
     "universal_pathlib",
-    "mwatershed @ git+https://github.com/pattonw/mwatershed",
-    "funlib.math @ git+https://github.com/funkelab/funlib.math.git",
+    "mwatershed",
+    "funlib.math",
     "neuroglancer",
     "pydantic",
     ]
@@ -66,7 +66,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 exclude = ["ignore"]
 
+[tool.setuptools.package-data]
+"cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
+
 [project.scripts]
 cellmap_flow = "cellmap_flow.cli.cli:cli"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
 cellmap_flow_multiple = "cellmap_flow.cli.multiple_cli:main"
+cellmap_flow_yaml = "cellmap_flow.cli.multiple_yaml_cli:main"
+cellmap_flow_blockwise_processor = "cellmap_flow.blockwise.cli:cli"
