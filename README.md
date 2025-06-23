@@ -17,7 +17,7 @@ Please feel free to explore and contribute, but note that there may be frequent 
   <span style="font-size:1.1em; color:#4CAF50;"><strong>Speed up your data processing from <s>months</s> to <u>minutes</u>!</strong></span>
 </p>
 
-![CellMapFlow Logo](img/jrc.gif)
+![Real-time data processing visualization](img/jrc.gif)
 
 
 ---
