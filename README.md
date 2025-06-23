@@ -10,7 +10,7 @@ Please feel free to explore and contribute, but note that there may be frequent 
 [![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
 
 ### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
-![CellMapFlow Logo](img/flow.gif)
+![Animated demonstration of CellMapFlow's real-time data processing workflow](img/flow.gif)
 <br>
 <p align="center">
   <span style="font-size:1.3em;">🚀 </span>
