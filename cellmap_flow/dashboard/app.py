@@ -22,7 +22,7 @@ from cellmap_flow.utils.web_utils import (
     POSTPROCESS_DICT_KEY,
 )
 from cellmap_flow.models.run import update_run_models
-import cellmap_flow.globals as g
+from cellmap_flow.globals import g
 import numpy as np
 import time
 

@@ -4,11 +4,12 @@ import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-import cellmap_flow.globals as g
+from cellmap_flow.globals import g
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     get_norms_post_args,
 )
+
 
 logger = logging.getLogger(__name__)
 

@@ -5,13 +5,13 @@ from funlib.geometry import Coordinate
 import logging
 from cellmap_flow.utils.data import ModelConfig
 
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
 
 def apply_postprocess(data, **kwargs):
-    for pross in Flow().postprocess:
+    for pross in g.postprocess:
         # logger.error(f"applying postprocess: {pross}")
         data = pross(data, **kwargs)
     return data
@@ -94,7 +94,7 @@ class Inferencer:
             result = self.model_config.config.process_chunk(idi, roi)
         else:
             result = self.process_chunk_basic(idi, roi)
-    
+
         postprocessed = apply_postprocess(
             result,
             chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
@@ -115,4 +115,3 @@ class Inferencer:
             use_half_prediction=self.use_half_prediction,
         )
         return result
-

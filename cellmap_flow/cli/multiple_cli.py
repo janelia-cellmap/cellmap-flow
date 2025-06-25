@@ -8,7 +8,7 @@ from cellmap_flow.utils.data import (
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-import cellmap_flow.globals as g
+from cellmap_flow.globals import g
 
 
 data_args = ["-d", "--data-path"]
@@ -158,11 +158,9 @@ def main():
                 else:
                     j += 1
             if not config_folder:
-                logger.error(
-                    "Missing -c for --celmmap-model sub-command."
-                )
+                logger.error("Missing -c for --celmmap-model sub-command.")
                 sys.exit(1)
-            models.append(CellMapModelConfig(config_folder, name=name,scale=scale))
+            models.append(CellMapModelConfig(config_folder, name=name, scale=scale))
             i = j
             continue
 

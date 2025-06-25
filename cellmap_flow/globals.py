@@ -125,3 +125,6 @@ class Flow:
     @classmethod
     def delete(cls):
         cls._instance = None
+
+
+g = Flow()

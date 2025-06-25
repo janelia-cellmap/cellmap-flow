@@ -19,7 +19,7 @@ import json
 import logging
 import os
 from typing import Union, Sequence
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 import s3fs
 
 
@@ -36,7 +36,7 @@ def get_scale_info(zarr_grp):
 
 
 def find_target_scale(zarr_grp_path, target_resolution):
-    zarr_grp = zarr.open(zarr_grp_path,mode="r")
+    zarr_grp = zarr.open(zarr_grp_path, mode="r")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
     target_scale = None
     for scale, res in resolutions.items():
@@ -94,7 +94,7 @@ def apply_norms(data):
     if hasattr(data, "read"):
         data = data.read().result()
     # logger.error("norm time")
-    for norm in Flow().input_norms:
+    for norm in g.input_norms:
         # logger.error(f"applying norm: {norm}")
         data = norm(data)
     return data
@@ -111,13 +111,15 @@ class LazyNormalization:
     def __getattr__(self, attr):
         at = getattr(self.ts_dataset, attr)
         if attr == "dtype":
-            if len(Flow().input_norms) > 0:
-                return np.dtype(Flow().input_norms[-1].dtype)
+            if len(g.input_norms) > 0:
+                return np.dtype(g.input_norms[-1].dtype)
             return np.dtype(at.numpy_dtype)
         return at
 
 
-def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None, normalize = True):
+def open_ds_tensorstore(
+    dataset_path: str, mode="r", concurrency_limit=None, normalize=True
+):
     # open with zarr or n5 depending on extension
     filetype = (
         "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
@@ -262,7 +264,7 @@ def to_ndarray_tensorstore(
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
         # logger.error("norm time")
-        for norm in Flow().input_norms:
+        for norm in g.input_norms:
             # logger.error(f"Applying norm: {norm}")
             data = norm(data)
     pad_width = [

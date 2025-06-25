@@ -4,7 +4,7 @@ import base64
 
 
 ARGS_KEY = "__CFLOW_ARGS__"
-IP_PATTERN = ["CELLMAP_FLOW_SERVER_IP(",")CELLMAP_FLOW_SERVER_IP"]
+IP_PATTERN = ["CELLMAP_FLOW_SERVER_IP(", ")CELLMAP_FLOW_SERVER_IP"]
 INPUT_NORM_DICT_KEY = "input_norm"
 POSTPROCESS_DICT_KEY = "postprocess"
 
@@ -15,6 +15,7 @@ def get_free_port():
     free_port = s.getsockname()[1]
     s.close()
     return free_port
+
 
 def get_public_ip():
     """

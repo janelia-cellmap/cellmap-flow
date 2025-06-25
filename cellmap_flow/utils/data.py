@@ -1,4 +1,3 @@
-
 # %%
 import logging
 import warnings
@@ -36,7 +35,7 @@ class ModelConfig:
             self._config = self._get_config()
             check_config(self._config)
         return self._config
-    
+
     @property
     def output_dtype(self):
         """
@@ -320,7 +319,6 @@ def get_dacapo_run_model(run_name, iteration):
     return run
 
 
-
 def concat_along_c(arrs, axes_list, channel_axis_name="c"):
     """
     Concatenate a list of arrays along the axis named `channel_axis_name`.
@@ -522,6 +520,7 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
 # b.model.inputs
 # # %%
 
+
 def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
     """
     Reads a YAML file that defines a list of model configs.
@@ -594,7 +593,7 @@ class CellMapModelConfig(ModelConfig):
     to populate the necessary metadata and define a prediction function.
     """
 
-    def __init__(self, folder_path, name,scale=None):
+    def __init__(self, folder_path, name, scale=None):
         """
         :param cellmap_model: An instance of CellmapModel containing metadata
                               and references to ONNX, TorchScript, or PyTorch models.
@@ -648,4 +647,3 @@ class CellMapModelConfig(ModelConfig):
         config.model.to(device)
         config.model.eval()
         return config
-

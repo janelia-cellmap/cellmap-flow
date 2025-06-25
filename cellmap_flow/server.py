@@ -28,12 +28,11 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 import requests
 import time
 
 logger = logging.getLogger(__name__)
-g = Flow()
 
 
 def get_process_dataset(dataset: str):
