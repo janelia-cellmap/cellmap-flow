@@ -12,7 +12,6 @@ class Flow:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Flow, cls).__new__(cls)
-            # Initialize default attributes
             cls._instance.jobs = []
             cls._instance.models_config = []
             cls._instance.servers = []
@@ -118,7 +117,6 @@ class Flow:
             print(f"Killing job {job.job_id}")
             job.kill()
         if instance.neuroglancer_thread is not None:
-            # Here you might want to join or otherwise stop the thread gracefully.
             instance.neuroglancer_thread = None
         instance.jobs = []
 
