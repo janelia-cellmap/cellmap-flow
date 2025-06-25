@@ -2,6 +2,7 @@ import pytest
 
 from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.globals import Flow
 import os
 import logging
 import numpy as np
