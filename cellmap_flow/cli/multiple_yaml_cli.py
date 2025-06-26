@@ -4,7 +4,8 @@ import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 from cellmap_flow.utils.config_utils import load_config, build_models
-import cellmap_flow.globals as g
+from cellmap_flow.globals import g
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,7 @@ def run_multiple(models, dataset_path, charge_group, queue):
 
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
         start_hosts(
-            command,
-            job_name=model.name,
-            queue=queue,
-            charge_group=charge_group
+            command, job_name=model.name, queue=queue, charge_group=charge_group
         )
 
     generate_neuroglancer_url(dataset_path)
@@ -49,14 +47,14 @@ def main():
     config_path = sys.argv[1]
     config = load_config(config_path)
 
-    data_path = config['data_path']
-    charge_group = config['charge_group']
-    queue = config['queue']
+    data_path = config["data_path"]
+    charge_group = config["charge_group"]
+    queue = config["queue"]
 
     print("Data path:", data_path)
 
     # Build model configuration objects
-    models = build_models(config['models'])
+    models = build_models(config["models"])
 
     # For debugging, print each model config
     for model in models:

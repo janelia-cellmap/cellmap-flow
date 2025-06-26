@@ -28,29 +28,11 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
-import cellmap_flow.globals as g
+from cellmap_flow.globals import g
 import requests
 import time
 
 logger = logging.getLogger(__name__)
-
-
-def get_output_dtype():
-    dtype = np.float32
-
-    if len(g.input_norms) > 0:
-        for norm in g.input_norms[::-1]:
-            if norm.dtype:
-                dtype = norm.dtype
-                break
-
-    if len(g.postprocess) > 0:
-        for postprocess in g.postprocess[::-1]:
-            if postprocess.dtype:
-                dtype = postprocess.dtype
-                break
-
-    return dtype
 
 
 def get_process_dataset(dataset: str):
@@ -125,8 +107,11 @@ class CellMapFlowServer:
             self.axis = ["z", "y", "x", "c^"]
             self.vol_shape = self.default_vol_shape.copy()
         # Chunk encoding for N5
-        self.chunk_encoder = N5ChunkWrapper(
-            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+        self.chunk_encoder = self._initialize_chunk_encoder()
+
+    def _initialize_chunk_encoder(self):
+        return N5ChunkWrapper(
+            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
         # Create and configure Flask
         self.app = Flask(__name__)
@@ -181,7 +166,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(),
+                g.get_output_dtype(),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -218,7 +203,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(),
+                g.get_output_dtype(),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -312,7 +297,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = get_output_dtype().__name__
+        dtype = g.get_output_dtype().__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -329,13 +314,15 @@ class CellMapFlowServer:
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
-    def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
+    def _chunk_impl(
+        self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c, get_encoded=True
+    ):
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
-        chunk_data = chunk_data.astype(get_output_dtype())
+        chunk_data = chunk_data.astype(g.get_output_dtype())
 
         current_time = time.time()
 
@@ -362,11 +349,14 @@ class CellMapFlowServer:
                 self.previous_refresh_time = current_time
                 continue
 
-        return (
-            self.chunk_encoder.encode(chunk_data),
-            HTTPStatus.OK,
-            {"Content-Type": "application/octet-stream"},
-        )
+        if get_encoded:
+            return (
+                self.chunk_encoder.encode(chunk_data),
+                HTTPStatus.OK,
+                {"Content-Type": "application/octet-stream"},
+            )
+        else:
+            return chunk_data
 
     #
     # --- Server Runner ---

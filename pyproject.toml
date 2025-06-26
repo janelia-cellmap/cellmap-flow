@@ -2,7 +2,7 @@
 name = "cellmap-flow"
 description = "Realtime prediction using neuroglancer"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<4.0"
 version = "0.1.4"
 license = { text = "BSD 3-Clause License" }
 authors = [
@@ -68,6 +68,10 @@ exclude = ["ignore"]
 
 [tool.setuptools.package-data]
 "cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
 
 [project.scripts]
 cellmap_flow = "cellmap_flow.cli.cli:cli"
