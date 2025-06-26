@@ -158,7 +158,7 @@ def main():
                 else:
                     j += 1
             if not config_folder:
-                logger.error("Missing -c for --celmmap-model sub-command.")
+                logger.error("Missing -c for --cellmap-model sub-command.")
                 sys.exit(1)
             models.append(CellMapModelConfig(config_folder, name=name, scale=scale))
             i = j
