@@ -107,7 +107,10 @@ class CellMapFlowServer:
             self.axis = ["z", "y", "x", "c^"]
             self.vol_shape = self.default_vol_shape.copy()
         # Chunk encoding for N5
-        self.chunk_encoder = N5ChunkWrapper(
+        self.chunk_encoder = self._initialize_chunk_encoder()
+
+    def _initialize_chunk_encoder(self):
+        return N5ChunkWrapper(
             g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
         # Create and configure Flask
