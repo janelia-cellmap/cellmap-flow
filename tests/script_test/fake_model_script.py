@@ -24,7 +24,7 @@ class FakeModel(nn.Module):
 # %%
 
 
-classes = ["mito", "er", "nuc", " pm", " ves", "ld"]
+classes = ["mito", "er", "nuc", "pm", "ves", "ld"]
 
 output_channels = 8
 block_shape = np.array((60, 60, 60, output_channels))
