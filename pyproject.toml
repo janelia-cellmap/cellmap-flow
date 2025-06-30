@@ -24,7 +24,7 @@ dependencies = [
     "marshmallow",
     "scikit-image",
     "flasgger",
-    "numcodecs",
+    "numcodecs==0.15.0",
     "zarr==2.18.4",
     "h5py",
     "s3fs",
