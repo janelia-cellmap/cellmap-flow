@@ -116,9 +116,7 @@ class EuclideanDistance(InputNormalizer):
     def dtype(self):
         return np.float32
 
-    @property
-    def dtype(self):
-        return np.float32
+# Removed redundant dtype property definition.
 
     def _process(self, data: np.ndarray, **kwargs) -> np.ndarray:
 
