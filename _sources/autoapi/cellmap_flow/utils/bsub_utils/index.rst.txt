@@ -1,0 +1,98 @@
+cellmap_flow.utils.bsub_utils
+=============================
+
+.. py:module:: cellmap_flow.utils.bsub_utils
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.bsub_utils.logger
+   cellmap_flow.utils.bsub_utils.security
+   cellmap_flow.utils.bsub_utils.SERVER_COMMAND
+   cellmap_flow.utils.bsub_utils.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.bsub_utils.Job
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.bsub_utils.cleanup
+   cellmap_flow.utils.bsub_utils.is_bsub_available
+   cellmap_flow.utils.bsub_utils.submit_bsub_job
+   cellmap_flow.utils.bsub_utils.parse_bpeek_output
+   cellmap_flow.utils.bsub_utils.get_host_from_stdout
+   cellmap_flow.utils.bsub_utils.run_locally
+   cellmap_flow.utils.bsub_utils.start_hosts
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: security
+   :value: 'http'
+
+
+.. py:data:: SERVER_COMMAND
+   :value: 'cellmap_flow_server'
+
+
+.. py:class:: Job(job_id=None, model_name=None, status='running', host=None, process=None)
+
+   .. py:attribute:: job_id
+      :value: None
+
+
+
+   .. py:attribute:: model_name
+      :value: None
+
+
+
+   .. py:attribute:: status
+      :value: 'running'
+
+
+
+   .. py:attribute:: host
+      :value: None
+
+
+
+   .. py:attribute:: process
+      :value: None
+
+
+
+   .. py:method:: kill()
+
+
+.. py:function:: cleanup(signum, frame)
+
+.. py:data:: logger
+
+.. py:function:: is_bsub_available()
+
+.. py:function:: submit_bsub_job(command, queue='gpu_h100', charge_group='cellmap', job_name='my_job')
+
+.. py:function:: parse_bpeek_output(job_id)
+
+.. py:function:: get_host_from_stdout(output)
+
+.. py:function:: run_locally(sc, name)
+
+.. py:function:: start_hosts(command, queue='gpu_h100', charge_group='cellmap', job_name='example_job')
+

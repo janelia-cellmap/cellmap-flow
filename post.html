@@ -1,0 +1,325 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PostProcessor Module &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="autoapi/index.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">DaCapo API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">PostProcessor Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#base-class">Base Class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#PostProcessor"><code class="docutils literal notranslate"><span class="pre">PostProcessor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.name"><code class="docutils literal notranslate"><span class="pre">PostProcessor.name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.__call__"><code class="docutils literal notranslate"><span class="pre">PostProcessor.__call__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.process"><code class="docutils literal notranslate"><span class="pre">PostProcessor.process()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor._process"><code class="docutils literal notranslate"><span class="pre">PostProcessor._process()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.to_dict"><code class="docutils literal notranslate"><span class="pre">PostProcessor.to_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.dtype"><code class="docutils literal notranslate"><span class="pre">PostProcessor.dtype</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#PostProcessor.is_segmentation"><code class="docutils literal notranslate"><span class="pre">PostProcessor.is_segmentation</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#postprocessor-subclasses">PostProcessor Subclasses</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#defaultpostprocessor">DefaultPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#DefaultPostprocessor"><code class="docutils literal notranslate"><span class="pre">DefaultPostprocessor</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#thresholdpostprocessor">ThresholdPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ThresholdPostprocessor"><code class="docutils literal notranslate"><span class="pre">ThresholdPostprocessor</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#labelpostprocessor">LabelPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#LabelPostprocessor"><code class="docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#mortonsegmentationrelabeling">MortonSegmentationRelabeling</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#MortonSegmentationRelabeling"><code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#affinitypostprocessor">AffinityPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#AffinityPostprocessor"><code class="docutils literal notranslate"><span class="pre">AffinityPostprocessor</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#simpleblockwisemerger">SimpleBlockwiseMerger</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#SimpleBlockwiseMerger"><code class="docutils literal notranslate"><span class="pre">SimpleBlockwiseMerger</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#channelselection">ChannelSelection</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ChannelSelection"><code class="docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#lambdapostprocessor">LambdaPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#LambdaPostprocessor"><code class="docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">PostProcessor Module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/post.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="postprocessor-module">
+<h1>PostProcessor Module<a class="headerlink" href="#postprocessor-module" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The <cite>PostProcessor</cite> module defines a framework for applying various postprocessing operations to <cite>numpy.ndarray</cite> data, primarily used in image segmentation, classification, and data normalization workflows.</p>
+</section>
+<section id="base-class">
+<h2>Base Class<a class="headerlink" href="#base-class" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="PostProcessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#PostProcessor" title="Link to this definition"></a></dt>
+<dd><p>Abstract base class for all postprocessing methods.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="PostProcessor.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#PostProcessor.name" title="Link to this definition"></a></dt>
+<dd><p>Returns the class name.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="PostProcessor.__call__">
+<span class="sig-name descname"><span class="pre">__call__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#PostProcessor.__call__" title="Link to this definition"></a></dt>
+<dd><p>Invokes the <cite>process()</cite> method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="PostProcessor.process">
+<span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#PostProcessor.process" title="Link to this definition"></a></dt>
+<dd><p>Ensures <cite>data</cite> is a NumPy array and dispatches to <cite>_process</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="PostProcessor._process">
+<span class="sig-name descname"><span class="pre">_process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#PostProcessor._process" title="Link to this definition"></a></dt>
+<dd><p>Abstract method to be implemented by subclasses.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="PostProcessor.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#PostProcessor.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Serializes instance attributes to a dictionary.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="PostProcessor.dtype">
+<span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#PostProcessor.dtype" title="Link to this definition"></a></dt>
+<dd><p>Returns the target NumPy dtype of the processed output.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="PostProcessor.is_segmentation">
+<span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
+<dd><p>Boolean indicating if output represents a segmentation map.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="postprocessor-subclasses">
+<h2>PostProcessor Subclasses<a class="headerlink" href="#postprocessor-subclasses" title="Link to this heading"></a></h2>
+<section id="defaultpostprocessor">
+<h3>DefaultPostprocessor<a class="headerlink" href="#defaultpostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="DefaultPostprocessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#DefaultPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Clips, biases, and scales the data. Converts to <cite>uint8</cite>.</p>
+<ul class="simple">
+<li><p><cite>clip_min</cite>: Minimum clipping value</p></li>
+<li><p><cite>clip_max</cite>: Maximum clipping value</p></li>
+<li><p><cite>bias</cite>: Value added after clipping</p></li>
+<li><p><cite>multiplier</cite>: Scaling factor</p></li>
+</ul>
+</section>
+<section id="thresholdpostprocessor">
+<h3>ThresholdPostprocessor<a class="headerlink" href="#thresholdpostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="ThresholdPostprocessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ThresholdPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Applies a threshold to binarize data. Produces <cite>uint8</cite> output.</p>
+<ul class="simple">
+<li><p><cite>threshold</cite>: Threshold for binarization</p></li>
+</ul>
+</section>
+<section id="labelpostprocessor">
+<h3>LabelPostprocessor<a class="headerlink" href="#labelpostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="LabelPostprocessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LabelPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Applies connected-component labeling to a selected channel using <cite>scipy.ndimage.label</cite>.</p>
+</section>
+<section id="mortonsegmentationrelabeling">
+<h3>MortonSegmentationRelabeling<a class="headerlink" href="#mortonsegmentationrelabeling" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="MortonSegmentationRelabeling">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Relabels segmentation data using Morton-order encoding to ensure chunk-wise uniqueness.</p>
+<ul class="simple">
+<li><p><cite>channel</cite>: Channel to operate on</p></li>
+<li><p>Uses <cite>pymorton.interleave</cite> for chunk-based ID uniqueness</p></li>
+</ul>
+</section>
+<section id="affinitypostprocessor">
+<h3>AffinityPostprocessor<a class="headerlink" href="#affinitypostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="AffinityPostprocessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">...</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AffinityPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Uses multi-scale watershed (<cite>mwatershed</cite>) to generate segmentations from affinity graphs.</p>
+<ul class="simple">
+<li><p><cite>bias</cite>: Threshold for filtering weak affinities</p></li>
+<li><p><cite>neighborhood</cite>: List of offset vectors for affinity connectivity</p></li>
+</ul>
+</section>
+<section id="simpleblockwisemerger">
+<h3>SimpleBlockwiseMerger<a class="headerlink" href="#simpleblockwisemerger" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="SimpleBlockwiseMerger">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Merges chunk boundaries using edge voxel consistency and <cite>neuroglancer.equivalence_map</cite>.</p>
+<ul class="simple">
+<li><p><cite>face_erosion_iterations</cite>: Controls erosion on boundary faces before merge</p></li>
+<li><p>Maintains a dictionary of voxel ID equivalences between chunks</p></li>
+</ul>
+</section>
+<section id="channelselection">
+<h3>ChannelSelection<a class="headerlink" href="#channelselection" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="ChannelSelection">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ChannelSelection" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Selects a subset of channels from the input array.</p>
+<ul class="simple">
+<li><p><cite>channels</cite>: Comma-separated list of channel indices (e.g., <cite>“0,1,2”</cite>)</p></li>
+</ul>
+</section>
+<section id="lambdapostprocessor">
+<h3>LambdaPostprocessor<a class="headerlink" href="#lambdapostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="LambdaPostprocessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LambdaPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Applies a user-defined lambda expression to each data point.</p>
+<ul class="simple">
+<li><p><cite>expression</cite>: Python expression to apply to the data (e.g., <cite>“x * 2”</cite>)</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="autoapi/index.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

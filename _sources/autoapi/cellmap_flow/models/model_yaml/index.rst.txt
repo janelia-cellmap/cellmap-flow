@@ -1,0 +1,19 @@
+cellmap_flow.models.model_yaml
+==============================
+
+.. py:module:: cellmap_flow.models.model_yaml
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_yaml.load_model_paths
+
+
+Module Contents
+---------------
+
+.. py:function:: load_model_paths(yaml_file: str) -> dict
+

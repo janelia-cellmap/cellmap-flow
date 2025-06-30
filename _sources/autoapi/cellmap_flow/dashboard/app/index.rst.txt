@@ -1,0 +1,62 @@
+cellmap_flow.dashboard.app
+==========================
+
+.. py:module:: cellmap_flow.dashboard.app
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.app.logger
+   cellmap_flow.dashboard.app.app
+   cellmap_flow.dashboard.app.NEUROGLANCER_URL
+   cellmap_flow.dashboard.app.INFERENCE_SERVER
+   cellmap_flow.dashboard.app.CustomCodeFolder
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.app.index
+   cellmap_flow.dashboard.app.is_output_segmentation
+   cellmap_flow.dashboard.app.update_equivalences
+   cellmap_flow.dashboard.app.submit_models
+   cellmap_flow.dashboard.app.process
+   cellmap_flow.dashboard.app.create_and_run_app
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: app
+
+.. py:data:: NEUROGLANCER_URL
+   :value: None
+
+
+.. py:data:: INFERENCE_SERVER
+   :value: None
+
+
+.. py:data:: CustomCodeFolder
+   :value: '/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm'
+
+
+.. py:function:: index()
+
+.. py:function:: is_output_segmentation()
+
+.. py:function:: update_equivalences()
+
+.. py:function:: submit_models()
+
+.. py:function:: process()
+
+.. py:function:: create_and_run_app(neuroglancer_url=None, inference_servers=None)
+

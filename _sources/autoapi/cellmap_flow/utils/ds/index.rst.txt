@@ -1,0 +1,234 @@
+cellmap_flow.utils.ds
+=====================
+
+.. py:module:: cellmap_flow.utils.ds
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.ds.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.ds.LazyNormalization
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.ds.get_scale_info
+   cellmap_flow.utils.ds.find_target_scale
+   cellmap_flow.utils.ds.ends_with_scale
+   cellmap_flow.utils.ds.split_dataset_path
+   cellmap_flow.utils.ds.apply_norms
+   cellmap_flow.utils.ds.open_ds_tensorstore
+   cellmap_flow.utils.ds.to_ndarray_tensorstore
+   cellmap_flow.utils.ds.get_url
+   cellmap_flow.utils.ds.separate_store_path
+   cellmap_flow.utils.ds.access_parent
+   cellmap_flow.utils.ds.check_for_multiscale
+   cellmap_flow.utils.ds.check_for_voxel_size
+   cellmap_flow.utils.ds.check_for_offset
+   cellmap_flow.utils.ds.check_for_units
+   cellmap_flow.utils.ds.check_for_attrs_multiscale
+   cellmap_flow.utils.ds.regularize_offset
+   cellmap_flow.utils.ds.get_ds_info
+
+
+Module Contents
+---------------
+
+.. py:function:: get_scale_info(zarr_grp)
+
+.. py:function:: find_target_scale(zarr_grp_path, target_resolution)
+
+.. py:data:: logger
+
+.. py:function:: ends_with_scale(string)
+
+.. py:function:: split_dataset_path(dataset_path, scale=None) -> tuple[str, str]
+
+   Split the dataset path into the filename and dataset
+
+   :param dataset_path: Path to the dataset
+   :type dataset_path: 'str'
+   :param scale: Scale to use, if present
+   :type scale: 'int'
+
+   :returns: Tuple of filename and dataset
+
+
+.. py:function:: apply_norms(data)
+
+.. py:class:: LazyNormalization(ts_dataset)
+
+   .. py:attribute:: ts_dataset
+
+
+.. py:function:: open_ds_tensorstore(dataset_path: str, mode='r', concurrency_limit=None, normalize=True)
+
+.. py:function:: to_ndarray_tensorstore(dataset, roi=None, voxel_size=None, offset=None, output_voxel_size=None, swap_axes=False, custom_fill_value=None)
+
+   Read a region of a tensorstore dataset and return it as a numpy array
+
+   :param dataset: Tensorstore dataset
+   :type dataset: 'tensorstore.dataset'
+   :param roi: Region of interest to read
+   :type roi: 'funlib.geometry.Roi'
+
+   :returns: Numpy array of the region
+
+
+.. py:function:: get_url(node: Union[zarr.Group, zarr.Array]) -> str
+
+.. py:function:: separate_store_path(store, path)
+
+   sometimes you can pass a total os path to node, leading to
+   an empty('') node.path attribute.
+   the correct way is to separate path to container(.n5, .zarr)
+   from path to array within a container.
+
+   :param store: path to store
+   :type store: string
+   :param path: path array/group (.n5 or .zarr)
+   :type path: string
+
+   :returns: returns regularized store and group/array path
+   :rtype: (string, string)
+
+
+.. py:function:: access_parent(node)
+
+   Get the parent (zarr.Group) of an input zarr array(ds).
+
+
+   :param node: _description_
+   :type node: zarr.core.Array or zarr.hierarchy.Group
+
+   :raises RuntimeError: returned if the node array is in the parent group,
+   :raises or the group itself is the root group:
+
+   :returns: parent group that contains input group/array
+   :rtype: zarr.hierarchy.Group
+
+
+.. py:function:: check_for_multiscale(group)
+
+   check if multiscale attribute exists in the input group and for any parent level group
+
+   :param group: group to check
+   :type group: zarr.hierarchy.Group
+
+   :returns: (multiscales attribute body, zarr group where multiscales was found)
+   :rtype: tuple({}, zarr.hierarchy.Group)
+
+
+.. py:function:: check_for_voxel_size(array, order)
+
+   checks specific attributes(resolution, scale,
+       pixelResolution["dimensions"], transform["scale"]) for voxel size
+       value in the parent directory of the input array
+
+   :param array: array to check
+   :type array: zarr.core.Array
+   :param order: colexicographical/lexicographical order
+   :type order: string
+
+   :raises ValueError: raises value error if no voxel_size value is found
+
+   :returns: returns physical size of the voxel (unitless)
+   :rtype: [float]
+
+
+.. py:function:: check_for_offset(array, order)
+
+   checks specific attributes(offset, transform["translate"]) for offset
+       value in the parent directory of the input array
+
+   :param array: array to check
+   :type array: zarr.core.Array
+   :param order: colexicographical/lexicographical order
+   :type order: string
+
+   :raises ValueError: raises value error if no offset value is found
+
+   :returns:
+
+             returns offset of the voxel (unitless) in respect to
+                      the center of the coordinate system
+   :rtype: [float]
+
+
+.. py:function:: check_for_units(array, order)
+
+   checks specific attributes(units, pixelResolution["unit"] transform["units"])
+       for units(nm, cm, etc.) value in the parent directory of the input array
+
+   :param array: array to check
+   :type array: zarr.core.Array
+   :param order: colexicographical/lexicographical order
+   :type order: string
+
+   :raises ValueError: raises value error if no units value is found
+
+   :returns: returns units for the voxel_size
+   :rtype: [string]
+
+
+.. py:function:: check_for_attrs_multiscale(ds, multiscale_group, multiscales)
+
+   checks multiscale attribute of the .zarr or .n5 group
+       for voxel_size(scale), offset(translation) and units values
+
+   :param ds: input zarr Array
+   :type ds: zarr.core.Array
+   :param multiscale_group: the group attrs
+                            that contains multiscale
+   :type multiscale_group: zarr.hierarchy.Group
+   :param multiscales: dictionary that contains all the info necessary
+                       to create multiscale resolution pyramid
+   :type multiscales: {}
+
+   :returns: returns (voxel_size, offset, physical units)
+   :rtype: ([float],[float],[string])
+
+
+.. py:function:: regularize_offset(voxel_size_float, offset_float)
+
+       offset is not a multiple of voxel_size. This is often due to someone defining
+       offset to the point source of each array element i.e. the center of the rendered
+       voxel, vs the offset to the corner of the voxel.
+       apparently this can be a heated discussion. See here for arguments against
+       the convention we are using: http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf
+
+   :param voxel_size_float: float voxel size list
+   :type voxel_size_float: [float]
+   :param offset_float: float offset list
+   :type offset_float: [float]
+
+   :returns: returned offset size that is multiple of voxel size
+   :rtype: (Coordinate, Coordinate))
+
+
+.. py:function:: get_ds_info(path: str, mode: str = 'r')
+
+   Open a Zarr, N5, or HDF5 dataset as an :class:`Array`. If the
+   dataset has attributes ``resolution`` and ``offset``, those will be
+   used to determine the meta-information of the returned array.
+
+   :param filename: The name of the container "file" (which is a directory for Zarr and
+                    N5).
+   :param ds_name: The name of the dataset to open.
+
+   :returns: A :class:`Array` pointing to the dataset.
+
+

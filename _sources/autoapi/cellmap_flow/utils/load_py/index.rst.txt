@@ -1,0 +1,53 @@
+cellmap_flow.utils.load_py
+==========================
+
+.. py:module:: cellmap_flow.utils.load_py
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.load_py.DISALLOWED_IMPORTS
+   cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.load_py.Config
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.load_py.analyze_script
+   cellmap_flow.utils.load_py.load_safe_config
+
+
+Module Contents
+---------------
+
+.. py:data:: DISALLOWED_IMPORTS
+
+.. py:data:: DISALLOWED_FUNCTIONS
+
+.. py:function:: analyze_script(filepath)
+
+   Analyzes the script at `filepath` using `ast` for potentially unsafe imports and function calls.
+   Returns a boolean indicating whether the script is safe and a list of detected issues.
+
+
+.. py:function:: load_safe_config(config_path, force_safe=os.getenv('FORCE_SAFE_CONFIG', False))
+
+   Loads the configuration script at `config_path` after verifying its safety.
+   If `force_safe` is True, raises an error if the script is deemed unsafe.
+
+
+.. py:class:: Config(**kwargs)
+

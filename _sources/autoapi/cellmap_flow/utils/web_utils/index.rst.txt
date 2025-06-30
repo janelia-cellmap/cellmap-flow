@@ -1,0 +1,76 @@
+cellmap_flow.utils.web_utils
+============================
+
+.. py:module:: cellmap_flow.utils.web_utils
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.web_utils.ARGS_KEY
+   cellmap_flow.utils.web_utils.IP_PATTERN
+   cellmap_flow.utils.web_utils.INPUT_NORM_DICT_KEY
+   cellmap_flow.utils.web_utils.POSTPROCESS_DICT_KEY
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.web_utils.get_free_port
+   cellmap_flow.utils.web_utils.get_public_ip
+   cellmap_flow.utils.web_utils.encode_to_str
+   cellmap_flow.utils.web_utils.decode_to_json
+   cellmap_flow.utils.web_utils.list_cls_to_dict
+   cellmap_flow.utils.web_utils.kill_n_remove_from_neuroglancer
+   cellmap_flow.utils.web_utils.get_norms_post_args
+
+
+Module Contents
+---------------
+
+.. py:data:: ARGS_KEY
+   :value: '__CFLOW_ARGS__'
+
+
+.. py:data:: IP_PATTERN
+   :value: ['CELLMAP_FLOW_SERVER_IP(', ')CELLMAP_FLOW_SERVER_IP']
+
+
+.. py:data:: INPUT_NORM_DICT_KEY
+   :value: 'input_norm'
+
+
+.. py:data:: POSTPROCESS_DICT_KEY
+   :value: 'postprocess'
+
+
+.. py:function:: get_free_port()
+
+.. py:function:: get_public_ip()
+
+   Return the local/private IP address in use on this machine
+   (e.g., 10.x.x.x or 192.168.x.x if behind NAT).
+   This *does not* return the real Internet-facing public IP
+   if you're behind NAT.
+
+
+.. py:function:: encode_to_str(data)
+
+   Encodes a JSON object into a URL-safe string without '/', '+', or '='.
+
+
+.. py:function:: decode_to_json(encoded_str)
+
+   Decodes a URL-safe string back into a JSON object.
+
+
+.. py:function:: list_cls_to_dict(ll)
+
+.. py:function:: kill_n_remove_from_neuroglancer(jobs, s)
+
+.. py:function:: get_norms_post_args(input_norms, postprocess)
+

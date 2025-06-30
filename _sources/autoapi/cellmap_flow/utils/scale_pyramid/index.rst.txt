@@ -1,0 +1,81 @@
+cellmap_flow.utils.scale_pyramid
+================================
+
+.. py:module:: cellmap_flow.utils.scale_pyramid
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.scale_pyramid.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.scale_pyramid.ScalePyramid
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.scale_pyramid.get_raw_layer
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: get_raw_layer(dataset_path)
+
+.. py:class:: ScalePyramid(volume_layers)
+
+
+
+   A neuroglancer layer that provides volume data on different scales.
+   Mimics a LocalVolume.
+
+   :param volume_layers: One ``LocalVolume`` per provided resolution.
+   :type volume_layers: ``list`` of ``LocalVolume``
+
+
+   .. py:attribute:: min_voxel_size
+
+
+   .. py:attribute:: max_voxel_size
+
+
+   .. py:attribute:: dims
+
+
+   .. py:attribute:: volume_layers
+
+
+   .. py:property:: volume_type
+
+
+   .. py:property:: token
+
+
+   .. py:method:: info()
+
+
+   .. py:method:: get_encoded_subvolume(data_format, start, end, scale_key=None)
+
+
+   .. py:method:: get_object_mesh(object_id)
+
+
+   .. py:method:: invalidate()
+
+      Mark the data invalidated.  Clients will refetch the volume.
+
+
+

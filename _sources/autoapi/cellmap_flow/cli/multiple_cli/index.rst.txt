@@ -1,0 +1,61 @@
+cellmap_flow.cli.multiple_cli
+=============================
+
+.. py:module:: cellmap_flow.cli.multiple_cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.multiple_cli.data_args
+   cellmap_flow.cli.multiple_cli.charge_group_arg
+   cellmap_flow.cli.multiple_cli.server_queue_arg
+   cellmap_flow.cli.multiple_cli.DEFAULT_SERVER_QUEUE
+   cellmap_flow.cli.multiple_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.multiple_cli.main
+   cellmap_flow.cli.multiple_cli.run_multiple
+
+
+Module Contents
+---------------
+
+.. py:data:: data_args
+   :value: ['-d', '--data-path']
+
+
+.. py:data:: charge_group_arg
+   :value: ['-P', '--project']
+
+
+.. py:data:: server_queue_arg
+   :value: ['-q', '--queue']
+
+
+.. py:data:: DEFAULT_SERVER_QUEUE
+   :value: 'gpu_h100'
+
+
+.. py:data:: logger
+
+.. py:function:: main()
+
+   Allows chaining multiple model calls in one command, for example:
+
+   
+      cellmap_flow_multiple --data-path /some/shared/path --dacapo -r run_1 -it 60 --dacapo -r run_2 -it 50 --script -s /path/to/script
+
+   This will parse the arguments and dispatch the appropriate logic
+   for each sub-command (dacapo, script, etc.).
+
+
+.. py:function:: run_multiple(models, dataset_path, charge_group, queue)
+

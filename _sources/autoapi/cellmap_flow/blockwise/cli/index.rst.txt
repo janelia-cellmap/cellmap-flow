@@ -1,0 +1,32 @@
+cellmap_flow.blockwise.cli
+==========================
+
+.. py:module:: cellmap_flow.blockwise.cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.cli.cli
+   cellmap_flow.blockwise.cli.run
+
+
+Module Contents
+---------------
+
+.. py:function:: cli(log_level)
+
+.. py:data:: logger
+
+.. py:function:: run(yaml_config, client)
+

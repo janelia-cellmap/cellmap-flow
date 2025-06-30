@@ -1,0 +1,50 @@
+cellmap_flow.globals
+====================
+
+.. py:module:: cellmap_flow.globals
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.globals.g
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.globals.Flow
+
+
+Module Contents
+---------------
+
+.. py:class:: Flow
+
+   .. py:method:: to_dict()
+
+
+   .. py:method:: get_output_dtype()
+
+
+   .. py:method:: run(zarr_path, model_configs, queue='gpu_h100', charge_group='cellmap', input_normalizers=None, post_processors=None)
+      :classmethod:
+
+
+
+   .. py:method:: stop()
+      :classmethod:
+
+
+
+   .. py:method:: delete()
+      :classmethod:
+
+
+
+.. py:data:: g
+

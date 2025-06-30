@@ -1,0 +1,517 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.utils.ds &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.utils.load_py" href="../load_py/index.html" />
+    <link rel="prev" title="cellmap_flow.utils.data" href="../data/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">DaCapo API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessor Module</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.utils.ds</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/utils/ds/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.utils.ds">
+<span id="cellmap-flow-utils-ds"></span><h1>cellmap_flow.utils.ds<a class="headerlink" href="#module-cellmap_flow.utils.ds" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.logger" title="cellmap_flow.utils.ds.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.LazyNormalization" title="cellmap_flow.utils.ds.LazyNormalization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyNormalization</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_scale_info" title="cellmap_flow.utils.ds.get_scale_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_scale_info</span></code></a>(zarr_grp)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.find_target_scale" title="cellmap_flow.utils.ds.find_target_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_target_scale</span></code></a>(zarr_grp_path, target_resolution)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.ends_with_scale" title="cellmap_flow.utils.ds.ends_with_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ends_with_scale</span></code></a>(string)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.split_dataset_path" title="cellmap_flow.utils.ds.split_dataset_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_dataset_path</span></code></a>(→ tuple[str, str])</p></td>
+<td><p>Split the dataset path into the filename and dataset</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.apply_norms" title="cellmap_flow.utils.ds.apply_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_norms</span></code></a>(data)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.open_ds_tensorstore" title="cellmap_flow.utils.ds.open_ds_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_ds_tensorstore</span></code></a>(dataset_path[, mode, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.to_ndarray_tensorstore" title="cellmap_flow.utils.ds.to_ndarray_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_ndarray_tensorstore</span></code></a>(dataset[, roi, voxel_size, ...])</p></td>
+<td><p>Read a region of a tensorstore dataset and return it as a numpy array</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_url" title="cellmap_flow.utils.ds.get_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_url</span></code></a>(→ str)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.separate_store_path" title="cellmap_flow.utils.ds.separate_store_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">separate_store_path</span></code></a>(store, path)</p></td>
+<td><p>sometimes you can pass a total os path to node, leading to</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.access_parent" title="cellmap_flow.utils.ds.access_parent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">access_parent</span></code></a>(node)</p></td>
+<td><p>Get the parent (zarr.Group) of an input zarr array(ds).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_multiscale" title="cellmap_flow.utils.ds.check_for_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_multiscale</span></code></a>(group)</p></td>
+<td><p>check if multiscale attribute exists in the input group and for any parent level group</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_voxel_size" title="cellmap_flow.utils.ds.check_for_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_voxel_size</span></code></a>(array, order)</p></td>
+<td><p>checks specific attributes(resolution, scale,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_offset" title="cellmap_flow.utils.ds.check_for_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_offset</span></code></a>(array, order)</p></td>
+<td><p>checks specific attributes(offset, transform[&quot;translate&quot;]) for offset</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_units" title="cellmap_flow.utils.ds.check_for_units"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_units</span></code></a>(array, order)</p></td>
+<td><p>checks specific attributes(units, pixelResolution[&quot;unit&quot;] transform[&quot;units&quot;])</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_attrs_multiscale" title="cellmap_flow.utils.ds.check_for_attrs_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_attrs_multiscale</span></code></a>(ds, multiscale_group, ...)</p></td>
+<td><p>checks multiscale attribute of the .zarr or .n5 group</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.regularize_offset" title="cellmap_flow.utils.ds.regularize_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">regularize_offset</span></code></a>(voxel_size_float, offset_float)</p></td>
+<td><p>offset is not a multiple of voxel_size. This is often due to someone defining</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_ds_info" title="cellmap_flow.utils.ds.get_ds_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_ds_info</span></code></a>(path[, mode])</p></td>
+<td><p>Open a Zarr, N5, or HDF5 dataset as an <code class="xref py py-class docutils literal notranslate"><span class="pre">Array</span></code>. If the</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.get_scale_info">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">get_scale_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_grp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.get_scale_info" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.find_target_scale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">find_target_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_grp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.find_target_scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.ds.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.ends_with_scale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">ends_with_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">string</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.ends_with_scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.split_dataset_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">split_dataset_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.ds.split_dataset_path" title="Link to this definition"></a></dt>
+<dd><p>Split the dataset path into the filename and dataset</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset_path</strong> (<em>'str'</em>) – Path to the dataset</p></li>
+<li><p><strong>scale</strong> (<em>'int'</em>) – Scale to use, if present</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tuple of filename and dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.apply_norms">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">apply_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.apply_norms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.LazyNormalization">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">LazyNormalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ts_dataset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.LazyNormalization" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.LazyNormalization.ts_dataset">
+<span class="sig-name descname"><span class="pre">ts_dataset</span></span><a class="headerlink" href="#cellmap_flow.utils.ds.LazyNormalization.ts_dataset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.open_ds_tensorstore">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">open_ds_tensorstore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concurrency_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.open_ds_tensorstore" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.to_ndarray_tensorstore">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">to_ndarray_tensorstore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">swap_axes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">custom_fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.to_ndarray_tensorstore" title="Link to this definition"></a></dt>
+<dd><p>Read a region of a tensorstore dataset and return it as a numpy array</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> (<em>'tensorstore.dataset'</em>) – Tensorstore dataset</p></li>
+<li><p><strong>roi</strong> (<em>'funlib.geometry.Roi'</em>) – Region of interest to read</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Numpy array of the region</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.get_url">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">get_url</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">zarr.Group</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">zarr.Array</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.utils.ds.get_url" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.separate_store_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">separate_store_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">store</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.separate_store_path" title="Link to this definition"></a></dt>
+<dd><p>sometimes you can pass a total os path to node, leading to
+an empty(‘’) node.path attribute.
+the correct way is to separate path to container(.n5, .zarr)
+from path to array within a container.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>store</strong> (<em>string</em>) – path to store</p></li>
+<li><p><strong>path</strong> (<em>string</em>) – path array/group (.n5 or .zarr)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>returns regularized store and group/array path</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(string, string)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.access_parent">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">access_parent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.access_parent" title="Link to this definition"></a></dt>
+<dd><p>Get the parent (zarr.Group) of an input zarr array(ds).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>node</strong> (<em>zarr.core.Array</em><em> or </em><em>zarr.hierarchy.Group</em>) – _description_</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>RuntimeError</strong> – returned if the node array is in the parent group,</p></li>
+<li><p><strong>or the group itself is the root group</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>parent group that contains input group/array</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>zarr.hierarchy.Group</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.check_for_multiscale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">check_for_multiscale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.check_for_multiscale" title="Link to this definition"></a></dt>
+<dd><p>check if multiscale attribute exists in the input group and for any parent level group</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group</strong> (<em>zarr.hierarchy.Group</em>) – group to check</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(multiscales attribute body, zarr group where multiscales was found)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple({}, zarr.hierarchy.Group)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.check_for_voxel_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">check_for_voxel_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.check_for_voxel_size" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>checks specific attributes(resolution, scale,</dt><dd><p>pixelResolution[“dimensions”], transform[“scale”]) for voxel size
+value in the parent directory of the input array</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>array</strong> (<em>zarr.core.Array</em>) – array to check</p></li>
+<li><p><strong>order</strong> (<em>string</em>) – colexicographical/lexicographical order</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – raises value error if no voxel_size value is found</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>returns physical size of the voxel (unitless)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>[float]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.check_for_offset">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">check_for_offset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.check_for_offset" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>checks specific attributes(offset, transform[“translate”]) for offset</dt><dd><p>value in the parent directory of the input array</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>array</strong> (<em>zarr.core.Array</em>) – array to check</p></li>
+<li><p><strong>order</strong> (<em>string</em>) – colexicographical/lexicographical order</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – raises value error if no offset value is found</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>returns offset of the voxel (unitless) in respect to</dt><dd><p>the center of the coordinate system</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>[float]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.check_for_units">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">check_for_units</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.check_for_units" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>checks specific attributes(units, pixelResolution[“unit”] transform[“units”])</dt><dd><p>for units(nm, cm, etc.) value in the parent directory of the input array</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>array</strong> (<em>zarr.core.Array</em>) – array to check</p></li>
+<li><p><strong>order</strong> (<em>string</em>) – colexicographical/lexicographical order</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – raises value error if no units value is found</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>returns units for the voxel_size</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>[string]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.check_for_attrs_multiscale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">check_for_attrs_multiscale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiscale_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiscales</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.check_for_attrs_multiscale" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>checks multiscale attribute of the .zarr or .n5 group</dt><dd><p>for voxel_size(scale), offset(translation) and units values</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ds</strong> (<em>zarr.core.Array</em>) – input zarr Array</p></li>
+<li><p><strong>multiscale_group</strong> (<em>zarr.hierarchy.Group</em>) – the group attrs
+that contains multiscale</p></li>
+<li><p><strong>multiscales</strong> (<em>{}</em>) – dictionary that contains all the info necessary
+to create multiscale resolution pyramid</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>returns (voxel_size, offset, physical units)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>([float],[float],[string])</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.regularize_offset">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">regularize_offset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxel_size_float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.regularize_offset" title="Link to this definition"></a></dt>
+<dd><blockquote>
+<div><p>offset is not a multiple of voxel_size. This is often due to someone defining
+offset to the point source of each array element i.e. the center of the rendered
+voxel, vs the offset to the corner of the voxel.
+apparently this can be a heated discussion. See here for arguments against
+the convention we are using: <a class="reference external" href="http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf">http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf</a></p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>voxel_size_float</strong> (<em>[</em><em>float</em><em>]</em>) – float voxel size list</p></li>
+<li><p><strong>offset_float</strong> (<em>[</em><em>float</em><em>]</em>) – float offset list</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>returned offset size that is multiple of voxel size</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(Coordinate, Coordinate))</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.get_ds_info">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">get_ds_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'r'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.get_ds_info" title="Link to this definition"></a></dt>
+<dd><p>Open a Zarr, N5, or HDF5 dataset as an <code class="xref py py-class docutils literal notranslate"><span class="pre">Array</span></code>. If the
+dataset has attributes <code class="docutils literal notranslate"><span class="pre">resolution</span></code> and <code class="docutils literal notranslate"><span class="pre">offset</span></code>, those will be
+used to determine the meta-information of the returned array.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filename</strong> – The name of the container “file” (which is a directory for Zarr and
+N5).</p></li>
+<li><p><strong>ds_name</strong> – The name of the dataset to open.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Array</span></code> pointing to the dataset.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../data/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../load_py/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.load_py" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

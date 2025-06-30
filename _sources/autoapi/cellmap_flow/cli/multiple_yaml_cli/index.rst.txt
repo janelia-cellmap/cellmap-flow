@@ -1,0 +1,36 @@
+cellmap_flow.cli.multiple_yaml_cli
+==================================
+
+.. py:module:: cellmap_flow.cli.multiple_yaml_cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.multiple_yaml_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.multiple_yaml_cli.run_multiple
+   cellmap_flow.cli.multiple_yaml_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: run_multiple(models, dataset_path, charge_group, queue)
+
+.. py:function:: main()
+
+   Usage:
+       python cellmap_flow_with_yaml.py /path/to/config.yaml
+
+

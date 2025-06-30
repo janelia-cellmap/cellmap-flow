@@ -1,0 +1,108 @@
+cellmap_flow.norm.input_normalize
+=================================
+
+.. py:module:: cellmap_flow.norm.input_normalize
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.logger
+   cellmap_flow.norm.input_normalize.NormalizationMethods
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.InputNormalizer
+   cellmap_flow.norm.input_normalize.MinMaxNormalizer
+   cellmap_flow.norm.input_normalize.LambdaNormalizer
+   cellmap_flow.norm.input_normalize.ZScoreNormalizer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.get_input_normalizers
+   cellmap_flow.norm.input_normalize.get_normalizations
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: InputNormalizer
+
+   .. py:method:: name()
+      :classmethod:
+
+
+
+   .. py:method:: normalize(data) -> numpy.ndarray
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: MinMaxNormalizer(min_value=0.0, max_value=255.0)
+
+
+
+   .. py:attribute:: min_value
+
+
+   .. py:attribute:: max_value
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: LambdaNormalizer(expression: str)
+
+
+
+   .. py:attribute:: expression
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: ZScoreNormalizer(mean=0.0, std=1.0)
+
+
+
+   .. py:attribute:: mean
+      :value: 0.0
+
+
+
+   .. py:attribute:: std
+      :value: 1.0
+
+
+
+   .. py:property:: dtype
+
+
+   .. py:method:: normalize(data: numpy.ndarray) -> numpy.ndarray
+
+
+.. py:data:: NormalizationMethods
+
+.. py:function:: get_input_normalizers() -> list[dict]
+
+.. py:function:: get_normalizations(elms: dict) -> InputNormalizer
+

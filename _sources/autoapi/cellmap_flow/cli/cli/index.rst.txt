@@ -1,0 +1,76 @@
+cellmap_flow.cli.cli
+====================
+
+.. py:module:: cellmap_flow.cli.cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.cli.logger
+   cellmap_flow.cli.cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.cli.cli
+   cellmap_flow.cli.cli.dacapo
+   cellmap_flow.cli.cli.script
+   cellmap_flow.cli.cli.bioimage
+   cellmap_flow.cli.cli.cellmap_model
+   cellmap_flow.cli.cli.script_server_check
+   cellmap_flow.cli.cli.run
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: cli(log_level)
+
+   Command-line interface for the Cellmap flo application.
+
+   :param log_level: The desired log level for the application.
+   :type log_level: str
+
+   .. rubric:: Examples
+
+   To use Dacapo run the following commands:
+   ```
+   cellmap_flow dacapo -r my_run -i iteration -d data_path
+   ```
+
+   To use custom script
+   ```
+   cellmap_flow script -s script_path -d data_path
+   ```
+
+   To use bioimage-io model
+   ```
+   cellmap_flow bioimage -m model_path -d data_path
+   ```
+
+
+.. py:data:: logger
+
+.. py:function:: dacapo(run_name, iteration, data_path, queue, charge_group)
+
+.. py:function:: script(script_path, data_path, queue, charge_group)
+
+.. py:function:: bioimage(model_path, data_path, edge_length_to_process, queue, charge_group)
+
+.. py:function:: cellmap_model(config_folder, name, data_path, queue, charge_group)
+
+   Run the CellMapFlow with a CellMap model.
+
+
+.. py:function:: script_server_check(script_path, dataset)
+
+.. py:function:: run(command, dataset_path, queue, charge_group, name)
+

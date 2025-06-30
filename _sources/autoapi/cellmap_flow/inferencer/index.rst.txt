@@ -1,0 +1,59 @@
+cellmap_flow.inferencer
+=======================
+
+.. py:module:: cellmap_flow.inferencer
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.inferencer.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.inferencer.Inferencer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.inferencer.apply_postprocess
+   cellmap_flow.inferencer.predict
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: apply_postprocess(data, **kwargs)
+
+.. py:function:: predict(read_roi, write_roi, config, **kwargs)
+
+.. py:class:: Inferencer(model_config: cellmap_flow.utils.data.ModelConfig, use_half_prediction=True)
+
+   .. py:attribute:: use_half_prediction
+      :value: True
+
+
+
+   .. py:attribute:: model_config
+
+
+   .. py:method:: optimize_model()
+
+
+   .. py:method:: process_chunk(idi, roi)
+
+
+   .. py:method:: process_chunk_basic(idi, roi)
+
+

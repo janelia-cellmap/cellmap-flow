@@ -1,0 +1,101 @@
+cellmap_flow.server
+===================
+
+.. py:module:: cellmap_flow.server
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.server.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.server.CellMapFlowServer
+   cellmap_flow.server.DummyConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.server.get_process_dataset
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: get_process_dataset(dataset: str)
+
+.. py:class:: CellMapFlowServer(dataset_name: str, model_config: cellmap_flow.utils.data.ModelConfig)
+
+   Flask application hosting a "virtual N5" for Neuroglancer.
+   All routes are defined via Flask decorators for convenience.
+
+
+   .. py:attribute:: read_block_shape
+
+
+   .. py:attribute:: n5_block_shape
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: output_channels
+
+
+   .. py:attribute:: inferencer
+
+
+   .. py:attribute:: idi_raw
+
+
+   .. py:attribute:: refresh_rate_seconds
+      :value: 5
+
+
+
+   .. py:attribute:: previous_refresh_time
+      :value: 0
+
+
+
+   .. py:attribute:: chunk_encoder
+
+
+   .. py:method:: run(debug=False, port=None, certfile=None, keyfile=None)
+
+      Run the Flask dev server with optional SSL certificate.
+
+
+
+.. py:class:: DummyConfig
+
+   .. py:attribute:: block_shape
+      :value: (32, 32, 32)
+
+
+
+   .. py:attribute:: output_voxel_size
+      :value: (4, 4, 4)
+
+
+
+   .. py:attribute:: output_channels
+      :value: 1
+
+
+

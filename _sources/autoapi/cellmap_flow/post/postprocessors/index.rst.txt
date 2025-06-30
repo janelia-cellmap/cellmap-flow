@@ -1,0 +1,261 @@
+cellmap_flow.post.postprocessors
+================================
+
+.. py:module:: cellmap_flow.post.postprocessors
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.post.postprocessors.postprocessing_lock
+   cellmap_flow.post.postprocessors.logger
+   cellmap_flow.post.postprocessors.PostProcessorMethods
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.post.postprocessors.PostProcessor
+   cellmap_flow.post.postprocessors.DefaultPostprocessor
+   cellmap_flow.post.postprocessors.ThresholdPostprocessor
+   cellmap_flow.post.postprocessors.LabelPostprocessor
+   cellmap_flow.post.postprocessors.MortonSegmentationRelabeling
+   cellmap_flow.post.postprocessors.AffinityPostprocessor
+   cellmap_flow.post.postprocessors.SimpleBlockwiseMerger
+   cellmap_flow.post.postprocessors.ChannelSelection
+   cellmap_flow.post.postprocessors.LambdaPostprocessor
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.post.postprocessors.get_postprocessors_list
+   cellmap_flow.post.postprocessors.get_postprocessors
+
+
+Module Contents
+---------------
+
+.. py:data:: postprocessing_lock
+
+.. py:data:: logger
+
+.. py:class:: PostProcessor
+
+   .. py:method:: name()
+      :classmethod:
+
+
+
+   .. py:method:: process(data, **kwargs) -> numpy.ndarray
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: DefaultPostprocessor(clip_min: float = -1.0, clip_max: float = 1.0, bias: float = 1.0, multiplier: float = 127.5)
+
+
+
+   .. py:attribute:: clip_min
+
+
+   .. py:attribute:: clip_max
+
+
+   .. py:attribute:: bias
+
+
+   .. py:attribute:: multiplier
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: ThresholdPostprocessor(threshold: float = 0.5)
+
+
+
+   .. py:attribute:: threshold
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: LabelPostprocessor(channel: int = 0)
+
+
+
+   .. py:attribute:: channel
+      :value: 0
+
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: MortonSegmentationRelabeling(channel: int = 0)
+
+
+
+   .. py:attribute:: channel
+      :value: 0
+
+
+
+   .. py:attribute:: num_previous_segments
+      :value: 0
+
+
+
+   .. py:attribute:: use_exact
+      :value: True
+
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: AffinityPostprocessor(bias: float = 0.0, neighborhood: str = '[\n                [1, 0, 0],\n                [0, 1, 0],\n                [0, 0, 1],\n                [3, 0, 0],\n                [0, 3, 0],\n                [0, 0, 3],\n                [9, 0, 0],\n                [0, 9, 0],\n                [0, 0, 9],\n            ]')
+
+
+
+   .. py:attribute:: bias
+
+
+   .. py:attribute:: neighborhood
+
+
+   .. py:attribute:: use_exact
+      :value: True
+
+
+
+   .. py:attribute:: num_previous_segments
+      :value: 0
+
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+   .. py:property:: num_channels
+
+
+.. py:class:: SimpleBlockwiseMerger(channel: int = 0, face_erosion_iterations: int = 0)
+
+
+
+   .. py:attribute:: channel
+      :value: 0
+
+
+
+   .. py:attribute:: face_erosion_iterations
+      :value: 0
+
+
+
+   .. py:attribute:: use_exact
+      :value: True
+
+
+
+   .. py:attribute:: equivalences
+
+
+   .. py:attribute:: chunk_slice_position_to_coords_id_dict
+
+
+   .. py:attribute:: slices
+
+
+   .. py:attribute:: keys_to_skip
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:method:: calculate_equivalences()
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: ChannelSelection(channels: str = '0')
+
+
+
+   .. py:attribute:: channels
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: num_channels
+
+
+.. py:class:: LambdaPostprocessor(expression: str)
+
+
+
+   .. py:attribute:: expression
+
+
+   .. py:method:: to_dict()
+
+
+   .. py:property:: dtype
+
+
+.. py:function:: get_postprocessors_list() -> list[dict]
+
+   Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor.
+
+
+.. py:function:: get_postprocessors(elms: dict) -> PostProcessor
+
+.. py:data:: PostProcessorMethods
+

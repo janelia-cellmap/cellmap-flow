@@ -1,0 +1,49 @@
+cellmap_flow.image_data_interface
+=================================
+
+.. py:module:: cellmap_flow.image_data_interface
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.image_data_interface.ImageDataInterface
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageDataInterface(dataset_path, target_resolution=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1)
+
+   .. py:attribute:: path
+
+
+   .. py:attribute:: filetype
+      :value: 'zarr'
+
+
+
+   .. py:attribute:: swap_axes
+
+
+   .. py:attribute:: offset
+
+
+   .. py:attribute:: custom_fill_value
+      :value: None
+
+
+
+   .. py:attribute:: concurrency_limit
+      :value: 1
+
+
+
+   .. py:property:: ts
+
+
+   .. py:method:: to_ndarray_ts(roi=None)
+
+

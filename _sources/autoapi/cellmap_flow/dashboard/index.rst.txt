@@ -1,0 +1,15 @@
+cellmap_flow.dashboard
+======================
+
+.. py:module:: cellmap_flow.dashboard
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/dashboard/app/index
+
+

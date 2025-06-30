@@ -1,0 +1,217 @@
+cellmap_flow.utils.data
+=======================
+
+.. py:module:: cellmap_flow.utils.data
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.data.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.data.ModelConfig
+   cellmap_flow.utils.data.ScriptModelConfig
+   cellmap_flow.utils.data.DaCapoModelConfig
+   cellmap_flow.utils.data.BioModelConfig
+   cellmap_flow.utils.data.Config
+   cellmap_flow.utils.data.CellMapModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.data.check_config
+   cellmap_flow.utils.data.get_dacapo_channels
+   cellmap_flow.utils.data.get_dacapo_run_model
+   cellmap_flow.utils.data.concat_along_c
+   cellmap_flow.utils.data.reorder_axes
+   cellmap_flow.utils.data.process_chunk_bioimage
+   cellmap_flow.utils.data.process_chunk_bioimage_test
+   cellmap_flow.utils.data.format_output_bioimage
+   cellmap_flow.utils.data.parse_model_configs
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ModelConfig
+
+   .. py:property:: config
+
+
+   .. py:property:: output_dtype
+
+      Returns the output dtype of the model.
+      If not defined, defaults to np.float32.
+
+
+.. py:class:: ScriptModelConfig(script_path, name=None, scale=None)
+
+
+
+   .. py:attribute:: script_path
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+.. py:class:: DaCapoModelConfig(run_name: str, iteration: int, name=None)
+
+
+
+   .. py:attribute:: run_name
+
+
+   .. py:attribute:: iteration
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+.. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None)
+
+
+
+   .. py:attribute:: model_name
+
+
+   .. py:attribute:: voxel_size
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: voxels_to_process
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+   .. py:method:: load_input_information(model)
+
+
+   .. py:method:: load_output_information(model)
+
+
+   .. py:method:: get_axes_and_dims(sample)
+
+
+   .. py:method:: get_spatial_dims(axes, dims)
+
+
+   .. py:method:: get_input_slicer(input_axes)
+
+
+.. py:function:: check_config(config)
+
+.. py:class:: Config
+
+.. py:function:: get_dacapo_channels(task)
+
+.. py:function:: get_dacapo_run_model(run_name, iteration)
+
+.. py:function:: concat_along_c(arrs, axes_list, channel_axis_name='c')
+
+   Concatenate a list of arrays along the axis named `channel_axis_name`.
+
+   :param arrs: The list of arrays to concatenate.
+   :type arrs: list of np.ndarray
+   :param axes_list: The list of list-of-axis-names. axes_list[i] is the axis names
+                     corresponding to arrs[i].
+   :type axes_list: list of list of str
+   :param channel_axis_name: The name of the "channel" axis. Default is "c".
+   :type channel_axis_name: str
+
+   :returns: * **out** (*np.ndarray*) -- The concatenated array.
+             * **out_axes** (*list of str*) -- The list of axis names for the output array.
+
+
+.. py:function:: reorder_axes(arr: numpy.ndarray, axes: list[str], desired_order: list[str] = ['z', 'y', 'x', 'c']) -> tuple[numpy.ndarray, list[str]]
+
+   Reorder/remove axes so that the final array has axes in the desired order.
+
+   - Any axis not in desired_order is removed IF its size == 1,
+   otherwise a ValueError is raised.
+   - If an axis from desired_order is missing, we insert a size-1 dimension
+   in the correct position so the final shape has exactly 4 dimensions.
+
+   :param arr: Input array.
+   :type arr: np.ndarray
+   :param axes: Axis labels corresponding to arr.shape in order.
+   :type axes: list of str
+
+   :returns: * **arr** (*np.ndarray*) -- The reshaped/reordered array with axes in desired_order.
+             * **out_axes** (*list of str*) -- The final axis labels, which should be exactly desired_order.
+
+
+.. py:function:: process_chunk_bioimage(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
+
+.. py:function:: process_chunk_bioimage_test(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
+
+.. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
+
+.. py:function:: parse_model_configs(yaml_file_path: str) -> List[ModelConfig]
+
+   Reads a YAML file that defines a list of model configs.
+   Validates them manually, then returns a list of constructed ModelConfig objects.
+
+
+.. py:class:: CellMapModelConfig(folder_path, name, scale=None)
+
+
+
+   Configuration class for a CellmapModel.
+   Similar to DaCapoModelConfig, but uses a CellmapModel object
+   to populate the necessary metadata and define a prediction function.
+
+
+   .. py:attribute:: cellmap_model
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+      :type: str
+
+
+      You can either return a placeholder command or remove this property if not needed.
+      For consistency with your DaCapoModelConfig, we return something minimal here.
+
+

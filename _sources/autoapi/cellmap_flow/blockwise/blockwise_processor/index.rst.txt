@@ -1,0 +1,112 @@
+cellmap_flow.blockwise.blockwise_processor
+==========================================
+
+.. py:module:: cellmap_flow.blockwise.blockwise_processor
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.get_process_dataset
+   cellmap_flow.blockwise.blockwise_processor.spawn_worker
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: get_process_dataset(json_data: str)
+
+.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=True)
+
+   .. py:attribute:: config
+
+
+   .. py:attribute:: yaml_config
+
+
+   .. py:attribute:: input_path
+
+
+   .. py:attribute:: charge_group
+
+
+   .. py:attribute:: queue
+
+
+   .. py:attribute:: output_path
+
+
+   .. py:attribute:: workers
+
+
+   .. py:attribute:: model_config
+
+
+   .. py:attribute:: block_shape
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: output_channels
+
+
+   .. py:attribute:: channels
+
+
+   .. py:attribute:: task_name
+
+
+   .. py:attribute:: dtype
+
+
+   .. py:attribute:: json_str
+      :value: None
+
+
+
+   .. py:attribute:: inferencer
+
+
+   .. py:attribute:: idi_raw
+
+
+   .. py:attribute:: output_arrays
+      :value: []
+
+
+
+   .. py:method:: process_fn(block)
+
+
+   .. py:method:: client()
+
+
+   .. py:method:: run()
+
+
+.. py:function:: spawn_worker(name, yaml_config, charge_group, queue, ncpu=12)
+
