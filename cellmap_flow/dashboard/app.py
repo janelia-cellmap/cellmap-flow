@@ -22,7 +22,7 @@ from cellmap_flow.utils.web_utils import (
     POSTPROCESS_DICT_KEY,
 )
 from cellmap_flow.models.run import update_run_models
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 import numpy as np
 import time
 
@@ -36,7 +36,6 @@ CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/exampl
 
 @app.route("/")
 def index():
-    g = Flow()
     # Render the main page with tabs
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
@@ -62,7 +61,6 @@ def index():
 
 
 def is_output_segmentation():
-    g = Flow()
     if len(g.postprocess) == 0:
         return False
 
@@ -80,7 +78,7 @@ def update_equivalences():
         [np.uint64(item) for item in sublist] for sublist in equivalences_str
     ]
 
-    with Flow().viewer.txn() as s:
+    with g.viewer.txn() as s:
         for layer in s.layers:
             if layer.source[0].url.endswith(dataset):
                 layer.equivalences = equivalences
@@ -105,7 +103,6 @@ def submit_models():
 
 @app.route("/api/process", methods=["POST"])
 def process():
-    g = Flow()
     data = request.get_json()
 
     # add dashboard url to data so we can update the state from the server

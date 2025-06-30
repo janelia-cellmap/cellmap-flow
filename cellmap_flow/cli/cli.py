@@ -149,7 +149,6 @@ def script(script_path, data_path, queue, charge_group):
     help="The chargeback group to use when submitting",
     default=None,
 )
-
 def bioimage(model_path, data_path, edge_length_to_process, queue, charge_group):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path} -e {edge_length_to_process}"
     base_name = model_path.split("/")[-1].split(".")[0]
@@ -186,7 +185,6 @@ def cellmap_model(config_folder, name, data_path, queue, charge_group):
         f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
     )
     run(command, data_path, queue, charge_group, name)
-
 
 
 @cli.command()

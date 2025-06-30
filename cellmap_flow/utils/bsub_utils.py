@@ -4,7 +4,7 @@ import os
 import sys
 import signal
 import select
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 import logging
 
 
@@ -17,9 +17,10 @@ security = "http"
 SERVER_COMMAND = "cellmap_flow_server"
 
 
-
 class Job:
-    def __init__(self, job_id=None, model_name=None, status="running", host=None, process=None):
+    def __init__(
+        self, job_id=None, model_name=None, status="running", host=None, process=None
+    ):
         self.job_id = job_id
         self.model_name = model_name
         self.status = status
@@ -40,9 +41,7 @@ class Job:
             os.system(f"bkill {self.job_id}")
 
 
-
 def cleanup(signum, frame):
-    g = Flow()
     print(f"Script is being killed. Received signal: {signum}")
     for job in g.jobs:
         print(f"Killing job {job.job_id}")
@@ -164,7 +163,6 @@ def get_host_from_stdout(output):
 #         host_name = output.split("Host name: ")[1].split("\n")[0].strip()
 #         port = output.split(f"* Running on {security}://127.0.0.1:")[1].split("\n")[0]
 
-    
 
 #         host = f"{security}://{host_name}:{port}"
 #         print(f"{host}")
@@ -172,7 +170,7 @@ def get_host_from_stdout(output):
 #     return None
 
 
-def run_locally(sc,name):
+def run_locally(sc, name):
     command = sc.split(" ")
     print(f"Running command: {command}")
     process = subprocess.Popen(
@@ -198,21 +196,20 @@ def run_locally(sc,name):
         if process.stderr in rlist:
             output += process.stderr.readline()
         # print(output)
-        
+
         host = get_host_from_stdout(output)
         if host:
             break
         # Check if the process has finished and no more output is available
         if process.poll() is not None and not rlist:
             break
-    Flow().jobs.append(Job(model_name=name, host=host,process=process))
+    g.jobs.append(Job(model_name=name, host=host, process=process))
     return host
 
 
 def start_hosts(
     command, queue="gpu_h100", charge_group="cellmap", job_name="example_job"
 ):
-    g = Flow()
     g.queue = queue
     g.charge_group = charge_group
     if security == "https":

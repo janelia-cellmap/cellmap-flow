@@ -1,10 +1,19 @@
-
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
 from cellmap_flow.models.model_yaml import load_model_paths
+
 import os
 import threading
+import numpy as np
 
+
+
+# input_norms = [MinMaxNormalizer()]
+# postprocess = [DefaultPostprocessor(0,200,0,1)]
+
+input_norms = []
+postprocess = []
+viewer = None
 
 class Flow:
     _instance = None
@@ -12,7 +21,6 @@ class Flow:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Flow, cls).__new__(cls)
-            # Initialize default attributes
             cls._instance.jobs = []
             cls._instance.models_config = []
             cls._instance.servers = []
@@ -30,24 +38,43 @@ class Flow:
             cls._instance.charge_group = "cellmap"
             cls._instance.neuroglancer_thread = None
         return cls._instance
-    
+
     def to_dict(self):
         return self.__dict__.items()
-    
+
     def __repr__(self):
         return f"Flow({self.__dict__})"
+
     def __str__(self):
         return f"Flow({self.__dict__})"
-        
+
+    def get_output_dtype(self):
+        dtype = np.float32
+
+        if len(self.input_norms) > 0:
+            for norm in self.input_norms[::-1]:
+                if norm.dtype:
+                    dtype = norm.dtype
+                    break
+
+        if len(self.postprocess) > 0:
+            for postprocess in self.postprocess[::-1]:
+                if postprocess.dtype:
+                    dtype = postprocess.dtype
+                    break
+
+        return dtype
 
     @classmethod
-    def run(cls,
-            zarr_path, 
-            model_configs, 
-            queue="gpu_h100", 
-            charge_group="cellmap", 
-            input_normalizers=None, 
-            post_processors=None):
+    def run(
+        cls,
+        zarr_path,
+        model_configs,
+        queue="gpu_h100",
+        charge_group="cellmap",
+        input_normalizers=None,
+        post_processors=None,
+    ):
 
         from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
         from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
@@ -75,7 +102,7 @@ class Flow:
             print(f"Starting server with command: {command}")
             thread = threading.Thread(
                 target=start_hosts,
-                args=(command, queue, charge_group, model_config.name)
+                args=(command, queue, charge_group, model_config.name),
             )
             thread.start()
             threads.append(thread)
@@ -99,7 +126,6 @@ class Flow:
             print(f"Killing job {job.job_id}")
             job.kill()
         if instance.neuroglancer_thread is not None:
-            # Here you might want to join or otherwise stop the thread gracefully.
             instance.neuroglancer_thread = None
         instance.jobs = []
 
@@ -108,18 +134,4 @@ class Flow:
         cls._instance = None
 
 
-import os
-model_catalog = {}
-# model_catalog = load_model_paths(
-#   os.path.normpath(
-#      os.path.join(os.path.dirname(__file__), os.pardir, "models", "models.yaml")
-#  )
-# )
-
-
-# input_norms = [MinMaxNormalizer()]
-# postprocess = [DefaultPostprocessor(0,200,0,1)]
-
-input_norms = []
-postprocess = []
-viewer = None
+g = Flow()

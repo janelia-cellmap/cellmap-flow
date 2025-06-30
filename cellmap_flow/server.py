@@ -28,30 +28,15 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
-from cellmap_flow.globals import Flow
+
+from cellmap_flow.globals import g
+
 import requests
 import time
 
 logger = logging.getLogger(__name__)
 
 
-def get_output_dtype():
-    dtype = np.float32
-    g = Flow()
-
-    if len(g.input_norms) > 0:
-        for norm in g.input_norms[::-1]:
-            if norm.dtype:
-                dtype = norm.dtype
-                break
-
-    if len(g.postprocess) > 0:
-        for postprocess in g.postprocess[::-1]:
-            if postprocess.dtype:
-                dtype = postprocess.dtype
-                break
-
-    return dtype
 
 
 def get_process_dataset(dataset: str):
@@ -126,9 +111,9 @@ class CellMapFlowServer:
             self.axis = ["z", "y", "x", "c^"]
             self.vol_shape = self.default_vol_shape.copy()
         # Chunk encoding for N5
-        self.chunk_encoder = N5ChunkWrapper(
-            get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
-        )
+        self.chunk_encoder = self._initialize_chunk_encoder()
+
+
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
@@ -137,9 +122,6 @@ class CellMapFlowServer:
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
 
-        # ------------------------------------------------------
-        # Routes using @self.app.route -- no add_url_rule calls!
-        # ------------------------------------------------------
 
         @self.app.route("/")
         def home():
@@ -172,7 +154,6 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
-            g = Flow()
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
             self.n5_block_shape[-1] = self.default_vol_shape[-1]
@@ -183,7 +164,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(),
+                g.get_output_dtype(),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -210,7 +191,6 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            g = Flow()
             g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
             self.vol_shape = self.default_vol_shape.copy()
             self.n5_block_shape[-1] = self.default_vol_shape[-1]
@@ -221,7 +201,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                get_output_dtype(),
+                g.get_output_dtype(),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -315,7 +295,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = get_output_dtype().__name__
+        dtype = g.get_output_dtype().__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -333,13 +313,12 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-        g = Flow()
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
-        chunk_data = chunk_data.astype(get_output_dtype())
+        chunk_data = chunk_data.astype(g.get_output_dtype())
 
         current_time = time.time()
 
@@ -372,9 +351,11 @@ class CellMapFlowServer:
             {"Content-Type": "application/octet-stream"},
         )
 
-    #
-    # --- Server Runner ---
-    #
+    def _initialize_chunk_encoder(self):
+        return N5ChunkWrapper(
+            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+        )
+    
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
         Run the Flask dev server with optional SSL certificate.

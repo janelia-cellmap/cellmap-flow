@@ -4,11 +4,13 @@ import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
+
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     get_norms_post_args,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,6 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 
 
 def generate_neuroglancer_url(dataset_path, extras = []):
-    g = Flow()
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
     st_data = get_norms_post_args(g.input_norms, g.postprocess)

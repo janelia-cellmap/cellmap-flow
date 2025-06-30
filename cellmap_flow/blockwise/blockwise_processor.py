@@ -19,24 +19,10 @@ from cellmap_flow.post.postprocessors import get_postprocessors
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
-
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
-
-
-
-def get_output_dtype(model_output):
-    p_dtype = model_output
-    # g = Flow()
-    if len(g.postprocess) > 0:
-        for postprocess in g.postprocess[::-1]:
-            if postprocess.dtype:
-                p_dtype = postprocess.dtype
-                break
-    return p_dtype
-
 
 
 def get_process_dataset(json_data: str):
@@ -64,7 +50,6 @@ class CellMapFlowBlockwiseProcessor:
             return
         self.output_path = self.config["output_path"]
         self.output_path = Path(self.output_path)
-
 
         output_channels = None
         if "output_channels" in self.config:
@@ -118,8 +103,8 @@ class CellMapFlowBlockwiseProcessor:
         else:
             self.output_channels = self.channels
 
+        self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        self.dtype = get_output_dtype(self.model_config.output_dtype)
 
         # g = Flow()
 
@@ -140,8 +125,6 @@ class CellMapFlowBlockwiseProcessor:
         )
         self.output_arrays = []
 
-
-
         output_shape = (
             np.array(self.idi_raw.shape)
             * np.array(self.input_voxel_size)
@@ -154,7 +137,7 @@ class CellMapFlowBlockwiseProcessor:
         for channel in self.output_channels:
             if create:
                 array = prepare_ds(
-                    DirectoryStore(self.output_path / channel/"s0"),
+                    DirectoryStore(self.output_path / channel / "s0"),
                     output_shape,
                     dtype=self.dtype,
                     chunk_shape=self.block_shape,
@@ -166,7 +149,7 @@ class CellMapFlowBlockwiseProcessor:
             else:
                 try:
                     array = open_ds(
-                        DirectoryStore(self.output_path / channel/"s0"),
+                        DirectoryStore(self.output_path / channel / "s0"),
                         "a",
                     )
                 except Exception as e:
@@ -268,7 +251,7 @@ class CellMapFlowBlockwiseProcessor:
 import subprocess
 
 
-def spawn_worker(name, yaml_config,charge_group,queue,ncpu=12):
+def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
         subprocess.run(
             [
@@ -291,7 +274,7 @@ def spawn_worker(name, yaml_config,charge_group,queue,ncpu=12):
                 "run",
                 "-y",
                 f"{yaml_config}",
-                "--client"
+                "--client",
             ]
         )
 

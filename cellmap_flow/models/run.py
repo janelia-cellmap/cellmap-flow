@@ -1,4 +1,5 @@
-from cellmap_flow.globals import Flow
+from cellmap_flow.globals import g
+
 
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.web_utils import (
@@ -15,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 def run_model(model_path, name, st_data):
-    g = Flow()
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
         return
@@ -36,7 +36,6 @@ def run_model(model_path, name, st_data):
 
 
 def update_run_models(names: List[str]):
-    g = Flow()
 
     to_be_killed = [j for j in g.jobs if j.model_name not in names]
     names_running = [j.model_name for j in g.jobs]
