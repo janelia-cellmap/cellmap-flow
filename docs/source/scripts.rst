@@ -2,7 +2,7 @@ Python Scripts
 ================================
 CellMap Flow can be executed from cli commands or programmatically via Python scripts.
 
-First you need to define your model config. which can be ScriptModelConfig, DacapoModelConfig, BioModelConfig or FlyModelConfig. 
+First you need to define your model config, which can be ScriptModelConfig, DacapoModelConfig, BioModelConfig or FlyModelConfig. 
 Then you can call Flow.run with the appropriate parameters.
 
 Prerequisites
