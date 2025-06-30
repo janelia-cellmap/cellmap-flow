@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>cellmap_flow.utils.load_py &mdash; CellMap Flow  documentation</title>
+  <title>cellmap_flow.cli.fly_model &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
@@ -24,8 +24,8 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils.neuroglancer_utils" href="../neuroglancer_utils/index.html" />
-    <link rel="prev" title="cellmap_flow.utils.import_utils" href="../import_utils/index.html" /> 
+    <link rel="next" title="cellmap_flow.cli.multiple_cli" href="../multiple_cli/index.html" />
+    <link rel="prev" title="cellmap_flow.cli.cli" href="../cli/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -58,7 +58,7 @@
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
@@ -67,7 +67,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
-<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
 </ul>
 </li>
 </ul>
@@ -92,10 +92,10 @@
       <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
           <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
-          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
-      <li class="breadcrumb-item active">cellmap_flow.utils.load_py</li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.cli</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.cli.fly_model</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../../../../_sources/autoapi/cellmap_flow/utils/load_py/index.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../../../../_sources/autoapi/cellmap_flow/cli/fly_model/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -103,26 +103,16 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-cellmap_flow.utils.load_py">
-<span id="cellmap-flow-utils-load-py"></span><h1>cellmap_flow.utils.load_py<a class="headerlink" href="#module-cellmap_flow.utils.load_py" title="Link to this heading"></a></h1>
+  <section id="module-cellmap_flow.cli.fly_model">
+<span id="cellmap-flow-cli-fly-model"></span><h1>cellmap_flow.cli.fly_model<a class="headerlink" href="#module-cellmap_flow.cli.fly_model" title="Link to this heading"></a></h1>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.load_py.DISALLOWED_IMPORTS" title="cellmap_flow.utils.load_py.DISALLOWED_IMPORTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DISALLOWED_IMPORTS</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.fly_model.queue" title="cellmap_flow.cli.fly_model.queue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">queue</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS" title="cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DISALLOWED_FUNCTIONS</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="classes">
-<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.load_py.Config" title="cellmap_flow.utils.load_py.Config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Config</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.fly_model.charge_group" title="cellmap_flow.cli.fly_model.charge_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">charge_group</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -132,11 +122,8 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.load_py.analyze_script" title="cellmap_flow.utils.load_py.analyze_script"><code class="xref py py-obj docutils literal notranslate"><span class="pre">analyze_script</span></code></a>(filepath)</p></td>
-<td><p>Analyzes the script at <cite>filepath</cite> using <cite>ast</cite> for potentially unsafe imports and function calls.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.load_py.load_safe_config" title="cellmap_flow.utils.load_py.load_safe_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_safe_config</span></code></a>(config_path[, force_safe])</p></td>
-<td><p>Loads the configuration script at <cite>config_path</cite> after verifying its safety.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.fly_model.main" title="cellmap_flow.cli.fly_model.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>()</p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>
@@ -144,32 +131,18 @@
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.load_py.DISALLOWED_IMPORTS">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.load_py.</span></span><span class="sig-name descname"><span class="pre">DISALLOWED_IMPORTS</span></span><a class="headerlink" href="#cellmap_flow.utils.load_py.DISALLOWED_IMPORTS" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.cli.fly_model.queue">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.fly_model.</span></span><span class="sig-name descname"><span class="pre">queue</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'gpu_h100'</span></em><a class="headerlink" href="#cellmap_flow.cli.fly_model.queue" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.load_py.</span></span><span class="sig-name descname"><span class="pre">DISALLOWED_FUNCTIONS</span></span><a class="headerlink" href="#cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.cli.fly_model.charge_group">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.fly_model.</span></span><span class="sig-name descname"><span class="pre">charge_group</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap'</span></em><a class="headerlink" href="#cellmap_flow.cli.fly_model.charge_group" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.utils.load_py.analyze_script">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.load_py.</span></span><span class="sig-name descname"><span class="pre">analyze_script</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.load_py.analyze_script" title="Link to this definition"></a></dt>
-<dd><p>Analyzes the script at <cite>filepath</cite> using <cite>ast</cite> for potentially unsafe imports and function calls.
-Returns a boolean indicating whether the script is safe and a list of detected issues.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.utils.load_py.load_safe_config">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.load_py.</span></span><span class="sig-name descname"><span class="pre">load_safe_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_safe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">os.getenv('FORCE_SAFE_CONFIG',</span> <span class="pre">False)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.load_py.load_safe_config" title="Link to this definition"></a></dt>
-<dd><p>Loads the configuration script at <cite>config_path</cite> after verifying its safety.
-If <cite>force_safe</cite> is True, raises an error if the script is deemed unsafe.</p>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.utils.load_py.Config">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.load_py.</span></span><span class="sig-name descname"><span class="pre">Config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.load_py.Config" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.cli.fly_model.main">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.fly_model.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.fly_model.main" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>
@@ -179,8 +152,8 @@ If <cite>force_safe</cite> is True, raises an error if the script is deemed unsa
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../import_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.import_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../neuroglancer_utils/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.neuroglancer_utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../cli/index.html" class="btn btn-neutral float-left" title="cellmap_flow.cli.cli" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../multiple_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.multiple_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -11,6 +11,7 @@ Submodules
    :maxdepth: 1
 
    /autoapi/cellmap_flow/models/cellmap_models/index
+   /autoapi/cellmap_flow/models/model_app_config/index
    /autoapi/cellmap_flow/models/model_yaml/index
    /autoapi/cellmap_flow/models/run/index
 

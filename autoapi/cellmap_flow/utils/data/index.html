@@ -128,13 +128,16 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.DaCapoModelConfig" title="cellmap_flow.utils.data.DaCapoModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DaCapoModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.BioModelConfig" title="cellmap_flow.utils.data.BioModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BioModelConfig</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.FlyModelConfig" title="cellmap_flow.utils.data.FlyModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlyModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.Config" title="cellmap_flow.utils.data.Config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Config</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.BioModelConfig" title="cellmap_flow.utils.data.BioModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BioModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.CellMapModelConfig" title="cellmap_flow.utils.data.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.Config" title="cellmap_flow.utils.data.Config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Config</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.CellMapModelConfig" title="cellmap_flow.utils.data.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a CellmapModel.</p></td>
 </tr>
 </tbody>
@@ -144,31 +147,34 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.check_config" title="cellmap_flow.utils.data.check_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_config</span></code></a>(config)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.load_eval_model" title="cellmap_flow.utils.data.load_eval_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_eval_model</span></code></a>(num_channels, checkpoint_path)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.get_dacapo_channels" title="cellmap_flow.utils.data.get_dacapo_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dacapo_channels</span></code></a>(task)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.check_config" title="cellmap_flow.utils.data.check_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_config</span></code></a>(config)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.get_dacapo_run_model" title="cellmap_flow.utils.data.get_dacapo_run_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dacapo_run_model</span></code></a>(run_name, iteration)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.get_dacapo_channels" title="cellmap_flow.utils.data.get_dacapo_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dacapo_channels</span></code></a>(task)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.concat_along_c" title="cellmap_flow.utils.data.concat_along_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">concat_along_c</span></code></a>(arrs, axes_list[, channel_axis_name])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.get_dacapo_run_model" title="cellmap_flow.utils.data.get_dacapo_run_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dacapo_run_model</span></code></a>(run_name, iteration)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.concat_along_c" title="cellmap_flow.utils.data.concat_along_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">concat_along_c</span></code></a>(arrs, axes_list[, channel_axis_name])</p></td>
 <td><p>Concatenate a list of arrays along the axis named <cite>channel_axis_name</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.reorder_axes" title="cellmap_flow.utils.data.reorder_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reorder_axes</span></code></a>(→ tuple[numpy.ndarray, list[str]])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.reorder_axes" title="cellmap_flow.utils.data.reorder_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reorder_axes</span></code></a>(→ tuple[numpy.ndarray, list[str]])</p></td>
 <td><p>Reorder/remove axes so that the final array has axes in the desired order.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.process_chunk_bioimage" title="cellmap_flow.utils.data.process_chunk_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process_chunk_bioimage</span></code></a>(self, idi, input_roi)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.process_chunk_bioimage" title="cellmap_flow.utils.data.process_chunk_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process_chunk_bioimage</span></code></a>(self, idi, input_roi)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.process_chunk_bioimage_test" title="cellmap_flow.utils.data.process_chunk_bioimage_test"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process_chunk_bioimage_test</span></code></a>(self, idi, input_roi)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.process_chunk_bioimage_test" title="cellmap_flow.utils.data.process_chunk_bioimage_test"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process_chunk_bioimage_test</span></code></a>(self, idi, input_roi)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.format_output_bioimage" title="cellmap_flow.utils.data.format_output_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_output_bioimage</span></code></a>(self, output_sample[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.format_output_bioimage" title="cellmap_flow.utils.data.format_output_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_output_bioimage</span></code></a>(self, output_sample[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.parse_model_configs" title="cellmap_flow.utils.data.parse_model_configs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_model_configs</span></code></a>(→ List[ModelConfig])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.data.parse_model_configs" title="cellmap_flow.utils.data.parse_model_configs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_model_configs</span></code></a>(→ List[ModelConfig])</p></td>
 <td><p>Reads a YAML file that defines a list of model configs.</p></td>
 </tr>
 </tbody>
@@ -244,6 +250,61 @@ If not defined, defaults to np.float32.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.utils.data.DaCapoModelConfig.command">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.utils.data.DaCapoModelConfig.command" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.load_eval_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.data.</span></span><span class="sig-name descname"><span class="pre">load_eval_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.data.load_eval_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.data.</span></span><span class="sig-name descname"><span class="pre">FlyModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(178,</span> <span class="pre">178,</span> <span class="pre">178)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(56,</span> <span class="pre">56,</span> <span class="pre">56)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.chpoint_path">
+<span class="sig-name descname"><span class="pre">chpoint_path</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.chpoint_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.channels">
+<span class="sig-name descname"><span class="pre">channels</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.input_size">
+<span class="sig-name descname"><span class="pre">input_size</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(178,</span> <span class="pre">178,</span> <span class="pre">178)</span></em><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.input_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.output_size">
+<span class="sig-name descname"><span class="pre">output_size</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(56,</span> <span class="pre">56,</span> <span class="pre">56)</span></em><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.output_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.command">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.command" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.utils.data.FlyModelConfig.model">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#cellmap_flow.utils.data.FlyModelConfig.model" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>

@@ -9,6 +9,9 @@ Attributes
 
 .. autoapisummary::
 
+   cellmap_flow.globals.input_norms
+   cellmap_flow.globals.postprocess
+   cellmap_flow.globals.viewer
    cellmap_flow.globals.g
 
 
@@ -22,6 +25,18 @@ Classes
 
 Module Contents
 ---------------
+
+.. py:data:: input_norms
+   :value: []
+
+
+.. py:data:: postprocess
+   :value: []
+
+
+.. py:data:: viewer
+   :value: None
+
 
 .. py:class:: Flow
 

@@ -94,9 +94,6 @@ Module Contents
    .. py:attribute:: threshold
 
 
-   .. py:method:: to_dict()
-
-
    .. py:property:: dtype
 
 
@@ -110,9 +107,6 @@ Module Contents
    .. py:attribute:: channel
       :value: 0
 
-
-
-   .. py:method:: to_dict()
 
 
    .. py:property:: dtype
@@ -140,9 +134,6 @@ Module Contents
 
 
 
-   .. py:method:: to_dict()
-
-
    .. py:property:: dtype
 
 
@@ -167,9 +158,6 @@ Module Contents
    .. py:attribute:: num_previous_segments
       :value: 0
 
-
-
-   .. py:method:: to_dict()
 
 
    .. py:property:: dtype
@@ -212,9 +200,6 @@ Module Contents
    .. py:attribute:: keys_to_skip
 
 
-   .. py:method:: to_dict()
-
-
    .. py:method:: calculate_equivalences()
 
 
@@ -231,9 +216,6 @@ Module Contents
    .. py:attribute:: channels
 
 
-   .. py:method:: to_dict()
-
-
    .. py:property:: num_channels
 
 
@@ -242,9 +224,6 @@ Module Contents
 
 
    .. py:attribute:: expression
-
-
-   .. py:method:: to_dict()
 
 
    .. py:property:: dtype

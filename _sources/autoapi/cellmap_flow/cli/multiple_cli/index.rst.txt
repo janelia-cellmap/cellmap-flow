@@ -12,6 +12,7 @@ Attributes
    cellmap_flow.cli.multiple_cli.data_args
    cellmap_flow.cli.multiple_cli.charge_group_arg
    cellmap_flow.cli.multiple_cli.server_queue_arg
+   cellmap_flow.cli.multiple_cli.extra_args
    cellmap_flow.cli.multiple_cli.DEFAULT_SERVER_QUEUE
    cellmap_flow.cli.multiple_cli.logger
 
@@ -38,6 +39,10 @@ Module Contents
 
 .. py:data:: server_queue_arg
    :value: ['-q', '--queue']
+
+
+.. py:data:: extra_args
+   :value: ['-e', '--extra']
 
 
 .. py:data:: DEFAULT_SERVER_QUEUE

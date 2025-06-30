@@ -10,7 +10,6 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.norm.input_normalize.logger
-   cellmap_flow.norm.input_normalize.NormalizationMethods
 
 
 Classes
@@ -19,6 +18,8 @@ Classes
 .. autoapisummary::
 
    cellmap_flow.norm.input_normalize.InputNormalizer
+   cellmap_flow.norm.input_normalize.Dilate
+   cellmap_flow.norm.input_normalize.EuclideanDistance
    cellmap_flow.norm.input_normalize.MinMaxNormalizer
    cellmap_flow.norm.input_normalize.LambdaNormalizer
    cellmap_flow.norm.input_normalize.ZScoreNormalizer
@@ -54,7 +55,39 @@ Module Contents
    .. py:property:: dtype
 
 
-.. py:class:: MinMaxNormalizer(min_value=0.0, max_value=255.0)
+.. py:class:: Dilate(size=1)
+
+
+
+   .. py:attribute:: size
+      :value: 1
+
+
+
+.. py:class:: EuclideanDistance(anisotropy=50, black_border=True, parallel=5, type='edt', activation='tanh')
+
+
+
+   .. py:attribute:: anisotropy
+
+
+   .. py:attribute:: black_border
+      :value: True
+
+
+
+   .. py:attribute:: parallel
+      :value: 5
+
+
+
+   .. py:attribute:: activation
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: MinMaxNormalizer(min_value=0.0, max_value=255.0, invert=False)
 
 
 
@@ -74,9 +107,6 @@ Module Contents
    .. py:attribute:: expression
 
 
-   .. py:method:: to_dict()
-
-
    .. py:property:: dtype
 
 
@@ -85,13 +115,9 @@ Module Contents
 
 
    .. py:attribute:: mean
-      :value: 0.0
-
 
 
    .. py:attribute:: std
-      :value: 1.0
-
 
 
    .. py:property:: dtype
@@ -99,8 +125,6 @@ Module Contents
 
    .. py:method:: normalize(data: numpy.ndarray) -> numpy.ndarray
 
-
-.. py:data:: NormalizationMethods
 
 .. py:function:: get_input_normalizers() -> list[dict]
 

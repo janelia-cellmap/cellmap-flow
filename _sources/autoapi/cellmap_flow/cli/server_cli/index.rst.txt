@@ -19,6 +19,7 @@ Functions
 
    cellmap_flow.cli.server_cli.cli
    cellmap_flow.cli.server_cli.dacapo
+   cellmap_flow.cli.server_cli.fly
    cellmap_flow.cli.server_cli.script
    cellmap_flow.cli.server_cli.bioimage
    cellmap_flow.cli.server_cli.run_server
@@ -61,6 +62,11 @@ Module Contents
    Run the CellMapFlow server with a DaCapo model.
 
 
+.. py:function:: fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path)
+
+   Run the CellMapFlow server with a Fly model.
+
+
 .. py:function:: script(script_path, data_path, debug, port, certfile, keyfile)
 
    Run the CellMapFlow server with a custom script.
@@ -71,7 +77,7 @@ Module Contents
    Run the CellMapFlow server with a bioimage-io model.
 
 
-.. py:function:: run_server(model_config, data_path, debug, port, certfile, keyfile)
+.. py:function:: run_server(model_config, data_path, debug=False, port=0, certfile=None, keyfile=None)
 
 .. py:function:: cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile)
 

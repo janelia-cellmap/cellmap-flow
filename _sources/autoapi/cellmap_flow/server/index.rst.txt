@@ -76,6 +76,9 @@ Module Contents
    .. py:attribute:: chunk_encoder
 
 
+   .. py:attribute:: app
+
+
    .. py:method:: run(debug=False, port=None, certfile=None, keyfile=None)
 
       Run the Flask dev server with optional SSL certificate.

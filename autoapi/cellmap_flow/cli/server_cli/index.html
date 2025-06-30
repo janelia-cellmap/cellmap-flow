@@ -125,19 +125,22 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.dacapo" title="cellmap_flow.cli.server_cli.dacapo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dacapo</span></code></a>(run_name, iteration, data_path, debug, port, ...)</p></td>
 <td><p>Run the CellMapFlow server with a DaCapo model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.script" title="cellmap_flow.cli.server_cli.script"><code class="xref py py-obj docutils literal notranslate"><span class="pre">script</span></code></a>(script_path, data_path, debug, port, certfile, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.fly" title="cellmap_flow.cli.server_cli.fly"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fly</span></code></a>(checkpoint, channels, input_voxel_size, ...)</p></td>
+<td><p>Run the CellMapFlow server with a Fly model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.script" title="cellmap_flow.cli.server_cli.script"><code class="xref py py-obj docutils literal notranslate"><span class="pre">script</span></code></a>(script_path, data_path, debug, port, certfile, ...)</p></td>
 <td><p>Run the CellMapFlow server with a custom script.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.bioimage" title="cellmap_flow.cli.server_cli.bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage</span></code></a>(model_path, data_path, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.bioimage" title="cellmap_flow.cli.server_cli.bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage</span></code></a>(model_path, data_path, ...)</p></td>
 <td><p>Run the CellMapFlow server with a bioimage-io model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.run_server" title="cellmap_flow.cli.server_cli.run_server"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_server</span></code></a>(model_config, data_path, debug, port, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.run_server" title="cellmap_flow.cli.server_cli.run_server"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_server</span></code></a>(model_config, data_path[, debug, port, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.cellmap_model" title="cellmap_flow.cli.server_cli.cellmap_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellmap_model</span></code></a>(folder_path, name, data_path, debug, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.cellmap_model" title="cellmap_flow.cli.server_cli.cellmap_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellmap_model</span></code></a>(folder_path, name, data_path, debug, ...)</p></td>
 <td><p>Run the CellMapFlow server with a CellMap model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.run_ui_server" title="cellmap_flow.cli.server_cli.run_ui_server"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_ui_server</span></code></a>(neuroglancer_url, inference_host)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.server_cli.run_ui_server" title="cellmap_flow.cli.server_cli.run_ui_server"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_ui_server</span></code></a>(neuroglancer_url, inference_host)</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -181,6 +184,12 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.cli.server_cli.fly">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.server_cli.</span></span><span class="sig-name descname"><span class="pre">fly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.server_cli.fly" title="Link to this definition"></a></dt>
+<dd><p>Run the CellMapFlow server with a Fly model.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.server_cli.script">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.server_cli.</span></span><span class="sig-name descname"><span class="pre">script</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">script_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">certfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyfile</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.server_cli.script" title="Link to this definition"></a></dt>
 <dd><p>Run the CellMapFlow server with a custom script.</p>
@@ -194,7 +203,7 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.server_cli.run_server">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.server_cli.</span></span><span class="sig-name descname"><span class="pre">run_server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">certfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyfile</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.server_cli.run_server" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.server_cli.</span></span><span class="sig-name descname"><span class="pre">run_server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">certfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.server_cli.run_server" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">

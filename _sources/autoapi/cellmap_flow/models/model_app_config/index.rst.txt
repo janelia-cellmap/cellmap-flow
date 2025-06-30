@@ -1,0 +1,108 @@
+cellmap_flow.models.model_app_config
+====================================
+
+.. py:module:: cellmap_flow.models.model_app_config
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_app_config.AppInput
+   cellmap_flow.models.model_app_config.TextInput
+   cellmap_flow.models.model_app_config.SelectInput
+   cellmap_flow.models.model_app_config.ListInput
+   cellmap_flow.models.model_app_config.FileInput
+   cellmap_flow.models.model_app_config.ModelDashboardConfig
+   cellmap_flow.models.model_app_config.MyModelConfig
+
+
+Module Contents
+---------------
+
+.. py:class:: AppInput
+
+.. py:class:: TextInput(name, default_value=None, description=None)
+
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: default_value
+      :value: None
+
+
+
+   .. py:attribute:: description
+      :value: None
+
+
+
+.. py:class:: SelectInput(name, options, default_value=None, description=None)
+
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: default_value
+      :value: None
+
+
+
+   .. py:attribute:: options
+
+
+   .. py:attribute:: description
+      :value: None
+
+
+
+.. py:class:: ListInput(name, options, default_value=None, description=None)
+
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: options
+
+
+   .. py:attribute:: default_value
+      :value: None
+
+
+
+   .. py:attribute:: description
+      :value: None
+
+
+
+.. py:class:: FileInput(name, default_value=None, description=None)
+
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: default_value
+      :value: None
+
+
+
+   .. py:attribute:: description
+      :value: None
+
+
+
+.. py:class:: ModelDashboardConfig
+
+.. py:class:: MyModelConfig
+
+
+
+   .. py:attribute:: elemns
+
+

@@ -15,7 +15,7 @@ Classes
 Module Contents
 ---------------
 
-.. py:class:: ImageDataInterface(dataset_path, target_resolution=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1)
+.. py:class:: ImageDataInterface(dataset_path, voxel_size=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1, normalize=True)
 
    .. py:attribute:: path
 
@@ -38,6 +38,11 @@ Module Contents
 
    .. py:attribute:: concurrency_limit
       :value: 1
+
+
+
+   .. py:attribute:: normalize
+      :value: True
 
 
 

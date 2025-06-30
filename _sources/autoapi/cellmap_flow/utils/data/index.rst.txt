@@ -20,6 +20,7 @@ Classes
    cellmap_flow.utils.data.ModelConfig
    cellmap_flow.utils.data.ScriptModelConfig
    cellmap_flow.utils.data.DaCapoModelConfig
+   cellmap_flow.utils.data.FlyModelConfig
    cellmap_flow.utils.data.BioModelConfig
    cellmap_flow.utils.data.Config
    cellmap_flow.utils.data.CellMapModelConfig
@@ -30,6 +31,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.utils.data.load_eval_model
    cellmap_flow.utils.data.check_config
    cellmap_flow.utils.data.get_dacapo_channels
    cellmap_flow.utils.data.get_dacapo_run_model
@@ -93,6 +95,45 @@ Module Contents
 
 
    .. py:property:: command
+
+
+.. py:function:: load_eval_model(num_channels, checkpoint_path)
+
+.. py:class:: FlyModelConfig(chpoint_path: str, channels: [str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=(178, 178, 178), output_size=(56, 56, 56))
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: chpoint_path
+
+
+   .. py:attribute:: channels
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: input_size
+      :value: (178, 178, 178)
+
+
+
+   .. py:attribute:: output_size
+      :value: (56, 56, 56)
+
+
+
+   .. py:property:: command
+
+
+   .. py:property:: model
 
 
 .. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None)

@@ -33,7 +33,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: get_raw_layer(dataset_path)
+.. py:function:: get_raw_layer(dataset_path, normalize=True)
 
 .. py:class:: ScalePyramid(volume_layers)
 
