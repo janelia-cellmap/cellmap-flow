@@ -1,0 +1,268 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Model &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="PostProcessors" href="post.html" />
+    <link rel="prev" title="CLI Commands" href="cli_command.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Custom Model</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#minimum-requirements-for-custom-scripts">Minimum Requirements for Custom Scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#required-attributes">Required Attributes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#testing-your-script">Testing Your Script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#basic-script-template-pytorch">Basic Script Template (PyTorch)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#advanced-usage-custom-process-function-tensorflow">Advanced Usage: Custom Process Function (TensorFlow)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Custom Model</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/custom_script.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="custom-model">
+<h1>Custom Model<a class="headerlink" href="#custom-model" title="Link to this heading"></a></h1>
+<p>This guide explains how to run your own custom model using the CellMap Flow CLI via the <cite>script</cite> interface.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>To run a custom model:</p>
+<ol class="arabic simple">
+<li><p>Create a Python script that:
+- Loads and prepares your model.
+- Optionally defines how to process each chunk (advanced).</p></li>
+<li><p>Use the CLI to launch the pipeline.</p></li>
+</ol>
+<p>The CLI command looks like:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input_data.zarr<span class="w"> </span>-q<span class="w"> </span>gpu_h100<span class="w"> </span>-P<span class="w"> </span>cellmap
+</pre></div>
+</div>
+</section>
+<section id="minimum-requirements-for-custom-scripts">
+<h2>Minimum Requirements for Custom Scripts<a class="headerlink" href="#minimum-requirements-for-custom-scripts" title="Link to this heading"></a></h2>
+<p>When using <cite>cellmap_flow script</cite>, your Python script <strong>must define</strong> a configuration object (typically the global scope) that satisfies the following:</p>
+<section id="required-attributes">
+<h3>Required Attributes<a class="headerlink" href="#required-attributes" title="Link to this heading"></a></h3>
+<p>Your script must define the following <strong>global-level</strong> variables or attributes:</p>
+<ul class="simple">
+<li><p><strong>model</strong> <em>(optional)</em>: PyTorch model instance. Required if predict is not defined.</p></li>
+<li><p><strong>predict</strong> <em>(optional)</em>: Custom callable to run predictions. Required if model is not defined.</p></li>
+<li><p><strong>read_shape</strong> <em>(required)</em>: The shape of the input block (in world units or voxels).</p></li>
+<li><p><strong>write_shape</strong> <em>(required)</em>: The shape of the output block (i.e., prediction size).</p></li>
+<li><p><strong>input_voxel_size</strong> <em>(required)</em>: Size of a voxel in the input data.</p></li>
+<li><p><strong>output_voxel_size</strong> <em>(required)</em>: Size of a voxel in the model output.</p></li>
+<li><p><strong>output_channels</strong> <em>(required)</em>: Number of channels in the output prediction.</p></li>
+<li><p><strong>block_shape</strong> <em>(required)</em>: Shape of each output block (must match write_shape + channels).</p></li>
+</ul>
+</section>
+</section>
+<section id="testing-your-script">
+<h2>Testing Your Script<a class="headerlink" href="#testing-your-script" title="Link to this heading"></a></h2>
+<p>You can test your script locally using:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script-server-check<span class="w"> </span>-s<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input.zarr
+</pre></div>
+</div>
+<p>This will simulate a small 2x2x2 chunk to ensure your setup works correctly.</p>
+</section>
+<section id="basic-script-template-pytorch">
+<h2>Basic Script Template (PyTorch)<a class="headerlink" href="#basic-script-template-pytorch" title="Link to this heading"></a></h2>
+<p>If you’re using PyTorch and your model is compatible with direct inference via <cite>.forward()</cite> or <cite>.eval()</cite>, you do <strong>not</strong> need to define a <cite>process_chunk</cite> function.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># pip install fly-organelles</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fly_organelles.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardUnet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">funlib.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Voxel size and chunk shape</span>
+<span class="n">input_voxel_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">output_voxel_size</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">read_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">178</span><span class="p">,</span> <span class="mi">178</span><span class="p">,</span> <span class="mi">178</span><span class="p">))</span> <span class="o">*</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">input_voxel_size</span><span class="p">)</span>
+<span class="n">write_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">56</span><span class="p">,</span> <span class="mi">56</span><span class="p">,</span> <span class="mi">56</span><span class="p">))</span> <span class="o">*</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">input_voxel_size</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load_eval_model</span><span class="p">(</span><span class="n">num_labels</span><span class="p">,</span> <span class="n">checkpoint_path</span><span class="p">):</span>
+    <span class="n">model_backbone</span> <span class="o">=</span> <span class="n">StandardUnet</span><span class="p">(</span><span class="n">num_labels</span><span class="p">)</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+    <span class="n">checkpoint</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">model_backbone</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">checkpoint</span><span class="p">[</span><span class="s2">&quot;model_state_dict&quot;</span><span class="p">])</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">model_backbone</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sigmoid</span><span class="p">())</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">model</span>
+
+<span class="n">CHECKPOINT_PATH</span> <span class="o">=</span> <span class="s2">&quot;/path/to/your/model_checkpoint&quot;</span>
+<span class="n">output_channels</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># Set according to your model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">load_eval_model</span><span class="p">(</span><span class="n">output_channels</span><span class="p">,</span> <span class="n">CHECKPOINT_PATH</span><span class="p">)</span>
+<span class="n">block_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="mi">56</span><span class="p">,</span> <span class="mi">56</span><span class="p">,</span> <span class="mi">56</span><span class="p">,</span> <span class="n">output_channels</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You <strong>must define</strong> the <cite>model</cite> and <cite>block_shape</cite> variables in the global scope. CellMap Flow will use these automatically.</p>
+</div>
+</section>
+<section id="advanced-usage-custom-process-function-tensorflow">
+<h2>Advanced Usage: Custom Process Function (TensorFlow)<a class="headerlink" href="#advanced-usage-custom-process-function-tensorflow" title="Link to this heading"></a></h2>
+<p>For advanced use cases or non-standard frameworks like TensorFlow v1, define a <cite>process_chunk</cite> function that handles:</p>
+<ul class="simple">
+<li><p>Rescaling input</p></li>
+<li><p>Feeding to model</p></li>
+<li><p>Retrieving and postprocessing output</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">tensorflow.compat.v1</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">tf</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span><span class="o">,</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">funlib.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span><span class="p">,</span> <span class="n">Roi</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.image_data_interface</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageDataInterface</span>
+
+<span class="c1"># Define voxel sizes and context</span>
+<span class="n">voxel_size</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">output_voxel_size</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">read_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">268</span><span class="p">,</span> <span class="mi">268</span><span class="p">,</span> <span class="mi">268</span><span class="p">))</span> <span class="o">*</span> <span class="n">voxel_size</span>
+<span class="n">write_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">((</span><span class="mi">164</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="mi">164</span><span class="p">))</span> <span class="o">*</span> <span class="n">output_voxel_size</span>
+<span class="n">context</span> <span class="o">=</span> <span class="p">(</span><span class="n">read_shape</span> <span class="o">-</span> <span class="n">write_shape</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+
+<span class="n">output_channels</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">block_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="mi">164</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="mi">164</span><span class="p">,</span> <span class="n">output_channels</span><span class="p">))</span>
+
+<span class="c1"># Load TensorFlow model</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_eval_model</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">):</span>
+    <span class="n">graph</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">(</span><span class="n">graph</span><span class="o">=</span><span class="n">graph</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">graph</span><span class="o">.</span><span class="n">as_default</span><span class="p">():</span>
+        <span class="n">meta_graph_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="s2">&quot;config.meta&quot;</span><span class="p">)</span>
+        <span class="n">saver</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">import_meta_graph</span><span class="p">(</span><span class="n">meta_graph_file</span><span class="p">)</span>
+        <span class="n">saver</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">session</span>
+
+<span class="n">setup_dir</span> <span class="o">=</span> <span class="s2">&quot;/path/to/tf_model_dir&quot;</span>
+<span class="n">checkpoint</span> <span class="o">=</span> <span class="s2">&quot;train_net_checkpoint_400000&quot;</span>
+<span class="n">session</span> <span class="o">=</span> <span class="n">load_eval_model</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_tensor_names</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="s2">&quot;config.json&quot;</span><span class="p">),</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">net_config</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">net_config</span><span class="p">[</span><span class="n">it</span><span class="p">]</span> <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">],</span> <span class="p">[</span><span class="n">net_config</span><span class="p">[</span><span class="n">ot</span><span class="p">]</span> <span class="k">for</span> <span class="n">ot</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rescale_data</span><span class="p">(</span><span class="n">input_array</span><span class="p">,</span> <span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">input_array</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">))</span> <span class="o">-</span> <span class="mf">1.0</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">process_lsd</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">input_tensorname</span><span class="p">,</span> <span class="n">output_tensorname</span><span class="p">):</span>
+    <span class="n">input_data</span> <span class="o">=</span> <span class="n">rescale_data</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="mi">158</span><span class="p">,</span> <span class="mi">233</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+        <span class="p">{</span><span class="n">ot</span><span class="p">:</span> <span class="n">ot</span> <span class="k">for</span> <span class="n">ot</span> <span class="ow">in</span> <span class="n">output_tensorname</span><span class="p">},</span>
+        <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">input_tensorname</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">input_data</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="n">output_tensorname</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">process_chunk</span><span class="p">(</span><span class="n">idi</span><span class="p">:</span> <span class="n">ImageDataInterface</span><span class="p">,</span> <span class="n">input_roi</span><span class="p">:</span> <span class="n">Roi</span><span class="p">):</span>
+    <span class="n">input_roi</span> <span class="o">=</span> <span class="n">input_roi</span><span class="o">.</span><span class="n">grow</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+    <span class="n">chunk</span> <span class="o">=</span> <span class="n">idi</span><span class="o">.</span><span class="n">to_ndarray_ts</span><span class="p">(</span><span class="n">input_roi</span><span class="p">)</span>
+    <span class="n">input_tensor</span><span class="p">,</span> <span class="n">output_tensor</span> <span class="o">=</span> <span class="n">get_tensor_names</span><span class="p">(</span><span class="n">setup_dir</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;embedding&quot;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">process_lsd</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">input_tensor</span><span class="p">,</span> <span class="n">output_tensor</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli_command.html" class="btn btn-neutral float-left" title="CLI Commands" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="post.html" class="btn btn-neutral float-right" title="PostProcessors" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
