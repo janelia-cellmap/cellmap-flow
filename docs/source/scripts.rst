@@ -25,7 +25,7 @@ Script
     checkpoint_path = "../fly_organelles/run07/model_checkpoint_432000"
 
     model_config = FlyModelConfig(
-        chpoint_path=checkpoint_path,
+        checkpoint_path=checkpoint_path,
         channels=["classes"] * 8,
         input_voxel_size=model_scale,
         output_voxel_size=model_scale,
