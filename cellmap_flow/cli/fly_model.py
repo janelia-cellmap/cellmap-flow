@@ -13,8 +13,9 @@ from cellmap_flow.globals import Flow
 from cellmap_flow.utils.data import FlyModelConfig
 
 
-
 import sys
+
+
 def main():
     g = Flow()
     args = sys.argv[1:]
@@ -34,7 +35,7 @@ def main():
         print(res)
         scale = run_items.get("scale", None)
         if scale is None:
-            scale,_,_ = find_target_scale(zarr_grp_path, res)
+            scale, _, _ = find_target_scale(zarr_grp_path, res)
         print(scale)
         data_path = os.path.join(zarr_grp_path, scale)
         model_config = FlyModelConfig(
@@ -46,7 +47,9 @@ def main():
         )
         model_command = f"fly -c {model_config.chpoint_path} -ch {','.join(model_config.channels)} -ivs {','.join(map(str,model_config.input_voxel_size))} -ovs {','.join(map(str,model_config.output_voxel_size))}"
         command = f"{SERVER_COMMAND} {model_command} -d {data_path}"
-        thread = threading.Thread(target=start_hosts, args=(command, queue, charge_group, model_config.name))
+        thread = threading.Thread(
+            target=start_hosts, args=(command, queue, charge_group, model_config.name)
+        )
         thread.start()
         threads.append(thread)
 

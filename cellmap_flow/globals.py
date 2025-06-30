@@ -7,13 +7,13 @@ import threading
 import numpy as np
 
 
-
 # input_norms = [MinMaxNormalizer()]
 # postprocess = [DefaultPostprocessor(0,200,0,1)]
 
 input_norms = []
 postprocess = []
 viewer = None
+
 
 class Flow:
     _instance = None

@@ -1,0 +1,20 @@
+data_path: "/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8/s3"
+
+charge_group: "cellmap"
+
+queue: "gpu_h100"
+
+
+models:
+  - type: "script"
+    script_path: "/groups/cellmap/cellmap/zouinkhim/cellpose_sam/flow/models/2025-06-04_12-41-00_cellpose_sam/nuc_64_90_e_0100_script.py"
+    name: "nuc_64_90_e_0100"
+    scale: "s3"
+
+
+### blockwise
+output_path: "/nrs/cellmap/zouinkhim/salivary/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/nuc_64_90_e_0100/s0"
+# optional output channel-if not set output all channels from model
+# output_channels:mito,ld
+task_name: "nuc_64_90_e_0100_cellpose_task"
+workers: 4

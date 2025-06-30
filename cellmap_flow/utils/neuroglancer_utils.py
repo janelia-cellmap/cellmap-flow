@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 neuroglancer.set_server_bind_address("0.0.0.0")
 
 
-def generate_neuroglancer_url(dataset_path, extras = []):
+def generate_neuroglancer_url(dataset_path, extras=[]):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
     st_data = get_norms_post_args(g.input_norms, g.postprocess)
@@ -37,10 +37,10 @@ def generate_neuroglancer_url(dataset_path, extras = []):
             s.layers["data"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
             )
-        for i,extra in enumerate(extras):
+        for i, extra in enumerate(extras):
             logger.error(f" adding extra {i} {extra}")
             if extra.startswith("/"):
-                s.layers[f"extra_{i}"] = get_raw_layer(extra,normalize=False)
+                s.layers[f"extra_{i}"] = get_raw_layer(extra, normalize=False)
             else:
                 if ".zarr" in extra:
                     filetype = "zarr"

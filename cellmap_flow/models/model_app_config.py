@@ -4,11 +4,13 @@ from enum import Enum
 class AppInput:
     pass
 
+
 class TextInput(AppInput):
     def __init__(self, name, default_value=None, description=None):
         self.name = name
         self.default_value = default_value
         self.description = description
+
 
 class SelectInput(AppInput):
     def __init__(self, name, options, default_value=None, description=None):
@@ -17,6 +19,7 @@ class SelectInput(AppInput):
         self.options = options
         self.description = description
 
+
 class ListInput(AppInput):
     def __init__(self, name, options, default_value=None, description=None):
         self.name = name
@@ -24,11 +27,13 @@ class ListInput(AppInput):
         self.default_value = default_value
         self.description = description
 
+
 class FileInput(AppInput):
     def __init__(self, name, default_value=None, description=None):
         self.name = name
         self.default_value = default_value
         self.description = description
+
 
 class ModelDashboardConfig:
     pass

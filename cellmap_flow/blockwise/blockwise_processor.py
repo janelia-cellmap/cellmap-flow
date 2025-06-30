@@ -105,9 +105,7 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-
         # g = Flow()
-
 
         self.json_str = None
 
@@ -116,7 +114,6 @@ class CellMapFlowBlockwiseProcessor:
                 json_data = decode_to_json(json_data)
             g.input_norms, g.postprocess = get_process_dataset(json_data)
             self.json_str = encode_to_str(json_data)
-
 
         self.inferencer = Inferencer(self.model_config)
 
@@ -160,11 +157,9 @@ class CellMapFlowBlockwiseProcessor:
 
         write_roi = block.write_roi.intersect(self.outpout_arrays[0].roi)
 
-
         if write_roi.empty:
             print(f"empty write roi: {write_roi}")
             return
-
 
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
 
@@ -192,7 +187,6 @@ class CellMapFlowBlockwiseProcessor:
                 )
             array[write_roi] = predictions.to_ndarray(write_roi)
 
-
     def client(self):
         client = daisy.Client()
         while True:
@@ -203,19 +197,15 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
-
     def run(self):
-
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
-
 
         context = (Coordinate(read_shape) - Coordinate(write_shape)) / 2
 
         read_roi = daisy.Roi((0, 0, 0), read_shape)
         write_roi = read_roi.grow(-context, -context)
-
 
         total_write_roi = self.idi_raw.roi
         # .snap_to_grid(self.output_voxel_size)
@@ -224,7 +214,6 @@ class CellMapFlowBlockwiseProcessor:
         name = f"predict_{self.model_config.name}{self.task_name}"
 
         task = daisy.Task(
-
             name,
             total_roi=total_read_roi,
             read_roi=read_roi,
@@ -240,12 +229,10 @@ class CellMapFlowBlockwiseProcessor:
             max_retries=0,
             timeout=None,
             num_workers=self.workers,
-
         )
 
         daisy.run_blockwise([task])
         # , multiprocessing= False
-
 
 
 import subprocess

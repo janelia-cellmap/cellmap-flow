@@ -78,6 +78,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 
 # return f"fly -c {self.chpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
 
+
 @cli.command()
 @click.option(
     "-c", "--checkpoint", required=True, type=str, help="The path to the checkpoint."
@@ -118,6 +119,7 @@ def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
         output_voxel_size=output_voxel_size,
     )
     run_server(model_config, data_path)
+
 
 @cli.command()
 @click.option(
@@ -170,7 +172,9 @@ def bioimage(
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
-def run_server(model_config, data_path, debug=False, port = 0, certfile = None, keyfile= None):
+def run_server(
+    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None
+):
     server = CellMapFlowServer(data_path, model_config)
 
     server.run(
@@ -181,7 +185,6 @@ def run_server(model_config, data_path, debug=False, port = 0, certfile = None, 
     )
 
 
-        
 @cli.command()
 @click.option(
     "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
@@ -209,4 +212,3 @@ def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
 )
 def run_ui_server(neuroglancer_url, inference_host):
     create_and_run_app(neuroglancer_url, inference_host)
-

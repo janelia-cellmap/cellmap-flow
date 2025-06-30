@@ -37,8 +37,6 @@ import time
 logger = logging.getLogger(__name__)
 
 
-
-
 def get_process_dataset(dataset: str):
     if ARGS_KEY not in dataset:
         return None, [], []  # No normalization or postprocessing
@@ -113,7 +111,6 @@ class CellMapFlowServer:
         # Chunk encoding for N5
         self.chunk_encoder = self._initialize_chunk_encoder()
 
-
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
@@ -121,7 +118,6 @@ class CellMapFlowServer:
 
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
-
 
         @self.app.route("/")
         def home():
@@ -355,7 +351,7 @@ class CellMapFlowServer:
         return N5ChunkWrapper(
             g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
         )
-    
+
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
         Run the Flask dev server with optional SSL certificate.

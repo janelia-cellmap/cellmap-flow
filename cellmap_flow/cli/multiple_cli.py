@@ -97,7 +97,7 @@ def main():
                 logger.error("Multiple data paths provided.")
                 sys.exit(1)
             data_path = args[i + 1]
-        
+
         if arg in extra_args:
             logger.error(f"extra {args[i + 1]}")
             extras.append(args[i + 1])
@@ -233,7 +233,7 @@ def main():
         print(model)
 
     run_multiple(models, data_path, charge_group, queue)
-    generate_neuroglancer_url(data_path,extras)
+    generate_neuroglancer_url(data_path, extras)
     while True:
         pass
 
@@ -253,7 +253,9 @@ def run_multiple(models, dataset_path, charge_group, queue):
             scale = model.scale
             current_data_path = "/".join(dataset_path.split("/")[:-1]) + f"/{scale}"
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
-        thread = threading.Thread(target=start_hosts, args=(command, queue, charge_group, model.name))
+        thread = threading.Thread(
+            target=start_hosts, args=(command, queue, charge_group, model.name)
+        )
         thread.start()
         threads.append(thread)
 
@@ -264,4 +266,3 @@ def run_multiple(models, dataset_path, charge_group, queue):
     generate_neuroglancer_url(dataset_path)
     while True:
         pass
-

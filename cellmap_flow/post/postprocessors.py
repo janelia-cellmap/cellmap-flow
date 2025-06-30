@@ -26,10 +26,10 @@ class PostProcessor:
 
     def __call__(self, data: np.ndarray, **kwargs) -> np.ndarray:
         return self.process(data, **kwargs)
-    
+
     def __str__(self):
         return str(self.to_dict())
-    
+
     def __repr__(self):
         return str(self.to_dict())
 
@@ -54,10 +54,10 @@ class PostProcessor:
 
     def to_dict(self):
         result = {}
-    #     result = {"name": self.name()}
+        #     result = {"name": self.name()}
         for k, v in self.__dict__.items():
             result[k] = v
-        return {self.name():result}
+        return {self.name(): result}
 
     @property
     def dtype(self):

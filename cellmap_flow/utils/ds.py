@@ -117,7 +117,9 @@ class LazyNormalization:
         return at
 
 
-def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None, normalize = True):
+def open_ds_tensorstore(
+    dataset_path: str, mode="r", concurrency_limit=None, normalize=True
+):
     # open with zarr or n5 depending on extension
     filetype = (
         "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
