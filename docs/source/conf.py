@@ -42,7 +42,7 @@ extensions = [
 ]
 
 nbsphinx_custom_formats = {
-    ".py": ["jupytext.reads", {"fmt", "py:percent"}],
+    ".py": ["jupytext.reads", {"fmt": "py:percent"}],
 }
 
 # Add any paths that contain templates here, relative to this directory.
