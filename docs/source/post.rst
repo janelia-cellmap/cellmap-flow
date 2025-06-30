@@ -1,4 +1,4 @@
-PostProcessor Module
+PostProcessors
 ====================
 
 Overview

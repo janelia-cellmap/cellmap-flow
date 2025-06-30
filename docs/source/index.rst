@@ -12,10 +12,12 @@
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: DaCapo API:
+   :caption: CellMap-Flow API:
 
-   overview
    install
+   scripts
+   cli_command
+   custom_script
    post
    autoapi/index
    
