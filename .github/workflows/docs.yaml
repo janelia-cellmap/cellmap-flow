@@ -22,13 +22,13 @@ jobs:
         python -m ipykernel install --user --name python3
         pip install .[docs]
         
-    # - name: parse notebooks
-    #   run: |
-    #     for nb in ./docs/source/notebooks/*.ipynb; do
-    #       jupytext --to notebook --execute "$nb" --output "$nb"
-    #     done
-    # - name: remove notebook scripts
-    #   run: rm ./docs/source/notebooks/*.py
+    - name: parse notebooks
+      run: |
+        for nb in ./docs/source/notebooks/*.ipynb; do
+          jupytext --to notebook --execute "$nb" --output "$nb"
+        done
+    - name: remove notebook scripts
+      run: rm -f ./docs/source/notebooks/*.py
     - name: Build and Commit
       uses: sphinx-notes/pages@v2
       with:
