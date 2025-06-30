@@ -3,26 +3,34 @@
 Please feel free to explore and contribute, but note that there may be frequent changes.
 
 
-<div align="center">
 
-![CellMapFlow Logo](https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png)
-
-[![Under Construction](https://img.shields.io/badge/Status-Under_Construction-orange.svg)](#)
-
-### Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.
-![Animated demonstration of CellMapFlow's real-time data processing workflow](https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/flow.gif)
-<br>
 <p align="center">
-  <span style="font-size:1.3em;">🚀 </span>
-  <span style="font-size:1.1em; color:#4CAF50;"><strong>Speed up your data processing from <s>months</s> to <u>minutes</u>!</strong></span>
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png" alt="CellMapFlow Logo" />
 </p>
 
-![Real-time data processing visualization](https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif)
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/Status-Under_Construction-orange.svg" alt="Under Construction" /></a>
+</p>
+
+<p align="center">
+  <strong>Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.</strong>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/flow.gif" alt="Animated demonstration of CellMapFlow's real-time data processing workflow" />
+</p>
+
+<p align="center">
+  🚀 Speed up your data processing from months to minutes!
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif" alt="Real-time data processing visualization" />
+</p>
 
 
----
 
-</div>
+
 
 ## Installation
 
@@ -118,9 +126,4 @@ To run TensorFlow models, we suggest installing TensorFlow via conda: `conda ins
 ```bash
 cellmap_flow_multiple --script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -n script_base --dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -n using_dacapo -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
 ```
-
-
-## Limitation:
-Currently only supporting data locating in /nrs/cellmap or /groups/cellmap because there is a data server already implemented for them.
-
 
