@@ -57,6 +57,9 @@ docs = [
     "sphinx-click",
     "sphinx-rtd-theme",
     "myst-parser",
+    "nbsphinx",
+    "myst_nb",
+    "jupytext",
 ]
 
 [build-system]

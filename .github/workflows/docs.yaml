@@ -1,0 +1,40 @@
+name: Generate Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # otherwise, you will failed to push refs to dest repo
+    - name: install dacapo
+      # run: 
+      run: |
+        pip install sphinx-autodoc-typehints sphinx-autoapi sphinx-click sphinx-rtd-theme myst-parser jupytext ipykernel nbsphinx myst_nb
+        python -m ipykernel install --user --name python3
+        pip install .[docs]
+        
+    - name: parse notebooks
+      run: |
+        for nb in ./docs/source/notebooks/*.ipynb; do
+          jupytext --to notebook --execute "$nb" --output "$nb"
+        done
+    - name: remove notebook scripts
+      run: rm ./docs/source/notebooks/*.py
+    - name: Build and Commit
+      uses: sphinx-notes/pages@v2
+      with:
+        documentation_path: ./docs/source
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: gh-pages
