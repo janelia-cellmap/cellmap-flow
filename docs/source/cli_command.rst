@@ -3,8 +3,8 @@ CLI Commands
 
 CellMap Flow provides several CLI interfaces to run different model configurations and modes of execution. This section outlines the supported entrypoints, command syntax, and examples.
 
-Available Entrypoints
----------------------
+Available Entry points
+----------------------
 
 The following CLI entrypoints are available:
 
