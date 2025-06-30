@@ -13,6 +13,7 @@ from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
     default="INFO",
 )
 def cli(log_level):
+
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
 

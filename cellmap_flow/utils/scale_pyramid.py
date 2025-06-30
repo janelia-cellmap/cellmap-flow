@@ -11,7 +11,7 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 logger = logging.getLogger(__name__)
 
 
-def get_raw_layer(dataset_path):
+def get_raw_layer(dataset_path, normalize=True):
     is_multiscale = False
     # if multiscale dataset
     if (
@@ -41,7 +41,9 @@ def get_raw_layer(dataset_path):
         ]
         scales.sort(key=lambda x: int(x[1:]))
         for scale in scales:
-            image = ImageDataInterface(f"{os.path.join(dataset_path, scale)}")
+            image = ImageDataInterface(
+                f"{os.path.join(dataset_path, scale)}", normalize=normalize
+            )
             layers.append(
                 neuroglancer.LocalVolume(
                     data=image.ts,

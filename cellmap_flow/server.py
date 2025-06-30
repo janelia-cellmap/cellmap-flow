@@ -28,7 +28,9 @@ from cellmap_flow.utils.web_utils import (
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
+
 from cellmap_flow.globals import g
+
 import requests
 import time
 
@@ -81,7 +83,7 @@ class CellMapFlowServer:
 
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
-            dataset_name, target_resolution=self.input_voxel_size
+            dataset_name, voxel_size=self.input_voxel_size
         )
 
         # Refresh rate for custom state updates
@@ -109,10 +111,6 @@ class CellMapFlowServer:
         # Chunk encoding for N5
         self.chunk_encoder = self._initialize_chunk_encoder()
 
-    def _initialize_chunk_encoder(self):
-        return N5ChunkWrapper(
-            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
-        )
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
@@ -120,10 +118,6 @@ class CellMapFlowServer:
 
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
-
-        # ------------------------------------------------------
-        # Routes using @self.app.route -- no add_url_rule calls!
-        # ------------------------------------------------------
 
         @self.app.route("/")
         def home():
@@ -314,9 +308,7 @@ class CellMapFlowServer:
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
-    def _chunk_impl(
-        self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c, get_encoded=True
-    ):
+    def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
         corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
@@ -349,18 +341,17 @@ class CellMapFlowServer:
                 self.previous_refresh_time = current_time
                 continue
 
-        if get_encoded:
-            return (
-                self.chunk_encoder.encode(chunk_data),
-                HTTPStatus.OK,
-                {"Content-Type": "application/octet-stream"},
-            )
-        else:
-            return chunk_data
+        return (
+            self.chunk_encoder.encode(chunk_data),
+            HTTPStatus.OK,
+            {"Content-Type": "application/octet-stream"},
+        )
 
-    #
-    # --- Server Runner ---
-    #
+    def _initialize_chunk_encoder(self):
+        return N5ChunkWrapper(
+            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+        )
+
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
         Run the Flask dev server with optional SSL certificate.

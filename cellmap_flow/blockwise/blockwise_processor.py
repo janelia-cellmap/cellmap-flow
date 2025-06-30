@@ -5,11 +5,14 @@ import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
+
 from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+
 from cellmap_flow.utils.config_utils import load_config, build_models
+
 from cellmap_flow.norm.input_normalize import get_normalizations
 from cellmap_flow.post.postprocessors import get_postprocessors
 
@@ -93,6 +96,7 @@ class CellMapFlowBlockwiseProcessor:
         self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
         self.output_channels = self.model_config.config.output_channels
         self.channels = self.model_config.config.channels
+
         self.task_name = task_name
         if output_channels:
             self.output_channels = output_channels
@@ -165,6 +169,7 @@ class CellMapFlowBlockwiseProcessor:
         #     return
 
         for i, array in enumerate(self.outpout_arrays):
+
             if chunk_data.shape == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")
