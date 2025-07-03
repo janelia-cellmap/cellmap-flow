@@ -99,7 +99,7 @@ Module Contents
 
 .. py:function:: load_eval_model(num_channels, checkpoint_path)
 
-.. py:class:: FlyModelConfig(chpoint_path: str, channels: [str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=(178, 178, 178), output_size=(56, 56, 56))
+.. py:class:: FlyModelConfig(checkpoint_path: str, channels: [str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=(178, 178, 178), output_size=(56, 56, 56))
 
 
 
@@ -108,7 +108,7 @@ Module Contents
 
 
 
-   .. py:attribute:: chpoint_path
+   .. py:attribute:: checkpoint_path
 
 
    .. py:attribute:: channels
