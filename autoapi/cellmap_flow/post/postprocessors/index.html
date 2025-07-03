@@ -126,31 +126,31 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PostProcessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="cellmap_flow.post.postprocessors.DefaultPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DefaultPostprocessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="cellmap_flow.post.postprocessors.ThresholdPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThresholdPostprocessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="cellmap_flow.post.postprocessors.LabelPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="cellmap_flow.post.postprocessors.AffinityPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AffinityPostprocessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleBlockwiseMerger</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="cellmap_flow.post.postprocessors.ChannelSelection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="cellmap_flow.post.postprocessors.LambdaPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></p></td>
-<td><p></p></td>
+<td><p>Base class for post-processing methods.</p></td>
 </tr>
 </tbody>
 </table>
@@ -162,7 +162,7 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.get_postprocessors_list" title="cellmap_flow.post.postprocessors.get_postprocessors_list"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_postprocessors_list</span></code></a>(→ list[dict])</p></td>
 <td><p>Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="cellmap_flow.post.postprocessors.get_postprocessors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_postprocessors</span></code></a>(→ PostProcessor)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="cellmap_flow.post.postprocessors.get_postprocessors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_postprocessors</span></code></a>(→ list[PostProcessor])</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -183,26 +183,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor" title="Link to this definition"></a></dt>
-<dd><dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.name">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.name" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.process">
-<span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.process" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.to_dict">
-<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.to_dict" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.dtype" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
+<dd><p>Base class for post-processing methods.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.is_segmentation">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
@@ -213,7 +194,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor.clip_min">
 <span class="sig-name descname"><span class="pre">clip_min</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor.clip_min" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -248,7 +230,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor.threshold">
 <span class="sig-name descname"><span class="pre">threshold</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor.threshold" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -268,7 +251,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.channel">
 <span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -288,7 +272,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.channel">
 <span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -318,7 +303,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'[\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">1,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[3,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">3,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">3],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[9,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">9,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">9],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">]'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.bias">
 <span class="sig-name descname"><span class="pre">bias</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.bias" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -358,7 +344,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.channel">
 <span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -413,7 +400,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection.channels">
 <span class="sig-name descname"><span class="pre">channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection.channels" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -428,7 +416,8 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LambdaPostprocessor">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<dd><p>Base class for post-processing methods.</p>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LambdaPostprocessor.expression">
 <span class="sig-name descname"><span class="pre">expression</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor.expression" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -448,7 +437,7 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.get_postprocessors">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">get_postprocessors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">elms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><span class="pre">PostProcessor</span></a></span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">get_postprocessors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">elms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><span class="pre">PostProcessor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">

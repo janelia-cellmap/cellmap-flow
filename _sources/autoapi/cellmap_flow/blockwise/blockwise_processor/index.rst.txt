@@ -25,7 +25,6 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.blockwise.blockwise_processor.get_process_dataset
    cellmap_flow.blockwise.blockwise_processor.spawn_worker
 
 
@@ -33,8 +32,6 @@ Module Contents
 ---------------
 
 .. py:data:: logger
-
-.. py:function:: get_process_dataset(json_data: str)
 
 .. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=True)
 
@@ -81,11 +78,6 @@ Module Contents
 
 
    .. py:attribute:: dtype
-
-
-   .. py:attribute:: json_str
-      :value: None
-
 
 
    .. py:attribute:: inferencer

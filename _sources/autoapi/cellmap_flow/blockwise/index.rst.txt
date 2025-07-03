@@ -72,11 +72,6 @@ Package Contents
    .. py:attribute:: dtype
 
 
-   .. py:attribute:: json_str
-      :value: None
-
-
-
    .. py:attribute:: inferencer
 
 

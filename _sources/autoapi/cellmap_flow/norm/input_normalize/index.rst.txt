@@ -17,6 +17,7 @@ Classes
 
 .. autoapisummary::
 
+   cellmap_flow.norm.input_normalize.SerializableInterface
    cellmap_flow.norm.input_normalize.InputNormalizer
    cellmap_flow.norm.input_normalize.Dilate
    cellmap_flow.norm.input_normalize.EuclideanDistance
@@ -31,6 +32,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.norm.input_normalize.get_input_normalizers
+   cellmap_flow.norm.input_normalize.deserialize_list
    cellmap_flow.norm.input_normalize.get_normalizations
 
 
@@ -39,20 +41,24 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: InputNormalizer
+.. py:class:: SerializableInterface
 
    .. py:method:: name()
       :classmethod:
 
 
 
-   .. py:method:: normalize(data) -> numpy.ndarray
+   .. py:method:: process(data, **kwargs) -> numpy.ndarray
 
 
    .. py:method:: to_dict()
 
 
    .. py:property:: dtype
+
+
+.. py:class:: InputNormalizer
+
 
 
 .. py:class:: Dilate(size=1)
@@ -128,5 +134,7 @@ Module Contents
 
 .. py:function:: get_input_normalizers() -> list[dict]
 
-.. py:function:: get_normalizations(elms: dict) -> InputNormalizer
+.. py:function:: deserialize_list(elms: dict, T: type) -> list
+
+.. py:function:: get_normalizations(elms: dict) -> list[InputNormalizer]
 

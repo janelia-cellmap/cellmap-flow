@@ -25,7 +25,7 @@ Module Contents
 ---------------
 
 .. py:data:: queue
-   :value: 'gpu_h100'
+   :value: 'gpu_a100'
 
 
 .. py:data:: charge_group
