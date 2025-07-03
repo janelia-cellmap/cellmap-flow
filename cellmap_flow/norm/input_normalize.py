@@ -7,14 +7,14 @@ from edt import edt
 logger = logging.getLogger(__name__)
 
 
-class InputNormalizer:
+class SerializableInterface:
 
     @classmethod
     def name(cls):
         return cls.__name__
 
-    def __call__(self, data: np.ndarray) -> np.ndarray:
-        return self.normalize(data)
+    def __call__(self, data: np.ndarray, **kwargs) -> np.ndarray:
+        return self.process(data, **kwargs)
 
     def __str__(self):
         return str(self.to_dict())
@@ -22,7 +22,7 @@ class InputNormalizer:
     def __repr__(self):
         return str(self.to_dict())
 
-    def normalize(self, data) -> np.ndarray:
+    def process(self, data, **kwargs) -> np.ndarray:
         if not isinstance(data, np.ndarray):
             data = np.array(data)
         if data.dtype.kind in {"U", "O"}:
@@ -32,8 +32,10 @@ class InputNormalizer:
                 raise TypeError(
                     f"Cannot convert non-numeric data to float. Found dtype: {data.dtype}"
                 )
-
-        data = self._process(data)
+        # if there are kwargs
+        sig = inspect.signature(self._process)
+        [kwargs.pop(k) for k in list(kwargs.keys()) if k not in sig.parameters]
+        data = self._process(data, **kwargs)
         return data.astype(self.dtype)
 
     def _process(self, data):
@@ -43,13 +45,17 @@ class InputNormalizer:
         result = {}
         result = {"name": self.name()}
         for k, v in self.__dict__.items():
-            result[k] = v
+            if not k.startswith("_"):
+                result[k] = v
         return result
         # return {self.name():result}
 
     @property
     def dtype(self):
-        return np.uint8
+        return None
+    
+class InputNormalizer(SerializableInterface):
+    pass
 
 
 class Dilate(InputNormalizer):
@@ -203,16 +209,19 @@ def get_input_normalizers() -> list[dict]:
     return normalizers
 
 
-def get_normalizations(elms: dict) -> InputNormalizer:
-    NormalizationMethods = [f for f in InputNormalizer.__subclasses__()]
+def deserialize_list(elms: dict, T: type) -> list:
+    methods = [f for f in T.__subclasses__()]
     result = []
-    for norm_name in elms:
+    for elm_name in elms:
         found = False
-        for nm in NormalizationMethods:
-            if nm.name() == norm_name:
-                result.append(nm(**elms[norm_name]))
+        for nm in methods:
+            if nm.name() == elm_name:
+                result.append(nm(**elms[elm_name]))
                 found = True
                 break
         if not found:
-            raise ValueError(f"Normalization method {norm_name} not found")
+            raise ValueError(f"method {elm_name} not found")
     return result
+
+def get_normalizations(elms: dict) -> list[InputNormalizer]:
+    return deserialize_list(elms, InputNormalizer)
