@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class PostProcessor(SerializableInterface):
     """Base class for post-processing methods."""
+
     @property
     def is_segmentation(self):
         return None
@@ -59,6 +60,7 @@ class ThresholdPostprocessor(PostProcessor):
     def _process(self, data):
         data = (data.astype(np.float32) > self.threshold).astype(np.uint8)
         return data
+
     @property
     def dtype(self):
         return np.uint8

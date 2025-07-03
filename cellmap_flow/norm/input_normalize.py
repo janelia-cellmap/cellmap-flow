@@ -53,7 +53,8 @@ class SerializableInterface:
     @property
     def dtype(self):
         return None
-    
+
+
 class InputNormalizer(SerializableInterface):
     pass
 
@@ -122,7 +123,7 @@ class EuclideanDistance(InputNormalizer):
     def dtype(self):
         return np.float32
 
-# Removed redundant dtype property definition.
+    # Removed redundant dtype property definition.
 
     def _process(self, data: np.ndarray, **kwargs) -> np.ndarray:
 
@@ -222,6 +223,7 @@ def deserialize_list(elms: dict, T: type) -> list:
         if not found:
             raise ValueError(f"method {elm_name} not found")
     return result
+
 
 def get_normalizations(elms: dict) -> list[InputNormalizer]:
     return deserialize_list(elms, InputNormalizer)

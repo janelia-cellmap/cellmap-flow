@@ -20,8 +20,7 @@ def get_process_dataset(json_data: dict):
     return input_norm_fns, postprocess_fns
 
 
-
-def serialize_norms_posts_to_json(norms = [], posts = []):
+def serialize_norms_posts_to_json(norms=[], posts=[]):
     norm_fns = {}
     for n in norms:
         elms = n.to_dict()

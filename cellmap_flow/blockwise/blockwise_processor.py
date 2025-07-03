@@ -20,9 +20,6 @@ from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 logger = logging.getLogger(__name__)
 
 
-
-
-
 class CellMapFlowBlockwiseProcessor:
 
     def __init__(self, yaml_config: str, create=True):
