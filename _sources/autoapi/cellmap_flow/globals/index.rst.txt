@@ -43,7 +43,7 @@ Module Contents
    .. py:method:: to_dict()
 
 
-   .. py:method:: get_output_dtype()
+   .. py:method:: get_output_dtype(model_output_dtype=None)
 
 
    .. py:method:: run(zarr_path, model_configs, queue='gpu_h100', charge_group='cellmap', input_normalizers=None, post_processors=None)
