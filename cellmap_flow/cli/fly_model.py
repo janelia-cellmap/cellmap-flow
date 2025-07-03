@@ -39,13 +39,13 @@ def main():
         print(scale)
         data_path = os.path.join(zarr_grp_path, scale)
         model_config = FlyModelConfig(
-            chpoint_path=run_items["checkpoint"],
+            checkpoint_path=run_items["checkpoint"],
             channels=run_items["classes"],
             input_voxel_size=res,
             output_voxel_size=res,
             name=run_name,
         )
-        model_command = f"fly -c {model_config.chpoint_path} -ch {','.join(model_config.channels)} -ivs {','.join(map(str,model_config.input_voxel_size))} -ovs {','.join(map(str,model_config.output_voxel_size))}"
+        model_command = f"fly -c {model_config.checkpoint_path} -ch {','.join(model_config.channels)} -ivs {','.join(map(str,model_config.input_voxel_size))} -ovs {','.join(map(str,model_config.output_voxel_size))}"
         command = f"{SERVER_COMMAND} {model_command} -d {data_path}"
         thread = threading.Thread(
             target=start_hosts, args=(command, queue, charge_group, model_config.name)

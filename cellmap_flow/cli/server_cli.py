@@ -76,7 +76,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
-# return f"fly -c {self.chpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
+# return f"fly -c {self.checkpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
 
 
 @cli.command()
@@ -113,7 +113,7 @@ def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
     input_voxel_size = tuple(map(int, input_voxel_size.split(",")))
     output_voxel_size = tuple(map(int, output_voxel_size.split(",")))
     model_config = FlyModelConfig(
-        chpoint_path=checkpoint,
+        checkpoint_path=checkpoint,
         channels=channels,
         input_voxel_size=input_voxel_size,
         output_voxel_size=output_voxel_size,

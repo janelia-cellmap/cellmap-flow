@@ -6,7 +6,6 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 
-
 from cellmap_flow.utils.config_utils import load_config, build_models
 
 from cellmap_flow.utils.serilization_utils import get_process_dataset
@@ -15,7 +14,6 @@ from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
 

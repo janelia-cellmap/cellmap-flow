@@ -4,6 +4,7 @@ import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 from cellmap_flow.utils.config_utils import load_config, build_models
+from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.globals import g
 
 
@@ -47,9 +48,21 @@ def main():
     config_path = sys.argv[1]
     config = load_config(config_path)
 
+    if "json_data" in config:
+        json_data = config["json_data"]
+        logger.warning(
+            f"Using 'json_data' from config, this will override any default normalization or postprocessing. {json_data}"
+        )
+        g.input_norms, g.postprocess = get_process_dataset(json_data)
+    else:
+        logger.warning(
+            "No 'json_data' found in config, using default normalization, postprocessing."
+        )
+
     data_path = config["data_path"]
     charge_group = config["charge_group"]
     queue = config["queue"]
+
 
     print("Data path:", data_path)
 
