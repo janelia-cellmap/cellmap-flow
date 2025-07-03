@@ -63,7 +63,6 @@ def main():
     charge_group = config["charge_group"]
     queue = config["queue"]
 
-
     print("Data path:", data_path)
 
     # Build model configuration objects

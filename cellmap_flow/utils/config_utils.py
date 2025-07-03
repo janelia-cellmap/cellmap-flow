@@ -72,7 +72,7 @@ def build_models(model_entries):
                 sys.exit(1)
 
             models.append(DaCapoModelConfig(run_name, iteration, name=name))
-        
+
         elif mtype_lower == "fly":
             if "checkpoint" not in entry:
                 logger.error(f"Model entry #{idx + 1} (fly) missing 'checkpoint'")
@@ -110,7 +110,6 @@ def build_models(model_entries):
                     name=name,
                 )
             )
-
 
         elif mtype_lower in ("cellmap-model", "cellmap_model", "cellmapmodel"):
             config_folder = entry.get("config_folder")
