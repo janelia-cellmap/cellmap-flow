@@ -1,4 +1,4 @@
-queue = "gpu_h100"
+queue = "gpu_a100"
 charge_group = "cellmap"
 
 import os

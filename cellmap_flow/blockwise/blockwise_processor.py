@@ -6,15 +6,10 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 
-from cellmap_flow.utils.web_utils import (
-    INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
-)
 
 from cellmap_flow.utils.config_utils import load_config, build_models
 
-from cellmap_flow.norm.input_normalize import get_normalizations
-from cellmap_flow.post.postprocessors import get_postprocessors
+from cellmap_flow.utils.serilization_utils import get_process_dataset
 
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
@@ -23,13 +18,6 @@ from cellmap_flow.globals import g
 from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
-
-
-def get_process_dataset(json_data: str):
-    logger.error(f"json data: {json_data}")
-    input_norm_fns = get_normalizations(json_data[INPUT_NORM_DICT_KEY])
-    postprocess_fns = get_postprocessors(json_data[POSTPROCESS_DICT_KEY])
-    return input_norm_fns, postprocess_fns
 
 
 class CellMapFlowBlockwiseProcessor:
@@ -105,15 +93,8 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        # g = Flow()
-
-        self.json_str = None
-
         if json_data:
-            if type(json_data) == str:
-                json_data = decode_to_json(json_data)
             g.input_norms, g.postprocess = get_process_dataset(json_data)
-            self.json_str = encode_to_str(json_data)
 
         self.inferencer = Inferencer(self.model_config)
 
