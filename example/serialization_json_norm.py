@@ -14,8 +14,14 @@ input_norm_fns, postprocess_fns = get_process_dataset(json_data)
 # %%
 input_norm_fns
 # %%
-json_data
+from cellmap_flow.utils.config_utils import load_config
 # %%
-import json
-json.loads(json_data)
+config = load_config("sal_1_mito.yaml")
 # %%
+json_data = config["json_data"]
+# %%
+input_norm_fns, postprocess_fns = get_process_dataset(json_data)
+# %%
+type(json_data)
+# %%
+input_norm_fns

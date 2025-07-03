@@ -93,15 +93,8 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        # g = Flow()
-
-        self.json_str = None
-
         if json_data:
-            if type(json_data) == str:
-                json_data = decode_to_json(json_data)
             g.input_norms, g.postprocess = get_process_dataset(json_data)
-            self.json_str = encode_to_str(json_data)
 
         self.inferencer = Inferencer(self.model_config)
 
