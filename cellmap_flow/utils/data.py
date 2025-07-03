@@ -135,7 +135,7 @@ class FlyModelConfig(ModelConfig):
 
     def __init__(
         self,
-        chpoint_path: str,
+        checkpoint_path: str,
         channels: [str],
         input_voxel_size: tuple,
         output_voxel_size: tuple,
@@ -145,7 +145,7 @@ class FlyModelConfig(ModelConfig):
     ):
         super().__init__()
         self.name = name
-        self.chpoint_path = chpoint_path
+        self.checkpoint_path = checkpoint_path
         self.channels = channels
         self.input_voxel_size = input_voxel_size
         self.output_voxel_size = output_voxel_size
@@ -155,12 +155,12 @@ class FlyModelConfig(ModelConfig):
 
     @property
     def command(self):
-        return f"fly -c {self.chpoint_path} -ch {','.join(self.channels)} -ivs {','.join(map(str,self.input_voxel_size))} -ovs {','.join(map(str,self.output_voxel_size))}"
+        return f"fly -c {self.checkpoint_path} -ch {','.join(self.channels)} -ivs {','.join(map(str,self.input_voxel_size))} -ovs {','.join(map(str,self.output_voxel_size))}"
 
     @property
     def model(self):
         if self._model is None:
-            self._model = load_eval_model(len(self.channels), self.chpoint_path)
+            self._model = load_eval_model(len(self.channels), self.checkpoint_path)
         return self._model
 
     def _get_config(self):

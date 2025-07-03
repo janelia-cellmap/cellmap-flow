@@ -7,8 +7,9 @@ json_data: {"input_norm": {"MinMaxNormalizer": {"min_value": 0.0, "max_value": 2
 models:
   - type: "fly"
     scale: "s1"
-    res: 16
+    resolution: 16
     checkpoint: "/groups/cellmap/cellmap/zouinkhim/salevary/train/v2/distance/mito_16_all/model_checkpoint_20000"
+    name: "mito_distance_16"
     classes:
       - "mito"
 
