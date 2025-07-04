@@ -5,28 +5,17 @@ import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.web_utils import (
-    INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
-)
+
 from cellmap_flow.utils.config_utils import load_config, build_models
-from cellmap_flow.norm.input_normalize import get_normalizations
-from cellmap_flow.post.postprocessors import get_postprocessors
+
+from cellmap_flow.utils.serilization_utils import get_process_dataset
 
 from funlib.persistence import prepare_ds, open_ds, Array
 from pathlib import Path
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
 
 logger = logging.getLogger(__name__)
-
-
-def get_process_dataset(json_data: str):
-    logger.error(f"json data: {json_data}")
-    input_norm_fns = get_normalizations(json_data[INPUT_NORM_DICT_KEY])
-    postprocess_fns = get_postprocessors(json_data[POSTPROCESS_DICT_KEY])
-    return input_norm_fns, postprocess_fns
 
 
 class CellMapFlowBlockwiseProcessor:
@@ -93,6 +82,7 @@ class CellMapFlowBlockwiseProcessor:
         self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
         self.output_channels = self.model_config.config.output_channels
         self.channels = self.model_config.config.channels
+
         self.task_name = task_name
         if output_channels:
             self.output_channels = output_channels
@@ -101,20 +91,13 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        # g = Flow()
-
-        self.json_str = None
-
         if json_data:
-            if type(json_data) == str:
-                json_data = decode_to_json(json_data)
             g.input_norms, g.postprocess = get_process_dataset(json_data)
-            self.json_str = encode_to_str(json_data)
 
         self.inferencer = Inferencer(self.model_config)
 
         self.idi_raw = ImageDataInterface(
-            self.input_path, target_resolution=self.input_voxel_size
+            self.input_path, voxel_size=self.input_voxel_size
         )
         self.output_arrays = []
 
@@ -129,16 +112,19 @@ class CellMapFlowBlockwiseProcessor:
         print(f"output_path: {self.output_path}")
         for channel in self.output_channels:
             if create:
-                array = prepare_ds(
-                    DirectoryStore(self.output_path / channel / "s0"),
-                    output_shape,
-                    dtype=self.dtype,
-                    chunk_shape=self.block_shape,
-                    voxel_size=self.output_voxel_size,
-                    axis_names=["z", "y", "x"],
-                    units=["nm", "nm", "nm"],
-                    offset=(0, 0, 0),
-                )
+                try:
+                    array = prepare_ds(
+                        DirectoryStore(self.output_path / channel / "s0"),
+                        output_shape,
+                        dtype=self.dtype,
+                        chunk_shape=self.block_shape,
+                        voxel_size=self.output_voxel_size,
+                        axis_names=["z", "y", "x"],
+                        units=["nm", "nm", "nm"],
+                        offset=(0, 0, 0),
+                    )
+                except Exception as e:
+                    raise Exception(f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}")
             else:
                 try:
                     array = open_ds(
@@ -147,11 +133,11 @@ class CellMapFlowBlockwiseProcessor:
                     )
                 except Exception as e:
                     raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
-            self.outpout_arrays.append(array)
+            self.output_arrays.append(array)
 
     def process_fn(self, block):
 
-        write_roi = block.write_roi.intersect(self.outpout_arrays[0].roi)
+        write_roi = block.write_roi.intersect(self.output_arrays[0].roi)
 
         if write_roi.empty:
             print(f"empty write roi: {write_roi}")
@@ -161,10 +147,11 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        # if self.outpout_arrays[0][block.write_roi].any():
+        # if self.output_arrays[0][block.write_roi].any():
         #     return
 
-        for i, array in enumerate(self.outpout_arrays):
+        for i, array in enumerate(self.output_arrays):
+
             if chunk_data.shape == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")

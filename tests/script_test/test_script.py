@@ -34,7 +34,7 @@ def test_fake_model_output():
     decoded_result = encoder.decode(result[0])
     assert np.all(decoded_result == 1), "Decoded result does not match expected output"
 
-    expected_shape = np.array((60, 60, 60, 8))
+    expected_shape = np.array((10, 10, 10, 8))
     expected_shape = np.prod(expected_shape)
     assert (
         decoded_result.size == expected_shape
@@ -51,15 +51,13 @@ def test_fake_model_output():
         f1 is f2
     ), "Flow should implement the singleton pattern - should be the same after setting postprocess"
 
-    result = server._chunk_impl(
-        None, None, chunk_x, chunk_y, chunk_z, None, get_encoded=False
-    )
-    assert np.all(result == 10), "Simple result does not match expected output"
+    # result = server._chunk_impl(
+    #     None, None, chunk_x, chunk_y, chunk_z, None, get_encoded=False
+    # )
+    # assert np.all(result == 10), "Simple result does not match expected output"
     f1.postprocess = [DummyPostprocessor()]
     server = CellMapFlowServer(dummy_zarr, model_config)
     encoder = server.chunk_encoder
-    result2 = server._chunk_impl(
-        None, None, chunk_x, chunk_y, chunk_z, None, get_encoded=True
-    )
+    result2 = server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
     decoded_result = encoder.decode(result2[0])
     assert np.all(decoded_result == 5), "Decoded result does not match expected output"

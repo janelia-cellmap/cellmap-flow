@@ -1,9 +1,18 @@
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
 from cellmap_flow.models.model_yaml import load_model_paths
+
 import os
 import threading
 import numpy as np
+
+
+# input_norms = [MinMaxNormalizer()]
+# postprocess = [DefaultPostprocessor(0,200,0,1)]
+
+input_norms = []
+postprocess = []
+viewer = None
 
 
 class Flow:
@@ -39,8 +48,11 @@ class Flow:
     def __str__(self):
         return f"Flow({self.__dict__})"
 
-    def get_output_dtype(self):
+    def get_output_dtype(self,model_output_dtype=None):
         dtype = np.float32
+
+        if model_output_dtype is not None:
+            dtype = model_output_dtype
 
         if len(self.input_norms) > 0:
             for norm in self.input_norms[::-1]:

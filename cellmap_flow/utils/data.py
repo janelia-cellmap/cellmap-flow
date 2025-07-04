@@ -104,11 +104,79 @@ class DaCapoModelConfig(ModelConfig):
         config.read_shape = Coordinate(in_shape) * Coordinate(voxel_size)
         config.write_shape = Coordinate(out_shape) * Coordinate(voxel_size)
         config.output_voxel_size = Coordinate(run.model.scale(voxel_size))
-        channels = get_dacapo_channels(run.task)
+        config.channels = get_dacapo_channels(run.task)
         config.output_channels = len(
-            channels
+            config.channels
         )  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
         config.block_shape = np.array(tuple(out_shape) + (len(channels),))
+
+        return config
+
+
+def load_eval_model(num_channels, checkpoint_path):
+    from fly_organelles.model import StandardUnet
+
+    model_backbone = StandardUnet(num_channels)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    checkpoint = torch.load(
+        checkpoint_path, weights_only=True, map_location=torch.device("cpu")
+    )
+    model_backbone.load_state_dict(checkpoint["model_state_dict"])
+    model = torch.nn.Sequential(model_backbone, torch.nn.Sigmoid())
+    model.to(device)
+    model.eval()
+    return model
+
+
+class FlyModelConfig(ModelConfig):
+
+    def __init__(
+        self,
+        checkpoint_path: str,
+        channels: [str],
+        input_voxel_size: tuple,
+        output_voxel_size: tuple,
+        name: str = None,
+        input_size=(178, 178, 178),
+        output_size=(56, 56, 56),
+    ):
+        super().__init__()
+        self.name = name
+        self.checkpoint_path = checkpoint_path
+        self.channels = channels
+        self.input_voxel_size = input_voxel_size
+        self.output_voxel_size = output_voxel_size
+        self.input_size = input_size
+        self.output_size = output_size
+        self._model = None
+
+    @property
+    def command(self):
+        return f"fly -c {self.checkpoint_path} -ch {','.join(self.channels)} -ivs {','.join(map(str,self.input_voxel_size))} -ovs {','.join(map(str,self.output_voxel_size))}"
+
+    @property
+    def model(self):
+        if self._model is None:
+            self._model = load_eval_model(len(self.channels), self.checkpoint_path)
+        return self._model
+
+    def _get_config(self):
+        config = Config()
+        config.model = self.model
+        config.input_voxel_size = self.input_voxel_size
+        config.read_shape = Coordinate(self.input_size) * Coordinate(
+            self.input_voxel_size
+        )
+        config.write_shape = Coordinate(self.output_size) * Coordinate(
+            self.input_voxel_size
+        )
+        config.output_voxel_size = Coordinate(self.output_voxel_size)
+        config.channels = self.channels
+        config.output_channels = len(self.channels)
+        config.block_shape = np.array(tuple(self.output_size) + (len(self.channels),))
 
         return config
 
@@ -487,38 +555,6 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
     )
     output = np.ascontiguousarray(output).clip(0, 1) * 255.0
     return output.astype(np.uint8), reordered_axes
-
-
-# from funlib.geometry import Coordinate, Roi
-# from bioimageio.core import predict, create_prediction_pipeline, Sample, Tensor
-
-# for n in [
-#     "impartial-shrimp",
-#     "affable-shark",
-#     "happy-elephant",
-#     "kind-seashell",
-# ]:  # "impartial-shrimp", "affable-shark",
-#     print("starting", n)
-#     b = BioModelConfig(n, Coordinate(16, 16, 16))
-#     b = b.config
-#     from bioimageio.core.digest_spec import get_test_inputs, get_test_outputs
-
-#     pp = create_prediction_pipeline(b.model)
-
-#     print(b.model.outputs[0].axes)
-
-#     o = b.process_chunk(
-#         ImageDataInterface(
-#             "/nrs/cellmap/data/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8/s1"
-#         ),
-#         input_roi=Roi((16000, 16000, 16000), b.read_shape),
-#     )
-#     print(b, b.output_voxel_size, b.read_shape, b.write_shape, b.block_shape, o.shape)
-#     # print("stopped", n)
-
-# # %%
-# b.model.inputs
-# # %%
 
 
 def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:

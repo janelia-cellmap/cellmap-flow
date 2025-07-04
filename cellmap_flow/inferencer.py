@@ -4,13 +4,14 @@ import torch
 from funlib.geometry import Coordinate
 import logging
 from cellmap_flow.utils.data import ModelConfig
-
 from cellmap_flow.globals import g
+
 
 logger = logging.getLogger(__name__)
 
 
 def apply_postprocess(data, **kwargs):
+
     for pross in g.postprocess:
         # logger.error(f"applying postprocess: {pross}")
         data = pross(data, **kwargs)

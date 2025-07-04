@@ -7,6 +7,7 @@ from cellmap_flow.utils.data import (
     BioModelConfig,
     ScriptModelConfig,
     CellMapModelConfig,
+    FlyModelConfig,
 )
 
 
@@ -72,6 +73,44 @@ def build_models(model_entries):
 
             models.append(DaCapoModelConfig(run_name, iteration, name=name))
 
+        elif mtype_lower == "fly":
+            if "checkpoint" not in entry:
+                logger.error(f"Model entry #{idx + 1} (fly) missing 'checkpoint'")
+                sys.exit(1)
+            if "classes" not in entry:
+                logger.error(f"Model entry #{idx + 1} (fly) missing 'classes'")
+                sys.exit(1)
+            if "resolution" not in entry:
+                logger.error(f"Model entry #{idx + 1} (fly) missing 'resolution'")
+                sys.exit(1)
+            if "name" not in entry:
+                logger.error(f"Model entry #{idx + 1} (fly) missing 'name'")
+                sys.exit(1)
+            checkpoint = entry["checkpoint"]
+            classes = entry["classes"]
+            resolution = entry["resolution"]
+            if isinstance(resolution, int):
+                resolution = (resolution, resolution, resolution)
+            elif isinstance(resolution, (list, tuple)) and len(resolution) == 3:
+                resolution = tuple(resolution)
+            name = entry["name"]
+            if "output_resolution" in entry:
+                output_resolution = entry["output_resolution"]
+            else:
+                logger.warning(
+                    f"Model entry #{idx + 1} (fly) missing 'output_resolution', using input resolution as output resolution."
+                )
+                output_resolution = resolution
+            models.append(
+                FlyModelConfig(
+                    checkpoint_path=checkpoint,
+                    channels=classes,
+                    input_voxel_size=resolution,
+                    output_voxel_size=output_resolution,
+                    name=name,
+                )
+            )
+
         elif mtype_lower in ("cellmap-model", "cellmap_model", "cellmapmodel"):
             config_folder = entry.get("config_folder")
             name = entry.get("name", None)
@@ -109,7 +148,7 @@ def build_models(model_entries):
         else:
             logger.error(
                 f"Model entry #{idx + 1} has unrecognized type '{mtype}'. "
-                "Valid types are: dacapo, cellmap-model, script, bioimage."
+                "Valid types are: dacapo, cellmap-model, script, fly, bioimage."
             )
             sys.exit(1)
 

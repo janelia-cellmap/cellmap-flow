@@ -5,49 +5,21 @@ import ast
 import neuroglancer
 import pymorton
 import threading
+from scipy.ndimage import label
+import mwatershed as mws
+from scipy.ndimage import measurements
+import fastremap
+from funlib.math import cantor_number
+import fastmorph
+from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 
 postprocessing_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
 
-class PostProcessor:
-
-    @classmethod
-    def name(cls):
-        return cls.__name__
-
-    def __call__(self, data: np.ndarray, **kwargs) -> np.ndarray:
-        return self.process(data, **kwargs)
-
-    def process(self, data, **kwargs) -> np.ndarray:
-        if not isinstance(data, np.ndarray):
-            data = np.array(data)
-        if data.dtype.kind in {"U", "O"}:
-            try:
-                data = data.astype(self.dtype)
-            except ValueError:
-                raise TypeError(
-                    f"Cannot convert non-numeric data to float. Found dtype: {data.dtype}"
-                )
-        # if there are kwargs
-        sig = inspect.signature(self._process)
-        [kwargs.pop(k) for k in list(kwargs.keys()) if k not in sig.parameters]
-        data = self._process(data, **kwargs)
-        return data.astype(self.dtype)
-
-    def _process(self, data, **kwargs):
-        raise NotImplementedError("Subclasses must implement this method")
-
-    def to_dict(self):
-        result = {"name": self.name()}
-        for k, v in self.__dict__.items():
-            result[k] = v
-        return result
-
-    @property
-    def dtype(self):
-        return None
+class PostProcessor(SerializableInterface):
+    """Base class for post-processing methods."""
 
     @property
     def is_segmentation(self):
@@ -89,9 +61,6 @@ class ThresholdPostprocessor(PostProcessor):
         data = (data.astype(np.float32) > self.threshold).astype(np.uint8)
         return data
 
-    def to_dict(self):
-        return {"name": self.name(), "threshold": self.threshold}
-
     @property
     def dtype(self):
         return np.uint8
@@ -99,9 +68,6 @@ class ThresholdPostprocessor(PostProcessor):
     @property
     def is_segmentation(self):
         return True
-
-
-from scipy.ndimage import label
 
 
 class LabelPostprocessor(PostProcessor):
@@ -113,9 +79,6 @@ class LabelPostprocessor(PostProcessor):
         to_process, num_features = label(to_process)
         data[self.channel] = to_process
         return data
-
-    def to_dict(self):
-        return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -153,8 +116,8 @@ class MortonSegmentationRelabeling(PostProcessor):
         data[self.channel] = to_process
         return data
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -163,12 +126,6 @@ class MortonSegmentationRelabeling(PostProcessor):
     @property
     def is_segmentation(self):
         return True
-
-
-import mwatershed as mws
-from scipy.ndimage import measurements
-import fastremap
-from funlib.math import cantor_number
 
 
 class AffinityPostprocessor(PostProcessor):
@@ -238,8 +195,8 @@ class AffinityPostprocessor(PostProcessor):
         # insert empty dimension
         return np.expand_dims(segmentation, axis=0)
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -252,9 +209,6 @@ class AffinityPostprocessor(PostProcessor):
     @property
     def num_channels(self):
         return 1
-
-
-import fastmorph
 
 
 class SimpleBlockwiseMerger(PostProcessor):
@@ -305,8 +259,8 @@ class SimpleBlockwiseMerger(PostProcessor):
         # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
         return data.astype(np.uint64 if self.use_exact else np.uint16)
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     def calculate_equivalences(self):
         chunk_slice_position_to_coords_id_dict = (
@@ -352,8 +306,8 @@ class ChannelSelection(PostProcessor):
         data = data[self.channels, :, :, :]
         return data
 
-    def to_dict(self):
-        return {"name": self.name()}
+    # def to_dict(self):
+    #     return {"name": self.name()}
 
     @property
     def num_channels(self):
@@ -368,8 +322,8 @@ class LambdaPostprocessor(PostProcessor):
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))
 
-    def to_dict(self):
-        return {"name": self.name(), "expression": self.expression}
+    # def to_dict(self):
+    #     return {"name": self.name(), "expression": self.expression}
 
     @property
     def dtype(self):
@@ -401,18 +355,8 @@ def get_postprocessors_list() -> list[dict]:
     return postprocessors
 
 
-def get_postprocessors(elms: dict) -> PostProcessor:
-    result = []
-    for post_name in elms:
-        found = False
-        for nm in PostProcessorMethods:
-            if nm.name() == post_name:
-                result.append(nm(**elms[post_name]))
-                found = True
-                break
-        if not found:
-            raise ValueError(f"PostProcess method {post_name} not found")
-    return result
+def get_postprocessors(elms: dict) -> list[PostProcessor]:
+    return deserialize_list(elms, PostProcessor)
 
 
 PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]

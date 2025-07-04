@@ -8,12 +8,15 @@ from cellmap_flow.utils.data import (
 import logging
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+import threading
+
 from cellmap_flow.globals import g
 
 
 data_args = ["-d", "--data-path"]
 charge_group_arg = ["-P", "--project"]
 server_queue_arg = ["-q", "--queue"]
+extra_args = ["-e", "--extra"]
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
@@ -75,6 +78,7 @@ def main():
     charge_group = None
     queue = None
     models = []
+    extras = []
 
     for i, arg in enumerate(args):
         if arg in charge_group_arg:
@@ -93,6 +97,10 @@ def main():
                 logger.error("Multiple data paths provided.")
                 sys.exit(1)
             data_path = args[i + 1]
+
+        if arg in extra_args:
+            logger.error(f"extra {args[i + 1]}")
+            extras.append(args[i + 1])
 
     if not data_path:
         logger.error("Data path not provided.")
@@ -225,6 +233,9 @@ def main():
         print(model)
 
     run_multiple(models, data_path, charge_group, queue)
+    generate_neuroglancer_url(data_path, extras)
+    while True:
+        pass
 
 
 if __name__ == "__main__":
@@ -234,15 +245,24 @@ if __name__ == "__main__":
 def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
+    threads = []
     for model in models:
+
         current_data_path = dataset_path
         if hasattr(model, "scale"):
             scale = model.scale
             current_data_path = "/".join(dataset_path.split("/")[:-1]) + f"/{scale}"
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
-        start_hosts(
-            command, job_name=model.name, queue=queue, charge_group=charge_group
+        thread = threading.Thread(
+            target=start_hosts, args=(command, queue, charge_group, model.name)
         )
+        thread.start()
+        threads.append(thread)
+
+    for thread in threads:
+        thread.join()
+
+        # generate_neuroglancer_url(dataset_path)
     generate_neuroglancer_url(dataset_path)
     while True:
         pass
