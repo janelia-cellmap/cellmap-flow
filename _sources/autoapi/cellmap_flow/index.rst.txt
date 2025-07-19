@@ -20,7 +20,6 @@ Submodules
    /autoapi/cellmap_flow/norm/index
    /autoapi/cellmap_flow/post/index
    /autoapi/cellmap_flow/server/index
-   /autoapi/cellmap_flow/tmp/index
    /autoapi/cellmap_flow/utils/index
 
 
