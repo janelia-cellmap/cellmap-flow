@@ -66,11 +66,12 @@ class ScriptModelConfig(ModelConfig):
         from cellmap_flow.utils.load_py import load_safe_config
 
         config = load_safe_config(self.script_path)
-        setattr(
-            config,
-            "block_shape",
-            np.array(tuple(config.write_shape) + (config.output_channels,)),
-        )
+        if not hasattr(config, "block_shape"):
+            setattr(
+                config,
+                "block_shape",
+                np.array(tuple(config.write_shape) + (config.output_channels,)),
+            )
 
         return config
 
