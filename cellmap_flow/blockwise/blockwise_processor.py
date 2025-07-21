@@ -55,6 +55,13 @@ class CellMapFlowBlockwiseProcessor:
         if self.workers <= 1:
             logger.error("Workers should be greater than 1.")
             return
+        if "create" in self.config:
+            create = self.config["create"]
+            if isinstance(create, str):
+                logger.warning(
+                    f"Type config[create] is str = {create}, better set a bool"
+                )
+                create = create.lower() == "true"
 
         task_name = self.config["task_name"]
 
@@ -124,7 +131,9 @@ class CellMapFlowBlockwiseProcessor:
                         offset=(0, 0, 0),
                     )
                 except Exception as e:
-                    raise Exception(f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}")
+                    raise Exception(
+                        f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}"
+                    )
             else:
                 try:
                     array = open_ds(
@@ -147,8 +156,8 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        # if self.output_arrays[0][block.write_roi].any():
-        #     return
+        if self.output_arrays[0][block.write_roi].any():
+            return
 
         for i, array in enumerate(self.output_arrays):
 

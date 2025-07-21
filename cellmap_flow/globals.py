@@ -52,7 +52,7 @@ class Flow:
     def __str__(self):
         return f"Flow({self.__dict__})"
 
-    def get_output_dtype(self,model_output_dtype=None):
+    def get_output_dtype(self, model_output_dtype=None):
         dtype = np.float32
 
         if model_output_dtype is not None:
