@@ -125,7 +125,7 @@ class Config:
                 serialized[key] = value
         return serialized
 
-    def get(self, key: str, default: any = None) -> any:
+    def get(self, key: str, default: Any = None) -> Any:
         """
         Gets the value of a configuration key.
         """
