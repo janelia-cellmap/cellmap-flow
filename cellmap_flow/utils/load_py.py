@@ -1,6 +1,7 @@
 import ast
 import os
 import inspect
+from typing import Any
 
 from upath import UPath
 
