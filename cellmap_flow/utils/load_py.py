@@ -1,3 +1,4 @@
+# copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/6e9d842b9a90b0df22aa07946a4d1deed5c27504/src/cellmap_segmentation_challenge/utils/security.py
 import ast
 import os
 import inspect
