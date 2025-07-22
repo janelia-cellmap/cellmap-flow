@@ -1,8 +1,14 @@
+import os
+import zarr
 from cellmap_flow.utils.ds import (
+    find_closest_scale,
     get_ds_info,
     open_ds_tensorstore,
     to_ndarray_tensorstore,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ImageDataInterface:
@@ -16,12 +22,19 @@ class ImageDataInterface:
         concurrency_limit=1,
         normalize=True,
     ):
+        # if multiscale dataset, get scale for voxel size
+        if not isinstance(zarr.open(dataset_path, mode="r"), zarr.core.Array):
+            scale, _, _ = find_closest_scale(dataset_path, voxel_size)
+            logger.info(f"found scale {scale} for voxel size {voxel_size}")
+            dataset_path = os.path.join(dataset_path, scale)
+            logger.info(f"using dataset path {dataset_path}")
         self.path = dataset_path
         self.filetype = (
             "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
         )
         self.swap_axes = self.filetype == "n5"
         self._ts = None
+
         self.voxel_size, self.chunk_shape, self.shape, self.roi, self.swap_axes = (
             get_ds_info(dataset_path)
         )
