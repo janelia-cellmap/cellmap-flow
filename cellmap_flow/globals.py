@@ -29,11 +29,15 @@ class Flow:
             cls._instance.postprocess = []
             cls._instance.viewer = None
             cls._instance.dataset_path = None
-            cls._instance.model_catalog = {}
+            # cls._instance.model_catalog = {}
             # Uncomment and adjust if you want to load the model catalog:
-            # cls._instance.model_catalog = load_model_paths(
-            #     os.path.normpath(os.path.join(os.path.dirname(__file__), os.pardir, "models", "models.yaml"))
-            # )
+            cls._instance.model_catalog = load_model_paths(
+                os.path.normpath(
+                    os.path.join(
+                        os.path.dirname(__file__), os.pardir, "models", "models.yaml"
+                    )
+                )
+            )
             cls._instance.queue = "gpu_h100"
             cls._instance.charge_group = "cellmap"
             cls._instance.neuroglancer_thread = None

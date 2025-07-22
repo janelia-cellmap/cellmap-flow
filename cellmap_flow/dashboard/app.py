@@ -27,11 +27,19 @@ import numpy as np
 import time
 
 logger = logging.getLogger(__name__)
-app = Flask(__name__)
+# Explicitly set template and static folder paths for package installation
+template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
-CustomCodeFolder = "/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm"
+CUSTOM_CODE_FOLDER = os.path.expanduser(
+    os.environ.get(
+        "CUSTOM_CODE_FOLDER",
+        "~/Desktop/cellmap/cellmap-flow/example/example_norm",
+    )
+)
 
 
 @app.route("/")
@@ -147,7 +155,7 @@ def process():
             # Save custom code to a file with date and time
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"custom_code_{timestamp}.py"
-            filepath = os.path.join(CustomCodeFolder, filename)
+            filepath = os.path.join(CUSTOM_CODE_FOLDER, filename)
 
             with open(filepath, "w") as file:
                 file.write(custom_code)

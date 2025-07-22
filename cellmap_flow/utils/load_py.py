@@ -1,7 +1,8 @@
-## copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/a9525b31502abb7ea01e10c16340bbc1056cf1fc/src/cellmap_segmentation_challenge/utils/security.py
-
+# copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/6e9d842b9a90b0df22aa07946a4d1deed5c27504/src/cellmap_segmentation_challenge/utils/security.py
 import ast
 import os
+import inspect
+from typing import Any
 
 from upath import UPath
 
@@ -67,7 +68,9 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
         for issue in issues:
             print(f" - {issue}")
         if force_safe:
-            raise ValueError("Unsafe script detected; loading aborted.")
+            raise ValueError(
+                "Unsafe script detected; loading aborted. You can set the environment variable FORCE_SAFE_CONFIG=False or pass force_safe=False to override."
+            )
 
     # Load the config module if script is safe
     config_path = UPath(config_path)
@@ -76,6 +79,22 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
     try:
         with open(config_path, "r") as config_file:
             code = config_file.read()
+            # Parse the code into an AST
+            tree = ast.parse(code)
+
+            # Define a node transformer to replace __file__ with the config path
+            class ReplaceFileNode(ast.NodeTransformer):
+                def visit_Name(self, node):
+                    if node.id == "__file__":
+                        return ast.Constant(value=str(config_path), kind=None)
+                    return node
+
+            # Transform the AST
+            transformer = ReplaceFileNode()
+            tree = transformer.visit(tree)
+
+            # Convert the modified AST back to source code
+            code = ast.unparse(tree)
             exec(code, config_namespace)
         # Extract the config object from the namespace
         config = Config(**config_namespace)
@@ -91,3 +110,39 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
 class Config:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
+        self.kwargs = kwargs
+
+    def to_dict(self):
+        """
+        Returns the configuration as a dictionary.
+        """
+        return self.kwargs
+
+    def serialize(self):
+        """
+        Serializes the configuration to a string representation.
+        """
+        serialized = {}
+        for key, value in self.kwargs.items():
+            if (
+                inspect.ismodule(value)
+                or inspect.isclass(value)
+                or inspect.isfunction(value)
+                or inspect.isbuiltin(value)
+            ):
+                # Skip modules, classes, and functions
+                continue
+            elif "__" in key:
+                # Skip private attributes
+                continue
+            elif not isinstance(value, (int, float, str, bool)):
+                serialized[key] = str(value)
+            else:
+                serialized[key] = value
+        return serialized
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Gets the value of a configuration key.
+        """
+        return self.kwargs.get(key, default)

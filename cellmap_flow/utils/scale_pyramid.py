@@ -6,13 +6,15 @@ import logging
 import numpy as np
 import os
 
+import zarr
+
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.utils.ds import check_for_multiscale
 
 logger = logging.getLogger(__name__)
 
 
 def get_raw_layer(dataset_path, normalize=True):
-    is_multiscale = False
     # if multiscale dataset
     if (
         dataset_path.split("/")[-1].startswith("s")
@@ -20,6 +22,10 @@ def get_raw_layer(dataset_path, normalize=True):
     ):
         dataset_path = dataset_path.rsplit("/", 1)[0]
         is_multiscale = True
+    elif check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]:
+        is_multiscale = True
+    else:
+        is_multiscale = False
 
     if ".zarr" in dataset_path:
         filetype = "zarr"
