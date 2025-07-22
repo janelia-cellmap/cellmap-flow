@@ -27,6 +27,7 @@ Functions
 
    cellmap_flow.utils.ds.get_scale_info
    cellmap_flow.utils.ds.find_target_scale
+   cellmap_flow.utils.ds.find_closest_scale
    cellmap_flow.utils.ds.ends_with_scale
    cellmap_flow.utils.ds.split_dataset_path
    cellmap_flow.utils.ds.apply_norms
@@ -50,6 +51,8 @@ Module Contents
 .. py:function:: get_scale_info(zarr_grp)
 
 .. py:function:: find_target_scale(zarr_grp_path, target_resolution)
+
+.. py:function:: find_closest_scale(zarr_grp_path, target_resolution)
 
 .. py:data:: logger
 

@@ -129,9 +129,6 @@ Module Contents
    .. py:property:: dtype
 
 
-   .. py:method:: normalize(data: numpy.ndarray) -> numpy.ndarray
-
-
 .. py:function:: get_input_normalizers() -> list[dict]
 
 .. py:function:: deserialize_list(elms: dict, T: type) -> list

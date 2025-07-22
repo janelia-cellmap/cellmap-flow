@@ -135,49 +135,52 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.find_target_scale" title="cellmap_flow.utils.ds.find_target_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_target_scale</span></code></a>(zarr_grp_path, target_resolution)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.ends_with_scale" title="cellmap_flow.utils.ds.ends_with_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ends_with_scale</span></code></a>(string)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.find_closest_scale" title="cellmap_flow.utils.ds.find_closest_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_closest_scale</span></code></a>(zarr_grp_path, target_resolution)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.split_dataset_path" title="cellmap_flow.utils.ds.split_dataset_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_dataset_path</span></code></a>(→ tuple[str, str])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.ends_with_scale" title="cellmap_flow.utils.ds.ends_with_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ends_with_scale</span></code></a>(string)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.split_dataset_path" title="cellmap_flow.utils.ds.split_dataset_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_dataset_path</span></code></a>(→ tuple[str, str])</p></td>
 <td><p>Split the dataset path into the filename and dataset</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.apply_norms" title="cellmap_flow.utils.ds.apply_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_norms</span></code></a>(data)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.apply_norms" title="cellmap_flow.utils.ds.apply_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_norms</span></code></a>(data)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.open_ds_tensorstore" title="cellmap_flow.utils.ds.open_ds_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_ds_tensorstore</span></code></a>(dataset_path[, mode, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.open_ds_tensorstore" title="cellmap_flow.utils.ds.open_ds_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_ds_tensorstore</span></code></a>(dataset_path[, mode, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.to_ndarray_tensorstore" title="cellmap_flow.utils.ds.to_ndarray_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_ndarray_tensorstore</span></code></a>(dataset[, roi, voxel_size, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.to_ndarray_tensorstore" title="cellmap_flow.utils.ds.to_ndarray_tensorstore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_ndarray_tensorstore</span></code></a>(dataset[, roi, voxel_size, ...])</p></td>
 <td><p>Read a region of a tensorstore dataset and return it as a numpy array</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_url" title="cellmap_flow.utils.ds.get_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_url</span></code></a>(→ str)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_url" title="cellmap_flow.utils.ds.get_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_url</span></code></a>(→ str)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.separate_store_path" title="cellmap_flow.utils.ds.separate_store_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">separate_store_path</span></code></a>(store, path)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.separate_store_path" title="cellmap_flow.utils.ds.separate_store_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">separate_store_path</span></code></a>(store, path)</p></td>
 <td><p>sometimes you can pass a total os path to node, leading to</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.access_parent" title="cellmap_flow.utils.ds.access_parent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">access_parent</span></code></a>(node)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.access_parent" title="cellmap_flow.utils.ds.access_parent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">access_parent</span></code></a>(node)</p></td>
 <td><p>Get the parent (zarr.Group) of an input zarr array(ds).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_multiscale" title="cellmap_flow.utils.ds.check_for_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_multiscale</span></code></a>(group)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_multiscale" title="cellmap_flow.utils.ds.check_for_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_multiscale</span></code></a>(group)</p></td>
 <td><p>check if multiscale attribute exists in the input group and for any parent level group</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_voxel_size" title="cellmap_flow.utils.ds.check_for_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_voxel_size</span></code></a>(array, order)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_voxel_size" title="cellmap_flow.utils.ds.check_for_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_voxel_size</span></code></a>(array, order)</p></td>
 <td><p>checks specific attributes(resolution, scale,</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_offset" title="cellmap_flow.utils.ds.check_for_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_offset</span></code></a>(array, order)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_offset" title="cellmap_flow.utils.ds.check_for_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_offset</span></code></a>(array, order)</p></td>
 <td><p>checks specific attributes(offset, transform[&quot;translate&quot;]) for offset</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_units" title="cellmap_flow.utils.ds.check_for_units"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_units</span></code></a>(array, order)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_units" title="cellmap_flow.utils.ds.check_for_units"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_units</span></code></a>(array, order)</p></td>
 <td><p>checks specific attributes(units, pixelResolution[&quot;unit&quot;] transform[&quot;units&quot;])</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_attrs_multiscale" title="cellmap_flow.utils.ds.check_for_attrs_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_attrs_multiscale</span></code></a>(ds, multiscale_group, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.check_for_attrs_multiscale" title="cellmap_flow.utils.ds.check_for_attrs_multiscale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_for_attrs_multiscale</span></code></a>(ds, multiscale_group, ...)</p></td>
 <td><p>checks multiscale attribute of the .zarr or .n5 group</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.regularize_offset" title="cellmap_flow.utils.ds.regularize_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">regularize_offset</span></code></a>(voxel_size_float, offset_float)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.regularize_offset" title="cellmap_flow.utils.ds.regularize_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">regularize_offset</span></code></a>(voxel_size_float, offset_float)</p></td>
 <td><p>offset is not a multiple of voxel_size. This is often due to someone defining</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_ds_info" title="cellmap_flow.utils.ds.get_ds_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_ds_info</span></code></a>(path[, mode])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.ds.get_ds_info" title="cellmap_flow.utils.ds.get_ds_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_ds_info</span></code></a>(path[, mode])</p></td>
 <td><p>Open a Zarr, N5, or HDF5 dataset as an <code class="xref py py-class docutils literal notranslate"><span class="pre">Array</span></code>. If the</p></td>
 </tr>
 </tbody>
@@ -193,6 +196,11 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.utils.ds.find_target_scale">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">find_target_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_grp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.find_target_scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.ds.find_closest_scale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.ds.</span></span><span class="sig-name descname"><span class="pre">find_closest_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_grp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.ds.find_closest_scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">

@@ -10,10 +10,12 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.dashboard.app.logger
+   cellmap_flow.dashboard.app.template_dir
+   cellmap_flow.dashboard.app.static_dir
    cellmap_flow.dashboard.app.app
    cellmap_flow.dashboard.app.NEUROGLANCER_URL
    cellmap_flow.dashboard.app.INFERENCE_SERVER
-   cellmap_flow.dashboard.app.CustomCodeFolder
+   cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER
 
 
 Functions
@@ -34,6 +36,10 @@ Module Contents
 
 .. py:data:: logger
 
+.. py:data:: template_dir
+
+.. py:data:: static_dir
+
 .. py:data:: app
 
 .. py:data:: NEUROGLANCER_URL
@@ -44,9 +50,7 @@ Module Contents
    :value: None
 
 
-.. py:data:: CustomCodeFolder
-   :value: '/Users/zouinkhim/Desktop/cellmap/cellmap-flow/example/example_norm'
-
+.. py:data:: CUSTOM_CODE_FOLDER
 
 .. py:function:: index()
 

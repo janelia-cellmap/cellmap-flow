@@ -4,6 +4,14 @@ cellmap_flow.image_data_interface
 .. py:module:: cellmap_flow.image_data_interface
 
 
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.image_data_interface.logger
+
+
 Classes
 -------
 
@@ -15,14 +23,14 @@ Classes
 Module Contents
 ---------------
 
+.. py:data:: logger
+
 .. py:class:: ImageDataInterface(dataset_path, voxel_size=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1, normalize=True)
 
    .. py:attribute:: path
 
 
    .. py:attribute:: filetype
-      :value: 'zarr'
-
 
 
    .. py:attribute:: swap_axes

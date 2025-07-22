@@ -51,3 +51,24 @@ Module Contents
 
 .. py:class:: Config(**kwargs)
 
+   .. py:attribute:: kwargs
+
+
+   .. py:method:: to_dict()
+
+      Returns the configuration as a dictionary.
+
+
+
+   .. py:method:: serialize()
+
+      Serializes the configuration to a string representation.
+
+
+
+   .. py:method:: get(key: str, default: Any = None) -> Any
+
+      Gets the value of a configuration key.
+
+
+
