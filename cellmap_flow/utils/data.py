@@ -2,11 +2,10 @@
 import logging
 import warnings
 
+from cellmap_flow.models.cellmap_models import CellmapModel
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi
 import copy
-from typing import List
-import yaml
 from funlib.geometry.coordinate import Coordinate
 import numpy as np
 import torch
@@ -121,17 +120,21 @@ class DaCapoModelConfig(ModelConfig):
 
 
 def load_eval_model(num_channels, checkpoint_path):
-    from fly_organelles.model import StandardUnet
-
-    model_backbone = StandardUnet(num_channels)
     if torch.cuda.is_available():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
-    checkpoint = torch.load(
-        checkpoint_path, weights_only=True, map_location=torch.device("cpu")
-    )
-    model_backbone.load_state_dict(checkpoint["model_state_dict"])
+    if checkpoint_path.endswith(".ts"):
+        # TorchScript model
+        model_backbone = torch.jit.load(checkpoint_path, map_location=device)
+    else:
+        from fly_organelles.model import StandardUnet
+
+        model_backbone = StandardUnet(num_channels)
+        checkpoint = torch.load(
+            checkpoint_path, weights_only=True, map_location=torch.device("cpu")
+        )
+        model_backbone.load_state_dict(checkpoint["model_state_dict"])
     model = torch.nn.Sequential(model_backbone, torch.nn.Sigmoid())
     model.to(device)
     model.eval()
@@ -562,71 +565,6 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
     )
     output = np.ascontiguousarray(output).clip(0, 1) * 255.0
     return output.astype(np.uint8), reordered_axes
-
-
-def parse_model_configs(yaml_file_path: str) -> List[ModelConfig]:
-    """
-    Reads a YAML file that defines a list of model configs.
-    Validates them manually, then returns a list of constructed ModelConfig objects.
-    """
-    with open(yaml_file_path, "r") as f:
-        data = yaml.safe_load(f)
-
-    if not isinstance(data, list):
-        raise ValueError("Top-level YAML structure must be a list.")
-
-    configs: List[ModelConfig] = []
-
-    for idx, model_def in enumerate(data):
-        # Common checks:
-        if "type" not in model_def:
-            raise ValueError(f"Missing 'type' field in model definition #{idx+1}")
-
-        model_type = model_def["type"]
-        name = model_def.get("name")
-
-        if model_type == "bio":
-            # Expect "model_name"
-            if "model_name" not in model_def:
-                raise ValueError(f"Missing 'model_name' in bio model #{idx+1}")
-            config = BioModelConfig(
-                model_name=model_def["model_name"],
-                name=name,
-            )
-
-        elif model_type == "script":
-            # Expect "script_path"
-            if "script_path" not in model_def:
-                raise ValueError(f"Missing 'script_path' in script model #{idx+1}")
-            config = ScriptModelConfig(
-                script_path=model_def["script_path"],
-                name=name,
-            )
-
-        elif model_type == "dacapo":
-            # Expect "run_name" and "iteration"
-            if "run_name" not in model_def or "iteration" not in model_def:
-                raise ValueError(
-                    f"Missing 'run_name' or 'iteration' in dacapo model #{idx+1}"
-                )
-            config = DaCapoModelConfig(
-                run_name=model_def["run_name"],
-                iteration=model_def["iteration"],
-                name=name,
-            )
-
-        else:
-            raise ValueError(
-                f"Invalid 'type' field '{model_type}' in model definition #{idx+1}"
-            )
-
-        configs.append(config)
-
-    return configs
-
-
-from cellmap_flow.models.cellmap_models import CellmapModel
-from typing import Optional
 
 
 class CellMapModelConfig(ModelConfig):
