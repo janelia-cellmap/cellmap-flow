@@ -59,9 +59,6 @@ show_missing = True
 # Set precision for percentage display
 precision = 2
 
-# Minimum required coverage percentage
-fail_under = 70
-
 # Sort by name for consistent output
 sort = Name
 

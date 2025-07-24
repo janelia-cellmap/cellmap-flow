@@ -156,20 +156,6 @@ def mock_neuroglancer():
         yield mock_viewer
 
 
-@pytest.fixture
-def mock_gpu_available():
-    """Mock GPU availability."""
-    with patch("torch.cuda.is_available", return_value=True):
-        yield
-
-
-@pytest.fixture
-def mock_no_gpu():
-    """Mock no GPU available."""
-    with patch("torch.cuda.is_available", return_value=False):
-        yield
-
-
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest."""

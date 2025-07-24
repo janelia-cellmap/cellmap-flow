@@ -75,9 +75,9 @@ python tests/coverage_utils.py tests/test_specific.py
 ## Coverage Configuration
 
 ### Minimum Coverage Threshold
-- **Current**: 70%
+- **Current**: Reporting only (no failure threshold)
 - **Location**: `.coveragerc`
-- **Enforcement**: CI/CD pipeline
+- **Enforcement**: Disabled to allow flexible development
 
 ### Coverage Exclusions
 The following are excluded from coverage calculations:

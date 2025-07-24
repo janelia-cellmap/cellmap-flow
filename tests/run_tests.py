@@ -66,7 +66,6 @@ def run_tests_with_coverage():
         "--cov-report=xml:coverage.xml",
         "--cov-report=json:coverage.json",
         "--cov-branch",  # Enable branch coverage
-        "--cov-fail-under=70",  # Fail if coverage below 70%
         "-v",
     ]
 

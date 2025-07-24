@@ -72,10 +72,16 @@ tests/
 ## Key Testing Strategies
 
 ### 1. Mocking External Dependencies
-- **GPU operations**: Mock CUDA availability
+- **GPU operations**: Mock CUDA availability and tensor operations
 - **File systems**: Mock zarr/n5 datasets
 - **ML frameworks**: Mock DaCapo, BioImage.io models
 - **Web components**: Mock neuroglancer viewer
+
+**GPU Testing Strategy**: Since CI environments typically don't have NVIDIA drivers, all GPU-related tests use comprehensive mocking:
+- `torch.cuda.is_available()` - Mocked to return True/False as needed
+- `torch.device()` - Mocked to avoid actual device creation
+- `torch.from_numpy()` - Mocked to prevent CUDA tensor operations
+- Model `.to()`, `.half()`, `.forward()` methods - All mocked to simulate GPU operations without hardware
 
 ### 2. Error Handling Coverage
 - **Invalid inputs**: Wrong data types, missing parameters
@@ -117,17 +123,17 @@ python run_tests.py --specific
 
 ## Test Quality Metrics
 
-### Coverage Goals
-- **Unit tests**: Individual function/class testing
-- **Integration tests**: Component interaction testing  
-- **Error handling**: Exception and edge case coverage
-- **Mocking**: External dependency isolation
+### Current Coverage Status
+- **Total Test Count**: 57 tests
+- **Overall Coverage**: 17.87%
+- **All Tests Passing**: ✅ 57/57 tests pass in CI/CD environments
 
-### Expected Coverage Areas
-- Core inference pipeline: 90%+
-- Data utilities: 85%+
-- Normalization functions: 95%+
-- Global state management: 80%+
+### Coverage by Module
+- **Normalization functions**: 88.95%
+- **Inference pipeline**: 82.02%
+- **Global state management**: 34.48%
+- **Data utilities**: 28.12%
+- **Serialization utilities**: 96.77%
 
 ## Benefits of This Testing Framework
 
@@ -146,10 +152,21 @@ python run_tests.py --specific
 ### 4. **Continuous Integration Ready**
 - GitHub Actions compatible
 - Automated testing on code changes
+- **GPU-agnostic**: Tests run successfully in CI environments without NVIDIA hardware
 
 ### 5. **Development Efficiency**
 - Fast feedback on code changes
 - Reduced manual testing time
+
+## CI/CD Compatibility Notes
+
+### GPU Testing in CI Environments
+The test suite is designed to run successfully in GitHub Actions and other CI environments that don't have GPU hardware:
+
+- **Comprehensive mocking**: All PyTorch CUDA operations are mocked
+- **Device-agnostic**: Tests validate logic without requiring actual GPU hardware
+- **No NVIDIA driver dependencies**: Tests pass on CPU-only systems
+- **Consistent results**: Same test behavior locally and in CI
 
 ## Recommendations for Extension
 

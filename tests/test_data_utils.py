@@ -137,6 +137,7 @@ class TestDaCapoModelConfig:
         # Mock get_dacapo_channels to return a list with length
         mock_get_dacapo_channels.return_value = ["channel1", "channel2", "channel3"]
 
+        # Mock torch.cuda.is_available to avoid CUDA operations
         with patch("torch.cuda.is_available", return_value=False):
             config = DaCapoModelConfig(run_name="test_run", iteration=1000)
 
