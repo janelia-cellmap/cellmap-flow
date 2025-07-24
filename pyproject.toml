@@ -44,7 +44,7 @@ dependencies = [
 dacapo = ["dacapo-ml"]
 cellpose = ["cellpose==3.1.1.1"]
 bioimageio = ["bioimageio.core[onnx,pytorch]==0.7.0"]
-test = ["pytest", "pytest-cov", "pytest-lazy-fixtures"]
+test = ["pytest", "pytest-cov", "pytest-lazy-fixtures", "coverage[toml]", "pytest-html", "pytest-xdist"]
 dev = [
     "black",
     "mypy",
@@ -90,4 +90,69 @@ cellmap_flow_multiple = "cellmap_flow.cli.multiple_cli:main"
 cellmap_flow_fly = "cellmap_flow.cli.fly_model:main"
 cellmap_flow_yaml = "cellmap_flow.cli.multiple_yaml_cli:main"
 cellmap_flow_blockwise_processor = "cellmap_flow.blockwise.cli:cli"
+
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "-v",
+]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests as requiring GPU",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+filterwarnings = [
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["cellmap_flow"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/.*",
+    "*/venv/*",
+    "*/virtualenv/*",
+    "*/site-packages/*",
+    "setup.py",
+    "conftest.py",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+ignore_errors = true
+show_missing = true
+skip_covered = false
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+show_contexts = true
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
