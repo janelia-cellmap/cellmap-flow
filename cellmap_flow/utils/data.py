@@ -65,11 +65,19 @@ class ScriptModelConfig(ModelConfig):
         from cellmap_flow.utils.load_py import load_safe_config
 
         config = load_safe_config(self.script_path)
+        if not hasattr(config, "read_shape"):
+            config.read_shape = Coordinate(config.input_size) * Coordinate(
+                config.input_voxel_size
+            )
+        if not hasattr(config, "write_shape"):
+            config.write_shape = Coordinate(config.output_size) * Coordinate(
+                config.output_voxel_size
+            )
         if not hasattr(config, "block_shape"):
             setattr(
                 config,
                 "block_shape",
-                np.array(tuple(config.write_shape) + (config.output_channels,)),
+                np.array(tuple(config.output_size) + (config.output_channels,)),
             )
 
         return config
