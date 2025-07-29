@@ -238,10 +238,6 @@ def main():
         pass
 
 
-if __name__ == "__main__":
-    main()
-
-
 def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
@@ -266,3 +262,7 @@ def run_multiple(models, dataset_path, charge_group, queue):
     generate_neuroglancer_url(dataset_path)
     while True:
         pass
+
+
+if __name__ == "__main__":
+    main()

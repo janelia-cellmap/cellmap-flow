@@ -1,26 +1,25 @@
 import logging
-import daisy
-from zarr.storage import DirectoryStore
-import numpy as np
-from funlib.geometry.coordinate import Coordinate
-from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.inferencer import Inferencer
-
-from cellmap_flow.utils.config_utils import load_config, build_models
-
-from cellmap_flow.utils.serilization_utils import get_process_dataset
-
-from funlib.persistence import prepare_ds, open_ds, Array
+import subprocess
 from pathlib import Path
 
+import daisy
+import numpy as np
+from funlib.geometry.coordinate import Coordinate
+from funlib.persistence import Array, open_ds, prepare_ds
+from zarr.storage import DirectoryStore
+
 from cellmap_flow.globals import g
+from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.utils.config_utils import build_models, load_config
+from cellmap_flow.utils.serilization_utils import get_process_dataset
 
 logger = logging.getLogger(__name__)
 
 
 class CellMapFlowBlockwiseProcessor:
 
-    def __init__(self, yaml_config: str, create=True):
+    def __init__(self, yaml_config: str, create=False):
         """Run the CellMapFlow server with a Fly model."""
         self.config = load_config(yaml_config)
         self.yaml_config = yaml_config
@@ -55,6 +54,7 @@ class CellMapFlowBlockwiseProcessor:
         if self.workers <= 1:
             logger.error("Workers should be greater than 1.")
             return
+        self.cpu_workers = self.config.get("cpu_workers", 12)
         if "create" in self.config:
             create = self.config["create"]
             if isinstance(create, str):
@@ -177,6 +177,7 @@ class CellMapFlowBlockwiseProcessor:
                     self.output_voxel_size,
                 )
             array[write_roi] = predictions.to_ndarray(write_roi)
+        logger.info(f"Processed block {block.id} with write ROI {write_roi}")
 
     def client(self):
         client = daisy.Client()
@@ -214,6 +215,7 @@ class CellMapFlowBlockwiseProcessor:
                 self.yaml_config,
                 self.charge_group,
                 self.queue,
+                ncpu=self.cpu_workers,
             ),
             read_write_conflict=True,
             fit="overhang",
@@ -226,11 +228,10 @@ class CellMapFlowBlockwiseProcessor:
         # , multiprocessing= False
 
 
-import subprocess
-
-
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
+        if not Path("prediction_logs").exists():
+            Path("prediction_logs").mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
                 "bsub",
