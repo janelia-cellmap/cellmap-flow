@@ -33,7 +33,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=True)
+.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=False)
 
    .. py:attribute:: config
 
@@ -54,6 +54,9 @@ Module Contents
 
 
    .. py:attribute:: workers
+
+
+   .. py:attribute:: cpu_workers
 
 
    .. py:attribute:: model_config

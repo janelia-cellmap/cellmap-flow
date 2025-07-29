@@ -25,7 +25,7 @@ Classes
 Package Contents
 ----------------
 
-.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=True)
+.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=False)
 
    .. py:attribute:: config
 
@@ -46,6 +46,9 @@ Package Contents
 
 
    .. py:attribute:: workers
+
+
+   .. py:attribute:: cpu_workers
 
 
    .. py:attribute:: model_config

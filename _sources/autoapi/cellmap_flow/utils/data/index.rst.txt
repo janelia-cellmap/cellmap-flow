@@ -40,7 +40,6 @@ Functions
    cellmap_flow.utils.data.process_chunk_bioimage
    cellmap_flow.utils.data.process_chunk_bioimage_test
    cellmap_flow.utils.data.format_output_bioimage
-   cellmap_flow.utils.data.parse_model_configs
 
 
 Module Contents
@@ -221,12 +220,6 @@ Module Contents
 .. py:function:: process_chunk_bioimage_test(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
 
 .. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
-
-.. py:function:: parse_model_configs(yaml_file_path: str) -> List[ModelConfig]
-
-   Reads a YAML file that defines a list of model configs.
-   Validates them manually, then returns a list of constructed ModelConfig objects.
-
 
 .. py:class:: CellMapModelConfig(folder_path, name, scale=None)
 
