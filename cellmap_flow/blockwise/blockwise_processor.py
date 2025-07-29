@@ -230,6 +230,8 @@ class CellMapFlowBlockwiseProcessor:
 
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
+        if not Path("prediction_logs").exists():
+            Path("prediction_logs").mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
                 "bsub",
