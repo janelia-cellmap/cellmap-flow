@@ -98,8 +98,6 @@ Define these variables in your script (`cellmap_flow script -s path/to/your_scri
   The voxel shape of the data to be input to the PyTorch model.
 - **write_shape**: 
   The voxel shape of the data in output by the PyTorch model.
-- **block_shape**: 
-  The shape of the block output by the PyTorch model (i.e. `(*write_shape, output_channels)`).
 - **input_voxel_size**: 
   The voxel size of the data input to the model.
 - **output_voxel_size**: 
