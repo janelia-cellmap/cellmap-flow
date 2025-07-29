@@ -96,12 +96,10 @@ cellmap_flow script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/mo
 Define these variables in your script (`cellmap_flow script -s path/to/your_script.py`):
 - **model**: 
   The PyTorch model to be used for inference. 
-- **read_shape**: 
+- **input_size**: 
   The voxel shape of the data to be input to the PyTorch model.
-- **write_shape**: 
+- **output_size**: 
   The voxel shape of the data in output by the PyTorch model.
-- **block_shape**: 
-  The shape of the block output by the PyTorch model (i.e. `(*write_shape, output_channels)`).
 - **input_voxel_size**: 
   The voxel size of the data input to the model.
 - **output_voxel_size**: 
