@@ -1,0 +1,84 @@
+# Coverage.py configuration file
+# https://coverage.readthedocs.io/en/latest/config.html
+
+[run]
+# The source code directories to measure
+source = cellmap_flow
+
+# Files to omit from coverage
+omit = 
+    */tests/*,
+    */test_*,
+    */__pycache__/*,
+    */.*,
+    */venv/*,
+    */virtualenv/*,
+    */site-packages/*,
+    setup.py,
+    conftest.py,
+    */migrations/*,
+    */node_modules/*,
+
+# Enable branch coverage
+branch = True
+
+# Disable parallel mode to avoid file conflicts
+parallel = False
+
+# Specify data file location
+data_file = .coverage
+
+[report]
+# Regexes for lines to exclude from consideration
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run:
+    if 0:
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @(abc\.)?abstractmethod
+
+# Ignore warnings about missing files
+ignore_errors = True
+
+# Show line numbers of missing statements
+show_missing = True
+
+# Set precision for percentage display
+precision = 2
+
+# Sort by name for consistent output
+sort = Name
+
+[html]
+# Directory for HTML coverage report
+directory = htmlcov
+
+# Title for HTML report
+title = cellmap-flow Coverage Report
+
+# Show contexts for each covered line
+show_contexts = True
+
+[xml]
+# Output file for XML report (for CI/CD systems)
+output = coverage.xml
+
+[json]
+# Output file for JSON report
+output = coverage.json
+
+# Show contexts in JSON report
+show_contexts = True
