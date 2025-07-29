@@ -217,8 +217,8 @@ class CellMapFlowBlockwiseProcessor:
             ),
             read_write_conflict=True,
             fit="overhang",
-            max_retries=0,
-            timeout=None,
+            max_retries=2,
+            timeout=1800,
             num_workers=self.workers,
         )
 
