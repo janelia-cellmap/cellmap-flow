@@ -152,12 +152,14 @@ class CellMapFlowBlockwiseProcessor:
             print(f"empty write roi: {write_roi}")
             return
 
+        # Check if block is already processed before expensive inference computation
+        fill_value = getattr(self.output_arrays[0], 'fill_value', self.dtype(0))
+        if not (self.output_arrays[0][write_roi] == fill_value).all():
+            return
+
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
 
         chunk_data = chunk_data.astype(self.dtype)
-
-        if self.output_arrays[0][block.write_roi].any():
-            return
 
         for i, array in enumerate(self.output_arrays):
 
