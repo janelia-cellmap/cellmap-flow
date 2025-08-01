@@ -128,6 +128,7 @@ class CellMapFlowBlockwiseProcessor:
                         voxel_size=self.output_voxel_size,
                         axis_names=["z", "y", "x"],
                         units=["nm", "nm", "nm"],
+                        # TODO: offset should be taken from the input dataset
                         offset=(0, 0, 0),
                     )
                 except Exception as e:
@@ -143,6 +144,8 @@ class CellMapFlowBlockwiseProcessor:
                 except Exception as e:
                     raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
             self.output_arrays.append(array)
+
+        # TODO: initialize database for completion tracking
 
     def process_fn(self, block):
 
@@ -189,6 +192,8 @@ class CellMapFlowBlockwiseProcessor:
 
                 block.status = daisy.BlockStatus.SUCCESS
 
+                # TODO: update database with block status, store by task_id and block_id
+
     def run(self):
 
         read_shape = self.model_config.config.read_shape
@@ -222,6 +227,9 @@ class CellMapFlowBlockwiseProcessor:
             max_retries=0,
             timeout=None,
             num_workers=self.workers,
+            # TODO: add check_function that checks if the block is already processed from the database, pseudo code (daisy might not work with lambda though):
+            # check_function = lambda block: db.is_processed(block.id)
+            # check_function=self.check_function,
         )
 
         daisy.run_blockwise([task])
