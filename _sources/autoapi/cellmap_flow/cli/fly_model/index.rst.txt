@@ -4,15 +4,6 @@ cellmap_flow.cli.fly_model
 .. py:module:: cellmap_flow.cli.fly_model
 
 
-Attributes
-----------
-
-.. autoapisummary::
-
-   cellmap_flow.cli.fly_model.queue
-   cellmap_flow.cli.fly_model.charge_group
-
-
 Functions
 ---------
 
@@ -23,14 +14,6 @@ Functions
 
 Module Contents
 ---------------
-
-.. py:data:: queue
-   :value: 'gpu_a100'
-
-
-.. py:data:: charge_group
-   :value: 'cellmap'
-
 
 .. py:function:: main()
 
