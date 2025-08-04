@@ -1,26 +1,20 @@
 # %%
-import zarr
-from funlib.geometry import Coordinate
-import logging
-import tensorstore as ts
-import numpy as np
-from funlib.geometry import Coordinate
-from funlib.geometry import Roi
-import os
-import re
-import zarr
-from skimage.measure import block_reduce
-from funlib.geometry import Coordinate, Roi
-
-import zarr
-from zarr.n5 import N5FSStore
-import h5py
 import json
 import logging
 import os
-from typing import Union, Sequence
-from cellmap_flow.globals import g
+import re
+from typing import Sequence, Union
+
+import h5py
+import numpy as np
 import s3fs
+import tensorstore as ts
+import zarr
+from funlib.geometry import Coordinate, Roi
+from skimage.measure import block_reduce
+from zarr.n5 import N5FSStore
+
+from cellmap_flow.globals import g
 
 
 def get_scale_info(zarr_grp):
@@ -46,6 +40,26 @@ def find_target_scale(zarr_grp_path, target_resolution):
     if target_scale is None:
         msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
         raise ValueError(msg)
+    return target_scale, offsets[target_scale], shapes[target_scale]
+
+
+def find_closest_scale(zarr_grp_path, target_resolution):
+    zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    target_scale = None
+    last_scale = None
+    for scale, res in resolutions.items():
+        if last_scale is None:
+            last_scale = scale
+        if Coordinate(res) == Coordinate(target_resolution):
+            target_scale = scale
+            break
+        elif any((r > t for r, t in zip(res, target_resolution))):
+            target_scale = last_scale
+            break
+        last_scale = scale
+    if target_scale is None:
+        target_scale = last_scale
     return target_scale, offsets[target_scale], shapes[target_scale]
 
 

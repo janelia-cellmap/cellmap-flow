@@ -51,10 +51,11 @@ class Inferencer:
             logger.error("No GPU available, using CPU")
         torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
         torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
-        # condig is lazy so one call is needed to get the config
+        # config is lazy so one call is needed to get the config
         _ = self.model_config.config
 
         if hasattr(self.model_config.config, "read_shape") and hasattr(

@@ -71,7 +71,7 @@ def main():
         logger.error(
             "Example: cellmap_flow_multiple --data-path /some/shared/path --dacapo -r run_1 -it 60 --dacapo -r run_2 -it 50 --script -s /path/to/script"
         )
-        logger.error("Now we will just open the raw data ..")
+        logger.error("Now we will just open the raw data ...")
 
     # Extract data path
     data_path = None
@@ -238,10 +238,6 @@ def main():
         pass
 
 
-if __name__ == "__main__":
-    main()
-
-
 def run_multiple(models, dataset_path, charge_group, queue):
     g.queue = queue
     g.charge_group = charge_group
@@ -266,3 +262,7 @@ def run_multiple(models, dataset_path, charge_group, queue):
     generate_neuroglancer_url(dataset_path)
     while True:
         pass
+
+
+if __name__ == "__main__":
+    main()

@@ -92,7 +92,7 @@ def submit_bsub_job(
         command,
     ]
 
-    print("Submitting job with the following command:")
+    print(f"Submitting job with the following command: {' '.join(bsub_command)}")
 
     try:
         result = subprocess.run(

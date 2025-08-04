@@ -182,7 +182,7 @@ class ZScoreNormalizer(InputNormalizer):
     def dtype(self):
         return np.float32
 
-    def normalize(self, data: np.ndarray) -> np.ndarray:
+    def _process(self, data: np.ndarray) -> np.ndarray:
         return (data - self.mean) / self.std
 
 
