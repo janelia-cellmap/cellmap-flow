@@ -637,11 +637,3 @@ class CellMapModelConfig(ModelConfig):
         config.model.to(device)
         config.model.eval()
         return config
-
-
-# %%
-# config, task = DaCapoModelConfig(
-#     run_name="finetuned_07-31-24_3d_lsdaffs_jrc_mus-liver-zon-1_07-31-24_nuclear_pores_pseudorandom_training_centers_unet_default_v2_no_dataset_predictor_node_lr_5E-5__0",
-#     iteration=55000,
-#     name="Example DaCapo Model",
-# )._get_config()
