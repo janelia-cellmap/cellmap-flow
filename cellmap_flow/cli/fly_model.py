@@ -1,6 +1,3 @@
-queue = "gpu_a100"
-charge_group = "cellmap"
-
 import os
 import yaml
 
@@ -11,7 +8,8 @@ from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 import threading
 from cellmap_flow.globals import Flow
 from cellmap_flow.utils.data import FlyModelConfig
-
+from cellmap_flow.utils.serilization_utils import get_process_dataset
+from cellmap_flow.globals import g
 
 import sys
 
@@ -24,7 +22,16 @@ def main():
         data = yaml.safe_load(f)
 
     zarr_grp_path = data["input"]
-    g.queue = queue
+    json_data = data.get("json_data", None)
+
+    if json_data:
+        g.input_norms, g.postprocess = get_process_dataset(json_data)
+
+    queue = data.get("queue", "gpu_h100")
+    if "charge_group" not in data:
+        raise ValueError("charge_group is required in the YAML file")
+    charge_group = data["charge_group"]
+
     g.charge_group = charge_group
     threads = []
     for run_name, run_items in data["runs"].items():
