@@ -122,7 +122,7 @@ class DaCapoModelConfig(ModelConfig):
         config.output_channels = len(
             config.channels
         )  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
-        config.block_shape = np.array(tuple(out_shape) + (len(channels),))
+        config.block_shape = np.array(tuple(out_shape) + (config.output_channels,))
 
         return config
 
@@ -384,7 +384,8 @@ def get_dacapo_channels(task):
     if hasattr(task, "channels"):
         return task.channels
     elif type(task).__name__ == "AffinitiesTask":
-        return ["x", "y", "z"]
+        # to be backwards compatible in case .channels or .neighborhood doesn't exist
+        return [f"aff_{'.'.join(map(str, n))}" for n in task.predictor.neighborhood]
     else:
         return ["membrane"]
 
@@ -636,3 +637,11 @@ class CellMapModelConfig(ModelConfig):
         config.model.to(device)
         config.model.eval()
         return config
+
+
+# %%
+# config, task = DaCapoModelConfig(
+#     run_name="finetuned_07-31-24_3d_lsdaffs_jrc_mus-liver-zon-1_07-31-24_nuclear_pores_pseudorandom_training_centers_unet_default_v2_no_dataset_predictor_node_lr_5E-5__0",
+#     iteration=55000,
+#     name="Example DaCapo Model",
+# )._get_config()
