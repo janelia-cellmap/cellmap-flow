@@ -8,7 +8,6 @@ import threading
 from scipy.ndimage import label
 import mwatershed as mws
 from scipy.ndimage import measurements, gaussian_filter
-from scipy.ndimage import measurements
 import fastremap
 from funlib.math import cantor_number
 import fastmorph
