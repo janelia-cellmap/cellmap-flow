@@ -6,13 +6,16 @@ import daisy
 import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from funlib.persistence import Array, open_ds, prepare_ds
-from zarr.storage import DirectoryStore
+from zarr.storage import NestedDirectoryStore
+from zarr.hierarchy import open_group
+
 
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.config_utils import build_models, load_config
 from cellmap_flow.utils.serilization_utils import get_process_dataset
+from cellmap_flow.utils.ds import generate_singlescale_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -121,23 +124,39 @@ class CellMapFlowBlockwiseProcessor:
             if create:
                 try:
                     array = prepare_ds(
-                        DirectoryStore(self.output_path / channel / "s0"),
+                        NestedDirectoryStore(self.output_path / channel / "s0"),
                         output_shape,
                         dtype=self.dtype,
                         chunk_shape=self.block_shape,
                         voxel_size=self.output_voxel_size,
                         axis_names=["z", "y", "x"],
-                        units=["nm", "nm", "nm"],
+                        units=["nanometer",]*3,
                         offset=(0, 0, 0),
                     )
                 except Exception as e:
                     raise Exception(
                         f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}"
                     )
+                try:
+                    z_store = NestedDirectoryStore(self.output_path / channel)
+                    zg = open_group(store=z_store, mode='a')
+                    if 'multiscales' in list(zg.attrs):
+                        raise ValueError(f'multiscales attribute already exists in {z_store.path}')
+                    else:
+                        zattrs = generate_singlescale_metadata(ds_name='s0',
+                                                               voxel_size=self.output_voxel_size,
+                                                               translation=[0.0,]*3,
+                                                               units=['nanometer',]*3,
+                                                               axes=['z', 'y', 'x'])
+                        zg.attrs['multiscales'] = zattrs['multiscales']
+                except Exception as e:
+                    raise Exception(
+                        f"Failed to prepare ome-ngff metadata for {self.output_path/channel/'s0'}, {e}"
+                    ) 
             else:
                 try:
                     array = open_ds(
-                        DirectoryStore(self.output_path / channel / "s0"),
+                        NestedDirectoryStore(self.output_path / channel / "s0"),
                         "a",
                     )
                 except Exception as e:
