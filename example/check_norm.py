@@ -1,7 +1,7 @@
-from cellmap_flow.norm.input_normalize import get_normalizers
+from cellmap_flow.norm.input_normalize import get_input_normalizers
 
 # %%
-get_normalizers()
+get_input_normalizers()
 
 
 import cellmap_flow.norm.input_normalize

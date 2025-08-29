@@ -1,25 +1,66 @@
 # %%
-import zarr
-from funlib.geometry import Coordinate
-import logging
-import tensorstore as ts
-import numpy as np
-from funlib.geometry import Coordinate
-from funlib.geometry import Roi
-import os
-import re
-import zarr
-from skimage.measure import block_reduce
-from funlib.geometry import Coordinate, Roi
-
-import zarr
-from zarr.n5 import N5FSStore
-import h5py
 import json
 import logging
 import os
-from typing import Union, Sequence
-import cellmap_flow.globals as g
+import re
+from typing import Sequence, Union
+
+import h5py
+import numpy as np
+import s3fs
+import tensorstore as ts
+import zarr
+from funlib.geometry import Coordinate, Roi
+from skimage.measure import block_reduce
+from zarr.n5 import N5FSStore
+
+from cellmap_flow.globals import g
+
+
+def get_scale_info(zarr_grp):
+    attrs = zarr_grp.attrs
+    resolutions = {}
+    offsets = {}
+    shapes = {}
+    for scale in attrs["multiscales"][0]["datasets"]:
+        resolutions[scale["path"]] = scale["coordinateTransformations"][0]["scale"]
+        offsets[scale["path"]] = scale["coordinateTransformations"][1]["translation"]
+        shapes[scale["path"]] = zarr_grp[scale["path"]].shape
+    return offsets, resolutions, shapes
+
+
+def find_target_scale(zarr_grp_path, target_resolution):
+    zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    target_scale = None
+    for scale, res in resolutions.items():
+        if Coordinate(res) == Coordinate(target_resolution):
+            target_scale = scale
+            break
+    if target_scale is None:
+        msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
+        raise ValueError(msg)
+    return target_scale, offsets[target_scale], shapes[target_scale]
+
+
+def find_closest_scale(zarr_grp_path, target_resolution):
+    zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    target_scale = None
+    last_scale = None
+    for scale, res in resolutions.items():
+        if last_scale is None:
+            last_scale = scale
+        if Coordinate(res) == Coordinate(target_resolution):
+            target_scale = scale
+            break
+        elif any((r > t for r, t in zip(res, target_resolution))):
+            target_scale = last_scale
+            break
+        last_scale = scale
+    if target_scale is None:
+        target_scale = last_scale
+    return target_scale, offsets[target_scale], shapes[target_scale]
 
 
 # Ensure tensorstore does not attempt to use GCE credentials
@@ -66,7 +107,9 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
 def apply_norms(data):
     if hasattr(data, "read"):
         data = data.read().result()
+    # logger.error("norm time")
     for norm in g.input_norms:
+        # logger.error(f"applying norm: {norm}")
         data = norm(data)
     return data
 
@@ -88,13 +131,22 @@ class LazyNormalization:
         return at
 
 
-def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
+def open_ds_tensorstore(
+    dataset_path: str, mode="r", concurrency_limit=None, normalize=True
+):
     # open with zarr or n5 depending on extension
     filetype = (
         "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
     )
     extra_args = {}
 
+    if dataset_path.startswith("http://"):
+        path = dataset_path.split("http://")[1]
+        kvstore = {
+            "driver": "http",
+            "base_url": "http://",
+            "path": path,
+        }
     if dataset_path.startswith("s3://"):
         kvstore = {
             "driver": "s3",
@@ -145,7 +197,9 @@ def open_ds_tensorstore(dataset_path: str, mode="r", concurrency_limit=None):
         ts_dataset = dataset_future.result()
 
     # return ts_dataset
-    return LazyNormalization(ts_dataset)
+    if normalize:
+        return LazyNormalization(ts_dataset)
+    return ts_dataset
 
 
 def to_ndarray_tensorstore(
@@ -172,6 +226,10 @@ def to_ndarray_tensorstore(
             roi = Roi(roi.begin[::-1], roi.shape[::-1])
         if offset:
             offset = Coordinate(offset[::-1])
+        if voxel_size:
+            voxel_size = Coordinate(voxel_size[::-1])
+        if output_voxel_size:
+            output_voxel_size = Coordinate(output_voxel_size[::-1])
 
     if roi is None:
         with ts.Transaction() as txn:
@@ -219,8 +277,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
+        # logger.error("norm time")
         for norm in g.input_norms:
-            print(f"Applying norm: {norm}")
+            # logger.error(f"Applying norm: {norm}")
             data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
@@ -269,95 +328,6 @@ def to_ndarray_tensorstore(
         data = np.swapaxes(data, 0, 2)
 
     return data
-
-
-# def get_ds_info(path, ome_zarr=True):
-#     swap_axes = False
-#     if path.startswith("s3://"):
-#         ts_info = open_ds_tensorstore(path)
-#         shape = ts_info.shape
-#         path, filename = split_dataset_path(path)
-#         filename, scale = filename.rsplit("/s")
-#         scale = int(scale)
-#         fs = s3fs.S3FileSystem(
-#             anon=True
-#         )  # Set anon=True if you don't need authentication
-#         store = s3fs.S3Map(root=path, s3=fs)
-#         zarr_dataset = zarr.open(
-#             store,
-#             mode="r",
-#         )
-#         multiscale_attrs = zarr_dataset[filename].attrs.asdict()
-#         if "multiscales" in multiscale_attrs:
-#             multiscales = multiscale_attrs["multiscales"][0]
-#             axes = [axis["name"] for axis in multiscales["axes"]]
-#             for scale_info in multiscale_attrs["multiscales"][0]["datasets"]:
-#                 if scale_info["path"] == f"s{scale}":
-#                     voxel_size = Coordinate(
-#                         scale_info["coordinateTransformations"][0]["scale"]
-#                     )
-#         if axes[:3] == ["x", "y", "z"]:
-#             swap_axes = True
-#         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-#         roi = Roi((0, 0, 0), Coordinate(shape) * voxel_size)
-#     elif path.startswith("gs://"):
-#         ts_info = open_ds_tensorstore(path)
-#         shape = ts_info.shape
-#         voxel_size = Coordinate(
-#             (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
-#         )
-#         if ts_info.spec().transform.input_labels[:3] == ("x", "y", "z"):
-#             swap_axes = True
-#         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-#         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
-#     else:
-#         # TODO change with just get metadata
-#         ds = open_dataset(path, ome_zarr=ome_zarr)
-#         voxel_size = ds.voxel_size
-#         chunk_shape = ds.chunk_shape
-#         roi = ds.roi
-#         shape = ds.shape
-#     if swap_axes:
-#         voxel_size = Coordinate(voxel_size[::-1])
-#         chunk_shape = Coordinate(chunk_shape[::-1])
-#         shape = shape[::-1]
-#         roi = Roi(roi.begin[::-1], roi.shape[::-1])
-#     return voxel_size, chunk_shape, shape, roi, swap_axes
-
-
-# def get_resolutions(group):
-#     if type(group) is str:
-#         group = zarr.open(group)
-#     result = []
-#     for t in TreeNode(z).get_children():
-#         result.append(t.obj.name.lstrip("/"))
-
-#     return result
-
-
-# def get_right_resolution(group, resolution):
-
-#     if type(group) is str:
-#         group = Path(group)
-#     if not isinstance(resolution, tuple):
-#         raise ValueError(f"resolution must be a tuple got {resolution} ({type(resolution).__name__})")
-
-#     if type(resolution) is tuple:
-#         resolution = Coordinate(resolution)
-
-#     if not isinstance(zarr.open(group), zarr.hierarchy.Group):
-#         raise ValueError(f"{group} is not a zarr group")
-
-#     subfolders = get_resolutions(group)
-#     for s_r in subfolders:
-#         # TODO
-#         r = open_ome_ds(group, s_r).voxel_size
-#         if r[0] > resolution[0]:
-#             raise ValueError(f"{group} resolution {resolution} is larger than {s_r} {r}")
-#         equals = all([r[i] == resolution[i] for i in range(len(r))])
-#         if equals:
-#             return group / s_r
-#     raise ValueError(f"no resolution found for {resolution} in {group}")
 
 
 def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
@@ -476,7 +446,17 @@ def check_for_voxel_size(array, order):
         elif "scale" in item.attrs:
             return item.attrs["scale"]
         elif "pixelResolution" in item.attrs:
-            return item.attrs["pixelResolution"]["dimensions"]
+            downsampling_factors = [1, 1, 1]
+            if "downsamplingFactors" in item.attrs:
+                downsampling_factors = item.attrs["downsamplingFactors"]
+            if "dimensions" not in item.attrs["pixelResolution"]:
+                base_resolution = item.attrs["pixelResolution"]
+            else:
+                base_resolution = item.attrs["pixelResolution"]["dimensions"]
+            final_resolution = list(
+                np.array(base_resolution) * np.array(downsampling_factors)
+            )
+            return final_resolution
         elif "transform" in item.attrs:
             # Davis saves transforms in C order regardless of underlying
             # memory format (i.e. n5 or zarr). May be explicitly provided
@@ -543,7 +523,9 @@ def check_for_units(array, order):
 
         if "units" in item.attrs:
             return item.attrs["units"]
-        elif "pixelResolution" in item.attrs:
+        elif (
+            "pixelResolution" in item.attrs and "unit" in item.attrs["pixelResolution"]
+        ):
             unit = item.attrs["pixelResolution"]["unit"]
             return [unit for _ in range(len(array.shape))]
         elif "transform" in item.attrs:
@@ -720,6 +702,10 @@ def regularize_offset(voxel_size_float, offset_float):
 def _read_voxel_size_offset(ds, order="C"):
 
     voxel_size, offset, units = _read_attrs(ds, order)
+    for idx, unit in enumerate(units):
+        if unit == "um":
+            voxel_size[idx] = voxel_size[idx] * 1000
+            offset[idx] = offset[idx] * 1000
 
     return regularize_offset(voxel_size, offset)
 
@@ -747,8 +733,48 @@ def get_ds_info(path: str, mode: str = "r"):
     # TODO
     swap_axes = False
 
-    filename, ds_name = split_dataset_path(path)
+    if path.startswith("s3://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        path, filename = split_dataset_path(path)
+        filename, scale = filename.rsplit("/s")
+        scale = int(scale)
+        fs = s3fs.S3FileSystem(
+            anon=True
+        )  # Set anon=True if you don't need authentication
+        store = s3fs.S3Map(root=path, s3=fs)
+        zarr_dataset = zarr.open(
+            store,
+            mode="r",
+        )
+        multiscale_attrs = zarr_dataset[filename].attrs.asdict()
+        if "multiscales" in multiscale_attrs:
+            multiscales = multiscale_attrs["multiscales"][0]
+            axes = [axis["name"] for axis in multiscales["axes"]]
+            for scale_info in multiscale_attrs["multiscales"][0]["datasets"]:
+                if scale_info["path"] == f"s{scale}":
+                    voxel_size = Coordinate(
+                        scale_info["coordinateTransformations"][0]["scale"]
+                    )
+        if axes[:3] == ["x", "y", "z"]:
+            swap_axes = True
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi((0, 0, 0), Coordinate(shape) * voxel_size)
+        return voxel_size, chunk_shape, shape, roi, swap_axes
 
+    elif path.startswith("gs://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        voxel_size = Coordinate(
+            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
+        )
+        if ts_info.spec().transform.input_labels[:3] == ("x", "y", "z"):
+            swap_axes = True
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
+        return voxel_size, chunk_shape, shape, roi, swap_axes
+
+    filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip"):
         assert (
             not filename.endswith(".zip") or mode == "r"

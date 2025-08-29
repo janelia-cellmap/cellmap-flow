@@ -6,13 +6,15 @@ import logging
 import numpy as np
 import os
 
+import zarr
+
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.utils.ds import check_for_multiscale
 
 logger = logging.getLogger(__name__)
 
 
-def get_raw_layer(dataset_path):
-    is_multiscale = False
+def get_raw_layer(dataset_path, normalize=True):
     # if multiscale dataset
     if (
         dataset_path.split("/")[-1].startswith("s")
@@ -20,6 +22,10 @@ def get_raw_layer(dataset_path):
     ):
         dataset_path = dataset_path.rsplit("/", 1)[0]
         is_multiscale = True
+    elif check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]:
+        is_multiscale = True
+    else:
+        is_multiscale = False
 
     if ".zarr" in dataset_path:
         filetype = "zarr"
@@ -41,16 +47,24 @@ def get_raw_layer(dataset_path):
         ]
         scales.sort(key=lambda x: int(x[1:]))
         for scale in scales:
-            image = ImageDataInterface(f"{os.path.join(dataset_path, scale)}")
+            image = ImageDataInterface(
+                f"{os.path.join(dataset_path, scale)}", normalize=normalize
+            )
             layers.append(
                 neuroglancer.LocalVolume(
                     data=image.ts,
                     dimensions=neuroglancer.CoordinateSpace(
                         names=axis,
                         units="nm",
-                        scales=image.voxel_size,
+                        scales=(
+                            image.voxel_size[::-1]
+                            if filetype == "n5"
+                            else image.voxel_size
+                        ),
                     ),
-                    voxel_offset=image.offset,
+                    voxel_offset=(
+                        image.offset[::-1] if filetype == "n5" else image.offset
+                    ),
                 )
             )
 

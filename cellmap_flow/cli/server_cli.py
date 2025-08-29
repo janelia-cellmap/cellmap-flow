@@ -1,10 +1,18 @@
 import click
 import logging
 
+
+from cellmap_flow.image_data_interface import ImageDataInterface
+
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.utils.data import ScriptModelConfig, DaCapoModelConfig, BioModelConfig
+from cellmap_flow.utils.data import (
+    ScriptModelConfig,
+    DaCapoModelConfig,
+    BioModelConfig,
+    CellMapModelConfig,
+    FlyModelConfig,
+)
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.web_utils import get_free_port
 
 
 @click.group()
@@ -58,7 +66,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
@@ -66,6 +74,51 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
     """Run the CellMapFlow server with a DaCapo model."""
     model_config = DaCapoModelConfig(run_name=run_name, iteration=iteration)
     run_server(model_config, data_path, debug, port, certfile, keyfile)
+
+
+# return f"fly -c {self.checkpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
+
+
+@cli.command()
+@click.option(
+    "-c", "--checkpoint", required=True, type=str, help="The path to the checkpoint."
+)
+@click.option(
+    "-ch",
+    "--channels",
+    required=True,
+    type=str,
+    help="The channels of the model. split by comma.",
+)
+@click.option(
+    "-ivs",
+    "--input_voxel_size",
+    required=True,
+    type=str,
+    help="The input voxel size of the model. split by comma.",
+)
+@click.option(
+    "-ovs",
+    "--output_voxel_size",
+    required=True,
+    type=str,
+    help="The output voxel size of the model. split by comma.",
+)
+@click.option(
+    "-d", "--data_path", required=True, type=str, help="The path to the data."
+)
+def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
+    """Run the CellMapFlow server with a Fly model."""
+    channels = channels.split(",")
+    input_voxel_size = tuple(map(int, input_voxel_size.split(",")))
+    output_voxel_size = tuple(map(int, output_voxel_size.split(",")))
+    model_config = FlyModelConfig(
+        checkpoint_path=checkpoint,
+        channels=channels,
+        input_voxel_size=input_voxel_size,
+        output_voxel_size=output_voxel_size,
+    )
+    run_server(model_config, data_path)
 
 
 @cli.command()
@@ -79,7 +132,7 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
@@ -96,20 +149,33 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 @click.option(
     "-d", "--data_path", required=True, type=str, help="The path to the data."
 )
-@click.option("--debug", is_flag=True, help="Run in debug mode.")
+@click.option(
+    "-e",
+    "--edge_length_to_process",
+    required=False,
+    type=int,
+    help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
+)
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
 @click.option("--certfile", default=None, help="Path to SSL certificate file.")
 @click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def bioimage(model_path, data_path, debug, port, certfile, keyfile):
+def bioimage(
+    model_path, data_path, edge_length_to_process, debug, port, certfile, keyfile
+):
     """Run the CellMapFlow server with a bioimage-io model."""
-    model_config = BioModelConfig(model_name=model_path)
+    model_config = BioModelConfig(
+        model_name=model_path,
+        voxel_size=ImageDataInterface(data_path).voxel_size,
+        edge_length_to_process=edge_length_to_process,
+    )
     run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
-def run_server(model_config, data_path, debug, port, certfile, keyfile):
+def run_server(
+    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None
+):
     server = CellMapFlowServer(data_path, model_config)
-    if port == 0:
-        port = get_free_port()
 
     server.run(
         debug=debug,
@@ -117,6 +183,24 @@ def run_server(model_config, data_path, debug, port, certfile, keyfile):
         certfile=certfile,
         keyfile=keyfile,
     )
+
+
+@cli.command()
+@click.option(
+    "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
+)
+@click.option("-n", "--name", required=True, type=str, help="Name of the model")
+@click.option(
+    "-d", "--data_path", required=True, type=str, help="The path to the data."
+)
+@click.option("--debug", is_flag=False, help="Run in debug mode.")
+@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
+@click.option("--certfile", default=None, help="Path to SSL certificate file.")
+@click.option("--keyfile", default=None, help="Path to SSL private key file.")
+def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
+    """Run the CellMapFlow server with a CellMap model."""
+    model_config = CellMapModelConfig(folder_path=folder_path, name=name)
+    run_server(model_config, data_path, debug, port, certfile, keyfile)
 
 
 @cli.command()
