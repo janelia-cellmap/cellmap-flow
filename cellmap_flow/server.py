@@ -78,6 +78,7 @@ class CellMapFlowServer:
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
+        self.model_config_output_dtype = model_config.config.output_dtype
 
         self.inferencer = Inferencer(model_config)
 
@@ -160,7 +161,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
+                g.get_output_dtype(self.model_config_output_dtype),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -197,7 +198,7 @@ class CellMapFlowServer:
                     self.n5_block_shape[-1] = postprocess.num_channels
 
             self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
+                g.get_output_dtype(self.model_config_output_dtype),
                 self.n5_block_shape,
                 compressor=numcodecs.Zstd(),
             )
@@ -291,7 +292,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = g.get_output_dtype().__name__
+        dtype = g.get_output_dtype(self.model_config_output_dtype).__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -314,8 +315,10 @@ class CellMapFlowServer:
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
-        chunk_data = chunk_data.astype(g.get_output_dtype())
-
+        chunk_data = chunk_data.astype(
+            g.get_output_dtype(self.model_config_output_dtype)
+        )
+        print(np.unique(chunk_data), chunk_data.shape)
         current_time = time.time()
 
         # assume only one has equivalences
