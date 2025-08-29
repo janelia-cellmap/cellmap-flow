@@ -318,7 +318,6 @@ class CellMapFlowServer:
         chunk_data = chunk_data.astype(
             g.get_output_dtype(self.model_config_output_dtype)
         )
-        print(np.unique(chunk_data), chunk_data.shape)
         current_time = time.time()
 
         # assume only one has equivalences
