@@ -34,8 +34,7 @@ class CellMapFlowBlockwiseProcessor:
         print("Data path:", self.input_path)
 
         if "output_path" not in self.config:
-            logger.error("Missing required field in YAML: output_path")
-            return
+            raise Exception("Missing required field in YAML: output_path")
         self.output_path = self.config["output_path"]
         self.output_path = Path(self.output_path)
 
@@ -49,17 +48,14 @@ class CellMapFlowBlockwiseProcessor:
             json_data = self.config["json_data"]
 
         if "task_name" not in self.config:
-            logger.error("Missing required field in YAML: task_name")
-            return
+            raise Exception("Missing required field in YAML: task_name")
         if "workers" not in self.config:
-            logger.error("Missing required field in YAML: workers")
-            return
+            raise Exception("Missing required field in YAML: workers")
         
         task_name = self.config["task_name"]
         self.workers = self.config["workers"]
         if self.workers <= 1:
-            logger.error("Workers should be greater than 1.")
-            return
+            raise Exception("Workers should be greater than 1.")
         self.cpu_workers = self.config.get("cpu_workers", 12)
         # Added and create == True to fix client error when create: True in the yaml, so when it is a client it will not be changed
         if "create" in self.config and create == True:
@@ -71,8 +67,7 @@ class CellMapFlowBlockwiseProcessor:
                 create = create.lower() == "true"
 
         if "tmp_dir" not in self.config:
-            logger.error("Missing required field in YAML: tmp_dir, it is mandatory to track progress")
-            return
+            raise Exception("Missing required field in YAML: tmp_dir, it is mandatory to track progress")
 
         self.tmp_dir = Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
         if not self.tmp_dir.exists():
@@ -85,13 +80,11 @@ class CellMapFlowBlockwiseProcessor:
             print(model)
 
         if len(models) == 0:
-            logger.error("No models found in the configuration.")
-            return
+            raise Exception("No models found in the configuration.")
         if len(models) > 1:
-            logger.error(
+            raise Exception(
                 "Multiple models is not currently supported by blockwise processor."
             )
-            return
         self.model_config = models[0]
 
         # this is zyx
