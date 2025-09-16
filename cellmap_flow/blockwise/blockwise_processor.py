@@ -131,6 +131,7 @@ class CellMapFlowBlockwiseProcessor:
         print(f"type: {self.dtype}")
         print(f"output_path: {self.output_path}")
         for channel in self.output_channels:
+            ndim = len(self.block_shape)
             if create:
                 try:
                     array = prepare_ds(
@@ -139,9 +140,9 @@ class CellMapFlowBlockwiseProcessor:
                         dtype=self.dtype,
                         chunk_shape=self.block_shape,
                         voxel_size=self.output_voxel_size,
-                        axis_names=["z", "y", "x"][-len(self.block_shape):],
-                        units=["nanometer",]*len(self.block_shape),
-                        offset=(0,)*len(self.block_shape),
+                        axis_names=["z", "y", "x"][-ndim:],
+                        units=["nanometer",]*ndim,
+                        offset=(0,)*ndim,
                     )
                 except Exception as e:
                     raise Exception(
@@ -155,9 +156,9 @@ class CellMapFlowBlockwiseProcessor:
                     else:
                         zattrs = generate_singlescale_metadata(arr_name='s0',
                                                                voxel_size=self.output_voxel_size,
-                                                               translation=[0.0,]*len(self.block_shape),
-                                                               units=['nanometer',]*len(self.block_shape),
-                                                               axes=['z', 'y', 'x'][-len(self.block_shape):])
+                                                               translation=[0.0,]*ndim,
+                                                               units=['nanometer',]*ndim,
+                                                               axes=['z', 'y', 'x'][-ndim:])
                         zg.attrs['multiscales'] = zattrs['multiscales']
                 except Exception as e:
                     raise Exception(
