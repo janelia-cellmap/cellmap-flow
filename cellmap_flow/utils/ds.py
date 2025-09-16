@@ -40,7 +40,7 @@ def generate_singlescale_metadata(
         }
     ]
 
-    z_attrs["multiscales"][0]["name"] = ""
+    z_attrs["multiscales"][0]["name"] = "/"
     z_attrs["multiscales"][0]["version"] = "0.4"
 
     return z_attrs
