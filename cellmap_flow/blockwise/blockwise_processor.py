@@ -139,9 +139,9 @@ class CellMapFlowBlockwiseProcessor:
                         dtype=self.dtype,
                         chunk_shape=self.block_shape,
                         voxel_size=self.output_voxel_size,
-                        axis_names=["z", "y", "x"],
-                        units=["nanometer",]*3,
-                        offset=(0, 0, 0),
+                        axis_names=["z", "y", "x"][-len(self.block_shape):],
+                        units=["nanometer",]*len(self.block_shape),
+                        offset=(0,)*len(self.block_shape),
                     )
                 except Exception as e:
                     raise Exception(
@@ -155,9 +155,9 @@ class CellMapFlowBlockwiseProcessor:
                     else:
                         zattrs = generate_singlescale_metadata(arr_name='s0',
                                                                voxel_size=self.output_voxel_size,
-                                                               translation=[0.0,]*3,
-                                                               units=['nanometer',]*3,
-                                                               axes=['z', 'y', 'x'])
+                                                               translation=[0.0,]*len(self.block_shape),
+                                                               units=['nanometer',]*len(self.block_shape),
+                                                               axes=['z', 'y', 'x'][-len(self.block_shape):])
                         zg.attrs['multiscales'] = zattrs['multiscales']
                 except Exception as e:
                     raise Exception(

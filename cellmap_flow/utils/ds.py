@@ -28,7 +28,7 @@ def generate_singlescale_metadata(
         {"name": axis, "type": "space", "unit": unit} for axis, unit in zip(axes, units)
     ]
     z_attrs["multiscales"][0]["coordinateTransformations"] = [
-        {"scale": [1.0, 1.0, 1.0], "type": "scale"}
+        {"scale": [1.0,]*len(voxel_size), "type": "scale"}
     ]
     z_attrs["multiscales"][0]["datasets"] = [
         {
