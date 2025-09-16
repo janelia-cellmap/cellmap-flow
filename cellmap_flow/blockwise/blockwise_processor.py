@@ -150,7 +150,7 @@ class CellMapFlowBlockwiseProcessor:
                 try:
                     z_store = NestedDirectoryStore(self.output_path / channel)
                     zg = open_group(store=z_store, mode='a')
-                    if 'multiscales' in list(zg.attrs):
+                    if 'multiscales' in zg.attrs:
                         raise ValueError(f'multiscales attribute already exists in {z_store.path}')
                     else:
                         zattrs = generate_singlescale_metadata(arr_name='s0',
