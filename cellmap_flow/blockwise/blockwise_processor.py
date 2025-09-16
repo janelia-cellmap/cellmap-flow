@@ -146,7 +146,7 @@ class CellMapFlowBlockwiseProcessor:
                     if 'multiscales' in list(zg.attrs):
                         raise ValueError(f'multiscales attribute already exists in {z_store.path}')
                     else:
-                        zattrs = generate_singlescale_metadata(ds_name='s0',
+                        zattrs = generate_singlescale_metadata(arr_name='s0',
                                                                voxel_size=self.output_voxel_size,
                                                                translation=[0.0,]*3,
                                                                units=['nanometer',]*3,
