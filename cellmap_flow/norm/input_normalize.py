@@ -210,20 +210,56 @@ def get_input_normalizers() -> list[dict]:
     return normalizers
 
 
-def deserialize_list(elms: dict, T: type) -> list:
+def deserialize_list(elms, T: type) -> list:
+    """
+    Deserialize a list of processors from either dict or list format.
+    
+    Args:
+        elms: Either a dict (old format) or list (new ordered format) of processor configs
+        T: The base type to deserialize (InputNormalizer or PostProcessor)
+    
+    Returns:
+        List of instantiated processor objects in the specified order
+    """
     methods = [f for f in T.__subclasses__()]
     result = []
-    for elm_name in elms:
-        found = False
-        for nm in methods:
-            if nm.name() == elm_name:
-                result.append(nm(**elms[elm_name]))
-                found = True
-                break
-        if not found:
-            raise ValueError(f"method {elm_name} not found")
+    
+    # Handle new list format (ordered)
+    if isinstance(elms, list):
+        for elm_config in elms:
+            if isinstance(elm_config, dict) and 'name' in elm_config:
+                elm_name = elm_config['name']
+                params = {k: v for k, v in elm_config.items() if k != 'name'}
+                
+                found = False
+                for nm in methods:
+                    if nm.name() == elm_name:
+                        result.append(nm(**params))
+                        found = True
+                        break
+                if not found:
+                    logger.warning(f"method {elm_name} not found, skipping")
+            else:
+                logger.warning(f"Invalid element format in list: {elm_config}")
+    
+    # Handle old dict format (for backward compatibility)
+    elif isinstance(elms, dict):
+        for elm_name in elms:
+            found = False
+            for nm in methods:
+                if nm.name() == elm_name:
+                    result.append(nm(**elms[elm_name]))
+                    found = True
+                    break
+            if not found:
+                logger.warning(f"method {elm_name} not found, skipping")
+    
+    else:
+        raise ValueError(f"Expected dict or list, got {type(elms)}")
+    
     return result
 
 
-def get_normalizations(elms: dict) -> list[InputNormalizer]:
+def get_normalizations(elms) -> list[InputNormalizer]:
+    """Get normalizations from either dict or list format."""
     return deserialize_list(elms, InputNormalizer)

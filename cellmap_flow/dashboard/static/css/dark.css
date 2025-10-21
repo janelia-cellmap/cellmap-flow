@@ -114,3 +114,36 @@
     max-width: 800px;
     margin: 20px auto;
   }
+
+  /* Drag and Drop Styling */
+  .normalizer-item, .postprocessor-item {
+    background-color: #2a2a2a;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .normalizer-item:hover, .postprocessor-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .normalizer-item[draggable="true"]:active, 
+  .postprocessor-item[draggable="true"]:active {
+    cursor: grabbing;
+  }
+
+  .drag-handle {
+    color: #888;
+    user-select: none;
+    font-size: 1.2rem;
+  }
+
+  .drag-handle:hover {
+    color: #aaa;
+  }
+
+  /* Alert styling for dark mode */
+  .alert-info {
+    background-color: #1a4971;
+    border-color: #2980b9;
+    color: #cce5ff;
+  }

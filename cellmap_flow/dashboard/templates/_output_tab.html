@@ -1,22 +1,28 @@
 <!-- <h3>Post-Processing</h3> -->
+<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
+  <strong>Tip:</strong> Drag to reorder postprocessing steps. They will be applied in the order shown.
+</div>
 <form id="postProcessForm">
+  <div id="postProcessList">
   {% for normalizer in output_postprocessors %}
     {# Check if this post-processor is in the default_post_process dict #}
     {% set is_checked = normalizer.name in default_post_process and normalizer.name != 'custom_code' %}
 
-    <div class="form-check mb-2">
-      <input
-        class="form-check-input postProcessCheckbox"
-        type="checkbox"
-        id="postProcessMethod_{{ normalizer.name }}"
-        name="postProcessMethod_{{ normalizer.name }}"
-        value="{{ normalizer.name }}"
-        {% if is_checked %}checked{% endif %}
-      />
-      <label class="form-check-label" for="postProcessMethod_{{ normalizer.name }}">
-        {{ normalizer.name }}
-      </label>
-    </div>
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ normalizer.name }}" draggable="true">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2" style="cursor: move;">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcessMethod_{{ normalizer.name }}"
+          name="postProcessMethod_{{ normalizer.name }}"
+          value="{{ normalizer.name }}"
+          {% if is_checked %}checked{% endif %}
+        />
+        <label class="form-check-label ms-2" for="postProcessMethod_{{ normalizer.name }}">
+          {{ normalizer.name }}
+        </label>
+      </div>
 
     <!-- Show or hide the param div based on whether it's checked by default -->
     <div
@@ -46,8 +52,9 @@
         </div>
       {% endfor %}
     </div>
-    <hr />
+    </div>
   {% endfor %}
+  </div>
 
   <!-- Handle custom code checkbox and editor -->
   {% set is_custom_code_checked = 'custom_code' in default_post_process %}
@@ -142,26 +149,71 @@ document.addEventListener("DOMContentLoaded", function () {
 
   editor.addEventListener("input", debounce(checkSyntax, 500));
 
-  // Gather post-process data for submission
+  // Drag and drop functionality for reordering postprocessors
+  const postProcessList = document.getElementById("postProcessList");
+  let draggedPostItem = null;
+
+  postProcessList.addEventListener("dragstart", function (e) {
+    if (e.target.classList.contains("postprocessor-item")) {
+      draggedPostItem = e.target;
+      e.target.style.opacity = "0.5";
+    }
+  });
+
+  postProcessList.addEventListener("dragend", function (e) {
+    if (e.target.classList.contains("postprocessor-item")) {
+      e.target.style.opacity = "1";
+    }
+  });
+
+  postProcessList.addEventListener("dragover", function (e) {
+    e.preventDefault();
+    const afterElement = getDragAfterElementPost(postProcessList, e.clientY);
+    if (afterElement == null) {
+      postProcessList.appendChild(draggedPostItem);
+    } else {
+      postProcessList.insertBefore(draggedPostItem, afterElement);
+    }
+  });
+
+  function getDragAfterElementPost(container, y) {
+    const draggableElements = [...container.querySelectorAll(".postprocessor-item:not(.dragging)")];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  // Gather post-process data for submission IN ORDER
   window.gatherPostProcessData = function () {
-    const payload = {};
-    postProcessCheckboxes.forEach((cb) => {
-      if (cb.checked && cb !== customCodeCheckbox) {
-        const baseName = cb.value;
-        payload[baseName] = {};
+    const payload = [];
+    const orderedItems = document.querySelectorAll("#postProcessList .postprocessor-item");
+    
+    orderedItems.forEach((item) => {
+      const checkbox = item.querySelector(".postProcessCheckbox");
+      if (checkbox && checkbox.checked) {
+        const baseName = checkbox.value;
+        const postData = { name: baseName };
 
         const paramDiv = document.getElementById("postProcess_" + baseName + "Params");
         const inputs = paramDiv.querySelectorAll("input");
         inputs.forEach((inp) => {
           const paramName = inp.id.replace("postProcess_" + baseName + "_", "");
-          payload[baseName][paramName] = inp.value;
+          postData[paramName] = inp.value;
         });
+        
+        payload.push(postData);
       }
     });
 
     // If custom code is checked
     if (customCodeCheckbox.checked) {
-      payload.custom_code = editor.value;
+      payload.push({ name: "custom_code", code: editor.value });
     }
 
     return payload;

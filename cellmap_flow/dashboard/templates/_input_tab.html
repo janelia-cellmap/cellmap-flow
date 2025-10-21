@@ -1,23 +1,29 @@
 <!-- <h3>Input Normalization Methods</h3> -->
+<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
+  <strong>Tip:</strong> Drag to reorder normalization steps. They will be applied in the order shown.
+</div>
 <form id="inputNormForm">
+  <div id="inputNormList">
   {% for normalizer in input_normalizers %}
     {% set is_checked = normalizer.name in default_input_norm %}
-    <div class="form-check mb-2">
-      <input
-        class="form-check-input inputNormCheckbox"
-        type="checkbox"
-        id="inputNormMethod_{{ normalizer.name }}"
-        name="inputNormMethod_{{ normalizer.name }}"
-        value="{{ normalizer.name }}"
-        {% if is_checked %}checked{% endif %}
-      />
-      <label
-        class="form-check-label"
-        for="inputNormMethod_{{ normalizer.name }}"
-      >
-        {{ normalizer.name }}
-      </label>
-    </div>
+    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="{{ normalizer.name }}" draggable="true">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2" style="cursor: move;">⋮⋮</span>
+        <input
+          class="form-check-input inputNormCheckbox"
+          type="checkbox"
+          id="inputNormMethod_{{ normalizer.name }}"
+          name="inputNormMethod_{{ normalizer.name }}"
+          value="{{ normalizer.name }}"
+          {% if is_checked %}checked{% endif %}
+        />
+        <label
+          class="form-check-label ms-2"
+          for="inputNormMethod_{{ normalizer.name }}"
+        >
+          {{ normalizer.name }}
+        </label>
+      </div>
 
     <div
       id="inputNorm_{{ normalizer.name }}Params"
@@ -47,8 +53,9 @@
         </div>
       {% endfor %}
     </div>
-    <hr />
+    </div>
   {% endfor %}
+  </div>
 
   <!-- "Submit All" button -->
   <button type="button" class="btn btn-primary mt-3" id="submitAll">
@@ -79,20 +86,65 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // Helper function to gather "input_norm" data
+  // Drag and drop functionality for reordering
+  const inputNormList = document.getElementById("inputNormList");
+  let draggedItem = null;
+
+  inputNormList.addEventListener("dragstart", function (e) {
+    if (e.target.classList.contains("normalizer-item")) {
+      draggedItem = e.target;
+      e.target.style.opacity = "0.5";
+    }
+  });
+
+  inputNormList.addEventListener("dragend", function (e) {
+    if (e.target.classList.contains("normalizer-item")) {
+      e.target.style.opacity = "1";
+    }
+  });
+
+  inputNormList.addEventListener("dragover", function (e) {
+    e.preventDefault();
+    const afterElement = getDragAfterElement(inputNormList, e.clientY);
+    if (afterElement == null) {
+      inputNormList.appendChild(draggedItem);
+    } else {
+      inputNormList.insertBefore(draggedItem, afterElement);
+    }
+  });
+
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll(".normalizer-item:not(.dragging)")];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  // Helper function to gather "input_norm" data IN ORDER
   window.gatherInputNormData = function () {
-    const payload = {};
-    normalizerCheckboxes.forEach((cb) => {
-      if (cb.checked) {
-        const baseName = cb.value;
-        payload[baseName] = {};
+    const payload = [];
+    const orderedItems = document.querySelectorAll("#inputNormList .normalizer-item");
+    
+    orderedItems.forEach((item) => {
+      const checkbox = item.querySelector(".inputNormCheckbox");
+      if (checkbox && checkbox.checked) {
+        const baseName = checkbox.value;
+        const normData = { name: baseName };
 
         const paramDiv = document.getElementById("inputNorm_" + baseName + "Params");
         const inputs = paramDiv.querySelectorAll("input");
         inputs.forEach((inp) => {
           const paramName = inp.id.replace("inputNorm_" + baseName + "_", "");
-          payload[baseName][paramName] = inp.value;
+          normData[paramName] = inp.value;
         });
+        
+        payload.push(normData);
       }
     });
     return payload;
