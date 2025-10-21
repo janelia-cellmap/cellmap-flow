@@ -42,16 +42,16 @@ def predict(read_roi, write_roi, config, **kwargs):
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=True):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
             logger.error("No GPU available, using CPU")
-        torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
-        torch.backends.cudnn.enabled = True
-        torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
+        # torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
+        # torch.backends.cudnn.enabled = True
+        # torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config

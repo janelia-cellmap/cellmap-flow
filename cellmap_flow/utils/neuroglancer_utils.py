@@ -36,6 +36,9 @@ def generate_neuroglancer_url(dataset_path, extras=[]):
                 filetype = "precomputed"
             s.layers["data"] = neuroglancer.ImageLayer(
                 source=f"{filetype}://{dataset_path}",
+                shader="""#uicontrol invlerp normalized(range=[-1, 1], window=[-1, 1]);
+    #uicontrol vec3 color color(default="white");
+    void main(){{emitRGB(color * normalized());}}""",
             )
         for i, extra in enumerate(extras):
             logger.error(f" adding extra {i} {extra}")
@@ -68,7 +71,7 @@ def generate_neuroglancer_url(dataset_path, extras=[]):
             color = next(color_cycle)
             s.layers[model] = neuroglancer.ImageLayer(
                 source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
-                shader=f"""#uicontrol invlerp normalized(range=[0, 1], window=[0, 1]);
+                shader=f"""#uicontrol invlerp normalized(range=[0.5, 0.5], window=[0, 1]);
     #uicontrol vec3 color color(default="{color}");
     void main(){{emitRGB(color * normalized());}}""",
             )

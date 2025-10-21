@@ -82,7 +82,10 @@ def get_raw_layer(dataset_path, normalize=True):
                     scales=image.voxel_size,
                 ),
                 voxel_offset=image.offset,
-            )
+            ),
+            shader="""#uicontrol invlerp normalized(range=[-1, 1], window=[-1, 1]);
+    #uicontrol vec3 color color(default="white");
+    void main(){{emitRGB(color * normalized());}}""",
         )
 
 

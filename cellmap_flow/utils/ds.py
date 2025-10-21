@@ -17,6 +17,47 @@ from zarr.n5 import N5FSStore
 from cellmap_flow.globals import g
 
 
+def generate_singlescale_metadata(
+    arr_name: str,
+    voxel_size: list,
+    translation: list,
+    units: str,
+    axes: list,
+):
+    z_attrs: dict = {"multiscales": [{}]}
+
+    # Create axes with proper types - channel axis should have type "channel"
+    axes_list = []
+    for axis, unit in zip(axes, units):
+        if axis in ["c", "c^"]:
+            axes_list.append({"name": axis, "type": "channel"})
+        else:
+            axes_list.append({"name": axis, "type": "space", "unit": unit})
+
+    z_attrs["multiscales"][0]["axes"] = axes_list
+
+    # Set coordinateTransformations scale to match dimensionality
+    scale_transform = [1.0] * len(axes)
+    z_attrs["multiscales"][0]["coordinateTransformations"] = [
+        {"scale": scale_transform, "type": "scale"}
+    ]
+
+    z_attrs["multiscales"][0]["datasets"] = [
+        {
+            "coordinateTransformations": [
+                {"scale": voxel_size, "type": "scale"},
+                {"translation": translation, "type": "translation"},
+            ],
+            "path": arr_name,
+        }
+    ]
+
+    z_attrs["multiscales"][0]["name"] = ""
+    z_attrs["multiscales"][0]["version"] = "0.4"
+
+    return z_attrs
+
+
 def get_scale_info(zarr_grp):
     attrs = zarr_grp.attrs
     resolutions = {}
