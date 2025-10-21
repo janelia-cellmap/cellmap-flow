@@ -77,6 +77,7 @@ exclude = ["ignore"]
 
 [tool.setuptools.package-data]
 "cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
+"models" = ["*.yaml"]
 
 
 [tool.poetry.group.dev.dependencies]
