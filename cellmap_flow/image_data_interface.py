@@ -23,7 +23,16 @@ class ImageDataInterface:
         normalize=True,
     ):
         # if multiscale dataset, get scale for voxel size
-        if not isinstance(zarr.open(dataset_path, mode="r"), zarr.core.Array):
+        logger.error(f"opening dataset path {dataset_path} in mode {mode}")
+        if ".n5" in dataset_path:
+            container_path = dataset_path[: dataset_path.rfind(".n5") + 3]
+            ds_path = dataset_path[dataset_path.rfind(".n5") + 4 :]
+            store = zarr.N5Store(container_path)
+            dd = zarr.open(store, mode="r")
+            dd = dd[ds_path]
+        else:
+            dd = zarr.open(dataset_path, mode="r")
+        if not isinstance(dd, zarr.core.Array):
             scale, _, _ = find_closest_scale(dataset_path, voxel_size)
             logger.info(f"found scale {scale} for voxel size {voxel_size}")
             dataset_path = os.path.join(dataset_path, scale)
