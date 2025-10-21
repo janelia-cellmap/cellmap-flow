@@ -1,3 +1,28 @@
+"""
+CLI for running Fly models via YAML configuration.
+
+This module provides a command-line interface for running multiple Fly models
+based on a YAML configuration file. It supports custom input/output sizes,
+normalization, and postprocessing.
+
+Usage:
+    cellmap_flow_fly /path/to/config.yaml
+
+YAML Configuration Format:
+    input: /path/to/input.zarr
+    queue: gpu_h100
+    charge_group: cellmap  # Project/billing group
+    json_data: /path/to/norm_postprocess.json  # Optional
+    input_size: [178, 178, 178]  # Optional, default shown
+    output_size: [56, 56, 56]  # Optional, default shown
+    runs:
+      model_name:
+        checkpoint: /path/to/checkpoint.pth
+        classes: [channel1, channel2]
+        res: 8  # Resolution in nm
+        scale: s1  # Optional scale level
+"""
+
 import os
 import yaml
 

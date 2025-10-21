@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
     default=0,
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
@@ -81,31 +81,31 @@ def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
 
 @cli.command()
 @click.option(
-    "-c", "--checkpoint", required=True, type=str, help="The path to the checkpoint."
+    "-c", "--checkpoint", required=True, type=str, help="The path to the model checkpoint."
 )
 @click.option(
     "-ch",
     "--channels",
     required=True,
     type=str,
-    help="The channels of the model. split by comma.",
+    help="The channels of the model (comma-separated).",
 )
 @click.option(
     "-ivs",
-    "--input_voxel_size",
+    "--input-voxel-size",
     required=True,
     type=str,
-    help="The input voxel size of the model. split by comma.",
+    help="The input voxel size of the model (comma-separated).",
 )
 @click.option(
     "-ovs",
-    "--output_voxel_size",
+    "--output-voxel-size",
     required=True,
     type=str,
-    help="The output voxel size of the model. split by comma.",
+    help="The output voxel size of the model (comma-separated).",
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
     """Run the CellMapFlow server with a Fly model."""
@@ -124,13 +124,13 @@ def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
 @cli.command()
 @click.option(
     "-s",
-    "--script_path",
+    "--script-path",
     required=True,
     type=str,
-    help="The path to the script to run.",
+    help="The path to the Python script containing model specification.",
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
@@ -144,14 +144,14 @@ def script(script_path, data_path, debug, port, certfile, keyfile):
 
 @cli.command()
 @click.option(
-    "-m", "--model_path", required=True, type=str, help="The path to the model."
+    "-m", "--model-path", required=True, type=str, help="The path to the bioimage.io model."
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option(
     "-e",
-    "--edge_length_to_process",
+    "--edge-length-to-process",
     required=False,
     type=int,
     help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
@@ -187,11 +187,11 @@ def run_server(
 
 @cli.command()
 @click.option(
-    "-f", "--folder_path", required=True, type=str, help="Path to the model folder"
+    "-f", "--folder-path", required=True, type=str, help="Path to the model configuration folder."
 )
-@click.option("-n", "--name", required=True, type=str, help="Name of the model")
+@click.option("-n", "--name", required=True, type=str, help="Name of the model.")
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option("--debug", is_flag=False, help="Run in debug mode.")
 @click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
@@ -205,10 +205,10 @@ def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
 
 @cli.command()
 @click.option(
-    "-n", "--neuroglancer_url", required=True, type=str, help="Neuroglancer viewer url."
+    "-n", "--neuroglancer-url", required=True, type=str, help="Neuroglancer viewer URL."
 )
 @click.option(
-    "-i", "--inference_host", required=True, type=str, help="Inference host(s)"
+    "-i", "--inference-host", required=True, type=str, help="Inference host(s)."
 )
 def run_ui_server(neuroglancer_url, inference_host):
     create_and_run_app(neuroglancer_url, inference_host)

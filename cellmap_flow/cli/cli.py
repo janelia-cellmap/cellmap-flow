@@ -62,73 +62,73 @@ logger = logging.getLogger(__name__)
     default=0,
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option(
     "-q",
     "--queue",
     required=False,
     type=str,
-    help="The queue to use when submitting",
+    help="The queue to use when submitting jobs.",
     default="gpu_h100",
 )
 @click.option(
     "-P",
-    "--charge_group",
+    "--project",
     required=False,
     type=str,
-    help="The chargeback group to use when submitting",
+    help="The project/chargeback group for billing.",
     default=None,
 )
-def dacapo(run_name, iteration, data_path, queue, charge_group):
+def dacapo(run_name, iteration, data_path, queue, project):
     command = f"{SERVER_COMMAND} dacapo -r {run_name} -i {iteration} -d {data_path}"
-    run(command, data_path, queue, charge_group, run_name)
+    run(command, data_path, queue, project, run_name)
     raise NotImplementedError("This command is not yet implemented.")
 
 
 @cli.command()
 @click.option(
     "-s",
-    "--script_path",
+    "--script-path",
     required=True,
     type=str,
-    help="The path to the script to run.",
+    help="The path to the Python script containing model specification.",
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option(
     "-q",
     "--queue",
     required=False,
     type=str,
-    help="The queue to use when submitting",
+    help="The queue to use when submitting jobs.",
     default="gpu_h100",
 )
 @click.option(
     "-P",
-    "--charge_group",
+    "--project",
     required=False,
     type=str,
-    help="The chargeback group to use when submitting",
+    help="The project/chargeback group for billing.",
     default=None,
 )
-def script(script_path, data_path, queue, charge_group):
+def script(script_path, data_path, queue, project):
     command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
     base_name = script_path.split("/")[-1].split(".")[0]
-    run(command, data_path, queue, charge_group, base_name)
+    run(command, data_path, queue, project, base_name)
 
 
 @cli.command()
 @click.option(
-    "-m", "--model_path", required=True, type=str, help="The path to the model."
+    "-m", "--model-path", required=True, type=str, help="The path to the bioimage.io model."
 )
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option(
     "-e",
-    "--edge_length_to_process",
+    "--edge-length-to-process",
     required=False,
     type=int,
     help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
@@ -138,66 +138,66 @@ def script(script_path, data_path, queue, charge_group):
     "--queue",
     required=False,
     type=str,
-    help="The queue to use when submitting",
+    help="The queue to use when submitting jobs.",
     default="gpu_h100",
 )
 @click.option(
     "-P",
-    "--charge_group",
+    "--project",
     required=False,
     type=str,
-    help="The chargeback group to use when submitting",
+    help="The project/chargeback group for billing.",
     default=None,
 )
-def bioimage(model_path, data_path, edge_length_to_process, queue, charge_group):
+def bioimage(model_path, data_path, edge_length_to_process, queue, project):
     command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path} -e {edge_length_to_process}"
     base_name = model_path.split("/")[-1].split(".")[0]
-    run(command, data_path, queue, charge_group, base_name)
+    run(command, data_path, queue, project, base_name)
 
 
 @cli.command()
 @click.option(
-    "-f", "--config_folder", required=True, type=str, help="Path to the model folder"
+    "-f", "--config-folder", required=True, type=str, help="Path to the model configuration folder."
 )
-@click.option("-n", "--name", required=True, type=str, help="Name of the model")
+@click.option("-n", "--name", required=True, type=str, help="Name of the model.")
 @click.option(
-    "-d", "--data_path", required=True, type=str, help="The path to the data."
+    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
 )
 @click.option(
     "-q",
     "--queue",
     required=False,
     type=str,
-    help="The queue to use when submitting",
+    help="The queue to use when submitting jobs.",
     default="gpu_h100",
 )
 @click.option(
     "-P",
-    "--charge_group",
+    "--project",
     required=False,
     type=str,
-    help="The chargeback group to use when submitting",
+    help="The project/chargeback group for billing.",
     default=None,
 )
-def cellmap_model(config_folder, name, data_path, queue, charge_group):
+def cellmap_model(config_folder, name, data_path, queue, project):
     """Run the CellMapFlow with a CellMap model."""
     command = (
         f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
     )
-    run(command, data_path, queue, charge_group, name)
+    run(command, data_path, queue, project, name)
 
 
 @cli.command()
 @click.option(
-    "--script_path",
+    "--script-path",
     "-s",
     type=str,
-    help="Path to the Python script containing model specification",
+    help="Path to the Python script containing model specification.",
 )
-@click.option("--dataset", "-d", type=str, help="Path to the dataset")
-def script_server_check(script_path, dataset):
+@click.option("--data-path", "-d", type=str, help="Path to the dataset.")
+def script_server_check(script_path, data_path):
     model_config = ScriptModelConfig(script_path=script_path)
-    server = CellMapFlowServer(dataset, model_config)
+    server = CellMapFlowServer(data_path, model_config)
     chunk_x = 2
     chunk_y = 2
     chunk_z = 2
@@ -207,9 +207,9 @@ def script_server_check(script_path, dataset):
     print("Server check passed")
 
 
-def run(command, dataset_path, queue, charge_group, name):
+def run(command, dataset_path, queue, project, name):
 
-    start_hosts(command, queue, charge_group, name)
+    start_hosts(command, queue, project, name)
 
     neuroglancer_url = generate_neuroglancer_url(dataset_path)
     while True:
