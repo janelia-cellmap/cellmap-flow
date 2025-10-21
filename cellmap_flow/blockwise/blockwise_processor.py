@@ -31,17 +31,16 @@ class CellMapFlowBlockwiseProcessor:
         self.charge_group = self.config["charge_group"]
         self.queue = self.config["queue"]
 
-        print("Data path:", self.input_path)
+        logger.info(f"Data path: {self.input_path}")
 
         if "output_path" not in self.config:
             raise Exception("Missing required field in YAML: output_path")
         self.output_path = self.config["output_path"]
         self.output_path = Path(self.output_path)
 
-
         output_channels = None
         if "output_channels" in self.config:
-            output_channels = self.config["output_channels"].split(",")
+            output_channels = self.config["output_channels"]
 
         json_data = None
         if "json_data" in self.config:
@@ -51,11 +50,22 @@ class CellMapFlowBlockwiseProcessor:
             raise Exception("Missing required field in YAML: task_name")
         if "workers" not in self.config:
             raise Exception("Missing required field in YAML: workers")
-        
+
         task_name = self.config["task_name"]
         self.workers = self.config["workers"]
-        if self.workers <= 1:
-            raise Exception("Workers should be greater than 1.")
+
+        # Determine if output_channels is dict or list format
+        self.output_channels_is_dict = (
+            isinstance(output_channels, dict) if output_channels else False
+        )
+        if self.output_channels_is_dict:
+            self.output_channel_names = list(output_channels.keys())
+            self.output_channel_indices = output_channels
+        else:
+            self.output_channel_names = output_channels if output_channels else None
+            self.output_channel_indices = None
+        if self.workers < 1:
+            raise Exception("Workers should be greater than 0.")
         self.cpu_workers = self.config.get("cpu_workers", 12)
         # Added and create == True to fix client error when create: True in the yaml, so when it is a client it will not be changed
         if "create" in self.config and create == True:
@@ -67,9 +77,13 @@ class CellMapFlowBlockwiseProcessor:
                 create = create.lower() == "true"
 
         if "tmp_dir" not in self.config:
-            raise Exception("Missing required field in YAML: tmp_dir, it is mandatory to track progress")
+            raise Exception(
+                "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
+            )
 
-        self.tmp_dir = Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
+        self.tmp_dir = (
+            Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
+        )
         if not self.tmp_dir.exists():
             self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -77,7 +91,7 @@ class CellMapFlowBlockwiseProcessor:
         models = build_models(self.config["models"])
         # For debugging, print each model config
         for model in models:
-            print(model)
+            logger.info(str(model))
 
         if len(models) == 0:
             raise Exception("No models found in the configuration.")
@@ -93,14 +107,20 @@ class CellMapFlowBlockwiseProcessor:
 
         self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
-        self.output_channels = self.model_config.config.output_channels
+        # self.output_channels = self.model_config.config.output_channels
         self.channels = self.model_config.config.channels
 
         self.task_name = task_name
         if output_channels:
-            self.output_channels = output_channels
+            if self.output_channels_is_dict:
+                self.output_channels = self.output_channel_names
+            else:
+                self.output_channels = output_channels
         else:
             self.output_channels = self.channels
+            self.output_channels_is_dict = False
+            self.output_channel_names = self.channels
+            self.output_channel_indices = None
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
@@ -120,21 +140,61 @@ class CellMapFlowBlockwiseProcessor:
             / np.array(self.output_voxel_size)
         )
 
-        print(f"output_shape: {output_shape}")
-        print(f"type: {self.dtype}")
-        print(f"output_path: {self.output_path}")
-        for channel in self.output_channels:
+        logger.info(f"output_shape: {output_shape}")
+        logger.info(f"type: {self.dtype}")
+        logger.info(f"output_path: {self.output_path}")
+
+        # Ensure we have output channels to iterate over
+        channels_to_create = self.output_channels if self.output_channels else []
+
+        for channel in channels_to_create:
             if create:
                 try:
+                    # Determine output shape - for dict format with multiple channels, we need 4D
+                    if self.output_channels_is_dict and self.output_channel_indices:
+                        channel_indices = self.output_channel_indices[channel]
+                        if isinstance(channel_indices, int):
+                            channel_indices = [channel_indices]
+
+                        if len(channel_indices) > 1:
+                            # Multi-channel output - need 4D array (channels, z, y, x)
+                            final_output_shape = (len(channel_indices),) + tuple(
+                                output_shape.astype(int)
+                            )
+                        else:
+                            # Single channel output - 3D array
+                            final_output_shape = tuple(output_shape.astype(int))
+                    else:
+                        # List format - 3D array
+                        final_output_shape = tuple(output_shape.astype(int))
+
                     array = prepare_ds(
                         NestedDirectoryStore(self.output_path / channel / "s0"),
-                        output_shape,
+                        final_output_shape,
                         dtype=self.dtype,
-                        chunk_shape=self.block_shape,
-                        voxel_size=self.output_voxel_size,
-                        axis_names=["z", "y", "x"],
-                        units=["nanometer",]*3,
-                        offset=(0, 0, 0),
+                        chunk_shape=(
+                            self.block_shape
+                            if len(final_output_shape) == 3
+                            else (len(channel_indices),) + tuple(self.block_shape)
+                        ),
+                        voxel_size=(
+                            self.output_voxel_size
+                            if len(final_output_shape) == 3
+                            else (1,) + tuple(self.output_voxel_size)
+                        ),
+                        axis_names=(
+                            ["z", "y", "x"]
+                            if len(final_output_shape) == 3
+                            else ["c", "z", "y", "x"]
+                        ),
+                        units=(
+                            ["nanometer"] * 3
+                            if len(final_output_shape) == 3
+                            else [""] + ["nanometer"] * 3
+                        ),
+                        offset=(
+                            (0, 0, 0) if len(final_output_shape) == 3 else (0, 0, 0, 0)
+                        ),
                     )
                 except Exception as e:
                     raise Exception(
@@ -142,20 +202,51 @@ class CellMapFlowBlockwiseProcessor:
                     )
                 try:
                     z_store = NestedDirectoryStore(self.output_path / channel)
-                    zg = open_group(store=z_store, mode='a')
-                    if 'multiscales' in list(zg.attrs):
-                        raise ValueError(f'multiscales attribute already exists in {z_store.path}')
+                    zg = open_group(store=z_store, mode="a")
+
+                    # Determine metadata parameters based on dimensionality
+                    if self.output_channels_is_dict and self.output_channel_indices:
+                        channel_indices = self.output_channel_indices[channel]
+                        if isinstance(channel_indices, int):
+                            channel_indices = [channel_indices]
+
+                        if len(channel_indices) > 1:
+                            # 4D metadata
+                            metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
+                            metadata_translation = [0.0] * 4
+                            metadata_units = [""] + ["nanometer"] * 3
+                            metadata_axes = ["c", "z", "y", "x"]
+                        else:
+                            # 3D metadata
+                            metadata_voxel_size = self.output_voxel_size
+                            metadata_translation = [0.0] * 3
+                            metadata_units = ["nanometer"] * 3
+                            metadata_axes = ["z", "y", "x"]
                     else:
-                        zattrs = generate_singlescale_metadata(arr_name='s0',
-                                                               voxel_size=self.output_voxel_size,
-                                                               translation=[0.0,]*3,
-                                                               units=['nanometer',]*3,
-                                                               axes=['z', 'y', 'x'])
-                        zg.attrs['multiscales'] = zattrs['multiscales']
+                        # List format - 3D metadata
+                        metadata_voxel_size = self.output_voxel_size
+                        metadata_translation = [0.0] * 3
+                        metadata_units = ["nanometer"] * 3
+                        metadata_axes = ["z", "y", "x"]
+
+                    zattrs = generate_singlescale_metadata(
+                        arr_name="s0",
+                        voxel_size=metadata_voxel_size,
+                        translation=metadata_translation,
+                        units=metadata_units,
+                        axes=metadata_axes,
+                    )
+                    if "multiscales" in list(zg.attrs):
+                        old_multiscales = zg.attrs["multiscales"]
+                        if old_multiscales != zattrs["multiscales"]:
+                            raise ValueError(
+                                f"multiscales attribute already exists in {z_store.path} and is different from the new one"
+                            )
+                    zg.attrs["multiscales"] = zattrs["multiscales"]
                 except Exception as e:
                     raise Exception(
                         f"Failed to prepare ome-ngff metadata for {self.output_path/channel/'s0'}, {e}"
-                    ) 
+                    )
             else:
                 try:
                     array = open_ds(
@@ -167,11 +258,22 @@ class CellMapFlowBlockwiseProcessor:
             self.output_arrays.append(array)
 
     def process_fn(self, block):
+        logger.error(f"Processing block {block}")
 
-        write_roi = block.write_roi.intersect(self.output_arrays[0].roi)
+        # Handle 4D vs 3D array ROI intersection
+        first_array = self.output_arrays[0]
+        if len(first_array.roi.shape) == 4:
+            # For 4D arrays, create spatial ROI by skipping the channel dimension
+            array_spatial_roi = daisy.Roi(
+                first_array.roi.offset[1:], first_array.roi.shape[1:]
+            )
+            write_roi = block.write_roi.intersect(array_spatial_roi)
+        else:
+            # For 3D arrays, use normal intersection
+            write_roi = block.write_roi.intersect(first_array.roi)
 
         if write_roi.empty:
-            print(f"empty write roi: {write_roi}")
+            logger.warning(f"empty write roi: {write_roi}")
             return
 
         chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
@@ -179,8 +281,12 @@ class CellMapFlowBlockwiseProcessor:
         chunk_data = chunk_data.astype(self.dtype)
 
         for i, array in enumerate(self.output_arrays):
+            if not self.output_channels or i >= len(self.output_channels):
+                continue
 
-            if chunk_data.shape == 3:
+            channel_name = self.output_channels[i]
+
+            if chunk_data.ndim == 3:
                 if len(self.output_channels) > 1:
                     raise ValueError("output channels should be 1")
                 predictions = Array(
@@ -189,14 +295,53 @@ class CellMapFlowBlockwiseProcessor:
                     self.output_voxel_size,
                 )
             else:
-                index = self.channels.index(self.output_channels[i])
-                predictions = Array(
-                    chunk_data[index],
-                    block.write_roi.offset,
-                    self.output_voxel_size,
-                )
-            array[write_roi] = predictions.to_ndarray(write_roi)
+                if self.output_channels_is_dict and self.output_channel_indices:
+                    # Dictionary format: extract multiple channels for this output
+                    channel_indices = self.output_channel_indices[channel_name]
+                    if isinstance(channel_indices, int):
+                        channel_indices = [channel_indices]
 
+                    if len(channel_indices) == 1:
+                        # Single channel output
+                        channel_data = chunk_data[channel_indices[0]]
+                    else:
+                        # Multi-channel output - stack channels
+                        channel_data = np.stack(
+                            [chunk_data[idx] for idx in channel_indices], axis=0
+                        )
+
+                    predictions = Array(
+                        channel_data,
+                        block.write_roi.offset,
+                        self.output_voxel_size,
+                    )
+                else:
+                    # List format: original behavior
+                    index = self.channels.index(channel_name)
+                    predictions = Array(
+                        chunk_data[index],
+                        block.write_roi.offset,
+                        self.output_voxel_size,
+                    )
+            # Handle writing to 4D vs 3D arrays
+            if len(array.roi.shape) == 4:
+                # For 4D arrays, create spatial ROI and then full ROI for writing
+                array_spatial_roi = daisy.Roi(array.roi.offset[1:], array.roi.shape[1:])
+                spatial_write_roi = write_roi.intersect(array_spatial_roi)
+                if spatial_write_roi.empty:
+                    continue
+                # For 4D array writing, we need to include the channel dimension
+                full_write_roi = daisy.Roi(
+                    (0,) + spatial_write_roi.offset,
+                    (array.roi.shape[0],) + spatial_write_roi.shape,
+                )
+                array[full_write_roi] = predictions.to_ndarray(spatial_write_roi)
+            else:
+                # For 3D arrays, use normal intersection and writing
+                array_write_roi = write_roi.intersect(array.roi)
+                if array_write_roi.empty:
+                    continue
+                array[array_write_roi] = predictions.to_ndarray(array_write_roi)
 
 
     def client(self):
@@ -252,8 +397,12 @@ class CellMapFlowBlockwiseProcessor:
 
         task_state = daisy.run_blockwise([task])
         logger.info(f"Task state: {task_state}")
+
+
 def check_block(tmp_dir, block: daisy.Block) -> bool:
     return (tmp_dir / f"{block.block_id[1]}").exists()
+
+
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
         if not Path("prediction_logs").exists():
@@ -276,8 +425,6 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
                 "-e",
                 f"prediction_logs/out.err",
                 "cellmap_flow_blockwise_processor",
-                "run",
-                "-y",
                 f"{yaml_config}",
                 "--client",
             ]
