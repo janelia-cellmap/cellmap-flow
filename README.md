@@ -10,6 +10,8 @@ Please feel free to explore and contribute, but note that there may be frequent 
 
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/Status-Under_Construction-orange.svg" alt="Under Construction" /></a>
+  <a href="https://github.com/janelia-cellmap/cellmap-flow/actions/workflows/test-coverage.yml"><img src="https://github.com/janelia-cellmap/cellmap-flow/workflows/Tests%20and%20Coverage/badge.svg" alt="Tests" /></a>
+  <a href="https://codecov.io/gh/janelia-cellmap/cellmap-flow"><img src="https://codecov.io/gh/janelia-cellmap/cellmap-flow/branch/main/graph/badge.svg" alt="Coverage Status" /></a>
 </p>
 
 <p align="center">
@@ -124,4 +126,6 @@ To run TensorFlow models, we suggest installing TensorFlow via conda: `conda ins
 ```bash
 cellmap_flow_multiple --script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -n script_base --dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -n using_dacapo -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
 ```
+
+See [tests/README.md](tests/README.md) for detailed information about the test structure and coverage goals.
 
