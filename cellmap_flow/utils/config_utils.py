@@ -94,6 +94,8 @@ def build_models(model_entries):
             elif isinstance(resolution, (list, tuple)) and len(resolution) == 3:
                 resolution = tuple(resolution)
             name = entry["name"]
+            input_size = entry.get("input_size", None)
+            output_size = entry.get("output_size", None)
             if "output_resolution" in entry:
                 output_resolution = entry["output_resolution"]
             else:
@@ -108,6 +110,8 @@ def build_models(model_entries):
                     input_voxel_size=resolution,
                     output_voxel_size=output_resolution,
                     name=name,
+                    input_size=input_size,
+                    output_size=output_size,
                 )
             )
 

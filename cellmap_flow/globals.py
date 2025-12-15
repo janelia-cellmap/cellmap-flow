@@ -5,7 +5,10 @@ from cellmap_flow.models.model_yaml import load_model_paths
 import os
 import threading
 import numpy as np
+import logging
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # input_norms = [MinMaxNormalizer()]
 # postprocess = [DefaultPostprocessor(0,200,0,1)]
@@ -58,15 +61,12 @@ class Flow:
         if model_output_dtype is not None:
             dtype = model_output_dtype
 
-        if len(self.input_norms) > 0:
-            for norm in self.input_norms[::-1]:
-                if norm.dtype:
-                    dtype = norm.dtype
-                    break
-
         if len(self.postprocess) > 0:
-            for postprocess in self.postprocess[::-1]:
+            for postprocess in self.postprocess:
                 if postprocess.dtype:
+                    logger.info(
+                        f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
+                    )
                     dtype = postprocess.dtype
                     break
 

@@ -158,8 +158,8 @@ class FlyModelConfig(ModelConfig):
         input_voxel_size: tuple,
         output_voxel_size: tuple,
         name: str = None,
-        input_size=(178, 178, 178),
-        output_size=(56, 56, 56),
+        input_size=None,
+        output_size=None,
     ):
         super().__init__()
         self.name = name
@@ -167,9 +167,15 @@ class FlyModelConfig(ModelConfig):
         self.channels = channels
         self.input_voxel_size = input_voxel_size
         self.output_voxel_size = output_voxel_size
+        self._model = None
+        if input_size is None or output_size is None:
+            input_size = (178, 178, 178)
+            output_size = (56, 56, 56)
+            logger.warning(
+                "Input and output size not provided, defaulting to (178, 178, 178) and (56, 56, 56)"
+            )
         self.input_size = input_size
         self.output_size = output_size
-        self._model = None
 
     @property
     def command(self):

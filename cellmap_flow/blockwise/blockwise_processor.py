@@ -95,15 +95,26 @@ class CellMapFlowBlockwiseProcessor:
 
         if len(models) == 0:
             raise Exception("No models found in the configuration.")
-        if len(models) > 1:
+
+        # Support multiple models with model_mode
+        self.models = models
+        self.model_mode = self.config.get("model_mode", "AND").upper()
+        if self.model_mode not in ["AND", "OR", "SUM"]:
             raise Exception(
-                "Multiple models is not currently supported by blockwise processor."
+                f"Invalid model_mode: {self.model_mode}. Must be one of: AND, OR, SUM"
             )
+
+        if len(models) > 1:
+            logger.info(
+                f"Using {len(models)} models with merge mode: {self.model_mode}"
+            )
+
         self.model_config = models[0]
 
         # this is zyx
 
-        self.block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
+        block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
+        self.block_shape = self.config.get("block_size", block_shape)
 
         self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
@@ -122,12 +133,16 @@ class CellMapFlowBlockwiseProcessor:
             self.output_channel_names = self.channels
             self.output_channel_indices = None
 
-        self.dtype = g.get_output_dtype(self.model_config.output_dtype)
-
         if json_data:
             g.input_norms, g.postprocess = get_process_dataset(json_data)
 
-        self.inferencer = Inferencer(self.model_config, use_half_prediction=False)
+        self.dtype = g.get_output_dtype(self.model_config.output_dtype)
+
+        # Create inferencers for all models
+        self.inferencers = [
+            Inferencer(model, use_half_prediction=False) for model in self.models
+        ]
+        self.inferencer = self.inferencers[0]  # Keep for backward compatibility
 
         self.idi_raw = ImageDataInterface(
             self.input_path, voxel_size=self.input_voxel_size
@@ -276,7 +291,21 @@ class CellMapFlowBlockwiseProcessor:
             logger.warning(f"empty write roi: {write_roi}")
             return
 
-        chunk_data = self.inferencer.process_chunk(self.idi_raw, block.write_roi)
+        # Process chunk with all models
+        if len(self.inferencers) == 1:
+            # Single model - original behavior
+            chunk_data = self.inferencers[0].process_chunk(
+                self.idi_raw, block.write_roi
+            )
+        else:
+            # Multiple models - merge outputs based on model_mode
+            model_outputs = []
+            for inferencer in self.inferencers:
+                output = inferencer.process_chunk(self.idi_raw, block.write_roi)
+                model_outputs.append(output)
+
+            # Merge outputs based on model_mode
+            chunk_data = self._merge_model_outputs(model_outputs)
 
         chunk_data = chunk_data.astype(self.dtype)
 
@@ -343,6 +372,37 @@ class CellMapFlowBlockwiseProcessor:
                     continue
                 array[array_write_roi] = predictions.to_ndarray(array_write_roi)
 
+    def _merge_model_outputs(self, model_outputs):
+        """
+        Merge outputs from multiple models based on the configured model_mode.
+
+        Args:
+            model_outputs: List of numpy arrays from different models
+
+        Returns:
+            Merged numpy array
+        """
+        if self.model_mode == "AND":
+            # Element-wise minimum (logical AND for binary, minimum for continuous)
+            merged = model_outputs[0]
+            for output in model_outputs[1:]:
+                merged = np.minimum(merged, output)
+            return merged
+
+        elif self.model_mode == "OR":
+            # Element-wise maximum (logical OR for binary, maximum for continuous)
+            merged = model_outputs[0]
+            for output in model_outputs[1:]:
+                merged = np.maximum(merged, output)
+            return merged
+
+        elif self.model_mode == "SUM":
+            # Sum all outputs and normalize by number of models
+            merged = np.sum(model_outputs, axis=0) / len(model_outputs)
+            return merged
+
+        else:
+            raise ValueError(f"Unknown model_mode: {self.model_mode}")
 
     def client(self):
         client = daisy.Client()
