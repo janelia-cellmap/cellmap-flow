@@ -70,6 +70,23 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
+class ArgmaxPostprocessor(PostProcessor):
+    def __init__(self, axis: int = 0):
+        self.axis = axis
+
+    def _process(self, data):
+        data = np.argmax(data, axis=self.axis)
+        return data
+
+    @property
+    def dtype(self):
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)

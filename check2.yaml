@@ -1,0 +1,16 @@
+data_path: /path/to/data
+charge_group: my_group
+queue: gpu_h100
+models:
+  - type: dacapo
+    run_name: my_run
+    iteration: 100
+    name: my_model
+  - type: fly
+    checkpoint: /path/to/checkpoint.ts
+    classes: [mito, er, nucleus]
+    resolution: [4, 4, 4]
+    name: fly_model
+  - type: cellmap
+    folder_path: /path/to/model
+    name: cellmap_model

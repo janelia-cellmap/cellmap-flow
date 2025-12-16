@@ -15,7 +15,7 @@ from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig
+from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.web_utils import (
     get_public_ip,
     decode_to_json,

@@ -1,6 +1,6 @@
 # %%
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.data import (
+from cellmap_flow.models.models_config import (
     ModelConfig,
     BioModelConfig,
     DaCapoModelConfig,

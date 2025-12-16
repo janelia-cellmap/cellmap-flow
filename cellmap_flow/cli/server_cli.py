@@ -1,18 +1,29 @@
+"""
+Dynamic server CLI generator that automatically detects ModelConfig subclasses
+and creates server commands based on their __init__ parameters.
+"""
+
 import click
 import logging
-
+import inspect
+import sys
+from typing import Type, Dict, get_type_hints
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.utils.data import (
-    ScriptModelConfig,
-    DaCapoModelConfig,
-    BioModelConfig,
-    CellMapModelConfig,
-    FlyModelConfig,
-)
+from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.utils.cli_utils import (
+    get_all_subclasses,
+    create_click_option_from_param,
+    process_constructor_args,
+    get_all_model_configs,
+    print_available_models,
+)
+
+
+logging.basicConfig()
+logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -22,161 +33,33 @@ from cellmap_flow.server import CellMapFlowServer
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
     ),
     default="INFO",
+    help="Set the logging level"
 )
 def cli(log_level):
     """
-    Command-line interface for the Cellmap flo application.
-
-    Args:
-        log_level (str): The desired log level for the application.
+    CellMap Flow Server - Dynamic CLI for running inference servers.
+    
+    Automatically generates server commands for all available ModelConfig subclasses.
+    
     Examples:
-        To use Dacapo run the following commands:
-        ```
-        cellmap_flow_server dacapo -r my_run -i iteration -d data_path
-        ```
-
-        To use custom script
-        ```
-        cellmap_flow_server script -s script_path -d data_path
-        ```
-
-        To use bioimage-io model
-        ```
-        cellmap_flow_server bioimage -m model_path -d data_path
-        ```
+        cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
+        cellmap_flow_server script -s /path/to/script.py -d /path/to/data
+        cellmap_flow_server cellmap-model -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
 
-logger = logging.getLogger(__name__)
-
-
-@cli.command()
-@click.option(
-    "-r", "--run-name", required=True, type=str, help="The NAME of the run to train."
-)
-@click.option(
-    "-i",
-    "--iteration",
-    required=False,
-    type=int,
-    help="The iteration at which to train the run.",
-    default=0,
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option("--debug", is_flag=False, help="Run in debug mode.")
-@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
-@click.option("--certfile", default=None, help="Path to SSL certificate file.")
-@click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile):
-    """Run the CellMapFlow server with a DaCapo model."""
-    model_config = DaCapoModelConfig(run_name=run_name, iteration=iteration)
-    run_server(model_config, data_path, debug, port, certfile, keyfile)
-
-
-# return f"fly -c {self.checkpoint_path} -ch {self.channels} -ivs {self.input_voxel_size} -ovs {self.output_voxel_size} -n {self.name}"
-
-
-@cli.command()
-@click.option(
-    "-c", "--checkpoint", required=True, type=str, help="The path to the model checkpoint."
-)
-@click.option(
-    "-ch",
-    "--channels",
-    required=True,
-    type=str,
-    help="The channels of the model (comma-separated).",
-)
-@click.option(
-    "-ivs",
-    "--input-voxel-size",
-    required=True,
-    type=str,
-    help="The input voxel size of the model (comma-separated).",
-)
-@click.option(
-    "-ovs",
-    "--output-voxel-size",
-    required=True,
-    type=str,
-    help="The output voxel size of the model (comma-separated).",
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-def fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path):
-    """Run the CellMapFlow server with a Fly model."""
-    channels = channels.split(",")
-    input_voxel_size = tuple(map(int, input_voxel_size.split(",")))
-    output_voxel_size = tuple(map(int, output_voxel_size.split(",")))
-    model_config = FlyModelConfig(
-        checkpoint_path=checkpoint,
-        channels=channels,
-        input_voxel_size=input_voxel_size,
-        output_voxel_size=output_voxel_size,
-    )
-    run_server(model_config, data_path)
-
-
-@cli.command()
-@click.option(
-    "-s",
-    "--script-path",
-    required=True,
-    type=str,
-    help="The path to the Python script containing model specification.",
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option("--debug", is_flag=False, help="Run in debug mode.")
-@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
-@click.option("--certfile", default=None, help="Path to SSL certificate file.")
-@click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def script(script_path, data_path, debug, port, certfile, keyfile):
-    """Run the CellMapFlow server with a custom script."""
-    model_config = ScriptModelConfig(script_path=script_path)
-    run_server(model_config, data_path, debug, port, certfile, keyfile)
-
-
-@cli.command()
-@click.option(
-    "-m", "--model-path", required=True, type=str, help="The path to the bioimage.io model."
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option(
-    "-e",
-    "--edge-length-to-process",
-    required=False,
-    type=int,
-    help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
-)
-@click.option("--debug", is_flag=False, help="Run in debug mode.")
-@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
-@click.option("--certfile", default=None, help="Path to SSL certificate file.")
-@click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def bioimage(
-    model_path, data_path, edge_length_to_process, debug, port, certfile, keyfile
-):
-    """Run the CellMapFlow server with a bioimage-io model."""
-    model_config = BioModelConfig(
-        model_name=model_path,
-        voxel_size=ImageDataInterface(data_path).voxel_size,
-        edge_length_to_process=edge_length_to_process,
-    )
-    run_server(model_config, data_path, debug, port, certfile, keyfile)
+@cli.command(name="list-models")
+def list_models():
+    """List all available model configurations."""
+    print_available_models("cellmap_flow_server")
 
 
 def run_server(
     model_config, data_path, debug=False, port=0, certfile=None, keyfile=None
 ):
+    """Run the CellMapFlow server with the given configuration."""
     server = CellMapFlowServer(data_path, model_config)
-
     server.run(
         debug=debug,
         port=port,
@@ -185,22 +68,118 @@ def run_server(
     )
 
 
-@cli.command()
-@click.option(
-    "-f", "--folder-path", required=True, type=str, help="Path to the model configuration folder."
-)
-@click.option("-n", "--name", required=True, type=str, help="Name of the model.")
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option("--debug", is_flag=False, help="Run in debug mode.")
-@click.option("-p", "--port", default=0, type=int, help="Port to listen on.")
-@click.option("--certfile", default=None, help="Path to SSL certificate file.")
-@click.option("--keyfile", default=None, help="Path to SSL private key file.")
-def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
-    """Run the CellMapFlow server with a CellMap model."""
-    model_config = CellMapModelConfig(folder_path=folder_path, name=name)
-    run_server(model_config, data_path, debug, port, certfile, keyfile)
+def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]):
+    """
+    Dynamically create a Click command for a ModelConfig subclass server.
+    """
+    # Get constructor signature
+    sig = inspect.signature(config_class.__init__)
+    
+    # Get type hints if available
+    try:
+        type_hints = get_type_hints(config_class.__init__)
+    except:
+        type_hints = {}
+    
+    # Create the command function
+    def command_func(**kwargs):
+        # Separate model config kwargs from server kwargs
+        model_kwargs = {}
+        data_path = kwargs.pop('data_path')
+        debug = kwargs.pop('debug', False)
+        port = kwargs.pop('port', 0)
+        certfile = kwargs.pop('certfile', None)
+        keyfile = kwargs.pop('keyfile', None)
+        
+        # Process kwargs for the model config
+        for key, value in kwargs.items():
+            if value is not None:
+                model_kwargs[key] = value
+        
+        # Process constructor args (handle list/tuple conversions)
+        processed_kwargs = process_constructor_args(config_class, model_kwargs)
+        
+        # Create model config instance
+        try:
+            model_config = config_class(**processed_kwargs)
+        except TypeError as e:
+            logger.error(f"Error creating {config_class.__name__}: {e}")
+            logger.error(f"Provided arguments: {processed_kwargs}")
+            sys.exit(1)
+        
+        # Run the server
+        run_server(model_config, data_path, debug, port, certfile, keyfile)
+    
+    # Add docstring
+    command_func.__doc__ = f"""
+    Run CellMapFlow server using {config_class.__name__}.
+    
+    Model parameters are auto-generated from the class constructor.
+    """
+    
+    # Add common server options
+    command_func = click.option(
+        "-d", "--data-path", 
+        required=True, 
+        type=str, 
+        help="Path to the dataset"
+    )(command_func)
+    
+    command_func = click.option(
+        "--debug",
+        is_flag=True,
+        help="Run in debug mode"
+    )(command_func)
+    
+    command_func = click.option(
+        "-p", "--port",
+        default=0,
+        type=int,
+        help="Port to listen on"
+    )(command_func)
+    
+    command_func = click.option(
+        "--certfile",
+        default=None,
+        type=str,
+        help="Path to SSL certificate file"
+    )(command_func)
+    
+    command_func = click.option(
+        "--keyfile",
+        default=None,
+        type=str,
+        help="Path to SSL private key file"
+    )(command_func)
+    
+    # Add model-specific options based on constructor parameters
+    for param_name, param_info in reversed(list(sig.parameters.items())):
+        option_config = create_click_option_from_param(param_name, param_info)
+        if option_config:
+            command_func = click.option(*option_config.pop('param_decls'), **option_config)(command_func)
+    
+    # Register as a command
+    command_func = cli.command(name=cli_name)(command_func)
+    
+    return command_func
+
+
+def register_all_server_commands():
+    """
+    Discover and register all ModelConfig subclasses as server CLI commands.
+    """
+    model_configs = get_all_model_configs()
+    
+    for cli_name, config_class in model_configs.items():
+        try:
+            create_dynamic_server_command(cli_name, config_class)
+            logger.debug(f"Registered server command: {cli_name}")
+        except Exception as e:
+            logger.warning(f"Failed to register server command for {cli_name}: {e}")
+
+
+# Register all commands at module load time
+register_all_server_commands()
 
 
 @cli.command()
@@ -211,4 +190,14 @@ def cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile):
     "-i", "--inference-host", required=True, type=str, help="Inference host(s)."
 )
 def run_ui_server(neuroglancer_url, inference_host):
+    """Run the dashboard UI server."""
     create_and_run_app(neuroglancer_url, inference_host)
+
+
+def main():
+    """Entry point for the server CLI."""
+    cli()
+
+
+if __name__ == "__main__":
+    main()

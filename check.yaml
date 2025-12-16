@@ -1,0 +1,18 @@
+data_path: /nrs/cellmap/data/jrc_mus-salivary-3/jrc_mus-salivary-3.zarr/recon-1/em/fibsem-uint8
+queue: gpu_h100
+charge_group: cellmap
+json_data:
+  input_norm:
+    MinMaxNormalizer:
+      min_value: 0
+      max_value: 250
+      invert: false
+    LambdaNormalizer:
+      expression: x*2-1
+  postprocess: {}
+models:
+  mito_mouse_16_362000:
+    type: "fly"
+    checkpoint: /groups/cellmap/cellmap/zouinkhim/exp_c-elegen/v3/train/runs/20250806_mito_mouse_distance_16nm/model_checkpoint_362000
+    resolution: [16, 16, 16]
+    classes: [mito]

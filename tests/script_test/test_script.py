@@ -1,6 +1,6 @@
 import pytest
 from cellmap_flow.post.postprocessors import DefaultPostprocessor, PostProcessor
-from cellmap_flow.utils.data import ScriptModelConfig
+from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.globals import Flow
 import os

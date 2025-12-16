@@ -22,26 +22,34 @@ class ImageDataInterface:
         concurrency_limit=1,
         normalize=True,
     ):
-        # if multiscale dataset, get scale for voxel size
-        logger.error(f"opening dataset path {dataset_path} in mode {mode}")
-        if ".n5" in dataset_path:
-            container_path = dataset_path[: dataset_path.rfind(".n5") + 3]
-            ds_path = dataset_path[dataset_path.rfind(".n5") + 4 :]
-            store = zarr.N5Store(container_path)
-            dd = zarr.open(store, mode="r")
-            dd = dd[ds_path]
+        if not "gs://" in dataset_path:
+            # if multiscale dataset, get scale for voxel size
+            logger.error(f"opening dataset path {dataset_path} in mode {mode}")
+
+            if ".n5" in dataset_path:
+                container_path = dataset_path[: dataset_path.rfind(".n5") + 3]
+                ds_path = dataset_path[dataset_path.rfind(".n5") + 4 :]
+                store = zarr.N5Store(container_path)
+                dd = zarr.open(store, mode="r")
+                dd = dd[ds_path]
+            else:
+                dd = zarr.open(dataset_path, mode="r")
+            if not isinstance(dd, zarr.core.Array):
+                scale, _, _ = find_closest_scale(dataset_path, voxel_size)
+                logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                dataset_path = os.path.join(dataset_path, scale)
+                logger.info(f"using dataset path {dataset_path}")
+            self.path = dataset_path
+            self.filetype = (
+                "zarr"
+                if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
+                else "n5"
+            )
+            self.swap_axes = self.filetype == "n5"
         else:
-            dd = zarr.open(dataset_path, mode="r")
-        if not isinstance(dd, zarr.core.Array):
-            scale, _, _ = find_closest_scale(dataset_path, voxel_size)
-            logger.info(f"found scale {scale} for voxel size {voxel_size}")
-            dataset_path = os.path.join(dataset_path, scale)
-            logger.info(f"using dataset path {dataset_path}")
-        self.path = dataset_path
-        self.filetype = (
-            "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
-        )
-        self.swap_axes = self.filetype == "n5"
+            self.path = dataset_path
+            self.filetype = "gs"
+            self.swap_axes = False
         self._ts = None
 
         self.voxel_size, self.chunk_shape, self.shape, self.roi, self.swap_axes = (

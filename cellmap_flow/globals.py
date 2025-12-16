@@ -1,8 +1,8 @@
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
-from cellmap_flow.models.model_yaml import load_model_paths
 
 import os
+import yaml
 import threading
 import numpy as np
 import logging
@@ -34,13 +34,14 @@ class Flow:
             cls._instance.dataset_path = None
             # cls._instance.model_catalog = {}
             # Uncomment and adjust if you want to load the model catalog:
-            cls._instance.model_catalog = load_model_paths(
-                os.path.normpath(
+            yaml_file = os.path.normpath(
                     os.path.join(
                         os.path.dirname(__file__), os.pardir, "models", "models.yaml"
                     )
                 )
-            )
+            with open(yaml_file, "r") as f:
+                model_catalog = yaml.safe_load(f)
+            cls._instance.model_catalog = model_catalog
             cls._instance.queue = "gpu_h100"
             cls._instance.charge_group = "cellmap"
             cls._instance.neuroglancer_thread = None

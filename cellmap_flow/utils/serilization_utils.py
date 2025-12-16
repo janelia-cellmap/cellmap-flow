@@ -16,7 +16,7 @@ def get_process_dataset(json_data: dict):
     if isinstance(json_data, str):
         json_data = json.loads(json_data)
 
-    logger.error(f"json data: {json_data}")
+    logger.info(f"json data: {json_data}")
     input_norm_fns = get_normalizations(json_data[INPUT_NORM_DICT_KEY])
     postprocess_fns = get_postprocessors(json_data[POSTPROCESS_DICT_KEY])
     return input_norm_fns, postprocess_fns
