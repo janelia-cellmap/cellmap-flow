@@ -204,8 +204,9 @@ class CellMapFlowServer:
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
-            "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
+            "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>",
             methods=["GET"],
+            strict_slashes=False,
         )
         def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
             """
