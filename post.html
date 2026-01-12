@@ -18,8 +18,8 @@
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -142,7 +142,7 @@
 <h2>Base Class<a class="headerlink" href="#base-class" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="PostProcessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#PostProcessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#PostProcessor" title="Link to this definition"></a></dt>
 <dd><p>Abstract base class for all postprocessing methods.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="PostProcessor.name">
@@ -195,7 +195,7 @@
 <h3>DefaultPostprocessor<a class="headerlink" href="#defaultpostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="DefaultPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#DefaultPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#DefaultPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Clips, biases, and scales the data. Converts to <cite>uint8</cite>.</p>
@@ -210,7 +210,7 @@
 <h3>ThresholdPostprocessor<a class="headerlink" href="#thresholdpostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="ThresholdPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ThresholdPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ThresholdPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Applies a threshold to binarize data. Produces <cite>uint8</cite> output.</p>
@@ -222,7 +222,7 @@
 <h3>LabelPostprocessor<a class="headerlink" href="#labelpostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="LabelPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LabelPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LabelPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Applies connected-component labeling to a selected channel using <cite>scipy.ndimage.label</cite>.</p>
@@ -231,7 +231,7 @@
 <h3>MortonSegmentationRelabeling<a class="headerlink" href="#mortonsegmentationrelabeling" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="MortonSegmentationRelabeling">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Relabels segmentation data using Morton-order encoding to ensure chunk-wise uniqueness.</p>
@@ -244,7 +244,7 @@
 <h3>AffinityPostprocessor<a class="headerlink" href="#affinitypostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="AffinityPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">...</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AffinityPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">...</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#AffinityPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Uses multi-scale watershed (<cite>mwatershed</cite>) to generate segmentations from affinity graphs.</p>
@@ -257,7 +257,7 @@
 <h3>SimpleBlockwiseMerger<a class="headerlink" href="#simpleblockwisemerger" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="SimpleBlockwiseMerger">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Merges chunk boundaries using edge voxel consistency and <cite>neuroglancer.equivalence_map</cite>.</p>
@@ -270,7 +270,7 @@
 <h3>ChannelSelection<a class="headerlink" href="#channelselection" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="ChannelSelection">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ChannelSelection" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ChannelSelection" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Selects a subset of channels from the input array.</p>
@@ -282,7 +282,7 @@
 <h3>LambdaPostprocessor<a class="headerlink" href="#lambdapostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="LambdaPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LambdaPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LambdaPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <p>Applies a user-defined lambda expression to each data point.</p>

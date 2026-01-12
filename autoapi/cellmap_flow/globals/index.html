@@ -18,8 +18,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
@@ -137,22 +137,22 @@
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.globals.input_norms">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">input_norms</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#cellmap_flow.globals.input_norms" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">input_norms</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.globals.input_norms" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.globals.postprocess">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">postprocess</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#cellmap_flow.globals.postprocess" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">postprocess</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.globals.postprocess" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.globals.viewer">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">viewer</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#cellmap_flow.globals.viewer" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">viewer</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.globals.viewer" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">Flow</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">Flow</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow" title="Link to this definition"></a></dt>
 <dd><dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.to_dict" title="Link to this definition"></a></dt>
@@ -165,17 +165,17 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.run">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_configs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'gpu_h100'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cellmap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_normalizers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">post_processors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.run" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_configs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'gpu_h100'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cellmap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_normalizers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">post_processors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.run" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.stop">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.stop" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.stop" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.delete">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.delete" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.delete" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>

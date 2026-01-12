@@ -18,8 +18,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
@@ -182,18 +182,18 @@
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">PostProcessor</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">DefaultPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clip_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multiplier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">127.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor.clip_min">
@@ -217,19 +217,19 @@
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.DefaultPostprocessor.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ThresholdPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor.threshold">
@@ -238,71 +238,71 @@
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ThresholdPostprocessor.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.channel">
-<span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.channel" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">MortonSegmentationRelabeling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.channel">
-<span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.channel" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.num_previous_segments">
-<span class="sig-name descname"><span class="pre">num_previous_segments</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.num_previous_segments" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">num_previous_segments</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.num_previous_segments" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.use_exact">
-<span class="sig-name descname"><span class="pre">use_exact</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.use_exact" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">use_exact</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.use_exact" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'[\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">1,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[3,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">3,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">3],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[9,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">9,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">9],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">]'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'[\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">1,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[3,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">3,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">3],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[9,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">9,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">9],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">]'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.bias">
@@ -316,48 +316,48 @@
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.use_exact">
-<span class="sig-name descname"><span class="pre">use_exact</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.use_exact" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">use_exact</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.use_exact" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.num_previous_segments">
-<span class="sig-name descname"><span class="pre">num_previous_segments</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.num_previous_segments" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">num_previous_segments</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.num_previous_segments" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.num_channels">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.num_channels" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.num_channels" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">SimpleBlockwiseMerger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_erosion_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.channel">
-<span class="sig-name descname"><span class="pre">channel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.channel" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.channel" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.face_erosion_iterations">
-<span class="sig-name descname"><span class="pre">face_erosion_iterations</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.face_erosion_iterations" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">face_erosion_iterations</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.face_erosion_iterations" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.use_exact">
-<span class="sig-name descname"><span class="pre">use_exact</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.use_exact" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">use_exact</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.use_exact" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -387,19 +387,19 @@
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.is_segmentation">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.is_segmentation" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection.channels">
@@ -408,14 +408,14 @@
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection.num_channels">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection.num_channels" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection.num_channels" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LambdaPostprocessor">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LambdaPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LambdaPostprocessor.expression">
@@ -424,7 +424,7 @@
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LambdaPostprocessor.dtype">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor.dtype" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
