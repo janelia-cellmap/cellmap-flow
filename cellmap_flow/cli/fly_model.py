@@ -31,7 +31,8 @@ def main():
     if "charge_group" not in data:
         raise ValueError("charge_group is required in the YAML file")
     charge_group = data["charge_group"]
-
+    input_size = tuple(data.get("input_size", (178, 178, 178)))
+    output_size = tuple(data.get("output_size", (56, 56, 56)))
     g.charge_group = charge_group
     threads = []
     for run_name, run_items in data["runs"].items():
@@ -51,6 +52,8 @@ def main():
             input_voxel_size=res,
             output_voxel_size=res,
             name=run_name,
+            input_size=input_size,
+            output_size=output_size,
         )
         model_command = f"fly -c {model_config.checkpoint_path} -ch {','.join(model_config.channels)} -ivs {','.join(map(str,model_config.input_voxel_size))} -ovs {','.join(map(str,model_config.output_voxel_size))}"
         command = f"{SERVER_COMMAND} {model_command} -d {data_path}"
