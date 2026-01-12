@@ -36,11 +36,6 @@ def get_raw_layer(dataset_path, normalize=True):
     else:
         filetype = "precomputed"
 
-    if filetype == "n5":
-        axis = ["x", "y", "z"]
-    else:
-        axis = ["z", "y", "x"]
-
     layers = []
 
     if is_multiscale:
@@ -52,21 +47,16 @@ def get_raw_layer(dataset_path, normalize=True):
             image = ImageDataInterface(
                 f"{os.path.join(dataset_path, scale)}", normalize=normalize
             )
+            # Use axes from the actual dataset - neuroglancer will use them as-is
             layers.append(
                 neuroglancer.LocalVolume(
                     data=image.ts,
                     dimensions=neuroglancer.CoordinateSpace(
-                        names=axis,
+                        names=image.axes_names,
                         units="nm",
-                        scales=(
-                            image.voxel_size[::-1]
-                            if filetype == "n5"
-                            else image.voxel_size
-                        ),
+                        scales=image.voxel_size,
                     ),
-                    voxel_offset=(
-                        image.offset[::-1] if filetype == "n5" else image.offset
-                    ),
+                    voxel_offset=image.offset,
                 )
             )
 
@@ -79,7 +69,7 @@ def get_raw_layer(dataset_path, normalize=True):
             source=neuroglancer.LocalVolume(
                 data=image.ts,
                 dimensions=neuroglancer.CoordinateSpace(
-                    names=axis,
+                    names=image.axes_names,
                     units="nm",
                     scales=image.voxel_size,
                 ),

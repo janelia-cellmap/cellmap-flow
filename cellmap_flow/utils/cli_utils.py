@@ -170,13 +170,14 @@ def parse_comma_separated_values(value: str, target_type: type) -> Any:
     return [value]
 
 
-def create_click_option_from_param(param_name: str, param_info: inspect.Parameter) -> Dict[str, Any]:
+def create_click_option_from_param(param_name: str, param_info: inspect.Parameter, used_short_names: set = None) -> Dict[str, Any]:
     """
     Create a click.option configuration from a parameter.
     
     Args:
         param_name: Name of the parameter
         param_info: Parameter information from inspect.signature
+        used_short_names: Set of already used short names to avoid duplicates
         
     Returns:
         Dictionary with option configuration for click.option, or None if should skip
@@ -194,6 +195,10 @@ def create_click_option_from_param(param_name: str, param_info: inspect.Paramete
     if param_name == 'self':
         return None
     
+    # Initialize used_short_names if not provided
+    if used_short_names is None:
+        used_short_names = set()
+    
     # Parse the type
     base_type, is_optional = parse_type_annotation(annotation)
     
@@ -202,7 +207,14 @@ def create_click_option_from_param(param_name: str, param_info: inspect.Paramete
     
     # Create option name (convert underscore to hyphen)
     option_name = param_name.replace('_', '-')
-    short_name = '-' + param_name[0] if len(param_name) > 0 else None
+    
+    # Generate short name, checking for duplicates
+    short_name = None
+    candidate_short = '-' + param_name[0] if len(param_name) > 0 else None
+    if candidate_short and candidate_short not in used_short_names:
+        short_name = candidate_short
+        used_short_names.add(short_name)
+    
     long_name = '--' + option_name
     
     # Build the option config

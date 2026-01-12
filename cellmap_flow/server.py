@@ -37,6 +37,25 @@ import time
 logger = logging.getLogger(__name__)
 
 
+def get_output_shape(idi, model_config, output_channels):
+    input_shape = np.array(idi.shape)
+    input_axes = idi.axes_names
+    input_voxel_size = np.array(model_config.config.input_voxel_size)
+    output_voxel_size = np.array(model_config.config.output_voxel_size)
+    output_axes = model_config.config.axes_names
+
+    output_shape = input_shape * input_voxel_size / output_voxel_size
+    output_shape = np.ceil(output_shape).astype(int)
+    # swap axes to match output
+    spatial_output_axes = [x for x in output_axes if x != "c^"]
+    permitation_axes = [input_axes.index(ax) for ax in spatial_output_axes]
+    output_shape = output_shape[permitation_axes]
+    index_channel = output_axes.index("c^")
+    full_output_shape = list(output_shape)
+    full_output_shape.insert(index_channel, output_channels)
+    return tuple([int(x) for x in full_output_shape])
+
+
 def get_process_dataset(dataset: str):
     if ARGS_KEY not in dataset:
         return None, [], []  # No normalization or postprocessing
@@ -67,13 +86,7 @@ class CellMapFlowServer:
         """
 
         # this is zyx
-        self.read_block_shape = [int(x) for x in model_config.config.block_shape]
-        # this needs to have z and x swapped
-        self.n5_block_shape = self.read_block_shape.copy()
-        self.n5_block_shape[0], self.n5_block_shape[2] = (
-            self.n5_block_shape[2],
-            self.n5_block_shape[0],
-        )
+        self.block_shape = list([int(b) for b in model_config.config.block_shape])
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
@@ -83,31 +96,31 @@ class CellMapFlowServer:
 
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
-            dataset_name, voxel_size=self.input_voxel_size
+            dataset_name
+            # , voxel_size=self.input_voxel_size
         )
 
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5
         self.previous_refresh_time = 0
-        output_shape = (
-            np.array(self.idi_raw.shape)
-            * np.array(self.input_voxel_size)
-            / np.array(self.output_voxel_size)
+
+        self.shape = get_output_shape(
+            self.idi_raw,
+            model_config,
+            self.output_channels,
         )
 
-        if ".zarr" in dataset_name:
-            # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.default_vol_shape = [
-                *output_shape[::-1],
-                self.output_channels,
-            ]
-            self.axis = ["x", "y", "z", "c^"]
-            self.vol_shape = self.default_vol_shape.copy()
-        else:
-            # For non-Zarr data
-            self.default_vol_shape = [*output_shape, self.output_channels]
-            self.axis = ["z", "y", "x", "c^"]
-            self.vol_shape = self.default_vol_shape.copy()
+        self.axes_names = model_config.config.axes_names
+        self.channels_index = self.axes_names.index("c^")
+        self.units = ["nm" if ax != "c^" else "" for ax in self.axes_names]
+        self.voxel_size = list(self.output_voxel_size)
+        self.voxel_size.insert(self.channels_index, 1)
+        self.voxel_size = tuple(self.voxel_size)
+
+        # spacial_block_shape is self.block_shape without channel dimension
+        self.spacial_block_shape = self.block_shape.copy()
+        self.spacial_block_shape.pop(self.channels_index)
+
         # Chunk encoding for N5
         self.chunk_encoder = self._initialize_chunk_encoder()
 
@@ -150,21 +163,7 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
-            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.vol_shape = self.default_vol_shape.copy()
-            self.n5_block_shape[-1] = self.default_vol_shape[-1]
-
-            for postprocess in g.postprocess:
-                if hasattr(postprocess, "num_channels"):
-                    self.vol_shape[-1] = postprocess.num_channels
-                    self.n5_block_shape[-1] = postprocess.num_channels
-
-            self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
-                self.n5_block_shape,
-                compressor=numcodecs.Zstd(),
-            )
-
+            self.process_dataset_url(dataset)
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -187,64 +186,20 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.vol_shape = self.default_vol_shape.copy()
-            self.n5_block_shape[-1] = self.default_vol_shape[-1]
+            self.process_dataset_url(dataset)
 
-            for postprocess in g.postprocess:
-                if hasattr(postprocess, "num_channels"):
-                    self.vol_shape[-1] = postprocess.num_channels
-                    self.n5_block_shape[-1] = postprocess.num_channels
-
-            self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
-                self.n5_block_shape,
-                compressor=numcodecs.Zstd(),
-            )
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
-            "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>/",
+            "/<path:dataset>/s<int:scale>/<int:chunk_1>/<int:chunk_2>/<int:chunk_3>/<int:chunk_4>/",
             methods=["GET"],
         )
-        def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-            """
-            Serve a single chunk at the requested scale and location.
-            ---
-            tags:
-              - Chunks
-            parameters:
-              - in: path
-                name: dataset
-                schema:
-                  type: string
-              - in: path
-                name: scale
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_x
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_y
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_z
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_c
-                schema:
-                  type: integer
-            responses:
-              200:
-                description: Compressed chunk
-              500:
-                description: Internal server error
-            """
-            return self._chunk_impl(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c)
+        @self.app.route(
+            "/<path:dataset>/s<int:scale>/<int:chunk_1>/<int:chunk_2>/<int:chunk_3>/<int:chunk_4>",
+            methods=["GET"],
+        )
+        def chunk(dataset, scale, chunk_1, chunk_2, chunk_3, chunk_4):
+            return self._chunk_impl(dataset, scale, chunk_1, chunk_2, chunk_3, chunk_4)
 
     def _configure_swagger(self):
         """
@@ -275,17 +230,16 @@ class CellMapFlowServer:
     # --- Implementation (called by the decorated routes) ---
     #
     def _top_level_attributes_impl(self, dataset):
-        max_scale = 0
-        scales = [[2**s, 2**s, 2**s, 1] for s in range(max_scale + 1)]
+        scales = [[1, 1, 1, 1]]
         attr = {
             "pixelResolution": {
-                "dimensions": [*self.output_voxel_size, 1],
+                "dimensions": self.voxel_size,
                 "unit": "nm",
             },
             "ordering": "C",
-            "scales": scales,
-            "axes": self.axis,
-            "units": ["nm", "nm", "nm", ""],
+            "scales": [[1, 1, 1, 1]],
+            "axes": self.axes_names,
+            "units": self.units,
             "translate": [0, 0, 0, 0],
         }
         return jsonify(attr), HTTPStatus.OK
@@ -295,22 +249,50 @@ class CellMapFlowServer:
         attr = {
             "transform": {
                 "ordering": "C",
-                "axes": self.axis,
-                "scale": [*self.output_voxel_size, 1],
-                "units": ["nm", "nm", "nm", ""],
+                "axes": self.axes_names,
+                "scale": self.voxel_size,
+                "units": self.units,
                 "translate": [0.0, 0.0, 0.0, 0.0],
             },
             "compression": {"type": "zstd"},
-            "blockSize": list(self.n5_block_shape),
+            "blockSize": list(self.block_shape),
             "dataType": dtype,
-            "dimensions": self.vol_shape,
+            "dimensions": self.shape,
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
-    def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-        corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
+    def process_dataset_url(self, dataset_url):
+        g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset_url)
+
+        for postprocess in g.postprocess:
+            if hasattr(postprocess, "num_channels"):
+                # Convert to list to allow modification
+                shape_list = list(self.shape)
+                block_shape_list = list(self.block_shape)
+                shape_list[self.channels_index] = postprocess.num_channels
+                block_shape_list[self.channels_index] = postprocess.num_channels
+                self.shape = tuple(shape_list)
+                self.block_shape = tuple(block_shape_list)
+
+        self.chunk_encoder = N5ChunkWrapper(
+            g.get_output_dtype(),
+            self.block_shape,
+            compressor=numcodecs.Zstd(),
+        )
+
+    def _chunk_impl(self, dataset, scale, chunk_1, chunk_2, chunk_3, chunk_4):
+        chunk_indices = [chunk_1, chunk_2, chunk_3, chunk_4]
+        chunk_dict = {}
+        for i, axis in enumerate(self.axes_names):
+            chunk_dict[axis] = chunk_indices[i]
+
+        chunk_c = chunk_dict["c^"]
+        chunk_z = chunk_dict["z"]
+        chunk_y = chunk_dict["y"]
+        chunk_x = chunk_dict["x"]
+        corner = self.spacial_block_shape * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, self.spacial_block_shape]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
@@ -349,7 +331,7 @@ class CellMapFlowServer:
 
     def _initialize_chunk_encoder(self):
         return N5ChunkWrapper(
-            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
+            g.get_output_dtype(), self.block_shape, compressor=numcodecs.Zstd()
         )
 
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
@@ -375,32 +357,3 @@ class CellMapFlowServer:
             use_reloader=debug,
             ssl_context=ssl_context,
         )
-
-
-# ------------------------------------
-# Example usage (if run directly):
-#
-#   python your_server.py
-#
-# Then visit:
-#   http://localhost:8000/
-#   http://localhost:8000/apidocs/
-# ------------------------------------
-if __name__ == "__main__":
-    # Dummy ModelConfig example; replace with real config
-    class DummyConfig:
-        block_shape = (32, 32, 32)
-        output_voxel_size = (4, 4, 4)
-        output_channels = 1
-
-    dummy_model_config = ModelConfig(config=DummyConfig())
-
-    server = CellMapFlowServer("example.zarr", dummy_model_config)
-    server.run(debug=True, port=8000)
-
-# # %%
-# import neuroglancer
-# neuroglancer.set_server_bind_address("http://h06u01.int.janelia.org:19821/v/733c608c2ad97d2340bfc83f1f9459d5be4d9d49/")
-# with neuroglancer.Viewer().txn() as s:
-#     print(s.layers)
-# %%

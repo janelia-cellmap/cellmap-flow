@@ -72,10 +72,11 @@ class ThresholdPostprocessor(PostProcessor):
 
 class ArgmaxPostprocessor(PostProcessor):
     def __init__(self, axis: int = 0):
-        self.axis = axis
+        self.axis = int(axis)
 
     def _process(self, data):
-        data = np.argmax(data, axis=self.axis)
+        data = np.argmax(data, axis=self.axis, keepdims=True).astype(np.uint8)
+
         return data
 
     @property
@@ -85,6 +86,10 @@ class ArgmaxPostprocessor(PostProcessor):
     @property
     def is_segmentation(self):
         return True
+
+    @property
+    def num_channels(self):
+        return 1
 
 
 class LabelPostprocessor(PostProcessor):
@@ -96,6 +101,10 @@ class LabelPostprocessor(PostProcessor):
         to_process, num_features = label(to_process)
         data[self.channel] = to_process
         return data
+
+    @property
+    def num_channels(self):
+        return 1
 
     @property
     def dtype(self):

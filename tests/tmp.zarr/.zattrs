@@ -1,0 +1,83 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "z",
+                    "type": "space",
+                    "unit": "nanometer"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "nanometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "nanometer"
+                }
+            ],
+            "coordinateTransformations": [
+                {
+                    "scale": [
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "type": "scale"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                8.0,
+                                8.0,
+                                8.0
+                            ],
+                            "type": "scale"
+                        },
+                        {
+                            "translation": [
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "type": "translation"
+                        }
+                    ],
+                    "path": "s0"
+                }
+            ],
+            "name": "/recon-1/em/fibsem-uint8",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "FFFFFF",
+                "inverted": false,
+                "label": "fibsem-uint8",
+                "window": {
+                    "end": 255,
+                    "max": 255,
+                    "min": 0,
+                    "start": 0
+                }
+            }
+        ],
+        "id": 1,
+        "name": "jrc_mus-salivary-1",
+        "rdefs": {
+            "defaultT": 0,
+            "defaultZ": 7443,
+            "model": "greyscale"
+        },
+        "version": "0.4"
+    }
+}

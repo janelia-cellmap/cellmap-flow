@@ -8,7 +8,6 @@ from funlib.geometry.coordinate import Coordinate
 from funlib.persistence import Array, open_ds, prepare_ds
 from zarr.storage import NestedDirectoryStore
 from zarr.hierarchy import open_group
-from zarr.storage import DirectoryStore
 from functools import partial
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface

@@ -1,6 +1,3 @@
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
-from cellmap_flow.post.postprocessors import DefaultPostprocessor
-
 import os
 import yaml
 import threading
@@ -9,6 +6,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
+from cellmap_flow.post.postprocessors import ArgmaxPostprocessor
 
 # input_norms = [MinMaxNormalizer()]
 # postprocess = [DefaultPostprocessor(0,200,0,1)]
@@ -28,17 +28,20 @@ class Flow:
             cls._instance.models_config = []
             cls._instance.servers = []
             cls._instance.raw = None
-            cls._instance.input_norms = []  # or [MinMaxNormalizer(0, 255)]
-            cls._instance.postprocess = []
+            cls._instance.input_norms = [
+                MinMaxNormalizer(0, 255),
+                LambdaNormalizer("x*2-1"),
+            ]  # or [MinMaxNormalizer(0, 255)]
+            cls._instance.postprocess = [ArgmaxPostprocessor(0)]
             cls._instance.viewer = None
             cls._instance.dataset_path = None
             # cls._instance.model_catalog = {}
             # Uncomment and adjust if you want to load the model catalog:
             yaml_file = os.path.normpath(
-                    os.path.join(
-                        os.path.dirname(__file__), os.pardir, "models", "models.yaml"
-                    )
+                os.path.join(
+                    os.path.dirname(__file__), os.pardir, "models", "models.yaml"
                 )
+            )
             with open(yaml_file, "r") as f:
                 model_catalog = yaml.safe_load(f)
             cls._instance.model_catalog = model_catalog

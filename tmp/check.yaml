@@ -1,4 +1,4 @@
-data_path: /nrs/cellmap/data/jrc_mus-salivary-3/jrc_mus-salivary-3.zarr/recon-1/em/fibsem-uint8
+data_path: /nrs/cellmap/data/jrc_mus-salivary-3/jrc_mus-salivary-3.zarr/recon-1/em/fibsem-uint8/s1
 queue: gpu_h100
 charge_group: cellmap
 json_data:
