@@ -9,7 +9,7 @@ import os
 import zarr
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.ds import check_for_multiscale
+from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,12 @@ def get_raw_layer(dataset_path, normalize=True):
     ):
         dataset_path = dataset_path.rsplit("/", 1)[0]
         is_multiscale = True
-    elif check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]:
-        is_multiscale = True
     else:
-        is_multiscale = False
+        try:
+            is_multiscale = check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]
+        except Exception as e:
+            logger.error(e)
+            is_multiscale = False
 
     if ".zarr" in dataset_path:
         filetype = "zarr"
@@ -33,11 +35,6 @@ def get_raw_layer(dataset_path, normalize=True):
         filetype = "n5"
     else:
         filetype = "precomputed"
-
-    if filetype == "n5":
-        axis = ["x", "y", "z"]
-    else:
-        axis = ["z", "y", "x"]
 
     layers = []
 
@@ -50,21 +47,16 @@ def get_raw_layer(dataset_path, normalize=True):
             image = ImageDataInterface(
                 f"{os.path.join(dataset_path, scale)}", normalize=normalize
             )
+            # Use axes from the actual dataset - neuroglancer will use them as-is
             layers.append(
                 neuroglancer.LocalVolume(
                     data=image.ts,
                     dimensions=neuroglancer.CoordinateSpace(
-                        names=axis,
+                        names=image.axes_names,
                         units="nm",
-                        scales=(
-                            image.voxel_size[::-1]
-                            if filetype == "n5"
-                            else image.voxel_size
-                        ),
+                        scales=image.voxel_size,
                     ),
-                    voxel_offset=(
-                        image.offset[::-1] if filetype == "n5" else image.offset
-                    ),
+                    voxel_offset=image.offset,
                 )
             )
 
@@ -77,7 +69,7 @@ def get_raw_layer(dataset_path, normalize=True):
             source=neuroglancer.LocalVolume(
                 data=image.ts,
                 dimensions=neuroglancer.CoordinateSpace(
-                    names=axis,
+                    names=image.axes_names,
                     units="nm",
                     scales=image.voxel_size,
                 ),

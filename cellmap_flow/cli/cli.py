@@ -1,15 +1,27 @@
+"""
+Dynamic CLI generator that automatically detects ModelConfig subclasses
+and creates CLI commands based on their __init__ parameters.
+"""
+
 import click
 import logging
-import click
-
+import inspect
+import sys
+from typing import Type, Dict
+from typing import Type, get_type_hints
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
-from cellmap_flow.utils.data import ScriptModelConfig
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-
+from cellmap_flow.models.models_config import ModelConfig
+from cellmap_flow.utils.cli_utils import (
+    get_all_subclasses,
+    create_click_option_from_param,
+    process_constructor_args,
+    get_all_model_configs,
+    print_available_models,
+)
 
 logging.basicConfig()
-
 logger = logging.getLogger(__name__)
 
 
@@ -20,197 +32,211 @@ logger = logging.getLogger(__name__)
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
     ),
     default="INFO",
+    help="Set the logging level"
 )
 def cli(log_level):
     """
-    Command-line interface for the Cellmap flo application.
-
-    Args:
-        log_level (str): The desired log level for the application.
+    CellMap Flow - Dynamic CLI for model inference.
+    
+    Automatically generates commands for all available ModelConfig subclasses.
+    
     Examples:
-        To use Dacapo run the following commands:
-        ```
-        cellmap_flow dacapo -r my_run -i iteration -d data_path
-        ```
-
-        To use custom script
-        ```
-        cellmap_flow script -s script_path -d data_path
-        ```
-
-        To use bioimage-io model
-        ```
-        cellmap_flow bioimage -m model_path -d data_path
-        ```
+        cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
+        cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
+        cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
 
-logger = logging.getLogger(__name__)
+@cli.command(name="list-models")
+def list_models():
+    """List all available model configurations."""
+    print_available_models("cellmap_flow")
 
 
-@cli.command()
-@click.option(
-    "-r", "--run-name", required=True, type=str, help="The NAME of the run to train."
-)
-@click.option(
-    "-i",
-    "--iteration",
-    required=False,
-    type=int,
-    help="The iteration at which to train the run.",
-    default=0,
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option(
-    "-q",
-    "--queue",
-    required=False,
-    type=str,
-    help="The queue to use when submitting jobs.",
-    default="gpu_h100",
-)
-@click.option(
-    "-P",
-    "--project",
-    required=False,
-    type=str,
-    help="The project/chargeback group for billing.",
-    default=None,
-)
-def dacapo(run_name, iteration, data_path, queue, project):
-    command = f"{SERVER_COMMAND} dacapo -r {run_name} -i {iteration} -d {data_path}"
-    run(command, data_path, queue, project, run_name)
-    raise NotImplementedError("This command is not yet implemented.")
+@cli.command(name="run")
+@click.option("-m", "--model-type", required=True, help="Model type (e.g., dacapo, script, cellmap-model)")
+@click.option("-d", "--data-path", required=True, help="Path to the dataset")
+@click.option("-q", "--queue", default="gpu_h100", help="Queue for job submission")
+@click.option("-P", "--project", default=None, help="Project/chargeback group for billing")
+@click.option("-c", "--config", multiple=True, help="Model configuration as key=value pairs")
+@click.option("--server-check", is_flag=True, help="Run server check instead of full inference")
+def run_generic(model_type, data_path, queue, project, config, server_check):
+    """
+    Generic run command that accepts any model type with dynamic configuration.
+    
+    Example:
+        cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
+    """
+    model_configs = get_all_model_configs()
+    
+    if model_type not in model_configs:
+        click.echo(f"Error: Unknown model type '{model_type}'", err=True)
+        click.echo(f"Available types: {', '.join(sorted(model_configs.keys()))}", err=True)
+        sys.exit(1)
+    
+    config_class = model_configs[model_type]
+    
+    # Parse config key=value pairs
+    kwargs = {}
+    for item in config:
+        if '=' not in item:
+            click.echo(f"Error: Invalid config format '{item}'. Use key=value", err=True)
+            sys.exit(1)
+        key, value = item.split('=', 1)
+        kwargs[key] = value
+    
+    # Process the kwargs
+    processed_kwargs = process_constructor_args(config_class, kwargs)
+    
+    # Create model config
+    try:
+        model_config = config_class(**processed_kwargs)
+    except TypeError as e:
+        click.echo(f"Error creating model config: {e}", err=True)
+        click.echo(f"Required parameters for {model_type}: ", err=True)
+        sig = inspect.signature(config_class.__init__)
+        for param_name, param_info in sig.parameters.items():
+            if param_name != 'self' and param_info.default is inspect.Parameter.empty:
+                click.echo(f"  - {param_name}", err=True)
+        sys.exit(1)
+    
+    # Run the server check or full inference
+    if server_check:
+        server = CellMapFlowServer(data_path, model_config)
+        server._chunk_impl(None, None, 2, 2, 2, None)
+        click.echo("Server check passed")
+    else:
+        command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+        logger.info(f"Executing command: {command}")
+        start_hosts(command, queue, project, model_config.name or model_type)
+        neuroglancer_url = generate_neuroglancer_url(data_path)
+        click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
 
-@cli.command()
-@click.option(
-    "-s",
-    "--script-path",
-    required=True,
-    type=str,
-    help="The path to the Python script containing model specification.",
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option(
-    "-q",
-    "--queue",
-    required=False,
-    type=str,
-    help="The queue to use when submitting jobs.",
-    default="gpu_h100",
-)
-@click.option(
-    "-P",
-    "--project",
-    required=False,
-    type=str,
-    help="The project/chargeback group for billing.",
-    default=None,
-)
-def script(script_path, data_path, queue, project):
-    command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
-    base_name = script_path.split("/")[-1].split(".")[0]
-    run(command, data_path, queue, project, base_name)
+def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
+    """
+    Dynamically create a Click command for a ModelConfig subclass.
+    """
+    # Get constructor signature
+    sig = inspect.signature(config_class.__init__)
+    
+    # Get type hints if available
+    try:
+        type_hints = get_type_hints(config_class.__init__)
+    except:
+        type_hints = {}
+    
+    # Track used short names to avoid duplicates
+    used_short_names = set(['-d', '-q', '-P'])  # Reserved for common options
+    
+    # Create the command function
+    def command_func(**kwargs):
+        # Separate model config kwargs from CLI kwargs
+        model_kwargs = {}
+        data_path = kwargs.pop('data_path')
+        queue = kwargs.pop('queue', 'gpu_h100')
+        project = kwargs.pop('project', None)
+        server_check = kwargs.pop('server_check', False)
+        
+        # Process kwargs for the model config
+        for key, value in kwargs.items():
+            if value is not None:
+                model_kwargs[key] = value
+        
+        # Process constructor args (handle list/tuple conversions)
+        processed_kwargs = process_constructor_args(config_class, model_kwargs)
+        
+        # Create model config instance
+        try:
+            model_config = config_class(**processed_kwargs)
+        except TypeError as e:
+            logger.error(f"Error creating {config_class.__name__}: {e}")
+            logger.error(f"Provided arguments: {processed_kwargs}")
+            sys.exit(1)
+        
+        # Run server check or full inference
+        if server_check:
+            server = CellMapFlowServer(data_path, model_config)
+            server._chunk_impl(None, None, 2, 2, 2, None)
+            click.echo("Server check passed")
+        else:
+            command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+            logger.info(f"Executing command: {command}")
+            base_name = getattr(model_config, 'name', None) or cli_name
+            start_hosts(command, queue, project, base_name)
+            neuroglancer_url = generate_neuroglancer_url(data_path)
+            click.echo(f"Neuroglancer URL: {neuroglancer_url}")
+    
+    # Add docstring
+    command_func.__doc__ = f"""
+    Run inference using {config_class.__name__}.
+    
+    Model parameters are auto-generated from the class constructor.
+    """
+    
+    # Add common options
+    command_func = click.option(
+        "-d", "--data-path", 
+        required=True, 
+        type=str, 
+        help="Path to the dataset"
+    )(command_func)
+    
+    command_func = click.option(
+        "-q", "--queue",
+        default="gpu_h100",
+        type=str,
+        help="Queue for job submission"
+    )(command_func)
+    
+    command_func = click.option(
+        "-P", "--project",
+        default=None,
+        type=str,
+        help="Project/chargeback group for billing"
+    )(command_func)
+    
+    command_func = click.option(
+        "--server-check",
+        is_flag=True,
+        help="Run server check instead of full inference"
+    )(command_func)
+    
+    # Add model-specific options based on constructor parameters
+    for param_name, param_info in reversed(list(sig.parameters.items())):
+        option_config = create_click_option_from_param(param_name, param_info, used_short_names)
+        if option_config:
+            command_func = click.option(*option_config.pop('param_decls'), **option_config)(command_func)
+    
+    # Register as a command
+    command_func = cli.command(name=cli_name)(command_func)
+    
+    return command_func
 
 
-@cli.command()
-@click.option(
-    "-m", "--model-path", required=True, type=str, help="The path to the bioimage.io model."
-)
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option(
-    "-e",
-    "--edge-length-to-process",
-    required=False,
-    type=int,
-    help="For 2D models, the desired edge length of the chunk to process; batch size (z) will be adjusted to match as close as possible.",
-)
-@click.option(
-    "-q",
-    "--queue",
-    required=False,
-    type=str,
-    help="The queue to use when submitting jobs.",
-    default="gpu_h100",
-)
-@click.option(
-    "-P",
-    "--project",
-    required=False,
-    type=str,
-    help="The project/chargeback group for billing.",
-    default=None,
-)
-def bioimage(model_path, data_path, edge_length_to_process, queue, project):
-    command = f"{SERVER_COMMAND} bioimage -m {model_path} -d {data_path} -e {edge_length_to_process}"
-    base_name = model_path.split("/")[-1].split(".")[0]
-    run(command, data_path, queue, project, base_name)
+def register_all_model_commands():
+    """
+    Discover and register all ModelConfig subclasses as CLI commands.
+    """
+    model_configs = get_all_model_configs()
+    
+    for cli_name, config_class in model_configs.items():
+        try:
+            create_dynamic_command(cli_name, config_class)
+            logger.debug(f"Registered command: {cli_name}")
+        except Exception as e:
+            logger.warning(f"Failed to register command for {cli_name}: {e}")
 
 
-@cli.command()
-@click.option(
-    "-f", "--config-folder", required=True, type=str, help="Path to the model configuration folder."
-)
-@click.option("-n", "--name", required=True, type=str, help="Name of the model.")
-@click.option(
-    "-d", "--data-path", required=True, type=str, help="The path to the dataset."
-)
-@click.option(
-    "-q",
-    "--queue",
-    required=False,
-    type=str,
-    help="The queue to use when submitting jobs.",
-    default="gpu_h100",
-)
-@click.option(
-    "-P",
-    "--project",
-    required=False,
-    type=str,
-    help="The project/chargeback group for billing.",
-    default=None,
-)
-def cellmap_model(config_folder, name, data_path, queue, project):
-    """Run the CellMapFlow with a CellMap model."""
-    command = (
-        f"{SERVER_COMMAND} cellmap-model -f {config_folder} -n {name} -d {data_path}"
-    )
-    run(command, data_path, queue, project, name)
+# Register all commands at module load time
+register_all_model_commands()
 
 
-@cli.command()
-@click.option(
-    "--script-path",
-    "-s",
-    type=str,
-    help="Path to the Python script containing model specification.",
-)
-@click.option("--data-path", "-d", type=str, help="Path to the dataset.")
-def script_server_check(script_path, data_path):
-    model_config = ScriptModelConfig(script_path=script_path)
-    server = CellMapFlowServer(data_path, model_config)
-    chunk_x = 2
-    chunk_y = 2
-    chunk_z = 2
-
-    server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
-
-    print("Server check passed")
+def main():
+    """Entry point for the CLI."""
+    cli()
 
 
-def run(command, dataset_path, queue, project, name):
-
-    start_hosts(command, queue, project, name)
-
-    neuroglancer_url = generate_neuroglancer_url(dataset_path)
-    while True:
-        pass
+if __name__ == "__main__":
+    main()

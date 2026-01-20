@@ -1,10 +1,11 @@
 # copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/6e9d842b9a90b0df22aa07946a4d1deed5c27504/src/cellmap_segmentation_challenge/utils/security.py
 import ast
 import os
-import inspect
-from typing import Any
+from cellmap_flow.utils.serialize_config import Config
+
 
 from upath import UPath
+import numpy as np
 
 # Define restricted imports and functions
 DISALLOWED_IMPORTS = {"os", "subprocess", "sys"}
@@ -99,50 +100,12 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
         # Extract the config object from the namespace
         config = Config(**config_namespace)
     except Exception as e:
-        print(e)
-        raise RuntimeError(
-            f"Failed to execute configuration file: {config_path}"
-        ) from e
+        error_msg = (
+            f"Failed to execute configuration file: {config_path}\n"
+            f"Error type: {type(e).__name__}\n"
+            f"Error details: {str(e)}"
+        )
+        raise RuntimeError(error_msg) from e
 
     return config
 
-
-class Config:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-        self.kwargs = kwargs
-
-    def to_dict(self):
-        """
-        Returns the configuration as a dictionary.
-        """
-        return self.kwargs
-
-    def serialize(self):
-        """
-        Serializes the configuration to a string representation.
-        """
-        serialized = {}
-        for key, value in self.kwargs.items():
-            if (
-                inspect.ismodule(value)
-                or inspect.isclass(value)
-                or inspect.isfunction(value)
-                or inspect.isbuiltin(value)
-            ):
-                # Skip modules, classes, and functions
-                continue
-            elif "__" in key:
-                # Skip private attributes
-                continue
-            elif not isinstance(value, (int, float, str, bool)):
-                serialized[key] = str(value)
-            else:
-                serialized[key] = value
-        return serialized
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Gets the value of a configuration key.
-        """
-        return self.kwargs.get(key, default)
