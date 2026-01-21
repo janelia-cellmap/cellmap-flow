@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from funlib.geometry import Coordinate
 import logging
-from cellmap_flow.utils.data import ModelConfig
+from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 
 

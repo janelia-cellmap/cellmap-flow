@@ -1,5 +1,7 @@
 import logging
 from cellmap_flow.utils.web_utils import (
+    decode_to_json,
+    ARGS_KEY,
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
@@ -20,6 +22,24 @@ def get_process_dataset(json_data: dict):
     input_norm_fns = get_normalizations(json_data[INPUT_NORM_DICT_KEY])
     postprocess_fns = get_postprocessors(json_data[POSTPROCESS_DICT_KEY])
     return input_norm_fns, postprocess_fns
+
+
+def get_process_dataset_url(dataset: str):
+    if ARGS_KEY not in dataset:
+        return None, [], []  # No normalization or postprocessing
+    norm_data = dataset.split(ARGS_KEY)
+    if len(norm_data) != 3:
+        raise ValueError(
+            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}"
+        )
+    encoded_data = norm_data[1]
+    result = decode_to_json(encoded_data)
+    logger.error(f"Decoded data: {result}")
+    dashboard_url = result.get("dashboard_url", None)
+    input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
+    postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
+    logger.error(f"Normalized data: {result}")
+    return dashboard_url, input_norm_fns, postprocess_fns
 
 
 def serialize_norms_posts_to_json(norms=[], posts=[]):

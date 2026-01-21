@@ -33,14 +33,14 @@ logger = logging.getLogger(__name__)
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
     ),
     default="INFO",
-    help="Set the logging level"
+    help="Set the logging level",
 )
 def cli(log_level):
     """
     CellMap Flow Server - Dynamic CLI for running inference servers.
-    
+
     Automatically generates server commands for all available ModelConfig subclasses.
-    
+
     Examples:
         cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
@@ -74,31 +74,31 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     """
     # Get constructor signature
     sig = inspect.signature(config_class.__init__)
-    
+
     # Get type hints if available
     try:
         type_hints = get_type_hints(config_class.__init__)
     except:
         type_hints = {}
-    
+
     # Create the command function
     def command_func(**kwargs):
         # Separate model config kwargs from server kwargs
         model_kwargs = {}
-        data_path = kwargs.pop('data_path')
-        debug = kwargs.pop('debug', False)
-        port = kwargs.pop('port', 0)
-        certfile = kwargs.pop('certfile', None)
-        keyfile = kwargs.pop('keyfile', None)
-        
+        data_path = kwargs.pop("data_path")
+        debug = kwargs.pop("debug", False)
+        port = kwargs.pop("port", 0)
+        certfile = kwargs.pop("certfile", None)
+        keyfile = kwargs.pop("keyfile", None)
+
         # Process kwargs for the model config
         for key, value in kwargs.items():
             if value is not None:
                 model_kwargs[key] = value
-        
+
         # Process constructor args (handle list/tuple conversions)
         processed_kwargs = process_constructor_args(config_class, model_kwargs)
-        
+
         # Create model config instance
         try:
             model_config = config_class(**processed_kwargs)
@@ -106,61 +106,49 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
             logger.error(f"Error creating {config_class.__name__}: {e}")
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
-        
+
         # Run the server
         run_server(model_config, data_path, debug, port, certfile, keyfile)
-    
+
     # Add docstring
     command_func.__doc__ = f"""
     Run CellMapFlow server using {config_class.__name__}.
     
     Model parameters are auto-generated from the class constructor.
     """
-    
+
     # Add common server options
     command_func = click.option(
-        "-d", "--data-path", 
-        required=True, 
-        type=str, 
-        help="Path to the dataset"
+        "-d", "--data-path", required=True, type=str, help="Path to the dataset"
     )(command_func)
-    
+
+    command_func = click.option("--debug", is_flag=True, help="Run in debug mode")(
+        command_func
+    )
+
     command_func = click.option(
-        "--debug",
-        is_flag=True,
-        help="Run in debug mode"
+        "-p", "--port", default=0, type=int, help="Port to listen on"
     )(command_func)
-    
+
     command_func = click.option(
-        "-p", "--port",
-        default=0,
-        type=int,
-        help="Port to listen on"
+        "--certfile", default=None, type=str, help="Path to SSL certificate file"
     )(command_func)
-    
+
     command_func = click.option(
-        "--certfile",
-        default=None,
-        type=str,
-        help="Path to SSL certificate file"
+        "--keyfile", default=None, type=str, help="Path to SSL private key file"
     )(command_func)
-    
-    command_func = click.option(
-        "--keyfile",
-        default=None,
-        type=str,
-        help="Path to SSL private key file"
-    )(command_func)
-    
+
     # Add model-specific options based on constructor parameters
     for param_name, param_info in reversed(list(sig.parameters.items())):
         option_config = create_click_option_from_param(param_name, param_info)
         if option_config:
-            command_func = click.option(*option_config.pop('param_decls'), **option_config)(command_func)
-    
+            command_func = click.option(
+                *option_config.pop("param_decls"), **option_config
+            )(command_func)
+
     # Register as a command
     command_func = cli.command(name=cli_name)(command_func)
-    
+
     return command_func
 
 
@@ -169,7 +157,7 @@ def register_all_server_commands():
     Discover and register all ModelConfig subclasses as server CLI commands.
     """
     model_configs = get_all_model_configs()
-    
+
     for cli_name, config_class in model_configs.items():
         try:
             create_dynamic_server_command(cli_name, config_class)

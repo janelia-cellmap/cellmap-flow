@@ -140,11 +140,11 @@ def process():
 
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
-                    source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 )
             else:
                 s.layers[model] = neuroglancer.ImageLayer(
-                    source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 )
 
     logger.warning(f"Input normalizers: {g.input_norms}")

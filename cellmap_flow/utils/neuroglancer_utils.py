@@ -42,7 +42,7 @@ def generate_neuroglancer_url(dataset_path):
             host = job.host
             color = next(color_cycle)
             s.layers[model] = neuroglancer.ImageLayer(
-                source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 shader=f"""#uicontrol invlerp normalized(range=[0.5, 0.5], window=[0, 1]);
     #uicontrol vec3 color color(default="{color}");
     void main(){{emitRGB(color * normalized());}}""",
