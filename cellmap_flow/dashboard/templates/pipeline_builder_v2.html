@@ -334,6 +334,24 @@
             display: none;
         }
 
+        /* Configuration nodes */
+        .node-box.config-node {
+            min-width: 350px;
+            max-width: 450px;
+            background: linear-gradient(135deg, #2a2a3e, var(--bg-secondary));
+            border-color: #f59e0b;
+        }
+
+        .node-box.config-node:hover {
+            border-color: #fbbf24;
+            box-shadow: 0 6px 16px rgba(245, 158, 11, 0.2);
+        }
+
+        .node-box.config-node .node-input,
+        .node-box.config-node .node-output {
+            display: none;
+        }
+
         /* Node connection dots */
         .node-input, .node-output {
             position: absolute;
@@ -479,6 +497,19 @@
             cursor: not-allowed;
         }
 
+        /* Blockwise config fields */
+        .blockwise-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
         /* Message */
         .message {
             position: fixed;
@@ -619,6 +650,17 @@
                     </button>
                     <div class="library-items" id="postprocessors-items"></div>
                 </div>
+
+                <div class="library-section">
+                    <div class="section-title">Configuration</div>
+                    <button class="section-toggle" onclick="toggleSection(this, 'config')">
+                        <span>⚙️ Blockwise Config</span>
+                        <span id="config-toggle">▼</span>
+                    </button>
+                    <div class="library-items" id="config-items">
+                        <div class="library-item" draggable="true" data-type="blockwise-config" data-name="Blockwise Configuration">⚙️ Blockwise Configuration</div>
+                    </div>
+                </div>
             </div>
 
             <div class="canvas">
@@ -648,6 +690,7 @@
             normalizers: {{ current_normalizers | tojson }},
             models: {{ current_models | tojson }},
             postprocessors: {{ current_postprocessors | tojson }},
+            blockwise_config: [],
             edges: {{ current_edges | tojson }}
         };
 
@@ -830,6 +873,12 @@
                 postContainer.appendChild(elem);
             });
 
+            // Setup drag listeners for blockwise config item
+            const blockwiseItems = document.querySelectorAll('#config-items .library-item');
+            blockwiseItems.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+            });
+
             // Setup canvas drop
             const canvas = document.querySelector('.canvas');
             canvas.addEventListener('dragover', handleDragOver);
@@ -893,16 +942,28 @@
                 const count = pipeline.models.length;
                 x = 400 + (count * 380);
                 y = 20;
-            } else {
+            } else if (type === 'postprocessor') {
                 const count = pipeline.postprocessors.length;
                 x = 600 + (count * 380);
                 y = 20;
+            } else if (type === 'blockwise-config') {
+                x = 100;
+                y = 400;
             }
 
-            // Get default params from APP_CONFIG
+            // Get default params from APP_CONFIG or API
             let defaultParams = {};
             let modelConfig = null;
-            if (type === 'normalizer') {
+            if (type === 'blockwise-config') {
+                // Set default blockwise config params
+                defaultParams = {
+                    queue: 'gpu_h100',
+                    charge_group: 'cellmap',
+                    nb_cores_master: 4,
+                    nb_cores_worker: 12,
+                    nb_workers: 14
+                };
+            } else if (type === 'normalizer') {
                 const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
                     APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
                 const normDef = normsArray.find(n => (typeof n === 'string' ? n : n.name) === name);
@@ -953,8 +1014,10 @@
                 pipeline.normalizers.push(node);
             } else if (type === 'model') {
                 pipeline.models.push(node);
-            } else {
+            } else if (type === 'postprocessor') {
                 pipeline.postprocessors.push(node);
+            } else if (type === 'blockwise-config') {
+                pipeline.blockwise_config.push(node);
             }
 
             // Auto-connect the new node into the pipeline
@@ -975,8 +1038,10 @@
                 pipeline.normalizers = pipeline.normalizers.filter(n => n.id !== id);
             } else if (type === 'model') {
                 pipeline.models = pipeline.models.filter(m => m.id !== id);
-            } else {
+            } else if (type === 'postprocessor') {
                 pipeline.postprocessors = pipeline.postprocessors.filter(p => p.id !== id);
+            } else if (type === 'blockwise-config') {
+                pipeline.blockwise_config = pipeline.blockwise_config.filter(c => c.id !== id);
             }
             // Re-auto-connect remaining nodes
             autoConnectNodes();
@@ -993,7 +1058,8 @@
                 ...pipeline.outputs.map(n => ({ ...n, type: 'output' })),
                 ...pipeline.normalizers.map(n => ({ ...n, type: 'normalizer' })),
                 ...pipeline.models.map(m => ({ ...m, type: 'model' })),
-                ...pipeline.postprocessors.map(p => ({ ...p, type: 'postprocessor' }))
+                ...pipeline.postprocessors.map(p => ({ ...p, type: 'postprocessor' })),
+                ...pipeline.blockwise_config.map(c => ({ ...c, type: 'blockwise-config' }))
             ];
 
             if (allNodes.length === 0) {
@@ -1029,10 +1095,12 @@
             const div = document.createElement('div');
             div.className = 'node-box';
 
-            // Add special class for INPUT/OUTPUT nodes
+            // Add special class for different node types
             if (node.type === 'input' || node.type === 'output') {
                 div.classList.add('io-node');
                 div.classList.add(node.type + '-node');
+            } else if (node.type === 'blockwise-config') {
+                div.classList.add('config-node');
             }
 
             div.id = `node-${node.id}`;
@@ -1137,6 +1205,45 @@
                     </div>
                     ${inputContent}
                 `;
+            } else if (node.type === 'blockwise-config') {
+                // Blockwise configuration node
+                const fields = [
+                    { key: 'queue', label: 'Queue' },
+                    { key: 'charge_group', label: 'Charge Group' },
+                    { key: 'nb_cores_master', label: 'Cores Master' },
+                    { key: 'nb_cores_worker', label: 'Cores Worker' },
+                    { key: 'nb_workers', label: 'Workers' }
+                ];
+                
+                let blockwiseHTML = '';
+                fields.forEach(field => {
+                    const value = node.params?.[field.key] || '';
+                    const displayValue = String(value).replace(/"/g, '&quot;');
+                    const inputType = field.key.startsWith('nb_') ? 'number' : 'text';
+                    blockwiseHTML += `
+                        <div class="param-group">
+                            <label class="param-label">${field.label}</label>
+                            <input type="${inputType}" class="param-input" data-key="${field.key}" data-type="${inputType}"
+                                   value="${displayValue}"
+                                   onchange="handleParamChange(this, '${node.id}', 'blockwise-config')">
+                        </div>
+                    `;
+                });
+                
+                div.innerHTML = `
+                    <div class="node-header">
+                        <div>
+                            <div class="node-title">⚙️ Blockwise Config</div>
+                        </div>
+                        <div class="node-actions">
+                            <button class="icon-btn save" onclick="saveNode('${node.id}', 'blockwise-config')">💾</button>
+                            <button class="icon-btn delete" onclick="removeNode('${node.id}', 'blockwise-config')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="node-params">
+                        ${blockwiseHTML}
+                    </div>
+                `;
             } else {
                 div.innerHTML = `
                     <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
@@ -1177,6 +1284,8 @@
                     actualNode = pipeline.models.find(m => m.id === node.id);
                 } else if (node.type === 'postprocessor') {
                     actualNode = pipeline.postprocessors.find(p => p.id === node.id);
+                } else if (node.type === 'blockwise-config') {
+                    actualNode = pipeline.blockwise_config.find(c => c.id === node.id);
                 }
 
                 if (!actualNode) return;
@@ -1216,8 +1325,10 @@
                 node = pipeline.normalizers.find(n => n.id === nodeId);
             } else if (nodeType === 'model') {
                 node = pipeline.models.find(m => m.id === nodeId);
-            } else {
+            } else if (nodeType === 'postprocessor') {
                 node = pipeline.postprocessors.find(p => p.id === nodeId);
+            } else if (nodeType === 'blockwise-config') {
+                node = pipeline.blockwise_config.find(c => c.id === nodeId);
             }
 
             if (node) {
@@ -1271,6 +1382,25 @@
                         });
                     }
                 });
+                
+                // Sync blockwise config to backend if this is a blockwise-config node
+                if (nodeType === 'blockwise-config') {
+                    const config = {
+                        queue: node.params.queue || 'gpu_h100',
+                        charge_group: node.params.charge_group || 'cellmap',
+                        nb_cores_master: node.params.nb_cores_master || 4,
+                        nb_cores_worker: node.params.nb_cores_worker || 12,
+                        nb_workers: node.params.nb_workers || 14
+                    };
+                    fetch('/api/blockwise-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    }).then(r => r.json()).then(data => {
+                        console.log('Blockwise config synced:', data);
+                    }).catch(err => console.error('Error syncing blockwise config:', err));
+                }
+                
                 nodeBox.classList.remove('dirty');
                 showMessage('Parameters saved', 'success');
             }
@@ -1446,6 +1576,25 @@
                 yaml += '\n';
             }
 
+            // Export blockwise configuration
+            if (pipeline.blockwise_config.length > 0) {
+                yaml += 'blockwise_config:\n';
+                pipeline.blockwise_config.forEach(c => {
+                    yaml += `  - id: ${c.id}\n`;
+                    yaml += `    name: ${c.name}\n`;
+                    if (Object.keys(c.params).length > 0) {
+                        yaml += '    params:\n';
+                        Object.entries(c.params).forEach(([k, v]) => {
+                            yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${c.position.x}\n`;
+                    yaml += `      y: ${c.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
             // Export edges (connections)
             if (pipeline.edges.length > 0) {
                 yaml += 'edges:\n';
@@ -1543,6 +1692,18 @@
                             params: p.params || {},
                             position: p.position || { x: 600 + (i * 380), y: 20 }
                         })),
+                        blockwise_config: (data.blockwise_config || []).map((c, i) => ({
+                            id: c.id || `blockwise-${Date.now()}-${i}`,
+                            name: 'Blockwise Configuration',
+                            params: c.params || {
+                                queue: 'gpu_h100',
+                                charge_group: 'cellmap',
+                                nb_cores_master: 4,
+                                nb_cores_worker: 12,
+                                nb_workers: 14
+                            },
+                            position: c.position || { x: 100, y: 400 }
+                        })),
                         edges: data.edges || []
                     };
 
@@ -1565,6 +1726,7 @@
                 input_normalizers: [],
                 models: [],
                 postprocessors: [],
+                blockwise_config: [],
                 edges: []
             };
             let currentSection = null;
@@ -1595,6 +1757,10 @@
                     inPosition = false;
                 } else if (trimmed === 'postprocessors:') {
                     currentSection = 'postprocessors';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'blockwise_config:') {
+                    currentSection = 'blockwise_config';
                     inParams = false;
                     inPosition = false;
                 } else if (trimmed === 'edges:') {

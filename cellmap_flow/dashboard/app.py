@@ -408,6 +408,34 @@ def dataset_path_api():
         return jsonify({'success': True, 'dataset_path': g.dataset_path})
 
 
+@app.route("/api/blockwise-config", methods=["GET", "POST"])
+def blockwise_config_api():
+    """Get or set blockwise configuration in globals"""
+    if request.method == "GET":
+        return jsonify({
+            'queue': getattr(g, 'queue', 'gpu_h100'),
+            'charge_group': getattr(g, 'charge_group', 'cellmap'),
+            'nb_cores_master': getattr(g, 'nb_cores_master', 4),
+            'nb_cores_worker': getattr(g, 'nb_cores_worker', 12),
+            'nb_workers': getattr(g, 'nb_workers', 14)
+        })
+    elif request.method == "POST":
+        data = request.get_json()
+        g.queue = data.get('queue', 'gpu_h100')
+        g.charge_group = data.get('charge_group', 'cellmap')
+        g.nb_cores_master = int(data.get('nb_cores_master', 4))
+        g.nb_cores_worker = int(data.get('nb_cores_worker', 12))
+        g.nb_workers = int(data.get('nb_workers', 14))
+        logger.warning(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}")
+        return jsonify({'success': True, 'config': {
+            'queue': g.queue,
+            'charge_group': g.charge_group,
+            'nb_cores_master': g.nb_cores_master,
+            'nb_cores_worker': g.nb_cores_worker,
+            'nb_workers': g.nb_workers
+        }})
+
+
 @app.route("/api/pipeline/apply", methods=["POST"])
 def apply_pipeline():
     """Apply a pipeline configuration to the current inference"""

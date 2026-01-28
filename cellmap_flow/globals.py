@@ -44,6 +44,9 @@ class Flow:
 
             cls._instance.queue = "gpu_h100"
             cls._instance.charge_group = "cellmap"
+            cls._instance.nb_cores_master = 4
+            cls._instance.nb_cores_worker = 12
+            cls._instance.nb_workers = 14
             cls._instance.neuroglancer_thread = None
 
             # Pipeline visual state storage
