@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CellMapFlow - Pipeline Builder</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon" />
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --border-color: #475569;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --node-normalizer: #3b82f6;
+            --node-postprocessor: #8b5cf6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .canvas {
+            flex: 1;
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-color);
+            overflow: auto;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .pipeline-section {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
+        }
+
+        .node-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-start;
+            min-height: 44px;
+        }
+
+        .node {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: var(--text-primary);
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .node::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .node:hover {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(59, 130, 246, 0.15));
+            border-color: rgba(59, 130, 246, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+        }
+
+        .node.normalizer {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .node.normalizer:hover {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(59, 130, 246, 0.15));
+            border-color: rgba(59, 130, 246, 0.6);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+        }
+
+        .node.postprocessor {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.05));
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .node.postprocessor:hover {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(139, 92, 246, 0.15));
+            border-color: rgba(139, 92, 246, 0.6);
+            box-shadow: 0 8px 24px rgba(139, 92, 246, 0.2);
+        }
+
+        .node-remove {
+            margin-left: 4px;
+            background: rgba(239, 68, 68, 0.2);
+            border: none;
+            color: #fca5a5;
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .node-remove:hover {
+            background: rgba(239, 68, 68, 0.4);
+            color: #fecaca;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .sidebar h3 {
+            font-size: 13px;
+            margin: 0;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            margin-bottom: 0;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text-primary);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        select:hover {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        button {
+            padding: 10px 14px;
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-bottom: 0;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #2563eb;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.primary {
+            background: var(--accent-blue);
+        }
+
+        button.primary:hover {
+            background: #2563eb;
+        }
+
+        .params-panel {
+            margin-top: 0;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .params-panel h4 {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .param-input {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+
+        .param-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .export-section {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .export-section button {
+            margin-bottom: 0;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .import-label {
+            display: block;
+            padding: 10px 14px;
+            background: var(--accent-purple);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 1px solid var(--accent-purple);
+        }
+
+        .import-label:hover {
+            background: #7c3aed;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .error {
+            color: #fecaca;
+            font-size: 12px;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            margin-bottom: 0;
+        }
+
+        .success {
+            color: #86efac;
+            font-size: 12px;
+            padding: 12px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            margin-bottom: 0;
+        }
+
+        /* Scrollbar styling */
+        .canvas::-webkit-scrollbar,
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .canvas::-webkit-scrollbar-track,
+        .sidebar::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .canvas::-webkit-scrollbar-thumb,
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .canvas::-webkit-scrollbar-thumb:hover,
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 CellMapFlow Pipeline Builder</h1>
+        </div>
+
+        <div class="content">
+            <div class="canvas">
+                <div class="pipeline-section">
+                    <div class="section-title">📥 Input Normalizers</div>
+                    <div class="node-list" id="normalizer-nodes"></div>
+                </div>
+
+                <div class="pipeline-section">
+                    <div class="section-title">📤 Postprocessors</div>
+                    <div class="node-list" id="postprocessor-nodes"></div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <h3>➕ Add Normalizer</h3>
+                <select id="normalizer-select">
+                    <option value="">Select a normalizer...</option>
+                </select>
+
+                <h3>➕ Add Postprocessor</h3>
+                <select id="postprocessor-select">
+                    <option value="">Select a postprocessor...</option>
+                </select>
+
+                <div id="node-panel"></div>
+
+                <div class="export-section">
+                    <h3>⚙️ Apply Pipeline</h3>
+                    <button class="primary success" onclick="applyPipeline()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%;">
+                        ✓ Apply to Inference
+                    </button>
+
+                    <h3 style="margin-top: 20px;">💾 Save/Load</h3>
+                    <button class="primary" onclick="exportYAML()">Export as YAML</button>
+                    <button class="primary" onclick="exportJSON()">Export as JSON</button>
+                    <label class="import-label">
+                        📂 Import Pipeline
+                        <input type="file" class="file-input" accept=".yaml,.json" id="import-file" onchange="importFile()">
+                    </label>
+                    <div id="message"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize app config from Flask
+        window.APP_CONFIG = {
+            availableNormalizers: {{ input_normalizers | tojson }},
+            availablePostprocessors: {{ output_postprocessors | tojson }},
+        };
+
+        // State - initialize with current globals
+        let pipeline = {
+            normalizers: {{ current_normalizers | tojson }},
+            postprocessors: {{ current_postprocessors | tojson }}
+        };
+
+        // Ensure all nodes have IDs
+        pipeline.normalizers = pipeline.normalizers.map((n, i) => ({
+            id: n.id || `norm-${i}-${Date.now()}`,
+            name: n.name,
+            params: n.params || {}
+        }));
+        pipeline.postprocessors = pipeline.postprocessors.map((p, i) => ({
+            id: p.id || `post-${i}-${Date.now()}`,
+            name: p.name,
+            params: p.params || {}
+        }));
+
+        let availableNormalizers = window.APP_CONFIG?.availableNormalizers || {};
+        let availablePostprocessors = window.APP_CONFIG?.availablePostprocessors || {};
+
+        // Initialize dropdowns
+        function initializeSelects() {
+            const normSelect = document.getElementById('normalizer-select');
+            const postSelect = document.getElementById('postprocessor-select');
+
+            // Normalize to array format (handle both array and object formats)
+            const normArray = Array.isArray(availableNormalizers) ? availableNormalizers : Object.values(availableNormalizers);
+            const postArray = Array.isArray(availablePostprocessors) ? availablePostprocessors : Object.values(availablePostprocessors);
+
+            normArray.forEach(norm => {
+                const name = typeof norm === 'string' ? norm : norm.name;
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                normSelect.appendChild(opt);
+            });
+
+            postArray.forEach(post => {
+                const name = typeof post === 'string' ? post : post.name;
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                postSelect.appendChild(opt);
+            });
+
+            normSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    addNode('normalizer', e.target.value);
+                    e.target.value = '';
+                }
+            });
+
+            postSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    addNode('postprocessor', e.target.value);
+                    e.target.value = '';
+                }
+            });
+        }
+
+        // Add node to pipeline
+        function addNode(type, name) {
+            const id = `${type}-${Date.now()}`;
+            
+            // Get default params from available list
+            let defaultParams = {};
+            const sourceArray = type === 'normalizer' ? availableNormalizers : availablePostprocessors;
+            const sourceList = Array.isArray(sourceArray) ? sourceArray : Object.values(sourceArray);
+            
+            const found = sourceList.find(item => {
+                const itemName = typeof item === 'string' ? item : item.name;
+                return itemName === name;
+            });
+            
+            if (found && found.params) {
+                // Deep copy the params
+                defaultParams = JSON.parse(JSON.stringify(found.params));
+            }
+            
+            const node = { id, type, name, params: defaultParams };
+            
+            if (type === 'normalizer') {
+                pipeline.normalizers.push(node);
+            } else {
+                pipeline.postprocessors.push(node);
+            }
+
+            renderNodes();
+        }
+
+        // Remove node
+        function removeNode(id, type) {
+            if (type === 'normalizer') {
+                pipeline.normalizers = pipeline.normalizers.filter(n => n.id !== id);
+            } else {
+                pipeline.postprocessors = pipeline.postprocessors.filter(n => n.id !== id);
+            }
+            renderNodes();
+        }
+
+        // Render nodes
+        function renderNodes() {
+            const normContainer = document.getElementById('normalizer-nodes');
+            const postContainer = document.getElementById('postprocessor-nodes');
+
+            normContainer.innerHTML = '';
+            postContainer.innerHTML = '';
+
+            pipeline.normalizers.forEach(node => {
+                const div = createNodeElement(node, 'normalizer');
+                normContainer.appendChild(div);
+            });
+
+            pipeline.postprocessors.forEach(node => {
+                const div = createNodeElement(node, 'postprocessor');
+                postContainer.appendChild(div);
+            });
+        }
+
+        function createNodeElement(node, type) {
+            const div = document.createElement('div');
+            div.className = `node ${type}`;
+            div.innerHTML = `
+                <span onclick="selectNode('${node.id}', '${type}')" style="flex:1;cursor:pointer;">${node.name}</span>
+                <button class="node-remove" onclick="removeNode('${node.id}', '${type}')">×</button>
+            `;
+            return div;
+        }
+
+        // Select node and show params as form
+        function selectNode(id, type) {
+            const node = type === 'normalizer' 
+                ? pipeline.normalizers.find(n => n.id === id)
+                : pipeline.postprocessors.find(n => n.id === id);
+
+            if (!node) return;
+
+            const panel = document.getElementById('node-panel');
+            let formHTML = `
+                <div class="params-panel">
+                    <h4>🔧 ${node.name}</h4>
+                    <form id="params-form" style="display: flex; flex-direction: column; gap: 12px;">
+            `;
+
+            // Create form fields for each parameter
+            Object.entries(node.params).forEach(([key, value]) => {
+                const fieldId = `param-${key}`;
+                const fieldValue = value;
+                let inputField = '';
+
+                // Determine input type based on value type
+                if (typeof value === 'boolean') {
+                    inputField = `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="${fieldId}" style="flex: 1; margin: 0;">${key}</label>
+                            <input type="checkbox" id="${fieldId}" data-key="${key}" 
+                                   ${value ? 'checked' : ''} 
+                                   style="width: 20px; height: 20px; cursor: pointer;">
+                        </div>
+                    `;
+                } else if (typeof value === 'number') {
+                    inputField = `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="${fieldId}">${key}</label>
+                            <input type="number" id="${fieldId}" data-key="${key}" 
+                                   value="${value}" step="any" 
+                                   style="padding: 6px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 4px;">
+                        </div>
+                    `;
+                } else if (typeof value === 'string') {
+                    inputField = `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="${fieldId}">${key}</label>
+                            <input type="text" id="${fieldId}" data-key="${key}" 
+                                   value="${value}" 
+                                   style="padding: 6px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 4px;">
+                        </div>
+                    `;
+                } else if (Array.isArray(value)) {
+                    // For arrays, show as JSON textarea
+                    inputField = `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="${fieldId}">${key} (JSON)</label>
+                            <textarea id="${fieldId}" data-key="${key}" 
+                                      style="padding: 6px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; 
+                                             border-radius: 4px; font-family: monospace; font-size: 11px; height: 60px; resize: vertical;">
+${JSON.stringify(value, null, 2)}
+                            </textarea>
+                        </div>
+                    `;
+                } else if (typeof value === 'object' && value !== null) {
+                    // For nested objects, show as JSON textarea
+                    inputField = `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label for="${fieldId}">${key} (JSON)</label>
+                            <textarea id="${fieldId}" data-key="${key}" 
+                                      style="padding: 6px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; 
+                                             border-radius: 4px; font-family: monospace; font-size: 11px; height: 60px; resize: vertical;">
+${JSON.stringify(value, null, 2)}
+                            </textarea>
+                        </div>
+                    `;
+                }
+
+                formHTML += inputField;
+            });
+
+            formHTML += `
+                    </form>
+                    <button onclick="applyParams('${id}', '${type}')" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        ✓ Apply
+                    </button>
+                    <button onclick="resetParams('${id}', '${type}')" style="background: #64748b; margin-top: 8px;">
+                        ↻ Reset
+                    </button>
+                </div>
+            `;
+
+            panel.innerHTML = formHTML;
+        }
+
+        // Reset params to default
+        function resetParams(id, type) {
+            const node = type === 'normalizer' 
+                ? pipeline.normalizers.find(n => n.id === id)
+                : pipeline.postprocessors.find(n => n.id === id);
+
+            if (!node) return;
+
+            // Get default params from available list
+            let defaultParams = {};
+            const sourceArray = type === 'normalizer' ? availableNormalizers : availablePostprocessors;
+            const sourceList = Array.isArray(sourceArray) ? sourceArray : Object.values(sourceArray);
+            
+            const found = sourceList.find(item => {
+                const itemName = typeof item === 'string' ? item : item.name;
+                return itemName === node.name;
+            });
+            
+            if (found && found.params) {
+                defaultParams = JSON.parse(JSON.stringify(found.params));
+            }
+
+            node.params = defaultParams;
+            selectNode(id, type); // Refresh the panel
+            showMessage('Parameters reset to default', 'success');
+        }
+
+        // Apply params from form
+        function applyParams(id, type) {
+            try {
+                const node = type === 'normalizer'
+                    ? pipeline.normalizers.find(n => n.id === id)
+                    : pipeline.postprocessors.find(n => n.id === id);
+                
+                if (!node) return;
+
+                // Collect values from form fields
+                const form = document.getElementById('params-form');
+                const inputs = form.querySelectorAll('[data-key]');
+                
+                inputs.forEach(input => {
+                    const key = input.getAttribute('data-key');
+                    const originalValue = node.params[key];
+                    let value;
+
+                    if (input.type === 'checkbox') {
+                        value = input.checked;
+                    } else if (input.type === 'number') {
+                        value = parseFloat(input.value) || 0;
+                    } else if (input.tagName === 'TEXTAREA') {
+                        // Try to parse as JSON for arrays/objects
+                        try {
+                            value = JSON.parse(input.value);
+                        } catch {
+                            // If JSON parsing fails, keep as string
+                            value = input.value;
+                        }
+                    } else {
+                        // For text inputs, preserve original type if possible
+                        if (typeof originalValue === 'number') {
+                            value = parseFloat(input.value) || 0;
+                        } else if (typeof originalValue === 'boolean') {
+                            value = input.value.toLowerCase() === 'true';
+                        } else {
+                            value = input.value;
+                        }
+                    }
+
+                    node.params[key] = value;
+                });
+
+                showMessage('✓ Parameters updated', 'success');
+            } catch (e) {
+                showMessage('Error: ' + e.message, 'error');
+            }
+        }
+
+        // Export YAML
+        function exportYAML() {
+            let yaml = 'input_normalizers:\n';
+            pipeline.normalizers.forEach(n => {
+                yaml += `  - name: ${n.name}\n`;
+                yaml += '    params:\n';
+                Object.entries(n.params).forEach(([k, v]) => {
+                    yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                });
+            });
+
+            yaml += 'postprocessors:\n';
+            pipeline.postprocessors.forEach(p => {
+                yaml += `  - name: ${p.name}\n`;
+                yaml += '    params:\n';
+                Object.entries(p.params).forEach(([k, v]) => {
+                    yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                });
+            });
+
+            downloadFile(yaml, 'pipeline.yaml', 'text/yaml');
+        }
+
+        // Export JSON
+        function exportJSON() {
+            const data = JSON.stringify(pipeline, null, 2);
+            downloadFile(data, 'pipeline.json', 'application/json');
+        }
+
+        // Download file
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showMessage('Exported as ' + filename, 'success');
+        }
+
+        // Import file
+        function importFile() {
+            const file = document.getElementById('import-file').files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    let data;
+                    if (file.name.endsWith('.yaml')) {
+                        data = parseYAML(content);
+                    } else {
+                        data = JSON.parse(content);
+                    }
+
+                    // Merge or replace
+                    pipeline = {
+                        normalizers: (data.normalizers || []).map((n, i) => ({
+                            id: `norm-${Date.now()}-${i}`,
+                            type: 'normalizer',
+                            name: n.name || n,
+                            params: n.params || {}
+                        })),
+                        postprocessors: (data.postprocessors || []).map((p, i) => ({
+                            id: `post-${Date.now()}-${i}`,
+                            type: 'postprocessor',
+                            name: p.name || p,
+                            params: p.params || {}
+                        }))
+                    };
+                    renderNodes();
+                    showMessage('Pipeline imported', 'success');
+                    document.getElementById('import-file').value = '';
+                } catch (err) {
+                    showMessage('Import failed: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Simple YAML parser
+        function parseYAML(yaml) {
+            const result = { normalizers: [], postprocessors: [] };
+            let section = null;
+            let current = null;
+
+            yaml.split('\n').forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('input_normalizers:')) section = 'normalizers';
+                else if (trimmed.startsWith('postprocessors:')) section = 'postprocessors';
+                else if (trimmed.startsWith('- name:')) {
+                    if (current && section) result[section].push(current);
+                    current = { name: trimmed.replace('- name: ', ''), params: {} };
+                } else if (trimmed.startsWith('name:') && !trimmed.startsWith('- name:')) {
+                    if (current) current.name = trimmed.replace('name: ', '');
+                } else if (trimmed && current && !trimmed.startsWith('params:') && !trimmed.startsWith('-')) {
+                    const [k, v] = trimmed.split(':').map(s => s.trim());
+                    if (k && v) {
+                        try {
+                            current.params[k] = JSON.parse(v);
+                        } catch {
+                            current.params[k] = v;
+                        }
+                    }
+                }
+            });
+            if (current && section) result[section].push(current);
+            return result;
+        }
+
+        // Apply pipeline to inference
+        async function applyPipeline() {
+            try {
+                // Transform pipeline object to match backend format
+                const payload = {
+                    input_normalizers: pipeline.normalizers.map(n => ({
+                        name: n.name,
+                        params: n.params
+                    })),
+                    postprocessors: pipeline.postprocessors.map(p => ({
+                        name: p.name,
+                        params: p.params
+                    }))
+                };
+
+                const response = await fetch('/api/pipeline/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showMessage('✓ Pipeline applied successfully!', 'success');
+                } else {
+                    showMessage('Error: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showMessage('Failed to apply pipeline: ' + err.message, 'error');
+            }
+        }
+
+        // Show message
+        function showMessage(msg, type) {
+            const div = document.getElementById('message');
+            div.className = type;
+            div.textContent = msg;
+            setTimeout(() => div.textContent = '', 3000);
+        }
+
+        // Init
+        initializeSelects();
+        renderNodes();  // Render current pipeline from globals
+    </script>
+</body>
+</html>

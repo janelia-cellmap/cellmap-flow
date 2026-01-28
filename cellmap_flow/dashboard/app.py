@@ -68,6 +68,46 @@ def index():
     )
 
 
+@app.route("/pipeline-builder")
+def pipeline_builder():
+    """Render the drag-and-drop pipeline builder interface with current state from globals"""
+    input_norms = get_input_normalizers()
+    output_postprocessors = get_postprocessors_list()
+    
+    # Convert current pipeline state from globals to dict format with unique IDs
+    current_normalizers = []
+    for idx, norm in enumerate(g.input_norms):
+        norm_dict = norm.to_dict() if hasattr(norm, 'to_dict') else {'name': str(norm)}
+        norm_name = norm_dict.get('name', str(norm))
+        # Extract params: all dict items except 'name'
+        params = {k: v for k, v in norm_dict.items() if k != 'name'}
+        current_normalizers.append({
+            'id': f'norm-{idx}-{int(time.time()*1000)}',
+            'name': norm_name,
+            'params': params
+        })
+    
+    current_postprocessors = []
+    for idx, post in enumerate(g.postprocess):
+        post_dict = post.to_dict() if hasattr(post, 'to_dict') else {'name': str(post)}
+        post_name = post_dict.get('name', str(post))
+        # Extract params: all dict items except 'name'
+        params = {k: v for k, v in post_dict.items() if k != 'name'}
+        current_postprocessors.append({
+            'id': f'post-{idx}-{int(time.time()*1000)}',
+            'name': post_name,
+            'params': params
+        })
+    
+    return render_template(
+        "pipeline_builder.html",
+        input_normalizers=input_norms or {},
+        output_postprocessors=output_postprocessors or {},
+        current_normalizers=current_normalizers,
+        current_postprocessors=current_postprocessors,
+    )
+
+
 def is_output_segmentation():
     if len(g.postprocess) == 0:
         return False
@@ -175,6 +215,94 @@ def process():
             "found_custom_normalizer": get_input_normalizers(),
         }
     )
+
+
+@app.route("/api/pipeline/validate", methods=["POST"])
+def validate_pipeline():
+    """Validate a pipeline configuration"""
+    try:
+        data = request.get_json()
+        
+        # Validate normalizers
+        normalizer_names = [n.get("name") for n in data.get("input_normalizers", [])]
+        available_norms = get_input_normalizers()
+        for norm_name in normalizer_names:
+            if norm_name not in available_norms:
+                return jsonify(
+                    {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
+                ), 400
+        
+        # Validate postprocessors
+        processor_names = [p.get("name") for p in data.get("postprocessors", [])]
+        available_procs = get_postprocessors_list()
+        for proc_name in processor_names:
+            if proc_name not in available_procs:
+                return jsonify(
+                    {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
+                ), 400
+        
+        return jsonify({"valid": True, "message": "Pipeline is valid"})
+    
+    except Exception as e:
+        logger.error(f"Error validating pipeline: {e}")
+        return jsonify({"valid": False, "error": str(e)}), 500
+
+
+@app.route("/api/pipeline/apply", methods=["POST"])
+def apply_pipeline():
+    """Apply a pipeline configuration to the current inference"""
+    try:
+        data = request.get_json()
+        
+        # Validate first
+        validation = validate_pipeline_config(data)
+        if not validation["valid"]:
+            return jsonify(validation), 400
+        
+        # Apply normalizers
+        input_norms_config = {
+            n["name"]: n.get("params", {}) for n in data.get("input_normalizers", [])
+        }
+        g.input_norms = get_normalizations(input_norms_config)
+        
+        # Apply postprocessors
+        postprocs_config = {
+            p["name"]: p.get("params", {}) for p in data.get("postprocessors", [])
+        }
+        g.postprocess = get_postprocessors(postprocs_config)
+        
+        logger.warning(f"Pipeline applied: {len(g.input_norms)} normalizers, {len(g.postprocess)} postprocessors")
+        
+        return jsonify({
+            "message": "Pipeline applied successfully",
+            "normalizers_applied": len(g.input_norms),
+            "postprocessors_applied": len(g.postprocess),
+        })
+    
+    except Exception as e:
+        logger.error(f"Error applying pipeline: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def validate_pipeline_config(config):
+    """Helper function to validate pipeline configuration"""
+    try:
+        normalizer_names = [n.get("name") for n in config.get("input_normalizers", [])]
+        available_norms = get_input_normalizers()
+        for norm_name in normalizer_names:
+            if norm_name not in available_norms:
+                return {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
+        
+        processor_names = [p.get("name") for p in config.get("postprocessors", [])]
+        available_procs = get_postprocessors_list()
+        for proc_name in processor_names:
+            if proc_name not in available_procs:
+                return {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
+        
+        return {"valid": True}
+    
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

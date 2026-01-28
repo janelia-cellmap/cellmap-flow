@@ -1,4 +1,4 @@
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor
 
 import os
@@ -10,11 +10,11 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# input_norms = [MinMaxNormalizer()]
-# postprocess = [DefaultPostprocessor(0,200,0,1)]
+input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
+postprocess = [DefaultPostprocessor()]
 
-input_norms = []
-postprocess = []
+# input_norms = []
+# postprocess = []
 viewer = None
 
 
@@ -28,8 +28,8 @@ class Flow:
             cls._instance.models_config = []
             cls._instance.servers = []
             cls._instance.raw = None
-            cls._instance.input_norms = []  # or [MinMaxNormalizer(0, 255)]
-            cls._instance.postprocess = []
+            cls._instance.input_norms = input_norms
+            cls._instance.postprocess = postprocess
             cls._instance.viewer = None
             cls._instance.dataset_path = None
             # cls._instance.model_catalog = {}
