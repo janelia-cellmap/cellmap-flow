@@ -9,7 +9,14 @@ json_data:
       invert: false
     LambdaNormalizer:
       expression: x*2-1
-  postprocess: {}
+  postprocess:
+    DefaultPostprocessor:
+      clip_min: -1.0
+      clip_max: 1.0
+      bias: 1.0
+      multiplier: 127.5
+    ThresholdPostprocessor:
+      threshold: 0.5
 models:
   model_tmp1:
     type: fly

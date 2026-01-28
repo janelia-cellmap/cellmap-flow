@@ -305,7 +305,7 @@
         /* Special INPUT/OUTPUT nodes */
         .node-box.io-node {
             min-width: 120px;
-            max-width: 4000px;
+            max-width: 1600px;
             padding: 12px;
             background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
         }
@@ -1053,8 +1053,8 @@
                 ctx.font = '11px Menlo, Monaco, monospace';
                 const textMetrics = ctx.measureText(datasetPath);
                 const textWidth = textMetrics.width + 150;
-                const minWidth = 1000;
-                const maxWidth = 4000;
+                const minWidth = 400;
+                const maxWidth = 1600;
                 const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
                 div.style.width = calculatedWidth + 'px';
             }
@@ -1263,8 +1263,8 @@
                                 ctx.font = '11px Menlo, Monaco, monospace';
                                 const textMetrics = ctx.measureText(value);
                                 const textWidth = textMetrics.width + 150;
-                                const minWidth = 1000;
-                                const maxWidth = 4000;
+                                const minWidth = 400;
+                                const maxWidth = 1600;
                                 const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
                                 nodeBox.style.width = calculatedWidth + 'px';
                             }
