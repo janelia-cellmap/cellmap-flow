@@ -109,6 +109,20 @@ class CellMapFlowBlockwiseProcessor:
                 f"Using {len(models)} models with merge mode: {self.model_mode}"
             )
 
+        # Support cross-channel processing
+        self.process_only = self.config.get("process_only", None)
+        self.cross_channels = self.config.get("cross_channels", None)
+        
+        if self.cross_channels and self.cross_channels not in ["AND", "OR", "SUM"]:
+            raise Exception(
+                f"Invalid cross_channels: {self.cross_channels}. Must be one of: AND, OR, SUM"
+            )
+        
+        if self.process_only:
+            logger.info(
+                f"Processing only channels: {self.process_only} with merge mode: {self.cross_channels}"
+            )
+
         self.model_config = models[0]
 
         # this is zyx
@@ -132,6 +146,9 @@ class CellMapFlowBlockwiseProcessor:
             self.output_channels_is_dict = False
             self.output_channel_names = self.channels
             self.output_channel_indices = None
+
+        if not isinstance(self.output_channels, list):
+            self.output_channels = [self.output_channels]
 
         if json_data:
             g.input_norms, g.postprocess = get_process_dataset(json_data)
@@ -161,6 +178,12 @@ class CellMapFlowBlockwiseProcessor:
 
         # Ensure we have output channels to iterate over
         channels_to_create = self.output_channels if self.output_channels else []
+        if not isinstance(channels_to_create, list):
+            channels_to_create = [channels_to_create]
+
+        # check if there is two channels_to_create with same name
+        if len(channels_to_create) != len(set(channels_to_create)):
+            raise Exception(f"output_channels has duplicated channel names. channels: {channels_to_create}")
 
         for channel in channels_to_create:
             if create:
@@ -302,6 +325,11 @@ class CellMapFlowBlockwiseProcessor:
             model_outputs = []
             for inferencer in self.inferencers:
                 output = inferencer.process_chunk(self.idi_raw, block.write_roi)
+                if self.process_only and self.cross_channels:
+                    # Extract only the specified channels
+                    channel_outputs = [output[ch_idx] for ch_idx in self.process_only]
+                    # Merge the extracted channels based on cross_channels mode
+                    output = self._merge_model_outputs(channel_outputs, mode=self.cross_channels)
                 model_outputs.append(output)
 
             # Merge outputs based on model_mode
@@ -372,37 +400,40 @@ class CellMapFlowBlockwiseProcessor:
                     continue
                 array[array_write_roi] = predictions.to_ndarray(array_write_roi)
 
-    def _merge_model_outputs(self, model_outputs):
+    def _merge_model_outputs(self, model_outputs, mode=None):
         """
-        Merge outputs from multiple models based on the configured model_mode.
+        Merge outputs from multiple models or channels based on the configured mode.
 
         Args:
-            model_outputs: List of numpy arrays from different models
+            model_outputs: List of numpy arrays from different models or channels
+            mode: Merge mode (AND, OR, SUM). If None, uses self.model_mode
 
         Returns:
             Merged numpy array
         """
-        if self.model_mode == "AND":
+        merge_mode = mode if mode else self.model_mode
+        
+        if merge_mode == "AND":
             # Element-wise minimum (logical AND for binary, minimum for continuous)
             merged = model_outputs[0]
             for output in model_outputs[1:]:
                 merged = np.minimum(merged, output)
             return merged
 
-        elif self.model_mode == "OR":
+        elif merge_mode == "OR":
             # Element-wise maximum (logical OR for binary, maximum for continuous)
             merged = model_outputs[0]
             for output in model_outputs[1:]:
                 merged = np.maximum(merged, output)
             return merged
 
-        elif self.model_mode == "SUM":
-            # Sum all outputs and normalize by number of models
+        elif merge_mode == "SUM":
+            # Sum all outputs and normalize by number of models/channels
             merged = np.sum(model_outputs, axis=0) / len(model_outputs)
             return merged
 
         else:
-            raise ValueError(f"Unknown model_mode: {self.model_mode}")
+            raise ValueError(f"Unknown merge mode: {merge_mode}")
 
     def client(self):
         client = daisy.Client()
@@ -484,7 +515,7 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
                 f"prediction_logs/out.out",
                 "-e",
                 f"prediction_logs/out.err",
-                "cellmap_flow_blockwise_processor",
+                "cellmap_flow_blockwise",
                 f"{yaml_config}",
                 "--client",
             ]

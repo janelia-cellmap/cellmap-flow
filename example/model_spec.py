@@ -25,6 +25,7 @@ def load_eval_model(num_labels, checkpoint_path):
     model.eval()
     return model
 
+# classes = ["mito","er","nuc"," pm"," ves","ld"]
 CHECKPOINT_PATH = "/nrs/saalfeld/heinrichl/fly_organelles/run08/model_checkpoint_438000"
 output_channels = 8  # 0:all_mem,1:organelle,2:mito,3:er,4:nucleus,5:pm,6:vs,7:ld
 model = load_eval_model(output_channels, CHECKPOINT_PATH)
