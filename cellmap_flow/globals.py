@@ -1,5 +1,5 @@
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
-from cellmap_flow.post.postprocessors import DefaultPostprocessor
+from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
 import yaml
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
-postprocess = [DefaultPostprocessor()]
+postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
 
 # input_norms = []
 # postprocess = []

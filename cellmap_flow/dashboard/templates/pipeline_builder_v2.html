@@ -305,7 +305,7 @@
         /* Special INPUT/OUTPUT nodes */
         .node-box.io-node {
             min-width: 120px;
-            max-width: 120px;
+            max-width: 4000px;
             padding: 12px;
             background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
         }
@@ -459,11 +459,13 @@
             background: var(--bg-primary);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 6px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 11px;
             font-family: 'Menlo', 'Monaco', monospace;
             transition: all 0.2s;
+            height: 24px;
+            min-height: 24px;
         }
 
         .param-input:focus {
@@ -654,7 +656,7 @@
             id: n.id || `input-${i}-${Date.now()}`,
             name: 'INPUT',
             params: n.params || { dataset_path: APP_CONFIG.datasetPath || '' },
-            position: n.position || { x: 20, y: 20 + (i * 100) }
+            position: n.position || { x: 20, y: 20 + (i * 180) }
         }));
         // Ensure first INPUT node has dataset_path if it's empty
         if (pipeline.inputs.length === 0) {
@@ -672,20 +674,20 @@
             id: n.id || `output-${i}-${Date.now()}`,
             name: 'OUTPUT',
             params: {},
-            position: n.position || { x: 900, y: 20 + (i * 100) }
+            position: n.position || { x: 900, y: 20 + (i * 180) }
         }));
         pipeline.normalizers = (pipeline.normalizers || []).map((n, i) => ({
             id: n.id || `norm-${i}-${Date.now()}`,
             name: n.name,
             params: n.params || {},
-            position: n.position || { x: 200 + (i * 280), y: 20 }
+            position: n.position || { x: 200 + (i * 380), y: 20 }
         }));
         pipeline.models = (pipeline.models || []).map((m, i) => {
             const model = {
                 id: m.id || `model-${i}-${Date.now()}`,
                 name: m.name,
                 params: m.params || {},
-                position: m.position || { x: 400 + (i * 280), y: 20 }
+                position: m.position || { x: 400 + (i * 380), y: 20 }
             };
             // Preserve config if it exists (from backend ModelConfig.to_dict())
             if (m.config && typeof m.config === 'object') {
@@ -706,9 +708,73 @@
             id: p.id || `post-${i}-${Date.now()}`,
             name: p.name,
             params: p.params || {},
-            position: p.position || { x: 600 + (i * 280), y: 20 }
+            position: p.position || { x: 600 + (i * 380), y: 20 }
         }));
         pipeline.edges = pipeline.edges || [];
+
+        // Auto-connect nodes based on pipeline structure
+        function autoConnectNodes() {
+            // Clear existing edges
+            pipeline.edges = [];
+
+            // Helper to create edge
+            function addEdge(fromId, toId) {
+                if (fromId && toId) {
+                    const exists = pipeline.edges.some(e => e.from === fromId && e.to === toId);
+                    if (!exists) {
+                        pipeline.edges.push({
+                            id: `edge-${Date.now()}-${Math.random()}`,
+                            from: fromId,
+                            to: toId
+                        });
+                    }
+                }
+            }
+
+            // 1. INPUT → first normalizer (if any)
+            if (pipeline.inputs.length > 0 && pipeline.normalizers.length > 0) {
+                addEdge(pipeline.inputs[0].id, pipeline.normalizers[0].id);
+            }
+
+            // 2. Chain normalizers: norm1 → norm2 → norm3 → ...
+            for (let i = 0; i < pipeline.normalizers.length - 1; i++) {
+                addEdge(pipeline.normalizers[i].id, pipeline.normalizers[i + 1].id);
+            }
+
+            // 3. Last normalizer → ALL models (or INPUT → models if no normalizers)
+            const sourceForModels = pipeline.normalizers.length > 0 
+                ? pipeline.normalizers[pipeline.normalizers.length - 1].id 
+                : (pipeline.inputs.length > 0 ? pipeline.inputs[0].id : null);
+            
+            if (sourceForModels) {
+                pipeline.models.forEach(model => {
+                    addEdge(sourceForModels, model.id);
+                });
+            }
+
+            // 4. Chain postprocessors: each model → first postprocessor
+            if (pipeline.postprocessors.length > 0) {
+                pipeline.models.forEach(model => {
+                    addEdge(model.id, pipeline.postprocessors[0].id);
+                });
+            }
+
+            // 5. Chain postprocessors: post1 → post2 → post3 → ...
+            for (let i = 0; i < pipeline.postprocessors.length - 1; i++) {
+                addEdge(pipeline.postprocessors[i].id, pipeline.postprocessors[i + 1].id);
+            }
+
+            // 6. Last postprocessor → OUTPUT (if any)
+            if (pipeline.postprocessors.length > 0 && pipeline.outputs.length > 0) {
+                addEdge(pipeline.postprocessors[pipeline.postprocessors.length - 1].id, pipeline.outputs[0].id);
+            }
+        }
+
+        // Run auto-connect if we have nodes
+        if (pipeline.inputs.length > 0 || pipeline.normalizers.length > 0 || 
+            pipeline.models.length > 0 || pipeline.postprocessors.length > 0) {
+            autoConnectNodes();
+        }
 
         // Initialize library
         function initializeLibrary() {
@@ -814,22 +880,22 @@
             if (type === 'input') {
                 const count = pipeline.inputs.length;
                 x = 20;
-                y = 20 + (count * 100);
+                y = 20 + (count * 180);
             } else if (type === 'output') {
                 const count = pipeline.outputs.length;
                 x = 900;
-                y = 20 + (count * 100);
+                y = 20 + (count * 180);
             } else if (type === 'normalizer') {
                 const count = pipeline.normalizers.length;
-                x = 200 + (count * 280);
+                x = 200 + (count * 380);
                 y = 20;
             } else if (type === 'model') {
                 const count = pipeline.models.length;
-                x = 400 + (count * 280);
+                x = 400 + (count * 380);
                 y = 20;
             } else {
                 const count = pipeline.postprocessors.length;
-                x = 600 + (count * 280);
+                x = 600 + (count * 380);
                 y = 20;
             }
 
@@ -891,6 +957,8 @@
                 pipeline.postprocessors.push(node);
             }
 
+            // Auto-connect the new node into the pipeline
+            autoConnectNodes();
             renderCanvas();
             showMessage(`Added ${name}`, 'success');
         }
@@ -910,6 +978,8 @@
             } else {
                 pipeline.postprocessors = pipeline.postprocessors.filter(p => p.id !== id);
             }
+            // Re-auto-connect remaining nodes
+            autoConnectNodes();
             renderCanvas();
             showMessage('Node removed', 'success');
         }
@@ -975,12 +1045,16 @@
             div.style.top = pos.y + 'px';
 
             // For INPUT nodes, calculate width based on dataset_path length
-            if (node.type === 'input') {
+            if (node.type === 'input' || node.type === 'output') {
                 const datasetPath = node.params?.dataset_path || '';
-                // Approximate: 9.5 pixels per character + padding and buttons
-                const textWidth = datasetPath.length * 9.5 + 120;
-                const minWidth = 300;
-                const maxWidth = 1000;
+                // Measure text width more accurately using canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = '11px Menlo, Monaco, monospace';
+                const textMetrics = ctx.measureText(datasetPath);
+                const textWidth = textMetrics.width + 150;
+                const minWidth = 1000;
+                const maxWidth = 4000;
                 const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
                 div.style.width = calculatedWidth + 'px';
             }
@@ -1036,13 +1110,14 @@
             // For INPUT/OUTPUT nodes, show minimal UI
             if (node.type === 'input' || node.type === 'output') {
                 let inputContent = '';
-                if (node.type === 'input') {
-                    // Show dataset_path field for INPUT nodes
+                if (node.type === 'input' || node.type === 'output') {
+                    // Show dataset_path field for INPUT and OUTPUT nodes
                     const datasetPath = node.params?.dataset_path || '';
                     const displayPath = datasetPath.replace(/"/g, '&quot;');
+                    const labelText = node.type === 'input' ? 'Dataset Path' : 'Output Path';
                     inputContent = `
                         <div class="param-group" style="margin-top: 8px;">
-                            <label class="param-label">Dataset Path</label>
+                            <label class="param-label">${labelText}</label>
                             <input type="text" class="param-input" data-key="dataset_path" data-type="text"
                                    value="${displayPath}"
                                    onchange="handleParamChange(this, '${node.id}', '${node.type}')">
@@ -1172,8 +1247,8 @@
                     if (nodeType === 'model' && node.config) {
                         node.config[key] = value;
                     }
-                    // Sync dataset_path to backend when updated on INPUT node
-                    if (nodeType === 'input' && key === 'dataset_path') {
+                    // Sync dataset_path to backend when updated on INPUT or OUTPUT node
+                    if ((nodeType === 'input' || nodeType === 'output') && key === 'dataset_path') {
                         fetch('/api/dataset-path', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1183,9 +1258,13 @@
                             // Recalculate node width based on new dataset_path
                             const nodeBox = document.getElementById(`node-${nodeId}`);
                             if (nodeBox) {
-                                const textWidth = value.length * 9.5 + 120;
-                                const minWidth = 300;
-                                const maxWidth = 1000;
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                ctx.font = '11px Menlo, Monaco, monospace';
+                                const textMetrics = ctx.measureText(value);
+                                const textWidth = textMetrics.width + 150;
+                                const minWidth = 1000;
+                                const maxWidth = 4000;
                                 const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
                                 nodeBox.style.width = calculatedWidth + 'px';
                             }
@@ -1421,14 +1500,14 @@
                         inputs: (data.inputs || []).map((n, i) => ({
                             id: n.id || `input-${Date.now()}-${i}`,
                             name: 'INPUT',
-                            params: {},
-                            position: n.position || { x: 20, y: 20 + (i * 100) }
+                            params: n.params || { dataset_path: APP_CONFIG.datasetPath || '' },
+                            position: n.position || { x: 20, y: 20 + (i * 180) }
                         })),
                         outputs: (data.outputs || []).map((n, i) => ({
                             id: n.id || `output-${Date.now()}-${i}`,
                             name: 'OUTPUT',
                             params: {},
-                            position: n.position || { x: 900, y: 20 + (i * 100) }
+                            position: n.position || { x: 900, y: 20 + (i * 180) }
                         })),
                         normalizers: (data.input_normalizers || data.normalizers || []).map((n, i) => {
                             console.log('Processing normalizer:', n);  // Debug log
@@ -1436,7 +1515,7 @@
                                 id: n.id || `norm-${Date.now()}-${i}`,
                                 name: typeof n === 'string' ? n : (n.name || n),
                                 params: n.params || {},
-                                position: n.position || { x: 200 + (i * 30), y: 20 + (i * 30) }
+                                position: n.position || { x: 200 + (i * 380), y: 20 }
                             };
                         }),
                         models: (data.models || []).map((m, i) => {
@@ -1444,7 +1523,7 @@
                                 id: m.id || `model-${Date.now()}-${i}`,
                                 name: typeof m === 'string' ? m : (m.name || m),
                                 params: m.params || {},
-                                position: m.position || { x: 400 + (i * 30), y: 20 + (i * 30) }
+                                position: m.position || { x: 400 + (i * 380), y: 20 }
                             };
                             // Preserve config if it exists (for re-export with build_model_from_entry)
                             if (m.config && typeof m.config === 'object') {
@@ -1462,7 +1541,7 @@
                             id: p.id || `post-${Date.now()}-${i}`,
                             name: typeof p === 'string' ? p : (p.name || p),
                             params: p.params || {},
-                            position: p.position || { x: 600 + (i * 30), y: 20 + (i * 30) }
+                            position: p.position || { x: 600 + (i * 380), y: 20 }
                         })),
                         edges: data.edges || []
                     };
