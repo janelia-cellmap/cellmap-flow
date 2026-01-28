@@ -73,38 +73,74 @@ def pipeline_builder():
     """Render the drag-and-drop pipeline builder interface with current state from globals"""
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
-    
-    # Convert current pipeline state from globals to dict format with unique IDs
-    current_normalizers = []
-    for idx, norm in enumerate(g.input_norms):
-        norm_dict = norm.to_dict() if hasattr(norm, 'to_dict') else {'name': str(norm)}
-        norm_name = norm_dict.get('name', str(norm))
-        # Extract params: all dict items except 'name'
-        params = {k: v for k, v in norm_dict.items() if k != 'name'}
-        current_normalizers.append({
-            'id': f'norm-{idx}-{int(time.time()*1000)}',
-            'name': norm_name,
-            'params': params
-        })
-    
-    current_postprocessors = []
-    for idx, post in enumerate(g.postprocess):
-        post_dict = post.to_dict() if hasattr(post, 'to_dict') else {'name': str(post)}
-        post_name = post_dict.get('name', str(post))
-        # Extract params: all dict items except 'name'
-        params = {k: v for k, v in post_dict.items() if k != 'name'}
-        current_postprocessors.append({
-            'id': f'post-{idx}-{int(time.time()*1000)}',
-            'name': post_name,
-            'params': params
-        })
-    
+
+    # Get available models from catalog
+    available_models = {}
+    if hasattr(g, 'model_catalog') and g.model_catalog:
+        for category, models in g.model_catalog.items():
+            if isinstance(models, dict):
+                available_models.update(models)
+
+    # Check if we have stored pipeline state from previous apply
+    if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
+        # Use stored pipeline state (includes IDs, positions, params)
+        current_normalizers = g.pipeline_normalizers
+        current_postprocessors = g.pipeline_postprocessors
+        current_models = g.pipeline_models
+        current_inputs = g.pipeline_inputs
+        current_outputs = g.pipeline_outputs
+        current_edges = g.pipeline_edges
+    else:
+        # Fall back to converting from globals.input_norms and globals.postprocess
+        current_normalizers = []
+        for idx, norm in enumerate(g.input_norms):
+            norm_dict = norm.to_dict() if hasattr(norm, 'to_dict') else {'name': str(norm)}
+            norm_name = norm_dict.get('name', str(norm))
+            # Extract params: all dict items except 'name'
+            params = {k: v for k, v in norm_dict.items() if k != 'name'}
+            current_normalizers.append({
+                'id': f'norm-{idx}-{int(time.time()*1000)}',
+                'name': norm_name,
+                'params': params
+            })
+
+        # Current models (from jobs)
+        current_models = []
+        for idx, job in enumerate(g.jobs):
+            if hasattr(job, 'model_name'):
+                current_models.append({
+                    'id': f'model-{idx}-{int(time.time()*1000)}',
+                    'name': job.model_name,
+                    'params': {}
+                })
+
+        current_postprocessors = []
+        for idx, post in enumerate(g.postprocess):
+            post_dict = post.to_dict() if hasattr(post, 'to_dict') else {'name': str(post)}
+            post_name = post_dict.get('name', str(post))
+            # Extract params: all dict items except 'name'
+            params = {k: v for k, v in post_dict.items() if k != 'name'}
+            current_postprocessors.append({
+                'id': f'post-{idx}-{int(time.time()*1000)}',
+                'name': post_name,
+                'params': params
+            })
+
+        current_inputs = []
+        current_outputs = []
+        current_edges = []
+
     return render_template(
-        "pipeline_builder.html",
+        "pipeline_builder_v2.html",
         input_normalizers=input_norms or {},
+        available_models=available_models or {},
         output_postprocessors=output_postprocessors or {},
         current_normalizers=current_normalizers,
+        current_models=current_models,
         current_postprocessors=current_postprocessors,
+        current_inputs=current_inputs,
+        current_outputs=current_outputs,
+        current_edges=current_edges,
     )
 
 
@@ -222,16 +258,18 @@ def validate_pipeline():
     """Validate a pipeline configuration"""
     try:
         data = request.get_json()
-        
+
         # Validate normalizers
         normalizer_names = [n.get("name") for n in data.get("input_normalizers", [])]
         available_norms = get_input_normalizers()
+        # Extract just the normalizer names from the list of dicts
+        available_norm_names = [norm["name"] for norm in available_norms]
         for norm_name in normalizer_names:
-            if norm_name not in available_norms:
+            if norm_name not in available_norm_names:
                 return jsonify(
                     {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
                 ), 400
-        
+
         # Validate postprocessors
         processor_names = [p.get("name") for p in data.get("postprocessors", [])]
         available_procs = get_postprocessors_list()
@@ -240,9 +278,9 @@ def validate_pipeline():
                 return jsonify(
                     {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
                 ), 400
-        
+
         return jsonify({"valid": True, "message": "Pipeline is valid"})
-    
+
     except Exception as e:
         logger.error(f"Error validating pipeline: {e}")
         return jsonify({"valid": False, "error": str(e)}), 500
@@ -253,32 +291,69 @@ def apply_pipeline():
     """Apply a pipeline configuration to the current inference"""
     try:
         data = request.get_json()
-        
+        logger.warning(f"\n{'='*80}")
+        logger.warning(f"APPLY PIPELINE - Received data:")
+        logger.warning(f"  Input normalizers: {data.get('input_normalizers', [])}")
+        logger.warning(f"  Postprocessors: {data.get('postprocessors', [])}")
+
         # Validate first
         validation = validate_pipeline_config(data)
         if not validation["valid"]:
             return jsonify(validation), 400
-        
+
         # Apply normalizers
         input_norms_config = {
             n["name"]: n.get("params", {}) for n in data.get("input_normalizers", [])
         }
+        logger.warning(f"\nNormalizers config dict: {input_norms_config}")
         g.input_norms = get_normalizations(input_norms_config)
-        
+
         # Apply postprocessors
         postprocs_config = {
             p["name"]: p.get("params", {}) for p in data.get("postprocessors", [])
         }
+        logger.warning(f"Postprocessors config dict: {postprocs_config}")
         g.postprocess = get_postprocessors(postprocs_config)
-        
-        logger.warning(f"Pipeline applied: {len(g.input_norms)} normalizers, {len(g.postprocess)} postprocessors")
-        
+
+        # Save complete pipeline visual state to globals
+        g.pipeline_inputs = data.get("inputs", [])
+        g.pipeline_outputs = data.get("outputs", [])
+        g.pipeline_edges = data.get("edges", [])
+        g.pipeline_normalizers = data.get("input_normalizers", [])
+        g.pipeline_models = data.get("models", [])
+        g.pipeline_postprocessors = data.get("postprocessors", [])
+
+        # Log the updated globals state
+        logger.warning(f"\n{'='*80}")
+        logger.warning(f"UPDATED GLOBALS (g) STATE:")
+        logger.warning(f"{'='*80}")
+        logger.warning(f"\ng.input_norms ({len(g.input_norms)} items):")
+        for idx, norm in enumerate(g.input_norms):
+            logger.warning(f"  [{idx}] {norm}")
+
+        logger.warning(f"\ng.postprocess ({len(g.postprocess)} items):")
+        for idx, post in enumerate(g.postprocess):
+            logger.warning(f"  [{idx}] {post}")
+
+        logger.warning(f"\ng.jobs ({len(g.jobs)} items):")
+        for idx, job in enumerate(g.jobs):
+            logger.warning(f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}")
+
+        logger.warning(f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}")
+        logger.warning(f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}")
+        logger.warning(f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}")
+        logger.warning(f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}")
+        logger.warning(f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}")
+        logger.warning(f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}")
+
+        logger.warning(f"{'='*80}\n")
+
         return jsonify({
             "message": "Pipeline applied successfully",
             "normalizers_applied": len(g.input_norms),
             "postprocessors_applied": len(g.postprocess),
         })
-    
+
     except Exception as e:
         logger.error(f"Error applying pipeline: {e}")
         return jsonify({"error": str(e)}), 500
@@ -289,18 +364,20 @@ def validate_pipeline_config(config):
     try:
         normalizer_names = [n.get("name") for n in config.get("input_normalizers", [])]
         available_norms = get_input_normalizers()
+        # Extract just the normalizer names from the list of dicts
+        available_norm_names = [norm["name"] for norm in available_norms]
         for norm_name in normalizer_names:
-            if norm_name not in available_norms:
+            if norm_name not in available_norm_names:
                 return {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
-        
+
         processor_names = [p.get("name") for p in config.get("postprocessors", [])]
         available_procs = get_postprocessors_list()
         for proc_name in processor_names:
             if proc_name not in available_procs:
                 return {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
-        
+
         return {"valid": True}
-    
+
     except Exception as e:
         return {"valid": False, "error": str(e)}
 

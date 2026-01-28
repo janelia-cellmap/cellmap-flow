@@ -45,6 +45,14 @@ class Flow:
             cls._instance.queue = "gpu_h100"
             cls._instance.charge_group = "cellmap"
             cls._instance.neuroglancer_thread = None
+
+            # Pipeline visual state storage
+            cls._instance.pipeline_inputs = []
+            cls._instance.pipeline_outputs = []
+            cls._instance.pipeline_edges = []
+            cls._instance.pipeline_normalizers = []
+            cls._instance.pipeline_models = []
+            cls._instance.pipeline_postprocessors = []
         return cls._instance
 
     def to_dict(self):
