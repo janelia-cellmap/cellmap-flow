@@ -636,6 +636,7 @@
             availableNormalizers: {{ input_normalizers | tojson }},
             availableModels: {{ available_models | tojson }},
             availablePostprocessors: {{ output_postprocessors | tojson }},
+            datasetPath: {{ dataset_path | tojson }},
         };
 
         // Pipeline state - load from backend (persisted state from globals)
@@ -652,9 +653,21 @@
         pipeline.inputs = (pipeline.inputs || []).map((n, i) => ({
             id: n.id || `input-${i}-${Date.now()}`,
             name: 'INPUT',
-            params: {},
+            params: n.params || { dataset_path: APP_CONFIG.datasetPath || '' },
             position: n.position || { x: 20, y: 20 + (i * 100) }
         }));
+        // Ensure first INPUT node has dataset_path if it's empty
+        if (pipeline.inputs.length === 0) {
+            pipeline.inputs.push({
+                id: `input-0-${Date.now()}`,
+                name: 'INPUT',
+                params: { dataset_path: APP_CONFIG.datasetPath || '' },
+                position: { x: 20, y: 20 }
+            });
+        } else if (!pipeline.inputs[0].params?.dataset_path) {
+            pipeline.inputs[0].params = pipeline.inputs[0].params || {};
+            pipeline.inputs[0].params.dataset_path = APP_CONFIG.datasetPath || '';
+        }
         pipeline.outputs = (pipeline.outputs || []).map((n, i) => ({
             id: n.id || `output-${i}-${Date.now()}`,
             name: 'OUTPUT',
@@ -667,12 +680,28 @@
             params: n.params || {},
             position: n.position || { x: 200 + (i * 280), y: 20 }
         }));
-        pipeline.models = (pipeline.models || []).map((m, i) => ({
-            id: m.id || `model-${i}-${Date.now()}`,
-            name: m.name,
-            params: m.params || {},
-            position: m.position || { x: 400 + (i * 280), y: 20 }
-        }));
+        pipeline.models = (pipeline.models || []).map((m, i) => {
+            const model = {
+                id: m.id || `model-${i}-${Date.now()}`,
+                name: m.name,
+                params: m.params || {},
+                position: m.position || { x: 400 + (i * 280), y: 20 }
+            };
+            // Preserve config if it exists (from backend ModelConfig.to_dict())
+            if (m.config && typeof m.config === 'object') {
+                model.config = m.config;
+                // Also populate params from config for UI display (exclude 'name')
+                if (!m.params || Object.keys(m.params).length === 0) {
+                    model.params = {};
+                    Object.entries(m.config).forEach(([key, value]) => {
+                        if (key !== 'name') {
+                            model.params[key] = value;
+                        }
+                    });
+                }
+            }
+            return model;
+        });
         pipeline.postprocessors = (pipeline.postprocessors || []).map((p, i) => ({
             id: p.id || `post-${i}-${Date.now()}`,
             name: p.name,
@@ -804,7 +833,51 @@
                 y = 20;
             }
 
-            const node = { id, name, params: {}, position: { x, y } };
+            // Get default params from APP_CONFIG
+            let defaultParams = {};
+            let modelConfig = null;
+            if (type === 'normalizer') {
+                const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
+                    APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
+                const normDef = normsArray.find(n => (typeof n === 'string' ? n : n.name) === name);
+                if (normDef && typeof normDef === 'object' && normDef.params) {
+                    defaultParams = { ...normDef.params };
+                }
+            } else if (type === 'model') {
+                const modelsArray = Array.isArray(APP_CONFIG.availableModels) ?
+                    APP_CONFIG.availableModels : Object.values(APP_CONFIG.availableModels);
+                const modelDef = modelsArray.find(m => (typeof m === 'string' ? m : m.name) === name);
+                if (modelDef && typeof modelDef === 'object') {
+                    if (modelDef.params) {
+                        defaultParams = { ...modelDef.params };
+                    }
+                    // Store the full config if available
+                    if (modelDef.config) {
+                        modelConfig = { ...modelDef.config };
+                    }
+                }
+            } else if (type === 'postprocessor') {
+                const postsArray = Array.isArray(APP_CONFIG.availablePostprocessors) ?
+                    APP_CONFIG.availablePostprocessors : Object.values(APP_CONFIG.availablePostprocessors);
+                const postDef = postsArray.find(p => (typeof p === 'string' ? p : p.name) === name);
+                if (postDef && typeof postDef === 'object' && postDef.params) {
+                    defaultParams = { ...postDef.params };
+                }
+            }
+
+            const node = { id, name, params: defaultParams, position: { x, y } };
+            
+            // Add config for models if available
+            if (type === 'model' && modelConfig) {
+                node.config = modelConfig;
+                // Also populate params from config for UI display (exclude 'name')
+                node.params = {};
+                Object.entries(modelConfig).forEach(([key, value]) => {
+                    if (key !== 'name') {
+                        node.params[key] = value;
+                    }
+                });
+            }
 
             if (type === 'input') {
                 pipeline.inputs.push(node);
@@ -901,12 +974,33 @@
             div.style.left = pos.x + 'px';
             div.style.top = pos.y + 'px';
 
+            // For INPUT nodes, calculate width based on dataset_path length
+            if (node.type === 'input') {
+                const datasetPath = node.params?.dataset_path || '';
+                // Approximate: 9.5 pixels per character + padding and buttons
+                const textWidth = datasetPath.length * 9.5 + 120;
+                const minWidth = 300;
+                const maxWidth = 1000;
+                const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
+                div.style.width = calculatedWidth + 'px';
+            }
+
             let paramsHTML = '';
             const nodeParams = node.params || {};
             Object.entries(nodeParams).forEach(([key, value]) => {
                 // Determine param type from current value
                 const paramType = typeof value === 'boolean' ? 'boolean' : 'text';
                 let inputHTML = '';
+                
+                // Format the display value with proper HTML escaping
+                let displayValue = '';
+                if (value === null || value === undefined) {
+                    displayValue = '';
+                } else if (typeof value === 'object') {
+                    displayValue = JSON.stringify(value).replace(/"/g, '&quot;');
+                } else {
+                    displayValue = String(value).replace(/"/g, '&quot;');
+                }
 
                 if (paramType === 'boolean') {
                     const checked = value ? 'checked' : '';
@@ -920,13 +1014,13 @@
                 } else if (typeof value === 'number') {
                     inputHTML = `
                         <input type="number" class="param-input" data-key="${key}" data-type="number"
-                               value="${value}"
+                               value="${displayValue}"
                                onchange="handleParamChange(this, '${node.id}', '${node.type}')">
                     `;
                 } else {
                     inputHTML = `
                         <input type="text" class="param-input" data-key="${key}" data-type="text"
-                               value="${JSON.stringify(value)}"
+                               value="${displayValue}"
                                onchange="handleParamChange(this, '${node.id}', '${node.type}')">
                     `;
                 }
@@ -941,6 +1035,20 @@
 
             // For INPUT/OUTPUT nodes, show minimal UI
             if (node.type === 'input' || node.type === 'output') {
+                let inputContent = '';
+                if (node.type === 'input') {
+                    // Show dataset_path field for INPUT nodes
+                    const datasetPath = node.params?.dataset_path || '';
+                    const displayPath = datasetPath.replace(/"/g, '&quot;');
+                    inputContent = `
+                        <div class="param-group" style="margin-top: 8px;">
+                            <label class="param-label">Dataset Path</label>
+                            <input type="text" class="param-input" data-key="dataset_path" data-type="text"
+                                   value="${displayPath}"
+                                   onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                        </div>
+                    `;
+                }
                 div.innerHTML = `
                     <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
                     <div class="node-output" onmousedown="startConnection(event, '${node.id}', 'output')" title="Connect to here"></div>
@@ -952,6 +1060,7 @@
                             <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
                         </div>
                     </div>
+                    ${inputContent}
                 `;
             } else {
                 div.innerHTML = `
@@ -1059,6 +1168,29 @@
                     }
 
                     node.params[key] = value;
+                    // Also update config if this is a model node
+                    if (nodeType === 'model' && node.config) {
+                        node.config[key] = value;
+                    }
+                    // Sync dataset_path to backend when updated on INPUT node
+                    if (nodeType === 'input' && key === 'dataset_path') {
+                        fetch('/api/dataset-path', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ dataset_path: value })
+                        }).then(r => r.json()).then(data => {
+                            console.log('Dataset path synced:', data);
+                            // Recalculate node width based on new dataset_path
+                            const nodeBox = document.getElementById(`node-${nodeId}`);
+                            if (nodeBox) {
+                                const textWidth = value.length * 9.5 + 120;
+                                const minWidth = 300;
+                                const maxWidth = 1000;
+                                const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
+                                nodeBox.style.width = calculatedWidth + 'px';
+                            }
+                        });
+                    }
                 });
                 nodeBox.classList.remove('dirty');
                 showMessage('Parameters saved', 'success');
@@ -1185,12 +1317,30 @@
                 pipeline.models.forEach(m => {
                     yaml += `  - id: ${m.id}\n`;
                     yaml += `    name: ${m.name}\n`;
-                    if (Object.keys(m.params).length > 0) {
+
+                    // If we have a full config (from backend ModelConfig.to_dict()), use it
+                    if (m.config && typeof m.config === 'object') {
+                        // Export all config fields except 'name' (already exported above)
+                        Object.entries(m.config).forEach(([k, v]) => {
+                            if (k !== 'name') {
+                                // Handle arrays specially
+                                if (Array.isArray(v)) {
+                                    yaml += `    ${k}: [${v.join(', ')}]\n`;
+                                } else if (typeof v === 'object' && v !== null) {
+                                    yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                                } else {
+                                    yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                                }
+                            }
+                        });
+                    } else if (Object.keys(m.params || {}).length > 0) {
+                        // Fallback to params if no config available
                         yaml += '    params:\n';
                         Object.entries(m.params).forEach(([k, v]) => {
                             yaml += `      ${k}: ${JSON.stringify(v)}\n`;
                         });
                     }
+
                     yaml += `    position:\n`;
                     yaml += `      x: ${m.position.x}\n`;
                     yaml += `      y: ${m.position.y}\n`;
@@ -1289,12 +1439,25 @@
                                 position: n.position || { x: 200 + (i * 30), y: 20 + (i * 30) }
                             };
                         }),
-                        models: (data.models || []).map((m, i) => ({
-                            id: m.id || `model-${Date.now()}-${i}`,
-                            name: typeof m === 'string' ? m : (m.name || m),
-                            params: m.params || {},
-                            position: m.position || { x: 400 + (i * 30), y: 20 + (i * 30) }
-                        })),
+                        models: (data.models || []).map((m, i) => {
+                            const model = {
+                                id: m.id || `model-${Date.now()}-${i}`,
+                                name: typeof m === 'string' ? m : (m.name || m),
+                                params: m.params || {},
+                                position: m.position || { x: 400 + (i * 30), y: 20 + (i * 30) }
+                            };
+                            // Preserve config if it exists (for re-export with build_model_from_entry)
+                            if (m.config && typeof m.config === 'object') {
+                                model.config = m.config;
+                            } else if (m.type) {
+                                // Build config from individual fields if type exists
+                                model.config = { ...m };
+                                delete model.config.id;
+                                delete model.config.params;
+                                delete model.config.position;
+                            }
+                            return model;
+                        }),
                         postprocessors: (data.postprocessors || []).map((p, i) => ({
                             id: p.id || `post-${Date.now()}-${i}`,
                             name: typeof p === 'string' ? p : (p.name || p),
@@ -1410,6 +1573,16 @@
                             currentItem[key] = JSON.parse(value);
                         } catch {
                             currentItem[key] = value;
+                        }
+
+                        // For models section, also build the config object for use with build_model_from_entry
+                        if (currentSection === 'models' && key !== 'id' && key !== 'position' && key !== 'params') {
+                            currentItem.config = currentItem.config || {};
+                            try {
+                                currentItem.config[key] = JSON.parse(value);
+                            } catch {
+                                currentItem.config[key] = value;
+                            }
                         }
                     }
                 }

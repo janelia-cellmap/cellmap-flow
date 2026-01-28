@@ -73,6 +73,15 @@ class ModelConfig:
         )
         return np.float32
 
+    def to_dict(self):
+        """
+        Export model configuration as a dict that can be used with build_model_from_entry.
+
+        Returns:
+            Dictionary containing model type and all init parameters.
+        """
+        raise NotImplementedError("Subclasses must implement to_dict()")
+
 
 class ScriptModelConfig(ModelConfig):
 
@@ -103,6 +112,15 @@ class ScriptModelConfig(ModelConfig):
                 tuple(config.output_size) + (config.output_channels,)
             )
         return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {"type": "script", "script_path": self.script_path}
+        if self.name is not None:
+            result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
+        return result
 
 
 class DaCapoModelConfig(ModelConfig):
@@ -164,6 +182,17 @@ class DaCapoModelConfig(ModelConfig):
         elif type(task).__name__ == "AffinitiesTask":
             return ["x", "y", "z"]
         return ["membrane"]
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "dacapo",
+            "run_name": self.run_name,
+            "iteration": self.iteration,
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        return result
 
 
 class FlyModelConfig(ModelConfig):
@@ -239,6 +268,23 @@ class FlyModelConfig(ModelConfig):
         # Add axes_names for server compatibility
         config.axes_names = ["x", "y", "z", "c^"]
         return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "fly",
+            "checkpoint_path": self.checkpoint_path,
+            "channels": self.channels,
+            "input_voxel_size": list(self.input_voxel_size),
+            "output_voxel_size": list(self.output_voxel_size),
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.input_size is not None:
+            result["input_size"] = list(self.input_size)
+        if self.output_size is not None:
+            result["output_size"] = list(self.output_size)
+        return result
 
 
 class BioModelConfig(ModelConfig):
@@ -393,6 +439,21 @@ class BioModelConfig(ModelConfig):
             for a in input_axes
         )
 
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "bioimage",
+            "model_name": self.model_name,
+            "voxel_size": list(self.voxel_size) if hasattr(self.voxel_size, '__iter__') else self.voxel_size,
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.voxels_to_process is not None:
+            # Reconstruct edge_length_to_process from voxels_to_process
+            edge_length = round(self.voxels_to_process ** (1/3))
+            result["edge_length_to_process"] = edge_length
+        return result
+
 
 def concat_along_c(arrs, axes_list, channel_axis_name="c"):
     """Concatenate arrays along the channel axis, adding channel dim if missing."""
@@ -518,3 +579,15 @@ class CellMapModelConfig(ModelConfig):
         config.model.to(_get_device())
         config.model.eval()
         return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "cellmap-model",
+            "folder_path": self.cellmap_model.folder_path,
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
+        return result

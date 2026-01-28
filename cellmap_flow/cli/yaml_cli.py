@@ -172,23 +172,23 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
 
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
-    models = build_models(config["models"])
+    g.models_config = build_models(config["models"])
 
-    logger.info(f"Configured {len(models)} model(s):")
-    for i, model in enumerate(models, 1):
+    logger.info(f"Configured {len(g.models_config)} model(s):")
+    for i, model in enumerate(g.models_config, 1):
         model_name = getattr(model, "name", None) or type(model).__name__
         logger.info(f"  {i}. {model_name} ({type(model).__name__})")
 
     # Validation mode - exit without running
     if validate_only:
         click.echo("\n✓ Configuration is valid!")
-        click.echo(f"  - Models: {len(models)}")
+        click.echo(f"  - Models: {len(g.models_config)}")
         click.echo(f"  - Data path: {data_path}")
         click.echo(f"  - Queue: {queue}")
         return
 
     # Run the models
-    run_multiple(models, data_path, charge_group, queue)
+    run_multiple(g.models_config, data_path, charge_group, queue)
 
 
 if __name__ == "__main__":

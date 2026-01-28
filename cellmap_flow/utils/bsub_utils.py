@@ -520,7 +520,7 @@ def start_hosts(
                 command,
                 queue,
                 charge_group,
-                job_name=f"{job_name}_server"
+                job_name=f"{job_name}"
             )
             
             if wait_for_host:
