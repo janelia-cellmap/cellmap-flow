@@ -69,7 +69,7 @@ def load_config(path: str) -> Dict[str, Any]:
         if not config["models"]:
             logger.error("YAML 'models' list is empty")
             sys.exit(1)
-        logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
+        # logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
     else:
         logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)

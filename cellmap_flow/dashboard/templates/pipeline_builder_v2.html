@@ -46,7 +46,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
         .header h1 {
@@ -93,6 +93,18 @@
         .action-btn:hover {
             background: var(--bg-hover);
             border-color: #64748b;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            color: var(--text-secondary);
+        }
+
+        .action-btn:disabled:hover {
+            background: var(--bg-primary);
+            border-color: var(--border-color);
+            transform: none;
         }
 
         .import-btn {
@@ -518,19 +530,20 @@
             padding: 12px 16px;
             border-radius: 6px;
             font-size: 13px;
-            max-width: 300px;
+            max-width: 400px;
             animation: slideIn 0.3s ease-out;
+            z-index: 10000;
         }
 
         .message.success {
-            background: rgba(16, 185, 129, 0.2);
-            color: #86efac;
+            background: rgb(16, 185, 129);
+            color: #cae7d5;
             border: 1px solid rgba(16, 185, 129, 0.4);
         }
 
         .message.error {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fecaca;
+            background: rgba(239, 68, 68);
+            color: #fefefe;
             border: 1px solid rgba(239, 68, 68, 0.4);
         }
 
@@ -598,16 +611,28 @@
 <body>
     <div class="app-container">
         <div class="header">
-            <h1>🔄 CellMapFlow Pipeline</h1>
+            <h1>CellMapFlow Pipeline</h1>
             <div class="header-actions">
                 <button class="action-btn" onclick="exportYAML()">📥 Export YAML</button>
-                <button class="action-btn" onclick="exportJSON()">📥 Export JSON</button>
+                <!-- <button class="action-btn" onclick="exportJSON()">📥 Export JSON</button> -->
                 <label class="import-btn">
-                    📂 Import
+                    📂 Import YAML
                     <input type="file" class="file-input" accept=".yaml,.json" id="import-file" onchange="importFile()">
                 </label>
-                <button class="apply-btn" onclick="applyPipeline()">✓ Apply to Inference</button>
+                <button class="apply-btn" onclick="applyPipeline()">✓ Apply to Flow</button>
+                <button class="action-btn" onclick="toggleBlockwiseBar()" title="Show/Hide blockwise configuration section" style="background-color: rgba(255, 111, 0, 0.799);">Blockwise</button>
             </div>
+        </div>
+
+        <!-- Blockwise Configuration Section -->
+        <div id="blockwise-bar" class="blockwise-bar" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px 24px; display: none; gap: 12px; align-items: center;">
+            <span style="font-weight: 600; color: var(--text-secondary);"> Blockwise:</span>
+            <button id="btn-validate" class="action-btn" onclick="validateBlockwise()" title="Step 1: Validate if pipeline is ready for blockwise processing">✓ 1- Validate</button>
+            <button id="btn-generate" class="action-btn" onclick="generateBlockwiseTask()" title="Step 2: Generate blockwise task YAML files" disabled>📋 2- Generate Task</button>
+            <button id="btn-precheck" class="action-btn" onclick="precheckBlockwiseTask()" title="Step 3: Precheck blockwise task configuration" disabled>🔍 3- Precheck</button>
+            <button id="btn-submit" class="action-btn" onclick="submitBlockwiseTask()" title="Step 4: Submit blockwise task to LSF" disabled>🚀 4- Submit Task</button>
+            <div id="blockwise-status" style="margin-left: auto; font-size: 12px; color: var(--text-secondary);"></div>
+
         </div>
 
         <div class="main">
@@ -930,7 +955,7 @@
         // Connection state
         let connectionDrag = null;
 
-        function addNode(type, name, dropPosition) {
+        async function addNode(type, name, dropPosition) {
             const id = `${type}-${Date.now()}`;
 
             // Calculate initial position based on drop position or default positions
@@ -972,14 +997,24 @@
             let defaultParams = {};
             let modelConfig = null;
             if (type === 'blockwise-config') {
-                // Set default blockwise config params
-                defaultParams = {
-                    queue: 'gpu_h100',
-                    charge_group: 'cellmap',
-                    nb_cores_master: 4,
-                    nb_cores_worker: 12,
-                    nb_workers: 14
-                };
+                // Fetch blockwise config from globals via API
+                try {
+                    const response = await fetch('/api/blockwise-config');
+                    const config = await response.json();
+                    defaultParams = {
+                        queue: config.queue,
+                        charge_group: config.charge_group,
+                        nb_cores_master: config.nb_cores_master,
+                        nb_cores_worker: config.nb_cores_worker,
+                        nb_workers: config.nb_workers,
+                        tmp_dir: config.tmp_dir,
+                        blockwise_tasks_dir: config.blockwise_tasks_dir
+                    };
+                } catch (error) {
+                    console.error('Error fetching blockwise config:', error);
+                    // Fallback to empty params if API fails
+                    defaultParams = {};
+                }
             } else if (type === 'normalizer') {
                 const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
                     APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
@@ -1230,7 +1265,9 @@
                     { key: 'charge_group', label: 'Charge Group' },
                     { key: 'nb_cores_master', label: 'Cores Master' },
                     { key: 'nb_cores_worker', label: 'Cores Worker' },
-                    { key: 'nb_workers', label: 'Workers' }
+                    { key: 'nb_workers', label: 'Workers' },
+                    { key: 'tmp_dir', label: 'Temp Directory' },
+                    { key: 'blockwise_tasks_dir', label: 'Tasks Directory' }
                 ];
                 
                 let blockwiseHTML = '';
@@ -1404,11 +1441,13 @@
                 // Sync blockwise config to backend if this is a blockwise-config node
                 if (nodeType === 'blockwise-config') {
                     const config = {
-                        queue: node.params.queue || 'gpu_h100',
-                        charge_group: node.params.charge_group || 'cellmap',
-                        nb_cores_master: node.params.nb_cores_master || 4,
-                        nb_cores_worker: node.params.nb_cores_worker || 12,
-                        nb_workers: node.params.nb_workers || 14
+                        queue: node.params.queue,
+                        charge_group: node.params.charge_group,
+                        nb_cores_master: node.params.nb_cores_master,
+                        nb_cores_worker: node.params.nb_cores_worker,
+                        nb_workers: node.params.nb_workers,
+                        tmp_dir: node.params.tmp_dir,
+                        blockwise_tasks_dir: node.params.blockwise_tasks_dir
                     };
                     fetch('/api/blockwise-config', {
                         method: 'POST',
@@ -1434,6 +1473,17 @@
             div.className = `message ${type}`;
             div.textContent = msg;
             document.body.appendChild(div);
+            
+            // Calculate bottom position based on existing messages
+            const messages = document.querySelectorAll('.message');
+            let bottomPosition = 20;
+            messages.forEach((m, idx) => {
+                if (idx < messages.length - 1) { // All except the new one
+                    bottomPosition += m.offsetHeight + 10; // Add height + gap
+                }
+            });
+            div.style.bottom = bottomPosition + 'px';
+            
             setTimeout(() => div.remove(), 3000);
         }
 
@@ -1727,13 +1777,7 @@
                         blockwise_config: (data.blockwise_config || []).map((c, i) => ({
                             id: c.id || `blockwise-${Date.now()}-${i}`,
                             name: 'Blockwise Configuration',
-                            params: c.params || {
-                                queue: 'gpu_h100',
-                                charge_group: 'cellmap',
-                                nb_cores_master: 4,
-                                nb_cores_worker: 12,
-                                nb_workers: 14
-                            },
+                            params: c.params,
                             position: c.position || { x: 100, y: 400 }
                         })),
                         edges: data.edges || []
@@ -1741,6 +1785,34 @@
 
                     console.log('Final pipeline:', pipeline);  // Debug log
                     renderCanvas();
+                    
+                    // If blockwise config is imported, sync it to backend globals
+                    if (pipeline.blockwise_config.length > 0) {
+                        const blockwiseNode = pipeline.blockwise_config[0];
+                        const blockwiseParams = blockwiseNode.params;
+                        if (blockwiseParams) {
+                            const config = {
+                                queue: blockwiseParams.queue,
+                                charge_group: blockwiseParams.charge_group,
+                                nb_cores_master: blockwiseParams.nb_cores_master,
+                                nb_cores_worker: blockwiseParams.nb_cores_worker,
+                                nb_workers: blockwiseParams.nb_workers,
+                                tmp_dir: blockwiseParams.tmp_dir,
+                                blockwise_tasks_dir: blockwiseParams.blockwise_tasks_dir
+                            };
+                            fetch('/api/blockwise-config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(config)
+                            }).then(r => r.json()).then(data => {
+                                console.log('Blockwise config synced from import:', data);
+                                showMessage('✓ Blockwise config updated from import', 'success');
+                            }).catch(err => {
+                                console.error('Error syncing blockwise config from import:', err);
+                            });
+                        }
+                    }
+                    
                     showMessage('Pipeline imported successfully', 'success');
                     document.getElementById('import-file').value = '';
                 } catch (err) {
@@ -2082,7 +2154,229 @@
             }
         });
 
+        function toggleBlockwiseBar() {
+            const blockwiseBar = document.getElementById('blockwise-bar');
+            const isHidden = blockwiseBar.style.display === 'none';
+            blockwiseBar.style.display = isHidden ? 'flex' : 'none';
+        }
+
         initializeLibrary();
+
+        // Track if blockwise config has been loaded
+        let blockwiseConfigLoaded = false;
+
+        // Load blockwise configuration from globals on page load
+        async function loadBlockwiseConfig() {
+            if (blockwiseConfigLoaded) return;
+            blockwiseConfigLoaded = true;
+            
+            try {
+                const response = await fetch('/api/blockwise-config');
+                const config = await response.json();
+                
+                // Update existing blockwise config nodes with fetched values from globals
+                if (pipeline.blockwise_config.length > 0) {
+                    pipeline.blockwise_config.forEach(node => {
+                        if (!node.params) {
+                            node.params = {};
+                        }
+                        node.params.queue = config.queue;
+                        node.params.charge_group = config.charge_group;
+                        node.params.nb_cores_master = config.nb_cores_master;
+                        node.params.nb_cores_worker = config.nb_cores_worker;
+                        node.params.nb_workers = config.nb_workers;
+                        node.params.tmp_dir = config.tmp_dir;
+                        node.params.blockwise_tasks_dir = config.blockwise_tasks_dir;
+                    });
+                    renderCanvas();
+                    canvas.appendChild(svg);
+                    
+                }
+            } catch (error) {
+                console.error('Error loading blockwise config:', error);
+            }
+        }
+        
+        loadBlockwiseConfig();
+
+        // Blockwise workflow state tracking
+        let blockwiseState = {
+            validated: false,
+            generated: false,
+            prechecked: false
+        };
+
+        // Blockwise Operations
+        async function validateBlockwise() {
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Validating...';
+            
+            try {
+                const response = await fetch('/api/blockwise/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline })
+                });
+                
+                const data = await response.json();
+                if (data.valid) {
+                    showMessage('✓ Pipeline valid for blockwise processing', 'success');
+                    status.textContent = '✓ Step 1: Validated';
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.validated = true;
+                    blockwiseState.generated = false;
+                    blockwiseState.prechecked = false;
+                    // Enable generate button
+                    document.getElementById('btn-generate').disabled = false;
+                    // Disable precheck and submit
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Validation failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.validated = false;
+                    // Disable all other buttons
+                    document.getElementById('btn-generate').disabled = true;
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                }
+            } catch (error) {
+                showMessage('Error validating: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.validated = false;
+                // Disable all other buttons
+                document.getElementById('btn-generate').disabled = true;
+                document.getElementById('btn-precheck').disabled = true;
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function generateBlockwiseTask() {
+            if (!blockwiseState.validated) {
+                showMessage('⚠️ Please validate first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Generating...';
+            
+            try {
+                const response = await fetch('/api/blockwise/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage(`✓ Task generated: ${data.task_path}`, 'success');
+                    status.textContent = `✓ Step 2: Generated`;
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.generated = true;
+                    blockwiseState.prechecked = false;
+                    // Enable precheck
+                    document.getElementById('btn-precheck').disabled = false;
+                    // Disable submit until prechecked
+                    document.getElementById('btn-submit').disabled = true;
+                    console.log('Task path:', data.task_path);
+                    console.log('Task YAML:', data.task_yaml);
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Generation failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.generated = false;
+                    // Disable precheck and submit
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                }
+            } catch (error) {
+                showMessage('Error generating task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.generated = false;
+                // Disable precheck and submit
+                document.getElementById('btn-precheck').disabled = true;
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function precheckBlockwiseTask() {
+            if (!blockwiseState.generated) {
+                showMessage('⚠️ Please generate task first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Prechecking...';
+            
+            try {
+                const response = await fetch('/api/blockwise/precheck', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage(`✓ Precheck passed: ${data.message}`, 'success');
+                    status.textContent = `✓ Step 3: Prechecked`;
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.prechecked = true;
+                    // Enable submit
+                    document.getElementById('btn-submit').disabled = false;
+                    console.log('Precheck result:', data.message);
+                } else {
+                    showMessage(`✗ Precheck failed: ${data.error}`, 'error');
+                    status.textContent = '✗ Precheck failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.prechecked = false;
+                    // Disable submit
+                    document.getElementById('btn-submit').disabled = true;
+                    console.error('Precheck error:', data.error);
+                }
+            } catch (error) {
+                showMessage('Error prechecking task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.prechecked = false;
+                // Disable submit
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function submitBlockwiseTask() {
+            if (!blockwiseState.prechecked) {
+                showMessage('⚠️ Please precheck first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Submitting...';
+            
+            const jobName = prompt('Enter job name:', 'cellmap_flow_' + Date.now());
+            if (!jobName) {
+                status.textContent = '';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/blockwise/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline, job_name: jobName })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage('✓ Task submitted: ' + data.job_id, 'success');
+                    status.textContent = '✓ Submitted - Job: ' + data.job_id;
+                    status.style.color = 'var(--accent-green)';
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Submission failed';
+                    status.style.color = 'var(--accent-red)';
+                }
+            } catch (error) {
+                showMessage('Error submitting task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+            }
+        }
     </script>
 </body>
 </html>

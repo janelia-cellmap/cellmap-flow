@@ -37,6 +37,7 @@ dependencies = [
     "neuroglancer",
     "pydantic",
     "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git",
+    "daisy"
     ]
 
 # extras

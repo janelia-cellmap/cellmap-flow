@@ -6,6 +6,10 @@ from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import logging
+import subprocess
+import yaml
+import tempfile
+import re
 from cellmap_flow.utils.web_utils import get_free_port
 from cellmap_flow.norm.input_normalize import (
     get_input_normalizers,
@@ -34,6 +38,12 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 CORS(app)
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
+
+# Blockwise task directory will be set from globals or use default
+def get_blockwise_tasks_dir():
+    tasks_dir = getattr(g, 'blockwise_tasks_dir', None) or os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
+    os.makedirs(tasks_dir, exist_ok=True)
+    return tasks_dir
 CUSTOM_CODE_FOLDER = os.path.expanduser(
     os.environ.get(
         "CUSTOM_CODE_FOLDER",
@@ -413,26 +423,32 @@ def blockwise_config_api():
     """Get or set blockwise configuration in globals"""
     if request.method == "GET":
         return jsonify({
-            'queue': getattr(g, 'queue', 'gpu_h100'),
-            'charge_group': getattr(g, 'charge_group', 'cellmap'),
-            'nb_cores_master': getattr(g, 'nb_cores_master', 4),
-            'nb_cores_worker': getattr(g, 'nb_cores_worker', 12),
-            'nb_workers': getattr(g, 'nb_workers', 14)
+            'queue': g.queue,
+            'charge_group': g.charge_group,
+            'nb_cores_master': g.nb_cores_master,
+            'nb_cores_worker': g.nb_cores_worker,
+            'nb_workers': g.nb_workers,
+            'tmp_dir': g.tmp_dir,
+            'blockwise_tasks_dir': g.blockwise_tasks_dir
         })
     elif request.method == "POST":
         data = request.get_json()
-        g.queue = data.get('queue', 'gpu_h100')
-        g.charge_group = data.get('charge_group', 'cellmap')
-        g.nb_cores_master = int(data.get('nb_cores_master', 4))
-        g.nb_cores_worker = int(data.get('nb_cores_worker', 12))
-        g.nb_workers = int(data.get('nb_workers', 14))
-        logger.warning(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}")
+        g.queue = data.get('queue')
+        g.charge_group = data.get('charge_group')
+        g.nb_cores_master = int(data.get('nb_cores_master'))
+        g.nb_cores_worker = int(data.get('nb_cores_worker'))
+        g.nb_workers = int(data.get('nb_workers'))
+        g.tmp_dir = data.get('tmp_dir')
+        g.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
+        logger.warning(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")
         return jsonify({'success': True, 'config': {
             'queue': g.queue,
             'charge_group': g.charge_group,
             'nb_cores_master': g.nb_cores_master,
             'nb_cores_worker': g.nb_cores_worker,
-            'nb_workers': g.nb_workers
+            'nb_workers': g.nb_workers,
+            'tmp_dir': g.tmp_dir,
+            'blockwise_tasks_dir': g.blockwise_tasks_dir
         }})
 
 
@@ -539,6 +555,263 @@ def validate_pipeline_config(config):
 
     except Exception as e:
         return {"valid": False, "error": str(e)}
+
+
+@app.route("/api/blockwise/validate", methods=["POST"])
+def validate_blockwise():
+    """Validate if pipeline is ready for blockwise processing"""
+    try:
+        data = request.get_json()
+        pipeline = data.get("pipeline", {})
+        
+        # Check required components
+        if not pipeline.get("inputs") or len(pipeline["inputs"]) == 0:
+            return {"valid": False, "error": "No input nodes defined"}
+        
+        if not pipeline.get("outputs") or len(pipeline["outputs"]) == 0:
+            return {"valid": False, "error": "No output nodes defined"}
+        
+        if not pipeline.get("models") or len(pipeline["models"]) == 0:
+            return {"valid": False, "error": "No models defined"}
+        
+        # Check blockwise config
+        if not pipeline.get("blockwise_config") or len(pipeline["blockwise_config"]) == 0:
+            return {"valid": False, "error": "No blockwise configuration defined"}
+        
+        # Check input has dataset_path
+        input_node = pipeline["inputs"][0]
+        if not input_node.get("params", {}).get("dataset_path"):
+            return {"valid": False, "error": "Input node missing dataset_path"}
+        
+        # Check output has dataset_path
+        output_node = pipeline["outputs"][0]
+        if not output_node.get("params", {}).get("dataset_path"):
+            return {"valid": False, "error": "Output node missing dataset_path"}
+        
+        logger.info("Pipeline validation passed")
+        return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
+        
+    except Exception as e:
+        logger.error(f"Validation error: {str(e)}")
+        return {"valid": False, "error": str(e)}
+
+
+@app.route("/api/blockwise/generate", methods=["POST"])
+def generate_blockwise_task():
+    """Generate blockwise task YAML files"""
+    try:
+        data = request.get_json()
+        pipeline = data.get("pipeline", {})
+        
+        # First validate
+        validation = validate_blockwise()
+        if not validation.get("valid"):
+            return {"success": False, "error": validation.get("error")}
+        
+        # Get blockwise config
+        blockwise_config = pipeline["blockwise_config"][0]
+        input_node = pipeline["inputs"][0]
+        output_node = pipeline["outputs"][0]
+        
+        # Create task YAML content
+        task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        task_yaml = {
+            "data_path": input_node["params"]["dataset_path"],
+            "output_path": output_node["params"]["dataset_path"],
+            "task_name": task_name,
+            "charge_group": blockwise_config["params"]["charge_group"],
+            "queue": blockwise_config["params"]["queue"],
+            "workers": blockwise_config["params"]["nb_workers"],
+            "cpu_workers": blockwise_config["params"]["nb_cores_worker"],
+            "tmp_dir": blockwise_config["params"]["tmp_dir"],
+            "models": [],
+            "input_normalizers": [],
+            "postprocessors": []
+        }
+        
+        # Add models with full config
+        for model in pipeline.get("models", []):
+            model_entry = {
+                "name": model.get("name"),
+                **model.get("params", model.get("config", {}))
+            }
+            # Parse string representations of lists/tuples back to actual lists for specific fields
+            import ast
+            import re
+            for field in ["channels", "input_size", "output_size", "input_voxel_size", "output_voxel_size"]:
+                if field in model_entry:
+                    value = model_entry[field]
+                    # If it's already a list, keep it
+                    if isinstance(value, (list, tuple)):
+                        model_entry[field] = list(value)
+                        logger.info(f"Field {field} is already a list: {model_entry[field]}")
+                    # If it's a string that looks like a list/tuple, parse it
+                    elif isinstance(value, str):
+                        value_stripped = value.strip().strip("'\"")  # Remove outer quotes
+                        if (value_stripped.startswith('[') or value_stripped.startswith('(')) and \
+                           (value_stripped.endswith(']') or value_stripped.endswith(')')):
+                            try:
+                                # Fix unquoted identifiers: convert [mito] to ['mito']
+                                # Replace word characters not inside quotes with quoted versions
+                                fixed_value = re.sub(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', r"'\1'", value_stripped)
+                                # Remove duplicate quotes: ''mito'' -> 'mito'
+                                fixed_value = re.sub(r"''+", "'", fixed_value)
+                                logger.info(f"Fixing {field}: {value_stripped!r} -> {fixed_value!r}")
+                                
+                                parsed = ast.literal_eval(fixed_value)
+                                if isinstance(parsed, (list, tuple)):
+                                    model_entry[field] = list(parsed)
+                                    logger.info(f"Parsed {field} from string {value!r} to list {model_entry[field]}")
+                            except Exception as e:
+                                logger.warning(f"Failed to parse {field}: {value}, error: {e}")
+                    
+            task_yaml["models"].append(model_entry)
+        
+        # Add normalizers
+        for norm in pipeline.get("normalizers", []):
+            norm_entry = {
+                "name": norm.get("name"),
+                "params": norm.get("params", {})
+            }
+            task_yaml["input_normalizers"].append(norm_entry)
+        
+        # Add postprocessors
+        for post in pipeline.get("postprocessors", []):
+            post_entry = {
+                "name": post.get("name"),
+                "params": post.get("params", {})
+            }
+            task_yaml["postprocessors"].append(post_entry)
+        
+        # Convert to YAML format with proper list handling
+        yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True)
+        
+        # Save to file
+        yaml_filename = f"{task_name}.yaml"
+        tasks_dir = get_blockwise_tasks_dir()
+        yaml_path = os.path.join(tasks_dir, yaml_filename)
+        with open(yaml_path, 'w') as f:
+            f.write(yaml_content)
+        
+        logger.info(f"Generated blockwise task YAML at: {yaml_path}")
+        logger.info(f"Task YAML content:\n{yaml_content}")
+        
+        return {
+            "success": True,
+            "task_yaml": yaml_content,
+            "task_config": task_yaml,
+            "task_path": yaml_path,
+            "task_name": task_name,
+            "message": "Blockwise task generated successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Task generation error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@app.route("/api/blockwise/precheck", methods=["POST"])
+def precheck_blockwise_task():
+    """Precheck blockwise task configuration"""
+    try:
+        from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
+        
+        data = request.get_json()
+        pipeline = data.get("pipeline", {})
+        
+        # First validate
+        validation = validate_blockwise()
+        if not validation.get("valid"):
+            return {"success": False, "error": validation.get("error")}
+        
+        # Generate task YAML first
+        gen_result = generate_blockwise_task()
+        if not gen_result.get("success"):
+            return {"success": False, "error": gen_result.get("error")}
+        
+        yaml_path = gen_result.get("task_path")
+        
+        # Try to instantiate the processor to validate configuration
+        try:
+            _ = CellMapFlowBlockwiseProcessor(yaml_path, create=True)
+            logger.info(f"Blockwise precheck passed for: {yaml_path}")
+            return {
+                "success": True,
+                "message": "success"
+            }
+        except Exception as e:
+            logger.error(f"Blockwise precheck failed: {str(e)}")
+            return {"success": False, "error": str(e)}
+        
+    except Exception as e:
+        logger.error(f"Precheck error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@app.route("/api/blockwise/submit", methods=["POST"])
+def submit_blockwise_task():
+    """Submit blockwise task to LSF"""
+    try:
+        data = request.get_json()
+        pipeline = data.get("pipeline", {})
+        job_name = data.get("job_name", f"cellmap_flow_{int(time.time())}")
+        
+        # First validate
+        validation = validate_blockwise()
+        if not validation.get("valid"):
+            return {"success": False, "error": validation.get("error")}
+        
+        # Generate task YAML
+        gen_result = generate_blockwise_task()
+        if not gen_result.get("success"):
+            return {"success": False, "error": gen_result.get("error")}
+        
+        yaml_path = gen_result["task_path"]
+        blockwise_config = pipeline["blockwise_config"][0]
+        
+        # Build bsub command
+        cores_master = blockwise_config["params"]["nb_cores_master"]
+        charge_group = blockwise_config["params"]["charge_group"]
+        queue = blockwise_config["params"]["queue"]
+        
+        bsub_cmd = [
+            "bsub",
+            "-J", job_name,
+            "-n", str(cores_master),
+            "-P", charge_group,
+            # "-q", queue,
+            "python", "-m", "cellmap_flow.blockwise.cli",
+            yaml_path
+        ]
+        
+        logger.info(f"Submitting LSF job: {' '.join(bsub_cmd)}")
+        
+        # Submit job - use same environment as parent process
+        result = subprocess.run(bsub_cmd, capture_output=True, text=True, env=os.environ)
+        
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            logger.info(f"Job submitted successfully: {output}")
+            
+            # Extract job ID from bsub output (format: "Job <12345> is submitted")
+            match = re.search(r'<(\d+)>', output)
+            job_id = match.group(1) if match else "unknown"
+            
+            return {
+                "success": True,
+                "job_id": job_id,
+                "task_path": yaml_path,
+                "command": " ".join(bsub_cmd),
+                "message": f"Task submitted as job {job_id}"
+                }
+        else:
+            error_msg = result.stderr or result.stdout
+            logger.error(f"LSF submission failed: {error_msg}")
+            return {"success": False, "error": f"LSF error: {error_msg}"}
+        
+    except Exception as e:
+        logger.error(f"Submission error: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

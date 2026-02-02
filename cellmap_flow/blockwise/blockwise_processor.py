@@ -1,4 +1,10 @@
 import logging
+logging.getLogger().setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logging.getLogger().setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+
 import subprocess
 from pathlib import Path
 
@@ -17,7 +23,7 @@ from cellmap_flow.utils.config_utils import build_models, load_config
 from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.utils.ds import generate_singlescale_metadata
 
-logger = logging.getLogger(__name__)
+
 
 
 class CellMapFlowBlockwiseProcessor:
@@ -128,7 +134,7 @@ class CellMapFlowBlockwiseProcessor:
         # this is zyx
 
         block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
-        self.block_shape = self.config.get("block_size", block_shape)
+        self.block_shape = tuple(self.config.get("block_size", block_shape))
 
         self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
@@ -213,7 +219,7 @@ class CellMapFlowBlockwiseProcessor:
                         chunk_shape=(
                             self.block_shape
                             if len(final_output_shape) == 3
-                            else (len(channel_indices),) + tuple(self.block_shape)
+                            else (len(channel_indices),) + self.block_shape
                         ),
                         voxel_size=(
                             self.output_voxel_size
@@ -277,6 +283,8 @@ class CellMapFlowBlockwiseProcessor:
                     if "multiscales" in list(zg.attrs):
                         old_multiscales = zg.attrs["multiscales"]
                         if old_multiscales != zattrs["multiscales"]:
+                            logger.info(f"Old multiscales: {old_multiscales}")
+                            logger.info(f"New multiscales: {zattrs['multiscales']}")
                             raise ValueError(
                                 f"multiscales attribute already exists in {z_store.path} and is different from the new one"
                             )

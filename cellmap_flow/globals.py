@@ -37,6 +37,8 @@ class Flow:
     nb_cores_master: int
     nb_cores_worker: int
     nb_workers: int
+    tmp_dir: Optional[str]
+    blockwise_tasks_dir: Optional[str]
     neuroglancer_thread: Optional[Any]
     pipeline_inputs: List[Any]
     pipeline_outputs: List[Any]
@@ -71,6 +73,8 @@ class Flow:
             cls._instance.nb_cores_master = 4
             cls._instance.nb_cores_worker = 12
             cls._instance.nb_workers = 14
+            cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
+            cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
 
             # Pipeline visual state storage
