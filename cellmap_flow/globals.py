@@ -6,6 +6,7 @@ import yaml
 import threading
 import numpy as np
 import logging
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +20,30 @@ viewer = None
 
 
 class Flow:
-    _instance = None
+    _instance: Optional["Flow"] = None
+    
+    # Class-level type annotations for all instance attributes
+    jobs: List[Any]
+    models_config: List[Any]
+    servers: List[Any]
+    raw: Optional[Any]
+    input_norms: List[Any]
+    postprocess: List[Any]
+    viewer: Optional[Any]
+    dataset_path: Optional[str]
+    model_catalog: dict
+    queue: str
+    charge_group: str
+    nb_cores_master: int
+    nb_cores_worker: int
+    nb_workers: int
+    neuroglancer_thread: Optional[Any]
+    pipeline_inputs: List[Any]
+    pipeline_outputs: List[Any]
+    pipeline_edges: List[Any]
+    pipeline_normalizers: List[Any]
+    pipeline_models: List[Any]
+    pipeline_postprocessors: List[Any]
 
     def __new__(cls):
         if cls._instance is None:
@@ -32,7 +56,7 @@ class Flow:
             cls._instance.postprocess = postprocess
             cls._instance.viewer = None
             cls._instance.dataset_path = None
-            # cls._instance.model_catalog = {}
+            cls._instance.model_catalog = {}
             # Uncomment and adjust if you want to load the model catalog:
             models_path = os.path.normpath(
                 os.path.join(

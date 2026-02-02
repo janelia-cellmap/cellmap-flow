@@ -74,12 +74,12 @@ def pipeline_builder():
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
 
-    # Get available models from catalog with full config
+    # Get available models from models_config (not from catalog)
     available_models = {}
-    if hasattr(g, 'model_catalog') and g.model_catalog:
-        for category, models in g.model_catalog.items():
-            if isinstance(models, dict):
-                available_models.update(models)
+    # if hasattr(g, 'models_config') and g.models_config:
+    #     for model_config in g.models_config:
+    #         model_dict = model_config.to_dict()
+    #         available_models[model_config.name] = model_dict
     
     logger.warning(f"\n{'='*80}")
     logger.warning(f"AVAILABLE MODELS DEBUG:")
