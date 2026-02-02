@@ -911,7 +911,16 @@
             e.preventDefault();
             const type = e.dataTransfer.getData('type');
             const name = e.dataTransfer.getData('name');
-            addNode(type, name);
+            
+            // Get canvas element and calculate position relative to it
+            const canvas = document.getElementById('canvas-content');
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // Calculate position relative to canvas
+            const x = Math.max(0, e.clientX - canvasRect.left);
+            const y = Math.max(0, e.clientY - canvasRect.top);
+            
+            addNode(type, name, { x, y });
         }
 
         // Node management with positions
@@ -921,34 +930,42 @@
         // Connection state
         let connectionDrag = null;
 
-        function addNode(type, name) {
+        function addNode(type, name, dropPosition) {
             const id = `${type}-${Date.now()}`;
 
-            // Calculate initial position based on node type and count
+            // Calculate initial position based on drop position or default positions
             let x, y;
-            if (type === 'input') {
-                const count = pipeline.inputs.length;
-                x = 20;
-                y = 20 + (count * 180);
-            } else if (type === 'output') {
-                const count = pipeline.outputs.length;
-                x = 900;
-                y = 20 + (count * 180);
-            } else if (type === 'normalizer') {
-                const count = pipeline.normalizers.length;
-                x = 200 + (count * 380);
-                y = 20;
-            } else if (type === 'model') {
-                const count = pipeline.models.length;
-                x = 400 + (count * 380);
-                y = 20;
-            } else if (type === 'postprocessor') {
-                const count = pipeline.postprocessors.length;
-                x = 600 + (count * 380);
-                y = 20;
-            } else if (type === 'blockwise-config') {
-                x = 100;
-                y = 400;
+            
+            if (dropPosition) {
+                // Use drop position if provided
+                x = dropPosition.x;
+                y = dropPosition.y;
+            } else {
+                // Use default positions if no drop position
+                if (type === 'input') {
+                    const count = pipeline.inputs.length;
+                    x = 20;
+                    y = 20 + (count * 180);
+                } else if (type === 'output') {
+                    const count = pipeline.outputs.length;
+                    x = 900;
+                    y = 20 + (count * 180);
+                } else if (type === 'normalizer') {
+                    const count = pipeline.normalizers.length;
+                    x = 200 + (count * 380);
+                    y = 20;
+                } else if (type === 'model') {
+                    const count = pipeline.models.length;
+                    x = 400 + (count * 380);
+                    y = 20;
+                } else if (type === 'postprocessor') {
+                    const count = pipeline.postprocessors.length;
+                    x = 600 + (count * 380);
+                    y = 20;
+                } else if (type === 'blockwise-config') {
+                    x = 100;
+                    y = 400;
+                }
             }
 
             // Get default params from APP_CONFIG or API
