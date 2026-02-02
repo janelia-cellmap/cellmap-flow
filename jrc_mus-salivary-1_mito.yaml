@@ -24,9 +24,9 @@ models:
     resolution: 16
     classes:
     - mito
-  mito_mouse_16_362000:
-    type: fly
-    checkpoint: /groups/cellmap/cellmap/zouinkhim/exp_c-elegen/v3/train/runs/20250806_mito_mouse_distance_16nm/model_checkpoint_362000
-    resolution: 16
-    classes:
-    - mito
+  # mito_mouse_16_362000:
+  #   type: fly
+  #   checkpoint: /groups/cellmap/cellmap/zouinkhim/exp_c-elegen/v3/train/runs/20250806_mito_mouse_distance_16nm/model_checkpoint_362000
+  #   resolution: 16
+  #   classes:
+  #   - mito

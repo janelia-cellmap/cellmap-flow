@@ -1200,6 +1200,7 @@
                             <div class="node-title">${node.name}</div>
                         </div>
                         <div class="node-actions">
+                            <button class="icon-btn save" onclick="saveNode('${node.id}', '${node.type}')">💾</button>
                             <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
                         </div>
                     </div>
@@ -1477,11 +1478,18 @@
         function exportYAML() {
             let yaml = '';
 
-            // Export inputs
+            // Export inputs with dataset_path
             if (pipeline.inputs.length > 0) {
                 yaml += 'inputs:\n';
-                pipeline.inputs.forEach(n => {
+                pipeline.inputs.forEach((n, index) => {
                     yaml += `  - id: ${n.id}\n`;
+                    // Add dataset_path to the first input node
+                    if (index === 0) {
+                        const datasetPath = n.params?.dataset_path || APP_CONFIG.datasetPath || '';
+                        if (datasetPath) {
+                            yaml += `    dataset_path: ${datasetPath}\n`;
+                        }
+                    }
                     yaml += `    position:\n`;
                     yaml += `      x: ${n.position.x}\n`;
                     yaml += `      y: ${n.position.y}\n`;
@@ -1494,6 +1502,11 @@
                 yaml += 'outputs:\n';
                 pipeline.outputs.forEach(n => {
                     yaml += `  - id: ${n.id}\n`;
+                    if (n.params && Object.keys(n.params).length > 0) {
+                        Object.entries(n.params).forEach(([k, v]) => {
+                            yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
                     yaml += `    position:\n`;
                     yaml += `      x: ${n.position.x}\n`;
                     yaml += `      y: ${n.position.y}\n`;
@@ -1655,7 +1668,7 @@
                         outputs: (data.outputs || []).map((n, i) => ({
                             id: n.id || `output-${Date.now()}-${i}`,
                             name: 'OUTPUT',
-                            params: {},
+                            params: n.params || {},
                             position: n.position || { x: 900, y: 20 + (i * 180) }
                         })),
                         normalizers: (data.input_normalizers || data.normalizers || []).map((n, i) => {
@@ -1671,7 +1684,7 @@
                             const model = {
                                 id: m.id || `model-${Date.now()}-${i}`,
                                 name: typeof m === 'string' ? m : (m.name || m),
-                                params: m.params || {},
+                                params: m.params || m.config || {},
                                 position: m.position || { x: 400 + (i * 380), y: 20 }
                             };
                             // Preserve config if it exists (for re-export with build_model_from_entry)
@@ -1683,6 +1696,8 @@
                                 delete model.config.id;
                                 delete model.config.params;
                                 delete model.config.position;
+                                // Also ensure params includes all config fields
+                                model.params = { ...model.config };
                             }
                             return model;
                         }),
@@ -1820,14 +1835,23 @@
                             currentItem[key] = value;
                         }
 
+                        // For inputs/outputs, preserve dataset_path
+                        if ((currentSection === 'inputs' || currentSection === 'outputs') && key === 'dataset_path') {
+                            if (!currentItem.params) currentItem.params = {};
+                            currentItem.params.dataset_path = currentItem[key];
+                        }
+
                         // For models section, also build the config object for use with build_model_from_entry
-                        if (currentSection === 'models' && key !== 'id' && key !== 'position' && key !== 'params') {
+                        if (currentSection === 'models' && key !== 'id' && key !== 'position' && key !== 'params' && key !== 'name') {
                             currentItem.config = currentItem.config || {};
                             try {
                                 currentItem.config[key] = JSON.parse(value);
                             } catch {
                                 currentItem.config[key] = value;
                             }
+                            // Also add to params for display
+                            currentItem.params = currentItem.params || {};
+                            currentItem.params[key] = currentItem[key];
                         }
                     }
                 }

@@ -17,6 +17,12 @@ export const PipelineExporter = ({
     setParamInputs({ ...paramInputs, [key]: value });
   };
 
+  const saveNodeData = () => {
+    if (selectedNodeData && (selectedNodeData.type === 'input' || selectedNodeData.type === 'output')) {
+      alert(`${selectedNodeData.type.charAt(0).toUpperCase() + selectedNodeData.type.slice(1)} node saved.`);
+    }
+  };
+
   const applyParams = () => {
     if (selectedNode && selectedNodeData) {
       try {
@@ -36,32 +42,42 @@ export const PipelineExporter = ({
     }
   };
 
-  const exportToYAML = () => {
-    const pipelineData = onExport();
-    
-    // Extract workflow structure
-    const workflow = {
-      input_normalizers: [],
-      postprocessors: [],
-    };
+  const exportToYAML = async () => {
+    try {
+      // Fetch dataset_path from backend
+      const response = await fetch('/api/dataset_path');
+      const data = await response.json();
+      const datasetPath = data.dataset_path || '';
+      
+      const pipelineData = onExport();
+      
+      // Extract workflow structure
+      const workflow = {
+        input_normalizers: [],
+        postprocessors: [],
+      };
 
-    // Order nodes by edges
-    nodes.forEach((node) => {
-      if (node.type === 'normalizer') {
-        workflow.input_normalizers.push({
-          name: node.data.name,
-          params: node.data.params || {},
-        });
-      } else if (node.type === 'postprocessor') {
-        workflow.postprocessors.push({
-          name: node.data.name,
-          params: node.data.params || {},
-        });
-      }
-    });
+      // Order nodes by edges
+      nodes.forEach((node) => {
+        if (node.type === 'normalizer') {
+          workflow.input_normalizers.push({
+            name: node.data.name,
+            params: node.data.params || {},
+          });
+        } else if (node.type === 'postprocessor') {
+          workflow.postprocessors.push({
+            name: node.data.name,
+            params: node.data.params || {},
+          });
+        }
+      });
 
-    const yamlContent = generateYAML(workflow);
-    downloadFile(yamlContent, 'pipeline.yaml', 'text/yaml');
+      const yamlContent = generateYAML(workflow, datasetPath);
+      downloadFile(yamlContent, 'pipeline.yaml', 'text/yaml');
+    } catch (error) {
+      console.error('Error exporting YAML:', error);
+      alert('Error exporting YAML: ' + error.message);
+    }
   };
 
   const exportToJSON = () => {
@@ -102,53 +118,74 @@ export const PipelineExporter = ({
       <h3>Pipeline Controls</h3>
 
       {/* Node Inspector */}
-      {selectedNodeData && selectedNodeData.type !== 'input' && selectedNodeData.type !== 'output' && (
+      {selectedNodeData && (
         <div style={{ marginBottom: '20px', padding: '10px', background: '#f9f9f9', borderRadius: '5px' }}>
           <h4 style={{ marginTop: 0 }}>{selectedNodeData.data.label}</h4>
           <p style={{ fontSize: '12px', color: '#666' }}>Node ID: {selectedNode}</p>
+          <p style={{ fontSize: '11px', color: '#999' }}>Type: {selectedNodeData.type}</p>
 
-          <label style={{ fontWeight: 'bold', fontSize: '12px' }}>Parameters:</label>
-          <div style={{ marginTop: '8px', marginBottom: '10px' }}>
-            <input
-              type="text"
-              placeholder='JSON params e.g. {"param1": 0.5}'
-              onChange={(e) => setParamInputs({ param_input: e.target.value })}
-              style={{ width: '100%', padding: '5px', fontSize: '11px' }}
-            />
-          </div>
+          {(selectedNodeData.type === 'input' || selectedNodeData.type === 'output') ? (
+            <button
+              onClick={saveNodeData}
+              style={{
+                width: '100%',
+                padding: '6px',
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              Save {selectedNodeData.type.charAt(0).toUpperCase() + selectedNodeData.type.slice(1)}
+            </button>
+          ) : (
+            <>
+              <label style={{ fontWeight: 'bold', fontSize: '12px' }}>Parameters:</label>
+              <div style={{ marginTop: '8px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  placeholder='JSON params e.g. {"param1": 0.5}'
+                  onChange={(e) => setParamInputs({ param_input: e.target.value })}
+                  style={{ width: '100%', padding: '5px', fontSize: '11px' }}
+                />
+              </div>
 
-          <button
-            onClick={applyParams}
-            style={{
-              width: '100%',
-              padding: '6px',
-              background: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginBottom: '8px',
-            }}
-          >
-            Apply Parameters
-          </button>
+              <button
+                onClick={applyParams}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  marginBottom: '8px',
+                }}
+              >
+                Apply Parameters
+              </button>
 
-          <button
-            onClick={() => onDeleteNode(selectedNode)}
-            style={{
-              width: '100%',
-              padding: '6px',
-              background: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-            }}
-          >
-            Delete Node
-          </button>
+              <button
+                onClick={() => onDeleteNode(selectedNode)}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  background: '#f44336',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                Delete Node
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -199,26 +236,47 @@ export const PipelineExporter = ({
 };
 
 // Helper functions
-const generateYAML = (data) => {
+const generateYAML = (data, datasetPath = '') => {
   let yaml = '';
   
+  if (datasetPath) {
+    yaml += `dataset_path: ${datasetPath}\n`;
+    yaml += '\n';
+  }
+
   yaml += 'input_normalizers:\n';
-  data.input_normalizers.forEach((norm) => {
-    yaml += `  - name: ${norm.name}\n`;
-    yaml += '    params:\n';
-    Object.keys(norm.params).forEach((key) => {
-      yaml += `      ${key}: ${JSON.stringify(norm.params[key])}\n`;
+  if (data.input_normalizers.length === 0) {
+    yaml += '  []\n';
+  } else {
+    data.input_normalizers.forEach((norm) => {
+      yaml += `  - name: ${norm.name}\n`;
+      yaml += '    params:\n';
+      if (Object.keys(norm.params).length === 0) {
+        yaml += '      {}\n';
+      } else {
+        Object.keys(norm.params).forEach((key) => {
+          yaml += `      ${key}: ${JSON.stringify(norm.params[key])}\n`;
+        });
+      }
     });
-  });
+  }
 
   yaml += 'postprocessors:\n';
-  data.postprocessors.forEach((post) => {
-    yaml += `  - name: ${post.name}\n`;
-    yaml += '    params:\n';
-    Object.keys(post.params).forEach((key) => {
-      yaml += `      ${key}: ${JSON.stringify(post.params[key])}\n`;
+  if (data.postprocessors.length === 0) {
+    yaml += '  []\n';
+  } else {
+    data.postprocessors.forEach((post) => {
+      yaml += `  - name: ${post.name}\n`;
+      yaml += '    params:\n';
+      if (Object.keys(post.params).length === 0) {
+        yaml += '      {}\n';
+      } else {
+        Object.keys(post.params).forEach((key) => {
+          yaml += `      ${key}: ${JSON.stringify(post.params[key])}\n`;
+        });
+      }
     });
-  });
+  }
 
   return yaml;
 };
