@@ -1,6 +1,8 @@
 import click
 import logging
-
+import logging
+logging.getLogger().setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
 
 
@@ -32,3 +34,7 @@ def cli(yaml_config, client, log_level):
 
 
 logger = logging.getLogger(__name__)
+
+
+if __name__ == "__main__":
+    cli()

@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CellMapFlow - Pipeline Builder</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pipeline_builder.css') }}" />
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>CellMapFlow Pipeline</h1>
+            <div class="header-actions">
+                <button class="action-btn" onclick="exportYAML()">📥 Export YAML</button>
+                <!-- <button class="action-btn" onclick="exportJSON()">📥 Export JSON</button> -->
+                <label class="import-btn">
+                    📂 Import YAML
+                    <input type="file" class="file-input" accept=".yaml,.json" id="import-file" onchange="importFile()">
+                </label>
+                <button class="apply-btn" onclick="applyPipeline()">✓ Apply to Flow</button>
+                <button class="action-btn" onclick="toggleBlockwiseBar()" title="Show/Hide blockwise configuration section" style="background-color: rgba(255, 111, 0, 0.799);">Blockwise</button>
+            </div>
+        </div>
+
+        <!-- Blockwise Configuration Section -->
+        <div id="blockwise-bar" class="blockwise-bar" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px 24px; display: none; gap: 12px; align-items: center;">
+            <span style="font-weight: 600; color: var(--text-secondary);"> Blockwise:</span>
+            <button id="btn-validate" class="action-btn" onclick="validateBlockwise()" title="Step 1: Validate if pipeline is ready for blockwise processing">✓ 1- Validate</button>
+            <button id="btn-generate" class="action-btn" onclick="generateBlockwiseTask()" title="Step 2: Generate blockwise task YAML files" disabled>📋 2- Generate Task</button>
+            <button id="btn-precheck" class="action-btn" onclick="precheckBlockwiseTask()" title="Step 3: Precheck blockwise task configuration" disabled>🔍 3- Precheck</button>
+            <button id="btn-submit" class="action-btn" onclick="submitBlockwiseTask()" title="Step 4: Submit blockwise task to LSF" disabled>🚀 4- Submit Task</button>
+            
+            <!-- Model Merge Mode Selector -->
+            <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                <label for="model-merge-mode" style="color: var(--text-secondary); font-size: 12px; white-space: nowrap;">Model Merge:</label>
+                <select id="model-merge-mode" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                    <option value="">None (Single Model)</option>
+                </select>
+            </div>
+            
+            <div id="blockwise-status" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"></div>
+
+        </div>
+
+        <div class="main">
+            <div class="sidebar">
+                <div class="library-section">
+                    <div class="section-title">Flow Control</div>
+                    <button class="section-toggle active" onclick="toggleSection(this, 'io')">
+                        <span>🔌 Input/Output</span>
+                        <span id="io-toggle">▲</span>
+                    </button>
+                    <div class="library-items show" id="io-items">
+                        <div class="library-item" draggable="true" data-type="input" data-name="INPUT">🟣 INPUT</div>
+                        <div class="library-item" draggable="true" data-type="output" data-name="OUTPUT">🟢 OUTPUT</div>
+                    </div>
+                </div>
+
+                <div class="library-section">
+                    <div class="section-title">Input Normalizers</div>
+                    <button class="section-toggle" onclick="toggleSection(this, 'normalizers')">
+                        <span>📥 Normalizers</span>
+                        <span id="normalizers-toggle">▼</span>
+                    </button>
+                    <div class="library-items" id="normalizers-items"></div>
+                </div>
+
+                <div class="library-section">
+                    <div class="section-title">Models</div>
+                    <button class="section-toggle" onclick="toggleSection(this, 'models')">
+                        <span>🤖 Models</span>
+                        <span id="models-toggle">▼</span>
+                    </button>
+                    <div class="library-items" id="models-items"></div>
+                </div>
+
+                <div class="library-section">
+                    <div class="section-title">Postprocessing</div>
+                    <button class="section-toggle" onclick="toggleSection(this, 'postprocessors')">
+                        <span>📤 Postprocessors</span>
+                        <span id="postprocessors-toggle">▼</span>
+                    </button>
+                    <div class="library-items" id="postprocessors-items"></div>
+                </div>
+
+                <div class="library-section">
+                    <div class="section-title">Configuration</div>
+                    <button class="section-toggle" onclick="toggleSection(this, 'config')">
+                        <span>⚙️ Blockwise Config</span>
+                        <span id="config-toggle">▼</span>
+                    </button>
+                    <div class="library-items" id="config-items">
+                        <div class="library-item" draggable="true" data-type="blockwise-config" data-name="Blockwise Configuration">⚙️ Blockwise Configuration</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas">
+                <div class="canvas-content" id="canvas-content">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎨</div>
+                        <div class="empty-state-text">Drag items from the sidebar to start building your pipeline</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Output Channels Configuration Modal -->
+    <div id="output-channels-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-height: 600px; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>Configure Output Channels</h2>
+                <button class="modal-close-btn" onclick="closeOutputChannelsModal()">✕</button>
+            </div>
+            <div id="output-channels-body" class="modal-body">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeOutputChannelsModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="saveOutputChannels()">✓ Save Channels</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay" style="display: none;" 
+         onclick="if(event.target === this) closeOutputChannelsModal()"></div>
+
+    <script>
+        // Config from Flask
+        window.APP_CONFIG = {
+            availableNormalizers: {{ input_normalizers | tojson }},
+            availableModels: {{ available_models | tojson }},
+            availablePostprocessors: {{ output_postprocessors | tojson }},
+            availableModelMergers: {{ model_mergers | tojson }},
+            datasetPath: {{ dataset_path | tojson }},
+        };
+
+        // Pipeline state - load from backend (persisted state from globals)
+        let pipeline = {
+            inputs: {{ current_inputs | tojson }},
+            outputs: {{ current_outputs | tojson }},
+            normalizers: {{ current_normalizers | tojson }},
+            models: {{ current_models | tojson }},
+            postprocessors: {{ current_postprocessors | tojson }},
+            blockwise_config: [],
+            edges: {{ current_edges | tojson }}
+        };
+
+        // Ensure all nodes have IDs and positions
+        pipeline.inputs = (pipeline.inputs || []).map((n, i) => ({
+            id: n.id || `input-${i}-${Date.now()}`,
+            name: 'INPUT',
+            params: n.params || { dataset_path: APP_CONFIG.datasetPath || '' },
+            position: n.position || { x: 20, y: 20 + (i * 180) }
+        }));
+        // Ensure first INPUT node has dataset_path if it's empty
+        if (pipeline.inputs.length === 0) {
+            pipeline.inputs.push({
+                id: `input-0-${Date.now()}`,
+                name: 'INPUT',
+                params: { dataset_path: APP_CONFIG.datasetPath || '' },
+                position: { x: 20, y: 20 }
+            });
+        } else if (!pipeline.inputs[0].params?.dataset_path) {
+            pipeline.inputs[0].params = pipeline.inputs[0].params || {};
+            pipeline.inputs[0].params.dataset_path = APP_CONFIG.datasetPath || '';
+        }
+        pipeline.outputs = (pipeline.outputs || []).map((n, i) => ({
+            id: n.id || `output-${i}-${Date.now()}`,
+            name: 'OUTPUT',
+            params: {},
+            position: n.position || { x: 900, y: 20 + (i * 180) }
+        }));
+        pipeline.normalizers = (pipeline.normalizers || []).map((n, i) => ({
+            id: n.id || `norm-${i}-${Date.now()}`,
+            name: n.name,
+            params: n.params || {},
+            position: n.position || { x: 200 + (i * 380), y: 20 }
+        }));
+        pipeline.models = (pipeline.models || []).map((m, i) => {
+            const model = {
+                id: m.id || `model-${i}-${Date.now()}`,
+                name: m.name,
+                params: m.params || {},
+                position: m.position || { x: 400 + (i * 380), y: 20 }
+            };
+            // Preserve config if it exists (from backend ModelConfig.to_dict())
+            if (m.config && typeof m.config === 'object') {
+                model.config = m.config;
+                // Normalize channels field to always be an array
+                if (model.config.channels) {
+                    if (typeof model.config.channels === 'string') {
+                        try {
+                            model.config.channels = JSON.parse(model.config.channels);
+                            if (!Array.isArray(model.config.channels)) {
+                                model.config.channels = [model.config.channels];
+                            }
+                        } catch {
+                            model.config.channels = [model.config.channels];
+                        }
+                    }
+                }
+                // Also populate params from config for UI display (exclude 'name')
+                if (!m.params || Object.keys(m.params).length === 0) {
+                    model.params = {};
+                    Object.entries(m.config).forEach(([key, value]) => {
+                        if (key !== 'name') {
+                            model.params[key] = value;
+                        }
+                    });
+                }
+            }
+            return model;
+        });
+        pipeline.postprocessors = (pipeline.postprocessors || []).map((p, i) => ({
+            id: p.id || `post-${i}-${Date.now()}`,
+            name: p.name,
+            params: p.params || {},
+            position: p.position || { x: 600 + (i * 380), y: 20 }
+        }));
+        pipeline.edges = pipeline.edges || [];
+
+        // Auto-connect nodes based on pipeline structure
+        function autoConnectNodes() {
+            // Clear existing edges
+            pipeline.edges = [];
+
+            // Helper to create edge
+            function addEdge(fromId, toId) {
+                if (fromId && toId) {
+                    const exists = pipeline.edges.some(e => e.from === fromId && e.to === toId);
+                    if (!exists) {
+                        pipeline.edges.push({
+                            id: `edge-${Date.now()}-${Math.random()}`,
+                            from: fromId,
+                            to: toId
+                        });
+                    }
+                }
+            }
+
+            // 1. INPUT → first normalizer (if any)
+            if (pipeline.inputs.length > 0 && pipeline.normalizers.length > 0) {
+                addEdge(pipeline.inputs[0].id, pipeline.normalizers[0].id);
+            }
+
+            // 2. Chain normalizers: norm1 → norm2 → norm3 → ...
+            for (let i = 0; i < pipeline.normalizers.length - 1; i++) {
+                addEdge(pipeline.normalizers[i].id, pipeline.normalizers[i + 1].id);
+            }
+
+            // 3. Last normalizer → ALL models (or INPUT → models if no normalizers)
+            const sourceForModels = pipeline.normalizers.length > 0 
+                ? pipeline.normalizers[pipeline.normalizers.length - 1].id 
+                : (pipeline.inputs.length > 0 ? pipeline.inputs[0].id : null);
+            
+            if (sourceForModels) {
+                pipeline.models.forEach(model => {
+                    addEdge(sourceForModels, model.id);
+                });
+            }
+
+            // 4. Chain postprocessors: each model → first postprocessor
+            if (pipeline.postprocessors.length > 0) {
+                pipeline.models.forEach(model => {
+                    addEdge(model.id, pipeline.postprocessors[0].id);
+                });
+            }
+
+            // 5. Chain postprocessors: post1 → post2 → post3 → ...
+            for (let i = 0; i < pipeline.postprocessors.length - 1; i++) {
+                addEdge(pipeline.postprocessors[i].id, pipeline.postprocessors[i + 1].id);
+            }
+
+            // 6. Last postprocessor → OUTPUT (if any)
+            if (pipeline.postprocessors.length > 0 && pipeline.outputs.length > 0) {
+                addEdge(pipeline.postprocessors[pipeline.postprocessors.length - 1].id, pipeline.outputs[0].id);
+            }
+        }
+
+        // Run auto-connect if we have nodes
+        if (pipeline.inputs.length > 0 || pipeline.normalizers.length > 0 || 
+            pipeline.models.length > 0 || pipeline.postprocessors.length > 0) {
+            autoConnectNodes();
+        }
+
+        // Initialize library
+        function initializeLibrary() {
+            // Setup IO items drag events
+            const ioItems = document.querySelectorAll('#io-items .library-item');
+            ioItems.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+            });
+
+            const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
+                APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
+            const modelsArray = Array.isArray(APP_CONFIG.availableModels) ?
+                APP_CONFIG.availableModels : Object.values(APP_CONFIG.availableModels);
+            const postsArray = Array.isArray(APP_CONFIG.availablePostprocessors) ?
+                APP_CONFIG.availablePostprocessors : Object.values(APP_CONFIG.availablePostprocessors);
+
+            const normContainer = document.getElementById('normalizers-items');
+            normsArray.forEach(item => {
+                const name = typeof item === 'string' ? item : item.name;
+                const elem = document.createElement('div');
+                elem.className = 'library-item';
+                elem.textContent = name;
+                elem.draggable = true;
+                elem.dataset.type = 'normalizer';
+                elem.dataset.name = name;
+                elem.addEventListener('dragstart', handleDragStart);
+                normContainer.appendChild(elem);
+            });
+
+            const modelContainer = document.getElementById('models-items');
+            modelsArray.forEach(item => {
+                const name = typeof item === 'string' ? item : item.name || item;
+                const elem = document.createElement('div');
+                elem.className = 'library-item';
+                elem.textContent = name;
+                elem.draggable = true;
+                elem.dataset.type = 'model';
+                elem.dataset.name = name;
+                elem.addEventListener('dragstart', handleDragStart);
+                modelContainer.appendChild(elem);
+            });
+
+            const postContainer = document.getElementById('postprocessors-items');
+            postsArray.forEach(item => {
+                const name = typeof item === 'string' ? item : item.name;
+                const elem = document.createElement('div');
+                elem.className = 'library-item';
+                elem.textContent = name;
+                elem.draggable = true;
+                elem.dataset.type = 'postprocessor';
+                elem.dataset.name = name;
+                elem.addEventListener('dragstart', handleDragStart);
+                postContainer.appendChild(elem);
+            });
+
+            // Setup drag listeners for blockwise config item
+            const blockwiseItems = document.querySelectorAll('#config-items .library-item');
+            blockwiseItems.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+            });
+
+            // Setup canvas drop
+            const canvas = document.querySelector('.canvas');
+            canvas.addEventListener('dragover', handleDragOver);
+            canvas.addEventListener('drop', handleDrop);
+
+            renderCanvas();
+        }
+
+        function toggleSection(btn, sectionId) {
+            const items = document.getElementById(`${sectionId}-items`);
+            const toggle = document.getElementById(`${sectionId}-toggle`);
+            items.classList.toggle('show');
+            toggle.textContent = items.classList.contains('show') ? '▲' : '▼';
+            btn.classList.toggle('active');
+        }
+
+        // Drag and drop
+        function handleDragStart(e) {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('type', e.target.dataset.type);
+            e.dataTransfer.setData('name', e.target.dataset.name);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('type');
+            const name = e.dataTransfer.getData('name');
+            
+            // Get canvas element and calculate position relative to it
+            const canvas = document.getElementById('canvas-content');
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // Calculate position relative to canvas
+            const x = Math.max(0, e.clientX - canvasRect.left);
+            const y = Math.max(0, e.clientY - canvasRect.top);
+            
+            addNode(type, name, { x, y });
+        }
+
+        // Node management with positions
+        let draggedNode = null;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Connection state
+        let connectionDrag = null;
+
+        async function addNode(type, name, dropPosition) {
+            const id = `${type}-${Date.now()}`;
+
+            // Calculate initial position based on drop position or default positions
+            let x, y;
+            
+            if (dropPosition) {
+                // Use drop position if provided
+                x = dropPosition.x;
+                y = dropPosition.y;
+            } else {
+                // Use default positions if no drop position
+                if (type === 'input') {
+                    const count = pipeline.inputs.length;
+                    x = 20;
+                    y = 20 + (count * 180);
+                } else if (type === 'output') {
+                    const count = pipeline.outputs.length;
+                    x = 900;
+                    y = 20 + (count * 180);
+                } else if (type === 'normalizer') {
+                    const count = pipeline.normalizers.length;
+                    x = 200 + (count * 380);
+                    y = 20;
+                } else if (type === 'model') {
+                    const count = pipeline.models.length;
+                    x = 400 + (count * 380);
+                    y = 20;
+                } else if (type === 'postprocessor') {
+                    const count = pipeline.postprocessors.length;
+                    x = 600 + (count * 380);
+                    y = 20;
+                } else if (type === 'blockwise-config') {
+                    x = 100;
+                    y = 400;
+                }
+            }
+
+            // Get default params from APP_CONFIG or API
+            let defaultParams = {};
+            let modelConfig = null;
+            if (type === 'blockwise-config') {
+                // Fetch blockwise config from globals via API
+                try {
+                    const response = await fetch('/api/blockwise-config');
+                    const config = await response.json();
+                    defaultParams = {
+                        queue: config.queue,
+                        charge_group: config.charge_group,
+                        nb_cores_master: config.nb_cores_master,
+                        nb_cores_worker: config.nb_cores_worker,
+                        nb_workers: config.nb_workers,
+                        tmp_dir: config.tmp_dir,
+                        blockwise_tasks_dir: config.blockwise_tasks_dir
+                    };
+                } catch (error) {
+                    console.error('Error fetching blockwise config:', error);
+                    // Fallback to empty params if API fails
+                    defaultParams = {};
+                }
+            } else if (type === 'normalizer') {
+                const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
+                    APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
+                const normDef = normsArray.find(n => (typeof n === 'string' ? n : n.name) === name);
+                if (normDef && typeof normDef === 'object' && normDef.params) {
+                    defaultParams = { ...normDef.params };
+                }
+            } else if (type === 'model') {
+                const modelsArray = Array.isArray(APP_CONFIG.availableModels) ?
+                    APP_CONFIG.availableModels : Object.values(APP_CONFIG.availableModels);
+                const modelDef = modelsArray.find(m => (typeof m === 'string' ? m : m.name) === name);
+                if (modelDef && typeof modelDef === 'object') {
+                    if (modelDef.params) {
+                        defaultParams = { ...modelDef.params };
+                    }
+                    // Store the full config if available
+                    if (modelDef.config) {
+                        modelConfig = { ...modelDef.config };
+                    }
+                }
+            } else if (type === 'postprocessor') {
+                const postsArray = Array.isArray(APP_CONFIG.availablePostprocessors) ?
+                    APP_CONFIG.availablePostprocessors : Object.values(APP_CONFIG.availablePostprocessors);
+                const postDef = postsArray.find(p => (typeof p === 'string' ? p : p.name) === name);
+                if (postDef && typeof postDef === 'object' && postDef.params) {
+                    defaultParams = { ...postDef.params };
+                }
+            }
+
+            const node = { id, name, params: defaultParams, position: { x, y } };
+            
+            // Add config for models if available
+            if (type === 'model' && modelConfig) {
+                node.config = modelConfig;
+                // Also populate params from config for UI display (exclude 'name')
+                node.params = {};
+                Object.entries(modelConfig).forEach(([key, value]) => {
+                    if (key !== 'name') {
+                        node.params[key] = value;
+                    }
+                });
+            }
+
+            if (type === 'input') {
+                pipeline.inputs.push(node);
+            } else if (type === 'output') {
+                pipeline.outputs.push(node);
+            } else if (type === 'normalizer') {
+                pipeline.normalizers.push(node);
+            } else if (type === 'model') {
+                pipeline.models.push(node);
+            } else if (type === 'postprocessor') {
+                pipeline.postprocessors.push(node);
+            } else if (type === 'blockwise-config') {
+                pipeline.blockwise_config.push(node);
+            }
+
+            // Auto-connect the new node into the pipeline
+            autoConnectNodes();
+            renderCanvas();
+            showMessage(`Added ${name}`, 'success');
+        }
+
+        function removeNode(id, type) {
+            // Remove connections involving this node
+            pipeline.edges = pipeline.edges.filter(e => e.from !== id && e.to !== id);
+
+            if (type === 'input') {
+                pipeline.inputs = pipeline.inputs.filter(n => n.id !== id);
+            } else if (type === 'output') {
+                pipeline.outputs = pipeline.outputs.filter(n => n.id !== id);
+            } else if (type === 'normalizer') {
+                pipeline.normalizers = pipeline.normalizers.filter(n => n.id !== id);
+            } else if (type === 'model') {
+                pipeline.models = pipeline.models.filter(m => m.id !== id);
+            } else if (type === 'postprocessor') {
+                pipeline.postprocessors = pipeline.postprocessors.filter(p => p.id !== id);
+            } else if (type === 'blockwise-config') {
+                pipeline.blockwise_config = pipeline.blockwise_config.filter(c => c.id !== id);
+            }
+            // Re-auto-connect remaining nodes
+            autoConnectNodes();
+            renderCanvas();
+            showMessage('Node removed', 'success');
+        }
+
+        // Global state for output channels modal
+        let outputChannelsModalState = {
+            outputNodeId: null,
+            availableChannels: [],
+            selectedChannels: []
+        };
+
+        function openOutputChannelsModal(outputNodeId) {
+            // Find the output node
+            const outputNode = pipeline.outputs.find(n => n.id === outputNodeId);
+            if (!outputNode) return;
+
+            outputChannelsModalState.outputNodeId = outputNodeId;
+            
+            // Detect available channels from connected models first
+            detectAvailableChannels();
+
+            // Initialize selected channels: if output_channels is empty, select all available channels
+            const existingChannels = outputNode.params?.output_channels || [];
+            outputChannelsModalState.selectedChannels = existingChannels.length > 0 
+                ? existingChannels 
+                : [...outputChannelsModalState.availableChannels]; // Select all by default
+
+            // Populate the modal
+            populateOutputChannelsModal();
+
+            // Show modal
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('output-channels-modal').style.display = 'block';
+        }
+
+        function detectAvailableChannels() {
+            outputChannelsModalState.availableChannels = [];
+
+            // Get all connected models (traverse edges to find which models connect to OUTPUT)
+            const outputNodeId = outputChannelsModalState.outputNodeId;
+            const connectedModelIds = new Set();
+
+            // Find edges that connect TO the output node
+            pipeline.edges.forEach(edge => {
+                if (edge.to === outputNodeId) {
+                    // This edge connects FROM something TO the output
+                    const sourceNode = [
+                        ...pipeline.models,
+                        ...pipeline.postprocessors,
+                        ...pipeline.normalizers
+                    ].find(n => n.id === edge.from);
+
+                    if (sourceNode && sourceNode.type === 'model') {
+                        connectedModelIds.add(edge.from);
+                    }
+                }
+            });
+
+            // If no edges, use all models in pipeline
+            if (connectedModelIds.size === 0) {
+                pipeline.models.forEach(model => {
+                    if (model.config?.channels) {
+                        const channels = model.config.channels;
+                        // Ensure channels is an array
+                        if (Array.isArray(channels)) {
+                            outputChannelsModalState.availableChannels = [...channels];
+                        } else if (typeof channels === 'string') {
+                            // If it's a string (from parsing), try to parse it as JSON array
+                            try {
+                                const parsed = JSON.parse(channels);
+                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
+                            } catch {
+                                outputChannelsModalState.availableChannels = [channels];
+                            }
+                        }
+                    }
+                });
+            } else {
+                // Use channels from connected models
+                connectedModelIds.forEach(modelId => {
+                    const model = pipeline.models.find(m => m.id === modelId);
+                    if (model && model.config?.channels) {
+                        const channels = model.config.channels;
+                        // Ensure channels is an array
+                        if (Array.isArray(channels)) {
+                            outputChannelsModalState.availableChannels = [...channels];
+                        } else if (typeof channels === 'string') {
+                            // If it's a string (from parsing), try to parse it as JSON array
+                            try {
+                                const parsed = JSON.parse(channels);
+                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
+                            } catch {
+                                outputChannelsModalState.availableChannels = [channels];
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Fallback: if still no channels, show default channels
+            if (outputChannelsModalState.availableChannels.length === 0) {
+                outputChannelsModalState.availableChannels = ['mito', 'nucleus', 'er', 'membrane'];
+                console.warn('No model channels found, using defaults');
+            }
+
+            console.log('Available channels:', outputChannelsModalState.availableChannels);
+            console.log('Selected channels:', outputChannelsModalState.selectedChannels);
+        }
+
+        function populateOutputChannelsModal() {
+            const body = document.getElementById('output-channels-body');
+            let available = outputChannelsModalState.availableChannels;
+            const selected = outputChannelsModalState.selectedChannels;
+
+            // Ensure available is an array
+            if (typeof available === 'string') {
+                try {
+                    available = JSON.parse(available);
+                    if (!Array.isArray(available)) {
+                        available = [available];
+                    }
+                } catch {
+                    available = [available];
+                }
+                outputChannelsModalState.availableChannels = available;
+            } else if (!Array.isArray(available)) {
+                available = Object.keys(available || {});
+            }
+
+            if (available.length === 0) {
+                body.innerHTML = '<p style="color: var(--text-secondary);">No channels detected from models</p>';
+                return;
+            }
+
+            let html = '<div style="margin-bottom: 16px;"><strong>Select output channels:</strong></div>';
+
+            available.forEach(channel => {
+                const isChecked = selected.includes(channel);
+                const checkboxId = `channel-${channel}-${Date.now()}`;
+                html += `
+                    <div class="channel-checkbox-group">
+                        <input type="checkbox" id="${checkboxId}" data-channel="${channel}" 
+                               ${isChecked ? 'checked' : ''}>
+                        <label for="${checkboxId}">
+                            ${channel}
+                        </label>
+                    </div>
+                `;
+            });
+
+            body.innerHTML = html;
+        }
+
+        function saveOutputChannels() {
+            const checkboxes = document.querySelectorAll('#output-channels-body input[type="checkbox"]');
+            const selectedChannels = [];
+
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedChannels.push(checkbox.dataset.channel);
+                }
+            });
+
+            // Find and update the output node
+            const outputNode = pipeline.outputs.find(n => n.id === outputChannelsModalState.outputNodeId);
+            if (outputNode) {
+                outputNode.params = outputNode.params || {};
+                outputNode.params.output_channels = selectedChannels;
+                outputNode.classList?.add('dirty');
+            }
+
+            closeOutputChannelsModal();
+            renderCanvas();
+            showMessage(`✓ Output channels configured: ${selectedChannels.join(', ')}`, 'success');
+        }
+
+        function closeOutputChannelsModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('output-channels-modal').style.display = 'none';
+            outputChannelsModalState = {
+                outputNodeId: null,
+                availableChannels: [],
+                selectedChannels: []
+            };
+        }
+
+        function renderCanvas() {
+            const canvas = document.getElementById('canvas-content');
+            canvas.innerHTML = '';
+
+            const allNodes = [
+                ...pipeline.inputs.map(n => ({ ...n, type: 'input' })),
+                ...pipeline.outputs.map(n => ({ ...n, type: 'output' })),
+                ...pipeline.normalizers.map(n => ({ ...n, type: 'normalizer' })),
+                ...pipeline.models.map(m => ({ ...m, type: 'model' })),
+                ...pipeline.postprocessors.map(p => ({ ...p, type: 'postprocessor' })),
+                ...pipeline.blockwise_config.map(c => ({ ...c, type: 'blockwise-config' }))
+            ];
+
+            if (allNodes.length === 0) {
+                canvas.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎨</div>
+                        <div class="empty-state-text">Drag INPUT/OUTPUT or other items from the sidebar to start building your pipeline</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Create SVG layer for connections
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.classList.add('connections-svg');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.style.minHeight = '600px';
+            canvas.appendChild(svg);
+
+            // Render nodes
+            allNodes.forEach(node => {
+                const nodeEl = createNodeElement(node);
+                canvas.appendChild(nodeEl);
+                setupNodeDragging(nodeEl, node);
+            });
+
+            // Render connections
+            renderConnections();
+        }
+
+        function createNodeElement(node) {
+            const div = document.createElement('div');
+            div.className = 'node-box';
+
+            // Add special class for different node types
+            if (node.type === 'input' || node.type === 'output') {
+                div.classList.add('io-node');
+                div.classList.add(node.type + '-node');
+            } else if (node.type === 'blockwise-config') {
+                div.classList.add('config-node');
+            }
+
+            div.id = `node-${node.id}`;
+            div.dataset.nodeid = node.id;
+            div.dataset.nodetype = node.type;
+
+            // Apply saved position
+            const pos = node.position || { x: 20, y: 20 };
+            div.style.left = pos.x + 'px';
+            div.style.top = pos.y + 'px';
+
+            // For INPUT nodes, calculate width based on dataset_path length
+            if (node.type === 'input' || node.type === 'output') {
+                const datasetPath = node.params?.dataset_path || '';
+                // Measure text width more accurately using canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = '11px Menlo, Monaco, monospace';
+                const textMetrics = ctx.measureText(datasetPath);
+                const textWidth = textMetrics.width + 150;
+                const minWidth = 400;
+                const maxWidth = 1600;
+                const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
+                div.style.width = calculatedWidth + 'px';
+            }
+
+            let paramsHTML = '';
+            const nodeParams = node.params || {};
+            Object.entries(nodeParams).forEach(([key, value]) => {
+                // Determine param type from current value
+                const paramType = typeof value === 'boolean' ? 'boolean' : 'text';
+                let inputHTML = '';
+                
+                // Format the display value with proper HTML escaping
+                let displayValue = '';
+                if (value === null || value === undefined) {
+                    displayValue = '';
+                } else if (typeof value === 'object') {
+                    displayValue = JSON.stringify(value).replace(/"/g, '&quot;');
+                } else {
+                    displayValue = String(value).replace(/"/g, '&quot;');
+                }
+
+                if (paramType === 'boolean') {
+                    const checked = value ? 'checked' : '';
+                    inputHTML = `
+                        <select class="param-input" data-key="${key}" data-type="boolean"
+                                onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                            <option value="true" ${value === true ? 'selected' : ''}>true</option>
+                            <option value="false" ${value === false ? 'selected' : ''}>false</option>
+                        </select>
+                    `;
+                } else if (typeof value === 'number') {
+                    inputHTML = `
+                        <input type="number" class="param-input" data-key="${key}" data-type="number"
+                               value="${displayValue}"
+                               onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                    `;
+                } else {
+                    inputHTML = `
+                        <input type="text" class="param-input" data-key="${key}" data-type="text"
+                               value="${displayValue}"
+                               onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                    `;
+                }
+
+                paramsHTML += `
+                    <div class="param-group">
+                        <label class="param-label">${key}</label>
+                        ${inputHTML}
+                    </div>
+                `;
+            });
+
+            // For INPUT/OUTPUT nodes, show minimal UI
+            if (node.type === 'input' || node.type === 'output') {
+                let inputContent = '';
+                if (node.type === 'input' || node.type === 'output') {
+                    // Show dataset_path field for INPUT and OUTPUT nodes
+                    const datasetPath = node.params?.dataset_path || '';
+                    const displayPath = datasetPath.replace(/"/g, '&quot;');
+                    const labelText = node.type === 'input' ? 'Dataset Path' : 'Output Path';
+                    inputContent = `
+                        <div class="param-group" style="margin-top: 8px;">
+                            <label class="param-label">${labelText}</label>
+                            <input type="text" class="param-input" data-key="dataset_path" data-type="text"
+                                   value="${displayPath}"
+                                   onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                        </div>
+                    `;
+                    
+                    // Add output channels configuration for OUTPUT nodes
+                    if (node.type === 'output') {
+                        const selectedChannels = node.params?.output_channels || [];
+                        const selectedDisplay = Array.isArray(selectedChannels) ? selectedChannels.join(', ') : '';
+                        inputContent += `
+                            <div class="param-group">
+                                <label class="param-label">Output Channels</label>
+                                <button class="configure-btn" onclick="openOutputChannelsModal('${node.id}')">
+                                    🔧 Configure (${selectedChannels.length || 0} selected)
+                                </button>
+                                <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                                    ${selectedDisplay ? `${selectedDisplay}` : 'Click configure to select'}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                div.innerHTML = `
+                    <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
+                    <div class="node-output" onmousedown="startConnection(event, '${node.id}', 'output')" title="Connect to here"></div>
+                    <div class="node-header">
+                        <div>
+                            <div class="node-title">${node.name}</div>
+                        </div>
+                        <div class="node-actions">
+                            <button class="icon-btn save" onclick="saveNode('${node.id}', '${node.type}')">💾</button>
+                            <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
+                        </div>
+                    </div>
+                    ${inputContent}
+                `;
+            } else if (node.type === 'blockwise-config') {
+                // Blockwise configuration node
+                const fields = [
+                    { key: 'queue', label: 'Queue' },
+                    { key: 'charge_group', label: 'Charge Group' },
+                    { key: 'nb_cores_master', label: 'Cores Master' },
+                    { key: 'nb_cores_worker', label: 'Cores Worker' },
+                    { key: 'nb_workers', label: 'Workers' },
+                    { key: 'tmp_dir', label: 'Temp Directory' },
+                    { key: 'blockwise_tasks_dir', label: 'Tasks Directory' }
+                ];
+                
+                let blockwiseHTML = '';
+                fields.forEach(field => {
+                    const value = node.params?.[field.key] || '';
+                    const displayValue = String(value).replace(/"/g, '&quot;');
+                    const inputType = field.key.startsWith('nb_') ? 'number' : 'text';
+                    blockwiseHTML += `
+                        <div class="param-group">
+                            <label class="param-label">${field.label}</label>
+                            <input type="${inputType}" class="param-input" data-key="${field.key}" data-type="${inputType}"
+                                   value="${displayValue}"
+                                   onchange="handleParamChange(this, '${node.id}', 'blockwise-config')">
+                        </div>
+                    `;
+                });
+                
+                div.innerHTML = `
+                    <div class="node-header">
+                        <div>
+                            <div class="node-title">⚙️ Blockwise Config</div>
+                        </div>
+                        <div class="node-actions">
+                            <button class="icon-btn save" onclick="saveNode('${node.id}', 'blockwise-config')">💾</button>
+                            <button class="icon-btn delete" onclick="removeNode('${node.id}', 'blockwise-config')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="node-params">
+                        ${blockwiseHTML}
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
+                    <div class="node-output" onmousedown="startConnection(event, '${node.id}', 'output')" title="Connect to here"></div>
+                    <div class="node-header">
+                        <div>
+                            <div class="node-title">${node.name}</div>
+                            <div class="node-type">${node.type}</div>
+                        </div>
+                        <div class="node-actions">
+                            <button class="icon-btn save" onclick="saveNode('${node.id}', '${node.type}')">💾</button>
+                            <button class="icon-btn reset" onclick="resetNode('${node.id}', '${node.type}')">↻</button>
+                            <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="node-params">
+                        ${paramsHTML || '<div class="param-group"><div class="param-label">No parameters</div></div>'}
+                    </div>
+                `;
+            }
+
+            return div;
+        }
+
+        function setupNodeDragging(nodeEl, node) {
+            const header = nodeEl.querySelector('.node-header');
+
+            header.addEventListener('mousedown', (e) => {
+                // Find the actual node in pipeline arrays (not the copy)
+                let actualNode;
+                if (node.type === 'input') {
+                    actualNode = pipeline.inputs.find(n => n.id === node.id);
+                } else if (node.type === 'output') {
+                    actualNode = pipeline.outputs.find(n => n.id === node.id);
+                } else if (node.type === 'normalizer') {
+                    actualNode = pipeline.normalizers.find(n => n.id === node.id);
+                } else if (node.type === 'model') {
+                    actualNode = pipeline.models.find(m => m.id === node.id);
+                } else if (node.type === 'postprocessor') {
+                    actualNode = pipeline.postprocessors.find(p => p.id === node.id);
+                } else if (node.type === 'blockwise-config') {
+                    actualNode = pipeline.blockwise_config.find(c => c.id === node.id);
+                }
+
+                if (!actualNode) return;
+
+                draggedNode = {
+                    element: nodeEl,
+                    node: actualNode,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    originalX: actualNode.position?.x || 0,
+                    originalY: actualNode.position?.y || 0
+                };
+
+                nodeEl.style.zIndex = 1000;
+                nodeEl.style.cursor = 'grabbing';
+                header.style.cursor = 'grabbing';
+            });
+
+            header.style.cursor = 'grab';
+        }
+
+        function handleParamChange(input, nodeId, nodeType) {
+            const nodeBox = document.getElementById(`node-${nodeId}`);
+            nodeBox.classList.add('dirty');
+        }
+
+        function saveNode(nodeId, nodeType) {
+            const nodeBox = document.getElementById(`node-${nodeId}`);
+            const inputs = nodeBox.querySelectorAll('.param-input');
+
+            let node;
+            if (nodeType === 'input') {
+                node = pipeline.inputs.find(n => n.id === nodeId);
+            } else if (nodeType === 'output') {
+                node = pipeline.outputs.find(n => n.id === nodeId);
+            } else if (nodeType === 'normalizer') {
+                node = pipeline.normalizers.find(n => n.id === nodeId);
+            } else if (nodeType === 'model') {
+                node = pipeline.models.find(m => m.id === nodeId);
+            } else if (nodeType === 'postprocessor') {
+                node = pipeline.postprocessors.find(p => p.id === nodeId);
+            } else if (nodeType === 'blockwise-config') {
+                node = pipeline.blockwise_config.find(c => c.id === nodeId);
+            }
+
+            if (node) {
+                inputs.forEach(input => {
+                    const key = input.dataset.key;
+                    const type = input.dataset.type || 'text';
+                    let value;
+
+                    if (type === 'boolean') {
+                        value = input.value === 'true';
+                    } else if (type === 'number') {
+                        value = parseFloat(input.value);
+                        if (isNaN(value)) {
+                            showMessage(`Invalid number for ${key}`, 'error');
+                            return;
+                        }
+                    } else {
+                        try {
+                            value = JSON.parse(input.value);
+                        } catch {
+                            value = input.value;
+                        }
+                    }
+
+                    node.params[key] = value;
+                    // Also update config if this is a model node
+                    if (nodeType === 'model' && node.config) {
+                        node.config[key] = value;
+                    }
+                    // Sync dataset_path to backend when updated on INPUT or OUTPUT node
+                    if ((nodeType === 'input' || nodeType === 'output') && key === 'dataset_path') {
+                        fetch('/api/dataset-path', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ dataset_path: value })
+                        }).then(r => r.json()).then(data => {
+                            console.log('Dataset path synced:', data);
+                            // Recalculate node width based on new dataset_path
+                            const nodeBox = document.getElementById(`node-${nodeId}`);
+                            if (nodeBox) {
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                ctx.font = '11px Menlo, Monaco, monospace';
+                                const textMetrics = ctx.measureText(value);
+                                const textWidth = textMetrics.width + 150;
+                                const minWidth = 400;
+                                const maxWidth = 1600;
+                                const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
+                                nodeBox.style.width = calculatedWidth + 'px';
+                            }
+                        });
+                    }
+                });
+                
+                // Sync blockwise config to backend if this is a blockwise-config node
+                if (nodeType === 'blockwise-config') {
+                    const config = {
+                        queue: node.params.queue,
+                        charge_group: node.params.charge_group,
+                        nb_cores_master: node.params.nb_cores_master,
+                        nb_cores_worker: node.params.nb_cores_worker,
+                        nb_workers: node.params.nb_workers,
+                        tmp_dir: node.params.tmp_dir,
+                        blockwise_tasks_dir: node.params.blockwise_tasks_dir
+                    };
+                    fetch('/api/blockwise-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    }).then(r => r.json()).then(data => {
+                        console.log('Blockwise config synced:', data);
+                    }).catch(err => console.error('Error syncing blockwise config:', err));
+                }
+                
+                nodeBox.classList.remove('dirty');
+                showMessage('Parameters saved', 'success');
+            }
+        }
+
+        function resetNode(nodeId, nodeType) {
+            renderCanvas();
+            showMessage('Node reset', 'success');
+        }
+
+        function showMessage(msg, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = msg;
+            document.body.appendChild(div);
+            
+            // Calculate bottom position based on existing messages
+            const messages = document.querySelectorAll('.message');
+            let bottomPosition = 20;
+            messages.forEach((m, idx) => {
+                if (idx < messages.length - 1) { // All except the new one
+                    bottomPosition += m.offsetHeight + 10; // Add height + gap
+                }
+            });
+            div.style.bottom = bottomPosition + 'px';
+            
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        async function applyPipeline() {
+            // Transform pipeline data to backend format - include complete state for persistence
+            const payload = {
+                input_normalizers: pipeline.normalizers.map(n => ({
+                    id: n.id,
+                    name: n.name,
+                    params: n.params,
+                    position: n.position
+                })),
+                postprocessors: pipeline.postprocessors.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    params: p.params,
+                    position: p.position
+                })),
+                models: pipeline.models.map(m => ({
+                    id: m.id,
+                    name: m.name,
+                    params: m.params || {},
+                    position: m.position
+                })),
+                inputs: pipeline.inputs.map(i => ({
+                    id: i.id,
+                    position: i.position
+                })),
+                outputs: pipeline.outputs.map(o => ({
+                    id: o.id,
+                    position: o.position
+                })),
+                edges: pipeline.edges.map(e => ({
+                    id: e.id,
+                    from: e.from,
+                    to: e.to
+                }))
+            };
+
+            try {
+                const response = await fetch('/api/pipeline/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showMessage('✓ Pipeline applied successfully!', 'success');
+                } else {
+                    showMessage('Error: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showMessage('Failed: ' + err.message, 'error');
+            }
+        }
+
+        // Export YAML
+        function exportYAML() {
+            let yaml = '';
+
+            // Export inputs with dataset_path
+            if (pipeline.inputs.length > 0) {
+                yaml += 'inputs:\n';
+                pipeline.inputs.forEach((n, index) => {
+                    yaml += `  - id: ${n.id}\n`;
+                    // Add dataset_path to the first input node
+                    if (index === 0) {
+                        const datasetPath = n.params?.dataset_path || APP_CONFIG.datasetPath || '';
+                        if (datasetPath) {
+                            yaml += `    dataset_path: ${datasetPath}\n`;
+                        }
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${n.position.x}\n`;
+                    yaml += `      y: ${n.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export outputs
+            if (pipeline.outputs.length > 0) {
+                yaml += 'outputs:\n';
+                pipeline.outputs.forEach(n => {
+                    yaml += `  - id: ${n.id}\n`;
+                    if (n.params && Object.keys(n.params).length > 0) {
+                        Object.entries(n.params).forEach(([k, v]) => {
+                            yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${n.position.x}\n`;
+                    yaml += `      y: ${n.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export normalizers
+            if (pipeline.normalizers.length > 0) {
+                yaml += 'input_normalizers:\n';
+                pipeline.normalizers.forEach(n => {
+                    yaml += `  - id: ${n.id}\n`;
+                    yaml += `    name: ${n.name}\n`;
+                    if (Object.keys(n.params).length > 0) {
+                        yaml += '    params:\n';
+                        Object.entries(n.params).forEach(([k, v]) => {
+                            yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${n.position.x}\n`;
+                    yaml += `      y: ${n.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export models
+            if (pipeline.models.length > 0) {
+                yaml += 'models:\n';
+                pipeline.models.forEach(m => {
+                    yaml += `  - id: ${m.id}\n`;
+                    yaml += `    name: ${m.name}\n`;
+
+                    // If we have a full config (from backend ModelConfig.to_dict()), use it
+                    if (m.config && typeof m.config === 'object') {
+                        // Export all config fields except 'name' (already exported above)
+                        Object.entries(m.config).forEach(([k, v]) => {
+                            if (k !== 'name') {
+                                // Handle arrays specially
+                                if (Array.isArray(v)) {
+                                    yaml += `    ${k}: [${v.join(', ')}]\n`;
+                                } else if (typeof v === 'object' && v !== null) {
+                                    yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                                } else {
+                                    yaml += `    ${k}: ${JSON.stringify(v)}\n`;
+                                }
+                            }
+                        });
+                    } else if (Object.keys(m.params || {}).length > 0) {
+                        // Fallback to params if no config available
+                        yaml += '    params:\n';
+                        Object.entries(m.params).forEach(([k, v]) => {
+                            yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${m.position.x}\n`;
+                    yaml += `      y: ${m.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export postprocessors
+            if (pipeline.postprocessors.length > 0) {
+                yaml += 'postprocessors:\n';
+                pipeline.postprocessors.forEach(p => {
+                    yaml += `  - id: ${p.id}\n`;
+                    yaml += `    name: ${p.name}\n`;
+                    if (Object.keys(p.params).length > 0) {
+                        yaml += '    params:\n';
+                        Object.entries(p.params).forEach(([k, v]) => {
+                            yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${p.position.x}\n`;
+                    yaml += `      y: ${p.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export blockwise configuration
+            if (pipeline.blockwise_config.length > 0) {
+                yaml += 'blockwise_config:\n';
+                pipeline.blockwise_config.forEach(c => {
+                    yaml += `  - id: ${c.id}\n`;
+                    yaml += `    name: ${c.name}\n`;
+                    if (Object.keys(c.params).length > 0) {
+                        yaml += '    params:\n';
+                        Object.entries(c.params).forEach(([k, v]) => {
+                            yaml += `      ${k}: ${JSON.stringify(v)}\n`;
+                        });
+                    }
+                    yaml += `    position:\n`;
+                    yaml += `      x: ${c.position.x}\n`;
+                    yaml += `      y: ${c.position.y}\n`;
+                });
+                yaml += '\n';
+            }
+
+            // Export edges (connections)
+            if (pipeline.edges.length > 0) {
+                yaml += 'edges:\n';
+                pipeline.edges.forEach(e => {
+                    yaml += `  - id: ${e.id}\n`;
+                    yaml += `    from: ${e.from}\n`;
+                    yaml += `    to: ${e.to}\n`;
+                });
+            }
+
+            downloadFile(yaml, 'pipeline.yaml', 'text/yaml');
+        }
+
+        // Export JSON
+        function exportJSON() {
+            const data = JSON.stringify(pipeline, null, 2);
+            downloadFile(data, 'pipeline.json', 'application/json');
+        }
+
+        // Download file helper
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showMessage('Exported as ' + filename, 'success');
+        }
+
+        // Import file
+        function importFile() {
+            const file = document.getElementById('import-file').files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    let data;
+                    if (file.name.endsWith('.yaml')) {
+                        data = parseYAML(content);
+                    } else {
+                        data = JSON.parse(content);
+                    }
+
+                    // Replace pipeline with imported data
+                    console.log('Imported data:', data);  // Debug log
+
+                    pipeline = {
+                        inputs: (data.inputs || []).map((n, i) => ({
+                            id: n.id || `input-${Date.now()}-${i}`,
+                            name: 'INPUT',
+                            params: n.params || { dataset_path: APP_CONFIG.datasetPath || '' },
+                            position: n.position || { x: 20, y: 20 + (i * 180) }
+                        })),
+                        outputs: (data.outputs || []).map((n, i) => ({
+                            id: n.id || `output-${Date.now()}-${i}`,
+                            name: 'OUTPUT',
+                            params: n.params || {},
+                            position: n.position || { x: 900, y: 20 + (i * 180) }
+                        })),
+                        normalizers: (data.input_normalizers || data.normalizers || []).map((n, i) => {
+                            console.log('Processing normalizer:', n);  // Debug log
+                            return {
+                                id: n.id || `norm-${Date.now()}-${i}`,
+                                name: typeof n === 'string' ? n : (n.name || n),
+                                params: n.params || {},
+                                position: n.position || { x: 200 + (i * 380), y: 20 }
+                            };
+                        }),
+                        models: (data.models || []).map((m, i) => {
+                            const model = {
+                                id: m.id || `model-${Date.now()}-${i}`,
+                                name: typeof m === 'string' ? m : (m.name || m),
+                                params: m.params || m.config || {},
+                                position: m.position || { x: 400 + (i * 380), y: 20 }
+                            };
+                            // Preserve config if it exists (for re-export with build_model_from_entry)
+                            if (m.config && typeof m.config === 'object') {
+                                model.config = m.config;
+                            } else if (m.type) {
+                                // Build config from individual fields if type exists
+                                model.config = { ...m };
+                                delete model.config.id;
+                                delete model.config.params;
+                                delete model.config.position;
+                                // Also ensure params includes all config fields
+                                model.params = { ...model.config };
+                            }
+                            return model;
+                        }),
+                        postprocessors: (data.postprocessors || []).map((p, i) => ({
+                            id: p.id || `post-${Date.now()}-${i}`,
+                            name: typeof p === 'string' ? p : (p.name || p),
+                            params: p.params || {},
+                            position: p.position || { x: 600 + (i * 380), y: 20 }
+                        })),
+                        blockwise_config: (data.blockwise_config || []).map((c, i) => ({
+                            id: c.id || `blockwise-${Date.now()}-${i}`,
+                            name: 'Blockwise Configuration',
+                            params: c.params,
+                            position: c.position || { x: 100, y: 400 }
+                        })),
+                        edges: data.edges || []
+                    };
+
+                    console.log('Final pipeline:', pipeline);  // Debug log
+                    renderCanvas();
+                    
+                    // If blockwise config is imported, sync it to backend globals
+                    if (pipeline.blockwise_config.length > 0) {
+                        const blockwiseNode = pipeline.blockwise_config[0];
+                        const blockwiseParams = blockwiseNode.params;
+                        if (blockwiseParams) {
+                            const config = {
+                                queue: blockwiseParams.queue,
+                                charge_group: blockwiseParams.charge_group,
+                                nb_cores_master: blockwiseParams.nb_cores_master,
+                                nb_cores_worker: blockwiseParams.nb_cores_worker,
+                                nb_workers: blockwiseParams.nb_workers,
+                                tmp_dir: blockwiseParams.tmp_dir,
+                                blockwise_tasks_dir: blockwiseParams.blockwise_tasks_dir
+                            };
+                            fetch('/api/blockwise-config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(config)
+                            }).then(r => r.json()).then(data => {
+                                console.log('Blockwise config synced from import:', data);
+                                showMessage('✓ Blockwise config updated from import', 'success');
+                            }).catch(err => {
+                                console.error('Error syncing blockwise config from import:', err);
+                            });
+                        }
+                    }
+                    
+                    showMessage('Pipeline imported successfully', 'success');
+                    document.getElementById('import-file').value = '';
+                } catch (err) {
+                    showMessage('Import failed: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Simple YAML parser
+        function parseYAML(yaml) {
+            const result = {
+                inputs: [],
+                outputs: [],
+                input_normalizers: [],
+                models: [],
+                postprocessors: [],
+                blockwise_config: [],
+                edges: []
+            };
+            let currentSection = null;
+            let currentItem = null;
+            let inParams = false;
+            let inPosition = false;
+
+            yaml.split('\n').forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) return;
+
+                // Section headers
+                if (trimmed === 'inputs:') {
+                    currentSection = 'inputs';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'outputs:') {
+                    currentSection = 'outputs';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'input_normalizers:') {
+                    currentSection = 'input_normalizers';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'models:') {
+                    currentSection = 'models';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'postprocessors:') {
+                    currentSection = 'postprocessors';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'blockwise_config:') {
+                    currentSection = 'blockwise_config';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'edges:') {
+                    currentSection = 'edges';
+                    inParams = false;
+                    inPosition = false;
+                } else if (trimmed === 'params:') {
+                    inParams = true;
+                    inPosition = false;
+                    // Initialize params object if it doesn't exist
+                    if (currentItem && !currentItem.params) {
+                        currentItem.params = {};
+                    }
+                } else if (trimmed === 'position:') {
+                    inPosition = true;
+                    inParams = false;
+                    if (currentItem && !currentItem.position) {
+                        currentItem.position = {};
+                    }
+                } else if (trimmed.startsWith('- ')) {
+                    // New item
+                    const match = trimmed.match(/^- (\w+):\s*(.*)$/);
+                    if (match) {
+                        const [, key, value] = match;
+                        currentItem = { [key]: value.trim() };
+                        if (currentSection) result[currentSection].push(currentItem);
+                        inParams = false;
+                        inPosition = false;
+                    } else {
+                        currentItem = { name: trimmed.replace('- ', '').trim() };
+                        if (currentSection) result[currentSection].push(currentItem);
+                        inParams = false;
+                        inPosition = false;
+                    }
+                } else if (trimmed.includes(':')) {
+                    const [key, value] = trimmed.split(':').map(s => s.trim());
+                    if (!currentItem) return;
+
+                    if (inPosition) {
+                        try {
+                            currentItem.position[key] = parseFloat(value) || 0;
+                        } catch {
+                            currentItem.position[key] = 0;
+                        }
+                    } else if (inParams) {
+                        try {
+                            currentItem.params = currentItem.params || {};
+                            currentItem.params[key] = JSON.parse(value);
+                        } catch {
+                            currentItem.params = currentItem.params || {};
+                            currentItem.params[key] = value;
+                        }
+                    } else {
+                        try {
+                            currentItem[key] = JSON.parse(value);
+                        } catch {
+                            currentItem[key] = value;
+                        }
+
+                        // For inputs/outputs, preserve dataset_path
+                        if ((currentSection === 'inputs' || currentSection === 'outputs') && key === 'dataset_path') {
+                            if (!currentItem.params) currentItem.params = {};
+                            currentItem.params.dataset_path = currentItem[key];
+                        }
+
+                        // For models section, also build the config object for use with build_model_from_entry
+                        if (currentSection === 'models' && key !== 'id' && key !== 'position' && key !== 'params' && key !== 'name') {
+                            currentItem.config = currentItem.config || {};
+                            try {
+                                let parsedValue = JSON.parse(value);
+                                // Special handling for channels - ensure it's always an array
+                                if (key === 'channels' && !Array.isArray(parsedValue)) {
+                                    parsedValue = [parsedValue];
+                                }
+                                currentItem.config[key] = parsedValue;
+                            } catch {
+                                // If JSON parse fails, check if this is a channels field
+                                if (key === 'channels') {
+                                    currentItem.config[key] = [value];
+                                } else {
+                                    currentItem.config[key] = value;
+                                }
+                            }
+                            // Also add to params for display
+                            currentItem.params = currentItem.params || {};
+                            currentItem.params[key] = currentItem.config[key];
+                        }
+                    }
+                }
+            });
+
+            return result;
+        }
+
+        // Connection management
+        function startConnection(event, nodeId, portType) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            // Only allow dragging from output ports
+            if (portType !== 'output') return;
+
+            const dot = event.target;
+            dot.classList.add('active');
+
+            connectionDrag = {
+                fromNode: nodeId,
+                fromPort: portType,
+                startDot: dot
+            };
+
+            // Create temporary connection line
+            const svg = document.querySelector('.connections-svg');
+            const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tempPath.classList.add('connection-path', 'dragging-connection');
+            tempPath.id = 'temp-connection';
+            svg.appendChild(tempPath);
+
+            showMessage('Drag to an input to create connection', 'info');
+        }
+
+        function updateConnectionDrag(event) {
+            if (!connectionDrag) return;
+
+            const tempPath = document.getElementById('temp-connection');
+            if (!tempPath) return;
+
+            // Get start position from the output dot
+            const fromNodeEl = document.getElementById(`node-${connectionDrag.fromNode}`);
+            const fromDot = fromNodeEl.querySelector('.node-output');
+            const fromRect = fromDot.getBoundingClientRect();
+            const canvasRect = document.getElementById('canvas-content').getBoundingClientRect();
+
+            const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
+            const y1 = fromRect.top + fromRect.height / 2 - canvasRect.top;
+
+            // Mouse position as end point
+            const x2 = event.clientX - canvasRect.left;
+            const y2 = event.clientY - canvasRect.top;
+
+            // Create curved Bezier path
+            const pathData = createBezierPath(x1, y1, x2, y2);
+            tempPath.setAttribute('d', pathData);
+        }
+
+        function endConnection(event) {
+            if (!connectionDrag) return;
+
+            // Remove active state
+            if (connectionDrag.startDot) {
+                connectionDrag.startDot.classList.remove('active');
+            }
+
+            // Remove temporary connection
+            const tempPath = document.getElementById('temp-connection');
+            if (tempPath) tempPath.remove();
+
+            // Check if we're over an input dot
+            const target = document.elementFromPoint(event.clientX, event.clientY);
+            if (target && target.classList.contains('node-input')) {
+                const toNodeEl = target.closest('.node-box');
+                const toNodeId = toNodeEl.dataset.nodeid;
+
+                // Don't connect to self
+                if (toNodeId !== connectionDrag.fromNode) {
+                    // Check if connection already exists
+                    const exists = pipeline.edges.some(e =>
+                        e.from === connectionDrag.fromNode && e.to === toNodeId
+                    );
+
+                    if (!exists) {
+                        // Add new connection
+                        pipeline.edges.push({
+                            id: `edge-${Date.now()}`,
+                            from: connectionDrag.fromNode,
+                            to: toNodeId
+                        });
+                        renderConnections();
+                        showMessage('Connection created', 'success');
+                    } else {
+                        showMessage('Connection already exists', 'info');
+                    }
+                }
+            }
+
+            connectionDrag = null;
+        }
+
+        function createBezierPath(x1, y1, x2, y2) {
+            // Calculate control points for smooth curve
+            const dx = Math.abs(x2 - x1);
+            const curveStrength = Math.min(dx * 0.5, 150);
+
+            const cx1 = x1 + curveStrength;
+            const cy1 = y1;
+            const cx2 = x2 - curveStrength;
+            const cy2 = y2;
+
+            return `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
+        }
+
+        function renderConnections() {
+            const svg = document.querySelector('.connections-svg');
+            if (!svg) return;
+
+            // Remove old connections (but keep temp connection if it exists)
+            const existingPaths = svg.querySelectorAll('.connection-path:not(.dragging-connection)');
+            existingPaths.forEach(p => p.remove());
+
+            // Render each edge
+            pipeline.edges.forEach(edge => {
+                const fromNodeEl = document.getElementById(`node-${edge.from}`);
+                const toNodeEl = document.getElementById(`node-${edge.to}`);
+
+                if (!fromNodeEl || !toNodeEl) return;
+
+                const fromDot = fromNodeEl.querySelector('.node-output');
+                const toDot = toNodeEl.querySelector('.node-input');
+
+                if (!fromDot || !toDot) return;
+
+                const canvasRect = document.getElementById('canvas-content').getBoundingClientRect();
+                const fromRect = fromDot.getBoundingClientRect();
+                const toRect = toDot.getBoundingClientRect();
+
+                const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
+                const y1 = fromRect.top + fromRect.height / 2 - canvasRect.top;
+                const x2 = toRect.left + toRect.width / 2 - canvasRect.left;
+                const y2 = toRect.top + toRect.height / 2 - canvasRect.top;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.classList.add('connection-path');
+                path.setAttribute('d', createBezierPath(x1, y1, x2, y2));
+                path.dataset.edgeId = edge.id;
+                path.style.pointerEvents = 'stroke';
+
+                // Add click handler for deletion
+                path.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteConnection(edge.id);
+                });
+
+                svg.appendChild(path);
+            });
+        }
+
+        function deleteConnection(edgeId) {
+            pipeline.edges = pipeline.edges.filter(e => e.id !== edgeId);
+            renderConnections();
+            showMessage('Connection deleted', 'success');
+        }
+
+        // Initialize
+        document.addEventListener('mousemove', (e) => {
+            // Handle node dragging
+            if (draggedNode) {
+                const dx = e.clientX - draggedNode.startX;
+                const dy = e.clientY - draggedNode.startY;
+
+                const newX = Math.max(0, draggedNode.originalX + dx);
+                const newY = Math.max(0, draggedNode.originalY + dy);
+
+                draggedNode.element.style.left = newX + 'px';
+                draggedNode.element.style.top = newY + 'px';
+
+                // Update connections while dragging
+                renderConnections();
+            }
+
+            // Handle connection dragging
+            if (connectionDrag) {
+                updateConnectionDrag(e);
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            // Handle node dragging end
+            if (draggedNode) {
+                const dx = e.clientX - draggedNode.startX;
+                const dy = e.clientY - draggedNode.startY;
+
+                const finalX = Math.max(0, draggedNode.originalX + dx);
+                const finalY = Math.max(0, draggedNode.originalY + dy);
+
+                draggedNode.node.position = { x: finalX, y: finalY };
+                draggedNode.element.style.zIndex = 'auto';
+                draggedNode.element.style.cursor = 'auto';
+                draggedNode = null;
+
+                // Update connections after node movement
+                renderConnections();
+            }
+
+            // Handle connection dragging end
+            if (connectionDrag) {
+                endConnection(e);
+            }
+        });
+
+        function toggleBlockwiseBar() {
+            const blockwiseBar = document.getElementById('blockwise-bar');
+            const isHidden = blockwiseBar.style.display === 'none';
+            blockwiseBar.style.display = isHidden ? 'flex' : 'none';
+        }
+
+        initializeLibrary();
+
+        // Track if blockwise config has been loaded
+        let blockwiseConfigLoaded = false;
+
+        // Load blockwise configuration from globals on page load
+        async function loadBlockwiseConfig() {
+            if (blockwiseConfigLoaded) return;
+            blockwiseConfigLoaded = true;
+            
+            try {
+                const response = await fetch('/api/blockwise-config');
+                const config = await response.json();
+                
+                // Update existing blockwise config nodes with fetched values from globals
+                if (pipeline.blockwise_config.length > 0) {
+                    pipeline.blockwise_config.forEach(node => {
+                        if (!node.params) {
+                            node.params = {};
+                        }
+                        node.params.queue = config.queue;
+                        node.params.charge_group = config.charge_group;
+                        node.params.nb_cores_master = config.nb_cores_master;
+                        node.params.nb_cores_worker = config.nb_cores_worker;
+                        node.params.nb_workers = config.nb_workers;
+                        node.params.tmp_dir = config.tmp_dir;
+                        node.params.blockwise_tasks_dir = config.blockwise_tasks_dir;
+                    });
+                    renderCanvas();
+                    canvas.appendChild(svg);
+                    
+                }
+            } catch (error) {
+                console.error('Error loading blockwise config:', error);
+            }
+        }
+        
+        loadBlockwiseConfig();
+
+        // Blockwise workflow state tracking
+        let blockwiseState = {
+            validated: false,
+            generated: false,
+            prechecked: false,
+            model_mode: ""  // Stores the selected model merge mode
+        };
+
+        // Initialize Model Merger dropdown
+        function initializeModelMergerDropdown() {
+            const dropdown = document.getElementById('model-merge-mode');
+            const mergers = window.APP_CONFIG.availableModelMergers || [];
+            
+            // Clear existing options except the first one
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            // Add all available mergers
+            mergers.forEach(merger => {
+                const option = document.createElement('option');
+                option.value = merger.class_name;  // e.g., "AndModelMerger"
+                option.textContent = `${merger.name} - ${merger.description}`;
+                dropdown.appendChild(option);
+            });
+            
+            // Add change listener to store selection in blockwiseState
+            dropdown.addEventListener('change', (e) => {
+                blockwiseState.model_mode = e.target.value;
+                console.log('Selected model merge mode:', blockwiseState.model_mode);
+            });
+        }
+        
+        // Initialize on page load
+        initializeModelMergerDropdown();
+
+        // Blockwise Operations
+        async function validateBlockwise() {
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Validating...';
+            
+            try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
+                const response = await fetch('/api/blockwise/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
+                });
+                
+                const data = await response.json();
+                if (data.valid) {
+                    showMessage('✓ Pipeline valid for blockwise processing', 'success');
+                    status.textContent = '✓ Step 1: Validated';
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.validated = true;
+                    blockwiseState.generated = false;
+                    blockwiseState.prechecked = false;
+                    // Enable generate button
+                    document.getElementById('btn-generate').disabled = false;
+                    // Disable precheck and submit
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Validation failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.validated = false;
+                    // Disable all other buttons
+                    document.getElementById('btn-generate').disabled = true;
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                }
+            } catch (error) {
+                showMessage('Error validating: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.validated = false;
+                // Disable all other buttons
+                document.getElementById('btn-generate').disabled = true;
+                document.getElementById('btn-precheck').disabled = true;
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function generateBlockwiseTask() {
+            if (!blockwiseState.validated) {
+                showMessage('⚠️ Please validate first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Generating...';
+            
+            try {
+                // Add model_mode to pipeline if multiple models are present
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode  // Include the selected merge mode
+                };
+                
+                const response = await fetch('/api/blockwise/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage(`✓ Task generated: ${data.task_path}`, 'success');
+                    status.textContent = `✓ Step 2: Generated`;
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.generated = true;
+                    blockwiseState.prechecked = false;
+                    // Enable precheck
+                    document.getElementById('btn-precheck').disabled = false;
+                    // Disable submit until prechecked
+                    document.getElementById('btn-submit').disabled = true;
+                    console.log('Task path:', data.task_path);
+                    console.log('Task YAML:', data.task_yaml);
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Generation failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.generated = false;
+                    // Disable precheck and submit
+                    document.getElementById('btn-precheck').disabled = true;
+                    document.getElementById('btn-submit').disabled = true;
+                }
+            } catch (error) {
+                showMessage('Error generating task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.generated = false;
+                // Disable precheck and submit
+                document.getElementById('btn-precheck').disabled = true;
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function precheckBlockwiseTask() {
+            if (!blockwiseState.generated) {
+                showMessage('⚠️ Please generate task first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Prechecking...';
+            
+            try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
+                const response = await fetch('/api/blockwise/precheck', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage(`✓ Precheck passed: ${data.message}`, 'success');
+                    status.textContent = `✓ Step 3: Prechecked`;
+                    status.style.color = 'var(--accent-green)';
+                    blockwiseState.prechecked = true;
+                    // Enable submit
+                    document.getElementById('btn-submit').disabled = false;
+                    console.log('Precheck result:', data.message);
+                } else {
+                    showMessage(`✗ Precheck failed: ${data.error}`, 'error');
+                    status.textContent = '✗ Precheck failed';
+                    status.style.color = 'var(--accent-red)';
+                    blockwiseState.prechecked = false;
+                    // Disable submit
+                    document.getElementById('btn-submit').disabled = true;
+                    console.error('Precheck error:', data.error);
+                }
+            } catch (error) {
+                showMessage('Error prechecking task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+                blockwiseState.prechecked = false;
+                // Disable submit
+                document.getElementById('btn-submit').disabled = true;
+            }
+        }
+
+        async function submitBlockwiseTask() {
+            if (!blockwiseState.prechecked) {
+                showMessage('⚠️ Please precheck first', 'info');
+                return;
+            }
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Submitting...';
+            
+            const jobName = prompt('Enter job name:', 'cellmap_flow_' + Date.now());
+            if (!jobName) {
+                status.textContent = '';
+                return;
+            }
+            
+            try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
+                const response = await fetch('/api/blockwise/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showMessage('✓ Task submitted: ' + data.job_id, 'success');
+                    status.textContent = '✓ Submitted - Job: ' + data.job_id;
+                    status.style.color = 'var(--accent-green)';
+                } else {
+                    showMessage('✗ ' + data.error, 'error');
+                    status.textContent = '✗ Submission failed';
+                    status.style.color = 'var(--accent-red)';
+                }
+            } catch (error) {
+                showMessage('Error submitting task: ' + error.message, 'error');
+                status.textContent = '✗ Error';
+            }
+        }
+    </script>
+</body>
+</html>

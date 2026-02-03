@@ -69,7 +69,7 @@ def load_config(path: str) -> Dict[str, Any]:
         if not config["models"]:
             logger.error("YAML 'models' list is empty")
             sys.exit(1)
-        logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
+        # logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
     else:
         logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)
@@ -219,6 +219,15 @@ def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
         List of instantiated ModelConfig objects
     """
     models = []
+    
+    if isinstance(model_entries, list):
+        entries = {}
+        for entry in model_entries:
+            if "name" not in entry:
+                raise ValueError("Each model entry in the list must have a 'name' field.")      
+            entries[entry["name"]] = entry
+        model_entries = entries
+
     
     for model_name, entry in model_entries.items():
         model = build_model_from_entry(entry, model_name=model_name)

@@ -45,8 +45,8 @@ def generate_singlescale_metadata(
     z_attrs["multiscales"][0]["datasets"] = [
         {
             "coordinateTransformations": [
-                {"scale": voxel_size, "type": "scale"},
-                {"translation": translation, "type": "translation"},
+                {"scale": list(voxel_size), "type": "scale"},
+                {"translation": list(translation), "type": "translation"},
             ],
             "path": arr_name,
         }

@@ -70,7 +70,7 @@ def generate_neuroglancer_url(dataset_path, extras=[]):
             host = job.host
             color = next(color_cycle)
             s.layers[model] = neuroglancer.ImageLayer(
-                source=f"n5://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 shader="""#uicontrol int rChan slider(min=0, max=7, step=1, default=0);
                         #uicontrol int gChan slider(min=0, max=7, step=1, default=1);
                         #uicontrol int bChan slider(min=0, max=7, step=1, default=2);

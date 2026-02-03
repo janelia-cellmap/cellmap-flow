@@ -27,6 +27,7 @@ dependencies = [
     "numcodecs==0.15.0",
     "zarr==2.18.4",
     "xarray==2024.7.0",
+    # "xarray==2023.12.0",
     "h5py",
     "s3fs",
     "torch",    
@@ -36,6 +37,7 @@ dependencies = [
     "neuroglancer",
     "pydantic",
     "funlib.persistence @ git+https://github.com/funkelab/funlib.persistence.git",
+    "daisy"
     ]
 
 # extras
@@ -89,3 +91,4 @@ cellmap_flow = "cellmap_flow.cli.cli:main"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
 cellmap_flow_yaml = "cellmap_flow.cli.yaml_cli:main"
 cellmap_flow_blockwise = "cellmap_flow.blockwise.cli:cli"
+cellmap_flow_app = "cellmap_flow.dashboard.app"

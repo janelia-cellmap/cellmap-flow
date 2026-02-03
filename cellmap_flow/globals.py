@@ -1,25 +1,51 @@
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
-from cellmap_flow.post.postprocessors import DefaultPostprocessor
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
+from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
 import yaml
 import threading
 import numpy as np
 import logging
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# input_norms = [MinMaxNormalizer()]
-# postprocess = [DefaultPostprocessor(0,200,0,1)]
+input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
+postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
 
-input_norms = []
-postprocess = []
+# input_norms = []
+# postprocess = []
 viewer = None
 
 
 class Flow:
-    _instance = None
+    _instance: Optional["Flow"] = None
+    
+    # Class-level type annotations for all instance attributes
+    jobs: List[Any]
+    models_config: List[Any]
+    servers: List[Any]
+    raw: Optional[Any]
+    input_norms: List[Any]
+    postprocess: List[Any]
+    viewer: Optional[Any]
+    dataset_path: Optional[str]
+    model_catalog: dict
+    queue: str
+    charge_group: str
+    nb_cores_master: int
+    nb_cores_worker: int
+    nb_workers: int
+    tmp_dir: Optional[str]
+    blockwise_tasks_dir: Optional[str]
+    neuroglancer_thread: Optional[Any]
+    pipeline_inputs: List[Any]
+    pipeline_outputs: List[Any]
+    pipeline_edges: List[Any]
+    pipeline_normalizers: List[Any]
+    pipeline_models: List[Any]
+    pipeline_postprocessors: List[Any]
 
     def __new__(cls):
         if cls._instance is None:
@@ -28,11 +54,11 @@ class Flow:
             cls._instance.models_config = []
             cls._instance.servers = []
             cls._instance.raw = None
-            cls._instance.input_norms = []  # or [MinMaxNormalizer(0, 255)]
-            cls._instance.postprocess = []
+            cls._instance.input_norms = input_norms
+            cls._instance.postprocess = postprocess
             cls._instance.viewer = None
             cls._instance.dataset_path = None
-            # cls._instance.model_catalog = {}
+            cls._instance.model_catalog = {}
             # Uncomment and adjust if you want to load the model catalog:
             models_path = os.path.normpath(
                 os.path.join(
@@ -44,7 +70,20 @@ class Flow:
 
             cls._instance.queue = "gpu_h100"
             cls._instance.charge_group = "cellmap"
+            cls._instance.nb_cores_master = 4
+            cls._instance.nb_cores_worker = 12
+            cls._instance.nb_workers = 14
+            cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
+            cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
+
+            # Pipeline visual state storage
+            cls._instance.pipeline_inputs = []
+            cls._instance.pipeline_outputs = []
+            cls._instance.pipeline_edges = []
+            cls._instance.pipeline_normalizers = []
+            cls._instance.pipeline_models = []
+            cls._instance.pipeline_postprocessors = []
         return cls._instance
 
     def to_dict(self):
