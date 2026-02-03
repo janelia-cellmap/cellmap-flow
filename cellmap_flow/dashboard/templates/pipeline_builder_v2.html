@@ -459,6 +459,34 @@
             color: var(--accent-green);
         }
 
+        .configure-btn {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .configure-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        .selected-channels {
+            padding: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            max-height: 50px;
+            overflow-y: auto;
+            word-break: break-word;
+        }
+
         .node-box.dirty .icon-btn.save:hover {
             color: white;
             background: var(--accent-green);
@@ -564,6 +592,103 @@
             }
         }
 
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 5000;
+        }
+
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5001;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 16px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 8px;
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            justify-content: flex-end;
+        }
+
+        .channel-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background: var(--bg-tertiary);
+        }
+
+        .channel-checkbox-group input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
+        .channel-checkbox-group label {
+            cursor: pointer;
+            flex: 1;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         /* Scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -631,7 +756,16 @@
             <button id="btn-generate" class="action-btn" onclick="generateBlockwiseTask()" title="Step 2: Generate blockwise task YAML files" disabled>📋 2- Generate Task</button>
             <button id="btn-precheck" class="action-btn" onclick="precheckBlockwiseTask()" title="Step 3: Precheck blockwise task configuration" disabled>🔍 3- Precheck</button>
             <button id="btn-submit" class="action-btn" onclick="submitBlockwiseTask()" title="Step 4: Submit blockwise task to LSF" disabled>🚀 4- Submit Task</button>
-            <div id="blockwise-status" style="margin-left: auto; font-size: 12px; color: var(--text-secondary);"></div>
+            
+            <!-- Model Merge Mode Selector -->
+            <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                <label for="model-merge-mode" style="color: var(--text-secondary); font-size: 12px; white-space: nowrap;">Model Merge:</label>
+                <select id="model-merge-mode" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                    <option value="">None (Single Model)</option>
+                </select>
+            </div>
+            
+            <div id="blockwise-status" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"></div>
 
         </div>
 
@@ -699,12 +833,35 @@
         </div>
     </div>
 
+    <!-- Output Channels Configuration Modal -->
+    <div id="output-channels-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-height: 600px; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>Configure Output Channels</h2>
+                <button class="modal-close-btn" onclick="closeOutputChannelsModal()">✕</button>
+            </div>
+            <div id="output-channels-body" class="modal-body">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeOutputChannelsModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="saveOutputChannels()">✓ Save Channels</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay" style="display: none;" 
+         onclick="if(event.target === this) closeOutputChannelsModal()"></div>
+
     <script>
         // Config from Flask
         window.APP_CONFIG = {
             availableNormalizers: {{ input_normalizers | tojson }},
             availableModels: {{ available_models | tojson }},
             availablePostprocessors: {{ output_postprocessors | tojson }},
+            availableModelMergers: {{ model_mergers | tojson }},
             datasetPath: {{ dataset_path | tojson }},
         };
 
@@ -1101,6 +1258,149 @@
             showMessage('Node removed', 'success');
         }
 
+        // Global state for output channels modal
+        let outputChannelsModalState = {
+            outputNodeId: null,
+            availableChannels: [],
+            selectedChannels: []
+        };
+
+        function openOutputChannelsModal(outputNodeId) {
+            // Find the output node
+            const outputNode = pipeline.outputs.find(n => n.id === outputNodeId);
+            if (!outputNode) return;
+
+            outputChannelsModalState.outputNodeId = outputNodeId;
+            
+            // Detect available channels from connected models first
+            detectAvailableChannels();
+
+            // Initialize selected channels: if output_channels is empty, select all available channels
+            const existingChannels = outputNode.params?.output_channels || [];
+            outputChannelsModalState.selectedChannels = existingChannels.length > 0 
+                ? existingChannels 
+                : [...outputChannelsModalState.availableChannels]; // Select all by default
+
+            // Populate the modal
+            populateOutputChannelsModal();
+
+            // Show modal
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('output-channels-modal').style.display = 'block';
+        }
+
+        function detectAvailableChannels() {
+            outputChannelsModalState.availableChannels = [];
+
+            // Get all connected models (traverse edges to find which models connect to OUTPUT)
+            const outputNodeId = outputChannelsModalState.outputNodeId;
+            const connectedModelIds = new Set();
+
+            // Find edges that connect TO the output node
+            pipeline.edges.forEach(edge => {
+                if (edge.to === outputNodeId) {
+                    // This edge connects FROM something TO the output
+                    const sourceNode = [
+                        ...pipeline.models,
+                        ...pipeline.postprocessors,
+                        ...pipeline.normalizers
+                    ].find(n => n.id === edge.from);
+
+                    if (sourceNode && sourceNode.type === 'model') {
+                        connectedModelIds.add(edge.from);
+                    }
+                }
+            });
+
+            // If no edges, use all models in pipeline
+            if (connectedModelIds.size === 0) {
+                pipeline.models.forEach(model => {
+                    if (model.config?.channels) {
+                        outputChannelsModalState.availableChannels = [...model.config.channels];
+                    }
+                });
+            } else {
+                // Use channels from connected models
+                connectedModelIds.forEach(modelId => {
+                    const model = pipeline.models.find(m => m.id === modelId);
+                    if (model && model.config?.channels) {
+                        outputChannelsModalState.availableChannels = [...model.config.channels];
+                    }
+                });
+            }
+
+            // Fallback: if still no channels, show default channels
+            if (outputChannelsModalState.availableChannels.length === 0) {
+                outputChannelsModalState.availableChannels = ['mito', 'nucleus', 'er', 'membrane'];
+                console.warn('No model channels found, using defaults');
+            }
+
+            console.log('Available channels:', outputChannelsModalState.availableChannels);
+            console.log('Selected channels:', outputChannelsModalState.selectedChannels);
+        }
+
+        function populateOutputChannelsModal() {
+            const body = document.getElementById('output-channels-body');
+            const available = outputChannelsModalState.availableChannels;
+            const selected = outputChannelsModalState.selectedChannels;
+
+            if (available.length === 0) {
+                body.innerHTML = '<p style="color: var(--text-secondary);">No channels detected from models</p>';
+                return;
+            }
+
+            let html = '<div style="margin-bottom: 16px;"><strong>Select output channels:</strong></div>';
+
+            available.forEach(channel => {
+                const isChecked = selected.includes(channel);
+                const checkboxId = `channel-${channel}-${Date.now()}`;
+                html += `
+                    <div class="channel-checkbox-group">
+                        <input type="checkbox" id="${checkboxId}" data-channel="${channel}" 
+                               ${isChecked ? 'checked' : ''}>
+                        <label for="${checkboxId}">
+                            ${channel}
+                        </label>
+                    </div>
+                `;
+            });
+
+            body.innerHTML = html;
+        }
+
+        function saveOutputChannels() {
+            const checkboxes = document.querySelectorAll('#output-channels-body input[type="checkbox"]');
+            const selectedChannels = [];
+
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedChannels.push(checkbox.dataset.channel);
+                }
+            });
+
+            // Find and update the output node
+            const outputNode = pipeline.outputs.find(n => n.id === outputChannelsModalState.outputNodeId);
+            if (outputNode) {
+                outputNode.params = outputNode.params || {};
+                outputNode.params.output_channels = selectedChannels;
+                outputNode.classList?.add('dirty');
+            }
+
+            closeOutputChannelsModal();
+            renderCanvas();
+            showMessage(`✓ Output channels configured: ${selectedChannels.join(', ')}`, 'success');
+        }
+
+        function closeOutputChannelsModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('output-channels-modal').style.display = 'none';
+            outputChannelsModalState = {
+                outputNodeId: null,
+                availableChannels: [],
+                selectedChannels: []
+            };
+        }
+
         function renderCanvas() {
             const canvas = document.getElementById('canvas-content');
             canvas.innerHTML = '';
@@ -1243,6 +1543,23 @@
                                    onchange="handleParamChange(this, '${node.id}', '${node.type}')">
                         </div>
                     `;
+                    
+                    // Add output channels configuration for OUTPUT nodes
+                    if (node.type === 'output') {
+                        const selectedChannels = node.params?.output_channels || [];
+                        const selectedDisplay = Array.isArray(selectedChannels) ? selectedChannels.join(', ') : '';
+                        inputContent += `
+                            <div class="param-group">
+                                <label class="param-label">Output Channels</label>
+                                <button class="configure-btn" onclick="openOutputChannelsModal('${node.id}')">
+                                    🔧 Configure (${selectedChannels.length || 0} selected)
+                                </button>
+                                <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                                    ${selectedDisplay ? `${selectedDisplay}` : 'Click configure to select'}
+                                </div>
+                            </div>
+                        `;
+                    }
                 }
                 div.innerHTML = `
                     <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
@@ -2203,8 +2520,37 @@
         let blockwiseState = {
             validated: false,
             generated: false,
-            prechecked: false
+            prechecked: false,
+            model_mode: ""  // Stores the selected model merge mode
         };
+
+        // Initialize Model Merger dropdown
+        function initializeModelMergerDropdown() {
+            const dropdown = document.getElementById('model-merge-mode');
+            const mergers = window.APP_CONFIG.availableModelMergers || [];
+            
+            // Clear existing options except the first one
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            // Add all available mergers
+            mergers.forEach(merger => {
+                const option = document.createElement('option');
+                option.value = merger.class_name;  // e.g., "AndModelMerger"
+                option.textContent = `${merger.name} - ${merger.description}`;
+                dropdown.appendChild(option);
+            });
+            
+            // Add change listener to store selection in blockwiseState
+            dropdown.addEventListener('change', (e) => {
+                blockwiseState.model_mode = e.target.value;
+                console.log('Selected model merge mode:', blockwiseState.model_mode);
+            });
+        }
+        
+        // Initialize on page load
+        initializeModelMergerDropdown();
 
         // Blockwise Operations
         async function validateBlockwise() {
@@ -2212,10 +2558,16 @@
             status.textContent = 'Validating...';
             
             try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
                 const response = await fetch('/api/blockwise/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
                 });
                 
                 const data = await response.json();
@@ -2261,10 +2613,16 @@
             status.textContent = 'Generating...';
             
             try {
+                // Add model_mode to pipeline if multiple models are present
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode  // Include the selected merge mode
+                };
+                
                 const response = await fetch('/api/blockwise/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
                 });
                 
                 const data = await response.json();
@@ -2308,10 +2666,16 @@
             status.textContent = 'Prechecking...';
             
             try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
                 const response = await fetch('/api/blockwise/precheck', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig })
                 });
                 
                 const data = await response.json();
@@ -2356,10 +2720,16 @@
             }
             
             try {
+                // Add model_mode to pipeline
+                const pipelineWithConfig = { 
+                    ...pipeline,
+                    model_mode: blockwiseState.model_mode
+                };
+                
                 const response = await fetch('/api/blockwise/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline, job_name: jobName })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName })
                 });
                 
                 const data = await response.json();

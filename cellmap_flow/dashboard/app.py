@@ -16,6 +16,7 @@ from cellmap_flow.norm.input_normalize import (
     get_normalizations,
 )
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
+from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import (
@@ -57,6 +58,7 @@ def index():
     # Render the main page with tabs
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
+    model_mergers = get_model_mergers_list()
     model_catalog = g.model_catalog
     model_catalog["User"] = {j.model_name: "" for j in g.jobs}
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
@@ -71,6 +73,7 @@ def index():
         inference_servers=INFERENCE_SERVER,
         input_normalizers=input_norms,
         output_postprocessors=output_postprocessors,
+        model_mergers=model_mergers,
         default_post_process=default_post_process,
         default_input_norm=default_input_norm,
         model_catalog=model_catalog,
@@ -244,12 +247,16 @@ def pipeline_builder():
 
     # Get current dataset_path from globals
     dataset_path = getattr(g, 'dataset_path', None) or ''
+    
+    # Get available model mergers
+    model_mergers = get_model_mergers_list()
 
     return render_template(
         "pipeline_builder_v2.html",
         input_normalizers=input_norms or {},
         available_models=available_models or {},
         output_postprocessors=output_postprocessors or {},
+        model_mergers=model_mergers or {},
         current_normalizers=current_normalizers,
         current_models=current_models,
         current_postprocessors=current_postprocessors,
@@ -629,6 +636,13 @@ def generate_blockwise_task():
             "postprocessors": []
         }
         
+        # Add model_mode if multiple models are present and a merge mode is selected
+        model_count = len(pipeline.get("models", []))
+        model_mode = pipeline.get("model_mode", "")
+        if model_count > 1 and model_mode:
+            task_yaml["model_mode"] = model_mode
+            logger.info(f"Adding model_mode: {model_mode} for {model_count} models")
+        
         # Add models with full config
         for model in pipeline.get("models", []):
             model_entry = {
@@ -682,6 +696,12 @@ def generate_blockwise_task():
                 "params": post.get("params", {})
             }
             task_yaml["postprocessors"].append(post_entry)
+        
+        # Add output_channels from OUTPUT node if configured
+        output_channels = output_node.get("params", {}).get("output_channels", [])
+        if output_channels and isinstance(output_channels, list) and len(output_channels) > 0:
+            task_yaml["output_channels"] = output_channels
+            logger.info(f"Adding output_channels to YAML: {output_channels}")
         
         # Convert to YAML format with proper list handling
         yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True)
