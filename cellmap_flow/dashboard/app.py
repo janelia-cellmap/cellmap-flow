@@ -839,8 +839,10 @@ bbx_generator_state = {
     "dataset_path": None,
     "num_boxes": 0,
     "bounding_boxes": [],
+    "viewer": None,
     "viewer_process": None,
-    "viewer_url": None
+    "viewer_url": None,
+    "viewer_state": None
 }
 
 
@@ -858,24 +860,55 @@ def start_bbx_generator():
         if not dataset_path:
             return jsonify({"error": "Dataset path is required"}), 400
         
+        # Create Neuroglancer viewer
+        viewer = neuroglancer.Viewer()
+        
+        with viewer.txn() as s:
+            # Set coordinate space
+            s.dimensions = neuroglancer.CoordinateSpace(
+                names=["z", "y", "x"],
+                units="nm",
+                scales=[8, 8, 8],
+            )
+            
+            # Add image layer
+            s.layers["fibsem"] = get_raw_layer(dataset_path)
+            
+            # Add LOCAL annotation layer for bounding boxes
+            s.layers["annotations"] = neuroglancer.LocalAnnotationLayer(
+                dimensions=neuroglancer.CoordinateSpace(
+                    names=["z", "y", "x"],
+                    units="nm",
+                    scales=[1, 1, 1],
+                ),
+            )
+        
         # Store state
         bbx_generator_state["dataset_path"] = dataset_path
         bbx_generator_state["num_boxes"] = num_boxes
         bbx_generator_state["bounding_boxes"] = []
+        bbx_generator_state["viewer"] = viewer
         
-        # Get a free port for Neuroglancer
-        ng_port = get_free_port()
+        # Get the viewer URL and fix localhost reference
+        viewer_url = str(viewer)
         
-        # Start Neuroglancer viewer in background
-        # This would typically use subprocess to run the BBX creation script
-        # For now, we'll just prepare the URL
-        viewer_url = f"http://localhost:{ng_port}"
+        # Replace localhost with the actual request host for external access
+        # Parse the URL and replace localhost with the client's host
+        if "localhost" in viewer_url:
+            # Get the client's host from the request
+            client_host = request.host.split(":")[0]  # Get just the host part without port
+            viewer_url = viewer_url.replace("localhost", client_host)
+            logger.info(f"Replaced localhost with {client_host} in viewer URL")
+        
         bbx_generator_state["viewer_url"] = viewer_url
+        bbx_generator_state["viewer_state"] = viewer.state
         
-        logger.info(f"Starting BBX generator on port {ng_port}")
+        logger.info(f"Starting BBX generator with viewer URL: {viewer_url}")
         logger.info(f"Dataset path: {dataset_path}")
         logger.info(f"Target boxes: {num_boxes}")
         
+        # For iframe access, we need to return the raw viewer URL
+        # Neuroglancer server should be accessible at the returned URL
         return jsonify({
             "success": True,
             "viewer_url": viewer_url,
@@ -892,11 +925,43 @@ def start_bbx_generator():
 def get_bbx_generator_status():
     """Get current status of bounding box generation"""
     try:
+        # Extract bounding boxes from viewer if it exists
+        bboxes = []
+        if bbx_generator_state.get("viewer"):
+            viewer = bbx_generator_state["viewer"]
+            try:
+                with viewer.txn() as s:
+                    try:
+                        annotations_layer = s.layers["annotations"]
+                        if hasattr(annotations_layer, 'annotations'):
+                            for ann in annotations_layer.annotations:
+                                # Check if this is a bounding box annotation
+                                if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
+                                    point_a = ann.point_a
+                                    point_b = ann.point_b
+                                    
+                                    # Ensure point_a is the min and point_b is the max
+                                    offset = [min(point_a[j], point_b[j]) for j in range(3)]
+                                    max_point = [max(point_a[j], point_b[j]) for j in range(3)]
+                                    shape = [int(max_point[j] - offset[j]) for j in range(3)]
+                                    offset = [int(x) for x in offset]
+                                    
+                                    bboxes.append({
+                                        "offset": offset,
+                                        "shape": shape,
+                                    })
+                    except KeyError:
+                        logger.warning("Annotations layer not found in viewer")
+            except Exception as e:
+                logger.warning(f"Error extracting bboxes from viewer: {str(e)}")
+        
+        bbx_generator_state["bounding_boxes"] = bboxes
+        
         return jsonify({
-            "dataset_path": bbx_generator_state["dataset_path"],
-            "num_boxes": bbx_generator_state["num_boxes"],
-            "bounding_boxes": bbx_generator_state["bounding_boxes"],
-            "count": len(bbx_generator_state["bounding_boxes"])
+            "dataset_path": bbx_generator_state.get("dataset_path"),
+            "num_boxes": bbx_generator_state.get("num_boxes"),
+            "bounding_boxes": bboxes,
+            "count": len(bboxes)
         })
     
     except Exception as e:
@@ -908,19 +973,42 @@ def get_bbx_generator_status():
 def finalize_bbx_generation():
     """Finalize bounding box generation and return results"""
     try:
-        # In a real implementation, you would:
-        # 1. Stop the Neuroglancer viewer
-        # 2. Extract annotations from viewer state
-        # 3. Return the bounding boxes
-        
-        # For now, return the current state
-        bboxes = bbx_generator_state["bounding_boxes"]
+        # Extract final bounding boxes from viewer
+        bboxes = []
+        if bbx_generator_state.get("viewer"):
+            viewer = bbx_generator_state["viewer"]
+            try:
+                with viewer.txn() as s:
+                    try:
+                        annotations_layer = s.layers["annotations"]
+                        if hasattr(annotations_layer, 'annotations'):
+                            for ann in annotations_layer.annotations:
+                                # Check if this is a bounding box annotation
+                                if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
+                                    point_a = ann.point_a
+                                    point_b = ann.point_b
+                                    
+                                    # Ensure point_a is the min and point_b is the max
+                                    offset = [min(point_a[j], point_b[j]) for j in range(3)]
+                                    max_point = [max(point_a[j], point_b[j]) for j in range(3)]
+                                    shape = [int(max_point[j] - offset[j]) for j in range(3)]
+                                    offset = [int(x) for x in offset]
+                                    
+                                    bboxes.append({
+                                        "offset": offset,
+                                        "shape": shape,
+                                    })
+                    except KeyError:
+                        logger.warning("Annotations layer not found in viewer")
+            except Exception as e:
+                logger.warning(f"Error extracting final bboxes: {str(e)}")
         
         # Reset state
         bbx_generator_state["dataset_path"] = None
         bbx_generator_state["num_boxes"] = 0
         bbx_generator_state["bounding_boxes"] = []
         bbx_generator_state["viewer_url"] = None
+        bbx_generator_state["viewer"] = None
         
         return jsonify({
             "success": True,

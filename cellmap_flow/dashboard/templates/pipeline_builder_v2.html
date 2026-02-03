@@ -781,9 +781,8 @@
 
         function openBBXGeneratorModal(inputNodeId) {
             bbxGeneratorState.inputNodeId = inputNodeId;
-            document.getElementById('bbx-count-modal').style.display = 'block';
-            document.getElementById('modal-overlay').style.display = 'block';
-            document.getElementById('bbx-count-input').focus();
+            // Skip the count modal and directly start drawing
+            startBBXGeneration();
         }
 
         function closeBBXCountModal() {
@@ -791,13 +790,9 @@
         }
 
         async function startBBXGeneration() {
-            const numBoxes = parseInt(document.getElementById('bbx-count-input').value);
+            // Use a default or unlimited count - user can draw as many as they want
+            const numBoxes = 999;  // Essentially unlimited
             
-            if (isNaN(numBoxes) || numBoxes <= 0 || numBoxes > 100) {
-                showMessage('Please enter a number between 1 and 100', 'error');
-                return;
-            }
-
             bbxGeneratorState.numBoxes = numBoxes;
             bbxGeneratorState.createdBoxes = [];
 
@@ -837,7 +832,7 @@
                     const viewerContent = document.getElementById('bbx-viewer-content');
                     viewerContent.innerHTML = `<iframe id="bbx-iframe" src="${result.viewer_url}" style="width: 100%; height: 100%; border: none;"></iframe>`;
                     
-                    document.getElementById('bbx-status').textContent = `🎯 Create ${numBoxes} bounding box(es). Click "Done - Save Boxes" when finished.`;
+                    document.getElementById('bbx-status').textContent = `🎯 Draw bounding boxes in Neuroglancer. Click "Done - Save Boxes" when finished.`;
                     
                     // Start polling for completed boxes
                     pollBBXGeneration();
@@ -1704,73 +1699,134 @@
             let currentItem = null;
             let inParams = false;
             let inPosition = false;
+            let inBoundingBoxes = false;
+            let currentBBox = null;
 
-            yaml.split('\n').forEach(line => {
+            yaml.split('\n').forEach((line, index) => {
                 const trimmed = line.trim();
                 if (!trimmed || trimmed.startsWith('#')) return;
+
+                // Check indentation level for nested structures
+                const indent = line.match(/^(\s*)/)[1].length;
 
                 // Section headers
                 if (trimmed === 'inputs:') {
                     currentSection = 'inputs';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'outputs:') {
                     currentSection = 'outputs';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'input_normalizers:') {
                     currentSection = 'input_normalizers';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'models:') {
                     currentSection = 'models';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'postprocessors:') {
                     currentSection = 'postprocessors';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'blockwise_config:') {
                     currentSection = 'blockwise_config';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'edges:') {
                     currentSection = 'edges';
                     inParams = false;
                     inPosition = false;
+                    inBoundingBoxes = false;
                 } else if (trimmed === 'params:') {
                     inParams = true;
                     inPosition = false;
-                    // Initialize params object if it doesn't exist
+                    inBoundingBoxes = false;
                     if (currentItem && !currentItem.params) {
                         currentItem.params = {};
                     }
                 } else if (trimmed === 'position:') {
                     inPosition = true;
                     inParams = false;
+                    inBoundingBoxes = false;
                     if (currentItem && !currentItem.position) {
                         currentItem.position = {};
                     }
+                } else if (trimmed === 'bounding_boxes:') {
+                    inBoundingBoxes = true;
+                    inParams = false;
+                    inPosition = false;
+                    if (currentItem && !currentItem.params) {
+                        currentItem.params = {};
+                    }
+                    if (currentItem && !currentItem.params.bounding_boxes) {
+                        currentItem.params.bounding_boxes = [];
+                    }
                 } else if (trimmed.startsWith('- ')) {
-                    // New item
-                    const match = trimmed.match(/^- (\w+):\s*(.*)$/);
-                    if (match) {
-                        const [, key, value] = match;
-                        currentItem = { [key]: value.trim() };
-                        if (currentSection) result[currentSection].push(currentItem);
-                        inParams = false;
-                        inPosition = false;
+                    // Check if this is a new bounding box item or a regular list item
+                    if (inBoundingBoxes && trimmed.startsWith('- offset:')) {
+                        // New bounding box
+                        const offsetMatch = trimmed.match(/- offset:\s*\[(.*?)\]/);
+                        if (offsetMatch) {
+                            currentBBox = {
+                                offset: offsetMatch[1].split(',').map(s => {
+                                    const num = parseFloat(s.trim());
+                                    return isNaN(num) ? 0 : parseInt(num);
+                                }),
+                                shape: []
+                            };
+                            currentItem.params.bounding_boxes.push(currentBBox);
+                        }
+                    } else if (inBoundingBoxes && trimmed.startsWith('- ')) {
+                        // New list item in bounding boxes (shouldn't happen in well-formed YAML)
+                        const match = trimmed.match(/^- (\w+):\s*(.*)$/);
+                        if (match) {
+                            const [, key, value] = match;
+                            currentItem = { [key]: value.trim() };
+                            if (currentSection) result[currentSection].push(currentItem);
+                            inBoundingBoxes = false;
+                            inParams = false;
+                            inPosition = false;
+                        }
                     } else {
-                        currentItem = { name: trimmed.replace('- ', '').trim() };
-                        if (currentSection) result[currentSection].push(currentItem);
-                        inParams = false;
-                        inPosition = false;
+                        // Regular item in a section
+                        const match = trimmed.match(/^- (\w+):\s*(.*)$/);
+                        if (match) {
+                            const [, key, value] = match;
+                            currentItem = { [key]: value.trim() };
+                            if (currentSection) result[currentSection].push(currentItem);
+                            inParams = false;
+                            inPosition = false;
+                            inBoundingBoxes = false;
+                        } else {
+                            currentItem = { name: trimmed.replace('- ', '').trim() };
+                            if (currentSection) result[currentSection].push(currentItem);
+                            inParams = false;
+                            inPosition = false;
+                            inBoundingBoxes = false;
+                        }
                     }
                 } else if (trimmed.includes(':')) {
                     const [key, value] = trimmed.split(':').map(s => s.trim());
                     if (!currentItem) return;
 
-                    if (inPosition) {
+                    // Handle shape inside bounding boxes
+                    if (inBoundingBoxes && key === 'shape' && currentBBox) {
+                        const shapeMatch = value.match(/\[(.*?)\]/);
+                        if (shapeMatch) {
+                            currentBBox.shape = shapeMatch[1].split(',').map(s => {
+                                const num = parseFloat(s.trim());
+                                return isNaN(num) ? 0 : parseInt(num);
+                            });
+                        }
+                    } else if (inPosition) {
                         try {
                             currentItem.position[key] = parseFloat(value) || 0;
                         } catch {
