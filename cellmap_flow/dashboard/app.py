@@ -834,6 +834,102 @@ def submit_blockwise_task():
         return {"success": False, "error": str(e)}
 
 
+# Global state for BBX generator
+bbx_generator_state = {
+    "dataset_path": None,
+    "num_boxes": 0,
+    "bounding_boxes": [],
+    "viewer_process": None,
+    "viewer_url": None
+}
+
+
+@app.route("/api/bbx-generator", methods=["POST"])
+def start_bbx_generator():
+    """Start the Neuroglancer viewer for creating bounding boxes"""
+    try:
+        data = request.json
+        dataset_path = data.get("dataset_path", "")
+        num_boxes = data.get("num_boxes", 1)
+        
+        if not dataset_path:
+            return jsonify({"error": "Dataset path is required"}), 400
+        
+        # Store state
+        bbx_generator_state["dataset_path"] = dataset_path
+        bbx_generator_state["num_boxes"] = num_boxes
+        bbx_generator_state["bounding_boxes"] = []
+        
+        # Get a free port for Neuroglancer
+        ng_port = get_free_port()
+        
+        # Start Neuroglancer viewer in background
+        # This would typically use subprocess to run the BBX creation script
+        # For now, we'll just prepare the URL
+        viewer_url = f"http://localhost:{ng_port}"
+        bbx_generator_state["viewer_url"] = viewer_url
+        
+        logger.info(f"Starting BBX generator on port {ng_port}")
+        logger.info(f"Dataset path: {dataset_path}")
+        logger.info(f"Target boxes: {num_boxes}")
+        
+        return jsonify({
+            "success": True,
+            "viewer_url": viewer_url,
+            "dataset_path": dataset_path,
+            "num_boxes": num_boxes
+        })
+    
+    except Exception as e:
+        logger.error(f"Error starting BBX generator: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bbx-generator/status", methods=["GET"])
+def get_bbx_generator_status():
+    """Get current status of bounding box generation"""
+    try:
+        return jsonify({
+            "dataset_path": bbx_generator_state["dataset_path"],
+            "num_boxes": bbx_generator_state["num_boxes"],
+            "bounding_boxes": bbx_generator_state["bounding_boxes"],
+            "count": len(bbx_generator_state["bounding_boxes"])
+        })
+    
+    except Exception as e:
+        logger.error(f"Error getting BBX status: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bbx-generator/finalize", methods=["POST"])
+def finalize_bbx_generation():
+    """Finalize bounding box generation and return results"""
+    try:
+        # In a real implementation, you would:
+        # 1. Stop the Neuroglancer viewer
+        # 2. Extract annotations from viewer state
+        # 3. Return the bounding boxes
+        
+        # For now, return the current state
+        bboxes = bbx_generator_state["bounding_boxes"]
+        
+        # Reset state
+        bbx_generator_state["dataset_path"] = None
+        bbx_generator_state["num_boxes"] = 0
+        bbx_generator_state["bounding_boxes"] = []
+        bbx_generator_state["viewer_url"] = None
+        
+        return jsonify({
+            "success": True,
+            "bounding_boxes": bboxes,
+            "count": len(bboxes)
+        })
+    
+    except Exception as e:
+        logger.error(f"Error finalizing BBX generation: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     global NEUROGLANCER_URL, INFERENCE_SERVER
     NEUROGLANCER_URL = neuroglancer_url

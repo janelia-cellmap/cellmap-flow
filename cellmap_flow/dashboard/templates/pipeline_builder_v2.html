@@ -107,6 +107,50 @@
         </div>
     </div>
 
+    <!-- Bounding Box Generator Number Input Modal -->
+    <div id="bbx-count-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header">
+                <h2>Generate Bounding Boxes</h2>
+                <button class="modal-close-btn" onclick="closeBBXCountModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <label class="param-label" style="margin-bottom: 12px;">How many bounding boxes do you want to create?</label>
+                <input type="number" id="bbx-count-input" min="1" max="100" value="1" class="param-input" style="width: 100%; padding: 8px; font-size: 14px;">
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeBBXCountModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="startBBXGeneration()">✓ Start Drawing</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bounding Box Viewer Modal (Neuroglancer) -->
+    <div id="bbx-viewer-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 95%; height: 95vh; max-width: 1600px; overflow: hidden;">
+            <div class="modal-header">
+                <h2>Draw Bounding Boxes in Neuroglancer</h2>
+                <button class="modal-close-btn" onclick="closeBBXViewerModal()">✕</button>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                <div id="bbx-viewer-content" style="flex: 1; overflow: hidden; position: relative;">
+                    <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                        Loading Neuroglancer viewer...
+                    </div>
+                </div>
+                <div id="bbx-status" style="padding: 12px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);">
+                    Waiting for bounding boxes...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeBBXViewerModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="finalizeBBXGeneration()">✓ Done - Save Boxes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Output Channels Configuration Modal -->
     <div id="output-channels-modal" class="modal" style="display: none;">
         <div class="modal-content" style="width: 500px; max-height: 600px; overflow-y: auto;">
@@ -727,6 +771,161 @@
             };
         }
 
+        // Global state for BBX modal
+        let bbxGeneratorState = {
+            inputNodeId: null,
+            numBoxes: 1,
+            createdBoxes: [],
+            generatorWindow: null
+        };
+
+        function openBBXGeneratorModal(inputNodeId) {
+            bbxGeneratorState.inputNodeId = inputNodeId;
+            document.getElementById('bbx-count-modal').style.display = 'block';
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('bbx-count-input').focus();
+        }
+
+        function closeBBXCountModal() {
+            document.getElementById('bbx-count-modal').style.display = 'none';
+        }
+
+        async function startBBXGeneration() {
+            const numBoxes = parseInt(document.getElementById('bbx-count-input').value);
+            
+            if (isNaN(numBoxes) || numBoxes <= 0 || numBoxes > 100) {
+                showMessage('Please enter a number between 1 and 100', 'error');
+                return;
+            }
+
+            bbxGeneratorState.numBoxes = numBoxes;
+            bbxGeneratorState.createdBoxes = [];
+
+            // Find the input node to get dataset path
+            const inputNode = pipeline.inputs.find(n => n.id === bbxGeneratorState.inputNodeId);
+            if (!inputNode) {
+                showMessage('Input node not found', 'error');
+                return;
+            }
+
+            const datasetPath = inputNode.params?.dataset_path || '';
+            if (!datasetPath) {
+                showMessage('Please set the dataset path on the INPUT node first', 'error');
+                return;
+            }
+
+            closeBBXCountModal();
+            
+            // Show the viewer modal
+            document.getElementById('bbx-viewer-modal').style.display = 'block';
+            document.getElementById('modal-overlay').style.display = 'block';
+            
+            // Start the BBX generator in the backend
+            try {
+                const response = await fetch('/api/bbx-generator', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dataset_path: datasetPath,
+                        num_boxes: numBoxes
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    // Open the Neuroglancer URL in the modal
+                    const viewerContent = document.getElementById('bbx-viewer-content');
+                    viewerContent.innerHTML = `<iframe id="bbx-iframe" src="${result.viewer_url}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+                    
+                    document.getElementById('bbx-status').textContent = `🎯 Create ${numBoxes} bounding box(es). Click "Done - Save Boxes" when finished.`;
+                    
+                    // Start polling for completed boxes
+                    pollBBXGeneration();
+                } else {
+                    showMessage('Error: ' + (result.error || 'Failed to start BBX generator'), 'error');
+                    closeBBXViewerModal();
+                }
+            } catch (err) {
+                showMessage('Failed to connect to BBX generator: ' + err.message, 'error');
+                closeBBXViewerModal();
+            }
+        }
+
+        function pollBBXGeneration() {
+            // Poll for generated bounding boxes every 2 seconds
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/bbx-generator/status', {
+                        method: 'GET'
+                    });
+
+                    if (!response.ok) return;
+
+                    const result = await response.json();
+                    if (result.bounding_boxes && result.bounding_boxes.length > 0) {
+                        bbxGeneratorState.createdBoxes = result.bounding_boxes;
+                        document.getElementById('bbx-status').textContent = 
+                            `📦 ${result.bounding_boxes.length}/${bbxGeneratorState.numBoxes} box(es) created`;
+                    }
+                } catch (err) {
+                    console.error('Poll error:', err);
+                }
+            }, 2000);
+
+            // Store interval ID for cleanup
+            bbxGeneratorState.pollInterval = pollInterval;
+        }
+
+        function closeBBXViewerModal() {
+            // Clear the poll interval
+            if (bbxGeneratorState.pollInterval) {
+                clearInterval(bbxGeneratorState.pollInterval);
+            }
+
+            document.getElementById('bbx-viewer-modal').style.display = 'none';
+            document.getElementById('modal-overlay').style.display = 'none';
+            
+            // Clear the state
+            bbxGeneratorState = {
+                inputNodeId: null,
+                numBoxes: 1,
+                createdBoxes: [],
+                generatorWindow: null
+            };
+        }
+
+        async function finalizeBBXGeneration() {
+            try {
+                // Fetch final bounding boxes from backend
+                const response = await fetch('/api/bbx-generator/finalize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    const bboxes = result.bounding_boxes || [];
+                    
+                    // Find the input node and save bounding boxes
+                    const inputNode = pipeline.inputs.find(n => n.id === bbxGeneratorState.inputNodeId);
+                    if (inputNode) {
+                        inputNode.params = inputNode.params || {};
+                        inputNode.params.bounding_boxes = bboxes;
+                        
+                        showMessage(`✓ Saved ${bboxes.length} bounding box(es)`, 'success');
+                    }
+
+                    closeBBXViewerModal();
+                    renderCanvas();
+                } else {
+                    showMessage('Error: ' + (result.error || 'Failed to finalize bounding boxes'), 'error');
+                }
+            } catch (err) {
+                showMessage('Failed to finalize bounding boxes: ' + err.message, 'error');
+            }
+        }
+
         function renderCanvas() {
             const canvas = document.getElementById('canvas-content');
             canvas.innerHTML = '';
@@ -869,6 +1068,23 @@
                                    onchange="handleParamChange(this, '${node.id}', '${node.type}')">
                         </div>
                     `;
+                    
+                    // Add bounding boxes configuration for INPUT nodes
+                    if (node.type === 'input') {
+                        const bboxes = node.params?.bounding_boxes || [];
+                        const bboxDisplay = bboxes.length > 0 ? `${bboxes.length} bbox(es)` : 'None';
+                        inputContent += `
+                            <div class="param-group">
+                                <label class="param-label">Bounding Boxes</label>
+                                <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
+                                    📦 Generate (${bboxDisplay})
+                                </button>
+                                <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                                    ${bboxDisplay}
+                                </div>
+                            </div>
+                        `;
+                    }
                     
                     // Add output channels configuration for OUTPUT nodes
                     if (node.type === 'output') {
@@ -1188,7 +1404,7 @@
         function exportYAML() {
             let yaml = '';
 
-            // Export inputs with dataset_path
+            // Export inputs with dataset_path and bounding boxes
             if (pipeline.inputs.length > 0) {
                 yaml += 'inputs:\n';
                 pipeline.inputs.forEach((n, index) => {
@@ -1199,6 +1415,14 @@
                         if (datasetPath) {
                             yaml += `    dataset_path: ${datasetPath}\n`;
                         }
+                    }
+                    // Add bounding boxes if they exist
+                    if (n.params?.bounding_boxes && n.params.bounding_boxes.length > 0) {
+                        yaml += `    bounding_boxes:\n`;
+                        n.params.bounding_boxes.forEach(bbox => {
+                            yaml += `      - offset: [${bbox.offset.join(', ')}]\n`;
+                            yaml += `        shape: [${bbox.shape.join(', ')}]\n`;
+                        });
                     }
                     yaml += `    position:\n`;
                     yaml += `      x: ${n.position.x}\n`;
