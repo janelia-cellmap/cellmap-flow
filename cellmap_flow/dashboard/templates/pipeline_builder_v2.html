@@ -1782,13 +1782,37 @@
                             currentItem.params[key] = JSON.parse(value);
                         } catch {
                             currentItem.params = currentItem.params || {};
-                            currentItem.params[key] = value;
+                            // Check if value looks like a YAML array
+                            const arrayMatch = value.match(/^\[(.*)\]$/);
+                            if (arrayMatch) {
+                                const arrayContent = arrayMatch[1];
+                                const items = arrayContent.split(',').map(item => {
+                                    const trimmed = item.trim();
+                                    const num = parseFloat(trimmed);
+                                    return isNaN(num) ? trimmed : num;
+                                });
+                                currentItem.params[key] = items;
+                            } else {
+                                currentItem.params[key] = value;
+                            }
                         }
                     } else {
                         try {
                             currentItem[key] = JSON.parse(value);
                         } catch {
-                            currentItem[key] = value;
+                            // Check if value looks like a YAML array
+                            const arrayMatch = value.match(/^\[(.*)\]$/);
+                            if (arrayMatch) {
+                                const arrayContent = arrayMatch[1];
+                                const items = arrayContent.split(',').map(item => {
+                                    const trimmed = item.trim();
+                                    const num = parseFloat(trimmed);
+                                    return isNaN(num) ? trimmed : num;
+                                });
+                                currentItem[key] = items;
+                            } else {
+                                currentItem[key] = value;
+                            }
                         }
 
                         // For inputs/outputs, preserve dataset_path
@@ -1808,9 +1832,22 @@
                                 }
                                 currentItem.config[key] = parsedValue;
                             } catch {
-                                // If JSON parse fails, check if this is a channels field
-                                if (key === 'channels') {
-                                    currentItem.config[key] = [value];
+                                // If JSON parse fails, check if this is a channels or array field
+                                if (key === 'channels' || key === 'input_size' || key === 'output_size' || key === 'input_voxel_size' || key === 'output_voxel_size') {
+                                    // Try to parse as YAML array: [a, b, c] or [a]
+                                    const arrayMatch = value.match(/^\[(.*)\]$/);
+                                    if (arrayMatch) {
+                                        const arrayContent = arrayMatch[1];
+                                        const items = arrayContent.split(',').map(item => {
+                                            const trimmed = item.trim();
+                                            // Try to parse as number, otherwise keep as string
+                                            const num = parseFloat(trimmed);
+                                            return isNaN(num) ? trimmed : num;
+                                        });
+                                        currentItem.config[key] = items;
+                                    } else {
+                                        currentItem.config[key] = [value];
+                                    }
                                 } else {
                                     currentItem.config[key] = value;
                                 }
