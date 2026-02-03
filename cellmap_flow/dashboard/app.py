@@ -26,6 +26,7 @@ from cellmap_flow.utils.web_utils import (
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
 )
+from cellmap_flow.utils.serilization_utils import serialize_norms_posts_to_json
 from cellmap_flow.models.run import update_run_models
 from cellmap_flow.globals import g
 import numpy as np
@@ -631,10 +632,14 @@ def generate_blockwise_task():
             "workers": blockwise_config["params"]["nb_workers"],
             "cpu_workers": blockwise_config["params"]["nb_cores_worker"],
             "tmp_dir": blockwise_config["params"]["tmp_dir"],
-            "models": [],
-            "input_normalizers": [],
-            "postprocessors": []
+            "models": []
         }
+        
+        # Add bounding_boxes from INPUT node if they exist
+        bounding_boxes = input_node.get("params", {}).get("bounding_boxes", [])
+        if bounding_boxes and isinstance(bounding_boxes, list) and len(bounding_boxes) > 0:
+            task_yaml["bounding_boxes"] = bounding_boxes
+            logger.info(f"Adding bounding_boxes to YAML: {len(bounding_boxes)} box(es)")
         
         # Add model_mode if multiple models are present and a merge mode is selected
         model_count = len(pipeline.get("models", []))
@@ -681,21 +686,49 @@ def generate_blockwise_task():
                     
             task_yaml["models"].append(model_entry)
         
-        # Add normalizers
-        for norm in pipeline.get("normalizers", []):
-            norm_entry = {
-                "name": norm.get("name"),
-                "params": norm.get("params", {})
-            }
-            task_yaml["input_normalizers"].append(norm_entry)
+        # Serialize normalizers and postprocessors to json_data format
+        # READ FROM TOP-LEVEL PIPELINE (THEY ARE STORED AT pipeline["normalizers"] and pipeline["postprocessors"])
+        # Normalizers and postprocessors are drawn in the pipeline and stored at top level, not in INPUT node
+        normalizers_list = pipeline.get("normalizers", [])
+        postprocessors_list = pipeline.get("postprocessors", [])
         
-        # Add postprocessors
-        for post in pipeline.get("postprocessors", []):
-            post_entry = {
-                "name": post.get("name"),
-                "params": post.get("params", {})
-            }
-            task_yaml["postprocessors"].append(post_entry)
+        # Create json_data for blockwise processor - maintain order by using list iteration order
+        if normalizers_list or postprocessors_list:
+            try:
+                # Build normalizers dict - preserve insertion order from normalizers_list
+                norm_fns = {}
+                for norm in normalizers_list:
+                    # norm can be dict with "name" and "params" keys
+                    if isinstance(norm, dict):
+                        norm_name = norm.get("name")
+                        norm_params = norm.get("params", {})
+                    else:
+                        continue
+                    if norm_name:
+                        norm_fns[norm_name] = norm_params
+                
+                # Build postprocessors dict - preserve insertion order from postprocessors_list
+                post_fns = {}
+                for post in postprocessors_list:
+                    # post can be dict with "name" and "params" keys
+                    if isinstance(post, dict):
+                        post_name = post.get("name")
+                        post_params = post.get("params", {})
+                    else:
+                        continue
+                    if post_name:
+                        post_fns[post_name] = post_params
+                
+                # Create json_data as dict (not JSON string) using the correct key constants
+                json_data_dict = {
+                    INPUT_NORM_DICT_KEY: norm_fns,
+                    POSTPROCESS_DICT_KEY: post_fns
+                }
+                # Store as dict (YAML will handle it properly)
+                task_yaml["json_data"] = json_data_dict
+                logger.info(f"Added json_data as dict with {len(normalizers_list)} normalizers and {len(postprocessors_list)} postprocessors")
+            except Exception as e:
+                logger.warning(f"Failed to create json_data: {e}")
         
         # Add output_channels from OUTPUT node if configured
         output_channels = output_node.get("params", {}).get("output_channels", [])
@@ -704,7 +737,8 @@ def generate_blockwise_task():
             logger.info(f"Adding output_channels to YAML: {output_channels}")
         
         # Convert to YAML format with proper list handling
-        yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True)
+        # sort_keys=False preserves dict insertion order (Python 3.7+)
+        yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
         
         # Save to file
         yaml_filename = f"{task_name}.yaml"

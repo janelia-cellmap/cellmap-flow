@@ -303,19 +303,12 @@ def to_ndarray_tensorstore(
         )
 
     roi -= offset
-    print(
-        f"DEBUG to_ndarray: roi after offset={roi}, voxel_size={voxel_size}, axes_names={axes_names}",
-        flush=True,
-    )
     roi /= voxel_size
-    print(f"DEBUG to_ndarray: roi after voxel_size division={roi}", flush=True)
 
     # Specify the range
     roi_slices = roi.to_slices()
-    print(f"DEBUG to_ndarray: roi_slices={roi_slices}", flush=True)
 
     domain = dataset.domain
-    print(f"DEBUG to_ndarray: domain={domain}", flush=True)
     # Compute the valid range
     valid_slices = tuple(
         slice(max(s.start, inclusive_min), min(s.stop, exclusive_max))

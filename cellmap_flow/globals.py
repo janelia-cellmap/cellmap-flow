@@ -11,11 +11,11 @@ from typing import Any, List, Optional
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
-postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
+# input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
+# postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
 
-# input_norms = []
-# postprocess = []
+input_norms = []
+postprocess = []
 viewer = None
 
 

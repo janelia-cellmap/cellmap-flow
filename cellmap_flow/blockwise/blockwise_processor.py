@@ -438,34 +438,62 @@ class CellMapFlowBlockwiseProcessor:
         read_roi = daisy.Roi((0, 0, 0), read_shape)
         write_roi = read_roi.grow(-context, -context)
 
-        total_write_roi = self.idi_raw.roi
-        # .snap_to_grid(self.output_voxel_size)
-        total_read_roi = total_write_roi.grow(context, context)
+        # Check if bounding boxes are specified
+        bounding_boxes = self.config.get("bounding_boxes", None)
 
-        name = f"predict_{self.model_config.name}{self.task_name}"
+        conflicts = False
+        
+        if bounding_boxes and len(bounding_boxes) > 0:
+            # Process specific ROIs from bounding boxes
+            logger.info(f"Processing {len(bounding_boxes)} bounding box(es)")
+            rois_to_process = []
+            # If there is ROI the ROI can be different than the block order which can cause read-write conflicts
+            # best way is to align the ROI with the block shape, but for now we will just warn the user about potential conflicts
+            conflicts = True
+            
+            for i, bbox in enumerate(bounding_boxes):
+                offset = tuple(bbox.get("offset", [0, 0, 0]))
+                shape = tuple(bbox.get("shape", [0, 0, 0]))
+                roi = daisy.Roi(offset, shape)
+                roi = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+                rois_to_process.append(roi)
+                logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
+        else:
+            # Process entire dataset
+            total_write_roi = self.idi_raw.roi
+            rois_to_process = [total_write_roi]
+            logger.info(f"Processing entire dataset: {total_write_roi}")
 
-        task = daisy.Task(
-            name,
-            total_roi=total_read_roi,
-            read_roi=read_roi,
-            write_roi=write_roi,
-            process_function=spawn_worker(
+        # Process each ROI
+        for roi_idx, total_write_roi in enumerate(rois_to_process):
+            total_read_roi = total_write_roi.grow(context, context)
+            
+            name = f"predict_{self.model_config.name}{self.task_name}"
+            if len(rois_to_process) > 1:
+                name = f"{name}_roi{roi_idx+1}"
+
+            task = daisy.Task(
                 name,
-                self.yaml_config,
-                self.charge_group,
-                self.queue,
-                ncpu=self.cpu_workers,
-            ),
-            check_function=partial(check_block, self.tmp_dir),
-            read_write_conflict=False,
-            fit="overhang",
-            max_retries=0,
-            timeout=None,
-            num_workers=self.workers,
-        )
+                total_roi=total_read_roi,
+                read_roi=read_roi,
+                write_roi=write_roi,
+                process_function=spawn_worker(
+                    name,
+                    self.yaml_config,
+                    self.charge_group,
+                    self.queue,
+                    ncpu=self.cpu_workers,
+                ),
+                check_function=partial(check_block, self.tmp_dir),
+                read_write_conflict=conflicts,
+                fit="overhang",
+                max_retries=0,
+                timeout=None,
+                num_workers=self.workers,
+            )
 
-        task_state = daisy.run_blockwise([task])
-        logger.info(f"Task state: {task_state}")
+            task_state = daisy.run_blockwise([task])
+            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
 
 
 def check_block(tmp_dir, block: daisy.Block) -> bool:
