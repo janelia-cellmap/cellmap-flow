@@ -917,6 +917,19 @@
             // Preserve config if it exists (from backend ModelConfig.to_dict())
             if (m.config && typeof m.config === 'object') {
                 model.config = m.config;
+                // Normalize channels field to always be an array
+                if (model.config.channels) {
+                    if (typeof model.config.channels === 'string') {
+                        try {
+                            model.config.channels = JSON.parse(model.config.channels);
+                            if (!Array.isArray(model.config.channels)) {
+                                model.config.channels = [model.config.channels];
+                            }
+                        } catch {
+                            model.config.channels = [model.config.channels];
+                        }
+                    }
+                }
                 // Also populate params from config for UI display (exclude 'name')
                 if (!m.params || Object.keys(m.params).length === 0) {
                     model.params = {};
@@ -1316,7 +1329,19 @@
             if (connectedModelIds.size === 0) {
                 pipeline.models.forEach(model => {
                     if (model.config?.channels) {
-                        outputChannelsModalState.availableChannels = [...model.config.channels];
+                        const channels = model.config.channels;
+                        // Ensure channels is an array
+                        if (Array.isArray(channels)) {
+                            outputChannelsModalState.availableChannels = [...channels];
+                        } else if (typeof channels === 'string') {
+                            // If it's a string (from parsing), try to parse it as JSON array
+                            try {
+                                const parsed = JSON.parse(channels);
+                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
+                            } catch {
+                                outputChannelsModalState.availableChannels = [channels];
+                            }
+                        }
                     }
                 });
             } else {
@@ -1324,7 +1349,19 @@
                 connectedModelIds.forEach(modelId => {
                     const model = pipeline.models.find(m => m.id === modelId);
                     if (model && model.config?.channels) {
-                        outputChannelsModalState.availableChannels = [...model.config.channels];
+                        const channels = model.config.channels;
+                        // Ensure channels is an array
+                        if (Array.isArray(channels)) {
+                            outputChannelsModalState.availableChannels = [...channels];
+                        } else if (typeof channels === 'string') {
+                            // If it's a string (from parsing), try to parse it as JSON array
+                            try {
+                                const parsed = JSON.parse(channels);
+                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
+                            } catch {
+                                outputChannelsModalState.availableChannels = [channels];
+                            }
+                        }
                     }
                 });
             }
@@ -1341,8 +1378,23 @@
 
         function populateOutputChannelsModal() {
             const body = document.getElementById('output-channels-body');
-            const available = outputChannelsModalState.availableChannels;
+            let available = outputChannelsModalState.availableChannels;
             const selected = outputChannelsModalState.selectedChannels;
+
+            // Ensure available is an array
+            if (typeof available === 'string') {
+                try {
+                    available = JSON.parse(available);
+                    if (!Array.isArray(available)) {
+                        available = [available];
+                    }
+                } catch {
+                    available = [available];
+                }
+                outputChannelsModalState.availableChannels = available;
+            } else if (!Array.isArray(available)) {
+                available = Object.keys(available || {});
+            }
 
             if (available.length === 0) {
                 body.innerHTML = '<p style="color: var(--text-secondary);">No channels detected from models</p>';
@@ -2251,13 +2303,23 @@
                         if (currentSection === 'models' && key !== 'id' && key !== 'position' && key !== 'params' && key !== 'name') {
                             currentItem.config = currentItem.config || {};
                             try {
-                                currentItem.config[key] = JSON.parse(value);
+                                let parsedValue = JSON.parse(value);
+                                // Special handling for channels - ensure it's always an array
+                                if (key === 'channels' && !Array.isArray(parsedValue)) {
+                                    parsedValue = [parsedValue];
+                                }
+                                currentItem.config[key] = parsedValue;
                             } catch {
-                                currentItem.config[key] = value;
+                                // If JSON parse fails, check if this is a channels field
+                                if (key === 'channels') {
+                                    currentItem.config[key] = [value];
+                                } else {
+                                    currentItem.config[key] = value;
+                                }
                             }
                             // Also add to params for display
                             currentItem.params = currentItem.params || {};
-                            currentItem.params[key] = currentItem[key];
+                            currentItem.params[key] = currentItem.config[key];
                         }
                     }
                 }
