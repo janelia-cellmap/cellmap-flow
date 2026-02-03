@@ -848,6 +848,9 @@ bbx_generator_state = {
 def start_bbx_generator():
     """Start the Neuroglancer viewer for creating bounding boxes"""
     try:
+        # Set Neuroglancer server to bind to 0.0.0.0 for external access
+        neuroglancer.set_server_bind_address("0.0.0.0")
+        
         data = request.json
         dataset_path = data.get("dataset_path", "")
         num_boxes = data.get("num_boxes", 1)
