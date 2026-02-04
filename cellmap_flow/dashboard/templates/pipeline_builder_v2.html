@@ -185,6 +185,23 @@
         </div>
     </div>
 
+    <!-- Bounding Box JSON Help Modal -->
+    <div id="bbx-json-help-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 600px; max-height: 70vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>📋 Bounding Box JSON Format</h2>
+                <button class="modal-close-btn" onclick="closeBBXJsonHelp()">✕</button>
+            </div>
+            <div id="bbx-json-template-content" class="modal-body">
+                <!-- Loaded dynamically from bbox_json_template.html -->
+                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading template...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeBBXJsonHelp()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Overlay -->
     <div id="modal-overlay" class="modal-overlay" style="display: none;" 
          onclick="if(event.target === this) closeOutputChannelsModal()"></div>
@@ -839,6 +856,79 @@
             }
         }
 
+        function triggerBBXFileUpload(inputNodeId) {
+            const fileInput = document.getElementById(`bbx-file-input-${inputNodeId}`);
+            fileInput.click();
+        }
+
+        function loadBBXFromFile(fileInput, inputNodeId) {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const bboxes = JSON.parse(content);
+                    
+                    // Validate structure
+                    if (!Array.isArray(bboxes)) {
+                        showMessage('Error: JSON must be an array of bounding boxes', 'error');
+                        return;
+                    }
+                    
+                    // Validate each bbox has offset and shape
+                    for (let bbox of bboxes) {
+                        if (!bbox.offset || !bbox.shape || !Array.isArray(bbox.offset) || !Array.isArray(bbox.shape)) {
+                            showMessage('Error: Each bbox must have "offset" and "shape" arrays', 'error');
+                            return;
+                        }
+                        if (bbox.offset.length !== 3 || bbox.shape.length !== 3) {
+                            showMessage('Error: offset and shape must have 3 elements each [z, y, x]', 'error');
+                            return;
+                        }
+                    }
+                    
+                    // Update the input node with loaded bboxes
+                    const inputNode = pipeline.inputs.find(n => n.id === inputNodeId);
+                    if (inputNode) {
+                        inputNode.params = inputNode.params || {};
+                        inputNode.params.bounding_boxes = bboxes;
+                        renderCanvas();
+                        showMessage(`✓ Loaded ${bboxes.length} bounding box(es) from file`, 'success');
+                    }
+                } catch (err) {
+                    showMessage(`Error parsing JSON: ${err.message}`, 'error');
+                }
+                
+                // Reset file input so same file can be re-uploaded
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function showBBXJsonHelp() {
+            // Load template content from the API route
+            fetch('/api/templates/bbox-json')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('bbx-json-template-content').innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Error loading bbox template:', err);
+                    document.getElementById('bbx-json-template-content').innerHTML = 
+                        '<p style="color: red;">Error loading template</p>';
+                });
+            
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('bbx-json-help-modal').style.display = 'block';
+        }
+
+        function closeBBXJsonHelp() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('bbx-json-help-modal').style.display = 'none';
+        }
+
         async function startBBXGeneration() {
             // Use a default or unlimited count - user can draw as many as they want
             const numBoxes = 999;  // Essentially unlimited
@@ -1171,9 +1261,18 @@
                         inputContent += `
                             <div class="param-group">
                                 <label class="param-label">Bounding Boxes</label>
-                                <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
-                                    📦 Generate (${bboxDisplay})
-                                </button>
+                                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                    <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
+                                        📦 Generate (${bboxDisplay})
+                                    </button>
+                                    <button class="configure-btn" style="background: var(--accent-blue); flex: 0;" onclick="triggerBBXFileUpload('${node.id}')">
+                                        📂 Load
+                                    </button>
+                                    <button class="configure-btn" style="background: var(--accent-green); flex: 0; padding: 6px 10px;" onclick="showBBXJsonHelp()">
+                                        ?
+                                    </button>
+                                </div>
+                                <input type="file" id="bbx-file-input-${node.id}" accept=".json" style="display: none;" onchange="loadBBXFromFile(this, '${node.id}')">
                                 <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
                                     ${bboxDisplay}
                                 </div>

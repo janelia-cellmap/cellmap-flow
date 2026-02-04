@@ -111,6 +111,22 @@ def stream_logs():
     })
 
 
+@app.route("/api/templates/bbox-json")
+def get_bbox_json_template():
+    """Serve the bounding box JSON format template"""
+    template_path = os.path.join(
+        os.path.dirname(__file__),
+        "templates",
+        "bbox_json_template.html"
+    )
+    try:
+        with open(template_path, 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    except FileNotFoundError:
+        return "<p>Template not found</p>", 404
+
+
 @app.route("/")
 def index():
     # Render the main page with tabs
