@@ -151,6 +151,10 @@
                         Loading Neuroglancer viewer...
                     </div>
                 </div>
+                <div id="bbx-existing-boxes" style="padding: 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); max-height: 120px; overflow-y: auto; display: none;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">📦 Existing Bounding Boxes (you can delete them in Neuroglancer):</div>
+                    <div id="bbx-boxes-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                </div>
                 <div id="bbx-status" style="padding: 12px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);">
                     Waiting for bounding boxes...
                 </div>
@@ -801,6 +805,40 @@
             document.getElementById('bbx-count-modal').style.display = 'none';
         }
 
+        function injectAnnotationsIntoIframe(iframe, boundingBoxes) {
+            if (!boundingBoxes || boundingBoxes.length === 0) {
+                return;
+            }
+            
+            try {
+                // Wait for Neuroglancer viewer to fully initialize
+                setTimeout(() => {
+                    const iframeWindow = iframe.contentWindow;
+                    
+                    // Try to inject annotations via postMessage
+                    const annotationData = boundingBoxes.map(bbox => ({
+                        type: 'bounding_box',
+                        pointA: bbox.offset,
+                        pointB: [
+                            bbox.offset[0] + bbox.shape[0],
+                            bbox.offset[1] + bbox.shape[1],
+                            bbox.offset[2] + bbox.shape[2]
+                        ]
+                    }));
+                    
+                    // Send message to iframe
+                    iframeWindow.postMessage({
+                        type: 'createAnnotations',
+                        annotations: annotationData
+                    }, '*');
+                    
+                    console.log('Sent annotations to iframe:', annotationData);
+                }, 2000);
+            } catch (err) {
+                console.error('Error injecting annotations into iframe:', err);
+            }
+        }
+
         async function startBBXGeneration() {
             // Use a default or unlimited count - user can draw as many as they want
             const numBoxes = 999;  // Essentially unlimited
@@ -808,7 +846,7 @@
             bbxGeneratorState.numBoxes = numBoxes;
             bbxGeneratorState.createdBoxes = [];
 
-            // Find the input node to get dataset path
+            // Find the input node to get dataset path and existing bounding boxes
             const inputNode = pipeline.inputs.find(n => n.id === bbxGeneratorState.inputNodeId);
             if (!inputNode) {
                 showMessage('Input node not found', 'error');
@@ -820,6 +858,9 @@
                 showMessage('Please set the dataset path on the INPUT node first', 'error');
                 return;
             }
+
+            // Get existing bounding boxes if any
+            const existingBoundingBoxes = inputNode.params?.bounding_boxes || [];
 
             closeBBXCountModal();
             
@@ -834,17 +875,54 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         dataset_path: datasetPath,
-                        num_boxes: numBoxes
+                        num_boxes: numBoxes,
+                        existing_bounding_boxes: existingBoundingBoxes
                     })
                 });
 
                 const result = await response.json();
                 if (response.ok) {
+                    // Store existing bounding boxes for iframe injection
+                    bbxGeneratorState.existingBoundingBoxes = result.existing_bounding_boxes || [];
+                    
                     // Open the Neuroglancer URL in the modal
                     const viewerContent = document.getElementById('bbx-viewer-content');
-                    viewerContent.innerHTML = `<iframe id="bbx-iframe" src="${result.viewer_url}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+                    const iframe = document.createElement('iframe');
+                    iframe.id = 'bbx-iframe';
+                    iframe.src = result.viewer_url;
+                    iframe.style.width = '100%';
+                    iframe.style.height = '100%';
+                    iframe.style.border = 'none';
+                    viewerContent.innerHTML = '';
+                    viewerContent.appendChild(iframe);
                     
-                    document.getElementById('bbx-status').textContent = `🎯 Draw bounding boxes in Neuroglancer. Click "Done - Save Boxes" when finished.`;
+                    // Wait for iframe to load, then inject annotations
+                    iframe.onload = function() {
+                        injectAnnotationsIntoIframe(iframe, bbxGeneratorState.existingBoundingBoxes);
+                    };
+                    
+                    const boxCount = result.existing_count || 0;
+                    const statusMsg = boxCount > 0 
+                        ? `🎯 Showing ${boxCount} existing box(es). Add more or delete existing ones. Click "Done - Save Boxes" when finished.`
+                        : `🎯 Draw bounding boxes in Neuroglancer. Click "Done - Save Boxes" when finished.`;
+                    document.getElementById('bbx-status').textContent = statusMsg;
+                    
+                    // Display existing bounding boxes in the list
+                    if (result.existing_bounding_boxes && result.existing_bounding_boxes.length > 0) {
+                        const existingBoxesDiv = document.getElementById('bbx-existing-boxes');
+                        const boxesList = document.getElementById('bbx-boxes-list');
+                        existingBoxesDiv.style.display = 'block';
+                        
+                        boxesList.innerHTML = result.existing_bounding_boxes.map((bbox, idx) => {
+                            const offset = bbox.offset || [];
+                            const shape = bbox.shape || [];
+                            return `<div style="background: var(--bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--accent-blue);">
+                                <div><strong>Box ${idx + 1}</strong></div>
+                                <div>Offset: [${offset.join(', ')}]</div>
+                                <div>Shape: [${shape.join(', ')}]</div>
+                            </div>`;
+                        }).join('');
+                    }
                     
                     // Start polling for completed boxes
                     pollBBXGeneration();

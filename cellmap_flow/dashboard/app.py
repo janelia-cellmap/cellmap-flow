@@ -990,6 +990,7 @@ def start_bbx_generator():
         data = request.json
         dataset_path = data.get("dataset_path", "")
         num_boxes = data.get("num_boxes", 1)
+        existing_bounding_boxes = data.get("existing_bounding_boxes", [])
         
         if not dataset_path:
             return jsonify({"error": "Dataset path is required"}), 400
@@ -1008,19 +1009,46 @@ def start_bbx_generator():
             # Add image layer
             s.layers["fibsem"] = get_raw_layer(dataset_path)
             
-            # Add LOCAL annotation layer for bounding boxes
-            s.layers["annotations"] = neuroglancer.LocalAnnotationLayer(
+            # Add annotation layer for bounding boxes
+            s.layers["bboxes"] = neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
                     names=["z", "y", "x"],
                     units="nm",
                     scales=[1, 1, 1],
                 ),
             )
+            
+            # Add existing bounding boxes to the annotations layer
+            if existing_bounding_boxes and len(existing_bounding_boxes) > 0:
+                logger.info(f"Loading {len(existing_bounding_boxes)} existing bounding box(es)")
+                from neuroglancer import AxisAlignedBoundingBoxAnnotation
+                
+                for idx, bbox in enumerate(existing_bounding_boxes):
+                    offset = bbox.get("offset", [0, 0, 0])
+                    shape = bbox.get("shape", [1, 1, 1])
+                    
+                    # Calculate min and max points from offset and shape - MUST be floats
+                    point_a = [float(offset[0]), float(offset[1]), float(offset[2])]
+                    point_b = [
+                        float(offset[0] + shape[0]),
+                        float(offset[1] + shape[1]),
+                        float(offset[2] + shape[2])
+                    ]
+                    
+                    # Create bounding box annotation with id and description
+                    ann = AxisAlignedBoundingBoxAnnotation(
+                        point_a=point_a,
+                        point_b=point_b,
+                        id=f"bbox-{idx + 1}",
+                        description=f"Bounding box {idx + 1}"
+                    )
+                    s.layers["bboxes"].annotations.append(ann)
+                    logger.info(f"Added existing bbox {idx + 1}: offset={offset}, shape={shape}")
         
         # Store state
         bbx_generator_state["dataset_path"] = dataset_path
         bbx_generator_state["num_boxes"] = num_boxes
-        bbx_generator_state["bounding_boxes"] = []
+        bbx_generator_state["bounding_boxes"] = list(existing_bounding_boxes)  # Start with existing ones
         bbx_generator_state["viewer"] = viewer
         
         # Get the viewer URL and fix localhost reference
@@ -1040,6 +1068,7 @@ def start_bbx_generator():
         logger.info(f"Starting BBX generator with viewer URL: {viewer_url}")
         logger.info(f"Dataset path: {dataset_path}")
         logger.info(f"Target boxes: {num_boxes}")
+        logger.info(f"Existing boxes: {len(existing_bounding_boxes)}")
         
         # For iframe access, we need to return the raw viewer URL
         # Neuroglancer server should be accessible at the returned URL
@@ -1047,7 +1076,9 @@ def start_bbx_generator():
             "success": True,
             "viewer_url": viewer_url,
             "dataset_path": dataset_path,
-            "num_boxes": num_boxes
+            "num_boxes": num_boxes,
+            "existing_count": len(existing_bounding_boxes),
+            "existing_bounding_boxes": existing_bounding_boxes
         })
     
     except Exception as e:
