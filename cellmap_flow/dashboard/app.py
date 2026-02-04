@@ -3,13 +3,15 @@ import os
 import socket
 import neuroglancer
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from flask_cors import CORS
 import logging
 import subprocess
 import yaml
 import tempfile
 import re
+from collections import deque
+import queue
 from cellmap_flow.utils.web_utils import get_free_port
 from cellmap_flow.norm.input_normalize import (
     get_input_normalizers,
@@ -33,11 +35,35 @@ import numpy as np
 import time
 
 logger = logging.getLogger(__name__)
+
+# Global log buffer for streaming to frontend
+log_buffer = deque(maxlen=1000)  # Keep last 1000 lines
+log_clients = []  # List of queues for connected clients
+
+# Custom handler to capture logs
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = self.format(record)
+        log_buffer.append(log_entry)
+        # Send to all connected clients
+        for client_queue in log_clients:
+            try:
+                client_queue.put_nowait(log_entry)
+            except queue.Full:
+                pass
+
 # Explicitly set template and static folder paths for package installation
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 CORS(app)
+
+# Add custom log handler to logger
+log_handler = LogHandler()
+log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(log_handler)
+logger.setLevel(logging.INFO)
+
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
 
@@ -52,6 +78,37 @@ CUSTOM_CODE_FOLDER = os.path.expanduser(
         "~/Desktop/cellmap/cellmap-flow/example/example_norm",
     )
 )
+
+
+@app.route("/api/logs/stream")
+def stream_logs():
+    """Stream logs via Server-Sent Events (SSE)"""
+    def generate():
+        # Send existing log buffer first
+        for log_line in log_buffer:
+            yield f"data: {log_line}\n\n"
+        
+        # Create a queue for this client
+        client_queue = queue.Queue(maxsize=100)
+        log_clients.append(client_queue)
+        
+        try:
+            while True:
+                try:
+                    log_line = client_queue.get(timeout=30)
+                    yield f"data: {log_line}\n\n"
+                except queue.Empty:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+        finally:
+            # Clean up when client disconnects
+            if client_queue in log_clients:
+                log_clients.remove(client_queue)
+    
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no"
+    })
 
 
 @app.route("/")
@@ -621,11 +678,20 @@ def generate_blockwise_task():
         input_node = pipeline["inputs"][0]
         output_node = pipeline["outputs"][0]
         
+        # Get output path and ensure it ends with .zarr
+        output_path = output_node["params"]["dataset_path"]
+        if output_path:
+            # Remove trailing slashes
+            output_path = output_path.rstrip('/\\')
+            # Add .zarr if not already present
+            if not output_path.endswith('.zarr'):
+                output_path = output_path + '.zarr'
+        
         # Create task YAML content
         task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         task_yaml = {
             "data_path": input_node["params"]["dataset_path"],
-            "output_path": output_node["params"]["dataset_path"],
+            "output_path": output_path,
             "task_name": task_name,
             "charge_group": blockwise_config["params"]["charge_group"],
             "queue": blockwise_config["params"]["queue"],
@@ -640,6 +706,12 @@ def generate_blockwise_task():
         if bounding_boxes and isinstance(bounding_boxes, list) and len(bounding_boxes) > 0:
             task_yaml["bounding_boxes"] = bounding_boxes
             logger.info(f"Adding bounding_boxes to YAML: {len(bounding_boxes)} box(es)")
+        
+        # Add separate_bounding_boxes_zarrs flag from INPUT node if set
+        separate_zarrs = input_node.get("params", {}).get("separate_bounding_boxes_zarrs", False)
+        if separate_zarrs:
+            task_yaml["separate_bounding_boxes_zarrs"] = True
+            logger.info("Adding separate_bounding_boxes_zarrs: True")
         
         # Add model_mode if multiple models are present and a merge mode is selected
         model_count = len(pipeline.get("models", []))
@@ -744,17 +816,55 @@ def generate_blockwise_task():
         yaml_filename = f"{task_name}.yaml"
         tasks_dir = get_blockwise_tasks_dir()
         yaml_path = os.path.join(tasks_dir, yaml_filename)
-        with open(yaml_path, 'w') as f:
-            f.write(yaml_content)
         
-        logger.info(f"Generated blockwise task YAML at: {yaml_path}")
+        # Check if we need to generate multiple YAMLs (one per bbox with separate output paths)
+        # Use the output_path (which already has .zarr appended if needed)
+        output_base_path = output_path
+        yaml_paths = []
+        
+        if separate_zarrs and bounding_boxes and len(bounding_boxes) > 0:
+            # Generate separate YAML for each bounding box
+            logger.info(f"Generating separate YAMLs for {len(bounding_boxes)} bounding box(es)")
+            for bbox_idx, bbox in enumerate(bounding_boxes):
+                # Create a copy of task_yaml for this bbox
+                bbox_task_yaml = task_yaml.copy()
+                
+                # Keep only this bbox in bounding_boxes
+                bbox_task_yaml["bounding_boxes"] = [bbox]
+                
+                # Set output path to box_X subdirectory
+                bbox_output_path = os.path.join(output_base_path, f"box_{bbox_idx + 1}")
+                bbox_task_yaml["output_path"] = bbox_output_path
+                
+                # Update task name to include bbox index
+                bbox_task_name = f"{task_name}_box{bbox_idx + 1}"
+                bbox_task_yaml["task_name"] = bbox_task_name
+                
+                # Convert to YAML
+                bbox_yaml_content = yaml.dump(bbox_task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                
+                # Save bbox YAML
+                bbox_yaml_filename = f"{bbox_task_name}.yaml"
+                bbox_yaml_path = os.path.join(tasks_dir, bbox_yaml_filename)
+                with open(bbox_yaml_path, 'w') as f:
+                    f.write(bbox_yaml_content)
+                
+                yaml_paths.append(bbox_yaml_path)
+                logger.info(f"Generated bbox {bbox_idx + 1} YAML at: {bbox_yaml_path}")
+        else:
+            # Single YAML for all bboxes
+            with open(yaml_path, 'w') as f:
+                f.write(yaml_content)
+            yaml_paths = [yaml_path]
+            logger.info(f"Generated blockwise task YAML at: {yaml_path}")
+        
         logger.info(f"Task YAML content:\n{yaml_content}")
         
         return {
             "success": True,
             "task_yaml": yaml_content,
             "task_config": task_yaml,
-            "task_path": yaml_path,
+            "task_paths": yaml_paths,  # All paths for multiple YAMLs
             "task_name": task_name,
             "message": "Blockwise task generated successfully"
         }
@@ -766,29 +876,20 @@ def generate_blockwise_task():
 
 @app.route("/api/blockwise/precheck", methods=["POST"])
 def precheck_blockwise_task():
-    """Precheck blockwise task configuration"""
+    """Precheck blockwise task configuration using already-generated YAML"""
     try:
         from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
         
         data = request.get_json()
-        pipeline = data.get("pipeline", {})
+        yaml_paths = data.get("yaml_paths", [])
         
-        # First validate
-        validation = validate_blockwise()
-        if not validation.get("valid"):
-            return {"success": False, "error": validation.get("error")}
+        if not yaml_paths:
+            return {"success": False, "error": "No YAML paths provided. Please generate task first."}
         
-        # Generate task YAML first
-        gen_result = generate_blockwise_task()
-        if not gen_result.get("success"):
-            return {"success": False, "error": gen_result.get("error")}
-        
-        yaml_path = gen_result.get("task_path")
-        
-        # Try to instantiate the processor to validate configuration
+        # Try to instantiate the processor to validate configuration with the first YAML
         try:
-            _ = CellMapFlowBlockwiseProcessor(yaml_path, create=True)
-            logger.info(f"Blockwise precheck passed for: {yaml_path}")
+            _ = CellMapFlowBlockwiseProcessor(yaml_paths[0], create=True)
+            logger.info(f"Blockwise precheck passed for: {yaml_paths[0]}")
             return {
                 "success": True,
                 "message": "success"
@@ -820,10 +921,10 @@ def submit_blockwise_task():
         if not gen_result.get("success"):
             return {"success": False, "error": gen_result.get("error")}
         
-        yaml_path = gen_result["task_path"]
+        yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
         blockwise_config = pipeline["blockwise_config"][0]
         
-        # Build bsub command
+        # Build bsub command - use multiple_cli to handle multiple YAML files
         cores_master = blockwise_config["params"]["nb_cores_master"]
         charge_group = blockwise_config["params"]["charge_group"]
         queue = blockwise_config["params"]["queue"]
@@ -834,9 +935,8 @@ def submit_blockwise_task():
             "-n", str(cores_master),
             "-P", charge_group,
             # "-q", queue,
-            "python", "-m", "cellmap_flow.blockwise.cli",
-            yaml_path
-        ]
+            "python", "-m", "cellmap_flow.blockwise.multiple_cli",
+        ] + yaml_paths  # Add all YAML paths
         
         logger.info(f"Submitting LSF job: {' '.join(bsub_cmd)}")
         
@@ -854,7 +954,7 @@ def submit_blockwise_task():
             return {
                 "success": True,
                 "job_id": job_id,
-                "task_path": yaml_path,
+                "task_paths": yaml_paths,
                 "command": " ".join(bsub_cmd),
                 "message": f"Task submitted as job {job_id}"
                 }

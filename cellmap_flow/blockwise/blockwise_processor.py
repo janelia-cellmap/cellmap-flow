@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO)
 
 import subprocess
 from pathlib import Path
-
+import zarr
 import daisy
 import numpy as np
 from funlib.geometry.coordinate import Coordinate
@@ -43,6 +43,10 @@ class CellMapFlowBlockwiseProcessor:
         if "output_path" not in self.config:
             raise Exception("Missing required field in YAML: output_path")
         self.output_path = self.config["output_path"]
+        if ".zarr" not in str(self.output_path):
+            raise Exception("output_path should be a zarr with .zarr on it")
+        z_con = self.output_path.split(".zarr")[0]+".zarr"
+        zarr.open(z_con,mode="a")  # this is to create the zarr if it does not exist
         self.output_path = Path(self.output_path)
 
         output_channels = None
@@ -177,11 +181,33 @@ class CellMapFlowBlockwiseProcessor:
         )
         self.output_arrays = []
 
-        output_shape = (
-            np.array(self.idi_raw.shape)
-            * np.array(self.input_voxel_size)
-            / np.array(self.output_voxel_size)
-        )
+        self.bounding_boxes = self.config.get("bounding_boxes", None)
+        self.separate_zarrs = self.config.get("separate_bounding_boxes_zarrs", False)
+
+        if self.bounding_boxes and self.separate_zarrs:
+            if len(self.bounding_boxes)>1:
+                raise Exception("separate_bounding_boxes_zarrs can only be used with one bounding box")
+            bounding_box = self.bounding_boxes[0]
+            offset = tuple(bounding_box.get("offset", [0, 0, 0]))
+            shape = tuple(bounding_box.get("shape", [0, 0, 0]))
+            roi = daisy.Roi(offset, shape)
+            roi2 = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+            if roi2 != roi:
+                logger.warning(f"Bounding box ROI {roi} was not aligned to output voxel size grid {self.output_voxel_size}, it has been adjusted to {roi2} to avoid misalignment issues.")
+            roi = roi2
+            output_shape = (np.array(roi.shape)
+                        / np.array(self.output_voxel_size)
+                        ).astype(int)
+            offset = (np.array(roi.offset)
+                    #   /np.array(self.output_voxel_size)
+                      ).astype(int)
+        else:
+            output_shape = (
+                np.array(self.idi_raw.shape)
+                * np.array(self.input_voxel_size)
+                / np.array(self.output_voxel_size)
+            ).astype(int)
+            offset = (0, 0, 0)
 
         logger.info(f"output_shape: {output_shape}")
         logger.info(f"type: {self.dtype}")
@@ -210,13 +236,16 @@ class CellMapFlowBlockwiseProcessor:
                             final_output_shape = (len(channel_indices),) + tuple(
                                 output_shape.astype(int)
                             )
+                            final_offset = (0,) + tuple(offset)
+                            
                         else:
                             # Single channel output - 3D array
                             final_output_shape = tuple(output_shape.astype(int))
+                            final_offset = tuple(offset)
                     else:
                         # List format - 3D array
                         final_output_shape = tuple(output_shape.astype(int))
-
+                        final_offset = tuple(offset)
                     array = prepare_ds(
                         NestedDirectoryStore(self.output_path / channel / "s0"),
                         final_output_shape,
@@ -226,7 +255,7 @@ class CellMapFlowBlockwiseProcessor:
                             if len(final_output_shape) == 3
                             else (len(channel_indices),) + self.block_shape
                         ),
-                        voxel_size=(
+                        voxel_size=Coordinate(
                             self.output_voxel_size
                             if len(final_output_shape) == 3
                             else (1,) + tuple(self.output_voxel_size)
@@ -241,8 +270,8 @@ class CellMapFlowBlockwiseProcessor:
                             if len(final_output_shape) == 3
                             else [""] + ["nanometer"] * 3
                         ),
-                        offset=(
-                            (0, 0, 0) if len(final_output_shape) == 3 else (0, 0, 0, 0)
+                        offset=Coordinate(
+                            final_offset
                         ),
                     )
                 except Exception as e:
@@ -262,19 +291,19 @@ class CellMapFlowBlockwiseProcessor:
                         if len(channel_indices) > 1:
                             # 4D metadata
                             metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
-                            metadata_translation = [0.0] * 4
+                            metadata_translation = list(final_offset)
                             metadata_units = [""] + ["nanometer"] * 3
                             metadata_axes = ["c", "z", "y", "x"]
                         else:
                             # 3D metadata
                             metadata_voxel_size = self.output_voxel_size
-                            metadata_translation = [0.0] * 3
+                            metadata_translation = list(final_offset)
                             metadata_units = ["nanometer"] * 3
                             metadata_axes = ["z", "y", "x"]
                     else:
                         # List format - 3D metadata
                         metadata_voxel_size = self.output_voxel_size
-                        metadata_translation = [0.0] * 3
+                        metadata_translation = list(final_offset)
                         metadata_units = ["nanometer"] * 3
                         metadata_axes = ["z", "y", "x"]
 
@@ -309,7 +338,7 @@ class CellMapFlowBlockwiseProcessor:
             self.output_arrays.append(array)
 
     def process_fn(self, block):
-        logger.error(f"Processing block {block}")
+        # logger.error(f"Processing block {block}")
 
         # Handle 4D vs 3D array ROI intersection
         first_array = self.output_arrays[0]
@@ -449,7 +478,8 @@ class CellMapFlowBlockwiseProcessor:
             rois_to_process = []
             # If there is ROI the ROI can be different than the block order which can cause read-write conflicts
             # best way is to align the ROI with the block shape, but for now we will just warn the user about potential conflicts
-            conflicts = True
+            if not self.separate_zarrs:
+                conflicts = True
             
             for i, bbox in enumerate(bounding_boxes):
                 offset = tuple(bbox.get("offset", [0, 0, 0]))
@@ -502,8 +532,8 @@ def check_block(tmp_dir, block: daisy.Block) -> bool:
 
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
-        if not Path("prediction_logs").exists():
-            Path("prediction_logs").mkdir(parents=True, exist_ok=True)
+        if not Path("daisy_logs").exists():
+            Path("daisy_logs").mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
                 "bsub",
@@ -518,9 +548,9 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
                 "-gpu",
                 "num=1",
                 "-o",
-                f"prediction_logs/out.out",
+                f"daisy_logs/out.out",
                 "-e",
-                f"prediction_logs/out.err",
+                f"daisy_logs/out.err",
                 "cellmap_flow_blockwise",
                 f"{yaml_config}",
                 "--client",

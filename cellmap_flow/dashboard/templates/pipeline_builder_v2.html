@@ -105,6 +105,18 @@
                 </div>
             </div>
         </div>
+
+        <!-- Log Panel -->
+        <div id="log-panel" class="log-panel">
+            <div class="log-header">
+                <span>📋 Flow Logs</span>
+                <button class="log-toggle-btn" onclick="toggleLogPanel()" title="Toggle log panel">▼</button>
+            </div>
+            <div id="log-content" class="log-content">
+                <div id="log-output" class="log-output"></div>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- Bounding Box Generator Number Input Modal -->
@@ -921,6 +933,15 @@
             }
         }
 
+        function updateInputNodeParam(inputNodeId, paramName, paramValue) {
+            const inputNode = pipeline.inputs.find(n => n.id === inputNodeId);
+            if (inputNode) {
+                inputNode.params = inputNode.params || {};
+                inputNode.params[paramName] = paramValue;
+                renderCanvas();
+            }
+        }
+
         function renderCanvas() {
             const canvas = document.getElementById('canvas-content');
             canvas.innerHTML = '';
@@ -1068,6 +1089,7 @@
                     if (node.type === 'input') {
                         const bboxes = node.params?.bounding_boxes || [];
                         const bboxDisplay = bboxes.length > 0 ? `${bboxes.length} bbox(es)` : 'None';
+                        const separateZarrs = node.params?.separate_bounding_boxes_zarrs || false;
                         inputContent += `
                             <div class="param-group">
                                 <label class="param-label">Bounding Boxes</label>
@@ -1076,6 +1098,15 @@
                                 </button>
                                 <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
                                     ${bboxDisplay}
+                                </div>
+                                <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="separate-zarrs-${node.id}" 
+                                           ${separateZarrs ? 'checked' : ''} 
+                                           onchange="updateInputNodeParam('${node.id}', 'separate_bounding_boxes_zarrs', this.checked)"
+                                           style="cursor: pointer;">
+                                    <label for="separate-zarrs-${node.id}" style="cursor: pointer; margin: 0; font-size: 13px;">
+                                        Save each bbox as separate zarr
+                                    </label>
                                 </div>
                             </div>
                         `;
@@ -1322,6 +1353,38 @@
             showMessage('Node reset', 'success');
         }
 
+        // Log streaming functionality
+        function startLogStreaming() {
+            const eventSource = new EventSource('/api/logs/stream');
+            const logOutput = document.getElementById('log-output');
+            
+            eventSource.onmessage = (event) => {
+                if (event.data && event.data !== 'keepalive') {
+                    const logLine = document.createElement('div');
+                    logLine.textContent = event.data;
+                    logOutput.appendChild(logLine);
+                    // Auto-scroll to bottom
+                    logOutput.parentElement.scrollTop = logOutput.parentElement.scrollHeight;
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                console.error('Log streaming error:', error);
+                eventSource.close();
+            };
+        }
+
+        function toggleLogPanel() {
+            const logContent = document.getElementById('log-content');
+            const toggleBtn = document.querySelector('.log-toggle-btn');
+            logContent.style.display = logContent.style.display === 'none' ? 'flex' : 'none';
+            toggleBtn.classList.toggle('collapsed');
+        }
+
+        // Start log streaming when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            startLogStreaming();
+        });
         function showMessage(msg, type) {
             const div = document.createElement('div');
             div.className = `message ${type}`;
@@ -1338,7 +1401,7 @@
             });
             div.style.bottom = bottomPosition + 'px';
             
-            setTimeout(() => div.remove(), 3000);
+            setTimeout(() => div.remove(), 5000);
         }
 
         async function applyPipeline() {
@@ -2280,16 +2343,19 @@
                 
                 const data = await response.json();
                 if (data.success) {
-                    showMessage(`✓ Task generated: ${data.task_path}`, 'success');
+                    const taskPath = (data.task_paths && data.task_paths[0]) || data.task_name || 'Task';
+                    showMessage(`✓ Task generated: ${taskPath}`, 'success');
                     status.textContent = `✓ Step 2: Generated`;
                     status.style.color = 'var(--accent-green)';
                     blockwiseState.generated = true;
                     blockwiseState.prechecked = false;
+                    blockwiseState.yaml_paths = data.task_paths;  // Store yaml_paths for precheck
                     // Enable precheck
                     document.getElementById('btn-precheck').disabled = false;
                     // Disable submit until prechecked
                     document.getElementById('btn-submit').disabled = true;
-                    console.log('Task path:', data.task_path);
+                    console.log('Task name:', data.task_name);
+                    console.log('Task paths:', data.task_paths);
                     console.log('Task YAML:', data.task_yaml);
                 } else {
                     showMessage('✗ ' + data.error, 'error');
@@ -2319,16 +2385,10 @@
             status.textContent = 'Prechecking...';
             
             try {
-                // Add model_mode to pipeline
-                const pipelineWithConfig = { 
-                    ...pipeline,
-                    model_mode: blockwiseState.model_mode
-                };
-                
                 const response = await fetch('/api/blockwise/precheck', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline: pipelineWithConfig })
+                    body: JSON.stringify({ yaml_paths: blockwiseState.yaml_paths })
                 });
                 
                 const data = await response.json();

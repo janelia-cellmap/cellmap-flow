@@ -30,6 +30,7 @@
             display: flex;
             height: 100vh;
             flex-direction: column;
+            overflow: hidden;
         }
 
         .header {
@@ -723,4 +724,68 @@
             text-align: center;
             max-width: 300px;
             line-height: 1.5;
+        }
+
+        /* Log Panel Styles */
+        .log-panel {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            max-height: 250px;
+            min-height: 50px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .log-header span {
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .log-toggle-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 12px;
+            padding: 0;
+            transition: transform 0.2s;
+        }
+
+        .log-toggle-btn.collapsed {
+            transform: rotate(180deg);
+        }
+
+        .log-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: var(--bg-primary);
+        }
+
+        .log-output {
+            padding: 8px 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-output:empty::before {
+            content: "Waiting for logs...";
+            color: var(--border-color);
         }
