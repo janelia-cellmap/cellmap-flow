@@ -320,7 +320,7 @@
                 }
             }
 
-            // 1. INPUT → first normalizer (if any)
+            // 1. INPUT → first normalizer (if normalizers exist)
             if (pipeline.inputs.length > 0 && pipeline.normalizers.length > 0) {
                 addEdge(pipeline.inputs[0].id, pipeline.normalizers[0].id);
             }
@@ -330,22 +330,30 @@
                 addEdge(pipeline.normalizers[i].id, pipeline.normalizers[i + 1].id);
             }
 
-            // 3. Last normalizer → ALL models (or INPUT → models if no normalizers)
+            // 3. Determine source for models: last normalizer → models (or INPUT → models if no normalizers)
             const sourceForModels = pipeline.normalizers.length > 0 
                 ? pipeline.normalizers[pipeline.normalizers.length - 1].id 
                 : (pipeline.inputs.length > 0 ? pipeline.inputs[0].id : null);
             
-            if (sourceForModels) {
+            if (sourceForModels && pipeline.models.length > 0) {
                 pipeline.models.forEach(model => {
                     addEdge(sourceForModels, model.id);
                 });
             }
 
-            // 4. Chain postprocessors: each model → first postprocessor
-            if (pipeline.postprocessors.length > 0) {
-                pipeline.models.forEach(model => {
-                    addEdge(model.id, pipeline.postprocessors[0].id);
-                });
+            // 4. Determine sink for models: either to postprocessors or directly to output
+            if (pipeline.models.length > 0) {
+                if (pipeline.postprocessors.length > 0) {
+                    // Models → first postprocessor (if postprocessors exist)
+                    pipeline.models.forEach(model => {
+                        addEdge(model.id, pipeline.postprocessors[0].id);
+                    });
+                } else if (pipeline.outputs.length > 0) {
+                    // Models → OUTPUT directly (if no postprocessors but have output)
+                    pipeline.models.forEach(model => {
+                        addEdge(model.id, pipeline.outputs[0].id);
+                    });
+                }
             }
 
             // 5. Chain postprocessors: post1 → post2 → post3 → ...
@@ -353,7 +361,7 @@
                 addEdge(pipeline.postprocessors[i].id, pipeline.postprocessors[i + 1].id);
             }
 
-            // 6. Last postprocessor → OUTPUT (if any)
+            // 6. Last postprocessor → OUTPUT (if postprocessors exist)
             if (pipeline.postprocessors.length > 0 && pipeline.outputs.length > 0) {
                 addEdge(pipeline.postprocessors[pipeline.postprocessors.length - 1].id, pipeline.outputs[0].id);
             }
