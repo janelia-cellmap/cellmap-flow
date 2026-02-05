@@ -511,6 +511,7 @@
 
         // Node management with positions
         let draggedNode = null;
+        let selectedNode = null;  // Track the currently selected/front node
         let dragOffset = { x: 0, y: 0 };
 
         // Connection state
@@ -1631,6 +1632,9 @@
 
                 if (!actualNode) return;
 
+                // Bring this node to front
+                bringNodeToFront(nodeEl);
+
                 draggedNode = {
                     element: nodeEl,
                     node: actualNode,
@@ -1646,6 +1650,17 @@
             });
 
             header.style.cursor = 'grab';
+        }
+
+        function bringNodeToFront(nodeEl) {
+            // Reset previous selected node to auto z-index
+            if (selectedNode && selectedNode !== nodeEl) {
+                selectedNode.style.zIndex = 'auto';
+            }
+            
+            // Set this node as selected and bring to front
+            selectedNode = nodeEl;
+            nodeEl.style.zIndex = 999;  // 999 so dragging can use 1000
         }
 
         function handleParamChange(input, nodeId, nodeType) {
@@ -2574,7 +2589,8 @@
                 const finalY = Math.max(0, draggedNode.originalY + dy);
 
                 draggedNode.node.position = { x: finalX, y: finalY };
-                draggedNode.element.style.zIndex = 'auto';
+                // Keep z-index at 999 since it's selected, instead of resetting to auto
+                draggedNode.element.style.zIndex = 999;
                 draggedNode.element.style.cursor = 'auto';
                 draggedNode = null;
 
