@@ -73,6 +73,10 @@
                         <span id="models-toggle">▼</span>
                     </button>
                     <div class="library-items" id="models-items"></div>
+                    <button class="action-btn" style="width: 100%; margin-top: 8px; background: var(--accent-blue);" 
+                            onclick="openCreateModelConfigModal()" title="Create a custom model configuration">
+                        ➕ Create Custom
+                    </button>
                 </div>
 
                 <div class="library-section">
@@ -198,6 +202,34 @@
             </div>
             <div class="modal-footer">
                 <button class="action-btn" onclick="closeBBXJsonHelp()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Model Config Modal -->
+    <div id="create-model-config-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 600px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>Create Custom Model Configuration</h2>
+                <button class="modal-close-btn" onclick="closeCreateModelConfigModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px;">
+                    <label class="param-label">Model Type</label>
+                    <select id="model-config-type-select" class="param-input" 
+                            onchange="updateModelConfigForm(this.value)" style="width: 100%; padding: 8px;">
+                        <option value="">-- Select Model Type --</option>
+                    </select>
+                </div>
+                
+                <div id="model-config-form-container" style="display: none;">
+                    <div id="model-config-form"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeCreateModelConfigModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="submitCreateModelConfig()" id="create-model-config-btn">✓ Create Model</button>
             </div>
         </div>
     </div>
@@ -1115,6 +1147,190 @@
                 inputNode.params = inputNode.params || {};
                 inputNode.params[paramName] = paramValue;
                 renderCanvas();
+            }
+        }
+
+        // ===== MODEL CONFIG CREATION =====
+        let availableModelConfigTypes = {};
+
+        async function openCreateModelConfigModal() {
+            const modal = document.getElementById('create-model-config-modal');
+            const overlay = document.getElementById('modal-overlay');
+            overlay.style.display = 'block';
+            modal.style.display = 'block';
+            
+            // Fetch available model config types if not already loaded
+            if (Object.keys(availableModelConfigTypes).length === 0) {
+                try {
+                    const response = await fetch('/api/model-config-types');
+                    availableModelConfigTypes = await response.json();
+                    populateModelConfigTypeSelect();
+                } catch (error) {
+                    console.error('Error loading model config types:', error);
+                    alert('Failed to load model types');
+                }
+            }
+        }
+
+        function closeCreateModelConfigModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('create-model-config-modal').style.display = 'none';
+        }
+
+        function populateModelConfigTypeSelect() {
+            const select = document.getElementById('model-config-type-select');
+            select.innerHTML = '<option value="">-- Select Model Type --</option>';
+            
+            Object.entries(availableModelConfigTypes).forEach(([className, config]) => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = `${config.display_name} - ${config.description}`;
+                select.appendChild(option);
+            });
+        }
+
+        function updateModelConfigForm(className) {
+            const container = document.getElementById('model-config-form-container');
+            const formDiv = document.getElementById('model-config-form');
+            
+            if (!className) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            const config = availableModelConfigTypes[className];
+            formDiv.innerHTML = '';
+            
+            // Group parameters into required and optional
+            const required = Object.entries(config.parameters).filter(([_, info]) => info.required);
+            const optional = Object.entries(config.parameters).filter(([_, info]) => !info.required);
+            
+            // Add required parameters section
+            if (required.length > 0) {
+                const requiredDiv = document.createElement('div');
+                requiredDiv.innerHTML = '<h3 style="margin-top: 0; margin-bottom: 12px; color: var(--text-primary);">Required Parameters</h3>';
+                required.forEach(([paramName, paramInfo]) => {
+                    const fieldDiv = createParameterField(paramName, paramInfo);
+                    requiredDiv.appendChild(fieldDiv);
+                });
+                formDiv.appendChild(requiredDiv);
+            }
+            
+            // Add optional parameters section
+            if (optional.length > 0) {
+                const optionalDiv = document.createElement('div');
+                optionalDiv.innerHTML = '<h3 style="margin-top: 16px; margin-bottom: 12px; color: var(--text-secondary);">Optional Parameters</h3>';
+                optional.forEach(([paramName, paramInfo]) => {
+                    const fieldDiv = createParameterField(paramName, paramInfo);
+                    optionalDiv.appendChild(fieldDiv);
+                });
+                formDiv.appendChild(optionalDiv);
+            }
+            
+            container.style.display = 'block';
+        }
+
+        function createParameterField(paramName, paramInfo) {
+            const fieldDiv = document.createElement('div');
+            fieldDiv.style.marginBottom = '12px';
+            
+            const label = document.createElement('label');
+            label.className = 'param-label';
+            label.textContent = paramInfo.description;
+            if (paramInfo.required) {
+                label.textContent += ' *';
+            }
+            fieldDiv.appendChild(label);
+            
+            const input = document.createElement('input');
+            input.id = `param-${paramName}`;
+            input.className = 'param-input';
+            input.placeholder = paramInfo.description;
+            input.style.width = '100%';
+            input.style.padding = '8px';
+            input.style.marginTop = '4px';
+            
+            if (paramInfo.input_type === 'number') {
+                input.type = 'number';
+                input.step = 'any';
+            } else if (paramInfo.input_type === 'file') {
+                input.type = 'text';
+                input.placeholder = `e.g., /path/to/${paramName}`;
+            } else if (paramInfo.input_type === 'textarea') {
+                const textarea = document.createElement('textarea');
+                textarea.id = `param-${paramName}`;
+                textarea.className = 'param-input';
+                textarea.placeholder = `e.g., ["ch0", "ch1"] or (16, 16, 16)`;
+                textarea.style.width = '100%';
+                textarea.style.padding = '8px';
+                textarea.style.minHeight = '60px';
+                textarea.style.marginTop = '4px';
+                textarea.style.fontFamily = 'monospace';
+                fieldDiv.appendChild(textarea);
+                return fieldDiv;
+            } else {
+                input.type = 'text';
+            }
+            
+            if (paramInfo.default !== undefined) {
+                input.placeholder += ` (default: ${paramInfo.default})`;
+            }
+            
+            fieldDiv.appendChild(input);
+            return fieldDiv;
+        }
+
+        async function submitCreateModelConfig() {
+            const className = document.getElementById('model-config-type-select').value;
+            if (!className) {
+                alert('Please select a model type');
+                return;
+            }
+            
+            const config = availableModelConfigTypes[className];
+            const params = {};
+            
+            // Collect all parameter values
+            Object.keys(config.parameters).forEach(paramName => {
+                const input = document.getElementById(`param-${paramName}`);
+                if (input) {
+                    const value = input.value.trim();
+                    params[paramName] = value || null;
+                }
+            });
+            
+            try {
+                const response = await fetch('/api/create-model-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ class_name: className, params })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                    return;
+                }
+                
+                const result = await response.json();
+                console.log('Model config created:', result);
+                
+                // Add the new model to the UI
+                const modelContainer = document.getElementById('models-items');
+                const elem = document.createElement('div');
+                elem.className = 'library-item';
+                elem.textContent = result.model_name;
+                elem.draggable = true;
+                elem.dataset.type = 'model';
+                elem.dataset.name = result.model_name;
+                elem.addEventListener('dragstart', handleDragStart);
+                modelContainer.appendChild(elem);
+                
+                alert(`✓ Created ${result.model_name}`);
+                closeCreateModelConfigModal();
+            } catch (error) {
+                console.error('Error creating model config:', error);
+                alert('Failed to create model config');
             }
         }
 

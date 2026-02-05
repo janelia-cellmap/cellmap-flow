@@ -161,37 +161,47 @@ def pipeline_builder():
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
 
-    # Get available models from models_config (not from catalog)
+    # Get available models from model catalog
     available_models = {}
-    # if hasattr(g, 'models_config') and g.models_config:
-    #     for model_config in g.models_config:
-    #         model_dict = model_config.to_dict()
-    #         available_models[model_config.name] = model_dict
+    if hasattr(g, 'model_catalog') and g.model_catalog:
+        for category, category_models in g.model_catalog.items():
+            if isinstance(category_models, dict):
+                for model_name, model_path in category_models.items():
+                    full_name = f"{category}/{model_name}"
+                    available_models[full_name] = {
+                        'name': full_name,
+                        'category': category,
+                        'model_name': model_name,
+                        'path': model_path
+                    }
+    
+    # Also include any models from g.models_config if available
+    if hasattr(g, 'models_config') and g.models_config:
+        for model_config in g.models_config:
+            model_dict = model_config.to_dict()
+            model_name = model_config.name
+            if model_name not in available_models:
+                available_models[model_name] = model_dict
     
     logger.warning(f"\n{'='*80}")
     logger.warning(f"AVAILABLE MODELS DEBUG:")
-    logger.warning(f"  Initial available_models keys: {list(available_models.keys())}")
-    logger.warning(f"  g.models_config: {g.models_config if hasattr(g, 'models_config') else 'NOT SET'}")
-    logger.warning(f"  Sample model with config:")
-    for model_name, model_data in list(available_models.items())[:1]:
-        logger.warning(f"    {model_name}: {model_data}")
+    logger.warning(f"  Models from catalog: {[k for k in available_models.keys() if '/' in k]}")
+    logger.warning(f"  Models from config: {[k for k in available_models.keys() if '/' not in k]}")
+    logger.warning(f"  Total available models: {len(available_models)}")
+    
+    # Ensure all models have proper structure for UI
     models_with_config = {}
-    for model_name in available_models.keys():
-        # Find matching config (strip _server suffix for matching)
-        model_name_stripped = model_name.replace('_server', '')
-        for model_config in g.models_config:
-            config_name = getattr(model_config, 'name', '').replace('_server', '')
-            if config_name == model_name_stripped:
-                if hasattr(model_config, 'to_dict'):
-                    models_with_config[model_name] = {
-                        'name': model_name,
-                        'config': model_config.to_dict()
-                    }
-                break
-        # If no config found, just use the name
-        if model_name not in models_with_config:
+    for model_name, model_data in available_models.items():
+        # Ensure the model has a 'name' field
+        if isinstance(model_data, dict):
+            models_with_config[model_name] = model_data
+            if 'name' not in models_with_config[model_name]:
+                models_with_config[model_name]['name'] = model_name
+        else:
             models_with_config[model_name] = {'name': model_name}
+    
     available_models = models_with_config
+    logger.warning(f"  Final available_models count: {len(available_models)}")
 
     # Check if we have stored pipeline state from previous apply
     if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
@@ -339,6 +349,75 @@ def pipeline_builder():
         current_edges=current_edges,
         dataset_path=dataset_path,
     )
+
+
+@app.route("/api/available-models")
+def get_available_models():
+    """Get available models from the model catalog"""
+    models = {}
+    
+    # Build models from catalog
+    if hasattr(g, 'model_catalog') and g.model_catalog:
+        for category, category_models in g.model_catalog.items():
+            if isinstance(category_models, dict):
+                for model_name, model_path in category_models.items():
+                    full_name = f"{category}/{model_name}"
+                    models[full_name] = {
+                        'name': full_name,
+                        'category': category,
+                        'model_name': model_name,
+                        'path': model_path
+                    }
+    
+    logger.info(f"Available models: {list(models.keys())}")
+    return jsonify(models)
+
+
+@app.route("/api/model-config-types")
+def get_model_config_types():
+    """Get available ModelConfig subclasses and their parameter metadata"""
+    from cellmap_flow.models.model_registry import get_all_model_configs
+    
+    try:
+        config_types = get_all_model_configs()
+        logger.info(f"Available model config types: {list(config_types.keys())}")
+        return jsonify(config_types)
+    except Exception as e:
+        logger.error(f"Error getting model config types: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/create-model-config", methods=["POST"])
+def create_model_config():
+    """Create a ModelConfig instance from user-provided parameters"""
+    from cellmap_flow.models.model_registry import instantiate_model_config
+    
+    try:
+        data = request.get_json()
+        class_name = data.get('class_name')
+        params = data.get('params', {})
+        
+        if not class_name:
+            return jsonify({'error': 'class_name is required'}), 400
+        
+        # Instantiate the model config
+        model_config = instantiate_model_config(class_name, params)
+        
+        # Store it in g.models_config for use in pipeline
+        if not hasattr(g, 'models_config'):
+            g.models_config = []
+        g.models_config.append(model_config)
+        
+        logger.info(f"Created {class_name}: {model_config.name}")
+        return jsonify({
+            'success': True,
+            'message': f'Created {class_name}',
+            'model_name': model_config.name,
+            'config_dict': model_config.to_dict()
+        })
+    except Exception as e:
+        logger.error(f"Error creating model config: {str(e)}")
+        return jsonify({'error': str(e)}), 400
 
 
 def is_output_segmentation():
