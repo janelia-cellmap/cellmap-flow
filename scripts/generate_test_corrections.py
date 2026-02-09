@@ -166,15 +166,31 @@ def save_correction_to_zarr(
     correction_group = zarr.open_group(str(output_path), mode='a')
     corr_group = correction_group.require_group(correction_id)
 
-    # Save arrays
-    raw_array = corr_group.require_group('raw/s0')
-    raw_array.array('data', raw_data, chunks=(64, 64, 64), dtype=np.uint8)
+    # Save arrays with OME-NGFF compatible structure
+    # Structure: raw/s0 (not raw/s0/data)
+    corr_group.array('raw/s0', raw_data, chunks=(64, 64, 64), dtype=np.uint8, overwrite=True)
+    corr_group.array('prediction/s0', prediction, chunks=(64, 64, 64), dtype=np.uint8, overwrite=True)
+    corr_group.array('mask/s0', corrected_mask, chunks=(64, 64, 64), dtype=np.uint8, overwrite=True)
 
-    pred_array = corr_group.require_group('prediction/s0')
-    pred_array.array('data', prediction, chunks=(64, 64, 64), dtype=np.uint8)
-
-    mask_array = corr_group.require_group('mask/s0')
-    mask_array.array('data', corrected_mask, chunks=(64, 64, 64), dtype=np.uint8)
+    # Add OME-NGFF metadata for Neuroglancer compatibility
+    for name in ['raw', 'prediction', 'mask']:
+        group = corr_group.require_group(name)
+        group.attrs['multiscales'] = [{
+            'version': '0.4',
+            'name': name,
+            'axes': [
+                {'name': 'z', 'type': 'space', 'unit': 'nanometer'},
+                {'name': 'y', 'type': 'space', 'unit': 'nanometer'},
+                {'name': 'x', 'type': 'space', 'unit': 'nanometer'}
+            ],
+            'datasets': [{
+                'path': 's0',
+                'coordinateTransformations': [{
+                    'type': 'scale',
+                    'scale': list(voxel_size)
+                }]
+            }]
+        }]
 
     # Save metadata
     corr_group.attrs['correction_id'] = correction_id

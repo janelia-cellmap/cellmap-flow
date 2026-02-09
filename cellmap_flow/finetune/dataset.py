@@ -97,8 +97,8 @@ class CorrectionDataset(Dataset):
 
             corrections.append({
                 'id': correction_id,
-                'raw_path': str(self.corrections_path / correction_id / 'raw' / 's0' / 'data'),
-                'mask_path': str(self.corrections_path / correction_id / 'mask' / 's0' / 'data'),
+                'raw_path': str(self.corrections_path / correction_id / 'raw' / 's0'),
+                'mask_path': str(self.corrections_path / correction_id / 'mask' / 's0'),
                 'metadata': attrs,
             })
 
