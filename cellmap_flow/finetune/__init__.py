@@ -18,6 +18,12 @@ from cellmap_flow.finetune.dataset import (
     create_dataloader,
 )
 
+from cellmap_flow.finetune.trainer import (
+    LoRAFinetuner,
+    DiceLoss,
+    CombinedLoss,
+)
+
 __all__ = [
     "detect_adaptable_layers",
     "wrap_model_with_lora",
@@ -26,4 +32,7 @@ __all__ = [
     "save_lora_adapter",
     "CorrectionDataset",
     "create_dataloader",
+    "LoRAFinetuner",
+    "DiceLoss",
+    "CombinedLoss",
 ]
