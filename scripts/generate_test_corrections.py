@@ -307,16 +307,17 @@ def main():
         # Create expanded ROI for reading (includes context)
         read_roi = roi.grow(context, context)
 
-        # Load raw data WITHOUT normalization for saving
-        # Temporarily disable normalization
+        # Load raw data at FULL INPUT SIZE (for training) WITHOUT normalization
+        # This is the data the model needs as input
         original_norms = g.input_norms
         g.input_norms = []
-        raw_data_unnorm = dataset.to_ndarray_ts(roi)
+        raw_data_full = dataset.to_ndarray_ts(read_roi)  # Full input size
+        raw_data_write = dataset.to_ndarray_ts(roi)       # Output size (for reference)
         g.input_norms = original_norms
 
         # Ensure uint8
-        if raw_data_unnorm.dtype != np.uint8:
-            raw_data_unnorm = raw_data_unnorm.astype(np.uint8)
+        if raw_data_full.dtype != np.uint8:
+            raw_data_full = raw_data_full.astype(np.uint8)
 
         print(f"  Context: {context}")
         print(f"  Read ROI: {read_roi.get_shape() / dataset.voxel_size}")
@@ -352,12 +353,13 @@ def main():
         corrected_mask = create_synthetic_correction(prediction, correction_type)
 
         # Save to Zarr
+        # Note: Save raw at FULL input size, prediction/mask at output size
         save_correction_to_zarr(
             correction_id=correction_id,
-            raw_data=raw_data_unnorm,
-            prediction=prediction,
-            corrected_mask=corrected_mask,
-            roi=roi,
+            raw_data=raw_data_full,  # Full input size for training
+            prediction=prediction,    # Output size
+            corrected_mask=corrected_mask,  # Output size
+            roi=read_roi,  # Use read_roi for metadata (full size)
             voxel_size=voxel_size,
             output_path=output_path,
             model_name="fly_organelles_mito",

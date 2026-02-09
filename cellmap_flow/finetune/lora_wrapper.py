@@ -297,6 +297,11 @@ def load_lora_adapter(
 
     logger.info(f"Loading LoRA adapter from: {adapter_path}")
 
+    # Wrap Sequential models to make them compatible with PEFT
+    if isinstance(model, nn.Sequential):
+        logger.info("Wrapping Sequential model for PEFT compatibility")
+        model = SequentialWrapper(model)
+
     peft_model = PeftModel.from_pretrained(
         model,
         adapter_path,
