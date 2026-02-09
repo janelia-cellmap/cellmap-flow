@@ -126,24 +126,6 @@ class CorrectionDataset(Dataset):
         raw = zarr.open(correction['raw_path'], mode='r')[:]
         mask = zarr.open(correction['mask_path'], mode='r')[:]
 
-        # Handle size mismatch: center-crop raw to match mask size
-        # (Model output is smaller than input due to UNet architecture)
-        if raw.shape != mask.shape:
-            rz, ry, rx = raw.shape
-            mz, my, mx = mask.shape
-
-            # Calculate center crop offsets
-            z_off = (rz - mz) // 2
-            y_off = (ry - my) // 2
-            x_off = (rx - mx) // 2
-
-            # Center crop raw to match mask
-            raw = raw[
-                z_off:z_off + mz,
-                y_off:y_off + my,
-                x_off:x_off + mx
-            ]
-
         # Convert to float
         raw = raw.astype(np.float32)
         mask = mask.astype(np.float32)
@@ -157,10 +139,8 @@ class CorrectionDataset(Dataset):
             if raw.max() > 1.0:
                 raw = raw / 255.0
 
-        # Extract patch if requested
-        if self.patch_shape is not None:
-            raw, mask = self._random_crop(raw, mask, self.patch_shape)
-
+        # For models with different input/output sizes, we keep raw at full size
+        # Patching is disabled for this case - use full corrections
         # Apply augmentation
         if self.augment:
             raw, mask = self._augment_3d(raw, mask)
@@ -284,7 +264,7 @@ class CorrectionDataset(Dataset):
 def create_dataloader(
     corrections_zarr_path: str,
     batch_size: int = 2,
-    patch_shape: Optional[Tuple[int, int, int]] = (48, 48, 48),
+    patch_shape: Optional[Tuple[int, int, int]] = None,
     augment: bool = True,
     num_workers: int = 4,
     shuffle: bool = True,

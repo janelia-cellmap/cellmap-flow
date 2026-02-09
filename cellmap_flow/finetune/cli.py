@@ -117,8 +117,8 @@ def main():
         "--patch-shape",
         type=int,
         nargs=3,
-        default=[48, 48, 48],
-        help="Patch shape for training (Z Y X, default: 48 48 48)"
+        default=None,
+        help="Patch shape for training (Z Y X). Default: None (use full corrections)"
     )
     parser.add_argument(
         "--no-augment",
