@@ -54,7 +54,7 @@ def main():
     dataloader = create_dataloader(
         corrections_path,
         batch_size=2,
-        patch_shape=(64, 64, 64),
+        patch_shape=None,  # Use full correction size (56x56x56)
         augment=True,
         num_workers=2,
         shuffle=True,
