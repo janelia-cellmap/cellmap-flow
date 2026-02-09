@@ -82,6 +82,28 @@ def detect_adaptable_layers(
     return adaptable
 
 
+class SequentialWrapper(nn.Module):
+    """
+    Wrapper for Sequential models to make them compatible with PEFT.
+
+    PEFT expects models to accept **kwargs, but Sequential only accepts
+    positional args. This wrapper provides that interface.
+    """
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x=None, input_ids=None, **kwargs):
+        # PEFT may pass input as 'input_ids' kwarg for transformers
+        # For vision models, we expect 'x' as positional or kwarg
+        if x is None and input_ids is not None:
+            x = input_ids
+        if x is None:
+            raise ValueError("Input tensor not provided")
+        # Ignore other kwargs and just pass x
+        return self.model(x)
+
+
 def wrap_model_with_lora(
     model: nn.Module,
     target_modules: Optional[List[str]] = None,
@@ -144,6 +166,11 @@ def wrap_model_with_lora(
             "peft library is required for LoRA finetuning. "
             "Install with: pip install peft"
         )
+
+    # Wrap Sequential models to make them compatible with PEFT
+    if isinstance(model, nn.Sequential):
+        logger.info("Wrapping Sequential model for PEFT compatibility")
+        model = SequentialWrapper(model)
 
     # Auto-detect target modules if not specified
     if target_modules is None:
