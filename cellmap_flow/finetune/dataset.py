@@ -141,9 +141,14 @@ class CorrectionDataset(Dataset):
 
         # For models with different input/output sizes, we keep raw at full size
         # Patching is disabled for this case - use full corrections
-        # Apply augmentation
-        if self.augment:
+        # Apply augmentation (only if raw and mask have same shape)
+        if self.augment and raw.shape == mask.shape:
             raw, mask = self._augment_3d(raw, mask)
+        elif self.augment and raw.shape != mask.shape:
+            logger.debug(
+                f"Skipping augmentation: raw {raw.shape} != mask {mask.shape}. "
+                "Augmentation requires matching sizes."
+            )
 
         # Add channel dimension and convert to torch
         raw = torch.from_numpy(raw[np.newaxis, ...])  # (1, Z, Y, X)
