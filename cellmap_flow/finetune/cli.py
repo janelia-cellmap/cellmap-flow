@@ -240,7 +240,7 @@ def main():
     dataloader = create_dataloader(
         args.corrections,
         batch_size=args.batch_size,
-        patch_shape=tuple(args.patch_shape),
+        patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
         augment=not args.no_augment,
         num_workers=args.num_workers,
         shuffle=True,
