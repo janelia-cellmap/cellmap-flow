@@ -70,6 +70,12 @@ postprocess = ["edt",
     "mwatershed @ git+https://github.com/pattonw/mwatershed",
     "funlib.math @ git+https://github.com/funkelab/funlib.math.git",]
 
+finetune = [
+    "peft>=0.7.0",           # HuggingFace Parameter-Efficient Fine-Tuning
+    "transformers>=4.35.0",  # Required by peft
+    "accelerate>=0.20.0",    # Training utilities
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
