@@ -163,3 +163,10 @@ cython_debug/
 
 # Misc
 .vscode/
+
+# Project-specific
+ignore/
+*.zarr/
+.claude/
+test_corrections.zarr/
+correction_slices/
