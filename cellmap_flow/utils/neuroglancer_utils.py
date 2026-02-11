@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 neuroglancer.set_server_bind_address("0.0.0.0")
 
 
-def generate_neuroglancer_url(dataset_path):
+def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
     st_data = get_norms_post_args(g.input_norms, g.postprocess)
 
     # Add a layer to the viewer
     with g.viewer.txn() as s:
-        g.raw = get_raw_layer(dataset_path)
+        g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
         s.layers["data"] = g.raw
         colors = [
             "red",

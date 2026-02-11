@@ -125,11 +125,12 @@ class ScriptModelConfig(ModelConfig):
 
 class DaCapoModelConfig(ModelConfig):
 
-    def __init__(self, run_name: str, iteration: int, name=None):
+    def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()
         self.run_name = run_name
         self.iteration = iteration
         self.name = name
+        self.scale = scale
 
     @property
     def command(self):
@@ -192,6 +193,8 @@ class DaCapoModelConfig(ModelConfig):
         }
         if self.name is not None:
             result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
         return result
 
 
@@ -206,6 +209,7 @@ class FlyModelConfig(ModelConfig):
         name: str = None,
         input_size=None,
         output_size=None,
+        scale=None,
     ):
         super().__init__()
         self.name = name
@@ -213,6 +217,7 @@ class FlyModelConfig(ModelConfig):
         self.channels = channels
         self.input_voxel_size = input_voxel_size
         self.output_voxel_size = output_voxel_size
+        self.scale = scale
         self._model = None
         if input_size is None or output_size is None:
             input_size = (178, 178, 178)
@@ -284,6 +289,8 @@ class FlyModelConfig(ModelConfig):
             result["input_size"] = list(self.input_size)
         if self.output_size is not None:
             result["output_size"] = list(self.output_size)
+        if self.scale is not None:
+            result["scale"] = self.scale
         return result
 
 
@@ -294,11 +301,13 @@ class BioModelConfig(ModelConfig):
         voxel_size,
         edge_length_to_process=None,
         name=None,
+        scale=None,
     ):
         super().__init__()
         self.model_name = model_name
         self.voxel_size = voxel_size
         self.name = name
+        self.scale = scale
         self.voxels_to_process = None
         if edge_length_to_process:
             self.voxels_to_process = edge_length_to_process**3
@@ -448,6 +457,8 @@ class BioModelConfig(ModelConfig):
         }
         if self.name is not None:
             result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
         if self.voxels_to_process is not None:
             # Reconstruct edge_length_to_process from voxels_to_process
             edge_length = round(self.voxels_to_process ** (1/3))

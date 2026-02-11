@@ -3,6 +3,7 @@ Dynamic CLI generator that automatically detects ModelConfig subclasses
 and creates CLI commands based on their __init__ parameters.
 """
 
+import os
 import click
 import logging
 import inspect
@@ -116,16 +117,21 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
                 click.echo(f"  - {param_name}", err=True)
         sys.exit(1)
 
+    # Append scale to data_path if present in model config
+    final_data_path = data_path
+    if hasattr(model_config, 'scale') and model_config.scale:
+        final_data_path = os.path.join(data_path, model_config.scale)
+
     # Run the server check or full inference
     if server_check:
-        server = CellMapFlowServer(data_path, model_config)
+        server = CellMapFlowServer(final_data_path, model_config)
         server._chunk_impl(None, None, 2, 2, 2, None)
         click.echo("Server check passed")
     else:
-        command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+        command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
         logger.info(f"Executing command: {command}")
         start_hosts(command, queue, project, model_config.name or model_type)
-        neuroglancer_url = generate_neuroglancer_url(data_path)
+        neuroglancer_url = generate_neuroglancer_url(final_data_path)
         click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
 
@@ -170,17 +176,22 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
 
+        # Append scale to data_path if present in model config
+        final_data_path = data_path
+        if hasattr(model_config, 'scale') and model_config.scale:
+            final_data_path = os.path.join(data_path, model_config.scale)
+
         # Run server check or full inference
         if server_check:
-            server = CellMapFlowServer(data_path, model_config)
+            server = CellMapFlowServer(final_data_path, model_config)
             server._chunk_impl(None, None, 2, 2, 2, None)
             click.echo("Server check passed")
         else:
-            command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+            command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             start_hosts(command, queue, project, base_name)
-            neuroglancer_url = generate_neuroglancer_url(data_path)
+            neuroglancer_url = generate_neuroglancer_url(final_data_path)
             click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
     # Add docstring

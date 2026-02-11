@@ -243,9 +243,7 @@ class CellMapFlowServer:
                 continue
 
         # Encode using Zarr format
-        encoded = numcodecs.Blosc(
-            cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE
-        ).encode(chunk_data)
+        encoded = self.chunk_encoder.encode(chunk_data)
 
         return (
             encoded,
