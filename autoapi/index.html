@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>API Reference &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
@@ -93,18 +94,18 @@
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/blockwise/index.html">cellmap_flow.blockwise</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/blockwise/blockwise_processor/index.html">cellmap_flow.blockwise.blockwise_processor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/blockwise/cli/index.html">cellmap_flow.blockwise.cli</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/blockwise/multiple_cli/index.html">cellmap_flow.blockwise.multiple_cli</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/cli/index.html">cellmap_flow.cli</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/cli/index.html">cellmap_flow.cli.cli</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/fly_model/index.html">cellmap_flow.cli.fly_model</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/multiple_cli/index.html">cellmap_flow.cli.multiple_cli</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/multiple_yaml_cli/index.html">cellmap_flow.cli.multiple_yaml_cli</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/server_cli/index.html">cellmap_flow.cli.server_cli</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/cli/yaml_cli/index.html">cellmap_flow.cli.yaml_cli</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/dashboard/index.html">cellmap_flow.dashboard</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/dashboard/app/index.html">cellmap_flow.dashboard.app</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/dashboard/bbx_generator/index.html">cellmap_flow.dashboard.bbx_generator</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/globals/index.html">cellmap_flow.globals</a></li>
@@ -112,8 +113,9 @@
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/inferencer/index.html">cellmap_flow.inferencer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/models/index.html">cellmap_flow.models</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/cellmap_models/index.html">cellmap_flow.models.cellmap_models</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/model_app_config/index.html">cellmap_flow.models.model_app_config</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/model_yaml/index.html">cellmap_flow.models.model_yaml</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/model_merger/index.html">cellmap_flow.models.model_merger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/model_registry/index.html">cellmap_flow.models.model_registry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/models_config/index.html">cellmap_flow.models.models_config</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/models/run/index.html">cellmap_flow.models.run</a></li>
 </ul>
 </li>
@@ -128,13 +130,16 @@
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/server/index.html">cellmap_flow.server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cellmap_flow/utils/index.html">cellmap_flow.utils</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/bsub_utils/index.html">cellmap_flow.utils.bsub_utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/cli_utils/index.html">cellmap_flow.utils.cli_utils</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/config_utils/index.html">cellmap_flow.utils.config_utils</a></li>
-<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/data/index.html">cellmap_flow.utils.data</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/ds/index.html">cellmap_flow.utils.ds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/generate_neuroglancer/index.html">cellmap_flow.utils.generate_neuroglancer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/import_utils/index.html">cellmap_flow.utils.import_utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/job_extensions/index.html">cellmap_flow.utils.job_extensions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/load_py/index.html">cellmap_flow.utils.load_py</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/neuroglancer_utils/index.html">cellmap_flow.utils.neuroglancer_utils</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/scale_pyramid/index.html">cellmap_flow.utils.scale_pyramid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/serialize_config/index.html">cellmap_flow.utils.serialize_config</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/serilization_utils/index.html">cellmap_flow.utils.serilization_utils</a></li>
 <li class="toctree-l3"><a class="reference internal" href="cellmap_flow/utils/web_utils/index.html">cellmap_flow.utils.web_utils</a></li>
 </ul>

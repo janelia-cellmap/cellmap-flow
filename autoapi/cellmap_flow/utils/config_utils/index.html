@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cellmap_flow.utils.config_utils &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
@@ -24,8 +24,8 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils.data" href="../data/index.html" />
-    <link rel="prev" title="cellmap_flow.utils.bsub_utils" href="../bsub_utils/index.html" /> 
+    <link rel="next" title="cellmap_flow.utils.ds" href="../ds/index.html" />
+    <link rel="prev" title="cellmap_flow.utils.cli_utils" href="../cli_utils/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
@@ -105,6 +106,8 @@
              
   <section id="module-cellmap_flow.utils.config_utils">
 <span id="cellmap-flow-utils-config-utils"></span><h1>cellmap_flow.utils.config_utils<a class="headerlink" href="#module-cellmap_flow.utils.config_utils" title="Link to this heading"></a></h1>
+<p>Smart YAML configuration utilities that dynamically discover and instantiate
+ModelConfig subclasses, similar to the CLI v2 approach.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
@@ -122,11 +125,17 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.load_config" title="cellmap_flow.utils.config_utils.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>(path)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.get_model_type_mapping" title="cellmap_flow.utils.config_utils.get_model_type_mapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_model_type_mapping</span></code></a>(→ Dict[str, type])</p></td>
+<td><p>Get mapping of CLI-friendly names to ModelConfig classes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.load_config" title="cellmap_flow.utils.config_utils.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>(→ Dict[str, Any])</p></td>
 <td><p>Load and validate the YAML configuration.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.build_models" title="cellmap_flow.utils.config_utils.build_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_models</span></code></a>(model_entries)</p></td>
-<td><p>Given a list of model entries from YAML, instantiate the correct ModelConfig objects.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.build_model_from_entry" title="cellmap_flow.utils.config_utils.build_model_from_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_model_from_entry</span></code></a>(...)</p></td>
+<td><p>Build a single ModelConfig instance from a YAML entry.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.config_utils.build_models" title="cellmap_flow.utils.config_utils.build_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_models</span></code></a>(...)</p></td>
+<td><p>Given model entries from YAML, instantiate the correct ModelConfig objects.</p></td>
 </tr>
 </tbody>
 </table>
@@ -144,15 +153,75 @@
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.get_model_type_mapping">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">get_model_type_mapping</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">type</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.get_model_type_mapping" title="Link to this definition"></a></dt>
+<dd><p>Get mapping of CLI-friendly names to ModelConfig classes.
+Uses the same logic as cli_v2 for consistency.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary mapping model type names to ModelConfig classes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.load_config">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.config_utils.load_config" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.load_config" title="Link to this definition"></a></dt>
 <dd><p>Load and validate the YAML configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> – Path to YAML configuration file</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Validated configuration dictionary</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.build_model_from_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">build_model_from_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.build_model_from_entry" title="Link to this definition"></a></dt>
+<dd><p>Build a single ModelConfig instance from a YAML entry.
+Dynamically discovers the appropriate class and validates parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>entry</strong> – Dictionary containing model configuration from YAML</p></li>
+<li><p><strong>model_name</strong> – Name/key of the model from YAML (used as the model’s name)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Instantiated ModelConfig subclass</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.build_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">build_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_entries</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.config_utils.build_models" title="Link to this definition"></a></dt>
-<dd><p>Given a list of model entries from YAML, instantiate the correct ModelConfig objects.</p>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">build_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_entries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.build_models" title="Link to this definition"></a></dt>
+<dd><p>Given model entries from YAML, instantiate the correct ModelConfig objects.
+Uses dynamic discovery like cli_v2 instead of hardcoded if/else chains.</p>
+<p>YAML format:
+models:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>my_model_1:</dt><dd><p>type: cellmap-model
+checkpoint_path: /path/to/checkpoint</p>
+</dd>
+<dt>my_model_2:</dt><dd><p>type: dacapo
+run_name: my_run
+iteration: 50000</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model_entries</strong> – Dictionary mapping model names to their configurations</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of instantiated ModelConfig objects</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -162,8 +231,8 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../bsub_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.bsub_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../data/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.data" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../cli_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.cli_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../ds/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.ds" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

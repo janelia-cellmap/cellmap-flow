@@ -1,0 +1,1075 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Argument Reference &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Custom Model" href="custom_script.html" />
+    <link rel="prev" title="CLI Commands" href="cli_command.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CLI Argument Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#standardization-principles">Standardization Principles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#common-arguments">Common Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#data-path-d">–data-path, -d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#project-p">–project, -P</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#queue-q">–queue, -q</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#name-n">–name, -n</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#model-path-arguments">Model Path Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#script-path-s">–script-path, -s</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#model-path-m">–model-path, -m</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#config-folder-f">–config-folder, -f</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#dacapo-specific-arguments">DaCapo-Specific Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-name-r">–run-name, -r</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iteration-i">–iteration, -i</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#fly-model-specific-arguments">Fly Model-Specific Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#checkpoint-c">–checkpoint, -c</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#channels-ch">–channels, -ch</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#input-voxel-size-ivs">–input-voxel-size, -ivs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output-voxel-size-ovs">–output-voxel-size, -ovs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#bioimage-specific-arguments">Bioimage-Specific Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edge-length-to-process-e">–edge-length-to-process, -e</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#server-specific-arguments">Server-Specific Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#port-p">–port, -p</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#debug">–debug</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#certfile">–certfile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#keyfile">–keyfile</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ui-server-arguments">UI Server Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#neuroglancer-url">–neuroglancer-url</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#inference-host-i">–inference-host, -i</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-advanced-arguments">Optional/Advanced Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#scale-r">–scale, -r</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#log-level">–log-level</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#migration-guide">Migration Guide</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#old-vs-new-argument-names">Old vs New Argument Names</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automated-migration-script">Automated Migration Script</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examples-by-use-case">Examples by Use Case</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#single-model-inference">Single Model Inference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multiple-models">Multiple Models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#yaml-configuration">YAML Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#manual-server-control">Manual Server Control</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">CLI Argument Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cli_reference.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cli-argument-reference">
+<h1>CLI Argument Reference<a class="headerlink" href="#cli-argument-reference" title="Link to this heading"></a></h1>
+<p>This document provides a comprehensive reference of all CLI arguments used across CellMap Flow’s command-line interfaces.</p>
+<nav class="contents local" id="table-of-contents">
+<p class="topic-title">Table of Contents</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#standardization-principles" id="id1">Standardization Principles</a></p></li>
+<li><p><a class="reference internal" href="#common-arguments" id="id2">Common Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#data-path-d" id="id3">–data-path, -d</a></p></li>
+<li><p><a class="reference internal" href="#project-p" id="id4">–project, -P</a></p></li>
+<li><p><a class="reference internal" href="#queue-q" id="id5">–queue, -q</a></p></li>
+<li><p><a class="reference internal" href="#name-n" id="id6">–name, -n</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#model-path-arguments" id="id7">Model Path Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#script-path-s" id="id8">–script-path, -s</a></p></li>
+<li><p><a class="reference internal" href="#model-path-m" id="id9">–model-path, -m</a></p></li>
+<li><p><a class="reference internal" href="#config-folder-f" id="id10">–config-folder, -f</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#dacapo-specific-arguments" id="id11">DaCapo-Specific Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#run-name-r" id="id12">–run-name, -r</a></p></li>
+<li><p><a class="reference internal" href="#iteration-i" id="id13">–iteration, -i</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#fly-model-specific-arguments" id="id14">Fly Model-Specific Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#checkpoint-c" id="id15">–checkpoint, -c</a></p></li>
+<li><p><a class="reference internal" href="#channels-ch" id="id16">–channels, -ch</a></p></li>
+<li><p><a class="reference internal" href="#input-voxel-size-ivs" id="id17">–input-voxel-size, -ivs</a></p></li>
+<li><p><a class="reference internal" href="#output-voxel-size-ovs" id="id18">–output-voxel-size, -ovs</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#bioimage-specific-arguments" id="id19">Bioimage-Specific Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#edge-length-to-process-e" id="id20">–edge-length-to-process, -e</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#server-specific-arguments" id="id21">Server-Specific Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#port-p" id="id22">–port, -p</a></p></li>
+<li><p><a class="reference internal" href="#debug" id="id23">–debug</a></p></li>
+<li><p><a class="reference internal" href="#certfile" id="id24">–certfile</a></p></li>
+<li><p><a class="reference internal" href="#keyfile" id="id25">–keyfile</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#ui-server-arguments" id="id26">UI Server Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#neuroglancer-url" id="id27">–neuroglancer-url</a></p></li>
+<li><p><a class="reference internal" href="#inference-host-i" id="id28">–inference-host, -i</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#optional-advanced-arguments" id="id29">Optional/Advanced Arguments</a></p>
+<ul>
+<li><p><a class="reference internal" href="#scale-r" id="id30">–scale, -r</a></p></li>
+<li><p><a class="reference internal" href="#log-level" id="id31">–log-level</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#migration-guide" id="id32">Migration Guide</a></p>
+<ul>
+<li><p><a class="reference internal" href="#old-vs-new-argument-names" id="id33">Old vs New Argument Names</a></p></li>
+<li><p><a class="reference internal" href="#automated-migration-script" id="id34">Automated Migration Script</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#examples-by-use-case" id="id35">Examples by Use Case</a></p>
+<ul>
+<li><p><a class="reference internal" href="#single-model-inference" id="id36">Single Model Inference</a></p></li>
+<li><p><a class="reference internal" href="#multiple-models" id="id37">Multiple Models</a></p></li>
+<li><p><a class="reference internal" href="#yaml-configuration" id="id38">YAML Configuration</a></p></li>
+<li><p><a class="reference internal" href="#manual-server-control" id="id39">Manual Server Control</a></p></li>
+</ul>
+</li>
+</ul>
+</nav>
+<section id="standardization-principles">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Standardization Principles</a><a class="headerlink" href="#standardization-principles" title="Link to this heading"></a></h2>
+<p>All CellMap Flow CLIs follow these naming conventions:</p>
+<ol class="arabic simple">
+<li><p><strong>Hyphenated multi-word arguments</strong>: Use hyphens (<code class="docutils literal notranslate"><span class="pre">--data-path</span></code>), not underscores (<code class="docutils literal notranslate"><span class="pre">--data_path</span></code>)</p></li>
+<li><p><strong>Consistent terminology</strong>: <code class="docutils literal notranslate"><span class="pre">--project</span></code> for billing groups (not <code class="docutils literal notranslate"><span class="pre">--charge_group</span></code>)</p></li>
+<li><p><strong>Clear, descriptive names</strong>: Arguments should be self-documenting</p></li>
+<li><p><strong>Short and long forms</strong>: Commonly used arguments have single-letter shortcuts</p></li>
+</ol>
+</section>
+<section id="common-arguments">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink">Common Arguments</a><a class="headerlink" href="#common-arguments" title="Link to this heading"></a></h2>
+<p>These arguments are used consistently across multiple CLI interfaces.</p>
+<section id="data-path-d">
+<h3><a class="toc-backref" href="#id3" role="doc-backlink">–data-path, -d</a><a class="headerlink" href="#data-path-d" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for most commands)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to the input dataset, typically a Zarr file or group</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--data-path<span class="w"> </span>/nrs/cellmap/data/dataset.zarr
+-d<span class="w"> </span>/nrs/cellmap/data/dataset.zarr/s1
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> (all subcommands)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (all subcommands)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">data_path</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="project-p">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">–project, -P</a><a class="headerlink" href="#project-p" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for job submission)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Project or chargeback group for billing purposes</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--project<span class="w"> </span>cellmap
+-P<span class="w"> </span>my_lab_group
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> (all subcommands)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">charge_group</span></code> or <code class="docutils literal notranslate"><span class="pre">project</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Migration Note:</strong> Previously <code class="docutils literal notranslate"><span class="pre">--charge_group</span></code>. Updated to <code class="docutils literal notranslate"><span class="pre">--project</span></code> for consistency.</p>
+</section>
+<section id="queue-q">
+<h3><a class="toc-backref" href="#id5" role="doc-backlink">–queue, -q</a><a class="headerlink" href="#queue-q" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code></p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Compute queue to submit jobs to</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--queue<span class="w"> </span>gpu_rtx
+-q<span class="w"> </span><span class="nb">local</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> (all subcommands)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">queue</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="name-n">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">–name, -n</a><a class="headerlink" href="#name-n" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Depends on subcommand</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Auto-generated from model/script path</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Custom name for the model, used for job naming and output identification</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--name<span class="w"> </span>mitochondria_model
+-n<span class="w"> </span>my_experiment_v2
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">cellmap-model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">cellmap-model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code> (per-model in YAML)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="model-path-arguments">
+<h2><a class="toc-backref" href="#id7" role="doc-backlink">Model Path Arguments</a><a class="headerlink" href="#model-path-arguments" title="Link to this heading"></a></h2>
+<section id="script-path-s">
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">–script-path, -s</a><a class="headerlink" href="#script-path-s" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for script-based models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to Python script containing model specification</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--script-path<span class="w"> </span>/groups/cellmap/scripts/my_model.py
+-s<span class="w"> </span>./model_definition.py
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">script</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">script</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--script</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="model-path-m">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">–model-path, -m</a><a class="headerlink" href="#model-path-m" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for bioimage.io models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to bioimage.io model file or directory</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--model-path<span class="w"> </span>/models/mito_segmentation.bioimage.io
+-m<span class="w"> </span>./my_model.zip
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">bioimage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">bioimage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--bioimage</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="config-folder-f">
+<h3><a class="toc-backref" href="#id10" role="doc-backlink">–config-folder, -f</a><a class="headerlink" href="#config-folder-f" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for CellMap models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to model configuration folder containing model definition files</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--config-folder<span class="w"> </span>/groups/cellmap/models/mito_16
+-f<span class="w"> </span>./model_configs/nuclei
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">cellmap-model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">cellmap-model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--cellmap-model</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="dacapo-specific-arguments">
+<h2><a class="toc-backref" href="#id11" role="doc-backlink">DaCapo-Specific Arguments</a><a class="headerlink" href="#dacapo-specific-arguments" title="Link to this heading"></a></h2>
+<section id="run-name-r">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">–run-name, -r</a><a class="headerlink" href="#run-name-r" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for DaCapo models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Name of the DaCapo training run to use</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--run-name<span class="w"> </span>mito_run_v3
+-r<span class="w"> </span>nuclei_training_20241015
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">dacapo</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">dacapo</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--dacapo</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="iteration-i">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">–iteration, -i</a><a class="headerlink" href="#iteration-i" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training iteration/checkpoint to use from the DaCapo run</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--iteration<span class="w"> </span><span class="m">60000</span>
+-i<span class="w"> </span><span class="m">40000</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">dacapo</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">dacapo</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--dacapo</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="fly-model-specific-arguments">
+<h2><a class="toc-backref" href="#id14" role="doc-backlink">Fly Model-Specific Arguments</a><a class="headerlink" href="#fly-model-specific-arguments" title="Link to this heading"></a></h2>
+<section id="checkpoint-c">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">–checkpoint, -c</a><a class="headerlink" href="#checkpoint-c" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for Fly models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to the Fly model checkpoint file</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--checkpoint<span class="w"> </span>/models/fly_checkpoint.pth
+-c<span class="w"> </span>./checkpoints/epoch_100.pth
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">fly</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">checkpoint</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="channels-ch">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">–channels, -ch</a><a class="headerlink" href="#channels-ch" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code> (comma-separated)</p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for Fly models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Comma-separated list of output channel names</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--channels<span class="w"> </span>mito,nucleus,golgi
+-ch<span class="w"> </span>cell_membrane,er
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">fly</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">classes</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="input-voxel-size-ivs">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">–input-voxel-size, -ivs</a><a class="headerlink" href="#input-voxel-size-ivs" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code> (comma-separated)</p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for Fly models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Comma-separated input voxel size in nanometers (z,y,x)</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--input-voxel-size<span class="w"> </span><span class="m">8</span>,8,8
+-ivs<span class="w"> </span><span class="m">4</span>,4,4
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">fly</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="output-voxel-size-ovs">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">–output-voxel-size, -ovs</a><a class="headerlink" href="#output-voxel-size-ovs" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code> (comma-separated)</p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for Fly models)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Comma-separated output voxel size in nanometers (z,y,x)</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--output-voxel-size<span class="w"> </span><span class="m">8</span>,8,8
+-ovs<span class="w"> </span><span class="m">4</span>,4,4
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">fly</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="bioimage-specific-arguments">
+<h2><a class="toc-backref" href="#id19" role="doc-backlink">Bioimage-Specific Arguments</a><a class="headerlink" href="#bioimage-specific-arguments" title="Link to this heading"></a></h2>
+<section id="edge-length-to-process-e">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">–edge-length-to-process, -e</a><a class="headerlink" href="#edge-length-to-process-e" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Auto-calculated</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>For 2D models, desired edge length of chunks to process; batch size (z) will be adjusted accordingly</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--edge-length-to-process<span class="w"> </span><span class="m">512</span>
+-e<span class="w"> </span><span class="m">1024</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">bioimage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">bioimage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span> <span class="pre">--bioimage</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="server-specific-arguments">
+<h2><a class="toc-backref" href="#id21" role="doc-backlink">Server-Specific Arguments</a><a class="headerlink" href="#server-specific-arguments" title="Link to this heading"></a></h2>
+<section id="port-p">
+<h3><a class="toc-backref" href="#id22" role="doc-backlink">–port, -p</a><a class="headerlink" href="#port-p" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">0</span></code> (auto-assign)</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Port number for the inference server to listen on</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--port<span class="w"> </span><span class="m">8080</span>
+-p<span class="w"> </span><span class="m">5000</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (all model subcommands)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="debug">
+<h3><a class="toc-backref" href="#id23" role="doc-backlink">–debug</a><a class="headerlink" href="#debug" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">flag</span></code> (boolean)</p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Run server in debug mode with verbose logging</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--debug
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (all model subcommands)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="certfile">
+<h3><a class="toc-backref" href="#id24" role="doc-backlink">–certfile</a><a class="headerlink" href="#certfile" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No (for HTTPS)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to SSL certificate file for HTTPS connections</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--certfile<span class="w"> </span>/path/to/cert.pem
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (all model subcommands)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="keyfile">
+<h3><a class="toc-backref" href="#id25" role="doc-backlink">–keyfile</a><a class="headerlink" href="#keyfile" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No (for HTTPS)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Path to SSL private key file for HTTPS connections</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--keyfile<span class="w"> </span>/path/to/key.pem
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (all model subcommands)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="ui-server-arguments">
+<h2><a class="toc-backref" href="#id26" role="doc-backlink">UI Server Arguments</a><a class="headerlink" href="#ui-server-arguments" title="Link to this heading"></a></h2>
+<section id="neuroglancer-url">
+<h3><a class="toc-backref" href="#id27" role="doc-backlink">–neuroglancer-url</a><a class="headerlink" href="#neuroglancer-url" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for UI server)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Neuroglancer viewer URL to connect to</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--neuroglancer-url<span class="w"> </span>http://localhost:8080/neuroglancer
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">run-ui-server</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="inference-host-i">
+<h3><a class="toc-backref" href="#id28" role="doc-backlink">–inference-host, -i</a><a class="headerlink" href="#inference-host-i" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>Yes (for UI server)</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Inference host address(es)</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--inference-host<span class="w"> </span>http://gpu-node-01:5000
+-i<span class="w"> </span>http://localhost:8000,http://localhost:8001
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">run-ui-server</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="optional-advanced-arguments">
+<h2><a class="toc-backref" href="#id29" role="doc-backlink">Optional/Advanced Arguments</a><a class="headerlink" href="#optional-advanced-arguments" title="Link to this heading"></a></h2>
+<section id="scale-r">
+<h3><a class="toc-backref" href="#id30" role="doc-backlink">–scale, -r</a><a class="headerlink" href="#scale-r" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Auto-detected</p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Input scale level for multi-resolution datasets (e.g., <code class="docutils literal notranslate"><span class="pre">s0</span></code>, <code class="docutils literal notranslate"><span class="pre">s1</span></code>, <code class="docutils literal notranslate"><span class="pre">s2</span></code>)</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--scale<span class="w"> </span>s1
+-r<span class="w"> </span>s2
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code> (per-model)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> (in YAML as <code class="docutils literal notranslate"><span class="pre">scale</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="log-level">
+<h3><a class="toc-backref" href="#id31" role="doc-backlink">–log-level</a><a class="headerlink" href="#log-level" title="Link to this heading"></a></h3>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">choice</span></code> (DEBUG, INFO, WARNING, ERROR, CRITICAL)</p>
+</dd>
+<dt class="field-even">Required<span class="colon">:</span></dt>
+<dd class="field-even"><p>No</p>
+</dd>
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">INFO</span></code></p>
+</dd>
+<dt class="field-even">Description<span class="colon">:</span></dt>
+<dd class="field-even"><p>Logging verbosity level</p>
+</dd>
+</dl>
+<p><strong>Examples:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>--log-level<span class="w"> </span>DEBUG
+--log-level<span class="w"> </span>WARNING
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Used in:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> (main CLI group)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> (main CLI group)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+<section id="migration-guide">
+<h2><a class="toc-backref" href="#id32" role="doc-backlink">Migration Guide</a><a class="headerlink" href="#migration-guide" title="Link to this heading"></a></h2>
+<section id="old-vs-new-argument-names">
+<h3><a class="toc-backref" href="#id33" role="doc-backlink">Old vs New Argument Names</a><a class="headerlink" href="#old-vs-new-argument-names" title="Link to this heading"></a></h3>
+<p>If you have scripts using old argument names, use this table to update them:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 30.0%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Old Argument</p></th>
+<th class="head"><p>New Argument</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--data_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--data-path</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--charge_group</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--project</span></code></p></td>
+<td><p>Clearer terminology</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--script_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--script-path</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--model_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--model-path</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--config_folder</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--config-folder</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--edge_length_to_process</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--edge-length-to-process</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--input_voxel_size</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--input-voxel-size</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--output_voxel_size</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--output-voxel-size</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--neuroglancer_url</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--neuroglancer-url</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--inference_host</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--inference-host</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--folder_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--folder-path</span></code></p></td>
+<td><p>Standardized hyphenation</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="automated-migration-script">
+<h3><a class="toc-backref" href="#id34" role="doc-backlink">Automated Migration Script</a><a class="headerlink" href="#automated-migration-script" title="Link to this heading"></a></h3>
+<p>For large codebases, you can use this sed script to update your YAML and shell scripts:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Update argument names in shell scripts</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/--data_path/--data-path/g&#39;</span><span class="w"> </span>*.sh
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/--charge_group/--project/g&#39;</span><span class="w"> </span>*.sh
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/--script_path/--script-path/g&#39;</span><span class="w"> </span>*.sh
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/--model_path/--model-path/g&#39;</span><span class="w"> </span>*.sh
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/--config_folder/--config-folder/g&#39;</span><span class="w"> </span>*.sh
+</pre></div>
+</div>
+</section>
+</section>
+<section id="examples-by-use-case">
+<h2><a class="toc-backref" href="#id35" role="doc-backlink">Examples by Use Case</a><a class="headerlink" href="#examples-by-use-case" title="Link to this heading"></a></h2>
+<section id="single-model-inference">
+<h3><a class="toc-backref" href="#id36" role="doc-backlink">Single Model Inference</a><a class="headerlink" href="#single-model-inference" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Script-based model</span>
+cellmap_flow<span class="w"> </span>script<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--script-path<span class="w"> </span>/path/to/model.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data-path<span class="w"> </span>/data/volume.zarr/s1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--project<span class="w"> </span>cellmap<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--queue<span class="w"> </span>gpu_h100
+
+<span class="c1"># CellMap model</span>
+cellmap_flow<span class="w"> </span>cellmap-model<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--config-folder<span class="w"> </span>/models/mito_config<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--name<span class="w"> </span>mito_v2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data-path<span class="w"> </span>/data/volume.zarr/s1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--project<span class="w"> </span>cellmap
+</pre></div>
+</div>
+</section>
+<section id="multiple-models">
+<h3><a class="toc-backref" href="#id37" role="doc-backlink">Multiple Models</a><a class="headerlink" href="#multiple-models" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_multiple<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data-path<span class="w"> </span>/data/volume.zarr/s1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--project<span class="w"> </span>cellmap<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--queue<span class="w"> </span>gpu_h100<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--script<span class="w"> </span>-s<span class="w"> </span>/models/mito.py<span class="w"> </span>-n<span class="w"> </span>mito<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--script<span class="w"> </span>-s<span class="w"> </span>/models/nucleus.py<span class="w"> </span>-n<span class="w"> </span>nucleus<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cellmap-model<span class="w"> </span>-f<span class="w"> </span>/models/golgi<span class="w"> </span>-n<span class="w"> </span>golgi
+</pre></div>
+</div>
+</section>
+<section id="yaml-configuration">
+<h3><a class="toc-backref" href="#id38" role="doc-backlink">YAML Configuration</a><a class="headerlink" href="#yaml-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/data/volume.zarr/s1&quot;</span>
+<span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cellmap&quot;</span><span class="w">  </span><span class="c1"># or use &#39;charge_group&#39;</span>
+<span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpu_h100&quot;</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
+<span class="w">    </span><span class="nt">script_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/models/mito.py&quot;</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mito&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap-model</span>
+<span class="w">    </span><span class="nt">config_folder</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/models/nucleus_config&quot;</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nucleus&quot;</span>
+<span class="w">    </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s2&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="manual-server-control">
+<h3><a class="toc-backref" href="#id39" role="doc-backlink">Manual Server Control</a><a class="headerlink" href="#manual-server-control" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start inference server</span>
+cellmap_flow_server<span class="w"> </span>script<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--script-path<span class="w"> </span>/models/model.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data-path<span class="w"> </span>/data/volume.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--debug
+
+<span class="c1"># Start UI server</span>
+cellmap_flow_server<span class="w"> </span>run-ui-server<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--neuroglancer-url<span class="w"> </span>http://localhost:8080/ng<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--inference-host<span class="w"> </span>http://localhost:5000
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli_command.html" class="btn btn-neutral float-left" title="CLI Commands" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom_script.html" class="btn btn-neutral float-right" title="Custom Model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

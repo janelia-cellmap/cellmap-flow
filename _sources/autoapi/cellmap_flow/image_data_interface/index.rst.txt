@@ -30,12 +30,6 @@ Module Contents
    .. py:attribute:: path
 
 
-   .. py:attribute:: filetype
-
-
-   .. py:attribute:: swap_axes
-
-
    .. py:attribute:: offset
 
 
@@ -55,6 +49,9 @@ Module Contents
 
 
    .. py:property:: ts
+
+
+   .. py:property:: info
 
 
    .. py:method:: to_ndarray_ts(roi=None)

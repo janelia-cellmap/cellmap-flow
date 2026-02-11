@@ -1,0 +1,88 @@
+cellmap_flow.models.model_registry
+==================================
+
+.. py:module:: cellmap_flow.models.model_registry
+
+.. autoapi-nested-parse::
+
+   Registry and introspection tools for ModelConfig subclasses.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_registry.get_parameter_info
+   cellmap_flow.models.model_registry.get_all_model_configs
+   cellmap_flow.models.model_registry.instantiate_model_config
+
+
+Module Contents
+---------------
+
+.. py:data:: MODEL_CONFIG_CLASSES
+
+.. py:function:: get_parameter_info(cls) -> Dict[str, Any]
+
+   Extract parameter information from a ModelConfig subclass __init__ method.
+
+   Returns a dict with parameter names as keys and info dicts with:
+   - 'type': the type hint (str, int, list, tuple, etc.)
+   - 'required': whether the parameter is required (no default value)
+   - 'default': the default value if provided
+   - 'description': parameter name for UI labels
+
+
+.. py:function:: get_all_model_configs() -> Dict[str, Dict[str, Any]]
+
+   Get metadata for all available ModelConfig subclasses.
+
+   Returns a dict like:
+   {
+       'ScriptModelConfig': {
+           'display_name': 'Script Model',
+           'description': 'Load model from Python script',
+           'parameters': {
+               'script_path': {
+                   'name': 'script_path',
+                   'type': 'string',
+                   'required': True,
+                   'description': 'Script Path',
+                   'input_type': 'file'
+               },
+               'name': {
+                   'name': 'name',
+                   'type': 'string',
+                   'required': False,
+                   'description': 'Name',
+                   'default': None
+               },
+               ...
+           }
+       },
+       ...
+   }
+
+
+.. py:function:: instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any
+
+   Instantiate a ModelConfig subclass with the provided parameters.
+
+   :param class_name: Name of the ModelConfig subclass (e.g., 'ScriptModelConfig')
+   :param params: Dictionary of parameters to pass to __init__
+
+   :returns: An instance of the ModelConfig subclass
+
+   :raises ValueError: If class_name is not recognized or params are invalid
+
+

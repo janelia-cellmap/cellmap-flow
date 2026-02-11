@@ -249,7 +249,10 @@ Module Contents
    Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor.
 
 
-.. py:function:: get_postprocessors(elms: dict) -> list[PostProcessor]
+.. py:function:: get_postprocessors(elms) -> list[PostProcessor]
+
+   Get postprocessors from either dict or list format.
+
 
 .. py:data:: PostProcessorMethods
 

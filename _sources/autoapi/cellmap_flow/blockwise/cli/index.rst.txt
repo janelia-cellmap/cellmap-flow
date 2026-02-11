@@ -18,15 +18,12 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.blockwise.cli.cli
-   cellmap_flow.blockwise.cli.run
 
 
 Module Contents
 ---------------
 
-.. py:function:: cli(log_level)
+.. py:function:: cli(yaml_config, client, log_level)
 
 .. py:data:: logger
-
-.. py:function:: run(yaml_config, client)
 

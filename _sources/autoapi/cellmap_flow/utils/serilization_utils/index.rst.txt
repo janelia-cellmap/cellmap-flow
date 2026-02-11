@@ -18,6 +18,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.utils.serilization_utils.get_process_dataset
+   cellmap_flow.utils.serilization_utils.get_process_dataset_url
    cellmap_flow.utils.serilization_utils.serialize_norms_posts_to_json
 
 
@@ -27,6 +28,8 @@ Module Contents
 .. py:data:: logger
 
 .. py:function:: get_process_dataset(json_data: dict)
+
+.. py:function:: get_process_dataset_url(dataset: str)
 
 .. py:function:: serialize_norms_posts_to_json(norms=[], posts=[])
 

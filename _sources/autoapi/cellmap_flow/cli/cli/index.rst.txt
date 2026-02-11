@@ -3,13 +3,18 @@ cellmap_flow.cli.cli
 
 .. py:module:: cellmap_flow.cli.cli
 
+.. autoapi-nested-parse::
+
+   Dynamic CLI generator that automatically detects ModelConfig subclasses
+   and creates CLI commands based on their __init__ parameters.
+
+
 
 Attributes
 ----------
 
 .. autoapisummary::
 
-   cellmap_flow.cli.cli.logger
    cellmap_flow.cli.cli.logger
 
 
@@ -19,12 +24,11 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.cli.cli.cli
-   cellmap_flow.cli.cli.dacapo
-   cellmap_flow.cli.cli.script
-   cellmap_flow.cli.cli.bioimage
-   cellmap_flow.cli.cli.cellmap_model
-   cellmap_flow.cli.cli.script_server_check
-   cellmap_flow.cli.cli.run
+   cellmap_flow.cli.cli.list_models
+   cellmap_flow.cli.cli.run_generic
+   cellmap_flow.cli.cli.create_dynamic_command
+   cellmap_flow.cli.cli.register_all_model_commands
+   cellmap_flow.cli.cli.main
 
 
 Module Contents
@@ -34,43 +38,43 @@ Module Contents
 
 .. py:function:: cli(log_level)
 
-   Command-line interface for the Cellmap flo application.
+   CellMap Flow - Dynamic CLI for model inference.
 
-   :param log_level: The desired log level for the application.
-   :type log_level: str
+   Automatically generates commands for all available ModelConfig subclasses.
 
    .. rubric:: Examples
 
-   To use Dacapo run the following commands:
-   ```
-   cellmap_flow dacapo -r my_run -i iteration -d data_path
-   ```
-
-   To use custom script
-   ```
-   cellmap_flow script -s script_path -d data_path
-   ```
-
-   To use bioimage-io model
-   ```
-   cellmap_flow bioimage -m model_path -d data_path
-   ```
+   cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
+   cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
+   cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
 
 
-.. py:data:: logger
+.. py:function:: list_models()
 
-.. py:function:: dacapo(run_name, iteration, data_path, queue, charge_group)
-
-.. py:function:: script(script_path, data_path, queue, charge_group)
-
-.. py:function:: bioimage(model_path, data_path, edge_length_to_process, queue, charge_group)
-
-.. py:function:: cellmap_model(config_folder, name, data_path, queue, charge_group)
-
-   Run the CellMapFlow with a CellMap model.
+   List all available model configurations.
 
 
-.. py:function:: script_server_check(script_path, dataset)
+.. py:function:: run_generic(model_type, data_path, queue, project, config, server_check)
 
-.. py:function:: run(command, dataset_path, queue, charge_group, name)
+   Generic run command that accepts any model type with dynamic configuration.
+
+   .. rubric:: Example
+
+   cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
+
+
+.. py:function:: create_dynamic_command(cli_name: str, config_class: Type[cellmap_flow.models.models_config.ModelConfig])
+
+   Dynamically create a Click command for a ModelConfig subclass.
+
+
+.. py:function:: register_all_model_commands()
+
+   Discover and register all ModelConfig subclasses as CLI commands.
+
+
+.. py:function:: main()
+
+   Entry point for the CLI.
+
 

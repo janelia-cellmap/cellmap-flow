@@ -3,6 +3,12 @@ cellmap_flow.cli.server_cli
 
 .. py:module:: cellmap_flow.cli.server_cli
 
+.. autoapi-nested-parse::
+
+   Dynamic server CLI generator that automatically detects ModelConfig subclasses
+   and creates server commands based on their __init__ parameters.
+
+
 
 Attributes
 ----------
@@ -18,71 +24,59 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.cli.server_cli.cli
-   cellmap_flow.cli.server_cli.dacapo
-   cellmap_flow.cli.server_cli.fly
-   cellmap_flow.cli.server_cli.script
-   cellmap_flow.cli.server_cli.bioimage
+   cellmap_flow.cli.server_cli.list_models
    cellmap_flow.cli.server_cli.run_server
-   cellmap_flow.cli.server_cli.cellmap_model
+   cellmap_flow.cli.server_cli.create_dynamic_server_command
+   cellmap_flow.cli.server_cli.register_all_server_commands
    cellmap_flow.cli.server_cli.run_ui_server
+   cellmap_flow.cli.server_cli.main
 
 
 Module Contents
 ---------------
 
+.. py:data:: logger
+
 .. py:function:: cli(log_level)
 
-   Command-line interface for the Cellmap flo application.
+   CellMap Flow Server - Dynamic CLI for running inference servers.
 
-   :param log_level: The desired log level for the application.
-   :type log_level: str
+   Automatically generates server commands for all available ModelConfig subclasses.
 
    .. rubric:: Examples
 
-   To use Dacapo run the following commands:
-   ```
-   cellmap_flow_server dacapo -r my_run -i iteration -d data_path
-   ```
-
-   To use custom script
-   ```
-   cellmap_flow_server script -s script_path -d data_path
-   ```
-
-   To use bioimage-io model
-   ```
-   cellmap_flow_server bioimage -m model_path -d data_path
-   ```
+   cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
+   cellmap_flow_server script -s /path/to/script.py -d /path/to/data
+   cellmap_flow_server cellmap-model -f /path/to/model -n mymodel -d /path/to/data
 
 
-.. py:data:: logger
+.. py:function:: list_models()
 
-.. py:function:: dacapo(run_name, iteration, data_path, debug, port, certfile, keyfile)
-
-   Run the CellMapFlow server with a DaCapo model.
-
-
-.. py:function:: fly(checkpoint, channels, input_voxel_size, output_voxel_size, data_path)
-
-   Run the CellMapFlow server with a Fly model.
-
-
-.. py:function:: script(script_path, data_path, debug, port, certfile, keyfile)
-
-   Run the CellMapFlow server with a custom script.
-
-
-.. py:function:: bioimage(model_path, data_path, edge_length_to_process, debug, port, certfile, keyfile)
-
-   Run the CellMapFlow server with a bioimage-io model.
+   List all available model configurations.
 
 
 .. py:function:: run_server(model_config, data_path, debug=False, port=0, certfile=None, keyfile=None)
 
-.. py:function:: cellmap_model(folder_path, name, data_path, debug, port, certfile, keyfile)
+   Run the CellMapFlow server with the given configuration.
 
-   Run the CellMapFlow server with a CellMap model.
+
+.. py:function:: create_dynamic_server_command(cli_name: str, config_class: Type[cellmap_flow.models.models_config.ModelConfig])
+
+   Dynamically create a Click command for a ModelConfig subclass server.
+
+
+.. py:function:: register_all_server_commands()
+
+   Discover and register all ModelConfig subclasses as server CLI commands.
 
 
 .. py:function:: run_ui_server(neuroglancer_url, inference_host)
+
+   Run the dashboard UI server.
+
+
+.. py:function:: main()
+
+   Entry point for the server CLI.
+
 

@@ -13,14 +13,6 @@ Attributes
    cellmap_flow.utils.load_py.DISALLOWED_FUNCTIONS
 
 
-Classes
--------
-
-.. autoapisummary::
-
-   cellmap_flow.utils.load_py.Config
-
-
 Functions
 ---------
 
@@ -47,28 +39,5 @@ Module Contents
 
    Loads the configuration script at `config_path` after verifying its safety.
    If `force_safe` is True, raises an error if the script is deemed unsafe.
-
-
-.. py:class:: Config(**kwargs)
-
-   .. py:attribute:: kwargs
-
-
-   .. py:method:: to_dict()
-
-      Returns the configuration as a dictionary.
-
-
-
-   .. py:method:: serialize()
-
-      Serializes the configuration to a string representation.
-
-
-
-   .. py:method:: get(key: str, default: Any = None) -> Any
-
-      Gets the value of a configuration key.
-
 
 

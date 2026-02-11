@@ -1,0 +1,359 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.utils.job_extensions &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.utils.load_py" href="../load_py/index.html" />
+    <link rel="prev" title="cellmap_flow.utils.import_utils" href="../import_utils/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_reference.html">CLI Argument Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.utils.job_extensions</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/utils/job_extensions/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.utils.job_extensions">
+<span id="cellmap-flow-utils-job-extensions"></span><h1>cellmap_flow.utils.job_extensions<a class="headerlink" href="#module-cellmap_flow.utils.job_extensions" title="Link to this heading"></a></h1>
+<p>Example extensions of the Job class for cloud providers.</p>
+<p>This demonstrates how to extend the abstract Job class to support
+different execution environments like AWS Batch, Google Cloud, Azure Batch, etc.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.logger" title="cellmap_flow.utils.job_extensions.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.AWSBatchJob" title="cellmap_flow.utils.job_extensions.AWSBatchJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AWSBatchJob</span></code></a></p></td>
+<td><p>Job submitted to AWS Batch.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob" title="cellmap_flow.utils.job_extensions.GoogleCloudJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GoogleCloudJob</span></code></a></p></td>
+<td><p>Job submitted to Google Cloud (Compute Engine or Batch).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.AzureBatchJob" title="cellmap_flow.utils.job_extensions.AzureBatchJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AzureBatchJob</span></code></a></p></td>
+<td><p>Job submitted to Azure Batch.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.SlurmJob" title="cellmap_flow.utils.job_extensions.SlurmJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SlurmJob</span></code></a></p></td>
+<td><p>Job submitted to SLURM cluster (common in HPC environments).</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.job_extensions.create_job_for_environment" title="cellmap_flow.utils.job_extensions.create_job_for_environment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_job_for_environment</span></code></a>(...)</p></td>
+<td><p>Factory function to create appropriate Job subclass based on environment.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">AWSBatchJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob" title="Link to this definition"></a></dt>
+<dd><p>Job submitted to AWS Batch.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob.job_id">
+<span class="sig-name descname"><span class="pre">job_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob.job_queue">
+<span class="sig-name descname"><span class="pre">job_queue</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob.job_queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob.kill">
+<span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob.kill" title="Link to this definition"></a></dt>
+<dd><p>Terminate the AWS Batch job.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob.get_status">
+<span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../bsub_utils/index.html#cellmap_flow.utils.bsub_utils.JobStatus" title="cellmap_flow.utils.bsub_utils.JobStatus"><span class="pre">cellmap_flow.utils.bsub_utils.JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob.get_status" title="Link to this definition"></a></dt>
+<dd><p>Query AWS Batch for job status.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AWSBatchJob.wait_for_host">
+<span class="sig-name descname"><span class="pre">wait_for_host</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AWSBatchJob.wait_for_host" title="Link to this definition"></a></dt>
+<dd><p>Monitor AWS Batch job logs for host information.</p>
+<p>This would typically involve:
+1. Getting the CloudWatch log stream for the job
+2. Monitoring the logs for host information
+3. Extracting the host URL</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">GoogleCloudJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">region</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob" title="Link to this definition"></a></dt>
+<dd><p>Job submitted to Google Cloud (Compute Engine or Batch).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.job_id">
+<span class="sig-name descname"><span class="pre">job_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.project_id">
+<span class="sig-name descname"><span class="pre">project_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.project_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.region">
+<span class="sig-name descname"><span class="pre">region</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.region" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.kill">
+<span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.kill" title="Link to this definition"></a></dt>
+<dd><p>Terminate the Google Cloud job.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.get_status">
+<span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../bsub_utils/index.html#cellmap_flow.utils.bsub_utils.JobStatus" title="cellmap_flow.utils.bsub_utils.JobStatus"><span class="pre">cellmap_flow.utils.bsub_utils.JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.get_status" title="Link to this definition"></a></dt>
+<dd><p>Query Google Cloud for job status.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.GoogleCloudJob.wait_for_host">
+<span class="sig-name descname"><span class="pre">wait_for_host</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.GoogleCloudJob.wait_for_host" title="Link to this definition"></a></dt>
+<dd><p>Monitor Google Cloud job logs for host information.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">AzureBatchJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_account</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pool_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob" title="Link to this definition"></a></dt>
+<dd><p>Job submitted to Azure Batch.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.job_id">
+<span class="sig-name descname"><span class="pre">job_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.batch_account">
+<span class="sig-name descname"><span class="pre">batch_account</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.batch_account" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.pool_id">
+<span class="sig-name descname"><span class="pre">pool_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.pool_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.kill">
+<span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.kill" title="Link to this definition"></a></dt>
+<dd><p>Terminate the Azure Batch job.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.get_status">
+<span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../bsub_utils/index.html#cellmap_flow.utils.bsub_utils.JobStatus" title="cellmap_flow.utils.bsub_utils.JobStatus"><span class="pre">cellmap_flow.utils.bsub_utils.JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.get_status" title="Link to this definition"></a></dt>
+<dd><p>Query Azure Batch for job status.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.AzureBatchJob.wait_for_host">
+<span class="sig-name descname"><span class="pre">wait_for_host</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.AzureBatchJob.wait_for_host" title="Link to this definition"></a></dt>
+<dd><p>Monitor Azure Batch job for host information.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.SlurmJob">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">SlurmJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.SlurmJob" title="Link to this definition"></a></dt>
+<dd><p>Job submitted to SLURM cluster (common in HPC environments).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.SlurmJob.job_id">
+<span class="sig-name descname"><span class="pre">job_id</span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.SlurmJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.SlurmJob.kill">
+<span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.SlurmJob.kill" title="Link to this definition"></a></dt>
+<dd><p>Cancel the SLURM job using scancel.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.SlurmJob.get_status">
+<span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../bsub_utils/index.html#cellmap_flow.utils.bsub_utils.JobStatus" title="cellmap_flow.utils.bsub_utils.JobStatus"><span class="pre">cellmap_flow.utils.bsub_utils.JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.SlurmJob.get_status" title="Link to this definition"></a></dt>
+<dd><p>Query SLURM for job status using squeue/sacct.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.SlurmJob.wait_for_host">
+<span class="sig-name descname"><span class="pre">wait_for_host</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.SlurmJob.wait_for_host" title="Link to this definition"></a></dt>
+<dd><p>Monitor SLURM job output file for host information.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.job_extensions.create_job_for_environment">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.job_extensions.</span></span><span class="sig-name descname"><span class="pre">create_job_for_environment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../bsub_utils/index.html#cellmap_flow.utils.bsub_utils.Job" title="cellmap_flow.utils.bsub_utils.Job"><span class="pre">cellmap_flow.utils.bsub_utils.Job</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.job_extensions.create_job_for_environment" title="Link to this definition"></a></dt>
+<dd><p>Factory function to create appropriate Job subclass based on environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>env_type</strong> – Type of environment (‘lsf’, ‘aws’, ‘gcp’, ‘azure’, ‘slurm’, ‘local’)</p></li>
+<li><p><strong>**kwargs</strong> – Environment-specific parameters</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Appropriate Job subclass instance</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">job</span> <span class="o">=</span> <span class="n">create_job_for_environment</span><span class="p">(</span><span class="s1">&#39;aws&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="o">=</span><span class="s1">&#39;12345&#39;</span><span class="p">,</span> <span class="n">job_queue</span><span class="o">=</span><span class="s1">&#39;my-queue&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">job</span> <span class="o">=</span> <span class="n">create_job_for_environment</span><span class="p">(</span><span class="s1">&#39;lsf&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="o">=</span><span class="s1">&#39;67890&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../import_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.import_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../load_py/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.load_py" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

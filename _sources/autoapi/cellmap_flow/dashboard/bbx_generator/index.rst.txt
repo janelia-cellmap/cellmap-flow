@@ -1,0 +1,103 @@
+cellmap_flow.dashboard.bbx_generator
+====================================
+
+.. py:module:: cellmap_flow.dashboard.bbx_generator
+
+.. autoapi-nested-parse::
+
+   Bounding box generator integration for the pipeline builder dashboard.
+   Uses the neuroglancer viewer to interactively create bounding boxes.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.bbx_generator.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.bbx_generator.BBXGenerator
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.bbx_generator.create_bounding_boxes_interactive
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: BBXGenerator(image_path: str, num_boxes: int, verbose: bool = True)
+
+   Manages interactive bounding box generation in Neuroglancer
+
+
+   .. py:attribute:: image_path
+
+
+   .. py:attribute:: num_boxes
+
+
+   .. py:attribute:: verbose
+      :value: True
+
+
+
+   .. py:attribute:: viewer
+      :value: None
+
+
+
+   .. py:attribute:: bounding_boxes
+      :value: []
+
+
+
+   .. py:method:: start_viewer() -> str
+
+      Start Neuroglancer viewer for drawing bounding boxes.
+
+      :returns: URL to access the viewer
+
+
+
+   .. py:method:: wait_for_boxes(timeout: int = 3600) -> List[Dict[str, Any]]
+
+      Wait for user to create bounding boxes.
+      Polls the viewer annotations and returns when target is reached or timeout.
+
+      :param timeout: Maximum seconds to wait (default 1 hour)
+
+      :returns: List of bounding boxes
+
+
+
+   .. py:method:: close()
+
+      Close the viewer
+
+
+
+.. py:function:: create_bounding_boxes_interactive(image_path: str, num_boxes: int, verbose: bool = True) -> List[Dict[str, Any]]
+
+   Create bounding boxes interactively in Neuroglancer.
+
+   :param image_path: URL or path to image (zarr/n5/precomputed)
+   :param num_boxes: Target number of bounding boxes to create
+   :param verbose: Print progress messages
+
+   :returns: List of bounding boxes
+
+

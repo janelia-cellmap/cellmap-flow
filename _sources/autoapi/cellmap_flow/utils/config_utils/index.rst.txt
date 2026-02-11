@@ -3,6 +3,12 @@ cellmap_flow.utils.config_utils
 
 .. py:module:: cellmap_flow.utils.config_utils
 
+.. autoapi-nested-parse::
+
+   Smart YAML configuration utilities that dynamically discover and instantiate
+   ModelConfig subclasses, similar to the CLI v2 approach.
+
+
 
 Attributes
 ----------
@@ -18,7 +24,9 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.utils.config_utils.get_model_type_mapping
    cellmap_flow.utils.config_utils.load_config
+   cellmap_flow.utils.config_utils.build_model_from_entry
    cellmap_flow.utils.config_utils.build_models
 
 
@@ -31,13 +39,51 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: load_config(path)
+.. py:function:: get_model_type_mapping() -> Dict[str, type]
+
+   Get mapping of CLI-friendly names to ModelConfig classes.
+   Uses the same logic as cli_v2 for consistency.
+
+   :returns: Dictionary mapping model type names to ModelConfig classes
+
+
+.. py:function:: load_config(path: str) -> Dict[str, Any]
 
    Load and validate the YAML configuration.
 
+   :param path: Path to YAML configuration file
 
-.. py:function:: build_models(model_entries)
+   :returns: Validated configuration dictionary
 
-   Given a list of model entries from YAML, instantiate the correct ModelConfig objects.
+
+.. py:function:: build_model_from_entry(entry: Dict[str, Any], model_name: str) -> cellmap_flow.models.models_config.ModelConfig
+
+   Build a single ModelConfig instance from a YAML entry.
+   Dynamically discovers the appropriate class and validates parameters.
+
+   :param entry: Dictionary containing model configuration from YAML
+   :param model_name: Name/key of the model from YAML (used as the model's name)
+
+   :returns: Instantiated ModelConfig subclass
+
+
+.. py:function:: build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[cellmap_flow.models.models_config.ModelConfig]
+
+   Given model entries from YAML, instantiate the correct ModelConfig objects.
+   Uses dynamic discovery like cli_v2 instead of hardcoded if/else chains.
+
+   YAML format:
+   models:
+     my_model_1:
+       type: cellmap-model
+       checkpoint_path: /path/to/checkpoint
+     my_model_2:
+       type: dacapo
+       run_name: my_run
+       iteration: 50000
+
+   :param model_entries: Dictionary mapping model names to their configurations
+
+   :returns: List of instantiated ModelConfig objects
 
 

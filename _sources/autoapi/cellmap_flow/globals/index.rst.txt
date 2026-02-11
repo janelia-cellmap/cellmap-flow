@@ -9,6 +9,7 @@ Attributes
 
 .. autoapisummary::
 
+   cellmap_flow.globals.logger
    cellmap_flow.globals.input_norms
    cellmap_flow.globals.postprocess
    cellmap_flow.globals.viewer
@@ -26,6 +27,8 @@ Classes
 Module Contents
 ---------------
 
+.. py:data:: logger
+
 .. py:data:: input_norms
    :value: []
 
@@ -40,10 +43,102 @@ Module Contents
 
 .. py:class:: Flow
 
+   .. py:attribute:: jobs
+      :type:  List[Any]
+
+
+   .. py:attribute:: models_config
+      :type:  List[Any]
+
+
+   .. py:attribute:: servers
+      :type:  List[Any]
+
+
+   .. py:attribute:: raw
+      :type:  Optional[Any]
+
+
+   .. py:attribute:: input_norms
+      :type:  List[Any]
+
+
+   .. py:attribute:: postprocess
+      :type:  List[Any]
+
+
+   .. py:attribute:: viewer
+      :type:  Optional[Any]
+
+
+   .. py:attribute:: dataset_path
+      :type:  Optional[str]
+
+
+   .. py:attribute:: model_catalog
+      :type:  dict
+
+
+   .. py:attribute:: queue
+      :type:  str
+
+
+   .. py:attribute:: charge_group
+      :type:  str
+
+
+   .. py:attribute:: nb_cores_master
+      :type:  int
+
+
+   .. py:attribute:: nb_cores_worker
+      :type:  int
+
+
+   .. py:attribute:: nb_workers
+      :type:  int
+
+
+   .. py:attribute:: tmp_dir
+      :type:  Optional[str]
+
+
+   .. py:attribute:: blockwise_tasks_dir
+      :type:  Optional[str]
+
+
+   .. py:attribute:: neuroglancer_thread
+      :type:  Optional[Any]
+
+
+   .. py:attribute:: pipeline_inputs
+      :type:  List[Any]
+
+
+   .. py:attribute:: pipeline_outputs
+      :type:  List[Any]
+
+
+   .. py:attribute:: pipeline_edges
+      :type:  List[Any]
+
+
+   .. py:attribute:: pipeline_normalizers
+      :type:  List[Any]
+
+
+   .. py:attribute:: pipeline_models
+      :type:  List[Any]
+
+
+   .. py:attribute:: pipeline_postprocessors
+      :type:  List[Any]
+
+
    .. py:method:: to_dict()
 
 
-   .. py:method:: get_output_dtype(model_output_dtype=None)
+   .. py:method:: get_output_dtype(model_output_dtype)
 
 
    .. py:method:: run(zarr_path, model_configs, queue='gpu_h100', charge_group='cellmap', input_normalizers=None, post_processors=None)

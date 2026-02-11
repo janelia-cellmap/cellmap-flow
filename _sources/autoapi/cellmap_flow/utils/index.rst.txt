@@ -11,13 +11,16 @@ Submodules
    :maxdepth: 1
 
    /autoapi/cellmap_flow/utils/bsub_utils/index
+   /autoapi/cellmap_flow/utils/cli_utils/index
    /autoapi/cellmap_flow/utils/config_utils/index
-   /autoapi/cellmap_flow/utils/data/index
    /autoapi/cellmap_flow/utils/ds/index
+   /autoapi/cellmap_flow/utils/generate_neuroglancer/index
    /autoapi/cellmap_flow/utils/import_utils/index
+   /autoapi/cellmap_flow/utils/job_extensions/index
    /autoapi/cellmap_flow/utils/load_py/index
    /autoapi/cellmap_flow/utils/neuroglancer_utils/index
    /autoapi/cellmap_flow/utils/scale_pyramid/index
+   /autoapi/cellmap_flow/utils/serialize_config/index
    /autoapi/cellmap_flow/utils/serilization_utils/index
    /autoapi/cellmap_flow/utils/web_utils/index
 

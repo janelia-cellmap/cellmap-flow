@@ -1,0 +1,193 @@
+cellmap_flow.utils.job_extensions
+=================================
+
+.. py:module:: cellmap_flow.utils.job_extensions
+
+.. autoapi-nested-parse::
+
+   Example extensions of the Job class for cloud providers.
+
+   This demonstrates how to extend the abstract Job class to support
+   different execution environments like AWS Batch, Google Cloud, Azure Batch, etc.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.job_extensions.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.job_extensions.AWSBatchJob
+   cellmap_flow.utils.job_extensions.GoogleCloudJob
+   cellmap_flow.utils.job_extensions.AzureBatchJob
+   cellmap_flow.utils.job_extensions.SlurmJob
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.job_extensions.create_job_for_environment
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: AWSBatchJob(job_id: str, job_queue: str, model_name: Optional[str] = None)
+
+
+
+   Job submitted to AWS Batch.
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:attribute:: job_queue
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the AWS Batch job.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.utils.bsub_utils.JobStatus
+
+      Query AWS Batch for job status.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Monitor AWS Batch job logs for host information.
+
+      This would typically involve:
+      1. Getting the CloudWatch log stream for the job
+      2. Monitoring the logs for host information
+      3. Extracting the host URL
+
+
+
+.. py:class:: GoogleCloudJob(job_id: str, project_id: str, region: str, model_name: Optional[str] = None)
+
+
+
+   Job submitted to Google Cloud (Compute Engine or Batch).
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:attribute:: project_id
+
+
+   .. py:attribute:: region
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the Google Cloud job.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.utils.bsub_utils.JobStatus
+
+      Query Google Cloud for job status.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Monitor Google Cloud job logs for host information.
+
+
+
+.. py:class:: AzureBatchJob(job_id: str, batch_account: str, pool_id: str, model_name: Optional[str] = None)
+
+
+
+   Job submitted to Azure Batch.
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:attribute:: batch_account
+
+
+   .. py:attribute:: pool_id
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the Azure Batch job.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.utils.bsub_utils.JobStatus
+
+      Query Azure Batch for job status.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Monitor Azure Batch job for host information.
+
+
+
+.. py:class:: SlurmJob(job_id: str, model_name: Optional[str] = None)
+
+
+
+   Job submitted to SLURM cluster (common in HPC environments).
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:method:: kill() -> None
+
+      Cancel the SLURM job using scancel.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.utils.bsub_utils.JobStatus
+
+      Query SLURM for job status using squeue/sacct.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Monitor SLURM job output file for host information.
+
+
+
+.. py:function:: create_job_for_environment(env_type: str, **kwargs) -> cellmap_flow.utils.bsub_utils.Job
+
+   Factory function to create appropriate Job subclass based on environment.
+
+   :param env_type: Type of environment ('lsf', 'aws', 'gcp', 'azure', 'slurm', 'local')
+   :param \*\*kwargs: Environment-specific parameters
+
+   :returns: Appropriate Job subclass instance
+
+   .. rubric:: Example
+
+   >>> job = create_job_for_environment('aws', job_id='12345', job_queue='my-queue')
+   >>> job = create_job_for_environment('lsf', job_id='67890')
+
+

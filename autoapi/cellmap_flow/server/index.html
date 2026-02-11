@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cellmap_flow.server &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
@@ -119,20 +120,7 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.CellMapFlowServer" title="cellmap_flow.server.CellMapFlowServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code></a></p></td>
-<td><p>Flask application hosting a &quot;virtual N5&quot; for Neuroglancer.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.DummyConfig" title="cellmap_flow.server.DummyConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DummyConfig</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.get_process_dataset" title="cellmap_flow.server.get_process_dataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_process_dataset</span></code></a>(dataset)</p></td>
-<td><p></p></td>
+<td><p>Flask application hosting a &quot;virtual Zarr&quot; for Neuroglancer.</p></td>
 </tr>
 </tbody>
 </table>
@@ -144,24 +132,14 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.server.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.server.get_process_dataset">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">get_process_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.get_process_dataset" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">CellMapFlowServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../utils/data/index.html#cellmap_flow.utils.data.ModelConfig" title="cellmap_flow.utils.data.ModelConfig"><span class="pre">cellmap_flow.utils.data.ModelConfig</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer" title="Link to this definition"></a></dt>
-<dd><p>Flask application hosting a “virtual N5” for Neuroglancer.
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">CellMapFlowServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer" title="Link to this definition"></a></dt>
+<dd><p>Flask application hosting a “virtual Zarr” for Neuroglancer.
 All routes are defined via Flask decorators for convenience.</p>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.read_block_shape">
-<span class="sig-name descname"><span class="pre">read_block_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.read_block_shape" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.n5_block_shape">
-<span class="sig-name descname"><span class="pre">n5_block_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.n5_block_shape" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.zarr_block_shape">
+<span class="sig-name descname"><span class="pre">zarr_block_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.zarr_block_shape" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -180,6 +158,11 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.output_dtype">
+<span class="sig-name descname"><span class="pre">output_dtype</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.output_dtype" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.inferencer">
 <span class="sig-name descname"><span class="pre">inferencer</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.inferencer" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -187,6 +170,11 @@ All routes are defined via Flask decorators for convenience.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.idi_raw">
 <span class="sig-name descname"><span class="pre">idi_raw</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.idi_raw" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.axes">
+<span class="sig-name descname"><span class="pre">axes</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.axes" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -200,6 +188,11 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.vol_shape">
+<span class="sig-name descname"><span class="pre">vol_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.vol_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.chunk_encoder">
 <span class="sig-name descname"><span class="pre">chunk_encoder</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.chunk_encoder" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -210,30 +203,15 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.refresh_dataset">
+<span class="sig-name descname"><span class="pre">refresh_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.refresh_dataset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.run">
 <span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">certfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.run" title="Link to this definition"></a></dt>
 <dd><p>Run the Flask dev server with optional SSL certificate.</p>
 </dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.server.DummyConfig">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">DummyConfig</span></span><a class="headerlink" href="#cellmap_flow.server.DummyConfig" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.DummyConfig.block_shape">
-<span class="sig-name descname"><span class="pre">block_shape</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(32,</span> <span class="pre">32,</span> <span class="pre">32)</span></span><a class="headerlink" href="#cellmap_flow.server.DummyConfig.block_shape" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.DummyConfig.output_voxel_size">
-<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(4,</span> <span class="pre">4,</span> <span class="pre">4)</span></span><a class="headerlink" href="#cellmap_flow.server.DummyConfig.output_voxel_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.DummyConfig.output_channels">
-<span class="sig-name descname"><span class="pre">output_channels</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.server.DummyConfig.output_channels" title="Link to this definition"></a></dt>
-<dd></dd></dl>
 
 </dd></dl>
 

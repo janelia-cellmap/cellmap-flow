@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cellmap_flow.dashboard.app &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
@@ -24,7 +24,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.globals" href="../../globals/index.html" />
+    <link rel="next" title="cellmap_flow.dashboard.bbx_generator" href="../bbx_generator/index.html" />
     <link rel="prev" title="cellmap_flow.dashboard" href="../index.html" /> 
 </head>
 
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
@@ -112,6 +113,12 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.logger" title="cellmap_flow.dashboard.app.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.log_buffer" title="cellmap_flow.dashboard.app.log_buffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_buffer</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.log_clients" title="cellmap_flow.dashboard.app.log_clients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_clients</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.template_dir" title="cellmap_flow.dashboard.app.template_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">template_dir</span></code></a></p></td>
 <td><p></p></td>
 </tr>
@@ -121,14 +128,30 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.app" title="cellmap_flow.dashboard.app.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.NEUROGLANCER_URL" title="cellmap_flow.dashboard.app.NEUROGLANCER_URL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NEUROGLANCER_URL</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.log_handler" title="cellmap_flow.dashboard.app.log_handler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_handler</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.INFERENCE_SERVER" title="cellmap_flow.dashboard.app.INFERENCE_SERVER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INFERENCE_SERVER</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.NEUROGLANCER_URL" title="cellmap_flow.dashboard.app.NEUROGLANCER_URL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NEUROGLANCER_URL</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER" title="cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CUSTOM_CODE_FOLDER</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.INFERENCE_SERVER" title="cellmap_flow.dashboard.app.INFERENCE_SERVER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INFERENCE_SERVER</span></code></a></p></td>
 <td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER" title="cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CUSTOM_CODE_FOLDER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.bbx_generator_state" title="cellmap_flow.dashboard.app.bbx_generator_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bbx_generator_state</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.LogHandler" title="cellmap_flow.dashboard.app.LogHandler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogHandler</span></code></a></p></td>
+<td><p>Handler instances dispatch logging events to specific destinations.</p></td>
 </tr>
 </tbody>
 </table>
@@ -137,22 +160,79 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.index" title="cellmap_flow.dashboard.app.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.get_blockwise_tasks_dir" title="cellmap_flow.dashboard.app.get_blockwise_tasks_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_blockwise_tasks_dir</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.is_output_segmentation" title="cellmap_flow.dashboard.app.is_output_segmentation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_output_segmentation</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.stream_logs" title="cellmap_flow.dashboard.app.stream_logs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stream_logs</span></code></a>()</p></td>
+<td><p>Stream logs via Server-Sent Events (SSE)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.get_bbox_json_template" title="cellmap_flow.dashboard.app.get_bbox_json_template"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox_json_template</span></code></a>()</p></td>
+<td><p>Serve the bounding box JSON format template</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.index" title="cellmap_flow.dashboard.app.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.update_equivalences" title="cellmap_flow.dashboard.app.update_equivalences"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_equivalences</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.pipeline_builder" title="cellmap_flow.dashboard.app.pipeline_builder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pipeline_builder</span></code></a>()</p></td>
+<td><p>Render the drag-and-drop pipeline builder interface with current state from globals</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.get_available_models" title="cellmap_flow.dashboard.app.get_available_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_available_models</span></code></a>()</p></td>
+<td><p>Get available models from the model catalog</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.get_model_config_types" title="cellmap_flow.dashboard.app.get_model_config_types"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_model_config_types</span></code></a>()</p></td>
+<td><p>Get available ModelConfig subclasses and their parameter metadata</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.create_model_config" title="cellmap_flow.dashboard.app.create_model_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_model_config</span></code></a>()</p></td>
+<td><p>Create a ModelConfig instance from user-provided parameters</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.is_output_segmentation" title="cellmap_flow.dashboard.app.is_output_segmentation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_output_segmentation</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.submit_models" title="cellmap_flow.dashboard.app.submit_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_models</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.update_equivalences" title="cellmap_flow.dashboard.app.update_equivalences"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_equivalences</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.process" title="cellmap_flow.dashboard.app.process"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.submit_models" title="cellmap_flow.dashboard.app.submit_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_models</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.create_and_run_app" title="cellmap_flow.dashboard.app.create_and_run_app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_and_run_app</span></code></a>([neuroglancer_url, inference_servers])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.process" title="cellmap_flow.dashboard.app.process"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.validate_pipeline" title="cellmap_flow.dashboard.app.validate_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_pipeline</span></code></a>()</p></td>
+<td><p>Validate a pipeline configuration</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.dataset_path_api" title="cellmap_flow.dashboard.app.dataset_path_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dataset_path_api</span></code></a>()</p></td>
+<td><p>Get or set the dataset path in globals</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.blockwise_config_api" title="cellmap_flow.dashboard.app.blockwise_config_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blockwise_config_api</span></code></a>()</p></td>
+<td><p>Get or set blockwise configuration in globals</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.apply_pipeline" title="cellmap_flow.dashboard.app.apply_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_pipeline</span></code></a>()</p></td>
+<td><p>Apply a pipeline configuration to the current inference</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.validate_pipeline_config" title="cellmap_flow.dashboard.app.validate_pipeline_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_pipeline_config</span></code></a>(config)</p></td>
+<td><p>Helper function to validate pipeline configuration</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.validate_blockwise" title="cellmap_flow.dashboard.app.validate_blockwise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_blockwise</span></code></a>()</p></td>
+<td><p>Validate if pipeline is ready for blockwise processing</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.generate_blockwise_task" title="cellmap_flow.dashboard.app.generate_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_blockwise_task</span></code></a>()</p></td>
+<td><p>Generate blockwise task YAML files</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.precheck_blockwise_task" title="cellmap_flow.dashboard.app.precheck_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">precheck_blockwise_task</span></code></a>()</p></td>
+<td><p>Precheck blockwise task configuration using already-generated YAML</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.submit_blockwise_task" title="cellmap_flow.dashboard.app.submit_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_blockwise_task</span></code></a>()</p></td>
+<td><p>Submit blockwise task to LSF</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.start_bbx_generator" title="cellmap_flow.dashboard.app.start_bbx_generator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_bbx_generator</span></code></a>()</p></td>
+<td><p>Start the Neuroglancer viewer for creating bounding boxes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.get_bbx_generator_status" title="cellmap_flow.dashboard.app.get_bbx_generator_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbx_generator_status</span></code></a>()</p></td>
+<td><p>Get current status of bounding box generation</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.finalize_bbx_generation" title="cellmap_flow.dashboard.app.finalize_bbx_generation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalize_bbx_generation</span></code></a>()</p></td>
+<td><p>Finalize bounding box generation and return results</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.app.create_and_run_app" title="cellmap_flow.dashboard.app.create_and_run_app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_and_run_app</span></code></a>([neuroglancer_url, inference_servers])</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -164,6 +244,34 @@
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.log_buffer">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">log_buffer</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.log_buffer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.log_clients">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">log_clients</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.log_clients" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.LogHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">LogHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">NOTSET</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.LogHandler" title="Link to this definition"></a></dt>
+<dd><p>Handler instances dispatch logging events to specific destinations.</p>
+<p>The base handler class. Acts as a placeholder which defines the Handler
+interface. Handlers can optionally use Formatter instances to format
+records as desired. By default, no formatter is specified; in this case,
+the ‘raw’ message as determined by record.message is logged.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.LogHandler.emit">
+<span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.LogHandler.emit" title="Link to this definition"></a></dt>
+<dd><p>Do whatever it takes to actually log the specified logging record.</p>
+<p>This version is intended to be implemented by subclasses and so
+raises a NotImplementedError.</p>
+</dd></dl>
+
+</dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.template_dir">
@@ -181,6 +289,11 @@
 <dd></dd></dl>
 
 <dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.log_handler">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">log_handler</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.log_handler" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.NEUROGLANCER_URL">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">NEUROGLANCER_URL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.NEUROGLANCER_URL" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -190,15 +303,56 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">INFERENCE_SERVER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.INFERENCE_SERVER" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.get_blockwise_tasks_dir">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">get_blockwise_tasks_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.get_blockwise_tasks_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">CUSTOM_CODE_FOLDER</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.stream_logs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">stream_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.stream_logs" title="Link to this definition"></a></dt>
+<dd><p>Stream logs via Server-Sent Events (SSE)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.get_bbox_json_template">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">get_bbox_json_template</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.get_bbox_json_template" title="Link to this definition"></a></dt>
+<dd><p>Serve the bounding box JSON format template</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.index">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">index</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.index" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.pipeline_builder">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">pipeline_builder</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.pipeline_builder" title="Link to this definition"></a></dt>
+<dd><p>Render the drag-and-drop pipeline builder interface with current state from globals</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.get_available_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">get_available_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.get_available_models" title="Link to this definition"></a></dt>
+<dd><p>Get available models from the model catalog</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.get_model_config_types">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">get_model_config_types</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.get_model_config_types" title="Link to this definition"></a></dt>
+<dd><p>Get available ModelConfig subclasses and their parameter metadata</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.create_model_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">create_model_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.create_model_config" title="Link to this definition"></a></dt>
+<dd><p>Create a ModelConfig instance from user-provided parameters</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.is_output_segmentation">
@@ -221,6 +375,83 @@
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.validate_pipeline">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">validate_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.validate_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Validate a pipeline configuration</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.dataset_path_api">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">dataset_path_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.dataset_path_api" title="Link to this definition"></a></dt>
+<dd><p>Get or set the dataset path in globals</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.blockwise_config_api">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">blockwise_config_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.blockwise_config_api" title="Link to this definition"></a></dt>
+<dd><p>Get or set blockwise configuration in globals</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.apply_pipeline">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">apply_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.apply_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Apply a pipeline configuration to the current inference</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.validate_pipeline_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">validate_pipeline_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.validate_pipeline_config" title="Link to this definition"></a></dt>
+<dd><p>Helper function to validate pipeline configuration</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.validate_blockwise">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">validate_blockwise</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.validate_blockwise" title="Link to this definition"></a></dt>
+<dd><p>Validate if pipeline is ready for blockwise processing</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.generate_blockwise_task">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">generate_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.generate_blockwise_task" title="Link to this definition"></a></dt>
+<dd><p>Generate blockwise task YAML files</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.precheck_blockwise_task">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">precheck_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.precheck_blockwise_task" title="Link to this definition"></a></dt>
+<dd><p>Precheck blockwise task configuration using already-generated YAML</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.submit_blockwise_task">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">submit_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.submit_blockwise_task" title="Link to this definition"></a></dt>
+<dd><p>Submit blockwise task to LSF</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.bbx_generator_state">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">bbx_generator_state</span></span><a class="headerlink" href="#cellmap_flow.dashboard.app.bbx_generator_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.start_bbx_generator">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">start_bbx_generator</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.start_bbx_generator" title="Link to this definition"></a></dt>
+<dd><p>Start the Neuroglancer viewer for creating bounding boxes</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.get_bbx_generator_status">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">get_bbx_generator_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.get_bbx_generator_status" title="Link to this definition"></a></dt>
+<dd><p>Get current status of bounding box generation</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.app.finalize_bbx_generation">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">finalize_bbx_generation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.finalize_bbx_generation" title="Link to this definition"></a></dt>
+<dd><p>Finalize bounding box generation and return results</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.app.create_and_run_app">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.app.</span></span><span class="sig-name descname"><span class="pre">create_and_run_app</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">neuroglancer_url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inference_servers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.app.create_and_run_app" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -233,7 +464,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../../globals/index.html" class="btn btn-neutral float-right" title="cellmap_flow.globals" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../bbx_generator/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.bbx_generator" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

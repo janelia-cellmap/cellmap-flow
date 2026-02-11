@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cellmap_flow.post.postprocessors &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
@@ -163,7 +164,7 @@
 <td><p>Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="cellmap_flow.post.postprocessors.get_postprocessors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_postprocessors</span></code></a>(→ list[PostProcessor])</p></td>
-<td><p></p></td>
+<td><p>Get postprocessors from either dict or list format.</p></td>
 </tr>
 </tbody>
 </table>
@@ -437,8 +438,9 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.get_postprocessors">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">get_postprocessors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">elms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><span class="pre">PostProcessor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">get_postprocessors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">elms</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><span class="pre">PostProcessor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.get_postprocessors" title="Link to this definition"></a></dt>
+<dd><p>Get postprocessors from either dict or list format.</p>
+</dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessorMethods">

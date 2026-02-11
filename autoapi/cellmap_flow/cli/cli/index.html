@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cellmap_flow.cli.cli &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
@@ -24,7 +24,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.cli.fly_model" href="../fly_model/index.html" />
+    <link rel="next" title="cellmap_flow.cli.server_cli" href="../server_cli/index.html" />
     <link rel="prev" title="cellmap_flow.cli" href="../index.html" /> 
 </head>
 
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
@@ -105,14 +106,13 @@
              
   <section id="module-cellmap_flow.cli.cli">
 <span id="cellmap-flow-cli-cli"></span><h1>cellmap_flow.cli.cli<a class="headerlink" href="#module-cellmap_flow.cli.cli" title="Link to this heading"></a></h1>
+<p>Dynamic CLI generator that automatically detects ModelConfig subclasses
+and creates CLI commands based on their __init__ parameters.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#id0" title="cellmap_flow.cli.cli.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#id0" title="cellmap_flow.cli.cli.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.logger" title="cellmap_flow.cli.cli.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -123,25 +123,22 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.cli" title="cellmap_flow.cli.cli.cli"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cli</span></code></a>(log_level)</p></td>
-<td><p>Command-line interface for the Cellmap flo application.</p></td>
+<td><p>CellMap Flow - Dynamic CLI for model inference.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.dacapo" title="cellmap_flow.cli.cli.dacapo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dacapo</span></code></a>(run_name, iteration, data_path, queue, charge_group)</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.list_models" title="cellmap_flow.cli.cli.list_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_models</span></code></a>()</p></td>
+<td><p>List all available model configurations.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.script" title="cellmap_flow.cli.cli.script"><code class="xref py py-obj docutils literal notranslate"><span class="pre">script</span></code></a>(script_path, data_path, queue, charge_group)</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.run_generic" title="cellmap_flow.cli.cli.run_generic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_generic</span></code></a>(model_type, data_path, queue, project, ...)</p></td>
+<td><p>Generic run command that accepts any model type with dynamic configuration.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.bioimage" title="cellmap_flow.cli.cli.bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage</span></code></a>(model_path, data_path, ...)</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.create_dynamic_command" title="cellmap_flow.cli.cli.create_dynamic_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_dynamic_command</span></code></a>(cli_name, config_class)</p></td>
+<td><p>Dynamically create a Click command for a ModelConfig subclass.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.cellmap_model" title="cellmap_flow.cli.cli.cellmap_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellmap_model</span></code></a>(config_folder, name, data_path, queue, ...)</p></td>
-<td><p>Run the CellMapFlow with a CellMap model.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.register_all_model_commands" title="cellmap_flow.cli.cli.register_all_model_commands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_all_model_commands</span></code></a>()</p></td>
+<td><p>Discover and register all ModelConfig subclasses as CLI commands.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.script_server_check" title="cellmap_flow.cli.cli.script_server_check"><code class="xref py py-obj docutils literal notranslate"><span class="pre">script_server_check</span></code></a>(script_path, dataset)</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.run" title="cellmap_flow.cli.cli.run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run</span></code></a>(command, dataset_path, queue, charge_group, name)</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.main" title="cellmap_flow.cli.cli.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>()</p></td>
+<td><p>Entry point for the CLI.</p></td>
 </tr>
 </tbody>
 </table>
@@ -156,62 +153,45 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.cli.cli">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">cli</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.cli" title="Link to this definition"></a></dt>
-<dd><p>Command-line interface for the Cellmap flo application.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – The desired log level for the application.</p>
-</dd>
-</dl>
+<dd><p>CellMap Flow - Dynamic CLI for model inference.</p>
+<p>Automatically generates commands for all available ModelConfig subclasses.</p>
 <p class="rubric">Examples</p>
-<p>To use Dacapo run the following commands:
-<code class="docutils literal notranslate"><span class="pre">`</span>
-<span class="pre">cellmap_flow</span> <span class="pre">dacapo</span> <span class="pre">-r</span> <span class="pre">my_run</span> <span class="pre">-i</span> <span class="pre">iteration</span> <span class="pre">-d</span> <span class="pre">data_path</span>
-<span class="pre">`</span></code></p>
-<p>To use custom script
-<code class="docutils literal notranslate"><span class="pre">`</span>
-<span class="pre">cellmap_flow</span> <span class="pre">script</span> <span class="pre">-s</span> <span class="pre">script_path</span> <span class="pre">-d</span> <span class="pre">data_path</span>
-<span class="pre">`</span></code></p>
-<p>To use bioimage-io model
-<code class="docutils literal notranslate"><span class="pre">`</span>
-<span class="pre">cellmap_flow</span> <span class="pre">bioimage</span> <span class="pre">-m</span> <span class="pre">model_path</span> <span class="pre">-d</span> <span class="pre">data_path</span>
-<span class="pre">`</span></code></p>
-</dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="id0">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.dacapo">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">dacapo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.dacapo" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.script">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">script</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">script_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.script" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.bioimage">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">bioimage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_length_to_process</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.bioimage" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.cellmap_model">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">cellmap_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_folder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.cellmap_model" title="Link to this definition"></a></dt>
-<dd><p>Run the CellMapFlow with a CellMap model.</p>
+<p>cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
+cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
+cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.script_server_check">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">script_server_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">script_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.script_server_check" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dt class="sig sig-object py" id="cellmap_flow.cli.cli.list_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">list_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.list_models" title="Link to this definition"></a></dt>
+<dd><p>List all available model configurations.</p>
+</dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.run">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.run" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dt class="sig sig-object py" id="cellmap_flow.cli.cli.run_generic">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">run_generic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server_check</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.run_generic" title="Link to this definition"></a></dt>
+<dd><p>Generic run command that accepts any model type with dynamic configuration.</p>
+<p class="rubric">Example</p>
+<p>cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.cli.cli.create_dynamic_command">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">create_dynamic_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cli_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.create_dynamic_command" title="Link to this definition"></a></dt>
+<dd><p>Dynamically create a Click command for a ModelConfig subclass.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.cli.cli.register_all_model_commands">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">register_all_model_commands</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.register_all_model_commands" title="Link to this definition"></a></dt>
+<dd><p>Discover and register all ModelConfig subclasses as CLI commands.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.cli.cli.main">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.main" title="Link to this definition"></a></dt>
+<dd><p>Entry point for the CLI.</p>
+</dd></dl>
 
 </section>
 </section>
@@ -221,7 +201,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.cli" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../fly_model/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.fly_model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../server_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.server_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

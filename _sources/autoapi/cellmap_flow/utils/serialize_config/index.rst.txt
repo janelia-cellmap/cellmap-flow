@@ -1,0 +1,55 @@
+cellmap_flow.utils.serialize_config
+===================================
+
+.. py:module:: cellmap_flow.utils.serialize_config
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.serialize_config.DEFAULT_AXES_NAMES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.serialize_config.Config
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_AXES_NAMES
+   :value: ['x', 'y', 'z']
+
+
+.. py:class:: Config(**kwargs)
+
+   .. py:attribute:: axes_names
+
+
+   .. py:attribute:: kwargs
+
+
+   .. py:method:: to_dict()
+
+      Returns the configuration as a dictionary.
+
+
+
+   .. py:method:: serialize()
+
+      Serializes the configuration to a string representation.
+
+
+
+   .. py:method:: get(key: str, default: Any = None) -> Any
+
+      Gets the value of a configuration key.
+
+
+

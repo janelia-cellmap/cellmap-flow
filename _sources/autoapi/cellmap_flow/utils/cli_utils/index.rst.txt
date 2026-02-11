@@ -1,0 +1,130 @@
+cellmap_flow.utils.cli_utils
+============================
+
+.. py:module:: cellmap_flow.utils.cli_utils
+
+.. autoapi-nested-parse::
+
+   Utility functions for CLI generation and management.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.cli_utils.get_all_subclasses
+   cellmap_flow.utils.cli_utils.get_all_model_configs
+   cellmap_flow.utils.cli_utils.print_available_models
+   cellmap_flow.utils.cli_utils.parse_type_annotation
+   cellmap_flow.utils.cli_utils.parse_comma_separated_values
+   cellmap_flow.utils.cli_utils.create_click_option_from_param
+   cellmap_flow.utils.cli_utils.process_constructor_args
+
+
+Module Contents
+---------------
+
+.. py:function:: get_all_subclasses(base_class: Type) -> Dict[str, Type]
+
+   Get all subclasses of a base class and convert their names to CLI-friendly format.
+
+   :param base_class: The base class to find subclasses for
+
+   :returns: Dictionary mapping CLI-friendly names to class objects
+
+   .. rubric:: Example
+
+   >>> from cellmap_flow.models.models_config import ModelConfig
+   >>> configs = get_all_subclasses(ModelConfig)
+   >>> # Returns: {'dacapo': DaCapoModelConfig, 'script': ScriptModelConfig, ...}
+
+
+.. py:function:: get_all_model_configs()
+
+   Discover all ModelConfig subclasses using __subclasses__().
+
+   :returns: Dictionary mapping CLI-friendly names to ModelConfig classes
+
+
+.. py:function:: print_available_models(cli_command_name: str = 'cellmap_flow')
+
+   Print a formatted list of all available model configurations.
+
+   :param cli_command_name: Name of the CLI command for help text
+
+
+.. py:function:: parse_type_annotation(annotation) -> Tuple[type, bool]
+
+   Parse type annotations to determine the base type and if it's optional.
+
+   :param annotation: The type annotation to parse
+
+   :returns: Tuple of (base_type, is_optional)
+
+   .. rubric:: Example
+
+   >>> parse_type_annotation(str)
+   (str, False)
+   >>> parse_type_annotation(Optional[int])
+   (int, True)
+   >>> parse_type_annotation(list[str])
+   (str, False)
+
+
+.. py:function:: parse_comma_separated_values(value: str, target_type: type) -> Any
+
+   Parse comma-separated string into list of target type.
+
+   :param value: Comma-separated string (e.g., "1,2,3" or "a,b,c")
+   :param target_type: Type to convert elements to (str, int, float)
+
+   :returns: List of parsed values
+
+   .. rubric:: Example
+
+   >>> parse_comma_separated_values("1,2,3", int)
+   [1, 2, 3]
+   >>> parse_comma_separated_values("a,b,c", str)
+   ['a', 'b', 'c']
+
+
+.. py:function:: create_click_option_from_param(param_name: str, param_info: inspect.Parameter, used_short_names: set = None) -> Dict[str, Any]
+
+   Create a click.option configuration from a parameter.
+
+   :param param_name: Name of the parameter
+   :param param_info: Parameter information from inspect.signature
+   :param used_short_names: Set of already used short names to avoid duplicates
+
+   :returns: Dictionary with option configuration for click.option, or None if should skip
+
+   .. rubric:: Example
+
+   >>> sig = inspect.signature(MyClass.__init__)
+   >>> param = sig.parameters['my_param']
+   >>> config = create_click_option_from_param('my_param', param)
+   >>> # Returns: {'param_decls': ['-m', '--my-param'], 'required': True, ...}
+
+
+.. py:function:: process_constructor_args(config_class: Type, kwargs: Dict[str, Any]) -> Dict[str, Any]
+
+   Process kwargs to match the constructor signature.
+   Handle list/tuple type conversions from comma-separated strings.
+
+   :param config_class: The class whose constructor to match
+   :param kwargs: Dictionary of keyword arguments
+
+   :returns: Processed kwargs with proper type conversions
+
+   .. rubric:: Example
+
+   >>> class MyConfig:
+   ...     def __init__(self, items: list[int], name: str):
+   ...         pass
+   >>> kwargs = {'items': '1,2,3', 'name': 'test'}
+   >>> result = process_constructor_args(MyConfig, kwargs)
+   >>> # Returns: {'items': [1, 2, 3], 'name': 'test'}
+
+

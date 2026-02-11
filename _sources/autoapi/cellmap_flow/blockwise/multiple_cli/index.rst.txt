@@ -1,0 +1,32 @@
+cellmap_flow.blockwise.multiple_cli
+===================================
+
+.. py:module:: cellmap_flow.blockwise.multiple_cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.multiple_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.multiple_cli.cli
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: cli(yaml_configs: tuple) -> None
+
+   Process multiple YAML configuration files.
+
+

@@ -12,6 +12,7 @@ Submodules
 
    /autoapi/cellmap_flow/blockwise/blockwise_processor/index
    /autoapi/cellmap_flow/blockwise/cli/index
+   /autoapi/cellmap_flow/blockwise/multiple_cli/index
 
 
 Classes
@@ -48,7 +49,29 @@ Package Contents
    .. py:attribute:: workers
 
 
+   .. py:attribute:: output_channels_is_dict
+      :value: False
+
+
+
    .. py:attribute:: cpu_workers
+
+
+   .. py:attribute:: tmp_dir
+
+
+   .. py:attribute:: models
+      :value: []
+
+
+
+   .. py:attribute:: model_mode_str
+
+
+   .. py:attribute:: process_only
+
+
+   .. py:attribute:: cross_channels_mode
 
 
    .. py:attribute:: model_config
@@ -63,9 +86,6 @@ Package Contents
    .. py:attribute:: output_voxel_size
 
 
-   .. py:attribute:: output_channels
-
-
    .. py:attribute:: channels
 
 
@@ -73,6 +93,9 @@ Package Contents
 
 
    .. py:attribute:: dtype
+
+
+   .. py:attribute:: inferencers
 
 
    .. py:attribute:: inferencer
@@ -84,6 +107,12 @@ Package Contents
    .. py:attribute:: output_arrays
       :value: []
 
+
+
+   .. py:attribute:: bounding_boxes
+
+
+   .. py:attribute:: separate_zarrs
 
 
    .. py:method:: process_fn(block)

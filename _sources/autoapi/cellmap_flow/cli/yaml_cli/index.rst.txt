@@ -1,0 +1,83 @@
+cellmap_flow.cli.yaml_cli
+=========================
+
+.. py:module:: cellmap_flow.cli.yaml_cli
+
+.. autoapi-nested-parse::
+
+   YAML-based CLI for running multiple models.
+   Similar to cli_v2 but uses YAML configuration files for batch processing.
+
+   This dynamically discovers ModelConfig subclasses just like cli_v2,
+   making it easy to add new model types without modifying this file.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.yaml_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.yaml_cli.run_multiple
+   cellmap_flow.cli.yaml_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: run_multiple(models: List[cellmap_flow.models.models_config.ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True) -> None
+
+   Submit multiple model inference jobs.
+
+   :param models: List of ModelConfig instances to run
+   :param dataset_path: Base path to the dataset
+   :param charge_group: Billing/chargeback group
+   :param queue: Job queue name
+
+
+.. py:function:: main(config_path: str, log_level: str, list_types: bool, validate_only: bool)
+
+   Run multiple model inference jobs from a YAML configuration file.
+
+   The YAML file should have the following structure:
+
+   
+   data_path: /path/to/data
+   charge_group: my_group
+   queue: gpu_h100  # optional, defaults to gpu_h100
+   json_data: /path/to/config.json  # optional
+   models:
+     my_model:
+       type: dacapo
+       run_name: my_run
+       iteration: 100
+     fly_model:
+       type: fly
+       checkpoint: /path/to/checkpoint.ts
+       classes: [mito, er, nucleus]
+       resolution: [4, 4, 4]
+
+   The model keys (my_model, fly_model) become the model names.
+
+   Model types are automatically discovered from ModelConfig subclasses.
+   Use --list-types to see all available types.
+
+   Examples:
+
+   
+       cellmap_flow_yaml config.yaml
+       cellmap_flow_yaml config.yaml --log-level DEBUG
+       cellmap_flow_yaml --list-types
+       cellmap_flow_yaml config.yaml --validate-only
+
+

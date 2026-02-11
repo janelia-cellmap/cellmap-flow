@@ -1,0 +1,264 @@
+cellmap_flow.models.models_config
+=================================
+
+.. py:module:: cellmap_flow.models.models_config
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.models_config.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.models_config.ModelConfig
+   cellmap_flow.models.models_config.ScriptModelConfig
+   cellmap_flow.models.models_config.DaCapoModelConfig
+   cellmap_flow.models.models_config.FlyModelConfig
+   cellmap_flow.models.models_config.BioModelConfig
+   cellmap_flow.models.models_config.CellMapModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.models_config.concat_along_c
+   cellmap_flow.models.models_config.reorder_axes
+   cellmap_flow.models.models_config.process_chunk_bioimage
+   cellmap_flow.models.models_config.format_output_bioimage
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ModelConfig
+
+   .. py:property:: config
+
+
+   .. py:property:: output_dtype
+
+      Returns the output dtype of the model. Defaults to np.float32.
+
+
+   .. py:method:: to_dict()
+      :abstractmethod:
+
+
+      Export model configuration as a dict that can be used with build_model_from_entry.
+
+      :returns: Dictionary containing model type and all init parameters.
+
+
+
+.. py:class:: ScriptModelConfig(script_path, name=None, scale=None)
+
+
+
+   .. py:attribute:: script_path
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+
+.. py:class:: DaCapoModelConfig(run_name: str, iteration: int, name=None, scale=None)
+
+
+
+   .. py:attribute:: run_name
+
+
+   .. py:attribute:: iteration
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+
+.. py:class:: FlyModelConfig(checkpoint_path: str, channels: list[str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=None, output_size=None, scale=None)
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: checkpoint_path
+
+
+   .. py:attribute:: channels
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: input_size
+      :value: None
+
+
+
+   .. py:attribute:: output_size
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+   .. py:method:: load_eval_model(num_channels, checkpoint_path)
+
+      Load evaluation model from checkpoint (TorchScript or PyTorch).
+
+
+
+   .. py:property:: model
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+
+.. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None, scale=None)
+
+
+
+   .. py:attribute:: model_name
+
+
+   .. py:attribute:: voxel_size
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: voxels_to_process
+      :value: None
+
+
+
+   .. py:property:: command
+
+
+   .. py:method:: load_input_information(model)
+
+
+   .. py:method:: load_output_information(model)
+
+
+   .. py:method:: get_axes_and_dims(sample)
+
+
+   .. py:method:: get_spatial_dims(axes, dims)
+
+
+   .. py:method:: get_input_slicer(input_axes)
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+
+.. py:function:: concat_along_c(arrs, axes_list, channel_axis_name='c')
+
+   Concatenate arrays along the channel axis, adding channel dim if missing.
+
+
+.. py:function:: reorder_axes(arr: numpy.ndarray, axes: list[str], desired_order: list[str] = ['z', 'y', 'x', 'c']) -> tuple[numpy.ndarray, list[str]]
+
+   Reorder/remove axes to match desired_order, removing size-1 unwanted axes.
+
+
+.. py:function:: process_chunk_bioimage(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
+
+.. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
+
+.. py:class:: CellMapModelConfig(folder_path, name, scale=None)
+
+
+
+   Configuration class for a CellmapModel.
+
+
+   .. py:attribute:: cellmap_model
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+      :type: str
+
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+

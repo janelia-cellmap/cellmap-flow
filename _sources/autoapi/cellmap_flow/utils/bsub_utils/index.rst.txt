@@ -3,6 +3,16 @@ cellmap_flow.utils.bsub_utils
 
 .. py:module:: cellmap_flow.utils.bsub_utils
 
+.. autoapi-nested-parse::
+
+   Utilities for job submission and management across different execution environments.
+
+   Supports:
+   - LSF (bsub) cluster jobs
+   - Local process execution
+   - Extensible to cloud providers and other cluster types
+
+
 
 Attributes
 ----------
@@ -10,9 +20,10 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.utils.bsub_utils.logger
-   cellmap_flow.utils.bsub_utils.security
+   cellmap_flow.utils.bsub_utils.DEFAULT_SECURITY
+   cellmap_flow.utils.bsub_utils.DEFAULT_QUEUE
+   cellmap_flow.utils.bsub_utils.DEFAULT_CHARGE_GROUP
    cellmap_flow.utils.bsub_utils.SERVER_COMMAND
-   cellmap_flow.utils.bsub_utils.logger
 
 
 Classes
@@ -20,7 +31,10 @@ Classes
 
 .. autoapisummary::
 
+   cellmap_flow.utils.bsub_utils.JobStatus
    cellmap_flow.utils.bsub_utils.Job
+   cellmap_flow.utils.bsub_utils.LocalJob
+   cellmap_flow.utils.bsub_utils.LSFJob
 
 
 Functions
@@ -28,11 +42,10 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.utils.bsub_utils.cleanup
+   cellmap_flow.utils.bsub_utils.extract_host_from_output
+   cellmap_flow.utils.bsub_utils.cleanup_handler
    cellmap_flow.utils.bsub_utils.is_bsub_available
    cellmap_flow.utils.bsub_utils.submit_bsub_job
-   cellmap_flow.utils.bsub_utils.parse_bpeek_output
-   cellmap_flow.utils.bsub_utils.get_host_from_stdout
    cellmap_flow.utils.bsub_utils.run_locally
    cellmap_flow.utils.bsub_utils.start_hosts
 
@@ -42,19 +55,64 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:data:: security
+.. py:data:: DEFAULT_SECURITY
    :value: 'http'
+
+
+.. py:data:: DEFAULT_QUEUE
+   :value: 'gpu_h100'
+
+
+.. py:data:: DEFAULT_CHARGE_GROUP
+   :value: 'cellmap'
 
 
 .. py:data:: SERVER_COMMAND
    :value: 'cellmap_flow_server'
 
 
-.. py:class:: Job(job_id=None, model_name=None, status='running', host=None, process=None)
+.. py:class:: JobStatus(*args, **kwds)
 
-   .. py:attribute:: job_id
-      :value: None
 
+
+   Enumeration of possible job statuses.
+
+
+   .. py:attribute:: PENDING
+      :value: 'pending'
+
+
+
+   .. py:attribute:: RUNNING
+      :value: 'running'
+
+
+
+   .. py:attribute:: COMPLETED
+      :value: 'completed'
+
+
+
+   .. py:attribute:: FAILED
+      :value: 'failed'
+
+
+
+   .. py:attribute:: KILLED
+      :value: 'killed'
+
+
+
+.. py:class:: Job(model_name: Optional[str] = None)
+
+
+
+   Abstract base class for jobs across different execution environments.
+
+   Subclasses should implement:
+   - kill(): Terminate the job
+   - get_status(): Get current job status
+   - wait_for_host(): Wait for and extract host information
 
 
    .. py:attribute:: model_name
@@ -63,36 +121,169 @@ Module Contents
 
 
    .. py:attribute:: status
-      :value: 'running'
-
 
 
    .. py:attribute:: host
+      :type:  Optional[str]
       :value: None
 
+
+
+   .. py:method:: kill() -> None
+      :abstractmethod:
+
+
+      Terminate the job.
+
+
+
+   .. py:method:: get_status() -> JobStatus
+      :abstractmethod:
+
+
+      Get the current status of the job.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+      :abstractmethod:
+
+
+      Wait for the job to provide host information.
+
+      :param timeout: Maximum time to wait in seconds
+
+      :returns: Host URL if found, None otherwise
+
+
+
+   .. py:method:: is_running() -> bool
+
+      Check if the job is currently running.
+
+
+
+.. py:class:: LocalJob(process: subprocess.Popen, model_name: Optional[str] = None)
+
+
+
+   Job running as a local subprocess.
 
 
    .. py:attribute:: process
-      :value: None
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the local process.
 
 
 
-   .. py:method:: kill()
+   .. py:method:: get_status() -> JobStatus
+
+      Get current status by checking process state.
 
 
-.. py:function:: cleanup(signum, frame)
 
-.. py:data:: logger
+   .. py:method:: wait_for_host(timeout: int = 60) -> Optional[str]
 
-.. py:function:: is_bsub_available()
+      Monitor process output for host information.
 
-.. py:function:: submit_bsub_job(command, queue='gpu_h100', charge_group='cellmap', job_name='my_job')
+      :param timeout: Maximum time to wait in seconds
 
-.. py:function:: parse_bpeek_output(job_id)
+      :returns: Host URL if found, None otherwise
 
-.. py:function:: get_host_from_stdout(output)
 
-.. py:function:: run_locally(sc, name)
 
-.. py:function:: start_hosts(command, queue='gpu_h100', charge_group='cellmap', job_name='example_job')
+.. py:class:: LSFJob(job_id: str, model_name: Optional[str] = None)
+
+
+
+   Job submitted to LSF cluster via bsub.
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the LSF job using bkill.
+
+
+
+   .. py:method:: get_status() -> JobStatus
+
+      Query LSF for job status using bjobs.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Monitor LSF job output using bpeek to extract host information.
+
+      :param timeout: Maximum time to wait in seconds
+
+      :returns: Host URL if found, None otherwise
+
+
+
+.. py:function:: extract_host_from_output(output: str) -> Optional[str]
+
+   Extract host/URL from command output using configured patterns.
+
+   :param output: String output to search
+
+   :returns: Host URL if found, None otherwise
+
+
+.. py:function:: cleanup_handler(signum: int, frame) -> None
+
+   Signal handler for graceful shutdown.
+   Kills all tracked jobs before exiting.
+
+
+.. py:function:: is_bsub_available() -> bool
+
+   Check if bsub command is available in the system PATH.
+
+
+.. py:function:: submit_bsub_job(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'my_job', num_gpus: int = 1, num_cpus: int = 4) -> LSFJob
+
+   Submit a job to LSF cluster using bsub.
+
+   :param command: Shell command to execute
+   :param queue: LSF queue name
+   :param charge_group: Project/chargeback group for billing
+   :param job_name: Name for the job
+   :param num_gpus: Number of GPUs to request
+   :param num_cpus: Number of CPUs to request
+
+   :returns: LSFJob object for the submitted job
+
+   :raises subprocess.CalledProcessError: If job submission fails
+
+
+.. py:function:: run_locally(command: str, name: str) -> LocalJob
+
+   Run command locally as a subprocess (fallback when bsub unavailable).
+
+   :param command: Shell command to execute
+   :param name: Job name for tracking
+
+   :returns: LocalJob object with process information
+
+
+.. py:function:: start_hosts(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'example_job', use_https: bool = False, wait_for_host: bool = True) -> Job
+
+   Start a server job either via bsub or locally.
+
+   :param command: Command to execute
+   :param queue: LSF queue name (for bsub)
+   :param charge_group: Project for billing (for bsub)
+   :param job_name: Name for the job
+   :param use_https: Whether to use HTTPS (adds cert/key flags)
+   :param wait_for_host: Whether to wait for host information before returning
+
+   :returns: Job object (LSFJob or LocalJob) with job information
+
 

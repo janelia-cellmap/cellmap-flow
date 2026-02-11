@@ -17,6 +17,7 @@
    install
    scripts
    cli_command
+   cli_reference
    custom_script
    post
    autoapi/index

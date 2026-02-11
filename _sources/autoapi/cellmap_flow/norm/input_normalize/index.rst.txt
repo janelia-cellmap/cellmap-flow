@@ -131,7 +131,18 @@ Module Contents
 
 .. py:function:: get_input_normalizers() -> list[dict]
 
-.. py:function:: deserialize_list(elms: dict, T: type) -> list
+.. py:function:: deserialize_list(elms, T: type) -> list
 
-.. py:function:: get_normalizations(elms: dict) -> list[InputNormalizer]
+   Deserialize a list of processors from either dict or list format.
+
+   :param elms: Either a dict (old format) or list (new ordered format) of processor configs
+   :param T: The base type to deserialize (InputNormalizer or PostProcessor)
+
+   :returns: List of instantiated processor objects in the specified order
+
+
+.. py:function:: get_normalizations(elms) -> list[InputNormalizer]
+
+   Get normalizations from either dict or list format.
+
 

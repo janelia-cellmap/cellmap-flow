@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Installation &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
@@ -51,6 +51,7 @@
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cli_command.html">CLI Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
@@ -127,14 +128,14 @@
 
 Usage:<span class="w"> </span>cellmap_flow<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>COMMAND<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
 
-<span class="w">  </span>Examples:
-<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>Dacapo<span class="w"> </span>run<span class="w"> </span>the<span class="w"> </span>following<span class="w"> </span>commands:
+<span class="w">  </span>Examples:<span class="w">     </span>
+<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>Dacapo<span class="w"> </span>run<span class="w"> </span>the<span class="w"> </span>following<span class="w"> </span>commands:<span class="w">  </span>
 <span class="w">    </span>cellmap_flow<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>my_run<span class="w"> </span>-i<span class="w"> </span>iteration<span class="w"> </span>-d<span class="w"> </span>data_path
 
 <span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>custom<span class="w"> </span>script
 <span class="w">    </span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>script_path<span class="w"> </span>-d<span class="w"> </span>data_path
 
-<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>bioimage-io<span class="w"> </span>model
+<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>bioimage-io<span class="w"> </span>model<span class="w"> </span>
 <span class="w">    </span>cellmap_flow<span class="w"> </span>bioimage<span class="w"> </span>-m<span class="w"> </span>model_path<span class="w"> </span>-d<span class="w"> </span>data_path
 
 
@@ -150,7 +151,7 @@ Commands:
 <h1>Using custom script:<a class="headerlink" href="#using-custom-script" title="Link to this heading"></a></h1>
 <p>This enables using any model by providing a script e.g. <a class="reference internal" href="#example/model_spec.py"><span class="xref myst">example/model_spec.py</span></a>
 e.g.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0<span class="w"> </span>
 </pre></div>
 </div>
 <section id="script-keywords">

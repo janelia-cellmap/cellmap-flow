@@ -16,7 +16,7 @@ Script
 .. code-block:: python
 
     from cellmap_flow.globals import Flow
-    from cellmap_flow.utils.data import FlyModelConfig
+    from cellmap_flow.models.models_config import FlyModelConfig
     from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 
     queue = "gpu_h100"

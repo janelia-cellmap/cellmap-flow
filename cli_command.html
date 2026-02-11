@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLI Commands &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
@@ -24,7 +24,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Custom Model" href="custom_script.html" />
+    <link rel="next" title="CLI Argument Reference" href="cli_reference.html" />
     <link rel="prev" title="Python Scripts" href="scripts.html" /> 
 </head>
 
@@ -54,15 +54,24 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">CLI Commands</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#available-entry-points">Available Entry points</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#basic-syntax">Basic Syntax</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#main-cli-entrypoint-cellmap-flow">Main CLI Entrypoint (<cite>cellmap_flow</cite>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#chaining-multiple-models-cellmap-flow-multiple">Chaining Multiple Models (<cite>cellmap_flow_multiple</cite>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#yaml-based-configuration-cellmap-flow-yaml">YAML-Based Configuration (<cite>cellmap_flow_yaml</cite>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#main-cli-entrypoint-cellmap-flow">Main CLI Entrypoint (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#chaining-multiple-models-cellmap-flow-multiple">Chaining Multiple Models (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#yaml-based-configuration-cellmap-flow-yaml">YAML-Based Configuration (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fly-model-yaml-configuration-cellmap-flow-fly">Fly Model YAML Configuration (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#inference-server-cli-cellmap-flow-server">Inference Server CLI (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#advanced-options">Advanced Options</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#server-check-utility">Server Check Utility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cli-arguments-reference">CLI Arguments Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#common-arguments">Common Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#model-specific-arguments">Model-Specific Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server-specific-arguments">Server-Specific Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#migration-notes">Migration Notes</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#usage-tips">Usage Tips</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">CLI Argument Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
@@ -100,18 +109,20 @@
 <p>The following CLI entrypoints are available:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> — the main interface for executing a single model using a script, Dacapo run, or Bioimage model.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> — runs inference servers for interactive prediction (used internally by cellmap_flow).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code> — supports executing <strong>multiple models</strong> in one command, all on the same dataset.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> — supports loading model configuration from a structured <strong>YAML</strong> file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> — specialized interface for running Fly models via YAML configuration.</p></li>
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>All CLI tools support <cite>–queue</cite> and <cite>–charge_group</cite> options for specifying compute resources.</p>
+<p>All CLI tools use standardized argument naming: <code class="docutils literal notranslate"><span class="pre">--data-path</span></code> (not <code class="docutils literal notranslate"><span class="pre">--data_path</span></code>), <code class="docutils literal notranslate"><span class="pre">--project</span></code> (for billing/chargeback groups), and <code class="docutils literal notranslate"><span class="pre">--queue</span></code> for compute resources.</p>
 </div>
 </section>
 <section id="basic-syntax">
 <h2>Basic Syntax<a class="headerlink" href="#basic-syntax" title="Link to this heading"></a></h2>
 <section id="main-cli-entrypoint-cellmap-flow">
-<h3>Main CLI Entrypoint (<cite>cellmap_flow</cite>)<a class="headerlink" href="#main-cli-entrypoint-cellmap-flow" title="Link to this heading"></a></h3>
+<h3>Main CLI Entrypoint (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>)<a class="headerlink" href="#main-cli-entrypoint-cellmap-flow" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>&lt;subcommand&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
@@ -121,6 +132,7 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">script</span></code> — run using a Python script model definition.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code> — run using a Bioimage.IO model.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">cellmap-model</span></code> — run using a structured CellMap model config folder.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">script-server-check</span></code> — validate a script-based model configuration.</p></li>
 </ul>
 <p>Examples:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Using a Dacapo run</span>
@@ -134,12 +146,15 @@ cellmap_flow<span class="w"> </span>bioimage<span class="w"> </span>-m<span clas
 
 <span class="c1"># Using a CellMap model folder</span>
 cellmap_flow<span class="w"> </span>cellmap-model<span class="w"> </span>-f<span class="w"> </span>/path/to/model_dir<span class="w"> </span>-n<span class="w"> </span>model_name<span class="w"> </span>-d<span class="w"> </span>/path/to/data<span class="w"> </span>-q<span class="w"> </span>gpu_h100<span class="w"> </span>-P<span class="w"> </span>cellmap
+
+<span class="c1"># Validate a script configuration</span>
+cellmap_flow<span class="w"> </span>script-server-check<span class="w"> </span>-s<span class="w"> </span>/path/to/script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/data
 </pre></div>
 </div>
 </section>
 <section id="chaining-multiple-models-cellmap-flow-multiple">
-<h3>Chaining Multiple Models (<cite>cellmap_flow_multiple</cite>)<a class="headerlink" href="#chaining-multiple-models-cellmap-flow-multiple" title="Link to this heading"></a></h3>
-<p>This CLI allows running <strong>multiple models sequentially</strong> on the same dataset. Each subcommand must be prefixed with <cite>–</cite>.</p>
+<h3>Chaining Multiple Models (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code>)<a class="headerlink" href="#chaining-multiple-models-cellmap-flow-multiple" title="Link to this heading"></a></h3>
+<p>This CLI allows running <strong>multiple models sequentially</strong> on the same dataset. Each subcommand must be prefixed with <code class="docutils literal notranslate"><span class="pre">--</span></code>.</p>
 <p>Example:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_multiple<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--data-path<span class="w"> </span>/nrs/path/zarr/volume.zarr<span class="w"> </span><span class="se">\</span>
@@ -152,37 +167,37 @@ cellmap_flow<span class="w"> </span>cellmap-model<span class="w"> </span>-f<span
 </div>
 </section>
 <section id="yaml-based-configuration-cellmap-flow-yaml">
-<h3>YAML-Based Configuration (<cite>cellmap_flow_yaml</cite>)<a class="headerlink" href="#yaml-based-configuration-cellmap-flow-yaml" title="Link to this heading"></a></h3>
+<h3>YAML-Based Configuration (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code>)<a class="headerlink" href="#yaml-based-configuration-cellmap-flow-yaml" title="Link to this heading"></a></h3>
 <p>Run multiple models defined in a <strong>YAML file</strong> with structured metadata. This allows batch processing and version-controlled configuration.</p>
 <p>YAML Example:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/nrs/cellmap/data/jrc_mus-salivary-1/.../fibsem-uint8&quot;</span>
-<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cellmap&quot;</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cellmap&quot;</span><span class="w">  </span><span class="c1"># or use &#39;project&#39;</span>
 <span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpu_h100&quot;</span>
 
 <span class="nt">models</span><span class="p">:</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap-model</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">config_folder</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/cellmap/zouinkhim/salivary/train/binary/mito_16&quot;</span>
-<span class="w">   </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;b_mito_16&quot;</span>
-<span class="w">   </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s1&quot;</span>
+<span class="w">  </span><span class="nt">config_folder</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/cellmap/zouinkhim/salivary/train/binary/mito_16&quot;</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;b_mito_16&quot;</span>
+<span class="w">  </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s1&quot;</span>
 
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap-model</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">config_folder</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/cellmap/zouinkhim/salivary/train/binary/lyso_16&quot;</span>
-<span class="w">   </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;b_lyso_16&quot;</span>
-<span class="w">   </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s1&quot;</span>
+<span class="w">  </span><span class="nt">config_folder</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/cellmap/zouinkhim/salivary/train/binary/lyso_16&quot;</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;b_lyso_16&quot;</span>
+<span class="w">  </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s1&quot;</span>
 
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dacapo</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">run_name</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;nuclei_run&quot;</span>
-<span class="w">   </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">36000</span>
-<span class="w">   </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nuclei_model&quot;</span>
+<span class="w">  </span><span class="nt">run_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nuclei_run&quot;</span>
+<span class="w">  </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">36000</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nuclei_model&quot;</span>
 
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">script_path</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/scripts/mito_script.py&quot;</span>
-<span class="w">   </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mito_script_model&quot;</span>
-<span class="w">   </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s2&quot;</span>
+<span class="w">  </span><span class="nt">script_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/scripts/mito_script.py&quot;</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mito_script_model&quot;</span>
+<span class="w">  </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s2&quot;</span>
 
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bioimage</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">model_path</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/models/mito.bioimage.io&quot;</span>
-<span class="w">   </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;bio_mito&quot;</span>
+<span class="w">  </span><span class="nt">model_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/groups/cellmap/models/mito.bioimage.io&quot;</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;bio_mito&quot;</span>
 </pre></div>
 </div>
 <p>To execute:</p>
@@ -190,26 +205,183 @@ cellmap_flow<span class="w"> </span>cellmap-model<span class="w"> </span>-f<span
 </pre></div>
 </div>
 </section>
+<section id="fly-model-yaml-configuration-cellmap-flow-fly">
+<h3>Fly Model YAML Configuration (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code>)<a class="headerlink" href="#fly-model-yaml-configuration-cellmap-flow-fly" title="Link to this heading"></a></h3>
+<p>Specialized interface for Fly models with custom input/output sizes:</p>
+<p>YAML Example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/input.zarr&quot;</span>
+<span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpu_h100&quot;</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cellmap&quot;</span>
+<span class="nt">input_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">178</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">178</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">178</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Optional</span>
+<span class="nt">output_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">56</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">56</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">56</span><span class="p p-Indicator">]</span><span class="w">    </span><span class="c1"># Optional</span>
+<span class="nt">json_data</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/norm.json&quot;</span><span class="w">  </span><span class="c1"># Optional preprocessing config</span>
+
+<span class="nt">runs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">checkpoint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/checkpoint.pth&quot;</span>
+<span class="w">    </span><span class="nt">classes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;channel1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;channel2&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">res</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span><span class="w">  </span><span class="c1"># Resolution in nm</span>
+<span class="w">    </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;s1&quot;</span><span class="w">  </span><span class="c1"># Optional</span>
+</pre></div>
+</div>
+<p>To execute:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_fly<span class="w"> </span>/path/to/fly_config.yaml
+</pre></div>
+</div>
 </section>
-<section id="advanced-options">
-<h2>Advanced Options<a class="headerlink" href="#advanced-options" title="Link to this heading"></a></h2>
-<p>All CLI variants support the following flags (unless overridden):</p>
+<section id="inference-server-cli-cellmap-flow-server">
+<h3>Inference Server CLI (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>)<a class="headerlink" href="#inference-server-cli-cellmap-flow-server" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> CLI runs inference servers directly. This is typically used internally by the main CLI but can be invoked manually for debugging or custom setups.</p>
+<p>Supported subcommands:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">--data-path/-d</span></code>: Path to the input dataset (required).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--queue/-q</span></code>: Compute queue to submit the job (default: <code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code>).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--project/-P</span></code>: Charge group for billing (required).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--name/-n</span></code>: Custom model name (optional).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--scale/-r</span></code>: Input scale (optional for structured models).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--edge_length_to_process/-e</span></code>: For 2D models, desired chunk edge size (bioimage only).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code> — Run DaCapo model server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">script</span></code> — Run custom script model server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code> — Run Bioimage.IO model server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap-model</span></code> — Run CellMap model server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fly</span></code> — Run Fly model server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run-ui-server</span></code> — Run the dashboard UI server</p></li>
+</ul>
+<p>Examples:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run a script model server</span>
+cellmap_flow_server<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/path/to/script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/data<span class="w"> </span>-p<span class="w"> </span><span class="m">8080</span>
+
+<span class="c1"># Run a Fly model server</span>
+cellmap_flow_server<span class="w"> </span>fly<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-c<span class="w"> </span>/path/to/checkpoint.pth<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-ch<span class="w"> </span>channel1,channel2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-ivs<span class="w"> </span><span class="m">8</span>,8,8<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-ovs<span class="w"> </span><span class="m">8</span>,8,8<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-d<span class="w"> </span>/path/to/data
+
+<span class="c1"># Run the UI server</span>
+cellmap_flow_server<span class="w"> </span>run-ui-server<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-n<span class="w"> </span>http://neuroglancer-url<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-i<span class="w"> </span>http://inference-host
+</pre></div>
+</div>
+</section>
+</section>
+<section id="cli-arguments-reference">
+<h2>CLI Arguments Reference<a class="headerlink" href="#cli-arguments-reference" title="Link to this heading"></a></h2>
+<section id="common-arguments">
+<h3>Common Arguments<a class="headerlink" href="#common-arguments" title="Link to this heading"></a></h3>
+<p>The following arguments are standardized across all CLI interfaces:</p>
+<dl class="simple">
+<dt><strong>Data Path</strong></dt><dd><ul class="simple">
+<li><p>Flags: <code class="docutils literal notranslate"><span class="pre">-d</span></code>, <code class="docutils literal notranslate"><span class="pre">--data-path</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">str</span></code></p></li>
+<li><p>Required: Yes (for most commands)</p></li>
+<li><p>Description: Path to the input dataset (typically a Zarr file/group)</p></li>
+</ul>
+</dd>
+<dt><strong>Project/Charge Group</strong></dt><dd><ul class="simple">
+<li><p>Flags: <code class="docutils literal notranslate"><span class="pre">-P</span></code>, <code class="docutils literal notranslate"><span class="pre">--project</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">str</span></code></p></li>
+<li><p>Required: Yes (for job submission commands)</p></li>
+<li><p>Description: The project or chargeback group for billing purposes</p></li>
+<li><p>Note: Previously called <code class="docutils literal notranslate"><span class="pre">--charge_group</span></code>, now standardized to <code class="docutils literal notranslate"><span class="pre">--project</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>Queue</strong></dt><dd><ul class="simple">
+<li><p>Flags: <code class="docutils literal notranslate"><span class="pre">-q</span></code>, <code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">str</span></code></p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code></p></li>
+<li><p>Description: The compute queue to submit jobs to</p></li>
+</ul>
+</dd>
+<dt><strong>Model Name</strong></dt><dd><ul class="simple">
+<li><p>Flags: <code class="docutils literal notranslate"><span class="pre">-n</span></code>, <code class="docutils literal notranslate"><span class="pre">--name</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">str</span></code></p></li>
+<li><p>Description: Custom name for the model (used for job naming and output identification)</p></li>
+</ul>
+</dd>
+<dt><strong>Scale</strong></dt><dd><ul class="simple">
+<li><p>Flags: <code class="docutils literal notranslate"><span class="pre">-r</span></code>, <code class="docutils literal notranslate"><span class="pre">--scale</span></code></p></li>
+<li><p>Type: <code class="docutils literal notranslate"><span class="pre">str</span></code></p></li>
+<li><p>Description: Input scale level (e.g., <code class="docutils literal notranslate"><span class="pre">s0</span></code>, <code class="docutils literal notranslate"><span class="pre">s1</span></code>, <code class="docutils literal notranslate"><span class="pre">s2</span></code>) for multi-resolution datasets</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="model-specific-arguments">
+<h3>Model-Specific Arguments<a class="headerlink" href="#model-specific-arguments" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>DaCapo Models</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-r</span></code>, <code class="docutils literal notranslate"><span class="pre">--run-name</span></code>: The name of the DaCapo run (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-i</span></code>, <code class="docutils literal notranslate"><span class="pre">--iteration</span></code>: Training iteration to use (default: 0)</p></li>
+</ul>
+</dd>
+<dt><strong>Script Models</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-s</span></code>, <code class="docutils literal notranslate"><span class="pre">--script-path</span></code>: Path to the Python script containing model specification (required)</p></li>
+</ul>
+</dd>
+<dt><strong>Bioimage.IO Models</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-m</span></code>, <code class="docutils literal notranslate"><span class="pre">--model-path</span></code>: Path to the bioimage.io model (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-e</span></code>, <code class="docutils literal notranslate"><span class="pre">--edge-length-to-process</span></code>: For 2D models, desired chunk edge size</p></li>
+</ul>
+</dd>
+<dt><strong>CellMap Models</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-f</span></code>, <code class="docutils literal notranslate"><span class="pre">--config-folder</span></code>: Path to the model configuration folder (required)</p></li>
+</ul>
+</dd>
+<dt><strong>Fly Models</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-c</span></code>, <code class="docutils literal notranslate"><span class="pre">--checkpoint</span></code>: Path to the model checkpoint (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-ch</span></code>, <code class="docutils literal notranslate"><span class="pre">--channels</span></code>: Comma-separated list of channel names (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-ivs</span></code>, <code class="docutils literal notranslate"><span class="pre">--input-voxel-size</span></code>: Comma-separated input voxel size (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-ovs</span></code>, <code class="docutils literal notranslate"><span class="pre">--output-voxel-size</span></code>: Comma-separated output voxel size (required)</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="server-specific-arguments">
+<h3>Server-Specific Arguments<a class="headerlink" href="#server-specific-arguments" title="Link to this heading"></a></h3>
+<p>These arguments are available for <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> commands:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--debug</span></code>: Run server in debug mode (flag)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-p</span></code>, <code class="docutils literal notranslate"><span class="pre">--port</span></code>: Port number to listen on (default: 0 for auto-assign)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--certfile</span></code>: Path to SSL certificate file for HTTPS</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--keyfile</span></code>: Path to SSL private key file for HTTPS</p></li>
 </ul>
 </section>
-<section id="server-check-utility">
-<h2>Server Check Utility<a class="headerlink" href="#server-check-utility" title="Link to this heading"></a></h2>
-<p>Validate a script-based model before submitting:</p>
+<section id="migration-notes">
+<h3>Migration Notes<a class="headerlink" href="#migration-notes" title="Link to this heading"></a></h3>
+<p>If you have existing scripts using the old argument names, here are the changes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--data_path</span></code> → <code class="docutils literal notranslate"><span class="pre">--data-path</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--charge_group</span></code> → <code class="docutils literal notranslate"><span class="pre">--project</span></code> (<code class="docutils literal notranslate"><span class="pre">-P</span></code> remains the same)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--script_path</span></code> → <code class="docutils literal notranslate"><span class="pre">--script-path</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--model_path</span></code> → <code class="docutils literal notranslate"><span class="pre">--model-path</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--config_folder</span></code> → <code class="docutils literal notranslate"><span class="pre">--config-folder</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--edge_length_to_process</span></code> → <code class="docutils literal notranslate"><span class="pre">--edge-length-to-process</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--input_voxel_size</span></code> → <code class="docutils literal notranslate"><span class="pre">--input-voxel-size</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--output_voxel_size</span></code> → <code class="docutils literal notranslate"><span class="pre">--output-voxel-size</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--neuroglancer_url</span></code> → <code class="docutils literal notranslate"><span class="pre">--neuroglancer-url</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--inference_host</span></code> → <code class="docutils literal notranslate"><span class="pre">--inference-host</span></code></p></li>
+</ul>
+</section>
+</section>
+<section id="usage-tips">
+<h2>Usage Tips<a class="headerlink" href="#usage-tips" title="Link to this heading"></a></h2>
+<p><strong>Validate Configuration Before Submission</strong></p>
+<p>Use the <code class="docutils literal notranslate"><span class="pre">script-server-check</span></code> command to validate your model configuration:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script-server-check<span class="w"> </span>-s<span class="w"> </span>/path/to/script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/data
 </pre></div>
 </div>
-<p>This will initialize the inference server and simulate a 2x2x2 chunk to confirm configuration validity.</p>
+<p>This initializes the inference server and simulates a 2×2×2 chunk to confirm validity.</p>
+<p><strong>Running Multiple Models Efficiently</strong></p>
+<p>For running multiple models on the same dataset, prefer <code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> over chaining commands:</p>
+<ul class="simple">
+<li><p>✓ Better: Use YAML configuration with <code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code></p></li>
+<li><p>✗ Less optimal: Chain multiple <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> commands</p></li>
+</ul>
+<p><strong>Choosing the Right CLI</strong></p>
+<ul class="simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> for single model runs</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_multiple</span></code> for multiple models via command line</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> for multiple models with version-controlled config</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_fly</span></code> for Fly-specific models with custom sizes</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> for manual server control or debugging</p></li>
+</ul>
 </section>
 </section>
 
@@ -218,7 +390,7 @@ cellmap_flow<span class="w"> </span>cellmap-model<span class="w"> </span>-f<span
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="scripts.html" class="btn btn-neutral float-left" title="Python Scripts" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="custom_script.html" class="btn btn-neutral float-right" title="Custom Model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="cli_reference.html" class="btn btn-neutral float-right" title="CLI Argument Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

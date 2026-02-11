@@ -1,0 +1,140 @@
+cellmap_flow.models.model_merger
+================================
+
+.. py:module:: cellmap_flow.models.model_merger
+
+.. autoapi-nested-parse::
+
+   Model Merger classes for combining outputs from multiple models.
+
+   Similar to PostProcessor pattern, provides subclasses for different merge strategies
+   that can be looked up by their __name__ attribute.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_merger.logger
+   cellmap_flow.models.model_merger.MERGE_MODE_MAP
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_merger.ModelMerger
+   cellmap_flow.models.model_merger.AndModelMerger
+   cellmap_flow.models.model_merger.OrModelMerger
+   cellmap_flow.models.model_merger.SumModelMerger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.model_merger.get_model_mergers_list
+   cellmap_flow.models.model_merger.get_model_merger
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ModelMerger
+
+   Base class for model merging strategies.
+
+
+   .. py:method:: merge(model_outputs)
+      :abstractmethod:
+
+
+      Merge outputs from multiple models.
+
+      :param model_outputs: List of numpy arrays from different models
+
+      :returns: Merged numpy array
+
+
+
+.. py:class:: AndModelMerger
+
+
+
+   AND merge strategy: Element-wise minimum.
+   For binary data: logical AND. For continuous data: minimum value.
+
+
+   .. py:method:: merge(model_outputs)
+
+      Apply AND operation: element-wise minimum across all model outputs.
+
+      :param model_outputs: List of numpy arrays
+
+      :returns: Merged array with minimum values at each position
+
+
+
+.. py:class:: OrModelMerger
+
+
+
+   OR merge strategy: Element-wise maximum.
+   For binary data: logical OR. For continuous data: maximum value.
+
+
+   .. py:method:: merge(model_outputs)
+
+      Apply OR operation: element-wise maximum across all model outputs.
+
+      :param model_outputs: List of numpy arrays
+
+      :returns: Merged array with maximum values at each position
+
+
+
+.. py:class:: SumModelMerger
+
+
+
+   SUM merge strategy: Average of all outputs.
+   Computes the mean across all model outputs.
+
+
+   .. py:method:: merge(model_outputs)
+
+      Apply SUM operation: average all model outputs.
+
+      :param model_outputs: List of numpy arrays
+
+      :returns: Merged array with average values at each position
+
+
+
+.. py:function:: get_model_mergers_list() -> list[dict]
+
+   Returns a list of dictionaries containing information about all ModelMerger subclasses.
+
+   :returns: 'class_name', 'name', 'description'
+   :rtype: List of dicts with keys
+
+
+.. py:function:: get_model_merger(merger_name: str) -> ModelMerger
+
+   Get a ModelMerger instance by name.
+
+   :param merger_name: Name of the merger class (e.g., 'AndModelMerger', 'And', 'AND')
+
+   :returns: Instance of the requested ModelMerger subclass
+
+   :raises ValueError: If merger_name doesn't match any available merger class
+
+
+.. py:data:: MERGE_MODE_MAP
+

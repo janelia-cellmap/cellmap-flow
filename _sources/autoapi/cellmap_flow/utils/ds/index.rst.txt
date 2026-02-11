@@ -25,7 +25,9 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.utils.ds.generate_singlescale_metadata
    cellmap_flow.utils.ds.get_scale_info
+   cellmap_flow.utils.ds.get_array_path_if_needed
    cellmap_flow.utils.ds.find_target_scale
    cellmap_flow.utils.ds.find_closest_scale
    cellmap_flow.utils.ds.ends_with_scale
@@ -48,7 +50,11 @@ Functions
 Module Contents
 ---------------
 
+.. py:function:: generate_singlescale_metadata(arr_name: str, voxel_size: list, translation: list, units: str, axes: list)
+
 .. py:function:: get_scale_info(zarr_grp)
+
+.. py:function:: get_array_path_if_needed(zarr_grp_path, target_resolution)
 
 .. py:function:: find_target_scale(zarr_grp_path, target_resolution)
 
@@ -79,7 +85,7 @@ Module Contents
 
 .. py:function:: open_ds_tensorstore(dataset_path: str, mode='r', concurrency_limit=None, normalize=True)
 
-.. py:function:: to_ndarray_tensorstore(dataset, roi=None, voxel_size=None, offset=None, output_voxel_size=None, swap_axes=False, custom_fill_value=None)
+.. py:function:: to_ndarray_tensorstore(dataset, roi=None, voxel_size=None, offset=None, output_voxel_size=None, axes_names=['z', 'y', 'x'], custom_fill_value=None)
 
    Read a region of a tensorstore dataset and return it as a numpy array
 
