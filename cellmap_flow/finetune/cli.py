@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import torch
+import torch.nn as nn
 
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
@@ -226,6 +227,13 @@ def main():
     base_model = model_config.config.model
     logger.info(f"✓ Model loaded: {type(base_model).__name__}")
 
+    # Determine which channel to select (if model outputs multiple channels)
+    # For mito, we select channel 2 from the 8-channel fly_organelles output
+    select_channel = None
+    if args.channels == ["mito"]:
+        select_channel = 2
+        logger.info("Will select mito channel (index 2) from model output during training")
+
     # Wrap with LoRA
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
     lora_model = wrap_model_with_lora(
@@ -259,6 +267,7 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         use_mixed_precision=not args.no_mixed_precision,
         loss_type=args.loss_type,
+        select_channel=select_channel,
     )
 
     # Resume from checkpoint if specified

@@ -122,6 +122,7 @@ class LoRAFinetuner:
         use_mixed_precision: Enable FP16 training (default: True)
         loss_type: Loss function ("dice", "bce", or "combined")
         device: Training device ("cuda" or "cpu", auto-detected if None)
+        select_channel: Optional channel index to select from multi-channel output (default: None)
 
     Examples:
         >>> lora_model = wrap_model_with_lora(model)
@@ -146,6 +147,7 @@ class LoRAFinetuner:
         use_mixed_precision: bool = True,
         loss_type: str = "combined",
         device: Optional[str] = None,
+        select_channel: Optional[int] = None,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -153,6 +155,7 @@ class LoRAFinetuner:
         self.num_epochs = num_epochs
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.use_mixed_precision = use_mixed_precision
+        self.select_channel = select_channel
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -206,25 +209,39 @@ class LoRAFinetuner:
             - total_epochs: Number of epochs trained
             - total_steps: Total training steps
         """
-        logger.info("="*60)
-        logger.info("Starting LoRA Finetuning")
-        logger.info("="*60)
-        logger.info(f"Epochs: {self.num_epochs}")
-        logger.info(f"Batches per epoch: {len(self.dataloader)}")
-        logger.info(f"Gradient accumulation: {self.gradient_accumulation_steps}")
-        logger.info(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
-        logger.info(f"Mixed precision: {self.use_mixed_precision}")
-        logger.info("")
+        # Create log file
+        log_file = self.output_dir / "training_log.txt"
+
+        def log_message(msg):
+            """Log to both console and file."""
+            print(msg)  # Always print to console
+            logger.info(msg)  # Also log normally
+            with open(log_file, 'a') as f:
+                f.write(msg + '\n')
+
+        log_message("="*60)
+        log_message("Starting LoRA Finetuning")
+        log_message("="*60)
+        log_message(f"Epochs: {self.num_epochs}")
+        log_message(f"Batches per epoch: {len(self.dataloader)}")
+        log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
+        log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
+        log_message(f"Mixed precision: {self.use_mixed_precision}")
+        log_message(f"Log file: {log_file}")
+        log_message("")
 
         self.model.train()
         start_time = time.time()
+
+        # Store log function for use in _train_epoch
+        self._log_message = log_message
 
         for epoch in range(self.num_epochs):
             self.current_epoch = epoch
             epoch_loss = self._train_epoch()
 
             # Log epoch results
-            logger.info(
+            self._log_message(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
                 f"Best: {self.best_loss:.6f}"
@@ -234,7 +251,7 @@ class LoRAFinetuner:
             if epoch_loss < self.best_loss:
                 self.best_loss = epoch_loss
                 self.save_checkpoint(is_best=True)
-                logger.info(f"  → Saved best checkpoint")
+                self._log_message(f"  → Saved best checkpoint")
 
             # Save regular checkpoint every 5 epochs
             if (epoch + 1) % 5 == 0:
@@ -250,14 +267,14 @@ class LoRAFinetuner:
         self.save_checkpoint(is_best=False)
 
         total_time = time.time() - start_time
-        logger.info("")
-        logger.info("="*60)
-        logger.info("Training Complete!")
-        logger.info(f"Total time: {total_time/60:.2f} minutes")
-        logger.info(f"Best loss: {self.best_loss:.6f}")
-        logger.info(f"Final loss: {epoch_loss:.6f}")
-        logger.info(f"Output directory: {self.output_dir}")
-        logger.info("="*60)
+        self._log_message("")
+        self._log_message("="*60)
+        self._log_message("Training Complete!")
+        self._log_message(f"Total time: {total_time/60:.2f} minutes")
+        self._log_message(f"Best loss: {self.best_loss:.6f}")
+        self._log_message(f"Final loss: {epoch_loss:.6f}")
+        self._log_message(f"Output directory: {self.output_dir}")
+        self._log_message("="*60)
 
         return {
             'final_loss': epoch_loss,
@@ -280,6 +297,11 @@ class LoRAFinetuner:
             # Forward pass with mixed precision
             with autocast(enabled=self.use_mixed_precision):
                 pred = self.model(raw)
+
+                # Select specific channel if requested (e.g., mito = channel 2 from 8-channel output)
+                if self.select_channel is not None:
+                    pred = pred[:, self.select_channel:self.select_channel+1, :, :, :]
+
                 loss = self.criterion(pred, target)
 
                 # Scale loss for gradient accumulation
@@ -298,13 +320,18 @@ class LoRAFinetuner:
             # Accumulate loss (unscaled)
             epoch_loss += loss.item() * self.gradient_accumulation_steps
 
-            # Log progress every 10 batches
-            if (batch_idx + 1) % 10 == 0:
-                avg_loss = epoch_loss / (batch_idx + 1)
-                logger.info(
+            # Log progress every batch (since we have few batches)
+            avg_loss = epoch_loss / (batch_idx + 1)
+            if hasattr(self, '_log_message'):
+                self._log_message(
                     f"  Batch {batch_idx+1}/{num_batches} - "
                     f"Loss: {avg_loss:.6f}"
                 )
+            else:
+                # Fallback if _log_message not set
+                msg = f"  Batch {batch_idx+1}/{num_batches} - Loss: {avg_loss:.6f}"
+                print(msg)
+                logger.info(msg)
 
         return epoch_loss / num_batches
 
