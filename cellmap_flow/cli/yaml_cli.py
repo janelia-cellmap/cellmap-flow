@@ -175,6 +175,31 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     logger.info("Building model configurations...")
     g.models_config = build_models(config["models"])
 
+    # Handle AgentModelConfig: run agent and replace with selected models
+    from cellmap_flow.models.models_config import AgentModelConfig
+
+    resolved_configs = []
+    for model_config in g.models_config:
+        if isinstance(model_config, AgentModelConfig):
+            logger.info(
+                f"Running agent '{model_config.name}' to select models..."
+            )
+            selected = model_config.get_selected_configs(data_path)
+            agent_result = model_config.agent_result
+            logger.info(
+                f"Agent recommended {len(selected)} model(s): "
+                f"{[getattr(m, 'name', '?') for m in selected]}"
+            )
+            logger.info(f"Reasoning: {agent_result.get('reasoning', 'N/A')}")
+            logger.info(
+                f"Detected structures: "
+                f"{agent_result.get('detected_structures', [])}"
+            )
+            resolved_configs.extend(selected)
+        else:
+            resolved_configs.append(model_config)
+    g.models_config = resolved_configs
+
     logger.info(f"Configured {len(g.models_config)} model(s):")
     for i, model in enumerate(g.models_config, 1):
         model_name = getattr(model, "name", None) or type(model).__name__

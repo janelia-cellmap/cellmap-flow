@@ -8,6 +8,7 @@ from cellmap_flow.models.models_config import (
     FlyModelConfig,
     BioModelConfig,
     CellMapModelConfig,
+    AgentModelConfig,
 )
 
 # Registry of available model config classes
@@ -17,6 +18,7 @@ MODEL_CONFIG_CLASSES = {
     'FlyModelConfig': FlyModelConfig,
     'BioModelConfig': BioModelConfig,
     'CellMapModelConfig': CellMapModelConfig,
+    'AgentModelConfig': AgentModelConfig,
 }
 
 

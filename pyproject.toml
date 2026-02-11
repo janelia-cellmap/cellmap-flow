@@ -46,6 +46,7 @@ dependencies = [
 dacapo = ["dacapo-ml"]
 cellpose = ["cellpose==3.1.1.1"]
 bioimageio = ["bioimageio.core[onnx,pytorch]==0.7.0"]
+agent = ["google-genai>=1.0.0", "Pillow"]
 test = ["pytest", "pytest-cov", "pytest-lazy-fixtures"]
 dev = [
     "black",

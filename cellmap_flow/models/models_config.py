@@ -602,3 +602,137 @@ class CellMapModelConfig(ModelConfig):
         if self.scale is not None:
             result["scale"] = self.scale
         return result
+
+
+class AgentModelConfig(ModelConfig):
+    """
+    Configuration that uses an AI agent (Gemini) to analyze EM images
+    and automatically select the best model(s) from the catalog.
+
+    The agent extracts sample slices from the dataset, sends them to a
+    vision-capable LLM, and delegates to the recommended model's config.
+
+    YAML usage:
+        models:
+          auto_select:
+            type: agent
+            gemini_model: gemini-2.5-flash-preview-05-20  # optional
+            num_slices: 3                                   # optional
+            custom_prompt: "Focus on mitochondria"          # optional
+    """
+
+    def __init__(
+        self,
+        name: str = None,
+        gemini_model: str = None,
+        num_slices: int = 3,
+        custom_prompt: str = None,
+        api_key: str = None,
+        scale=None,
+    ):
+        super().__init__()
+        self.name = name or "agent_selector"
+        self.gemini_model = gemini_model or "gemini-2.5-flash-preview-05-20"
+        self.num_slices = num_slices
+        self.custom_prompt = custom_prompt
+        self.api_key = api_key
+        self.scale = scale
+        self._agent_result = None
+        self._selected_configs = None
+
+    def run_agent(self, dataset_path: str) -> dict:
+        """
+        Run the agent to analyze the dataset and select models.
+
+        Args:
+            dataset_path: Path to the EM dataset.
+
+        Returns:
+            Agent result dict with recommended_models, reasoning, etc.
+        """
+        from cellmap_flow.models.agent_model_selector import (
+            select_models_with_agent,
+        )
+
+        self._agent_result = select_models_with_agent(
+            dataset_path=dataset_path,
+            gemini_model=self.gemini_model,
+            api_key=self.api_key,
+            num_slices=self.num_slices,
+            custom_prompt=self.custom_prompt,
+        )
+        return self._agent_result
+
+    def get_selected_configs(self, dataset_path: str) -> list:
+        """
+        Run the agent (if needed) and return the selected ModelConfig instances.
+
+        Args:
+            dataset_path: Path to the EM dataset.
+
+        Returns:
+            List of ModelConfig instances recommended by the agent.
+        """
+        if self._selected_configs is not None:
+            return self._selected_configs
+
+        if self._agent_result is None:
+            self.run_agent(dataset_path)
+
+        from cellmap_flow.models.agent_model_selector import (
+            build_model_configs_from_agent,
+        )
+
+        self._selected_configs = build_model_configs_from_agent(
+            dataset_path=dataset_path,
+            agent_result=self._agent_result,
+        )
+        return self._selected_configs
+
+    @property
+    def agent_result(self) -> dict:
+        """The raw agent result. None until run_agent() is called."""
+        return self._agent_result
+
+    def _get_config(self):
+        """
+        Returns the config of the first recommended model.
+
+        Note: For full agent workflow, use get_selected_configs() which
+        returns all recommended models. This method exists for compatibility
+        with the ModelConfig interface but requires dataset_path to be set
+        via run_agent() first.
+        """
+        if self._selected_configs is None:
+            raise RuntimeError(
+                "Agent has not been run yet. Call run_agent(dataset_path) or "
+                "get_selected_configs(dataset_path) first."
+            )
+        if not self._selected_configs:
+            raise RuntimeError(
+                "Agent did not recommend any valid models. "
+                f"Result: {self._agent_result}"
+            )
+        return self._selected_configs[0].config
+
+    @property
+    def command(self) -> str:
+        return (
+            f"agent --gemini-model {self.gemini_model} "
+            f"--num-slices {self.num_slices}"
+        )
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "agent",
+            "gemini_model": self.gemini_model,
+            "num_slices": self.num_slices,
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.custom_prompt is not None:
+            result["custom_prompt"] = self.custom_prompt
+        if self.scale is not None:
+            result["scale"] = self.scale
+        return result
