@@ -20,6 +20,7 @@
    cli_reference
    custom_script
    post
+   plugins
    autoapi/index
    
 
