@@ -19,10 +19,11 @@ from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora, load_lora_a
 from cellmap_flow.finetune.dataset import create_dataloader
 from cellmap_flow.finetune.trainer import LoRAFinetuner
 
+
 def main():
-    print("="*60)
+    print("=" * 60)
     print("End-to-End LoRA Finetuning Test")
-    print("="*60)
+    print("=" * 60)
 
     # Configuration
     model_checkpoint = "/groups/cellmap/cellmap/zouinkhim/exp_c-elegen/v3/train/runs/20250806_mito_mouse_distance_16nm/model_checkpoint_362000"
@@ -72,14 +73,15 @@ def main():
         gradient_accumulation_steps=2,
         use_mixed_precision=True,
         loss_type="combined",
+        mask_unannotated=True,  # Only compute loss on annotated regions (target > 0)
     )
     print("   ✓ Trainer created")
 
     # 5. Train
     print("\n5. Starting training (3 epochs)...")
-    print("-"*60)
+    print("-" * 60)
     stats = trainer.train()
-    print("-"*60)
+    print("-" * 60)
 
     # 6. Save adapter
     print("\n6. Saving LoRA adapter...")
@@ -121,9 +123,9 @@ def main():
         break
 
     # 9. Summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("✓ End-to-End Test Passed!")
-    print("="*60)
+    print("=" * 60)
     print(f"Training stats:")
     print(f"  - Best loss: {stats['best_loss']:.6f}")
     print(f"  - Final loss: {stats['final_loss']:.6f}")
@@ -131,7 +133,8 @@ def main():
     print(f"  - Total steps: {stats['total_steps']}")
     print(f"\nAdapter location: {adapter_path}")
     print(f"Checkpoint location: {output_dir}")
-    print("="*60)
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
