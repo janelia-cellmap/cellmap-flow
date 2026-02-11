@@ -17,8 +17,6 @@
    install
    scripts
    yaml_config
-   cli_command
-   cli_reference
    custom_script
    post
    plugins
