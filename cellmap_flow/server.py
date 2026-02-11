@@ -1,33 +1,23 @@
-import json
 import logging
 import socket
 from http import HTTPStatus
-from flask import request
-import neuroglancer
 import numpy as np
 import numcodecs
 from flask import Flask, jsonify, redirect
 from flask_cors import CORS
 from flasgger import Swagger
-from zarr.n5 import N5ChunkWrapper
 from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.data import ModelConfig
+from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.web_utils import (
     get_public_ip,
-    decode_to_json,
-    ARGS_KEY,
-    INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
     IP_PATTERN,
     get_free_port,
 )
-from cellmap_flow.norm.input_normalize import get_normalizations
-from cellmap_flow.post.postprocessors import get_postprocessors
-
+from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 
 from cellmap_flow.globals import g
 
@@ -37,27 +27,9 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def get_process_dataset(dataset: str):
-    if ARGS_KEY not in dataset:
-        return None, [], []  # No normalization or postprocessing
-    norm_data = dataset.split(ARGS_KEY)
-    if len(norm_data) != 3:
-        raise ValueError(
-            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}"
-        )
-    encoded_data = norm_data[1]
-    result = decode_to_json(encoded_data)
-    logger.error(f"Decoded data: {result}")
-    dashboard_url = result.get("dashboard_url", None)
-    input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
-    postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
-    logger.error(f"Normalized data: {result}")
-    return dashboard_url, input_norm_fns, postprocess_fns
-
-
 class CellMapFlowServer:
     """
-    Flask application hosting a "virtual N5" for Neuroglancer.
+    Flask application hosting a "virtual Zarr" for Neuroglancer.
     All routes are defined via Flask decorators for convenience.
     """
 
@@ -66,18 +38,12 @@ class CellMapFlowServer:
         Initialize the server and set up routes via decorators.
         """
 
-        # this is zyx
-        self.read_block_shape = [int(x) for x in model_config.config.block_shape]
-        # this needs to have z and x swapped
-        self.n5_block_shape = self.read_block_shape.copy()
-        self.n5_block_shape[0], self.n5_block_shape[2] = (
-            self.n5_block_shape[2],
-            self.n5_block_shape[0],
-        )
+        self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
+        self.output_dtype = model_config.output_dtype
 
         self.inferencer = Inferencer(model_config)
 
@@ -85,6 +51,12 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, voxel_size=self.input_voxel_size
         )
+        self.axes = self.idi_raw.axes_names.copy()
+        # remove channel axis if present can be c^, c, or channel
+        for axis_name in ["c^", "c", "channel"]:
+            if axis_name in self.axes:
+                self.axes.remove(axis_name)
+        # add channel axis at the end
 
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5
@@ -94,21 +66,9 @@ class CellMapFlowServer:
             * np.array(self.input_voxel_size)
             / np.array(self.output_voxel_size)
         )
+        self.vol_shape = [*output_shape, self.output_channels]
 
-        if ".zarr" in dataset_name:
-            # Convert from (z, y, x) -> (x, y, z) plus channels
-            self.default_vol_shape = [
-                *output_shape[::-1],
-                self.output_channels,
-            ]
-            self.axis = ["x", "y", "z", "c^"]
-            self.vol_shape = self.default_vol_shape.copy()
-        else:
-            # For non-Zarr data
-            self.default_vol_shape = [*output_shape, self.output_channels]
-            self.axis = ["z", "y", "x", "c^"]
-            self.vol_shape = self.default_vol_shape.copy()
-        # Chunk encoding for N5
+        # Chunk encoding for Zarr
         self.chunk_encoder = self._initialize_chunk_encoder()
 
         # Create and configure Flask
@@ -121,138 +81,30 @@ class CellMapFlowServer:
 
         @self.app.route("/")
         def home():
-            """
-            Redirects to Swagger UI at /apidocs/ for documentation.
-            ---
-            tags:
-              - Documentation
-            responses:
-              302:
-                description: Redirect to API docs
-            """
             return redirect("/apidocs/")
 
-        @self.app.route("/<path:dataset>/attributes.json", methods=["GET"])
+        @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
-            """
-            Return top-level or dataset-level N5 attributes.
-            ---
-            tags:
-              - Attributes
-            parameters:
-              - in: path
-                name: dataset
-                schema:
-                  type: string
-                required: true
-                description: Dataset name or path
-            responses:
-              200:
-                description: Attributes in JSON
-            """
-            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.vol_shape = self.default_vol_shape.copy()
-            self.n5_block_shape[-1] = self.default_vol_shape[-1]
-
-            for postprocess in g.postprocess:
-                if hasattr(postprocess, "num_channels"):
-                    self.vol_shape[-1] = postprocess.num_channels
-                    self.n5_block_shape[-1] = postprocess.num_channels
-
-            self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
-                self.n5_block_shape,
-                compressor=numcodecs.Zstd(),
-            )
+            self.refresh_dataset(dataset)
 
             return self._top_level_attributes_impl(dataset)
 
-        @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
+        @self.app.route("/<path:dataset>/s<int:scale>/.zarray", methods=["GET"])
         def attributes(dataset, scale):
-            """
-            Return attributes of a specific scale (e.g. /s0/attributes.json).
-            ---
-            tags:
-              - Attributes
-            parameters:
-              - in: path
-                name: dataset
-                schema:
-                  type: string
-              - in: path
-                name: scale
-                schema:
-                  type: integer
-            responses:
-              200:
-                description: Scale-level attributes in JSON
-            """
-            g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset(dataset)
-            self.vol_shape = self.default_vol_shape.copy()
-            self.n5_block_shape[-1] = self.default_vol_shape[-1]
-
-            for postprocess in g.postprocess:
-                if hasattr(postprocess, "num_channels"):
-                    self.vol_shape[-1] = postprocess.num_channels
-                    self.n5_block_shape[-1] = postprocess.num_channels
-
-            self.chunk_encoder = N5ChunkWrapper(
-                g.get_output_dtype(),
-                self.n5_block_shape,
-                compressor=numcodecs.Zstd(),
-            )
+            self.refresh_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
-            "/<path:dataset>/s<int:scale>/<int:chunk_x>/<int:chunk_y>/<int:chunk_z>/<int:chunk_c>",
+            "/<path:dataset>/s<int:scale>/<int:chunk_z>.<int:chunk_y>.<int:chunk_x>.<int:chunk_c>",
             methods=["GET"],
             strict_slashes=False,
         )
-        def chunk(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-            """
-            Serve a single chunk at the requested scale and location.
-            ---
-            tags:
-              - Chunks
-            parameters:
-              - in: path
-                name: dataset
-                schema:
-                  type: string
-              - in: path
-                name: scale
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_x
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_y
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_z
-                schema:
-                  type: integer
-              - in: path
-                name: chunk_c
-                schema:
-                  type: integer
-            responses:
-              200:
-                description: Compressed chunk
-              500:
-                description: Internal server error
-            """
-            return self._chunk_impl(dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c)
+        def chunk(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
+            return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c)
 
     def _configure_swagger(self):
-        """
-        Configure Flasgger/Swagger settings for auto-generated docs.
-        """
         self.app.config["SWAGGER"] = {
-            "title": "CellMapFlow Virtual N5 API",
+            "title": "CellMapFlow Virtual Zarr API",
             "uiversion": 3,  # Use Swagger UI 3.x
         }
         swagger_config = {
@@ -260,9 +112,9 @@ class CellMapFlowServer:
             "specs": [
                 {
                     "version": "0.0.1",
-                    "title": "CellMapFlow Virtual N5 API",
+                    "title": "CellMapFlow Virtual Zarr API",
                     "endpoint": "api_spec",
-                    "description": "API to serve a virtual N5 interface for Neuroglancer.",
+                    "description": "API to serve a virtual Zarr interface for Neuroglancer.",
                     "route": "/api_spec.json",
                 }
             ],
@@ -272,50 +124,99 @@ class CellMapFlowServer:
         }
         self.swagger = Swagger(self.app, config=swagger_config)
 
-    #
-    # --- Implementation (called by the decorated routes) ---
-    #
+    def refresh_dataset(self, dataset):
+        g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
+
+        for postprocess in g.postprocess:
+            if hasattr(postprocess, "num_channels"):
+                self.vol_shape[-1] = postprocess.num_channels
+                self.zarr_block_shape[-1] = postprocess.num_channels
+
+        # Update chunk encoder for Zarr
+        self.chunk_encoder = numcodecs.Blosc(
+            cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE
+        )
+
     def _top_level_attributes_impl(self, dataset):
         max_scale = 0
-        scales = [[2**s, 2**s, 2**s, 1] for s in range(max_scale + 1)]
+        datasets = []
+        for s in range(max_scale + 1):
+            scale_factor = 2**s
+            datasets.append(
+                {
+                    "coordinateTransformations": [
+                        {
+                            "type": "scale",
+                            "scale": [
+                                float(self.output_voxel_size[0] * scale_factor),
+                                float(self.output_voxel_size[1] * scale_factor),
+                                float(self.output_voxel_size[2] * scale_factor),
+                                1.0,
+                            ],
+                        },
+                        {"type": "translation", "translation": [0.0, 0.0, 0.0, 0.0]},
+                    ],
+                    "path": f"s{s}",
+                }
+            )
+
+        axes_list = []
+        for axis_name in self.axes:
+            axes_list.append({"name": axis_name, "type": "space", "unit": "nanometer"})
+        axes_list.append({"name": "c", "type": "channel"})
+
         attr = {
-            "pixelResolution": {
-                "dimensions": [*self.output_voxel_size, 1],
-                "unit": "nm",
-            },
-            "ordering": "C",
-            "scales": scales,
-            "axes": self.axis,
-            "units": ["nm", "nm", "nm", ""],
-            "translate": [0, 0, 0, 0],
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "name": dataset,
+                    "axes": axes_list,
+                    "datasets": datasets,
+                    "coordinateTransformations": [
+                        {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0]}
+                    ],
+                }
+            ]
         }
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = g.get_output_dtype().__name__
-        attr = {
-            "transform": {
-                "ordering": "C",
-                "axes": self.axis,
-                "scale": [*self.output_voxel_size, 1],
-                "units": ["nm", "nm", "nm", ""],
-                "translate": [0.0, 0.0, 0.0, 0.0],
-            },
-            "compression": {"type": "zstd"},
-            "blockSize": list(self.n5_block_shape),
-            "dataType": dtype,
-            "dimensions": self.vol_shape,
+        dtype = g.get_output_dtype(self.output_dtype).__name__
+        # Map numpy dtypes to Zarr dtypes
+        dtype_map = {
+            "uint8": "|u1",
+            "uint16": "<u2",
+            "uint32": "<u4",
+            "uint64": "<u8",
+            "int8": "<i1",
+            "int16": "<i2",
+            "int32": "<i4",
+            "int64": "<i8",
+            "float32": "<f4",
+            "float64": "<f8",
         }
-        print(f"Attributes (scale={scale}): {attr}", flush=True)
+        zarr_dtype = dtype_map.get(dtype, dtype)
+
+        attr = {
+            "chunks": list(self.zarr_block_shape),
+            "compressor": {"id": "blosc", "cname": "zstd", "clevel": 5, "shuffle": 1},
+            "dtype": zarr_dtype,
+            "fill_value": 0,
+            "filters": None,
+            "order": "C",
+            "shape": self.vol_shape,
+            "zarr_format": 2,
+        }
+        print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
-    def _chunk_impl(self, dataset, scale, chunk_x, chunk_y, chunk_z, chunk_c):
-        corner = self.read_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
+    def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
+        corner = self.zarr_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, self.zarr_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
-        chunk_data = chunk_data.astype(g.get_output_dtype())
+        chunk_data = chunk_data.astype(g.get_output_dtype(self.output_dtype))
 
         current_time = time.time()
 
@@ -342,16 +243,17 @@ class CellMapFlowServer:
                 self.previous_refresh_time = current_time
                 continue
 
+        # Encode using Zarr format
+        encoded = self.chunk_encoder.encode(chunk_data)
+
         return (
-            self.chunk_encoder.encode(chunk_data),
+            encoded,
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
 
     def _initialize_chunk_encoder(self):
-        return N5ChunkWrapper(
-            g.get_output_dtype(), self.n5_block_shape, compressor=numcodecs.Zstd()
-        )
+        return numcodecs.Blosc(cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE)
 
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
@@ -376,32 +278,3 @@ class CellMapFlowServer:
             use_reloader=debug,
             ssl_context=ssl_context,
         )
-
-
-# ------------------------------------
-# Example usage (if run directly):
-#
-#   python your_server.py
-#
-# Then visit:
-#   http://localhost:8000/
-#   http://localhost:8000/apidocs/
-# ------------------------------------
-if __name__ == "__main__":
-    # Dummy ModelConfig example; replace with real config
-    class DummyConfig:
-        block_shape = (32, 32, 32)
-        output_voxel_size = (4, 4, 4)
-        output_channels = 1
-
-    dummy_model_config = ModelConfig(config=DummyConfig())
-
-    server = CellMapFlowServer("example.zarr", dummy_model_config)
-    server.run(debug=True, port=8000)
-
-# # %%
-# import neuroglancer
-# neuroglancer.set_server_bind_address("http://h06u01.int.janelia.org:19821/v/733c608c2ad97d2340bfc83f1f9459d5be4d9d49/")
-# with neuroglancer.Viewer().txn() as s:
-#     print(s.layers)
-# %%

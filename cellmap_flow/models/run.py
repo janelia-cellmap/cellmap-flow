@@ -28,7 +28,7 @@ def run_model(model_path, name, st_data):
     )
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(
-            source=f"n5://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
+            source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
             shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
                     #uicontrol vec3 color color(default="red");
                     void main(){{emitRGB(color * normalized());}}""",

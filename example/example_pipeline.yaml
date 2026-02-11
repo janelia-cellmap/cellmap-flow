@@ -1,0 +1,26 @@
+# Example CellMapFlow Pipeline
+# This demonstrates a typical normalization -> inference -> postprocessing workflow
+
+input_normalizers:
+  - name: StandardNormalizer
+    params:
+      mean: 0.5
+      std: 0.1
+  
+  - name: MinMaxNormalizer
+    params:
+      min_val: 0.0
+      max_val: 255.0
+
+postprocessors:
+  - name: DefaultPostprocessor
+    params:
+      clip_min: -1.0
+      clip_max: 1.0
+      bias: 1.0
+      multiplier: 127.5
+  
+  - name: InstanceSegmentation
+    params:
+      threshold: 0.5
+      min_size: 100

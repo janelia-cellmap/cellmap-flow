@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from funlib.geometry import Coordinate
 import logging
-from cellmap_flow.utils.data import ModelConfig
+from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 
 
@@ -33,25 +33,22 @@ def predict(read_roi, write_roi, config, **kwargs):
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
-        raw_input_torch = torch.from_numpy(raw_input).float()
-        if use_half_prediction:
-            raw_input_torch = raw_input_torch.half()
-        # raw_input_torch = raw_input_torch.to(device)
-        raw_input_torch = raw_input_torch.to(device, non_blocking=True)
-        return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
+        raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
+        raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
+        return config.model.forward(raw_input_torch).cpu().numpy()[0]
 
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=True):
+    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
             logger.error("No GPU available, using CPU")
-        torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
-        torch.backends.cudnn.enabled = True
-        torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
+        # torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
+        # torch.backends.cudnn.enabled = True
+        # torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config

@@ -8,27 +8,121 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dark.css') }}" />
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .app-header {
+      background: #0d1117;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+    }
+
+    .app-logo {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .app-logo img {
+      max-height: 32px;
+      width: auto;
+    }
+
+    .app-actions {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .action-btn {
+      background: transparent;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover {
+      background: #161b22;
+      border-color: #8b949e;
+      color: #f0f6fc;
+    }
+
+    .action-btn.primary {
+      background: #238636;
+      border-color: #2ea043;
+      color: #fff;
+    }
+
+    .action-btn.primary:hover {
+      background: #2ea043;
+      border-color: #3fb950;
+    }
+
+    .content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    .navbar {
+      display: none !important;
+    }
+  </style>
 </head>
 
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container-fluid">
+  <!-- GitHub Style Header -->
+  <div class="app-header">
+    <div class="app-logo">
       <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
-        alt="CellMap Flow" width="200" />
-      <button class="btn btn-outline-light" type="button" onclick="toggleDashboard()">
+        alt="CellMap Flow" />
+    </div>
+    <div class="app-actions">
+      <button class="action-btn" type="button" onclick="toggleDashboard()">
         Toggle Dashboard
       </button>
+      <a class="action-btn primary" href="/pipeline-builder" role="button">
+        Pipeline Builder
+      </a>
     </div>
-  </nav>
+  </div>
 
-  <div class="row bg-dark text-light" style="height: 100vh;">
-    <div class="col-9" id="iframe-column">
-      <iframe src="{{ neuroglancer_url }}" style="width:100%;height:100vh;" title="Neuroglancer Data Viewer"
-        id="my_iframe">
-        Your browser does not support iframes.
-      </iframe>
+  <div class="content bg-dark text-light">
+    <div class="col-9" id="iframe-column" style="flex: 1; display: flex; overflow: hidden; height: 100%;">
+      {% if neuroglancer_url %}
+        <iframe src="{{ neuroglancer_url }}" style="width:100%;height:100%;border:none;" title="Neuroglancer Data Viewer"
+          id="my_iframe">
+          Your browser does not support iframes.
+        </iframe>
+      {% else %}
+        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a1a;flex-direction:column;gap:20px;">
+          <div style="font-size:48px;">🔌</div>
+          <div style="font-size:18px;text-align:center;">Neuroglancer Not Available</div>
+          <div style="font-size:14px;color:#888;text-align:center;max-width:400px;">
+            No Neuroglancer URL configured. Please configure a Neuroglancer instance to view datasets.<br><br>
+            You can still use the <a href="/pipeline-builder" style="color:#3b82f6;text-decoration:none;">Pipeline Builder</a> to design your workflow.
+          </div>
+        </div>
+      {% endif %}
     </div>
-    <div class="col-3" id="dashboard-column">
+    <div class="col-3" id="dashboard-column" style="width:350px;flex-shrink:0;border-left:1px solid #333;overflow-y:auto;overflow-x:hidden;height:100%;">
       {% include "_dashboard.html" %}
     </div>
 

@@ -355,7 +355,8 @@ def get_postprocessors_list() -> list[dict]:
     return postprocessors
 
 
-def get_postprocessors(elms: dict) -> list[PostProcessor]:
+def get_postprocessors(elms) -> list[PostProcessor]:
+    """Get postprocessors from either dict or list format."""
     return deserialize_list(elms, PostProcessor)
 
 

@@ -17,6 +17,47 @@ from zarr.n5 import N5FSStore
 from cellmap_flow.globals import g
 
 
+def generate_singlescale_metadata(
+    arr_name: str,
+    voxel_size: list,
+    translation: list,
+    units: str,
+    axes: list,
+):
+    z_attrs: dict = {"multiscales": [{}]}
+
+    # Create axes with proper types - channel axis should have type "channel"
+    axes_list = []
+    for axis, unit in zip(axes, units):
+        if axis in ["c", "c^"]:
+            axes_list.append({"name": axis, "type": "channel"})
+        else:
+            axes_list.append({"name": axis, "type": "space", "unit": unit})
+
+    z_attrs["multiscales"][0]["axes"] = axes_list
+
+    # Set coordinateTransformations scale to match dimensionality
+    scale_transform = [1.0] * len(axes)
+    z_attrs["multiscales"][0]["coordinateTransformations"] = [
+        {"scale": scale_transform, "type": "scale"}
+    ]
+
+    z_attrs["multiscales"][0]["datasets"] = [
+        {
+            "coordinateTransformations": [
+                {"scale": list(voxel_size), "type": "scale"},
+                {"translation": list(translation), "type": "translation"},
+            ],
+            "path": arr_name,
+        }
+    ]
+
+    z_attrs["multiscales"][0]["name"] = ""
+    z_attrs["multiscales"][0]["version"] = "0.4"
+
+    return z_attrs
+
+
 def get_scale_info(zarr_grp):
     attrs = zarr_grp.attrs
     resolutions = {}
@@ -29,8 +70,26 @@ def get_scale_info(zarr_grp):
     return offsets, resolutions, shapes
 
 
+def get_array_path_if_needed(zarr_grp_path, target_resolution):
+    try:
+        _ = get_ds_info(zarr_grp_path)
+        # If successful, it's a dataset path
+        return zarr_grp_path
+    except Exception as e:
+        if ".zarr" not in zarr_grp_path:
+            raise RuntimeError(
+                f"Failed to open dataset at {zarr_grp_path}: {e}\n Multiscale is only supported for zarr groups. Please provide a valid dataset path."
+            )
+        # Otherwise, it's a group path; find the appropriate scale
+        target_scale, _, _ = find_target_scale(zarr_grp_path, target_resolution)
+        return os.path.join(zarr_grp_path, target_scale)
+
+
 def find_target_scale(zarr_grp_path, target_resolution):
-    zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    try:
+        zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    except Exception as e:
+        raise RuntimeError(f"Failed to open zarr group at {zarr_grp_path}: {e}")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
     target_scale = None
     for scale, res in resolutions.items():
@@ -208,7 +267,7 @@ def to_ndarray_tensorstore(
     voxel_size=None,
     offset=None,
     output_voxel_size=None,
-    swap_axes=False,
+    axes_names=["z", "y", "x"],
     custom_fill_value=None,
 ):
     """Read a region of a tensorstore dataset and return it as a numpy array
@@ -220,16 +279,6 @@ def to_ndarray_tensorstore(
     Returns:
         Numpy array of the region
     """
-    if swap_axes:
-        print("Swapping axes")
-        if roi:
-            roi = Roi(roi.begin[::-1], roi.shape[::-1])
-        if offset:
-            offset = Coordinate(offset[::-1])
-        if voxel_size:
-            voxel_size = Coordinate(voxel_size[::-1])
-        if output_voxel_size:
-            output_voxel_size = Coordinate(output_voxel_size[::-1])
 
     if roi is None:
         with ts.Transaction() as txn:
@@ -312,20 +361,13 @@ def to_ndarray_tensorstore(
     #     padded_data[padded_slices] = dataset[valid_slices].read().result()
 
     if rescale_factor > 1:
-        rescale_factor = voxel_size[0] / output_voxel_size[0]
-        data = (
-            data.repeat(rescale_factor, 0)
-            .repeat(rescale_factor, 1)
-            .repeat(rescale_factor, 2)
-        )
+        rescale_factor = int(voxel_size[0] / output_voxel_size[0])
+        data = np.kron(data, np.ones((rescale_factor, rescale_factor, rescale_factor), dtype=data.dtype))
         data = data[snapped_slices]
 
     elif rescale_factor < 1:
         data = block_reduce(data, block_size=int(1 / rescale_factor), func=np.median)
         data = data[snapped_slices]
-
-    if swap_axes:
-        data = np.swapaxes(data, 0, 2)
 
     return data
 
@@ -730,9 +772,8 @@ def get_ds_info(path: str, mode: str = "r"):
 
         A :class:`Array` pointing to the dataset.
     """
-    # TODO
-    swap_axes = False
 
+    axes_names = ["x", "y", "z"]
     if path.startswith("s3://"):
         ts_info = open_ds_tensorstore(path)
         shape = ts_info.shape
@@ -756,11 +797,11 @@ def get_ds_info(path: str, mode: str = "r"):
                     voxel_size = Coordinate(
                         scale_info["coordinateTransformations"][0]["scale"]
                     )
-        if axes[:3] == ["x", "y", "z"]:
-            swap_axes = True
+        axes_names = axes[:3]
+
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi((0, 0, 0), Coordinate(shape) * voxel_size)
-        return voxel_size, chunk_shape, shape, roi, swap_axes
+        return voxel_size, chunk_shape, shape, roi, axes_names
 
     elif path.startswith("gs://"):
         ts_info = open_ds_tensorstore(path)
@@ -768,11 +809,11 @@ def get_ds_info(path: str, mode: str = "r"):
         voxel_size = Coordinate(
             (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
         )
-        if ts_info.spec().transform.input_labels[:3] == ("x", "y", "z"):
-            swap_axes = True
+        axes_names = list(ts_info.spec().transform.input_labels[:3])
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
-        return voxel_size, chunk_shape, shape, roi, swap_axes
+        file_type = "gs"
+        return voxel_size, chunk_shape, shape, roi, axes_names, file_type
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip"):
@@ -795,14 +836,22 @@ def get_ds_info(path: str, mode: str = "r"):
             except Exception:
                 logger.error("no order attribute found in %s set default C" % ds_name)
                 order = "C"
-        voxel_size, offset = _read_voxel_size_offset(ds, order)
+        try:
+            voxel_size, offset = _read_voxel_size_offset(ds, order)
+        except Exception as e:
+            logger.error(
+                "failed to read voxel size and offset for %s/%s, Will use default values"
+                % (filename, ds_name)
+            )
+            voxel_size = Coordinate((1,) * 3)
+            offset = Coordinate((0,) * 3)
         shape = Coordinate(ds.shape[-len(voxel_size) :])
         roi = Roi(offset, voxel_size * shape)
 
         chunk_shape = ds.chunks
 
         logger.debug("opened zarr dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, swap_axes
+        return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
 
     elif filename.endswith(".n5"):
         logger.debug("opening N5 dataset %s in %s", ds_name, filename)
@@ -815,7 +864,7 @@ def get_ds_info(path: str, mode: str = "r"):
         chunk_shape = ds.chunks
 
         logger.debug("opened N5 dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, swap_axes
+        return voxel_size, chunk_shape, shape, roi, axes_names, "n5"
 
     elif filename.endswith(".h5") or filename.endswith(".hdf"):
         logger.debug("opening H5 dataset %s in %s", ds_name, filename)
@@ -828,14 +877,14 @@ def get_ds_info(path: str, mode: str = "r"):
         chunk_shape = ds.chunks
 
         logger.debug("opened H5 dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, swap_axes
+        return voxel_size, chunk_shape, shape, roi, axes_names, "h5"
 
     elif filename.endswith(".json"):
         logger.debug("found JSON container spec")
         with open(filename, "r") as f:
             spec = json.load(f)
         assert "container" in spec, "JSON spec must contain 'container' key"
-        return get_ds_info(spec["container"], ds_name, mode=mode)
+        return get_ds_info(spec["container"], ds_name, mode=mode), "json"
 
     else:
         logger.error("don't know data format of %s in %s", ds_name, filename)

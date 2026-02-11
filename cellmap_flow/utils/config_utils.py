@@ -1,24 +1,42 @@
+"""
+Smart YAML configuration utilities that dynamically discover and instantiate
+ModelConfig subclasses, similar to the CLI v2 approach.
+"""
+
 import sys
 import yaml
 import logging
+import inspect
+from typing import List, Dict, Any
 
-from cellmap_flow.utils.data import (
-    DaCapoModelConfig,
-    BioModelConfig,
-    ScriptModelConfig,
-    CellMapModelConfig,
-    FlyModelConfig,
-)
-
+from cellmap_flow.models.models_config import ModelConfig
+from cellmap_flow.utils.cli_utils import get_all_subclasses, process_constructor_args
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
 logger = logging.getLogger(__name__)
 
 
-def load_config(path):
+def get_model_type_mapping() -> Dict[str, type]:
+    """
+    Get mapping of CLI-friendly names to ModelConfig classes.
+    Uses the same logic as cli_v2 for consistency.
+    
+    Returns:
+        Dictionary mapping model type names to ModelConfig classes
+    """
+    return get_all_subclasses(ModelConfig)
+
+
+def load_config(path: str) -> Dict[str, Any]:
     """
     Load and validate the YAML configuration.
+    
+    Args:
+        path: Path to YAML configuration file
+        
+    Returns:
+        Validated configuration dictionary
     """
     with open(path, "r") as f:
         config = yaml.safe_load(f)
@@ -38,118 +56,181 @@ def load_config(path):
         )
         config["queue"] = DEFAULT_SERVER_QUEUE
 
-    # Models must be a non-empty list
-    if (
-        "models" not in config
-        or not isinstance(config["models"], list)
-        or not config["models"]
-    ):
-        logger.error("YAML must contain a non-empty 'models' list")
+    # Models must be present and non-empty (can be dict or list for backward compatibility)
+    if "models" not in config:
+        logger.error("YAML must contain 'models' field")
+        sys.exit(1)
+    
+    if isinstance(config["models"], dict):
+        if not config["models"]:
+            logger.error("YAML 'models' dict is empty")
+            sys.exit(1)
+    elif isinstance(config["models"], list):
+        if not config["models"]:
+            logger.error("YAML 'models' list is empty")
+            sys.exit(1)
+        # logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
+    else:
+        logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)
 
     return config
 
 
-def build_models(model_entries):
+def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfig:
     """
-    Given a list of model entries from YAML, instantiate the correct ModelConfig objects.
+    Build a single ModelConfig instance from a YAML entry.
+    Dynamically discovers the appropriate class and validates parameters.
+    
+    Args:
+        entry: Dictionary containing model configuration from YAML
+        model_name: Name/key of the model from YAML (used as the model's name)
+        
+    Returns:
+        Instantiated ModelConfig subclass
+    """
+    mtype = entry.get("type")
+    if not mtype:
+        logger.error(f"Model '{model_name}' missing 'type' field")
+        sys.exit(1)
+
+    # Get available model types
+    model_type_mapping = get_model_type_mapping()
+    
+    # Normalize the type name (handle different separators)
+    mtype_normalized = mtype.lower().replace("_", "-")
+    
+    # Find matching model class
+    config_class = None
+    for type_name, cls in model_type_mapping.items():
+        if type_name == mtype_normalized or mtype.lower() == type_name.replace("-", ""):
+            config_class = cls
+            break
+    
+    if config_class is None:
+        available_types = ", ".join(sorted(model_type_mapping.keys()))
+        logger.error(
+            f"Model '{model_name}' has unrecognized type '{mtype}'. "
+            f"Valid types are: {available_types}"
+        )
+        sys.exit(1)
+    
+    # Get constructor signature
+    sig = inspect.signature(config_class.__init__)
+    
+    # Map YAML keys to constructor parameters
+    # Handle common YAML naming conventions vs Python parameter names
+    param_mapping = {
+        # Common aliases for parameters
+        "checkpoint": "checkpoint_path",
+        "classes": "channels",
+        "resolution": "input_voxel_size",
+        "output_resolution": "output_voxel_size",
+        "config_folder": "folder_path",
+        "model_path": "model_name",
+    }
+    
+    # Build kwargs from YAML entry
+    kwargs = {}
+    for yaml_key, yaml_value in entry.items():
+        if yaml_key == "type":
+            continue  # Skip the type field
+        
+        # Map YAML key to parameter name
+        param_name = param_mapping.get(yaml_key, yaml_key)
+        
+        # Handle list/tuple conversions for resolution
+        if param_name in ["input_voxel_size", "output_voxel_size"] and isinstance(yaml_value, int):
+            yaml_value = (yaml_value, yaml_value, yaml_value)
+        elif param_name in ["input_voxel_size", "output_voxel_size"] and isinstance(yaml_value, list):
+            yaml_value = tuple(yaml_value)
+        
+        kwargs[param_name] = yaml_value
+    
+    # Use model_name as the name if not explicitly provided in YAML
+    if 'name' not in kwargs:
+        kwargs['name'] = model_name
+    
+    # Process constructor args (handles type conversions)
+    processed_kwargs = process_constructor_args(config_class, kwargs)
+    
+    # Validate required parameters
+    required_params = []
+    for param_name, param_info in sig.parameters.items():
+        if (param_name != 'self' and 
+            param_info.default is inspect.Parameter.empty and
+            param_name not in ['name', 'scale']):
+            required_params.append(param_name)
+            
+            if param_name not in processed_kwargs:
+                # Special case: if output_voxel_size is missing but input_voxel_size exists, use input_voxel_size
+                if param_name == 'output_voxel_size' and 'input_voxel_size' in processed_kwargs:
+                    processed_kwargs['output_voxel_size'] = processed_kwargs['input_voxel_size']
+                    logger.warning(
+                        f"Model '{model_name}' ({mtype}): 'output_voxel_size' not specified, "
+                        f"using 'input_voxel_size' ({processed_kwargs['input_voxel_size']}) as default"
+                    )
+                    continue
+                
+                # Check if it exists under an alias
+                found = False
+                for yaml_key, mapped_param in param_mapping.items():
+                    if mapped_param == param_name and yaml_key in entry:
+                        found = True
+                        break
+                
+                if not found:
+                    logger.error(
+                        f"Model '{model_name}' ({mtype}) missing required parameter '{param_name}'"
+                    )
+                    sys.exit(1)
+    
+    # Create model instance
+    try:
+        model = config_class(**processed_kwargs)
+        logger.debug(f"Created model '{model_name}': {model}")
+        return model
+    except TypeError as e:
+        logger.error(f"Error creating model '{model_name}' ({mtype}): {e}")
+        logger.error(f"Provided parameters: {processed_kwargs}")
+        logger.error(f"Required parameters: {required_params}")
+        sys.exit(1)
+
+
+def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
+    """
+    Given model entries from YAML, instantiate the correct ModelConfig objects.
+    Uses dynamic discovery like cli_v2 instead of hardcoded if/else chains.
+    
+    YAML format:
+    models:
+      my_model_1:
+        type: cellmap-model
+        checkpoint_path: /path/to/checkpoint
+      my_model_2:
+        type: dacapo
+        run_name: my_run
+        iteration: 50000
+    
+    Args:
+        model_entries: Dictionary mapping model names to their configurations
+        
+    Returns:
+        List of instantiated ModelConfig objects
     """
     models = []
-    for idx, entry in enumerate(model_entries):
-        mtype = entry.get("type")
-        if not mtype:
-            logger.error(f"Model entry #{idx + 1} missing 'type' field")
-            sys.exit(1)
-
-        mtype_lower = mtype.lower()
-        if mtype_lower == "dacapo":
-            run_name = entry.get("run_name")
-            iteration = entry.get("iteration", 0)
-            name = entry.get("name", None)
-
-            if not run_name:
-                logger.error(f"Model entry #{idx + 1} (dacapo) missing 'run_name'")
-                sys.exit(1)
-
-            models.append(DaCapoModelConfig(run_name, iteration, name=name))
-
-        elif mtype_lower == "fly":
-            if "checkpoint" not in entry:
-                logger.error(f"Model entry #{idx + 1} (fly) missing 'checkpoint'")
-                sys.exit(1)
-            if "classes" not in entry:
-                logger.error(f"Model entry #{idx + 1} (fly) missing 'classes'")
-                sys.exit(1)
-            if "resolution" not in entry:
-                logger.error(f"Model entry #{idx + 1} (fly) missing 'resolution'")
-                sys.exit(1)
+    
+    if isinstance(model_entries, list):
+        entries = {}
+        for entry in model_entries:
             if "name" not in entry:
-                logger.error(f"Model entry #{idx + 1} (fly) missing 'name'")
-                sys.exit(1)
-            checkpoint = entry["checkpoint"]
-            classes = entry["classes"]
-            resolution = entry["resolution"]
-            if isinstance(resolution, int):
-                resolution = (resolution, resolution, resolution)
-            elif isinstance(resolution, (list, tuple)) and len(resolution) == 3:
-                resolution = tuple(resolution)
-            name = entry["name"]
-            if "output_resolution" in entry:
-                output_resolution = entry["output_resolution"]
-            else:
-                logger.warning(
-                    f"Model entry #{idx + 1} (fly) missing 'output_resolution', using input resolution as output resolution."
-                )
-                output_resolution = resolution
-            models.append(
-                FlyModelConfig(
-                    checkpoint_path=checkpoint,
-                    channels=classes,
-                    input_voxel_size=resolution,
-                    output_voxel_size=output_resolution,
-                    name=name,
-                )
-            )
+                raise ValueError("Each model entry in the list must have a 'name' field.")      
+            entries[entry["name"]] = entry
+        model_entries = entries
 
-        elif mtype_lower in ("cellmap-model", "cellmap_model", "cellmapmodel"):
-            config_folder = entry.get("config_folder")
-            name = entry.get("name", None)
-            scale = entry.get("scale", None)
-
-            if not config_folder:
-                logger.error(
-                    f"Model entry #{idx + 1} (cellmap-model) missing 'config_folder'"
-                )
-                sys.exit(1)
-
-            models.append(CellMapModelConfig(config_folder, name=name, scale=scale))
-
-        elif mtype_lower == "script":
-            script_path = entry.get("script_path")
-            name = entry.get("name", None)
-            scale = entry.get("scale", None)
-
-            if not script_path:
-                logger.error(f"Model entry #{idx + 1} (script) missing 'script_path'")
-                sys.exit(1)
-
-            models.append(ScriptModelConfig(script_path, name=name, scale=scale))
-
-        elif mtype_lower in ("bioimage", "bio-image", "bio_image"):
-            model_path = entry.get("model_path")
-            name = entry.get("name", None)
-
-            if not model_path:
-                logger.error(f"Model entry #{idx + 1} (bioimage) missing 'model_path'")
-                sys.exit(1)
-
-            models.append(BioModelConfig(model_path, name=name))
-
-        else:
-            logger.error(
-                f"Model entry #{idx + 1} has unrecognized type '{mtype}'. "
-                "Valid types are: dacapo, cellmap-model, script, fly, bioimage."
-            )
-            sys.exit(1)
-
+    
+    for model_name, entry in model_entries.items():
+        model = build_model_from_entry(entry, model_name=model_name)
+        models.append(model)
+    
     return models
