@@ -37,13 +37,14 @@ class DiceLoss(nn.Module):
         super().__init__()
         self.smooth = smooth
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Compute Dice loss.
 
         Args:
             pred: Predictions (B, C, Z, Y, X) - raw logits or probabilities
             target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
+            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
 
         Returns:
             Dice loss value (scalar)
@@ -55,6 +56,12 @@ class DiceLoss(nn.Module):
         # Apply sigmoid if pred is logits (not already in [0, 1])
         if pred.min() < 0 or pred.max() > 1:
             pred = torch.sigmoid(pred)
+
+        # Apply mask if provided
+        if mask is not None:
+            mask = mask.reshape(mask.size(0), 1, -1)  # (B, 1, N)
+            pred = pred * mask
+            target = target * mask
 
         # Compute intersection and union
         intersection = (pred * target).sum(dim=2)  # (B, C)
@@ -82,23 +89,32 @@ class CombinedLoss(nn.Module):
         """
         super().__init__()
         self.dice_loss = DiceLoss()
-        self.bce_loss = nn.BCEWithLogitsLoss()
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
         self.dice_weight = dice_weight
         self.bce_weight = bce_weight
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Compute combined loss.
 
         Args:
             pred: Predictions (B, C, Z, Y, X) - raw logits
             target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
+            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
 
         Returns:
             Combined loss value (scalar)
         """
-        dice = self.dice_loss(pred, target)
+        dice = self.dice_loss(pred, target, mask)
+
+        # For BCE, manually apply mask if provided
         bce = self.bce_loss(pred, target)
+        if mask is not None:
+            bce = bce * mask
+            bce = bce.sum() / mask.sum().clamp(min=1)  # Average over masked regions
+        else:
+            bce = bce.mean()
+
         return self.dice_weight * dice + self.bce_weight * bce
 
 
@@ -111,6 +127,7 @@ class LoRAFinetuner:
     - Gradient accumulation to simulate larger batch sizes
     - Checkpointing with best model tracking
     - Progress logging
+    - Partial annotation support (mask unannotated regions)
 
     Args:
         model: PEFT model with LoRA adapters
@@ -123,6 +140,9 @@ class LoRAFinetuner:
         loss_type: Loss function ("dice", "bce", or "combined")
         device: Training device ("cuda" or "cpu", auto-detected if None)
         select_channel: Optional channel index to select from multi-channel output (default: None)
+        mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
+                         Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
+                         This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
 
     Examples:
         >>> lora_model = wrap_model_with_lora(model)
@@ -148,6 +168,7 @@ class LoRAFinetuner:
         loss_type: str = "combined",
         device: Optional[str] = None,
         select_channel: Optional[int] = None,
+        mask_unannotated: bool = True,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -156,6 +177,7 @@ class LoRAFinetuner:
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.use_mixed_precision = use_mixed_precision
         self.select_channel = select_channel
+        self.mask_unannotated = mask_unannotated
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -181,11 +203,17 @@ class LoRAFinetuner:
         if loss_type == "dice":
             self.criterion = DiceLoss()
         elif loss_type == "bce":
-            self.criterion = nn.BCEWithLogitsLoss()
+            # Use reduction='none' so we can manually apply mask if needed
+            self.criterion = nn.BCEWithLogitsLoss(reduction='none')
+            self._use_bce = True
         elif loss_type == "combined":
             self.criterion = CombinedLoss()
+            self._use_bce = False
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
+
+        if loss_type != "bce":
+            self._use_bce = False
 
         logger.info(f"Using {loss_type} loss")
 
@@ -227,6 +255,7 @@ class LoRAFinetuner:
         log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
         log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
         log_message(f"Mixed precision: {self.use_mixed_precision}")
+        log_message(f"Mask unannotated regions: {self.mask_unannotated}")
         log_message(f"Log file: {log_file}")
         log_message("")
 
@@ -294,6 +323,15 @@ class LoRAFinetuner:
             raw = raw.to(self.device, non_blocking=True)
             target = target.to(self.device, non_blocking=True)
 
+            # Handle partial annotations: create mask and shift labels
+            mask = None
+            if self.mask_unannotated:
+                # Create mask for annotated regions (target > 0)
+                mask = (target > 0).float()  # (B, C, Z, Y, X)
+                # Shift labels down by 1 (but keep 0 as 0)
+                # e.g., 0->0 (unannotated), 1->0 (background), 2->1 (foreground)
+                target = torch.clamp(target - 1, min=0)
+
             # Forward pass with mixed precision
             with autocast(enabled=self.use_mixed_precision):
                 pred = self.model(raw)
@@ -302,7 +340,20 @@ class LoRAFinetuner:
                 if self.select_channel is not None:
                     pred = pred[:, self.select_channel:self.select_channel+1, :, :, :]
 
-                loss = self.criterion(pred, target)
+                # Compute loss with optional mask
+                if self._use_bce and mask is not None:
+                    # For standalone BCE loss, manually apply mask
+                    loss = self.criterion(pred, target)
+                    loss = loss * mask
+                    loss = loss.sum() / mask.sum().clamp(min=1)
+                elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
+                    # For custom losses that support masking (DiceLoss, CombinedLoss)
+                    loss = self.criterion(pred, target, mask)
+                else:
+                    # No masking needed
+                    loss = self.criterion(pred, target)
+                    if self._use_bce:
+                        loss = loss.mean()
 
                 # Scale loss for gradient accumulation
                 loss = loss / self.gradient_accumulation_steps

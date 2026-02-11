@@ -135,9 +135,10 @@ class CorrectionDataset(Dataset):
             mask = mask / 255.0
 
         # Normalize raw if requested
+        # Use [-1, 1] normalization to match the base model's training
         if self.normalize:
             if raw.max() > 1.0:
-                raw = raw / 255.0
+                raw = (raw.astype(np.float32) / 127.5) - 1.0
 
         # For models with different input/output sizes, we keep raw at full size
         # Patching is disabled for this case - use full corrections
