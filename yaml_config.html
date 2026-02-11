@@ -1,0 +1,426 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YAML Configuration &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Custom Model" href="custom_script.html" />
+    <link rel="prev" title="Python Scripts" href="scripts.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">YAML Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#yaml-structure">YAML Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#model-entries">Model Entries</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#available-model-types">Available Model Types</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#normalizers-and-postprocessors">Normalizers and Postprocessors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bounding-boxes">Bounding Boxes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#minimal-configuration">Minimal configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#full-configuration-with-normalizers">Full configuration with normalizers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#blockwise-processing">Blockwise processing</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">YAML Configuration</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/yaml_config.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="yaml-configuration">
+<h1>YAML Configuration<a class="headerlink" href="#yaml-configuration" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> lets you define and run multiple models from a single YAML file.
+It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_blockwise</span></code>).</p>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run inference</span>
+cellmap_flow_yaml<span class="w"> </span>config.yaml
+
+<span class="c1"># Validate without running</span>
+cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--validate-only
+
+<span class="c1"># List available model types</span>
+cellmap_flow_yaml<span class="w"> </span>--list-types
+
+<span class="c1"># Set log level</span>
+cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
+</pre></div>
+</div>
+</section>
+<section id="yaml-structure">
+<h2>YAML Structure<a class="headerlink" href="#yaml-structure" title="Link to this heading"></a></h2>
+<p>A configuration file has the following top-level fields:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Required</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data_path</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Path to the input dataset (zarr/n5).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">charge_group</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Project billing group.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">queue</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Job queue (default: <code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Dict or list of model entries (see below).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">json_data</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Input normalizers and postprocessors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">wrap_raw</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Wrap raw data in neuroglancer (default: <code class="docutils literal notranslate"><span class="pre">true</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">output_path</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Output zarr path (used by blockwise processing).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">task_name</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Task name (used by blockwise processing).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workers</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Number of GPU workers (blockwise).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cpu_workers</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Number of CPU workers (blockwise).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Temporary directory for intermediate files.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bounding_boxes</span></code></p></td>
+<td><p>No</p></td>
+<td><p>List of bounding boxes to process (blockwise).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">separate_bounding_boxes_zarrs</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Write each bounding box to a separate zarr (blockwise).</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="model-entries">
+<h2>Model Entries<a class="headerlink" href="#model-entries" title="Link to this heading"></a></h2>
+<p>Each model entry requires a <code class="docutils literal notranslate"><span class="pre">type</span></code> field and the parameters for that model type.
+Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span> <span class="pre">--list-types</span></code> to see all available types and their required parameters.</p>
+<p>Models can be specified as a <strong>dict</strong> (keys become model names) or a <strong>list</strong> (each entry must include a <code class="docutils literal notranslate"><span class="pre">name</span></code> field).</p>
+<p><strong>Dict format</strong> (recommended):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my_mito_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fly</span>
+<span class="w">    </span><span class="nt">checkpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/checkpoint</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<span class="w">    </span><span class="nt">classes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mito</span>
+<span class="w">  </span><span class="nt">my_dacapo_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dacapo</span>
+<span class="w">    </span><span class="nt">run_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_run</span>
+<span class="w">    </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</pre></div>
+</div>
+<p><strong>List format</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_mito_model</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fly</span>
+<span class="w">    </span><span class="nt">checkpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/checkpoint</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<span class="w">    </span><span class="nt">classes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mito</span>
+</pre></div>
+</div>
+<section id="available-model-types">
+<h3>Available Model Types<a class="headerlink" href="#available-model-types" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15.0%" />
+<col style="width: 20.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Class</p></th>
+<th class="head"><p>Key Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code></p></td>
+<td><p>ScriptModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">script_path</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+<td><p>DaCapoModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_name</span></code> (required), <code class="docutils literal notranslate"><span class="pre">iteration</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
+<td><p>FlyModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> (required), <code class="docutils literal notranslate"><span class="pre">classes</span></code> (required), <code class="docutils literal notranslate"><span class="pre">resolution</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bio</span></code></p></td>
+<td><p>BioModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">model_path</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap</span></code></p></td>
+<td><p>CellMapModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">config_folder</span></code> (required)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Common optional parameters: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>.</p>
+</section>
+</section>
+<section id="normalizers-and-postprocessors">
+<h2>Normalizers and Postprocessors<a class="headerlink" href="#normalizers-and-postprocessors" title="Link to this heading"></a></h2>
+<p>Define input normalization and output postprocessing under <code class="docutils literal notranslate"><span class="pre">json_data</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">json_data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input_norm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">MinMaxNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">min_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">max_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">250</span>
+<span class="w">      </span><span class="nt">invert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">    </span><span class="nt">LambdaNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x*2-1&quot;</span>
+<span class="w">  </span><span class="nt">postprocess</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">DefaultPostprocessor</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">clip_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">clip_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">bias</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">      </span><span class="nt">multiplier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.5</span>
+<span class="w">    </span><span class="nt">ThresholdPostprocessor</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+</pre></div>
+</div>
+<p>Normalizers are applied in order before inference. Postprocessors are applied in order after inference.</p>
+</section>
+<section id="bounding-boxes">
+<h2>Bounding Boxes<a class="headerlink" href="#bounding-boxes" title="Link to this heading"></a></h2>
+<p>For blockwise processing, you can specify regions of interest:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">bounding_boxes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">59611</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">52237</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5627</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">4674</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">11566</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10067</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">64285</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">26408</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15695</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">11626</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">12405</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">26847</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Set <code class="docutils literal notranslate"><span class="pre">separate_bounding_boxes_zarrs:</span> <span class="pre">true</span></code> to write each bounding box to its own zarr subdirectory (<code class="docutils literal notranslate"><span class="pre">box_1</span></code>, <code class="docutils literal notranslate"><span class="pre">box_2</span></code>, etc).</p>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="minimal-configuration">
+<h3>Minimal configuration<a class="headerlink" href="#minimal-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap</span>
+<span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gpu_h100</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dacapo</span>
+<span class="w">    </span><span class="nt">run_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_run</span>
+<span class="w">    </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50000</span>
+</pre></div>
+</div>
+</section>
+<section id="full-configuration-with-normalizers">
+<h3>Full configuration with normalizers<a class="headerlink" href="#full-configuration-with-normalizers" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8</span>
+<span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gpu_h100</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap</span>
+
+<span class="nt">json_data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input_norm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">MinMaxNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">min_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">max_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">250</span>
+<span class="w">      </span><span class="nt">invert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">    </span><span class="nt">LambdaNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x*2-1&quot;</span>
+<span class="w">  </span><span class="nt">postprocess</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">DefaultPostprocessor</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">clip_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">clip_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">bias</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">      </span><span class="nt">multiplier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.5</span>
+<span class="w">    </span><span class="nt">ThresholdPostprocessor</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.5</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model_tmp1</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fly</span>
+<span class="w">    </span><span class="nt">checkpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/model_checkpoint_362000</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<span class="w">    </span><span class="nt">classes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mito</span>
+</pre></div>
+</div>
+</section>
+<section id="blockwise-processing">
+<h3>Blockwise processing<a class="headerlink" href="#blockwise-processing" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8</span>
+<span class="nt">output_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/output.zarr</span>
+<span class="nt">task_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap_flow_mito_task</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap</span>
+<span class="nt">queue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gpu_h100</span>
+<span class="nt">workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14</span>
+<span class="nt">cpu_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
+<span class="nt">tmp_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/tmp</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">model_tmp1</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fly</span>
+<span class="w">    </span><span class="nt">channels</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mito</span>
+<span class="w">    </span><span class="nt">checkpoint_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/model_checkpoint_362000</span>
+<span class="w">    </span><span class="nt">input_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">178</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">178</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">178</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">input_voxel_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">16</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">output_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">56</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">56</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">56</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">output_voxel_size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">16</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">]</span>
+
+<span class="nt">bounding_boxes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">59611</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">52237</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5627</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">4674</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">11566</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10067</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">64285</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">26408</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15695</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">shape</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">11626</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">12405</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">26847</span><span class="p p-Indicator">]</span>
+
+<span class="nt">json_data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input_norm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">MinMaxNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">invert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">max_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">250</span>
+<span class="w">      </span><span class="nt">min_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">LambdaNormalizer</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x*2-1&quot;</span>
+<span class="w">  </span><span class="nt">postprocess</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">ThresholdPostprocessor</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+</pre></div>
+</div>
+<p>Run blockwise processing with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_blockwise<span class="w"> </span>config.yaml
+cellmap_flow_blockwise<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="scripts.html" class="btn btn-neutral float-left" title="Python Scripts" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom_script.html" class="btn btn-neutral float-right" title="Custom Model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

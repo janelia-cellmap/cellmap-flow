@@ -1,0 +1,47 @@
+cellmap_flow.dashboard.routes.bbx_generator
+===========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.bbx_generator
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.bbx_generator.logger
+   cellmap_flow.dashboard.routes.bbx_generator.bbx_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.bbx_generator.start_bbx_generator
+   cellmap_flow.dashboard.routes.bbx_generator.get_bbx_generator_status
+   cellmap_flow.dashboard.routes.bbx_generator.finalize_bbx_generation
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: bbx_bp
+
+.. py:function:: start_bbx_generator()
+
+   Start the Neuroglancer viewer for creating bounding boxes
+
+
+.. py:function:: get_bbx_generator_status()
+
+   Get current status of bounding box generation
+
+
+.. py:function:: finalize_bbx_generation()
+
+   Finalize bounding box generation and return results
+
+

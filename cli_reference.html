@@ -23,9 +23,7 @@
       <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Custom Model" href="custom_script.html" />
-    <link rel="prev" title="CLI Commands" href="cli_command.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -48,74 +46,13 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cli_command.html">CLI Commands</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">CLI Argument Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#standardization-principles">Standardization Principles</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#common-arguments">Common Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#data-path-d">–data-path, -d</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#project-p">–project, -P</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#queue-q">–queue, -q</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#name-n">–name, -n</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#model-path-arguments">Model Path Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#script-path-s">–script-path, -s</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#model-path-m">–model-path, -m</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#config-folder-f">–config-folder, -f</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#dacapo-specific-arguments">DaCapo-Specific Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#run-name-r">–run-name, -r</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#iteration-i">–iteration, -i</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#fly-model-specific-arguments">Fly Model-Specific Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#checkpoint-c">–checkpoint, -c</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#channels-ch">–channels, -ch</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#input-voxel-size-ivs">–input-voxel-size, -ivs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#output-voxel-size-ovs">–output-voxel-size, -ovs</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#bioimage-specific-arguments">Bioimage-Specific Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#edge-length-to-process-e">–edge-length-to-process, -e</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#server-specific-arguments">Server-Specific Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#port-p">–port, -p</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#debug">–debug</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#certfile">–certfile</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#keyfile">–keyfile</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#ui-server-arguments">UI Server Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#neuroglancer-url">–neuroglancer-url</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#inference-host-i">–inference-host, -i</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#optional-advanced-arguments">Optional/Advanced Arguments</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#scale-r">–scale, -r</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#log-level">–log-level</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#migration-guide">Migration Guide</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#old-vs-new-argument-names">Old vs New Argument Names</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#automated-migration-script">Automated Migration Script</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#examples-by-use-case">Examples by Use Case</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#single-model-inference">Single Model Inference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#multiple-models">Multiple Models</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#yaml-configuration">YAML Configuration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#manual-server-control">Manual Server Control</a></li>
-</ul>
-</li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -1044,10 +981,7 @@ cellmap_flow_server<span class="w"> </span>run-ui-server<span class="w"> </span>
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="cli_command.html" class="btn btn-neutral float-left" title="CLI Commands" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="custom_script.html" class="btn btn-neutral float-right" title="Custom Model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

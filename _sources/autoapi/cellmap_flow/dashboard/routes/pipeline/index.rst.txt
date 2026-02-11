@@ -1,0 +1,68 @@
+cellmap_flow.dashboard.routes.pipeline
+======================================
+
+.. py:module:: cellmap_flow.dashboard.routes.pipeline
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.pipeline.logger
+   cellmap_flow.dashboard.routes.pipeline.pipeline_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.pipeline.is_output_segmentation
+   cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config
+   cellmap_flow.dashboard.routes.pipeline.update_equivalences
+   cellmap_flow.dashboard.routes.pipeline.process
+   cellmap_flow.dashboard.routes.pipeline.validate_pipeline
+   cellmap_flow.dashboard.routes.pipeline.dataset_path_api
+   cellmap_flow.dashboard.routes.pipeline.blockwise_config_api
+   cellmap_flow.dashboard.routes.pipeline.apply_pipeline
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: pipeline_bp
+
+.. py:function:: is_output_segmentation()
+
+.. py:function:: validate_pipeline_config(config)
+
+   Helper function to validate pipeline configuration
+
+
+.. py:function:: update_equivalences()
+
+.. py:function:: process()
+
+.. py:function:: validate_pipeline()
+
+   Validate a pipeline configuration
+
+
+.. py:function:: dataset_path_api()
+
+   Get or set the dataset path in globals
+
+
+.. py:function:: blockwise_config_api()
+
+   Get or set blockwise configuration in globals
+
+
+.. py:function:: apply_pipeline()
+
+   Apply a pipeline configuration to the current inference
+
+

@@ -1,0 +1,390 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plugins &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="autoapi/index.html" />
+    <link rel="prev" title="PostProcessors" href="post.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Plugins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#cli-commands">CLI Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#register-a-plugin">Register a plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#list-registered-plugins">List registered plugins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#unregister-a-plugin">Unregister a plugin</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#writing-plugins">Writing Plugins</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#custom-normalizer">Custom Normalizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-postprocessor">Custom PostProcessor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-modelconfig">Custom ModelConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Plugins</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plugins.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="plugins">
+<h1>Plugins<a class="headerlink" href="#plugins" title="Link to this heading"></a></h1>
+<p>CellMap Flow supports user-defined <strong>plugins</strong> — custom normalizers, postprocessors, and model configurations that you can register once and use everywhere (CLI, dashboard, YAML pipelines).</p>
+<p>Plugins are Python files stored in <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code> and loaded automatically every time CellMap Flow starts.</p>
+<section id="cli-commands">
+<h2>CLI Commands<a class="headerlink" href="#cli-commands" title="Link to this heading"></a></h2>
+<section id="register-a-plugin">
+<h3>Register a plugin<a class="headerlink" href="#register-a-plugin" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py
+</pre></div>
+</div>
+<p>This copies the file to <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/my_plugin.py</span></code>. A basic safety check is performed to reject scripts that import <code class="docutils literal notranslate"><span class="pre">os</span></code>, <code class="docutils literal notranslate"><span class="pre">subprocess</span></code>, <code class="docutils literal notranslate"><span class="pre">sys</span></code> or call <code class="docutils literal notranslate"><span class="pre">eval</span></code>/<code class="docutils literal notranslate"><span class="pre">exec</span></code>.</p>
+<p>To overwrite an existing plugin with the same filename:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py<span class="w"> </span>--force
+</pre></div>
+</div>
+</section>
+<section id="list-registered-plugins">
+<h3>List registered plugins<a class="headerlink" href="#list-registered-plugins" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>list-plugins
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Registered plugins:
+
+  my_normalizer.py  (/home/user/.cellmap_flow/plugins/my_normalizer.py)
+  my_post.py        (/home/user/.cellmap_flow/plugins/my_post.py)
+</pre></div>
+</div>
+</section>
+<section id="unregister-a-plugin">
+<h3>Unregister a plugin<a class="headerlink" href="#unregister-a-plugin" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>unregister<span class="w"> </span>my_normalizer
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">.py</span></code> extension is optional. This deletes the file from the plugins directory.</p>
+</section>
+</section>
+<section id="writing-plugins">
+<h2>Writing Plugins<a class="headerlink" href="#writing-plugins" title="Link to this heading"></a></h2>
+<p>A plugin is a plain Python file that defines one or more subclasses of
+<code class="docutils literal notranslate"><span class="pre">InputNormalizer</span></code>, <code class="docutils literal notranslate"><span class="pre">PostProcessor</span></code>, or <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code>. Each subclass must:</p>
+<ol class="arabic simple">
+<li><p>Inherit from the correct base class.</p></li>
+<li><p>Accept all <code class="docutils literal notranslate"><span class="pre">__init__</span></code> parameters as simple types (<code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>) so they can be set from the dashboard or YAML.</p></li>
+<li><p>Implement the required abstract methods.</p></li>
+</ol>
+<section id="custom-normalizer">
+<h3>Custom Normalizer<a class="headerlink" href="#custom-normalizer" title="Link to this heading"></a></h3>
+<p>Subclass <code class="docutils literal notranslate"><span class="pre">InputNormalizer</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_process</span></code> and <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.norm.input_normalize</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputNormalizer</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyNewNormalizer</span><span class="p">(</span><span class="n">InputNormalizer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scale input data by a constant coefficient.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">coef</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef</span>
+</pre></div>
+</div>
+<p>Another example — percentile-based normalization:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.norm.input_normalize</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputNormalizer</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PercentileNormalizer</span><span class="p">(</span><span class="n">InputNormalizer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize data to a given percentile range.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">low</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">high</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">99.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">low</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">high</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">p_low</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">low</span><span class="p">)</span>
+        <span class="n">p_high</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p_high</span> <span class="o">-</span> <span class="n">p_low</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">((</span><span class="n">data</span> <span class="o">-</span> <span class="n">p_low</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">p_high</span> <span class="o">-</span> <span class="n">p_low</span><span class="p">))</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="custom-postprocessor">
+<h3>Custom PostProcessor<a class="headerlink" href="#custom-postprocessor" title="Link to this heading"></a></h3>
+<p>Subclass <code class="docutils literal notranslate"><span class="pre">PostProcessor</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_process</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, and <code class="docutils literal notranslate"><span class="pre">is_segmentation</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.post.postprocessors</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostProcessor</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SigmoidPostprocessor</span><span class="p">(</span><span class="n">PostProcessor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply sigmoid activation and convert to uint8.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">result</span> <span class="o">*</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_segmentation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+</pre></div>
+</div>
+<p>Another example — connected-component filtering by size:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.post.postprocessors</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostProcessor</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">label</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SizeFilterPostprocessor</span><span class="p">(</span><span class="n">PostProcessor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Remove connected components smaller than min_size voxels.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">min_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_size</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">labeled</span><span class="p">,</span> <span class="n">num_features</span> <span class="o">=</span> <span class="n">label</span><span class="p">(</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_features</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">labeled</span> <span class="o">==</span> <span class="n">idx</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_size</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">labeled</span> <span class="o">==</span> <span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dtype</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_segmentation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">True</span>
+</pre></div>
+</div>
+</section>
+<section id="custom-modelconfig">
+<h3>Custom ModelConfig<a class="headerlink" href="#custom-modelconfig" title="Link to this heading"></a></h3>
+<p>Subclass <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_get_config</span></code>, <code class="docutils literal notranslate"><span class="pre">command</span></code>, and <code class="docutils literal notranslate"><span class="pre">to_dict</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">_get_config</span></code> method must return a <code class="docutils literal notranslate"><span class="pre">Config</span></code> object with the following attributes:
+<code class="docutils literal notranslate"><span class="pre">model</span></code> (or <code class="docutils literal notranslate"><span class="pre">predict</span></code>), <code class="docutils literal notranslate"><span class="pre">read_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">write_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>,
+<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">output_channels</span></code>, and <code class="docutils literal notranslate"><span class="pre">block_shape</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">funlib.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.utils.serialize_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ONNXModelConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a model from an ONNX file.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">onnx_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">input_voxel_size</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;8,8,8&quot;</span><span class="p">,</span>
+        <span class="n">output_voxel_size</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;8,8,8&quot;</span><span class="p">,</span>
+        <span class="n">input_shape</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;128,128,128&quot;</span><span class="p">,</span>
+        <span class="n">output_shape</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;128,128,128&quot;</span><span class="p">,</span>
+        <span class="n">output_channels</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">scale</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span> <span class="o">=</span> <span class="n">onnx_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_input_voxel_size</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">input_voxel_size</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_output_voxel_size</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">output_voxel_size</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_input_shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">input_shape</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">output_shape</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">output_channels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">command</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;onnx --onnx-path </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">onnxruntime</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ort</span>
+
+        <span class="n">config</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">predict</span> <span class="o">=</span> <span class="n">ort</span><span class="o">.</span><span class="n">InferenceSession</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span><span class="p">)</span><span class="o">.</span><span class="n">run</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">input_voxel_size</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_input_voxel_size</span><span class="p">)</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">output_voxel_size</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_output_voxel_size</span><span class="p">)</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">read_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_input_shape</span><span class="p">)</span> <span class="o">*</span> <span class="n">config</span><span class="o">.</span><span class="n">input_voxel_size</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">write_shape</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span><span class="p">)</span> <span class="o">*</span> <span class="n">config</span><span class="o">.</span><span class="n">output_voxel_size</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">output_channels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">block_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span><span class="p">,)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">config</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;onnx&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;onnx_path&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span><span class="p">,</span>
+            <span class="s2">&quot;input_voxel_size&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_voxel_size</span><span class="p">),</span>
+            <span class="s2">&quot;output_voxel_size&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_voxel_size</span><span class="p">),</span>
+            <span class="s2">&quot;input_shape&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_shape</span><span class="p">),</span>
+            <span class="s2">&quot;output_shape&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span><span class="p">),</span>
+            <span class="s2">&quot;output_channels&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span><span class="p">,</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+        <span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<ol class="arabic">
+<li><p>Write your plugin (e.g. <code class="docutils literal notranslate"><span class="pre">my_normalizer.py</span></code>)</p></li>
+<li><p>Register it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>my_normalizer.py
+</pre></div>
+</div>
+</li>
+<li><p>Open the dashboard — your plugin appears in the normalizers/postprocessors/models list:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_app
+</pre></div>
+</div>
+</li>
+<li><p>Or use it in a YAML pipeline:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">input_normalizers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MyNewNormalizer</span>
+<span class="w">    </span><span class="nt">coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.5</span>
+
+<span class="nt">postprocess</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SigmoidPostprocessor</span>
+<span class="w">    </span><span class="nt">scale</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Plugin filenames must be unique. Use <code class="docutils literal notranslate"><span class="pre">--force</span></code> to overwrite.</p></li>
+<li><p>Plugins are checked for unsafe imports (<code class="docutils literal notranslate"><span class="pre">os</span></code>, <code class="docutils literal notranslate"><span class="pre">subprocess</span></code>, <code class="docutils literal notranslate"><span class="pre">sys</span></code>) and function calls (<code class="docutils literal notranslate"><span class="pre">eval</span></code>, <code class="docutils literal notranslate"><span class="pre">exec</span></code>) before registration.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">__init__</span></code> parameters should use simple types (<code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>) for dashboard and YAML compatibility.</p></li>
+<li><p>Registered <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> subclasses automatically get their own CLI command under <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="post.html" class="btn btn-neutral float-left" title="PostProcessors" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="autoapi/index.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

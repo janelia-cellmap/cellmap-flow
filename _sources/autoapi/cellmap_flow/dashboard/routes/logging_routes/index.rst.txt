@@ -1,0 +1,41 @@
+cellmap_flow.dashboard.routes.logging_routes
+============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.logging_routes
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.logger
+   cellmap_flow.dashboard.routes.logging_routes.logging_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.stream_logs
+   cellmap_flow.dashboard.routes.logging_routes.get_bbox_json_template
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: logging_bp
+
+.. py:function:: stream_logs()
+
+   Stream logs via Server-Sent Events (SSE)
+
+
+.. py:function:: get_bbox_json_template()
+
+   Serve the bounding box JSON format template
+
+

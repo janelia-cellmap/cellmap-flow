@@ -1,0 +1,82 @@
+cellmap_flow.dashboard.state
+============================
+
+.. py:module:: cellmap_flow.dashboard.state
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.logger
+   cellmap_flow.dashboard.state.log_buffer
+   cellmap_flow.dashboard.state.log_clients
+   cellmap_flow.dashboard.state.NEUROGLANCER_URL
+   cellmap_flow.dashboard.state.INFERENCE_SERVER
+   cellmap_flow.dashboard.state.CUSTOM_CODE_FOLDER
+   cellmap_flow.dashboard.state.bbx_generator_state
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.LogHandler
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.get_blockwise_tasks_dir
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: log_buffer
+
+.. py:data:: log_clients
+   :value: []
+
+
+.. py:class:: LogHandler(level=NOTSET)
+
+
+
+   Handler instances dispatch logging events to specific destinations.
+
+   The base handler class. Acts as a placeholder which defines the Handler
+   interface. Handlers can optionally use Formatter instances to format
+   records as desired. By default, no formatter is specified; in this case,
+   the 'raw' message as determined by record.message is logged.
+
+
+   .. py:method:: emit(record)
+
+      Do whatever it takes to actually log the specified logging record.
+
+      This version is intended to be implemented by subclasses and so
+      raises a NotImplementedError.
+
+
+
+.. py:data:: NEUROGLANCER_URL
+   :value: None
+
+
+.. py:data:: INFERENCE_SERVER
+   :value: None
+
+
+.. py:data:: CUSTOM_CODE_FOLDER
+
+.. py:function:: get_blockwise_tasks_dir()
+
+.. py:data:: bbx_generator_state
+

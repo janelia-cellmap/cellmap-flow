@@ -19,6 +19,7 @@ Submodules
    /autoapi/cellmap_flow/utils/job_extensions/index
    /autoapi/cellmap_flow/utils/load_py/index
    /autoapi/cellmap_flow/utils/neuroglancer_utils/index
+   /autoapi/cellmap_flow/utils/plugin_manager/index
    /autoapi/cellmap_flow/utils/scale_pyramid/index
    /autoapi/cellmap_flow/utils/serialize_config/index
    /autoapi/cellmap_flow/utils/serilization_utils/index

@@ -1,0 +1,32 @@
+cellmap_flow.dashboard.routes.index_page
+========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.index_page
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.index_page.logger
+   cellmap_flow.dashboard.routes.index_page.index_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.index_page.index
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: index_bp
+
+.. py:function:: index()
+

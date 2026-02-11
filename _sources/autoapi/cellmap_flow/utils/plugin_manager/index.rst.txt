@@ -1,0 +1,90 @@
+cellmap_flow.utils.plugin_manager
+=================================
+
+.. py:module:: cellmap_flow.utils.plugin_manager
+
+.. autoapi-nested-parse::
+
+   Plugin manager for cellmap_flow.
+
+   Handles registration, loading, and management of user plugins
+   (ModelConfig, InputNormalizer, PostProcessor subclasses).
+
+   Plugins are stored in ~/.cellmap_flow/plugins/ and loaded automatically
+   at startup so that custom subclasses appear in __subclasses__() calls.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.plugin_manager.logger
+   cellmap_flow.utils.plugin_manager.PLUGINS_DIR
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.plugin_manager.get_plugins_dir
+   cellmap_flow.utils.plugin_manager.register_plugin
+   cellmap_flow.utils.plugin_manager.unregister_plugin
+   cellmap_flow.utils.plugin_manager.list_plugins
+   cellmap_flow.utils.plugin_manager.load_plugins
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: PLUGINS_DIR
+
+.. py:function:: get_plugins_dir() -> pathlib.Path
+
+   Return the plugins directory, creating it if necessary.
+
+
+.. py:function:: register_plugin(filepath: str, force: bool = False) -> pathlib.Path
+
+   Register a plugin by copying a Python file to ~/.cellmap_flow/plugins/.
+
+   :param filepath: Path to the Python file to register.
+   :param force: Overwrite existing plugin with the same name.
+
+   :returns: Path to the installed plugin file.
+
+   :raises FileNotFoundError: If the source file does not exist.
+   :raises FileExistsError: If a plugin with the same name already exists and force is False.
+   :raises ValueError: If the file is not a .py file or fails safety analysis.
+
+
+.. py:function:: unregister_plugin(name: str) -> None
+
+   Remove a registered plugin by filename.
+
+   :param name: Filename of the plugin (e.g. 'my_normalizer.py').
+                The .py extension is added automatically if missing.
+
+
+.. py:function:: list_plugins() -> List[pathlib.Path]
+
+   Return a sorted list of all registered plugin file paths.
+
+
+.. py:function:: load_plugins() -> int
+
+   Load all registered plugins from ~/.cellmap_flow/plugins/.
+
+   Each plugin file is executed so that any subclasses defined in it
+   (ModelConfig, InputNormalizer, PostProcessor) become available
+   through __subclasses__().
+
+   Safe to call multiple times — plugins are only loaded once.
+
+   :returns: Number of plugins successfully loaded.
+
+

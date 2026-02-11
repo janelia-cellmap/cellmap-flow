@@ -10,24 +10,10 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.dashboard.app.logger
-   cellmap_flow.dashboard.app.log_buffer
-   cellmap_flow.dashboard.app.log_clients
    cellmap_flow.dashboard.app.template_dir
    cellmap_flow.dashboard.app.static_dir
    cellmap_flow.dashboard.app.app
    cellmap_flow.dashboard.app.log_handler
-   cellmap_flow.dashboard.app.NEUROGLANCER_URL
-   cellmap_flow.dashboard.app.INFERENCE_SERVER
-   cellmap_flow.dashboard.app.CUSTOM_CODE_FOLDER
-   cellmap_flow.dashboard.app.bbx_generator_state
-
-
-Classes
--------
-
-.. autoapisummary::
-
-   cellmap_flow.dashboard.app.LogHandler
 
 
 Functions
@@ -35,30 +21,6 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.app.get_blockwise_tasks_dir
-   cellmap_flow.dashboard.app.stream_logs
-   cellmap_flow.dashboard.app.get_bbox_json_template
-   cellmap_flow.dashboard.app.index
-   cellmap_flow.dashboard.app.pipeline_builder
-   cellmap_flow.dashboard.app.get_available_models
-   cellmap_flow.dashboard.app.get_model_config_types
-   cellmap_flow.dashboard.app.create_model_config
-   cellmap_flow.dashboard.app.is_output_segmentation
-   cellmap_flow.dashboard.app.update_equivalences
-   cellmap_flow.dashboard.app.submit_models
-   cellmap_flow.dashboard.app.process
-   cellmap_flow.dashboard.app.validate_pipeline
-   cellmap_flow.dashboard.app.dataset_path_api
-   cellmap_flow.dashboard.app.blockwise_config_api
-   cellmap_flow.dashboard.app.apply_pipeline
-   cellmap_flow.dashboard.app.validate_pipeline_config
-   cellmap_flow.dashboard.app.validate_blockwise
-   cellmap_flow.dashboard.app.generate_blockwise_task
-   cellmap_flow.dashboard.app.precheck_blockwise_task
-   cellmap_flow.dashboard.app.submit_blockwise_task
-   cellmap_flow.dashboard.app.start_bbx_generator
-   cellmap_flow.dashboard.app.get_bbx_generator_status
-   cellmap_flow.dashboard.app.finalize_bbx_generation
    cellmap_flow.dashboard.app.create_and_run_app
 
 
@@ -67,33 +29,6 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:data:: log_buffer
-
-.. py:data:: log_clients
-   :value: []
-
-
-.. py:class:: LogHandler(level=NOTSET)
-
-
-
-   Handler instances dispatch logging events to specific destinations.
-
-   The base handler class. Acts as a placeholder which defines the Handler
-   interface. Handlers can optionally use Formatter instances to format
-   records as desired. By default, no formatter is specified; in this case,
-   the 'raw' message as determined by record.message is logged.
-
-
-   .. py:method:: emit(record)
-
-      Do whatever it takes to actually log the specified logging record.
-
-      This version is intended to be implemented by subclasses and so
-      raises a NotImplementedError.
-
-
-
 .. py:data:: template_dir
 
 .. py:data:: static_dir
@@ -101,120 +36,6 @@ Module Contents
 .. py:data:: app
 
 .. py:data:: log_handler
-
-.. py:data:: NEUROGLANCER_URL
-   :value: None
-
-
-.. py:data:: INFERENCE_SERVER
-   :value: None
-
-
-.. py:function:: get_blockwise_tasks_dir()
-
-.. py:data:: CUSTOM_CODE_FOLDER
-
-.. py:function:: stream_logs()
-
-   Stream logs via Server-Sent Events (SSE)
-
-
-.. py:function:: get_bbox_json_template()
-
-   Serve the bounding box JSON format template
-
-
-.. py:function:: index()
-
-.. py:function:: pipeline_builder()
-
-   Render the drag-and-drop pipeline builder interface with current state from globals
-
-
-.. py:function:: get_available_models()
-
-   Get available models from the model catalog
-
-
-.. py:function:: get_model_config_types()
-
-   Get available ModelConfig subclasses and their parameter metadata
-
-
-.. py:function:: create_model_config()
-
-   Create a ModelConfig instance from user-provided parameters
-
-
-.. py:function:: is_output_segmentation()
-
-.. py:function:: update_equivalences()
-
-.. py:function:: submit_models()
-
-.. py:function:: process()
-
-.. py:function:: validate_pipeline()
-
-   Validate a pipeline configuration
-
-
-.. py:function:: dataset_path_api()
-
-   Get or set the dataset path in globals
-
-
-.. py:function:: blockwise_config_api()
-
-   Get or set blockwise configuration in globals
-
-
-.. py:function:: apply_pipeline()
-
-   Apply a pipeline configuration to the current inference
-
-
-.. py:function:: validate_pipeline_config(config)
-
-   Helper function to validate pipeline configuration
-
-
-.. py:function:: validate_blockwise()
-
-   Validate if pipeline is ready for blockwise processing
-
-
-.. py:function:: generate_blockwise_task()
-
-   Generate blockwise task YAML files
-
-
-.. py:function:: precheck_blockwise_task()
-
-   Precheck blockwise task configuration using already-generated YAML
-
-
-.. py:function:: submit_blockwise_task()
-
-   Submit blockwise task to LSF
-
-
-.. py:data:: bbx_generator_state
-
-.. py:function:: start_bbx_generator()
-
-   Start the Neuroglancer viewer for creating bounding boxes
-
-
-.. py:function:: get_bbx_generator_status()
-
-   Get current status of bounding box generation
-
-
-.. py:function:: finalize_bbx_generation()
-
-   Finalize bounding box generation and return results
-
 
 .. py:function:: create_and_run_app(neuroglancer_url=None, inference_servers=None)
 

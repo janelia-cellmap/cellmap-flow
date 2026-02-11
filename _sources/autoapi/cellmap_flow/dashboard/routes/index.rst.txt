@@ -1,0 +1,21 @@
+cellmap_flow.dashboard.routes
+=============================
+
+.. py:module:: cellmap_flow.dashboard.routes
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/dashboard/routes/bbx_generator/index
+   /autoapi/cellmap_flow/dashboard/routes/blockwise/index
+   /autoapi/cellmap_flow/dashboard/routes/index_page/index
+   /autoapi/cellmap_flow/dashboard/routes/logging_routes/index
+   /autoapi/cellmap_flow/dashboard/routes/models/index
+   /autoapi/cellmap_flow/dashboard/routes/pipeline/index
+   /autoapi/cellmap_flow/dashboard/routes/pipeline_builder_page/index
+
+

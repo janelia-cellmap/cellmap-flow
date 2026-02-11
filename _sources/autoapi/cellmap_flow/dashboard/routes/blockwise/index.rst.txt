@@ -1,0 +1,53 @@
+cellmap_flow.dashboard.routes.blockwise
+=======================================
+
+.. py:module:: cellmap_flow.dashboard.routes.blockwise
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.blockwise.logger
+   cellmap_flow.dashboard.routes.blockwise.blockwise_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.blockwise.validate_blockwise
+   cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task
+   cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task
+   cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: blockwise_bp
+
+.. py:function:: validate_blockwise()
+
+   Validate if pipeline is ready for blockwise processing
+
+
+.. py:function:: generate_blockwise_task()
+
+   Generate blockwise task YAML files
+
+
+.. py:function:: precheck_blockwise_task()
+
+   Precheck blockwise task configuration using already-generated YAML
+
+
+.. py:function:: submit_blockwise_task()
+
+   Submit blockwise task to LSF
+
+

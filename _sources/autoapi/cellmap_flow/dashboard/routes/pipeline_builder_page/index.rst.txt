@@ -1,0 +1,35 @@
+cellmap_flow.dashboard.routes.pipeline_builder_page
+===================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.pipeline_builder_page
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.pipeline_builder_page.logger
+   cellmap_flow.dashboard.routes.pipeline_builder_page.pipeline_builder_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.pipeline_builder_page.pipeline_builder
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: pipeline_builder_bp
+
+.. py:function:: pipeline_builder()
+
+   Render the drag-and-drop pipeline builder interface with current state from globals
+
+
