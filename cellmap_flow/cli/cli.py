@@ -21,6 +21,12 @@ from cellmap_flow.utils.cli_utils import (
     get_all_model_configs,
     print_available_models,
 )
+from cellmap_flow.utils.plugin_manager import (
+    register_plugin,
+    unregister_plugin,
+    list_plugins,
+    load_plugins,
+)
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -53,6 +59,57 @@ def cli(log_level):
 def list_models():
     """List all available model configurations."""
     print_available_models("cellmap_flow")
+
+
+@cli.command(name="register")
+@click.argument("filepath", type=click.Path(exists=True))
+@click.option("--force", is_flag=True, help="Overwrite existing plugin with the same name.")
+def register_cmd(filepath, force):
+    """Register a custom plugin (normalizer, postprocessor, or model config).
+
+    FILEPATH is the path to a .py file defining subclasses of
+    InputNormalizer, PostProcessor, or ModelConfig.
+
+    Example:
+        cellmap_flow register my_normalizer.py
+    """
+    try:
+        dest = register_plugin(filepath, force=force)
+        click.echo(f"Registered plugin: {dest.name}")
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command(name="unregister")
+@click.argument("name")
+def unregister_cmd(name):
+    """Unregister a previously registered plugin by name.
+
+    NAME is the plugin filename (with or without .py extension).
+
+    Example:
+        cellmap_flow unregister my_normalizer
+    """
+    try:
+        unregister_plugin(name)
+        click.echo(f"Unregistered plugin: {name}")
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command(name="list-plugins")
+def list_plugins_cmd():
+    """List all registered plugins."""
+    plugins = list_plugins()
+    if not plugins:
+        click.echo("No plugins registered.")
+        return
+    click.echo("Registered plugins:\n")
+    for plugin_path in plugins:
+        click.echo(f"  {plugin_path.name}  ({plugin_path})")
+
 
 
 @cli.command(name="run")
@@ -253,6 +310,9 @@ def register_all_model_commands():
         except Exception as e:
             logger.warning(f"Failed to register command for {cli_name}: {e}")
 
+
+# Load user plugins before registering model commands
+load_plugins()
 
 # Register all commands at module load time
 register_all_model_commands()

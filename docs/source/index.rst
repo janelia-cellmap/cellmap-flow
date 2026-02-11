@@ -16,10 +16,10 @@
 
    install
    scripts
-   cli_command
-   cli_reference
+   yaml_config
    custom_script
    post
+   plugins
    autoapi/index
    
 
