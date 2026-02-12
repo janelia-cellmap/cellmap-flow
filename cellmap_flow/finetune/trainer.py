@@ -336,9 +336,14 @@ class LoRAFinetuner:
             with autocast(enabled=self.use_mixed_precision):
                 pred = self.model(raw)
 
+                if batch_idx == 0:
+                    print(f"DEBUG trainer: pred.shape after model = {pred.shape}, select_channel = {self.select_channel}")
+
                 # Select specific channel if requested (e.g., mito = channel 2 from 8-channel output)
                 if self.select_channel is not None:
                     pred = pred[:, self.select_channel:self.select_channel+1, :, :, :]
+                    if batch_idx == 0:
+                        print(f"DEBUG trainer: pred.shape after channel selection = {pred.shape}")
 
                 # Compute loss with optional mask
                 if self._use_bce and mask is not None:
@@ -363,6 +368,19 @@ class LoRAFinetuner:
 
             # Update weights after accumulation
             if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+                # Debug: Check gradient norms
+                if batch_idx == 0:
+                    grad_norms = []
+                    for name, param in self.model.named_parameters():
+                        if param.requires_grad and param.grad is not None:
+                            grad_norms.append((name, param.grad.norm().item()))
+                    if grad_norms:
+                        print(f"DEBUG: First 5 gradient norms:")
+                        for name, norm in grad_norms[:5]:
+                            print(f"  {name}: {norm:.6f}")
+                    else:
+                        print("DEBUG: NO GRADIENTS COMPUTED!")
+
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad()
