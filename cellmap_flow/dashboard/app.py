@@ -33,12 +33,16 @@ from cellmap_flow.models.run import update_run_models
 from cellmap_flow.globals import g
 import numpy as np
 import time
+import uuid
+import zarr
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Global log buffer for streaming to frontend
 log_buffer = deque(maxlen=1000)  # Keep last 1000 lines
 log_clients = []  # List of queues for connected clients
+
 
 # Custom handler to capture logs
 class LogHandler(logging.Handler):
@@ -52,6 +56,7 @@ class LogHandler(logging.Handler):
             except queue.Full:
                 pass
 
+
 # Explicitly set template and static folder paths for package installation
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -60,18 +65,23 @@ CORS(app)
 
 # Add custom log handler to logger
 log_handler = LogHandler()
-log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
 NEUROGLANCER_URL = None
 INFERENCE_SERVER = None
 
+
 # Blockwise task directory will be set from globals or use default
 def get_blockwise_tasks_dir():
-    tasks_dir = getattr(g, 'blockwise_tasks_dir', None) or os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
+    tasks_dir = getattr(g, "blockwise_tasks_dir", None) or os.path.expanduser(
+        "~/.cellmap_flow/blockwise_tasks"
+    )
     os.makedirs(tasks_dir, exist_ok=True)
     return tasks_dir
+
+
 CUSTOM_CODE_FOLDER = os.path.expanduser(
     os.environ.get(
         "CUSTOM_CODE_FOLDER",
@@ -79,19 +89,333 @@ CUSTOM_CODE_FOLDER = os.path.expanduser(
     )
 )
 
+# MinIO state for finetune annotation crops
+minio_state = {
+    "process": None,  # subprocess.Popen object
+    "port": None,  # int
+    "ip": None,  # str
+    "bucket": "annotations",
+}
+
+
+def get_local_ip():
+    """Get the local IP address for MinIO server."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def find_available_port(start_port=9000):
+    """Find an available port for MinIO server."""
+    for port in range(start_port, start_port + 100):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", port))
+                return port
+        except OSError:
+            continue
+    raise RuntimeError("Could not find available port for MinIO")
+
+
+def create_correction_zarr(
+    zarr_path,
+    raw_crop_shape,
+    raw_voxel_size,
+    raw_offset,
+    annotation_crop_shape,
+    annotation_voxel_size,
+    annotation_offset,
+    dataset_path,
+    model_name,
+    output_channels,
+    raw_dtype="uint8",
+    create_mask=False,
+):
+    """
+    Create a correction zarr with OME-NGFF v0.4 metadata.
+
+    Structure:
+        crop_id.zarr/
+            raw/s0/          (uint8, shape=raw_crop_shape)
+            annotation/s0/   (uint8, shape=annotation_crop_shape, empty for manual annotation)
+            mask/s0/         (optional, uint8, shape=annotation_crop_shape)
+            .zattrs          (metadata)
+
+    Args:
+        zarr_path: Path to create zarr
+        raw_crop_shape: Shape in voxels for raw [z, y, x]
+        raw_voxel_size: Voxel size in nm for raw [z, y, x]
+        raw_offset: Offset in voxels for raw [z, y, x]
+        annotation_crop_shape: Shape in voxels for annotation [z, y, x]
+        annotation_voxel_size: Voxel size in nm for annotation [z, y, x]
+        annotation_offset: Offset in voxels for annotation [z, y, x]
+        dataset_path: Source dataset path
+        model_name: Model name for metadata
+        output_channels: Number of output channels
+        create_mask: Whether to create a mask group (default: False)
+
+    Returns:
+        (success: bool, info: str)
+    """
+    try:
+        # Helper to add OME-NGFF metadata
+        def add_ome_ngff_metadata(group, name, voxel_size, translation_offset=None):
+            """Add OME-NGFF v0.4 metadata."""
+            # Calculate physical translation
+            if translation_offset is not None:
+                physical_translation = [
+                    float(o * v) for o, v in zip(translation_offset, voxel_size)
+                ]
+            else:
+                physical_translation = [0.0, 0.0, 0.0]
+
+            # Coordinate transformations
+            transforms = [{"type": "scale", "scale": [float(v) for v in voxel_size]}]
+
+            if translation_offset is not None:
+                transforms.append(
+                    {"type": "translation", "translation": physical_translation}
+                )
+
+            # OME-NGFF v0.4 metadata
+            group.attrs["multiscales"] = [
+                {
+                    "version": "0.4",
+                    "name": name,
+                    "axes": [
+                        {"name": "z", "type": "space", "unit": "nanometer"},
+                        {"name": "y", "type": "space", "unit": "nanometer"},
+                        {"name": "x", "type": "space", "unit": "nanometer"},
+                    ],
+                    "datasets": [
+                        {"path": "s0", "coordinateTransformations": transforms}
+                    ],
+                }
+            ]
+
+        # Open zarr root
+        root = zarr.open(zarr_path, mode="w")
+
+        # Create raw group (will be filled by user later)
+        raw_group = root.create_group("raw")
+        raw_s0 = raw_group.create_dataset(
+            "s0",
+            shape=tuple(raw_crop_shape),
+            chunks=(64, 64, 64),
+            dtype=raw_dtype,
+            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            fill_value=0,
+        )
+        add_ome_ngff_metadata(raw_group, "raw", raw_voxel_size, raw_offset)
+
+        # Create annotation group (empty, will be filled by user annotations)
+        annotation_group = root.create_group("annotation")
+        annotation_s0 = annotation_group.create_dataset(
+            "s0",
+            shape=tuple(annotation_crop_shape),
+            chunks=(64, 64, 64),
+            dtype="uint8",
+            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            fill_value=0,
+        )
+        add_ome_ngff_metadata(
+            annotation_group, "annotation", annotation_voxel_size, annotation_offset
+        )
+
+        # Optionally create mask group (will be filled by user annotations)
+        if create_mask:
+            mask_group = root.create_group("mask")
+            mask_s0 = mask_group.create_dataset(
+                "s0",
+                shape=tuple(annotation_crop_shape),
+                chunks=(64, 64, 64),
+                dtype="uint8",
+                compressor=zarr.Blosc(
+                    cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE
+                ),
+                fill_value=0,
+            )
+            add_ome_ngff_metadata(
+                mask_group, "mask", annotation_voxel_size, annotation_offset
+            )
+
+        # Add root metadata
+        root.attrs["roi"] = {
+            "raw_offset": (
+                raw_offset.tolist()
+                if hasattr(raw_offset, "tolist")
+                else list(raw_offset)
+            ),
+            "raw_shape": (
+                raw_crop_shape.tolist()
+                if hasattr(raw_crop_shape, "tolist")
+                else list(raw_crop_shape)
+            ),
+            "annotation_offset": (
+                annotation_offset.tolist()
+                if hasattr(annotation_offset, "tolist")
+                else list(annotation_offset)
+            ),
+            "annotation_shape": (
+                annotation_crop_shape.tolist()
+                if hasattr(annotation_crop_shape, "tolist")
+                else list(annotation_crop_shape)
+            ),
+        }
+        root.attrs["raw_voxel_size"] = (
+            raw_voxel_size.tolist()
+            if hasattr(raw_voxel_size, "tolist")
+            else list(raw_voxel_size)
+        )
+        root.attrs["annotation_voxel_size"] = (
+            annotation_voxel_size.tolist()
+            if hasattr(annotation_voxel_size, "tolist")
+            else list(annotation_voxel_size)
+        )
+        root.attrs["model_name"] = model_name
+        root.attrs["dataset_path"] = dataset_path
+        root.attrs["created_at"] = datetime.now().isoformat()
+
+        logger.info(f"Created correction zarr at {zarr_path}")
+        logger.info(
+            f"  Raw crop shape: {raw_crop_shape}, voxel size: {raw_voxel_size}, offset: {raw_offset}"
+        )
+        logger.info(
+            f"  Annotation crop shape: {annotation_crop_shape}, voxel size: {annotation_voxel_size}, offset: {annotation_offset}"
+        )
+        logger.info(f"  Mask created: {create_mask}")
+
+        return True, zarr_path
+
+    except Exception as e:
+        logger.error(f"Error creating zarr: {e}")
+        return False, str(e)
+
+
+def ensure_minio_serving(zarr_path, crop_id):
+    """
+    Ensure MinIO is running and upload zarr file.
+
+    Args:
+        zarr_path: Path to zarr file to upload
+        crop_id: Unique identifier for the crop
+
+    Returns:
+        MinIO URL for the zarr file
+    """
+    # Check if MinIO is already running
+    if minio_state["process"] is None or minio_state["process"].poll() is not None:
+        # Start MinIO
+        minio_root = Path("~/.minio-server").expanduser()
+        minio_root.mkdir(parents=True, exist_ok=True)
+
+        ip = get_local_ip()
+        port = find_available_port()
+
+        env = os.environ.copy()
+        env["MINIO_ROOT_USER"] = "minio"
+        env["MINIO_ROOT_PASSWORD"] = "minio123"
+        env["MINIO_API_CORS_ALLOW_ORIGIN"] = "*"
+
+        minio_cmd = [
+            "minio",
+            "server",
+            str(minio_root),
+            "--address",
+            f"{ip}:{port}",
+            "--console-address",
+            f"{ip}:{port+1}",
+        ]
+
+        logger.info(f"Starting MinIO server at {ip}:{port}")
+        minio_proc = subprocess.Popen(
+            minio_cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        time.sleep(3)
+
+        if minio_proc.poll() is not None:
+            raise RuntimeError("MinIO failed to start")
+
+        minio_state["process"] = minio_proc
+        minio_state["port"] = port
+        minio_state["ip"] = ip
+
+        logger.info(f"MinIO started (PID: {minio_proc.pid})")
+
+        # Configure mc client
+        subprocess.run(
+            [
+                "mc",
+                "alias",
+                "set",
+                "myserver",
+                f"http://{ip}:{port}",
+                "minio",
+                "minio123",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        logger.info("MC client configured")
+
+        # Create bucket if needed
+        result = subprocess.run(
+            ["mc", "mb", f"myserver/{minio_state['bucket']}"],
+            capture_output=True,
+            text=True,
+        )
+
+        # Ignore error if bucket already exists
+        if result.returncode != 0 and "already" not in result.stderr.lower():
+            logger.warning(f"Bucket creation returned: {result.stderr}")
+
+        # Make bucket public
+        subprocess.run(
+            ["mc", "anonymous", "set", "public", f"myserver/{minio_state['bucket']}"],
+            check=True,
+            capture_output=True,
+        )
+        logger.info(f"Bucket {minio_state['bucket']} is public")
+
+    # Upload zarr file
+    zarr_name = Path(zarr_path).name
+    target = f"myserver/{minio_state['bucket']}/{zarr_name}"
+
+    logger.info(f"Uploading {zarr_name} to MinIO")
+    result = subprocess.run(
+        ["mc", "mirror", "--overwrite", zarr_path, target],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to upload to MinIO: {result.stderr}")
+
+    logger.info(f"Uploaded {zarr_name} to MinIO")
+
+    # Return MinIO URL
+    minio_url = f"http://{minio_state['ip']}:{minio_state['port']}/{minio_state['bucket']}/{zarr_name}"
+    return minio_url
+
 
 @app.route("/api/logs/stream")
 def stream_logs():
     """Stream logs via Server-Sent Events (SSE)"""
+
     def generate():
         # Send existing log buffer first
         for log_line in log_buffer:
             yield f"data: {log_line}\n\n"
-        
+
         # Create a queue for this client
         client_queue = queue.Queue(maxsize=100)
         log_clients.append(client_queue)
-        
+
         try:
             while True:
                 try:
@@ -104,11 +428,12 @@ def stream_logs():
             # Clean up when client disconnects
             if client_queue in log_clients:
                 log_clients.remove(client_queue)
-    
-    return Response(generate(), mimetype="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no"
-    })
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/")
@@ -151,49 +476,53 @@ def pipeline_builder():
     #     for model_config in g.models_config:
     #         model_dict = model_config.to_dict()
     #         available_models[model_config.name] = model_dict
-    
+
     logger.warning(f"\n{'='*80}")
     logger.warning(f"AVAILABLE MODELS DEBUG:")
     logger.warning(f"  Initial available_models keys: {list(available_models.keys())}")
-    logger.warning(f"  g.models_config: {g.models_config if hasattr(g, 'models_config') else 'NOT SET'}")
+    logger.warning(
+        f"  g.models_config: {g.models_config if hasattr(g, 'models_config') else 'NOT SET'}"
+    )
     logger.warning(f"  Sample model with config:")
     for model_name, model_data in list(available_models.items())[:1]:
         logger.warning(f"    {model_name}: {model_data}")
     models_with_config = {}
     for model_name in available_models.keys():
         # Find matching config (strip _server suffix for matching)
-        model_name_stripped = model_name.replace('_server', '')
+        model_name_stripped = model_name.replace("_server", "")
         for model_config in g.models_config:
-            config_name = getattr(model_config, 'name', '').replace('_server', '')
+            config_name = getattr(model_config, "name", "").replace("_server", "")
             if config_name == model_name_stripped:
-                if hasattr(model_config, 'to_dict'):
+                if hasattr(model_config, "to_dict"):
                     models_with_config[model_name] = {
-                        'name': model_name,
-                        'config': model_config.to_dict()
+                        "name": model_name,
+                        "config": model_config.to_dict(),
                     }
                 break
         # If no config found, just use the name
         if model_name not in models_with_config:
-            models_with_config[model_name] = {'name': model_name}
+            models_with_config[model_name] = {"name": model_name}
     available_models = models_with_config
 
     # Check if we have stored pipeline state from previous apply
-    if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
+    if hasattr(g, "pipeline_normalizers") and len(g.pipeline_normalizers) > 0:
         # Use stored pipeline state (includes IDs, positions, params)
         current_normalizers = g.pipeline_normalizers
         current_postprocessors = g.pipeline_postprocessors
         current_models = g.pipeline_models
         # Enrich current_models with config from g.models_config if available
-        if hasattr(g, 'models_config') and g.models_config:
+        if hasattr(g, "models_config") and g.models_config:
             for model_dict in current_models:
-                if 'config' not in model_dict:
+                if "config" not in model_dict:
                     # Strip _server suffix for matching
-                    model_name = model_dict['name'].replace('_server', '')
+                    model_name = model_dict["name"].replace("_server", "")
                     for model_config in g.models_config:
-                        config_name = getattr(model_config, 'name', '').replace('_server', '')
+                        config_name = getattr(model_config, "name", "").replace(
+                            "_server", ""
+                        )
                         if config_name == model_name:
-                            if hasattr(model_config, 'to_dict'):
-                                model_dict['config'] = model_config.to_dict()
+                            if hasattr(model_config, "to_dict"):
+                                model_dict["config"] = model_config.to_dict()
                             break
         current_inputs = g.pipeline_inputs
         current_outputs = g.pipeline_outputs
@@ -202,15 +531,19 @@ def pipeline_builder():
         # Fall back to converting from globals.input_norms and globals.postprocess
         current_normalizers = []
         for idx, norm in enumerate(g.input_norms):
-            norm_dict = norm.to_dict() if hasattr(norm, 'to_dict') else {'name': str(norm)}
-            norm_name = norm_dict.get('name', str(norm))
+            norm_dict = (
+                norm.to_dict() if hasattr(norm, "to_dict") else {"name": str(norm)}
+            )
+            norm_name = norm_dict.get("name", str(norm))
             # Extract params: all dict items except 'name'
-            params = {k: v for k, v in norm_dict.items() if k != 'name'}
-            current_normalizers.append({
-                'id': f'norm-{idx}-{int(time.time()*1000)}',
-                'name': norm_name,
-                'params': params
-            })
+            params = {k: v for k, v in norm_dict.items() if k != "name"}
+            current_normalizers.append(
+                {
+                    "id": f"norm-{idx}-{int(time.time()*1000)}",
+                    "name": norm_name,
+                    "params": params,
+                }
+            )
 
         # Current models (from jobs and models_config)
         current_models = []
@@ -218,94 +551,141 @@ def pipeline_builder():
         logger.warning(f"Building current_models from g.jobs:")
         logger.warning(f"  g.jobs count: {len(g.jobs)}")
         logger.warning(f"  g.models_config exists: {hasattr(g, 'models_config')}")
-        if hasattr(g, 'models_config'):
-            logger.warning(f"  g.models_config count: {len(g.models_config) if g.models_config else 0}")
+        if hasattr(g, "models_config"):
+            logger.warning(
+                f"  g.models_config count: {len(g.models_config) if g.models_config else 0}"
+            )
             logger.warning(f"  g.models_config type: {type(g.models_config)}")
             logger.warning(f"  g.models_config value: {g.models_config}")
             if g.models_config:
-                logger.warning(f"  g.models_config names: {[getattr(mc, 'name', 'NO_NAME') for mc in g.models_config]}")
+                logger.warning(
+                    f"  g.models_config names: {[getattr(mc, 'name', 'NO_NAME') for mc in g.models_config]}"
+                )
                 for mc in g.models_config:
-                    logger.warning(f"    Config object: {mc}, has to_dict: {hasattr(mc, 'to_dict')}")
-        
+                    logger.warning(
+                        f"    Config object: {mc}, has to_dict: {hasattr(mc, 'to_dict')}"
+                    )
+
         # If models_config is empty but we have jobs, try to get configs from model_catalog
-        if (not hasattr(g, 'models_config') or not g.models_config) and hasattr(g, 'model_catalog'):
-            logger.warning(f"  models_config is empty, checking model_catalog for configs...")
+        if (not hasattr(g, "models_config") or not g.models_config) and hasattr(
+            g, "model_catalog"
+        ):
+            logger.warning(
+                f"  models_config is empty, checking model_catalog for configs..."
+            )
             # Check if available_models dict has configs
             if available_models:
-                logger.warning(f"  available_models has {len(available_models)} entries with potential configs")
+                logger.warning(
+                    f"  available_models has {len(available_models)} entries with potential configs"
+                )
 
         for idx, job in enumerate(g.jobs):
-            if hasattr(job, 'model_name'):
+            if hasattr(job, "model_name"):
                 logger.warning(f"\n  Processing job {idx}: model_name={job.model_name}")
-                model_dict = {'id': f'model-{idx}-{int(time.time()*1000)}', 'name': job.model_name, 'params': {}}
+                model_dict = {
+                    "id": f"model-{idx}-{int(time.time()*1000)}",
+                    "name": job.model_name,
+                    "params": {},
+                }
                 # Try to find the corresponding ModelConfig to get full configuration
                 config_found = False
-                
+
                 # First try g.models_config
-                if hasattr(g, 'models_config') and g.models_config:
+                if hasattr(g, "models_config") and g.models_config:
                     # Strip _server suffix for matching
-                    job_model_name = job.model_name.replace('_server', '')
+                    job_model_name = job.model_name.replace("_server", "")
                     for model_config in g.models_config:
-                        model_config_name = getattr(model_config, 'name', None)
-                        config_name_stripped = model_config_name.replace('_server', '') if model_config_name else None
-                        logger.warning(f"    Checking model_config: {model_config_name} (stripped: {config_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if config_name_stripped and config_name_stripped == job_model_name:
+                        model_config_name = getattr(model_config, "name", None)
+                        config_name_stripped = (
+                            model_config_name.replace("_server", "")
+                            if model_config_name
+                            else None
+                        )
+                        logger.warning(
+                            f"    Checking model_config: {model_config_name} (stripped: {config_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})"
+                        )
+                        if (
+                            config_name_stripped
+                            and config_name_stripped == job_model_name
+                        ):
                             # Export the full model config using to_dict()
-                            if hasattr(model_config, 'to_dict'):
-                                model_dict['config'] = model_config.to_dict()
-                                logger.warning(f"    ✓ Config attached from models_config: {model_dict['config']}")
+                            if hasattr(model_config, "to_dict"):
+                                model_dict["config"] = model_config.to_dict()
+                                logger.warning(
+                                    f"    ✓ Config attached from models_config: {model_dict['config']}"
+                                )
                                 config_found = True
                             break
-                
+
                 # Fallback: check available_models dict (which was enriched earlier)
                 if not config_found and available_models:
-                    job_model_name = job.model_name.replace('_server', '')
+                    job_model_name = job.model_name.replace("_server", "")
                     for model_name, model_data in available_models.items():
-                        model_name_stripped = model_name.replace('_server', '')
-                        logger.warning(f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if model_name_stripped == job_model_name and isinstance(model_data, dict) and 'config' in model_data:
-                            model_dict['config'] = model_data['config']
-                            logger.warning(f"    ✓ Config attached from available_models: {model_dict['config']}")
+                        model_name_stripped = model_name.replace("_server", "")
+                        logger.warning(
+                            f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})"
+                        )
+                        if (
+                            model_name_stripped == job_model_name
+                            and isinstance(model_data, dict)
+                            and "config" in model_data
+                        ):
+                            model_dict["config"] = model_data["config"]
+                            logger.warning(
+                                f"    ✓ Config attached from available_models: {model_dict['config']}"
+                            )
                             config_found = True
                             break
-                
+
                 # Second fallback: check previously saved pipeline_model_configs
-                if not config_found and hasattr(g, 'pipeline_model_configs'):
-                    job_model_name = job.model_name.replace('_server', '')
+                if not config_found and hasattr(g, "pipeline_model_configs"):
+                    job_model_name = job.model_name.replace("_server", "")
                     for saved_name, saved_config in g.pipeline_model_configs.items():
-                        saved_name_stripped = saved_name.replace('_server', '')
-                        logger.warning(f"    Checking pipeline_model_configs: {saved_name} (stripped: {saved_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
+                        saved_name_stripped = saved_name.replace("_server", "")
+                        logger.warning(
+                            f"    Checking pipeline_model_configs: {saved_name} (stripped: {saved_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})"
+                        )
                         if saved_name_stripped == job_model_name:
-                            model_dict['config'] = saved_config
-                            logger.warning(f"    ✓ Config attached from pipeline_model_configs: {model_dict['config']}")
+                            model_dict["config"] = saved_config
+                            logger.warning(
+                                f"    ✓ Config attached from pipeline_model_configs: {model_dict['config']}"
+                            )
                             config_found = True
                             break
-                
+
                 if not config_found:
-                    logger.warning(f"    ✗ No matching config found for {job.model_name}")
-                    logger.warning(f"       TIP: Import a YAML with full model configs to populate g.pipeline_model_configs")
+                    logger.warning(
+                        f"    ✗ No matching config found for {job.model_name}"
+                    )
+                    logger.warning(
+                        f"       TIP: Import a YAML with full model configs to populate g.pipeline_model_configs"
+                    )
                 current_models.append(model_dict)
         logger.warning(f"{'='*80}\n")
 
         current_postprocessors = []
         for idx, post in enumerate(g.postprocess):
-            post_dict = post.to_dict() if hasattr(post, 'to_dict') else {'name': str(post)}
-            post_name = post_dict.get('name', str(post))
+            post_dict = (
+                post.to_dict() if hasattr(post, "to_dict") else {"name": str(post)}
+            )
+            post_name = post_dict.get("name", str(post))
             # Extract params: all dict items except 'name'
-            params = {k: v for k, v in post_dict.items() if k != 'name'}
-            current_postprocessors.append({
-                'id': f'post-{idx}-{int(time.time()*1000)}',
-                'name': post_name,
-                'params': params
-            })
+            params = {k: v for k, v in post_dict.items() if k != "name"}
+            current_postprocessors.append(
+                {
+                    "id": f"post-{idx}-{int(time.time()*1000)}",
+                    "name": post_name,
+                    "params": params,
+                }
+            )
 
         current_inputs = []
         current_outputs = []
         current_edges = []
 
     # Get current dataset_path from globals
-    dataset_path = getattr(g, 'dataset_path', None) or ''
-    
+    dataset_path = getattr(g, "dataset_path", None) or ""
+
     # Get available model mergers
     model_mergers = get_model_mergers_list()
 
@@ -447,9 +827,12 @@ def validate_pipeline():
         available_norm_names = [norm["name"] for norm in available_norms]
         for norm_name in normalizer_names:
             if norm_name not in available_norm_names:
-                return jsonify(
-                    {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
-                ), 400
+                return (
+                    jsonify(
+                        {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
+                    ),
+                    400,
+                )
 
         # Validate postprocessors
         processor_names = [p.get("name") for p in data.get("postprocessors", [])]
@@ -458,9 +841,12 @@ def validate_pipeline():
         available_proc_names = [proc["name"] for proc in available_procs]
         for proc_name in processor_names:
             if proc_name not in available_proc_names:
-                return jsonify(
-                    {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
-                ), 400
+                return (
+                    jsonify(
+                        {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
+                    ),
+                    400,
+                )
 
         return jsonify({"valid": True, "message": "Pipeline is valid"})
 
@@ -473,48 +859,57 @@ def validate_pipeline():
 def dataset_path_api():
     """Get or set the dataset path in globals"""
     if request.method == "GET":
-        dataset_path = getattr(g, 'dataset_path', None) or ''
-        return jsonify({'dataset_path': dataset_path})
+        dataset_path = getattr(g, "dataset_path", None) or ""
+        return jsonify({"dataset_path": dataset_path})
     elif request.method == "POST":
         data = request.get_json()
-        dataset_path = data.get('dataset_path', '')
+        dataset_path = data.get("dataset_path", "")
         g.dataset_path = dataset_path
         logger.warning(f"Dataset path updated to: {dataset_path}")
-        return jsonify({'success': True, 'dataset_path': g.dataset_path})
+        return jsonify({"success": True, "dataset_path": g.dataset_path})
 
 
 @app.route("/api/blockwise-config", methods=["GET", "POST"])
 def blockwise_config_api():
     """Get or set blockwise configuration in globals"""
     if request.method == "GET":
-        return jsonify({
-            'queue': g.queue,
-            'charge_group': g.charge_group,
-            'nb_cores_master': g.nb_cores_master,
-            'nb_cores_worker': g.nb_cores_worker,
-            'nb_workers': g.nb_workers,
-            'tmp_dir': g.tmp_dir,
-            'blockwise_tasks_dir': g.blockwise_tasks_dir
-        })
+        return jsonify(
+            {
+                "queue": g.queue,
+                "charge_group": g.charge_group,
+                "nb_cores_master": g.nb_cores_master,
+                "nb_cores_worker": g.nb_cores_worker,
+                "nb_workers": g.nb_workers,
+                "tmp_dir": g.tmp_dir,
+                "blockwise_tasks_dir": g.blockwise_tasks_dir,
+            }
+        )
     elif request.method == "POST":
         data = request.get_json()
-        g.queue = data.get('queue')
-        g.charge_group = data.get('charge_group')
-        g.nb_cores_master = int(data.get('nb_cores_master'))
-        g.nb_cores_worker = int(data.get('nb_cores_worker'))
-        g.nb_workers = int(data.get('nb_workers'))
-        g.tmp_dir = data.get('tmp_dir')
-        g.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
-        logger.warning(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")
-        return jsonify({'success': True, 'config': {
-            'queue': g.queue,
-            'charge_group': g.charge_group,
-            'nb_cores_master': g.nb_cores_master,
-            'nb_cores_worker': g.nb_cores_worker,
-            'nb_workers': g.nb_workers,
-            'tmp_dir': g.tmp_dir,
-            'blockwise_tasks_dir': g.blockwise_tasks_dir
-        }})
+        g.queue = data.get("queue")
+        g.charge_group = data.get("charge_group")
+        g.nb_cores_master = int(data.get("nb_cores_master"))
+        g.nb_cores_worker = int(data.get("nb_cores_worker"))
+        g.nb_workers = int(data.get("nb_workers"))
+        g.tmp_dir = data.get("tmp_dir")
+        g.blockwise_tasks_dir = data.get("blockwise_tasks_dir")
+        logger.warning(
+            f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}"
+        )
+        return jsonify(
+            {
+                "success": True,
+                "config": {
+                    "queue": g.queue,
+                    "charge_group": g.charge_group,
+                    "nb_cores_master": g.nb_cores_master,
+                    "nb_cores_worker": g.nb_cores_worker,
+                    "nb_workers": g.nb_workers,
+                    "tmp_dir": g.tmp_dir,
+                    "blockwise_tasks_dir": g.blockwise_tasks_dir,
+                },
+            }
+        )
 
 
 @app.route("/api/pipeline/apply", methods=["POST"])
@@ -553,13 +948,13 @@ def apply_pipeline():
         g.pipeline_normalizers = data.get("input_normalizers", [])
         g.pipeline_models = data.get("models", [])
         g.pipeline_postprocessors = data.get("postprocessors", [])
-        
+
         # Also save model configs separately for easier access
-        if not hasattr(g, 'pipeline_model_configs'):
+        if not hasattr(g, "pipeline_model_configs"):
             g.pipeline_model_configs = {}
         for model in data.get("models", []):
-            if 'config' in model and model['config']:
-                g.pipeline_model_configs[model['name']] = model['config']
+            if "config" in model and model["config"]:
+                g.pipeline_model_configs[model["name"]] = model["config"]
 
         # Log the updated globals state
         logger.warning(f"\n{'='*80}")
@@ -575,22 +970,38 @@ def apply_pipeline():
 
         logger.warning(f"\ng.jobs ({len(g.jobs)} items):")
         for idx, job in enumerate(g.jobs):
-            logger.warning(f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}")
+            logger.warning(
+                f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}"
+            )
 
-        logger.warning(f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}")
-        logger.warning(f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}")
-        logger.warning(f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}")
-        logger.warning(f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}")
-        logger.warning(f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}")
-        logger.warning(f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}")
+        logger.warning(
+            f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}"
+        )
+        logger.warning(
+            f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}"
+        )
+        logger.warning(
+            f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}"
+        )
+        logger.warning(
+            f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}"
+        )
+        logger.warning(
+            f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}"
+        )
+        logger.warning(
+            f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}"
+        )
 
         logger.warning(f"{'='*80}\n")
 
-        return jsonify({
-            "message": "Pipeline applied successfully",
-            "normalizers_applied": len(g.input_norms),
-            "postprocessors_applied": len(g.postprocess),
-        })
+        return jsonify(
+            {
+                "message": "Pipeline applied successfully",
+                "normalizers_applied": len(g.input_norms),
+                "postprocessors_applied": len(g.postprocess),
+            }
+        )
 
     except Exception as e:
         logger.error(f"Error applying pipeline: {e}")
@@ -628,34 +1039,37 @@ def validate_blockwise():
     try:
         data = request.get_json()
         pipeline = data.get("pipeline", {})
-        
+
         # Check required components
         if not pipeline.get("inputs") or len(pipeline["inputs"]) == 0:
             return {"valid": False, "error": "No input nodes defined"}
-        
+
         if not pipeline.get("outputs") or len(pipeline["outputs"]) == 0:
             return {"valid": False, "error": "No output nodes defined"}
-        
+
         if not pipeline.get("models") or len(pipeline["models"]) == 0:
             return {"valid": False, "error": "No models defined"}
-        
+
         # Check blockwise config
-        if not pipeline.get("blockwise_config") or len(pipeline["blockwise_config"]) == 0:
+        if (
+            not pipeline.get("blockwise_config")
+            or len(pipeline["blockwise_config"]) == 0
+        ):
             return {"valid": False, "error": "No blockwise configuration defined"}
-        
+
         # Check input has dataset_path
         input_node = pipeline["inputs"][0]
         if not input_node.get("params", {}).get("dataset_path"):
             return {"valid": False, "error": "Input node missing dataset_path"}
-        
+
         # Check output has dataset_path
         output_node = pipeline["outputs"][0]
         if not output_node.get("params", {}).get("dataset_path"):
             return {"valid": False, "error": "Output node missing dataset_path"}
-        
+
         logger.info("Pipeline validation passed")
         return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
-        
+
     except Exception as e:
         logger.error(f"Validation error: {str(e)}")
         return {"valid": False, "error": str(e)}
@@ -667,26 +1081,26 @@ def generate_blockwise_task():
     try:
         data = request.get_json()
         pipeline = data.get("pipeline", {})
-        
+
         # First validate
         validation = validate_blockwise()
         if not validation.get("valid"):
             return {"success": False, "error": validation.get("error")}
-        
+
         # Get blockwise config
         blockwise_config = pipeline["blockwise_config"][0]
         input_node = pipeline["inputs"][0]
         output_node = pipeline["outputs"][0]
-        
+
         # Get output path and ensure it ends with .zarr
         output_path = output_node["params"]["dataset_path"]
         if output_path:
             # Remove trailing slashes
-            output_path = output_path.rstrip('/\\')
+            output_path = output_path.rstrip("/\\")
             # Add .zarr if not already present
-            if not output_path.endswith('.zarr'):
-                output_path = output_path + '.zarr'
-        
+            if not output_path.endswith(".zarr"):
+                output_path = output_path + ".zarr"
+
         # Create task YAML content
         task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         task_yaml = {
@@ -698,72 +1112,103 @@ def generate_blockwise_task():
             "workers": blockwise_config["params"]["nb_workers"],
             "cpu_workers": blockwise_config["params"]["nb_cores_worker"],
             "tmp_dir": blockwise_config["params"]["tmp_dir"],
-            "models": []
+            "models": [],
         }
-        
+
         # Add bounding_boxes from INPUT node if they exist
         bounding_boxes = input_node.get("params", {}).get("bounding_boxes", [])
-        if bounding_boxes and isinstance(bounding_boxes, list) and len(bounding_boxes) > 0:
+        if (
+            bounding_boxes
+            and isinstance(bounding_boxes, list)
+            and len(bounding_boxes) > 0
+        ):
             task_yaml["bounding_boxes"] = bounding_boxes
             logger.info(f"Adding bounding_boxes to YAML: {len(bounding_boxes)} box(es)")
-        
+
         # Add separate_bounding_boxes_zarrs flag from INPUT node if set
-        separate_zarrs = input_node.get("params", {}).get("separate_bounding_boxes_zarrs", False)
+        separate_zarrs = input_node.get("params", {}).get(
+            "separate_bounding_boxes_zarrs", False
+        )
         if separate_zarrs:
             task_yaml["separate_bounding_boxes_zarrs"] = True
             logger.info("Adding separate_bounding_boxes_zarrs: True")
-        
+
         # Add model_mode if multiple models are present and a merge mode is selected
         model_count = len(pipeline.get("models", []))
         model_mode = pipeline.get("model_mode", "")
         if model_count > 1 and model_mode:
             task_yaml["model_mode"] = model_mode
             logger.info(f"Adding model_mode: {model_mode} for {model_count} models")
-        
+
         # Add models with full config
         for model in pipeline.get("models", []):
             model_entry = {
                 "name": model.get("name"),
-                **model.get("params", model.get("config", {}))
+                **model.get("params", model.get("config", {})),
             }
             # Parse string representations of lists/tuples back to actual lists for specific fields
             import ast
             import re
-            for field in ["channels", "input_size", "output_size", "input_voxel_size", "output_voxel_size"]:
+
+            for field in [
+                "channels",
+                "input_size",
+                "output_size",
+                "input_voxel_size",
+                "output_voxel_size",
+            ]:
                 if field in model_entry:
                     value = model_entry[field]
                     # If it's already a list, keep it
                     if isinstance(value, (list, tuple)):
                         model_entry[field] = list(value)
-                        logger.info(f"Field {field} is already a list: {model_entry[field]}")
+                        logger.info(
+                            f"Field {field} is already a list: {model_entry[field]}"
+                        )
                     # If it's a string that looks like a list/tuple, parse it
                     elif isinstance(value, str):
-                        value_stripped = value.strip().strip("'\"")  # Remove outer quotes
-                        if (value_stripped.startswith('[') or value_stripped.startswith('(')) and \
-                           (value_stripped.endswith(']') or value_stripped.endswith(')')):
+                        value_stripped = value.strip().strip(
+                            "'\""
+                        )  # Remove outer quotes
+                        if (
+                            value_stripped.startswith("[")
+                            or value_stripped.startswith("(")
+                        ) and (
+                            value_stripped.endswith("]") or value_stripped.endswith(")")
+                        ):
                             try:
                                 # Fix unquoted identifiers: convert [mito] to ['mito']
                                 # Replace word characters not inside quotes with quoted versions
-                                fixed_value = re.sub(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', r"'\1'", value_stripped)
+                                fixed_value = re.sub(
+                                    r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b",
+                                    r"'\1'",
+                                    value_stripped,
+                                )
                                 # Remove duplicate quotes: ''mito'' -> 'mito'
                                 fixed_value = re.sub(r"''+", "'", fixed_value)
-                                logger.info(f"Fixing {field}: {value_stripped!r} -> {fixed_value!r}")
-                                
+                                logger.info(
+                                    f"Fixing {field}: {value_stripped!r} -> {fixed_value!r}"
+                                )
+
                                 parsed = ast.literal_eval(fixed_value)
                                 if isinstance(parsed, (list, tuple)):
                                     model_entry[field] = list(parsed)
-                                    logger.info(f"Parsed {field} from string {value!r} to list {model_entry[field]}")
+                                    logger.info(
+                                        f"Parsed {field} from string {value!r} to list {model_entry[field]}"
+                                    )
                             except Exception as e:
-                                logger.warning(f"Failed to parse {field}: {value}, error: {e}")
-                    
+                                logger.warning(
+                                    f"Failed to parse {field}: {value}, error: {e}"
+                                )
+
             task_yaml["models"].append(model_entry)
-        
+
         # Serialize normalizers and postprocessors to json_data format
         # READ FROM TOP-LEVEL PIPELINE (THEY ARE STORED AT pipeline["normalizers"] and pipeline["postprocessors"])
         # Normalizers and postprocessors are drawn in the pipeline and stored at top level, not in INPUT node
         normalizers_list = pipeline.get("normalizers", [])
         postprocessors_list = pipeline.get("postprocessors", [])
-        
+
         # Create json_data for blockwise processor - maintain order by using list iteration order
         if normalizers_list or postprocessors_list:
             try:
@@ -778,7 +1223,7 @@ def generate_blockwise_task():
                         continue
                     if norm_name:
                         norm_fns[norm_name] = norm_params
-                
+
                 # Build postprocessors dict - preserve insertion order from postprocessors_list
                 post_fns = {}
                 for post in postprocessors_list:
@@ -790,85 +1235,100 @@ def generate_blockwise_task():
                         continue
                     if post_name:
                         post_fns[post_name] = post_params
-                
+
                 # Create json_data as dict (not JSON string) using the correct key constants
                 json_data_dict = {
                     INPUT_NORM_DICT_KEY: norm_fns,
-                    POSTPROCESS_DICT_KEY: post_fns
+                    POSTPROCESS_DICT_KEY: post_fns,
                 }
                 # Store as dict (YAML will handle it properly)
                 task_yaml["json_data"] = json_data_dict
-                logger.info(f"Added json_data as dict with {len(normalizers_list)} normalizers and {len(postprocessors_list)} postprocessors")
+                logger.info(
+                    f"Added json_data as dict with {len(normalizers_list)} normalizers and {len(postprocessors_list)} postprocessors"
+                )
             except Exception as e:
                 logger.warning(f"Failed to create json_data: {e}")
-        
+
         # Add output_channels from OUTPUT node if configured
         output_channels = output_node.get("params", {}).get("output_channels", [])
-        if output_channels and isinstance(output_channels, list) and len(output_channels) > 0:
+        if (
+            output_channels
+            and isinstance(output_channels, list)
+            and len(output_channels) > 0
+        ):
             task_yaml["output_channels"] = output_channels
             logger.info(f"Adding output_channels to YAML: {output_channels}")
-        
+
         # Convert to YAML format with proper list handling
         # sort_keys=False preserves dict insertion order (Python 3.7+)
-        yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
-        
+        yaml_content = yaml.dump(
+            task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False
+        )
+
         # Save to file
         yaml_filename = f"{task_name}.yaml"
         tasks_dir = get_blockwise_tasks_dir()
         yaml_path = os.path.join(tasks_dir, yaml_filename)
-        
+
         # Check if we need to generate multiple YAMLs (one per bbox with separate output paths)
         # Use the output_path (which already has .zarr appended if needed)
         output_base_path = output_path
         yaml_paths = []
-        
+
         if separate_zarrs and bounding_boxes and len(bounding_boxes) > 0:
             # Generate separate YAML for each bounding box
-            logger.info(f"Generating separate YAMLs for {len(bounding_boxes)} bounding box(es)")
+            logger.info(
+                f"Generating separate YAMLs for {len(bounding_boxes)} bounding box(es)"
+            )
             for bbox_idx, bbox in enumerate(bounding_boxes):
                 # Create a copy of task_yaml for this bbox
                 bbox_task_yaml = task_yaml.copy()
-                
+
                 # Keep only this bbox in bounding_boxes
                 bbox_task_yaml["bounding_boxes"] = [bbox]
-                
+
                 # Set output path to box_X subdirectory
                 bbox_output_path = os.path.join(output_base_path, f"box_{bbox_idx + 1}")
                 bbox_task_yaml["output_path"] = bbox_output_path
-                
+
                 # Update task name to include bbox index
                 bbox_task_name = f"{task_name}_box{bbox_idx + 1}"
                 bbox_task_yaml["task_name"] = bbox_task_name
-                
+
                 # Convert to YAML
-                bbox_yaml_content = yaml.dump(bbox_task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
-                
+                bbox_yaml_content = yaml.dump(
+                    bbox_task_yaml,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
+
                 # Save bbox YAML
                 bbox_yaml_filename = f"{bbox_task_name}.yaml"
                 bbox_yaml_path = os.path.join(tasks_dir, bbox_yaml_filename)
-                with open(bbox_yaml_path, 'w') as f:
+                with open(bbox_yaml_path, "w") as f:
                     f.write(bbox_yaml_content)
-                
+
                 yaml_paths.append(bbox_yaml_path)
                 logger.info(f"Generated bbox {bbox_idx + 1} YAML at: {bbox_yaml_path}")
         else:
             # Single YAML for all bboxes
-            with open(yaml_path, 'w') as f:
+            with open(yaml_path, "w") as f:
                 f.write(yaml_content)
             yaml_paths = [yaml_path]
             logger.info(f"Generated blockwise task YAML at: {yaml_path}")
-        
+
         logger.info(f"Task YAML content:\n{yaml_content}")
-        
+
         return {
             "success": True,
             "task_yaml": yaml_content,
             "task_config": task_yaml,
             "task_paths": yaml_paths,  # All paths for multiple YAMLs
             "task_name": task_name,
-            "message": "Blockwise task generated successfully"
+            "message": "Blockwise task generated successfully",
         }
-        
+
     except Exception as e:
         logger.error(f"Task generation error: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -878,26 +1338,28 @@ def generate_blockwise_task():
 def precheck_blockwise_task():
     """Precheck blockwise task configuration using already-generated YAML"""
     try:
-        from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
-        
+        from cellmap_flow.blockwise.blockwise_processor import (
+            CellMapFlowBlockwiseProcessor,
+        )
+
         data = request.get_json()
         yaml_paths = data.get("yaml_paths", [])
-        
+
         if not yaml_paths:
-            return {"success": False, "error": "No YAML paths provided. Please generate task first."}
-        
+            return {
+                "success": False,
+                "error": "No YAML paths provided. Please generate task first.",
+            }
+
         # Try to instantiate the processor to validate configuration with the first YAML
         try:
             _ = CellMapFlowBlockwiseProcessor(yaml_paths[0], create=True)
             logger.info(f"Blockwise precheck passed for: {yaml_paths[0]}")
-            return {
-                "success": True,
-                "message": "success"
-            }
+            return {"success": True, "message": "success"}
         except Exception as e:
             logger.error(f"Blockwise precheck failed: {str(e)}")
             return {"success": False, "error": str(e)}
-        
+
     except Exception as e:
         logger.error(f"Precheck error: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -910,59 +1372,66 @@ def submit_blockwise_task():
         data = request.get_json()
         pipeline = data.get("pipeline", {})
         job_name = data.get("job_name", f"cellmap_flow_{int(time.time())}")
-        
+
         # First validate
         validation = validate_blockwise()
         if not validation.get("valid"):
             return {"success": False, "error": validation.get("error")}
-        
+
         # Generate task YAML
         gen_result = generate_blockwise_task()
         if not gen_result.get("success"):
             return {"success": False, "error": gen_result.get("error")}
-        
+
         yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
         blockwise_config = pipeline["blockwise_config"][0]
-        
+
         # Build bsub command - use multiple_cli to handle multiple YAML files
         cores_master = blockwise_config["params"]["nb_cores_master"]
         charge_group = blockwise_config["params"]["charge_group"]
         queue = blockwise_config["params"]["queue"]
-        
+
         bsub_cmd = [
             "bsub",
-            "-J", job_name,
-            "-n", str(cores_master),
-            "-P", charge_group,
+            "-J",
+            job_name,
+            "-n",
+            str(cores_master),
+            "-P",
+            charge_group,
             # "-q", queue,
-            "python", "-m", "cellmap_flow.blockwise.multiple_cli",
+            "python",
+            "-m",
+            "cellmap_flow.blockwise.multiple_cli",
         ] + yaml_paths  # Add all YAML paths
-        
+
         logger.info(f"Submitting LSF job: {' '.join(bsub_cmd)}")
-        
+
         # Submit job - use same environment as parent process
-        result = subprocess.run(bsub_cmd, capture_output=True, text=True, env=os.environ)
-        
+        result = subprocess.run(
+            bsub_cmd, capture_output=True, text=True, env=os.environ
+        )
+
         if result.returncode == 0:
             output = result.stdout.strip()
             logger.info(f"Job submitted successfully: {output}")
-            
+
             # Extract job ID from bsub output (format: "Job <12345> is submitted")
-            match = re.search(r'<(\d+)>', output)
+            match = re.search(r"<(\d+)>", output)
             job_id = match.group(1) if match else "unknown"
-            
+
             return {
                 "success": True,
                 "job_id": job_id,
                 "task_paths": yaml_paths,
                 "command": " ".join(bsub_cmd),
-                "message": f"Task submitted as job {job_id}"
-                }
+                "message": f"Task submitted as job {job_id}",
+            }
         else:
             error_msg = result.stderr or result.stdout
             logger.error(f"LSF submission failed: {error_msg}")
             return {"success": False, "error": f"LSF error: {error_msg}"}
-        
+
     except Exception as e:
         logger.error(f"Submission error: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -976,7 +1445,7 @@ bbx_generator_state = {
     "viewer": None,
     "viewer_process": None,
     "viewer_url": None,
-    "viewer_state": None
+    "viewer_state": None,
 }
 
 
@@ -986,17 +1455,17 @@ def start_bbx_generator():
     try:
         # Set Neuroglancer server to bind to 0.0.0.0 for external access
         neuroglancer.set_server_bind_address("0.0.0.0")
-        
+
         data = request.json
         dataset_path = data.get("dataset_path", "")
         num_boxes = data.get("num_boxes", 1)
-        
+
         if not dataset_path:
             return jsonify({"error": "Dataset path is required"}), 400
-        
+
         # Create Neuroglancer viewer
         viewer = neuroglancer.Viewer()
-        
+
         with viewer.txn() as s:
             # Set coordinate space
             s.dimensions = neuroglancer.CoordinateSpace(
@@ -1004,10 +1473,10 @@ def start_bbx_generator():
                 units="nm",
                 scales=[8, 8, 8],
             )
-            
+
             # Add image layer
             s.layers["fibsem"] = get_raw_layer(dataset_path)
-            
+
             # Add LOCAL annotation layer for bounding boxes
             s.layers["annotations"] = neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
@@ -1016,40 +1485,44 @@ def start_bbx_generator():
                     scales=[1, 1, 1],
                 ),
             )
-        
+
         # Store state
         bbx_generator_state["dataset_path"] = dataset_path
         bbx_generator_state["num_boxes"] = num_boxes
         bbx_generator_state["bounding_boxes"] = []
         bbx_generator_state["viewer"] = viewer
-        
+
         # Get the viewer URL and fix localhost reference
         viewer_url = str(viewer)
-        
+
         # Replace localhost with the actual request host for external access
         # Parse the URL and replace localhost with the client's host
         if "localhost" in viewer_url:
             # Get the client's host from the request
-            client_host = request.host.split(":")[0]  # Get just the host part without port
+            client_host = request.host.split(":")[
+                0
+            ]  # Get just the host part without port
             viewer_url = viewer_url.replace("localhost", client_host)
             logger.info(f"Replaced localhost with {client_host} in viewer URL")
-        
+
         bbx_generator_state["viewer_url"] = viewer_url
         bbx_generator_state["viewer_state"] = viewer.state
-        
+
         logger.info(f"Starting BBX generator with viewer URL: {viewer_url}")
         logger.info(f"Dataset path: {dataset_path}")
         logger.info(f"Target boxes: {num_boxes}")
-        
+
         # For iframe access, we need to return the raw viewer URL
         # Neuroglancer server should be accessible at the returned URL
-        return jsonify({
-            "success": True,
-            "viewer_url": viewer_url,
-            "dataset_path": dataset_path,
-            "num_boxes": num_boxes
-        })
-    
+        return jsonify(
+            {
+                "success": True,
+                "viewer_url": viewer_url,
+                "dataset_path": dataset_path,
+                "num_boxes": num_boxes,
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error starting BBX generator: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -1067,37 +1540,50 @@ def get_bbx_generator_status():
                 with viewer.txn() as s:
                     try:
                         annotations_layer = s.layers["annotations"]
-                        if hasattr(annotations_layer, 'annotations'):
+                        if hasattr(annotations_layer, "annotations"):
                             for ann in annotations_layer.annotations:
                                 # Check if this is a bounding box annotation
-                                if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
+                                if (
+                                    type(ann).__name__
+                                    == "AxisAlignedBoundingBoxAnnotation"
+                                ):
                                     point_a = ann.point_a
                                     point_b = ann.point_b
-                                    
+
                                     # Ensure point_a is the min and point_b is the max
-                                    offset = [min(point_a[j], point_b[j]) for j in range(3)]
-                                    max_point = [max(point_a[j], point_b[j]) for j in range(3)]
-                                    shape = [int(max_point[j] - offset[j]) for j in range(3)]
+                                    offset = [
+                                        min(point_a[j], point_b[j]) for j in range(3)
+                                    ]
+                                    max_point = [
+                                        max(point_a[j], point_b[j]) for j in range(3)
+                                    ]
+                                    shape = [
+                                        int(max_point[j] - offset[j]) for j in range(3)
+                                    ]
                                     offset = [int(x) for x in offset]
-                                    
-                                    bboxes.append({
-                                        "offset": offset,
-                                        "shape": shape,
-                                    })
+
+                                    bboxes.append(
+                                        {
+                                            "offset": offset,
+                                            "shape": shape,
+                                        }
+                                    )
                     except KeyError:
                         logger.warning("Annotations layer not found in viewer")
             except Exception as e:
                 logger.warning(f"Error extracting bboxes from viewer: {str(e)}")
-        
+
         bbx_generator_state["bounding_boxes"] = bboxes
-        
-        return jsonify({
-            "dataset_path": bbx_generator_state.get("dataset_path"),
-            "num_boxes": bbx_generator_state.get("num_boxes"),
-            "bounding_boxes": bboxes,
-            "count": len(bboxes)
-        })
-    
+
+        return jsonify(
+            {
+                "dataset_path": bbx_generator_state.get("dataset_path"),
+                "num_boxes": bbx_generator_state.get("num_boxes"),
+                "bounding_boxes": bboxes,
+                "count": len(bboxes),
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error getting BBX status: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -1115,44 +1601,378 @@ def finalize_bbx_generation():
                 with viewer.txn() as s:
                     try:
                         annotations_layer = s.layers["annotations"]
-                        if hasattr(annotations_layer, 'annotations'):
+                        if hasattr(annotations_layer, "annotations"):
                             for ann in annotations_layer.annotations:
                                 # Check if this is a bounding box annotation
-                                if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
+                                if (
+                                    type(ann).__name__
+                                    == "AxisAlignedBoundingBoxAnnotation"
+                                ):
                                     point_a = ann.point_a
                                     point_b = ann.point_b
-                                    
+
                                     # Ensure point_a is the min and point_b is the max
-                                    offset = [min(point_a[j], point_b[j]) for j in range(3)]
-                                    max_point = [max(point_a[j], point_b[j]) for j in range(3)]
-                                    shape = [int(max_point[j] - offset[j]) for j in range(3)]
+                                    offset = [
+                                        min(point_a[j], point_b[j]) for j in range(3)
+                                    ]
+                                    max_point = [
+                                        max(point_a[j], point_b[j]) for j in range(3)
+                                    ]
+                                    shape = [
+                                        int(max_point[j] - offset[j]) for j in range(3)
+                                    ]
                                     offset = [int(x) for x in offset]
-                                    
-                                    bboxes.append({
-                                        "offset": offset,
-                                        "shape": shape,
-                                    })
+
+                                    bboxes.append(
+                                        {
+                                            "offset": offset,
+                                            "shape": shape,
+                                        }
+                                    )
                     except KeyError:
                         logger.warning("Annotations layer not found in viewer")
             except Exception as e:
                 logger.warning(f"Error extracting final bboxes: {str(e)}")
-        
+
         # Reset state
         bbx_generator_state["dataset_path"] = None
         bbx_generator_state["num_boxes"] = 0
         bbx_generator_state["bounding_boxes"] = []
         bbx_generator_state["viewer_url"] = None
         bbx_generator_state["viewer"] = None
-        
-        return jsonify({
-            "success": True,
-            "bounding_boxes": bboxes,
-            "count": len(bboxes)
-        })
-    
+
+        return jsonify(
+            {"success": True, "bounding_boxes": bboxes, "count": len(bboxes)}
+        )
+
     except Exception as e:
         logger.error(f"Error finalizing BBX generation: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/finetune/models", methods=["GET"])
+def get_finetune_models():
+    """Get available models for finetuning with their configurations."""
+    try:
+        models = []
+
+        # Extract from g.models_config
+        if hasattr(g, "models_config") and g.models_config:
+            for model_config in g.models_config:
+                try:
+                    config = model_config.config
+                    models.append(
+                        {
+                            "name": model_config.name,
+                            "write_shape": list(config.write_shape),
+                            "output_voxel_size": list(config.output_voxel_size),
+                            "output_channels": config.output_channels,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not extract config for {model_config.name}: {e}"
+                    )
+
+        # Determine selected model
+        selected = models[0]["name"] if len(models) == 1 else None
+
+        return jsonify({"models": models, "selected_model": selected})
+
+    except Exception as e:
+        logger.error(f"Error getting finetune models: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/finetune/view-center", methods=["GET"])
+def get_view_center():
+    """Get current view center position from Neuroglancer viewer."""
+    try:
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+
+        # Access viewer state using transaction
+        with g.viewer.txn() as s:
+            # Get the current view position (center of view)
+            position = s.position
+
+            # Get the viewer dimensions to extract scales
+            dimensions = s.dimensions
+            scales_nm = None
+
+            if dimensions and hasattr(dimensions, "scales"):
+                # CoordinateSpace has scales attribute directly
+                scales_nm = list(dimensions.scales)
+                logger.info(f"Viewer scales (raw): {scales_nm}")
+
+                # Check units and convert if needed
+                if hasattr(dimensions, "units"):
+                    units = dimensions.units
+                    # units can be a string (same for all axes) or list
+                    if isinstance(units, str):
+                        units = [units] * len(scales_nm)
+
+                    # Convert to nm if needed
+                    converted_scales = []
+                    for scale, unit in zip(scales_nm, units):
+                        if unit == "m":
+                            converted_scales.append(scale * 1e9)  # meters to nanometers
+                        elif unit == "nm":
+                            converted_scales.append(scale)
+                        else:
+                            logger.warning(f"Unknown unit: {unit}, assuming nm")
+                            converted_scales.append(scale)
+                    scales_nm = converted_scales
+
+                logger.info(f"Viewer scales (nm): {scales_nm}")
+            else:
+                logger.warning("Could not extract scales from viewer dimensions")
+
+            # Convert to list if it's a numpy array or coordinate object
+            if hasattr(position, "tolist"):
+                position = position.tolist()
+            elif hasattr(position, "__iter__"):
+                position = list(position)
+
+            logger.info(f"Got view center position: {position}")
+
+            return jsonify(
+                {"success": True, "position": position, "scales_nm": scales_nm}
+            )
+
+    except Exception as e:
+        logger.error(f"Error getting view center position: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/create-crop", methods=["POST"])
+def create_annotation_crop():
+    """Create an annotation crop centered at view center position."""
+    try:
+        from cellmap_flow.image_data_interface import ImageDataInterface
+        from funlib.geometry import Roi, Coordinate
+
+        data = request.get_json()
+        model_name = data.get("model_name")
+        view_center = np.array(
+            data.get("view_center")
+        )  # [z, y, x] in viewer coordinates
+        viewer_scales_nm = data.get("viewer_scales_nm")  # Scales from viewer in nm
+        output_path = data.get("output_path")  # User-specified output directory
+
+        if not hasattr(g, "models_config") or not g.models_config:
+            return jsonify({"success": False, "error": "No models loaded"}), 400
+
+        # Find model config
+        model_config = None
+        for mc in g.models_config:
+            if mc.name == model_name:
+                model_config = mc
+                break
+
+        if not model_config:
+            return (
+                jsonify({"success": False, "error": f"Model {model_name} not found"}),
+                404,
+            )
+
+        # Get model parameters
+        config = model_config.config
+        read_shape = np.array(config.read_shape)  # Physical size in nm for raw data
+        write_shape = np.array(config.write_shape)  # Physical size in nm for prediction
+        input_voxel_size = np.array(config.input_voxel_size)  # nm per voxel for input
+        output_voxel_size = np.array(
+            config.output_voxel_size
+        )  # nm per voxel for output
+        output_channels = config.output_channels
+
+        # Convert view center to nm using viewer scales
+        if viewer_scales_nm is not None:
+            viewer_scales_nm = np.array(viewer_scales_nm)
+            view_center_nm = view_center * viewer_scales_nm
+            logger.info(
+                f"Converted view center from {view_center} (viewer coords) to {view_center_nm} nm"
+            )
+            logger.info(f"  Using viewer scales: {viewer_scales_nm} nm")
+        else:
+            # Fallback: assume it's already in nm
+            view_center_nm = view_center
+            logger.warning(
+                "No viewer scales provided, assuming view center is already in nm"
+            )
+
+        # Calculate raw crop size in voxels (use read_shape and input_voxel_size)
+        raw_crop_shape_voxels = (read_shape / input_voxel_size).astype(int)
+
+        # Calculate annotation crop size in voxels (use write_shape and output_voxel_size)
+        annotation_crop_shape_voxels = (write_shape / output_voxel_size).astype(int)
+
+        # Calculate crop offset for raw (center the crop at view center)
+        half_read_shape = read_shape / 2
+        raw_crop_offset_nm = view_center_nm - half_read_shape
+        raw_crop_offset_voxels = (raw_crop_offset_nm / input_voxel_size).astype(int)
+
+        # Calculate crop offset for annotation (center the crop at view center)
+        half_write_shape = write_shape / 2
+        annotation_crop_offset_nm = view_center_nm - half_write_shape
+        annotation_crop_offset_voxels = (
+            annotation_crop_offset_nm / output_voxel_size
+        ).astype(int)
+
+        # Generate unique crop ID
+        crop_id = f"{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+        # Create zarr structure
+        if output_path:
+            # Use user-specified output path
+            corrections_dir = os.path.expanduser(output_path)
+            os.makedirs(corrections_dir, exist_ok=True)
+            zarr_path = os.path.join(corrections_dir, f"{crop_id}.zarr")
+        else:
+            # Fallback to default location
+            corrections_dir = os.path.expanduser("~/.cellmap_flow/corrections")
+            os.makedirs(corrections_dir, exist_ok=True)
+            zarr_path = os.path.join(corrections_dir, f"{crop_id}.zarr")
+
+        # Get dataset path
+        dataset_path = getattr(g, "dataset_path", "unknown")
+
+        # Create ImageDataInterface first to get the data dtype
+        logger.info(f"Creating ImageDataInterface for {dataset_path}")
+        logger.info(f"Using input voxel size: {input_voxel_size} nm")
+        try:
+            idi = ImageDataInterface(dataset_path, voxel_size=input_voxel_size)
+            # Get the dtype from the dataset
+            raw_dtype = idi.dtype
+            logger.info(f"Dataset dtype: {raw_dtype}")
+        except Exception as e:
+            logger.error(f"Error creating ImageDataInterface: {e}")
+            return (
+                jsonify(
+                    {"success": False, "error": f"Failed to access dataset: {str(e)}"}
+                ),
+                500,
+            )
+
+        # Create zarr with OME-NGFF metadata (no mask needed)
+        success, zarr_info = create_correction_zarr(
+            zarr_path=zarr_path,
+            raw_crop_shape=raw_crop_shape_voxels,
+            raw_voxel_size=input_voxel_size,
+            raw_offset=raw_crop_offset_voxels,
+            annotation_crop_shape=annotation_crop_shape_voxels,
+            annotation_voxel_size=output_voxel_size,
+            annotation_offset=annotation_crop_offset_voxels,
+            dataset_path=dataset_path,
+            model_name=model_name,
+            output_channels=output_channels,
+            raw_dtype=raw_dtype,
+            create_mask=False,
+        )
+
+        if not success:
+            return jsonify({"success": False, "error": zarr_info}), 500
+
+        # Read and fill raw data from the dataset
+        logger.info(f"Reading raw data from {dataset_path}")
+        try:
+
+            # Define ROI for the crop in physical coordinates (nm)
+            # Center the crop at view_center_nm
+            roi = Roi(
+                offset=Coordinate(view_center_nm - read_shape / 2),
+                shape=Coordinate(read_shape),
+            )
+            logger.info(f"Reading ROI: offset={roi.offset}, shape={roi.shape}")
+
+            # Read the data using tensorstore interface
+            raw_data = idi.to_ndarray_ts(roi)
+            logger.info(
+                f"Read raw data with shape: {raw_data.shape}, dtype: {raw_data.dtype}"
+            )
+
+            # Write to zarr
+            raw_zarr = zarr.open(zarr_path, mode="r+")
+            raw_zarr["raw/s0"][:] = raw_data
+            logger.info(f"Wrote raw data to {zarr_path}/raw/s0")
+
+        except Exception as e:
+            logger.error(f"Error reading/writing raw data: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            return (
+                jsonify(
+                    {"success": False, "error": f"Failed to read raw data: {str(e)}"}
+                ),
+                500,
+            )
+
+        # Start/ensure MinIO is running and upload
+        minio_url = ensure_minio_serving(zarr_path, crop_id)
+
+        return jsonify(
+            {
+                "success": True,
+                "crop_id": crop_id,
+                "zarr_path": zarr_path,
+                "minio_url": minio_url,
+                "neuroglancer_url": f"{minio_url}/annotation",
+                "metadata": {
+                    "center_position_nm": view_center_nm.tolist(),
+                    "raw_crop_offset": raw_crop_offset_voxels.tolist(),
+                    "raw_crop_shape": raw_crop_shape_voxels.tolist(),
+                    "raw_voxel_size": input_voxel_size.tolist(),
+                    "annotation_crop_offset": annotation_crop_offset_voxels.tolist(),
+                    "annotation_crop_shape": annotation_crop_shape_voxels.tolist(),
+                    "annotation_voxel_size": output_voxel_size.tolist(),
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating annotation crop: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/add-to-viewer", methods=["POST"])
+def add_crop_to_viewer():
+    """Add annotation crop layer to Neuroglancer viewer."""
+    try:
+        data = request.get_json()
+        crop_id = data.get("crop_id")
+        minio_url = data.get("minio_url")
+
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+
+        # Add layer to viewer
+        with g.viewer.txn() as s:
+            layer_name = f"annotation_{crop_id}"
+            s.layers[layer_name] = neuroglancer.ImageLayer(source=f"zarr://{minio_url}")
+
+        logger.info(f"Added layer {layer_name} to viewer")
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "Layer added to viewer",
+                "layer_name": layer_name,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error adding layer to viewer: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):
