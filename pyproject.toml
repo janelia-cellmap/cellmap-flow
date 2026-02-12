@@ -74,6 +74,8 @@ finetune = [
     "peft>=0.7.0",           # HuggingFace Parameter-Efficient Fine-Tuning
     "transformers>=4.35.0",  # Required by peft
     "accelerate>=0.20.0",    # Training utilities
+    "minio-client",          # For annotations
+    "minio-server"           # For annotations
 ]
 
 [build-system]
