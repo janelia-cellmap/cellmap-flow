@@ -36,6 +36,8 @@ import time
 import uuid
 import zarr
 from pathlib import Path
+import threading
+import s3fs
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,10 @@ minio_state = {
     "port": None,  # int
     "ip": None,  # str
     "bucket": "annotations",
+    "minio_root": None,  # Path to MinIO storage directory
+    "output_base": None,  # Base output directory for syncing back
+    "last_sync": {},  # Track last sync time per crop_id
+    "sync_thread": None,  # Background sync thread
 }
 
 
@@ -297,22 +303,30 @@ def create_correction_zarr(
         return False, str(e)
 
 
-def ensure_minio_serving(zarr_path, crop_id):
+def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
 
     Args:
         zarr_path: Path to zarr file to upload
         crop_id: Unique identifier for the crop
+        output_base_dir: Base output directory (MinIO will use output_base_dir/.minio)
 
     Returns:
         MinIO URL for the zarr file
     """
     # Check if MinIO is already running
     if minio_state["process"] is None or minio_state["process"].poll() is not None:
-        # Start MinIO
-        minio_root = Path("~/.minio-server").expanduser()
+        # Determine MinIO storage location
+        if output_base_dir:
+            minio_root = Path(output_base_dir) / ".minio"
+            minio_state["output_base"] = output_base_dir
+        else:
+            minio_root = Path("~/.minio-server").expanduser()
+            minio_state["output_base"] = None
+
         minio_root.mkdir(parents=True, exist_ok=True)
+        minio_state["minio_root"] = str(minio_root)
 
         ip = get_local_ip()
         port = find_available_port()
@@ -382,6 +396,9 @@ def ensure_minio_serving(zarr_path, crop_id):
         )
         logger.info(f"Bucket {minio_state['bucket']} is public")
 
+        # Start periodic sync thread
+        start_periodic_sync()
+
     # Upload zarr file
     zarr_name = Path(zarr_path).name
     target = f"myserver/{minio_state['bucket']}/{zarr_name}"
@@ -401,6 +418,146 @@ def ensure_minio_serving(zarr_path, crop_id):
     # Return MinIO URL
     minio_url = f"http://{minio_state['ip']}:{minio_state['port']}/{minio_state['bucket']}/{zarr_name}"
     return minio_url
+
+
+def sync_annotation_from_minio(crop_id, force=False):
+    """
+    Sync a single annotation crop from MinIO to local filesystem.
+
+    Args:
+        crop_id: Crop ID to sync (e.g., "5d291ea8-20260212-132326")
+        force: Force sync even if not modified
+
+    Returns:
+        bool: True if synced successfully
+    """
+    if not minio_state["ip"] or not minio_state["port"] or not minio_state["output_base"]:
+        logger.warning("MinIO not initialized or no output base set, skipping sync")
+        return False
+
+    try:
+        # Setup S3 filesystem
+        s3 = s3fs.S3FileSystem(
+            anon=False,
+            key='minio',
+            secret='minio123',
+            client_kwargs={
+                'endpoint_url': f"http://{minio_state['ip']}:{minio_state['port']}",
+                'region_name': 'us-east-1'
+            }
+        )
+
+        # Check if annotation has been modified
+        zarr_name = f"{crop_id}.zarr"
+        src_path = f"{minio_state['bucket']}/{zarr_name}/annotation"
+        dst_path = Path(minio_state['output_base']) / zarr_name / "annotation"
+
+        # Check if source exists
+        if not s3.exists(src_path):
+            logger.debug(f"Source annotation not found in MinIO: {src_path}")
+            return False
+
+        # Check modification time
+        try:
+            s3_info = s3.info(f"{src_path}/s0/0.0.0")
+            s3_mtime = s3_info.get('LastModified', None)
+
+            # Check if we've synced this before
+            last_sync = minio_state["last_sync"].get(crop_id, None)
+
+            if not force and last_sync and s3_mtime and s3_mtime <= last_sync:
+                # Not modified since last sync
+                return False
+        except Exception as e:
+            logger.debug(f"Could not check modification time: {e}")
+            # Continue with sync if we can't check mtime
+
+        # Perform sync using zarr
+        logger.info(f"Syncing annotation for {crop_id} from MinIO to local")
+
+        src_store = s3fs.S3Map(root=src_path, s3=s3)
+        src_group = zarr.open_group(store=src_store, mode='r')
+
+        dst_store = zarr.DirectoryStore(str(dst_path))
+        dst_group = zarr.open_group(store=dst_store, mode='a')
+
+        # Copy all arrays
+        for key in src_group.array_keys():
+            src_array = src_group[key]
+            dst_array = dst_group.create_dataset(
+                key,
+                shape=src_array.shape,
+                chunks=src_array.chunks,
+                dtype=src_array.dtype,
+                overwrite=True
+            )
+            dst_array[:] = src_array[:]
+            dst_array.attrs.update(src_array.attrs)
+
+        # Copy group attributes
+        dst_group.attrs.update(src_group.attrs)
+
+        # Update last sync time
+        minio_state["last_sync"][crop_id] = datetime.now()
+
+        logger.info(f"Successfully synced annotation for {crop_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error syncing annotation for {crop_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+def periodic_sync_annotations():
+    """Background thread function to periodically sync annotations from MinIO."""
+    logger.info("Starting periodic annotation sync thread")
+
+    while True:
+        try:
+            time.sleep(30)  # Sync every 30 seconds
+
+            if not minio_state["output_base"]:
+                continue
+
+            # Get list of all crops in MinIO
+            if not minio_state["ip"] or not minio_state["port"]:
+                continue
+
+            try:
+                s3 = s3fs.S3FileSystem(
+                    anon=False,
+                    key='minio',
+                    secret='minio123',
+                    client_kwargs={
+                        'endpoint_url': f"http://{minio_state['ip']}:{minio_state['port']}",
+                        'region_name': 'us-east-1'
+                    }
+                )
+
+                # List all crops in bucket
+                crops = s3.ls(minio_state['bucket'])
+                crop_ids = [Path(c).name.replace('.zarr', '') for c in crops if c.endswith('.zarr')]
+
+                # Sync each crop
+                for crop_id in crop_ids:
+                    sync_annotation_from_minio(crop_id, force=False)
+
+            except Exception as e:
+                logger.debug(f"Error in periodic sync: {e}")
+
+        except Exception as e:
+            logger.error(f"Unexpected error in sync thread: {e}")
+
+
+def start_periodic_sync():
+    """Start the periodic annotation sync thread if not already running."""
+    if minio_state["sync_thread"] is None or not minio_state["sync_thread"].is_alive():
+        thread = threading.Thread(target=periodic_sync_annotations, daemon=True)
+        thread.start()
+        minio_state["sync_thread"] = thread
+        logger.info("Started periodic annotation sync thread")
 
 
 @app.route("/api/logs/stream")
@@ -1674,6 +1831,34 @@ def get_finetune_models():
                         f"Could not extract config for {model_config.name}: {e}"
                     )
 
+        # If no models found in g.models_config, try to get from running jobs
+        # This handles the case where models were submitted via GUI after app started
+        if len(models) == 0 and hasattr(g, "jobs") and g.jobs:
+            logger.warning("No models in g.models_config, checking running jobs")
+            # Try to get model configs from jobs
+            for job in g.jobs:
+                if hasattr(job, "model_name"):
+                    job_model_name = job.model_name
+                    # Look for config in pipeline_model_configs (if available)
+                    if hasattr(g, "pipeline_model_configs") and job_model_name in g.pipeline_model_configs:
+                        config_dict = g.pipeline_model_configs[job_model_name]
+                        try:
+                            models.append(
+                                {
+                                    "name": job_model_name,
+                                    "write_shape": config_dict.get("write_shape", []),
+                                    "output_voxel_size": config_dict.get("output_voxel_size", []),
+                                    "output_channels": config_dict.get("output_channels", 1),
+                                }
+                            )
+                            logger.info(f"Found config for {job_model_name} in pipeline_model_configs")
+                        except Exception as e:
+                            logger.warning(f"Could not extract config for {job_model_name}: {e}")
+                    else:
+                        logger.warning(f"No configuration found for running job: {job_model_name}")
+                        logger.warning(f"  → Model needs write_shape, output_voxel_size, and output_channels for finetuning")
+                        logger.warning(f"  → Consider restarting with a proper YAML configuration file")
+
         # Determine selected model
         selected = models[0]["name"] if len(models) == 1 else None
 
@@ -1757,14 +1942,60 @@ def create_annotation_crop():
 
         data = request.get_json()
         model_name = data.get("model_name")
-        view_center = np.array(
-            data.get("view_center")
-        )  # [z, y, x] in viewer coordinates
-        viewer_scales_nm = data.get("viewer_scales_nm")  # Scales from viewer in nm
         output_path = data.get("output_path")  # User-specified output directory
 
         if not hasattr(g, "models_config") or not g.models_config:
             return jsonify({"success": False, "error": "No models loaded"}), 400
+
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+
+        # Get view center and scales automatically from viewer
+        with g.viewer.txn() as s:
+            # Get the current view position (center of view)
+            position = s.position
+
+            # Get the viewer dimensions to extract scales
+            dimensions = s.dimensions
+            viewer_scales_nm = None
+
+            if dimensions and hasattr(dimensions, "scales"):
+                # CoordinateSpace has scales attribute directly
+                scales_nm = list(dimensions.scales)
+
+                # Check units and convert if needed
+                if hasattr(dimensions, "units"):
+                    units = dimensions.units
+                    # units can be a string (same for all axes) or list
+                    if isinstance(units, str):
+                        units = [units] * len(scales_nm)
+
+                    # Convert to nm if needed
+                    converted_scales = []
+                    for scale, unit in zip(scales_nm, units):
+                        if unit == "m":
+                            converted_scales.append(scale * 1e9)  # meters to nanometers
+                        elif unit == "nm":
+                            converted_scales.append(scale)
+                        else:
+                            logger.warning(f"Unknown unit: {unit}, assuming nm")
+                            converted_scales.append(scale)
+                    viewer_scales_nm = converted_scales
+                else:
+                    viewer_scales_nm = scales_nm
+
+            # Convert to list if it's a numpy array or coordinate object
+            if hasattr(position, "tolist"):
+                view_center = position.tolist()
+            elif hasattr(position, "__iter__"):
+                view_center = list(position)
+            else:
+                view_center = position
+
+            view_center = np.array(view_center)
+
+        logger.info(f"Auto-detected view center: {view_center}")
+        logger.info(f"Auto-detected viewer scales: {viewer_scales_nm} nm")
 
         # Find model config
         model_config = None
@@ -1845,8 +2076,8 @@ def create_annotation_crop():
         logger.info(f"Using input voxel size: {input_voxel_size} nm")
         try:
             idi = ImageDataInterface(dataset_path, voxel_size=input_voxel_size)
-            # Get the dtype from the dataset
-            raw_dtype = idi.dtype
+            # Get the dtype from the tensorstore
+            raw_dtype = str(idi.ts.dtype)
             logger.info(f"Dataset dtype: {raw_dtype}")
         except Exception as e:
             logger.error(f"Error creating ImageDataInterface: {e}")
@@ -1912,7 +2143,7 @@ def create_annotation_crop():
             )
 
         # Start/ensure MinIO is running and upload
-        minio_url = ensure_minio_serving(zarr_path, crop_id)
+        minio_url = ensure_minio_serving(zarr_path, crop_id, output_base_dir=corrections_dir)
 
         return jsonify(
             {
@@ -1955,7 +2186,13 @@ def add_crop_to_viewer():
         # Add layer to viewer
         with g.viewer.txn() as s:
             layer_name = f"annotation_{crop_id}"
-            s.layers[layer_name] = neuroglancer.ImageLayer(source=f"zarr://{minio_url}")
+            # Configure source with writing enabled
+            source_config = {
+                "url": f"s3+{minio_url}",
+                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
+            }
+            layer = neuroglancer.SegmentationLayer(source=source_config)
+            s.layers[layer_name] = layer
 
         logger.info(f"Added layer {layer_name} to viewer")
 
@@ -1971,6 +2208,69 @@ def add_crop_to_viewer():
         logger.error(f"Error adding layer to viewer: {e}")
         import traceback
 
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/sync-annotations", methods=["POST"])
+def sync_annotations_manually():
+    """Manually trigger sync of annotations from MinIO to local disk."""
+    try:
+        data = request.get_json()
+        crop_id = data.get("crop_id", None)  # If None, sync all
+        force = data.get("force", True)  # Force sync by default for manual trigger
+
+        if crop_id:
+            # Sync single crop
+            success = sync_annotation_from_minio(crop_id, force=force)
+            if success:
+                return jsonify({
+                    "success": True,
+                    "message": f"Synced annotation for {crop_id}"
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "message": f"No updates to sync for {crop_id}"
+                })
+        else:
+            # Sync all crops
+            if not minio_state["ip"] or not minio_state["port"]:
+                return jsonify({"success": False, "error": "MinIO not initialized"}), 400
+
+            try:
+                s3 = s3fs.S3FileSystem(
+                    anon=False,
+                    key='minio',
+                    secret='minio123',
+                    client_kwargs={
+                        'endpoint_url': f"http://{minio_state['ip']}:{minio_state['port']}",
+                        'region_name': 'us-east-1'
+                    }
+                )
+
+                crops = s3.ls(minio_state['bucket'])
+                crop_ids = [Path(c).name.replace('.zarr', '') for c in crops if c.endswith('.zarr')]
+
+                synced_count = 0
+                for cid in crop_ids:
+                    if sync_annotation_from_minio(cid, force=force):
+                        synced_count += 1
+
+                return jsonify({
+                    "success": True,
+                    "message": f"Synced {synced_count} annotations",
+                    "synced_count": synced_count,
+                    "total_crops": len(crop_ids)
+                })
+
+            except Exception as e:
+                logger.error(f"Error syncing all annotations: {e}")
+                return jsonify({"success": False, "error": str(e)}), 500
+
+    except Exception as e:
+        logger.error(f"Error in sync endpoint: {e}")
+        import traceback
         logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
 

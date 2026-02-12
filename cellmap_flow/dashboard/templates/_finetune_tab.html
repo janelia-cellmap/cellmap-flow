@@ -1,14 +1,20 @@
 <div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
   <strong>Finetune:</strong> Create annotation crops at cursor position for model finetuning.
+  <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
 </div>
 
 <form id="finetuneForm">
   <!-- Model Selection (conditionally shown) -->
   <div id="modelSelectionDiv" class="mb-3">
     <label for="modelSelect" class="form-label">Select Model</label>
-    <select class="form-select" id="modelSelect">
-      <!-- Populated by JavaScript -->
-    </select>
+    <div class="d-flex gap-2">
+      <select class="form-select" id="modelSelect">
+        <!-- Populated by JavaScript -->
+      </select>
+      <button type="button" class="btn btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list">
+        &#x21bb;
+      </button>
+    </div>
     <small class="form-text text-muted">
       Crop will be sized to model's output inference size
     </small>
@@ -24,22 +30,17 @@
   <div class="mb-3">
     <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
     <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
-    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO)</small>
-  </div>
-
-  <!-- View Center Position Display -->
-  <div class="mb-3">
-    <label class="form-label">Current View Center Position</label>
-    <div class="input-group">
-      <input type="text" class="form-control" id="viewCenter" readonly value="Click 'Get Position' to update">
-      <button class="btn btn-secondary" type="button" id="getViewCenterBtn">Get Position</button>
-    </div>
-    <small class="form-text text-muted">Center of current view in nanometers [z, y, x]</small>
+    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
   </div>
 
   <!-- Create Crop Button -->
   <button type="button" class="btn btn-primary" id="createCropBtn">
     Create Annotation Crop
+  </button>
+
+  <!-- Save Annotations Button -->
+  <button type="button" class="btn btn-success ms-2" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+    💾 Save Annotations to Disk
   </button>
 
   <!-- MinIO Status -->
@@ -67,20 +68,36 @@ document.addEventListener("DOMContentLoaded", function () {
   const modelSelectionDiv = document.getElementById("modelSelectionDiv");
   const modelInfo = document.getElementById("modelInfo");
   const modelInfoContent = document.getElementById("modelInfoContent");
-  const viewCenter = document.getElementById("viewCenter");
-  const getViewCenterBtn = document.getElementById("getViewCenterBtn");
   const createCropBtn = document.getElementById("createCropBtn");
   const finetuneLog = document.getElementById("finetuneLog");
   const minioStatus = document.getElementById("minioStatus");
   const minioStatusContent = document.getElementById("minioStatusContent");
+  const outputPathInput = document.getElementById("outputPath");
+  const saveAnnotationsBtn = document.getElementById("saveAnnotationsBtn");
 
   let models = [];
   let selectedModel = null;
-  let currentViewCenter = null;
-  let currentScalesNm = null;
+
+  // Load saved output path from localStorage
+  const savedOutputPath = localStorage.getItem("finetuneOutputPath");
+  if (savedOutputPath) {
+    outputPathInput.value = savedOutputPath;
+  }
 
   // Load models on page load
   loadModels();
+
+  // Refresh button handler
+  const refreshModelsBtn = document.getElementById("refreshModelsBtn");
+  if (refreshModelsBtn) {
+    refreshModelsBtn.addEventListener("click", function() {
+      finetuneLog.value += "Refreshing model list...\n";
+      models = [];
+      selectedModel = null;
+      modelSelect.innerHTML = "";
+      loadModels();
+    });
+  }
 
   function loadModels() {
     fetch("/api/finetune/models")
@@ -96,6 +113,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (models.length === 0) {
           finetuneLog.value += "Error: No models available for finetuning\n";
+          finetuneLog.value += "  → Submit a model from the main tab first, then click the refresh button (↻) above\n";
           createCropBtn.disabled = true;
           return;
         }
@@ -131,11 +149,14 @@ document.addEventListener("DOMContentLoaded", function () {
           displayModelInfo(selectedModel);
         }
 
+        // Enable create button if we have models
+        createCropBtn.disabled = false;
         finetuneLog.value += `Loaded ${models.length} model(s)\n`;
       })
       .catch(err => {
         finetuneLog.value += `Error loading models: ${err}\n`;
         console.error(err);
+        createCropBtn.disabled = true;
       });
   }
 
@@ -158,41 +179,10 @@ document.addEventListener("DOMContentLoaded", function () {
     modelInfo.style.display = "block";
   }
 
-  // Get view center position
-  getViewCenterBtn.addEventListener("click", function() {
-    fetch("/api/finetune/view-center")
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          currentViewCenter = data.position;
-          currentScalesNm = data.scales_nm;
-          viewCenter.value = `[${data.position.join(', ')}]`;
-          finetuneLog.value += `View center position: [${data.position.join(', ')}] (viewer coords)\n`;
-          if (data.scales_nm) {
-            finetuneLog.value += `Viewer scales: [${data.scales_nm.join(', ')}] nm\n`;
-            // Calculate position in nm
-            const posNm = data.position.map((p, i) => p * data.scales_nm[i]);
-            finetuneLog.value += `Position in nm: [${posNm.map(p => p.toFixed(1)).join(', ')}]\n`;
-          }
-        } else {
-          finetuneLog.value += `Error getting view center position: ${data.error}\n`;
-        }
-      })
-      .catch(err => {
-        finetuneLog.value += `Error: ${err}\n`;
-        console.error(err);
-      });
-  });
-
   // Create annotation crop
   createCropBtn.addEventListener("click", function() {
     if (!selectedModel) {
       alert("No model selected");
-      return;
-    }
-
-    if (!currentViewCenter) {
-      alert("Please get view center position first (click 'Get Position')");
       return;
     }
 
@@ -203,13 +193,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     createCropBtn.disabled = true;
-    finetuneLog.value += `Creating annotation crop at [${currentViewCenter.join(', ')}]...\n`;
+    finetuneLog.value += `Creating annotation crop at current view center...\n`;
     finetuneLog.value += `Output path: ${outputPath}\n`;
 
     const payload = {
       model_name: selectedModel.name,
-      view_center: currentViewCenter,
-      viewer_scales_nm: currentScalesNm,
       output_path: outputPath
     };
 
@@ -221,7 +209,11 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
+          // Save output path to localStorage for next time
+          localStorage.setItem("finetuneOutputPath", outputPath);
+
           finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
+          finetuneLog.value += `  Center (nm): [${data.metadata.center_position_nm.map(v => v.toFixed(1)).join(', ')}]\n`;
           finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
           finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
           finetuneLog.value += `  Raw crop - Offset (voxels): [${data.metadata.raw_crop_offset.join(', ')}]\n`;
@@ -276,5 +268,38 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error(err);
       });
   }
+
+  // Save annotations to disk
+  saveAnnotationsBtn.addEventListener("click", function() {
+    saveAnnotationsBtn.disabled = true;
+    const originalText = saveAnnotationsBtn.textContent;
+    saveAnnotationsBtn.textContent = "💾 Syncing...";
+    finetuneLog.value += `Syncing all annotations from MinIO to local disk...\n`;
+
+    fetch("/api/finetune/sync-annotations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force: true })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ ${data.message}\n`;
+          if (data.synced_count !== undefined) {
+            finetuneLog.value += `  Synced ${data.synced_count} / ${data.total_crops} crops\n`;
+          }
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error || data.message}\n`;
+        }
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      });
+  });
 });
 </script>

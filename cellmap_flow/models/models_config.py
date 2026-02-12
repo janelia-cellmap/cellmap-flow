@@ -557,7 +557,7 @@ class CellMapModelConfig(ModelConfig):
 
     @property
     def command(self) -> str:
-        return f"cellmap-model --folder-path {self.cellmap_model.folder_path} --name {self.name}"
+        return f"cellmap --folder-path {self.cellmap_model.folder_path} --name {self.name}"
 
     def _get_config(self) -> Config:
         config = Config()

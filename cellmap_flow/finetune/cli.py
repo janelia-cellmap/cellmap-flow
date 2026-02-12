@@ -187,6 +187,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Debug: Print all arguments
+    print(f"\n{'='*60}")
+    print(f"DEBUG: All parsed arguments:")
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
+    print(f"{'='*60}\n")
+    logger.info(f"DEBUG: All parsed arguments: {vars(args)}")
+
     # Print configuration
     logger.info("="*60)
     logger.info("LoRA Finetuning Configuration")
@@ -228,11 +236,10 @@ def main():
     logger.info(f"✓ Model loaded: {type(base_model).__name__}")
 
     # Determine which channel to select (if model outputs multiple channels)
-    # For mito, we select channel 2 from the 8-channel fly_organelles output
+    # For fly models configured with specific channels, they already output only that channel
+    # So we don't need to select a channel during training
     select_channel = None
-    if args.channels == ["mito"]:
-        select_channel = 2
-        logger.info("Will select mito channel (index 2) from model output during training")
+    logger.info(f"Model outputs {model_config.config.output_channels} channel(s), no channel selection needed during training")
 
     # Wrap with LoRA
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
@@ -245,6 +252,7 @@ def main():
 
     # Create dataloader
     logger.info(f"Loading corrections from {args.corrections}...")
+    logger.info(f"DEBUG: args.corrections value: '{args.corrections}' (type: {type(args.corrections)})")
     dataloader = create_dataloader(
         args.corrections,
         batch_size=args.batch_size,
@@ -253,6 +261,7 @@ def main():
         num_workers=args.num_workers,
         shuffle=True,
         model_name=args.model_name,
+        normalize=False,  # Dashboard corrections are already normalized
     )
     logger.info(f"✓ DataLoader created: {len(dataloader.dataset)} corrections")
 
@@ -268,6 +277,7 @@ def main():
         use_mixed_precision=not args.no_mixed_precision,
         loss_type=args.loss_type,
         select_channel=select_channel,
+        mask_unannotated=False,  # Dense annotations, not sparse
     )
 
     # Resume from checkpoint if specified

@@ -50,6 +50,11 @@ class CorrectionDataset(Dataset):
         normalize: bool = True,
         model_name: Optional[str] = None,
     ):
+        print(f"\n{'='*60}")
+        print(f"DEBUG CorrectionDataset.__init__:")
+        print(f"  corrections_zarr_path (input): '{corrections_zarr_path}'")
+        print(f"  type: {type(corrections_zarr_path)}")
+        print(f"{'='*60}\n")
         self.corrections_path = Path(corrections_zarr_path)
         self.patch_shape = patch_shape
         self.augment = augment
@@ -73,20 +78,42 @@ class CorrectionDataset(Dataset):
         """Load correction metadata from Zarr."""
         corrections = []
 
+        print(f"\n{'='*60}")
+        print(f"DEBUG _load_corrections:")
+        print(f"  self.corrections_path: '{self.corrections_path}'")
+        print(f"  str(self.corrections_path): '{str(self.corrections_path)}'")
+        print(f"  type: {type(self.corrections_path)}")
+        print(f"  exists(): {self.corrections_path.exists()}")
+        print(f"{'='*60}\n")
+
+        logger.info(f"Loading corrections from: {self.corrections_path}")
+
         if not self.corrections_path.exists():
+            logger.error(f"Corrections path does not exist: {self.corrections_path}")
             return corrections
 
-        z = zarr.open(str(self.corrections_path), mode='r')
+        path_str = str(self.corrections_path)
+        print(f"DEBUG: About to call zarr.open_group with path_str='{path_str}'")
+        z = zarr.open_group(path_str, mode='r')
+        print(f"DEBUG: zarr.open_group succeeded!")
 
         for correction_id in z.keys():
             corr_group = z[correction_id]
 
             # Check if correction has required data
-            if not all(key in corr_group for key in ['raw', 'mask']):
+            # Support both 'mask' (from test scripts) and 'annotation' (from dashboard)
+            has_raw = 'raw' in corr_group
+            has_mask = 'mask' in corr_group
+            has_annotation = 'annotation' in corr_group
+
+            if not has_raw or not (has_mask or has_annotation):
                 logger.warning(
-                    f"Skipping {correction_id}: missing raw or mask"
+                    f"Skipping {correction_id}: missing raw or mask/annotation"
                 )
                 continue
+
+            # Use 'mask' if available, otherwise use 'annotation'
+            mask_key = 'mask' if has_mask else 'annotation'
 
             # Get metadata
             attrs = dict(corr_group.attrs)
@@ -98,7 +125,7 @@ class CorrectionDataset(Dataset):
             corrections.append({
                 'id': correction_id,
                 'raw_path': str(self.corrections_path / correction_id / 'raw' / 's0'),
-                'mask_path': str(self.corrections_path / correction_id / 'mask' / 's0'),
+                'mask_path': str(self.corrections_path / correction_id / mask_key / 's0'),
                 'metadata': attrs,
             })
 
@@ -135,10 +162,14 @@ class CorrectionDataset(Dataset):
             mask = mask / 255.0
 
         # Normalize raw if requested
-        # Use [-1, 1] normalization to match the base model's training
+        # Note: Dashboard corrections are already normalized, so we skip normalization
+        # Only normalize if raw values are in uint8 range [0, 255]
         if self.normalize:
             if raw.max() > 1.0:
                 raw = (raw.astype(np.float32) / 127.5) - 1.0
+            else:
+                # Already normalized, skip
+                pass
 
         # For models with different input/output sizes, we keep raw at full size
         # Patching is disabled for this case - use full corrections
@@ -275,6 +306,7 @@ def create_dataloader(
     num_workers: int = 4,
     shuffle: bool = True,
     model_name: Optional[str] = None,
+    normalize: bool = True,
 ) -> torch.utils.data.DataLoader:
     """
     Create a DataLoader for corrections.
@@ -306,7 +338,7 @@ def create_dataloader(
         corrections_zarr_path,
         patch_shape=patch_shape,
         augment=augment,
-        normalize=True,
+        normalize=normalize,
         model_name=model_name,
     )
 
