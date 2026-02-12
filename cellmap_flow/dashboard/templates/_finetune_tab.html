@@ -1,0 +1,280 @@
+<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
+  <strong>Finetune:</strong> Create annotation crops at cursor position for model finetuning.
+</div>
+
+<form id="finetuneForm">
+  <!-- Model Selection (conditionally shown) -->
+  <div id="modelSelectionDiv" class="mb-3">
+    <label for="modelSelect" class="form-label">Select Model</label>
+    <select class="form-select" id="modelSelect">
+      <!-- Populated by JavaScript -->
+    </select>
+    <small class="form-text text-muted">
+      Crop will be sized to model's output inference size
+    </small>
+  </div>
+
+  <!-- Model Info Display -->
+  <div id="modelInfo" class="mb-3 p-2 border rounded" style="display: none;">
+    <h6>Model Configuration</h6>
+    <div id="modelInfoContent"></div>
+  </div>
+
+  <!-- Output Path for Zarr Files -->
+  <div class="mb-3">
+    <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
+    <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
+    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO)</small>
+  </div>
+
+  <!-- View Center Position Display -->
+  <div class="mb-3">
+    <label class="form-label">Current View Center Position</label>
+    <div class="input-group">
+      <input type="text" class="form-control" id="viewCenter" readonly value="Click 'Get Position' to update">
+      <button class="btn btn-secondary" type="button" id="getViewCenterBtn">Get Position</button>
+    </div>
+    <small class="form-text text-muted">Center of current view in nanometers [z, y, x]</small>
+  </div>
+
+  <!-- Create Crop Button -->
+  <button type="button" class="btn btn-primary" id="createCropBtn">
+    Create Annotation Crop
+  </button>
+
+  <!-- MinIO Status -->
+  <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
+    <h6>MinIO Status</h6>
+    <div id="minioStatusContent"></div>
+  </div>
+
+  <!-- Log Output -->
+  <div class="mt-3">
+    <label class="form-label">Log</label>
+    <textarea
+      id="finetuneLog"
+      class="form-control"
+      rows="8"
+      readonly
+      style="color: gray; font-size: 0.9rem; background-color: transparent; border: 1px solid gray;"
+    ></textarea>
+  </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modelSelect = document.getElementById("modelSelect");
+  const modelSelectionDiv = document.getElementById("modelSelectionDiv");
+  const modelInfo = document.getElementById("modelInfo");
+  const modelInfoContent = document.getElementById("modelInfoContent");
+  const viewCenter = document.getElementById("viewCenter");
+  const getViewCenterBtn = document.getElementById("getViewCenterBtn");
+  const createCropBtn = document.getElementById("createCropBtn");
+  const finetuneLog = document.getElementById("finetuneLog");
+  const minioStatus = document.getElementById("minioStatus");
+  const minioStatusContent = document.getElementById("minioStatusContent");
+
+  let models = [];
+  let selectedModel = null;
+  let currentViewCenter = null;
+  let currentScalesNm = null;
+
+  // Load models on page load
+  loadModels();
+
+  function loadModels() {
+    fetch("/api/finetune/models")
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          finetuneLog.value += `Error: ${data.error}\n`;
+          createCropBtn.disabled = true;
+          return;
+        }
+
+        models = data.models;
+
+        if (models.length === 0) {
+          finetuneLog.value += "Error: No models available for finetuning\n";
+          createCropBtn.disabled = true;
+          return;
+        }
+
+        // If only one model, hide dropdown and auto-select
+        if (models.length === 1) {
+          modelSelectionDiv.style.display = "none";
+          selectedModel = models[0];
+          displayModelInfo(selectedModel);
+        } else {
+          // Populate dropdown
+          models.forEach(model => {
+            const option = document.createElement("option");
+            option.value = model.name;
+            option.textContent = model.name;
+            modelSelect.appendChild(option);
+          });
+
+          // Set initial selection
+          if (data.selected_model) {
+            modelSelect.value = data.selected_model;
+          }
+
+          // Update on selection change
+          modelSelect.addEventListener("change", function() {
+            const modelName = this.value;
+            selectedModel = models.find(m => m.name === modelName);
+            displayModelInfo(selectedModel);
+          });
+
+          // Display initial model
+          selectedModel = models.find(m => m.name === modelSelect.value);
+          displayModelInfo(selectedModel);
+        }
+
+        finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+      })
+      .catch(err => {
+        finetuneLog.value += `Error loading models: ${err}\n`;
+        console.error(err);
+      });
+  }
+
+  function displayModelInfo(model) {
+    if (!model) return;
+
+    const voxelShape = model.write_shape.map((s, i) =>
+      Math.round(s / model.output_voxel_size[i])
+    );
+
+    modelInfoContent.innerHTML = `
+      <small>
+        <strong>Name:</strong> ${model.name}<br>
+        <strong>Output Size (nm):</strong> [${model.write_shape.join(', ')}]<br>
+        <strong>Voxel Size (nm):</strong> [${model.output_voxel_size.join(', ')}]<br>
+        <strong>Crop Shape (voxels):</strong> [${voxelShape.join(', ')}]<br>
+        <strong>Channels:</strong> ${model.output_channels}
+      </small>
+    `;
+    modelInfo.style.display = "block";
+  }
+
+  // Get view center position
+  getViewCenterBtn.addEventListener("click", function() {
+    fetch("/api/finetune/view-center")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          currentViewCenter = data.position;
+          currentScalesNm = data.scales_nm;
+          viewCenter.value = `[${data.position.join(', ')}]`;
+          finetuneLog.value += `View center position: [${data.position.join(', ')}] (viewer coords)\n`;
+          if (data.scales_nm) {
+            finetuneLog.value += `Viewer scales: [${data.scales_nm.join(', ')}] nm\n`;
+            // Calculate position in nm
+            const posNm = data.position.map((p, i) => p * data.scales_nm[i]);
+            finetuneLog.value += `Position in nm: [${posNm.map(p => p.toFixed(1)).join(', ')}]\n`;
+          }
+        } else {
+          finetuneLog.value += `Error getting view center position: ${data.error}\n`;
+        }
+      })
+      .catch(err => {
+        finetuneLog.value += `Error: ${err}\n`;
+        console.error(err);
+      });
+  });
+
+  // Create annotation crop
+  createCropBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    if (!currentViewCenter) {
+      alert("Please get view center position first (click 'Get Position')");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createCropBtn.disabled = true;
+    finetuneLog.value += `Creating annotation crop at [${currentViewCenter.join(', ')}]...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      view_center: currentViewCenter,
+      viewer_scales_nm: currentScalesNm,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-crop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Raw crop - Offset (voxels): [${data.metadata.raw_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Raw crop - Shape (voxels): [${data.metadata.raw_crop_shape.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Offset (voxels): [${data.metadata.annotation_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Shape (voxels): [${data.metadata.annotation_crop_shape.join(', ')}]\n`;
+
+          // Update MinIO status
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          // Add to viewer
+          addToViewer(data.crop_id, data.neuroglancer_url);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createCropBtn.disabled = false;
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createCropBtn.disabled = false;
+      });
+  });
+
+  function addToViewer(cropId, neuroglancerUrl) {
+    finetuneLog.value += `Adding layer to viewer...\n`;
+
+    fetch("/api/finetune/add-to-viewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        crop_id: cropId,
+        minio_url: neuroglancerUrl
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ Layer added: ${data.layer_name}\n`;
+        } else {
+          finetuneLog.value += `✗ Error adding layer: ${data.error}\n`;
+        }
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+      });
+  }
+});
+</script>
