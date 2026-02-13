@@ -135,6 +135,14 @@ Module Contents
       :type:  List[Any]
 
 
+   .. py:attribute:: shaders
+      :type:  dict
+
+
+   .. py:attribute:: shader_controls
+      :type:  dict
+
+
    .. py:method:: to_dict()
 
 

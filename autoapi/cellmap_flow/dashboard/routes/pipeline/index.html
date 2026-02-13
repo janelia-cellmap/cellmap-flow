@@ -148,6 +148,9 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.apply_pipeline" title="cellmap_flow.dashboard.routes.pipeline.apply_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_pipeline</span></code></a>()</p></td>
 <td><p>Apply a pipeline configuration to the current inference</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.shaders_api" title="cellmap_flow.dashboard.routes.pipeline.shaders_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shaders_api</span></code></a>()</p></td>
+<td><p>Get or update stored shader strings and shaderControls.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -206,6 +209,17 @@
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.apply_pipeline">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">apply_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.apply_pipeline" title="Link to this definition"></a></dt>
 <dd><p>Apply a pipeline configuration to the current inference</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.shaders_api">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">shaders_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.shaders_api" title="Link to this definition"></a></dt>
+<dd><p>Get or update stored shader strings and shaderControls.</p>
+<p>GET  -&gt; returns current g.shaders and g.shader_controls
+POST -&gt; merges incoming {“shaders”: {…}, “shader_controls”: {…}} into globals</p>
+<blockquote>
+<div><p>(also accepts flat {layer_name: shader_str} for backwards compat)</p>
+</div></blockquote>
 </dd></dl>
 
 </section>

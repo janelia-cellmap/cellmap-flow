@@ -26,6 +26,7 @@ Functions
    cellmap_flow.dashboard.routes.pipeline.dataset_path_api
    cellmap_flow.dashboard.routes.pipeline.blockwise_config_api
    cellmap_flow.dashboard.routes.pipeline.apply_pipeline
+   cellmap_flow.dashboard.routes.pipeline.shaders_api
 
 
 Module Contents
@@ -64,5 +65,14 @@ Module Contents
 .. py:function:: apply_pipeline()
 
    Apply a pipeline configuration to the current inference
+
+
+.. py:function:: shaders_api()
+
+   Get or update stored shader strings and shaderControls.
+
+   GET  -> returns current g.shaders and g.shader_controls
+   POST -> merges incoming {"shaders": {...}, "shader_controls": {...}} into globals
+          (also accepts flat {layer_name: shader_str} for backwards compat)
 
 
