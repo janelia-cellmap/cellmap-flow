@@ -38,6 +38,7 @@ import zarr
 from pathlib import Path
 import threading
 import s3fs
+from cellmap_flow.finetune.job_manager import FinetuneJobManager
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,9 @@ CUSTOM_CODE_FOLDER = os.path.expanduser(
     )
 )
 
+# Global finetuning job manager
+finetune_job_manager = FinetuneJobManager()
+
 # MinIO state for finetune annotation crops
 minio_state = {
     "process": None,  # subprocess.Popen object
@@ -102,6 +106,35 @@ minio_state = {
     "last_sync": {},  # Track last sync time per crop_id
     "sync_thread": None,  # Background sync thread
 }
+
+# Session management for timestamped output directories
+# Maps base_output_path -> timestamped_session_path
+output_sessions = {}
+
+
+def get_or_create_session_path(base_output_path: str) -> str:
+    """
+    Get or create a timestamped session directory for the given base output path.
+
+    If a session already exists for this base path, reuse it.
+    Otherwise, create a new timestamped subdirectory.
+
+    Args:
+        base_output_path: Base output directory (e.g., "output/to/here")
+
+    Returns:
+        Timestamped session path (e.g., "output/to/here/20260213_123456")
+    """
+    base_output_path = os.path.expanduser(base_output_path)
+
+    if base_output_path not in output_sessions:
+        # Create new timestamped session
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_path = os.path.join(base_output_path, timestamp)
+        output_sessions[base_output_path] = session_path
+        logger.info(f"Created new session path: {session_path}")
+
+    return output_sessions[base_output_path]
 
 
 def get_local_ip():
@@ -600,7 +633,24 @@ def index():
     output_postprocessors = get_postprocessors_list()
     model_mergers = get_model_mergers_list()
     model_catalog = g.model_catalog
-    model_catalog["User"] = {j.model_name: "" for j in g.jobs}
+
+    # Build User catalog from jobs, using model configs to get paths
+    user_models = {}
+    for j in g.jobs:
+        model_path = ""
+        # Try to find the model config for this job
+        if hasattr(g, 'models_config') and g.models_config:
+            for model_config in g.models_config:
+                if hasattr(model_config, 'name') and model_config.name == j.model_name:
+                    # Try to get checkpoint_path or script_path
+                    if hasattr(model_config, 'checkpoint_path') and model_config.checkpoint_path:
+                        model_path = str(model_config.checkpoint_path)
+                    elif hasattr(model_config, 'script_path') and model_config.script_path:
+                        model_path = str(model_config.script_path)
+                    break
+        user_models[j.model_name] = model_path
+
+    model_catalog["User"] = user_models
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
     logger.warning(f"Model catalog: {model_catalog}")
@@ -2056,16 +2106,29 @@ def create_annotation_crop():
         # Generate unique crop ID
         crop_id = f"{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
-        # Create zarr structure
+        # Create zarr structure with timestamped session directory
         if output_path:
-            # Use user-specified output path
-            corrections_dir = os.path.expanduser(output_path)
+            # Use user-specified output path with timestamped session
+            session_path = get_or_create_session_path(output_path)
+            corrections_dir = os.path.join(session_path, "corrections")
             os.makedirs(corrections_dir, exist_ok=True)
+
+            # Initialize as zarr group if not already
+            import zarr
+            zarr.open_group(corrections_dir, mode='a')
+
             zarr_path = os.path.join(corrections_dir, f"{crop_id}.zarr")
+            logger.info(f"Using session path: {session_path}")
+            logger.info(f"Corrections directory: {corrections_dir}")
         else:
             # Fallback to default location
             corrections_dir = os.path.expanduser("~/.cellmap_flow/corrections")
             os.makedirs(corrections_dir, exist_ok=True)
+
+            # Initialize as zarr group if not already
+            import zarr
+            zarr.open_group(corrections_dir, mode='a')
+
             zarr_path = os.path.join(corrections_dir, f"{crop_id}.zarr")
 
         # Get dataset path
@@ -2272,6 +2335,218 @@ def sync_annotations_manually():
         logger.error(f"Error in sync endpoint: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/submit", methods=["POST"])
+def submit_finetuning():
+    """
+    Submit a finetuning job to the LSF cluster.
+
+    Request body:
+    {
+        "model_name": "model_name",
+        "lora_r": 8,
+        "num_epochs": 10,
+        "batch_size": 2,
+        "learning_rate": 0.0001
+    }
+    """
+    try:
+        data = request.get_json()
+        model_name = data.get("model_name")
+        corrections_path_str = data.get("corrections_path")
+        lora_r = data.get("lora_r", 8)
+        num_epochs = data.get("num_epochs", 10)
+        batch_size = data.get("batch_size", 2)
+        learning_rate = data.get("learning_rate", 1e-4)
+        checkpoint_path_override = data.get("checkpoint_path")  # Optional override
+
+        if not model_name:
+            return jsonify({"success": False, "error": "model_name is required"}), 400
+
+        if not corrections_path_str:
+            return jsonify({"success": False, "error": "corrections_path is required. Please specify the output path where annotation crops are saved."}), 400
+
+        # Find model config
+        model_config = None
+        for config in g.models_config:
+            if config.name == model_name:
+                model_config = config
+                break
+
+        if not model_config:
+            return jsonify({"success": False, "error": f"Model {model_name} not found"}), 404
+
+        # Get the corrections path from the user's input
+        # This will be the base path they entered (e.g., "output/to/here")
+        # We need to find the actual corrections directory with the session timestamp
+        base_corrections_path = Path(corrections_path_str)
+
+        # Check if this looks like a session path with corrections subdirectory
+        actual_corrections_path = None
+        if base_corrections_path.name == "corrections" and base_corrections_path.exists():
+            # User provided the full path including "/corrections"
+            actual_corrections_path = base_corrections_path
+            session_path = base_corrections_path.parent
+        else:
+            # User provided the base path - find the session with corrections
+            session_path = get_or_create_session_path(str(base_corrections_path))
+            actual_corrections_path = Path(session_path) / "corrections"
+
+        if not actual_corrections_path.exists():
+            return jsonify({
+                "success": False,
+                "error": f"Corrections path does not exist: {actual_corrections_path}. Please create annotation crops first."
+            }), 400
+
+        # Derive output base from session path for finetuning outputs
+        output_base = Path(session_path)
+        logger.info(f"Using session path for finetuning: {session_path}")
+        logger.info(f"Corrections path: {actual_corrections_path}")
+        logger.info(f"Output base: {output_base}")
+
+        # Submit job
+        finetune_job = finetune_job_manager.submit_finetuning_job(
+            model_config=model_config,
+            corrections_path=actual_corrections_path,
+            lora_r=lora_r,
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            output_base=output_base,
+            checkpoint_path_override=Path(checkpoint_path_override) if checkpoint_path_override else None
+        )
+
+        logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
+
+        # Get LSF job ID or local PID
+        lsf_job_id = None
+        if finetune_job.lsf_job:
+            if hasattr(finetune_job.lsf_job, 'job_id'):
+                lsf_job_id = finetune_job.lsf_job.job_id
+            elif hasattr(finetune_job.lsf_job, 'process'):
+                lsf_job_id = f"PID:{finetune_job.lsf_job.process.pid}"
+
+        return jsonify({
+            "success": True,
+            "job_id": finetune_job.job_id,
+            "lsf_job_id": lsf_job_id,
+            "output_dir": str(finetune_job.output_dir),
+            "message": "Finetuning job submitted successfully"
+        })
+
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error submitting finetuning job: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/jobs", methods=["GET"])
+def get_finetuning_jobs():
+    """Get list of all finetuning jobs."""
+    try:
+        jobs = finetune_job_manager.list_jobs()
+        return jsonify({"success": True, "jobs": jobs})
+    except Exception as e:
+        logger.error(f"Error getting jobs: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/job/<job_id>/status", methods=["GET"])
+def get_job_status(job_id):
+    """Get detailed status of a specific job."""
+    try:
+        status = finetune_job_manager.get_job_status(job_id)
+        if status is None:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+
+        return jsonify({"success": True, **status})
+    except Exception as e:
+        logger.error(f"Error getting job status: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/job/<job_id>/logs", methods=["GET"])
+def get_job_logs(job_id):
+    """Get training logs for a specific job."""
+    try:
+        logs = finetune_job_manager.get_job_logs(job_id)
+        if logs is None:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+
+        return jsonify({"success": True, "logs": logs})
+    except Exception as e:
+        logger.error(f"Error getting job logs: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/job/<job_id>/logs/stream", methods=["GET"])
+def stream_job_logs(job_id):
+    """Server-Sent Events stream for live training logs."""
+    def generate():
+        # Check if job exists
+        if job_id not in finetune_job_manager.jobs:
+            yield f"data: Job {job_id} not found\n\n"
+            return
+
+        finetune_job = finetune_job_manager.jobs[job_id]
+
+        # Send existing log content first
+        if finetune_job.log_file.exists():
+            try:
+                with open(finetune_job.log_file, "r") as f:
+                    existing_content = f.read()
+                    for line in existing_content.split("\n"):
+                        if line:
+                            yield f"data: {line}\n\n"
+            except Exception as e:
+                logger.error(f"Error reading log file: {e}")
+
+        # Then tail for new content
+        last_position = finetune_job.log_file.stat().st_size if finetune_job.log_file.exists() else 0
+
+        while finetune_job.status.value in ["PENDING", "RUNNING"]:
+            try:
+                if finetune_job.log_file.exists():
+                    with open(finetune_job.log_file, "r") as f:
+                        f.seek(last_position)
+                        new_content = f.read()
+                        last_position = f.tell()
+
+                        if new_content:
+                            for line in new_content.split("\n"):
+                                if line:
+                                    yield f"data: {line}\n\n"
+
+                time.sleep(1)  # Poll every second
+
+            except Exception as e:
+                logger.error(f"Error streaming logs: {e}")
+                break
+
+        yield f"data: === Training {finetune_job.status.value} ===\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+@app.route("/api/finetune/job/<job_id>/cancel", methods=["POST"])
+def cancel_job(job_id):
+    """Cancel a running finetuning job."""
+    try:
+        success = finetune_job_manager.cancel_job(job_id)
+
+        if success:
+            return jsonify({"success": True, "message": f"Job {job_id} cancelled"})
+        else:
+            return jsonify({"success": False, "error": "Failed to cancel job"}), 400
+
+    except Exception as e:
+        logger.error(f"Error cancelling job: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

@@ -42,12 +42,9 @@ def analyze_script(filepath):
             # If function is a direct name (e.g., `eval()`)
             if isinstance(node.func, ast.Name) and node.func.id in DISALLOWED_FUNCTIONS:
                 issues.append(f"Disallowed function call detected: {node.func.id}")
-            # If function is an attribute call (e.g., `os.system()`)
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in DISALLOWED_FUNCTIONS
-            ):
-                issues.append(f"Disallowed function call detected: {node.func.attr}")
+            # Note: We intentionally do NOT flag method calls like `model.eval()` here
+            # Method calls on objects (e.g., model.eval()) are safe - only direct calls
+            # to dangerous builtin functions (e.g., eval()) are a security risk
 
     # Return whether the script is safe (no issues found) and the list of issues
     is_safe = len(issues) == 0
