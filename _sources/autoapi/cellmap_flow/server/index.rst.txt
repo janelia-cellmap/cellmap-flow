@@ -46,6 +46,9 @@ Module Contents
    .. py:attribute:: output_dtype
 
 
+   .. py:attribute:: model_output_axes
+
+
    .. py:attribute:: inferencer
 
 

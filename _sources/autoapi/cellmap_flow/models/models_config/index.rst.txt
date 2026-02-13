@@ -46,6 +46,17 @@ Module Contents
    .. py:property:: config
 
 
+   .. py:property:: chunk_output_axes
+      :type: tuple[str, Ellipsis]
+
+
+      Returns the axes order of processed chunk output. Defaults to ('c', 'z', 'y', 'x').
+
+      Models can override by setting config.chunk_output_axes.
+      Note: this is distinct from config.output_axes used by BioModelConfig
+      for raw bioimageio model axes.
+
+
    .. py:property:: output_dtype
 
       Returns the output dtype of the model. Defaults to np.float32.

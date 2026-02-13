@@ -176,6 +176,15 @@
 <dd></dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.chunk_output_axes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">chunk_output_axes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.chunk_output_axes" title="Link to this definition"></a></dt>
+<dd><p>Returns the axes order of processed chunk output. Defaults to (‘c’, ‘z’, ‘y’, ‘x’).</p>
+<p>Models can override by setting config.chunk_output_axes.
+Note: this is distinct from config.output_axes used by BioModelConfig
+for raw bioimageio model axes.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.output_dtype">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_dtype</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.output_dtype" title="Link to this definition"></a></dt>
 <dd><p>Returns the output dtype of the model. Defaults to np.float32.</p>
