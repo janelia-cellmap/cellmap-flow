@@ -64,6 +64,18 @@ class ModelConfig:
         logger.warning(f"Model config validated: {self.__str__()}")
 
     @property
+    def chunk_output_axes(self) -> tuple[str, ...]:
+        """Returns the axes order of processed chunk output. Defaults to ('c', 'z', 'y', 'x').
+
+        Models can override by setting config.chunk_output_axes.
+        Note: this is distinct from config.output_axes used by BioModelConfig
+        for raw bioimageio model axes.
+        """
+        if hasattr(self.config, "chunk_output_axes"):
+            return tuple(self.config.chunk_output_axes)
+        return ("c", "z", "y", "x")
+
+    @property
     def output_dtype(self):
         """Returns the output dtype of the model. Defaults to np.float32."""
         if hasattr(self.config, "output_dtype"):
