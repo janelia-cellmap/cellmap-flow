@@ -1,7 +1,25 @@
 <div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
-  <strong>Finetune:</strong> Create annotation crops at cursor position for model finetuning.
+  <strong>Finetune:</strong> Create annotation crops and submit training jobs to the GPU cluster.
   <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
 </div>
+
+<!-- Tabs for Annotation Crops and Training -->
+<ul class="nav nav-tabs mb-3" id="finetuneTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="crops-tab" data-bs-toggle="tab" data-bs-target="#crops" type="button" role="tab">
+      Annotation Crops
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+      Training
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="finetuneTabContent">
+  <!-- Annotation Crops Tab -->
+  <div class="tab-pane fade show active" id="crops" role="tabpanel">
 
 <form id="finetuneForm">
   <!-- Model Selection (conditionally shown) -->
@@ -61,6 +79,127 @@
     ></textarea>
   </div>
 </form>
+</div><!-- End Crops Tab -->
+
+<!-- Training Tab -->
+<div class="tab-pane fade" id="training" role="tabpanel">
+
+<!-- Training Configuration Card -->
+<div class="card mb-3">
+  <div class="card-header">
+    <h5>Training Configuration</h5>
+  </div>
+  <div class="card-body">
+    <!-- Optional: Manual checkpoint path override -->
+    <div class="mb-3">
+      <label for="checkpointPath" class="form-label">
+        Checkpoint Path (Optional)
+        <span class="badge bg-secondary">Advanced</span>
+      </label>
+      <input type="text" id="checkpointPath" class="form-control" placeholder="Leave empty to auto-detect from model config">
+      <small class="text-muted">
+        Override the base model checkpoint to finetune from. If left empty, the system will attempt to extract it from the model configuration or script.
+      </small>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="loraRank" class="form-label">LoRA Rank</label>
+          <select id="loraRank" class="form-select">
+            <option value="4">4 (Fast, lower capacity)</option>
+            <option value="8" selected>8 (Balanced) - Recommended</option>
+            <option value="16">16 (High capacity)</option>
+          </select>
+          <small class="text-muted">Higher rank = more trainable parameters</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="numEpochs" class="form-label">Number of Epochs</label>
+          <input type="number" id="numEpochs" class="form-control" value="10" min="5" max="50" step="1">
+          <small class="text-muted">Typical range: 10-20 epochs</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="batchSize" class="form-label">Batch Size</label>
+          <select id="batchSize" class="form-select">
+            <option value="1">1 (Low memory)</option>
+            <option value="2" selected>2 (Recommended)</option>
+            <option value="4">4 (High memory)</option>
+          </select>
+          <small class="text-muted">Higher = faster but uses more GPU memory</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="learningRate" class="form-label">Learning Rate</label>
+          <select id="learningRate" class="form-select">
+            <option value="0.00001">1e-5 (Very Conservative)</option>
+            <option value="0.0001" selected>1e-4 (Standard)</option>
+            <option value="0.001">1e-3 (Aggressive)</option>
+            <option value="0.01">1e-2 (Very Aggressive)</option>
+            <option value="0.1">1e-1 (Extremely Aggressive)</option>
+          </select>
+          <small class="text-muted">LoRA typically uses higher learning rates</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button type="button" class="btn btn-primary btn-lg" id="startFinetuningBtn">
+        🚀 Start Finetuning
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Training Status Card (hidden initially) -->
+<div class="card mb-3" id="trainingStatusCard" style="display: none;">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Status</h5>
+    <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
+      ❌ Cancel Training
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <p class="mb-1"><strong>Job ID:</strong> <span id="jobId" class="font-monospace">-</span></p>
+      <p class="mb-1"><strong>Model:</strong> <span id="jobModelName">-</span></p>
+      <p class="mb-1"><strong>Status:</strong> <span id="jobStatus" class="badge bg-secondary">-</span></p>
+      <p class="mb-1"><strong>Progress:</strong> <span id="jobProgress">-</span></p>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress mb-3" style="height: 25px;">
+      <div id="trainingProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">
+        0%
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Training Logs Card -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Logs</h5>
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="autoScrollLogs" checked>
+      <label class="form-check-label" for="autoScrollLogs">Auto-scroll</label>
+    </div>
+  </div>
+  <div class="card-body">
+    <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
+              style="font-size: 0.85rem; background-color: #f8f9fa; white-space: pre;">No training job running...
+    </textarea>
+  </div>
+</div>
+</div><!-- End Training Tab -->
+</div><!-- End Tab Content -->
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -193,6 +332,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     createCropBtn.disabled = true;
+    createCropBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
     finetuneLog.value += `Creating annotation crop at current view center...\n`;
     finetuneLog.value += `Output path: ${outputPath}\n`;
 
@@ -236,11 +376,13 @@ document.addEventListener("DOMContentLoaded", function () {
           finetuneLog.value += `✗ Error: ${data.error}\n`;
         }
         createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
       })
       .catch(err => {
         finetuneLog.value += `✗ Error: ${err}\n`;
         console.error(err);
         createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
       });
   });
 
@@ -301,5 +443,253 @@ document.addEventListener("DOMContentLoaded", function () {
         saveAnnotationsBtn.textContent = originalText;
       });
   });
+
+  // === FINETUNING JOB MANAGEMENT ===
+
+  let eventSource = null;
+  let statusPollingInterval = null;
+
+  // Start Finetuning button
+  const startFinetuningBtn = document.getElementById("startFinetuningBtn");
+  if (startFinetuningBtn) {
+    startFinetuningBtn.addEventListener("click", async function() {
+      if (!selectedModel) {
+        alert("Please select a model first");
+        return;
+      }
+
+      // Get corrections path from output path field
+      const correctionsPath = document.getElementById("outputPath").value.trim();
+      if (!correctionsPath) {
+        alert("Please specify the output path where annotation crops are saved");
+        return;
+      }
+
+      // Get training parameters from form
+      const params = {
+        model_name: selectedModel.name,
+        corrections_path: correctionsPath,
+        lora_r: parseInt(document.getElementById("loraRank").value),
+        num_epochs: parseInt(document.getElementById("numEpochs").value),
+        batch_size: parseInt(document.getElementById("batchSize").value),
+        learning_rate: parseFloat(document.getElementById("learningRate").value)
+      };
+
+      // Add optional checkpoint path override if provided
+      const checkpointPath = document.getElementById("checkpointPath").value.trim();
+      if (checkpointPath) {
+        params.checkpoint_path = checkpointPath;
+      }
+
+      // Disable button and show loading
+      startFinetuningBtn.disabled = true;
+      startFinetuningBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+
+      try {
+        // Submit job
+        const response = await fetch("/api/finetune/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Show training status card
+          document.getElementById("trainingStatusCard").style.display = "block";
+          document.getElementById("jobId").textContent = result.job_id;
+          document.getElementById("jobModelName").textContent = params.model_name;
+          document.getElementById("jobStatus").textContent = "SUBMITTED";
+          document.getElementById("jobStatus").className = "badge bg-warning";
+
+          // Clear logs and start streaming
+          document.getElementById("trainingLogs").value = "";
+          appendLog("Finetuning job submitted successfully!");
+          appendLog(`Job ID: ${result.job_id}`);
+          appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
+          appendLog(`Output directory: ${result.output_dir}`);
+          appendLog(`\nWaiting for training to start...\n`);
+
+          // Start log streaming and status polling
+          startLogStreaming(result.job_id);
+          startStatusPolling(result.job_id);
+
+          // Request notification permission if not already granted
+          if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+          }
+        } else {
+          alert(`Failed to submit job: ${result.error}`);
+          appendLog(`✗ Error: ${result.error}\n`);
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+        appendLog(`✗ Error: ${error.message}\n`);
+      } finally {
+        // Re-enable button
+        startFinetuningBtn.disabled = false;
+        startFinetuningBtn.innerHTML = '🚀 Start Finetuning';
+      }
+    });
+  }
+
+  // Log streaming via SSE
+  function startLogStreaming(jobId) {
+    // Close existing stream if any
+    if (eventSource) {
+      eventSource.close();
+    }
+
+    eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream`);
+
+    eventSource.onmessage = function(event) {
+      appendLog(event.data);
+
+      // Auto-scroll if enabled
+      const logsArea = document.getElementById("trainingLogs");
+      if (document.getElementById("autoScrollLogs").checked) {
+        logsArea.scrollTop = logsArea.scrollHeight;
+      }
+    };
+
+    eventSource.onerror = function(error) {
+      console.error("Log streaming error:", error);
+      eventSource.close();
+    };
+  }
+
+  function appendLog(message) {
+    const logsArea = document.getElementById("trainingLogs");
+    logsArea.value += message + "\n";
+  }
+
+  // Status polling (every 3 seconds)
+  function startStatusPolling(jobId) {
+    // Clear existing interval
+    if (statusPollingInterval) {
+      clearInterval(statusPollingInterval);
+    }
+
+    statusPollingInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/status`);
+        const data = await response.json();
+
+        if (!data.success) {
+          console.error("Error getting job status:", data.error);
+          return;
+        }
+
+        // Update status display
+        const statusBadge = document.getElementById("jobStatus");
+        statusBadge.textContent = data.status;
+
+        // Color code status
+        statusBadge.className = "badge bg-" + getStatusColor(data.status);
+
+        // Update progress
+        if (data.current_epoch && data.total_epochs) {
+          const progressPercent = (data.current_epoch / data.total_epochs) * 100;
+          const progressBar = document.getElementById("trainingProgressBar");
+          progressBar.style.width = progressPercent + "%";
+          progressBar.textContent = `${data.current_epoch}/${data.total_epochs} epochs`;
+
+          document.getElementById("jobProgress").textContent =
+            `Epoch ${data.current_epoch}/${data.total_epochs}` +
+            (data.loss ? ` - Loss: ${data.loss.toFixed(4)}` : "");
+        }
+
+        // Handle completion
+        if (data.status === "COMPLETED") {
+          clearInterval(statusPollingInterval);
+          eventSource?.close();
+
+          // Show success notification
+          showNotification(
+            "Finetuning Complete!",
+            `Model ${data.finetuned_model_name || 'finetuned model'} is now available.`,
+            "success"
+          );
+
+          // Update progress bar to 100%
+          const progressBar = document.getElementById("trainingProgressBar");
+          progressBar.style.width = "100%";
+          progressBar.className = "progress-bar bg-success";
+          progressBar.textContent = "Complete!";
+
+          // Refresh model list to show new finetuned model
+          setTimeout(() => {
+            finetuneLog.value += "\nRefreshing model list...\n";
+            loadModels();
+          }, 2000);
+
+        } else if (data.status === "FAILED" || data.status === "CANCELLED") {
+          clearInterval(statusPollingInterval);
+          eventSource?.close();
+
+          showNotification(
+            "Training " + data.status,
+            "Check logs for details.",
+            "error"
+          );
+        }
+      } catch (error) {
+        console.error("Status polling error:", error);
+      }
+    }, 3000);  // Poll every 3 seconds
+  }
+
+  function getStatusColor(status) {
+    const colors = {
+      "PENDING": "warning",
+      "RUNNING": "primary",
+      "COMPLETED": "success",
+      "FAILED": "danger",
+      "CANCELLED": "secondary"
+    };
+    return colors[status] || "secondary";
+  }
+
+  function showNotification(title, message, type) {
+    // Browser notification
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body: message });
+    }
+
+    // Also show in-page alert
+    alert(`${title}\n\n${message}`);
+  }
+
+  // Cancel button
+  const cancelJobBtn = document.getElementById("cancelJobBtn");
+  if (cancelJobBtn) {
+    cancelJobBtn.addEventListener("click", async function() {
+      const jobId = document.getElementById("jobId").textContent;
+      if (!jobId || jobId === '-') {
+        alert("No active job to cancel");
+        return;
+      }
+
+      if (!confirm("Are you sure you want to cancel this training job?")) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/cancel`, {
+          method: "POST"
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          appendLog("\n=== TRAINING CANCELLED BY USER ===\n");
+        } else {
+          alert(`Failed to cancel: ${result.error}`);
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    });
+  }
 });
 </script>

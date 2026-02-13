@@ -109,7 +109,7 @@ def wrap_model_with_lora(
     target_modules: Optional[List[str]] = None,
     lora_r: int = 8,
     lora_alpha: int = 16,
-    lora_dropout: float = 0.0,
+    lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
     task_type: str = "FEATURE_EXTRACTION",
 ) -> nn.Module:
@@ -128,7 +128,7 @@ def wrap_model_with_lora(
         lora_alpha: LoRA alpha (scaling factor)
                     Controls strength of LoRA updates
                     Typical: 2*r, default 16
-        lora_dropout: Dropout probability for LoRA layers (0.0-0.5)
+        lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
         modules_to_save: Additional modules to make trainable (e.g., final layer)
         task_type: PEFT task type. Options:
                    - "FEATURE_EXTRACTION" (default, for general models)
