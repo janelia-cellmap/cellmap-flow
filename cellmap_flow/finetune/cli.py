@@ -56,8 +56,16 @@ def main():
     parser.add_argument(
         "--model-checkpoint",
         type=str,
-        required=True,
-        help="Path to model checkpoint (for fly models)"
+        required=False,
+        default=None,
+        help="Path to model checkpoint (optional - can train from scratch)"
+    )
+    parser.add_argument(
+        "--model-script",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to model script (alternative to checkpoint)"
     )
     parser.add_argument(
         "--model-name",
@@ -103,8 +111,8 @@ def main():
     parser.add_argument(
         "--lora-dropout",
         type=float,
-        default=0.0,
-        help="LoRA dropout (default: 0.0)"
+        default=0.1,
+        help="LoRA dropout (default: 0.1)"
     )
 
     # Data arguments
@@ -155,8 +163,8 @@ def main():
     parser.add_argument(
         "--gradient-accumulation-steps",
         type=int,
-        default=4,
-        help="Gradient accumulation steps (default: 4)"
+        default=1,
+        help="Gradient accumulation steps (default: 1)"
     )
     parser.add_argument(
         "--loss-type",
@@ -211,7 +219,20 @@ def main():
 
     # Load model
     logger.info("Loading model...")
-    if args.model_type == "fly":
+
+    # Handle script-based models
+    if args.model_script:
+        from cellmap_flow.models.models_config import ScriptModelConfig
+        logger.info(f"Using script-based model: {args.model_script}")
+        model_config = ScriptModelConfig(
+            script_path=args.model_script,
+            name=args.model_name or "script_model"
+        )
+    elif args.model_type == "fly":
+        if not args.model_checkpoint:
+            raise ValueError(
+                "For fly models, either --model-checkpoint or --model-script must be provided"
+            )
         model_config = FlyModelConfig(
             checkpoint_path=args.model_checkpoint,
             channels=args.channels,
@@ -219,6 +240,8 @@ def main():
             output_voxel_size=tuple(args.output_voxel_size),
         )
     elif args.model_type == "dacapo":
+        if not args.model_checkpoint:
+            raise ValueError("For dacapo models, --model-checkpoint is required")
         # Parse dacapo run name and iteration from checkpoint path
         # Expected format: /path/to/runs/{run_name}/model_checkpoint_{iteration}
         checkpoint_path = Path(args.model_checkpoint)

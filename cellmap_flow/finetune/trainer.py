@@ -135,7 +135,7 @@ class LoRAFinetuner:
         output_dir: Directory to save checkpoints and logs
         learning_rate: Learning rate (default: 1e-4)
         num_epochs: Number of training epochs (default: 10)
-        gradient_accumulation_steps: Steps to accumulate gradients (default: 4)
+        gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
         use_mixed_precision: Enable FP16 training (default: True)
         loss_type: Loss function ("dice", "bce", or "combined")
         device: Training device ("cuda" or "cpu", auto-detected if None)
@@ -163,7 +163,7 @@ class LoRAFinetuner:
         output_dir: str,
         learning_rate: float = 1e-4,
         num_epochs: int = 10,
-        gradient_accumulation_steps: int = 4,
+        gradient_accumulation_steps: int = 1,
         use_mixed_precision: bool = True,
         loss_type: str = "combined",
         device: Optional[str] = None,
@@ -242,10 +242,11 @@ class LoRAFinetuner:
 
         def log_message(msg):
             """Log to both console and file."""
-            print(msg)  # Always print to console
+            print(msg, flush=True)  # Always print to console with immediate flush
             logger.info(msg)  # Also log normally
             with open(log_file, 'a') as f:
                 f.write(msg + '\n')
+                f.flush()  # Flush immediately for live streaming
 
         log_message("="*60)
         log_message("Starting LoRA Finetuning")
@@ -401,6 +402,14 @@ class LoRAFinetuner:
                 msg = f"  Batch {batch_idx+1}/{num_batches} - Loss: {avg_loss:.6f}"
                 print(msg)
                 logger.info(msg)
+
+        # Handle leftover accumulated gradients at end of epoch
+        # (in case num_batches is not divisible by gradient_accumulation_steps)
+        if num_batches % self.gradient_accumulation_steps != 0:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+            self.global_step += 1
 
         return epoch_loss / num_batches
 
