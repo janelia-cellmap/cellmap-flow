@@ -46,6 +46,8 @@ class Flow:
     pipeline_normalizers: List[Any]
     pipeline_models: List[Any]
     pipeline_postprocessors: List[Any]
+    shaders: dict
+    shader_controls: dict
 
     def __new__(cls):
         if cls._instance is None:
@@ -84,6 +86,11 @@ class Flow:
             cls._instance.pipeline_normalizers = []
             cls._instance.pipeline_models = []
             cls._instance.pipeline_postprocessors = []
+
+            # Shader state: key = layer name, value = shader string
+            cls._instance.shaders = {}
+            # ShaderControls state: key = layer name, value = shaderControls dict
+            cls._instance.shader_controls = {}
         return cls._instance
 
     def to_dict(self):

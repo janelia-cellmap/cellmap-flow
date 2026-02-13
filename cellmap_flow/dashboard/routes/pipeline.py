@@ -23,6 +23,23 @@ logger = logging.getLogger(__name__)
 pipeline_bp = Blueprint("pipeline", __name__)
 
 
+def _save_shaders_from_viewer() -> None:
+    """Read current shader and shaderControls from the neuroglancer viewer and persist them in globals."""
+    if g.viewer is None:
+        return
+    try:
+        state = g.viewer.state
+        for layer in state.layers:
+            shader = getattr(layer, "shader", None)
+            if shader:
+                g.shaders[layer.name] = shader
+            shader_controls = getattr(layer, "shaderControls", None) or getattr(layer, "shader_controls", None)
+            if shader_controls:
+                g.shader_controls[layer.name] = shader_controls
+    except Exception as exc:
+        logger.warning(f"Could not save shaders from viewer: {exc}")
+
+
 def is_output_segmentation():
     if len(g.postprocess) == 0:
         return False
@@ -92,6 +109,9 @@ def process():
     g.input_norms = get_normalizations(data["input_norm"])
     g.postprocess = get_postprocessors(data["postprocess"])
 
+    # Save current shader state from viewer before refreshing layers
+    _save_shaders_from_viewer()
+
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(g.dataset_path)
         s.layers["data"] = g.raw
@@ -99,15 +119,20 @@ def process():
             model = job.model_name
             host = job.host
             st_data = encode_to_str(data)
+            shader = g.shaders.get(model)
 
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
                     source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
                 )
             else:
-                s.layers[model] = neuroglancer.ImageLayer(
-                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
-                )
+                kwargs = {"source": f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"}
+                if shader:
+                    kwargs["shader"] = shader
+                shader_controls = g.shader_controls.get(model)
+                if shader_controls:
+                    kwargs["shaderControls"] = shader_controls
+                s.layers[model] = neuroglancer.ImageLayer(**kwargs)
 
     logger.warning(f"Input normalizers: {g.input_norms}")
 
@@ -297,3 +322,35 @@ def apply_pipeline():
     except Exception as e:
         logger.error(f"Error applying pipeline: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@pipeline_bp.route("/api/shaders", methods=["GET", "POST"])
+def shaders_api():
+    """Get or update stored shader strings and shaderControls.
+
+    GET  -> returns current g.shaders and g.shader_controls
+    POST -> merges incoming {"shaders": {...}, "shader_controls": {...}} into globals
+           (also accepts flat {layer_name: shader_str} for backwards compat)
+    """
+    if request.method == "GET":
+        # Also sync from viewer if available
+        _save_shaders_from_viewer()
+        return jsonify({"shaders": g.shaders, "shader_controls": g.shader_controls})
+
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected a JSON object"}), 400
+
+    # Support both structured and flat formats
+    if "shaders" in data or "shader_controls" in data:
+        if "shaders" in data:
+            g.shaders.update(data["shaders"])
+        if "shader_controls" in data:
+            g.shader_controls.update(data["shader_controls"])
+    else:
+        # Flat dict — treat as shaders only (backwards compat)
+        g.shaders.update(data)
+
+    logger.info(f"Shaders updated for layers: {list(g.shaders.keys())}")
+    logger.info(f"ShaderControls updated for layers: {list(g.shader_controls.keys())}")
+    return jsonify({"message": "Shaders updated", "shaders": g.shaders, "shader_controls": g.shader_controls})
