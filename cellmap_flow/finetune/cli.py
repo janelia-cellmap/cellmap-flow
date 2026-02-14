@@ -373,7 +373,7 @@ def main():
         "--loss-type",
         type=str,
         default="combined",
-        choices=["dice", "bce", "combined", "mse"],
+        choices=["dice", "bce", "combined", "mse", "margin"],
         help="Loss function (default: combined)"
     )
     parser.add_argument(
@@ -382,6 +382,25 @@ def main():
         default=0.0,
         help="Label smoothing factor (e.g., 0.1 maps targets from 0/1 to 0.05/0.95). "
              "Helps preserve gradual distance-like outputs. (default: 0.0)"
+    )
+    parser.add_argument(
+        "--distillation-lambda",
+        type=float,
+        default=0.0,
+        help="Teacher distillation weight. Keeps model close to base on unlabeled voxels. "
+             "0.0=disabled, try 0.5-1.0 for sparse scribbles. (default: 0.0)"
+    )
+    parser.add_argument(
+        "--distillation-all-voxels",
+        action="store_true",
+        help="Apply distillation loss on all voxels instead of only unlabeled voxels. (default: unlabeled only)"
+    )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=0.3,
+        help="Margin threshold for margin loss. "
+             "Foreground must exceed 1-margin, background must stay below margin. (default: 0.3)"
     )
     parser.add_argument(
         "--no-mixed-precision",
@@ -544,6 +563,9 @@ def main():
             select_channel=select_channel,
             mask_unannotated=args.mask_unannotated,
             label_smoothing=args.label_smoothing,
+            distillation_lambda=args.distillation_lambda,
+            distillation_all_voxels=args.distillation_all_voxels,
+            margin=args.margin,
         )
 
         # Resume from checkpoint if specified (first iteration only)

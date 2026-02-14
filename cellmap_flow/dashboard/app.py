@@ -573,6 +573,47 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     return minio_url
 
 
+def sync_all_annotations_from_minio():
+    """Sync all annotations from MinIO to local disk.
+
+    Returns:
+        Number of annotations synced, or -1 if MinIO is not initialized.
+    """
+    if not minio_state.get("ip") or not minio_state.get("port"):
+        logger.info("MinIO not initialized, skipping annotation sync")
+        return -1
+
+    logger.info("Syncing annotations from MinIO before training...")
+    s3 = s3fs.S3FileSystem(
+        anon=False,
+        key='minio',
+        secret='minio123',
+        client_kwargs={
+            'endpoint_url': f"http://{minio_state['ip']}:{minio_state['port']}",
+            'region_name': 'us-east-1'
+        }
+    )
+    zarrs = s3.ls(minio_state['bucket'])
+    zarr_ids = [Path(c).name.replace('.zarr', '') for c in zarrs if c.endswith('.zarr')]
+    synced = 0
+    for zid in zarr_ids:
+        try:
+            zarr_name = f"{zid}.zarr"
+            attrs_path = f"{minio_state['bucket']}/{zarr_name}/.zattrs"
+            if s3.exists(attrs_path):
+                root_attrs = json.loads(s3.cat(attrs_path))
+                if root_attrs.get("type") == "annotation_volume":
+                    if sync_annotation_volume_from_minio(zid, force=True):
+                        synced += 1
+                    continue
+        except Exception:
+            pass
+        if sync_annotation_from_minio(zid, force=True):
+            synced += 1
+    logger.info(f"Synced {synced}/{len(zarr_ids)} annotations")
+    return synced
+
+
 def sync_annotation_from_minio(crop_id, force=False):
     """
     Sync a single annotation crop from MinIO to local filesystem.
@@ -2966,7 +3007,9 @@ def submit_finetuning():
         auto_serve = data.get("auto_serve", True)  # Auto-serve by default
         loss_type = data.get("loss_type", "mse")
         label_smoothing = data.get("label_smoothing", 0.1)
-
+        distillation_lambda = data.get("distillation_lambda", 0.0)
+        distillation_scope = data.get("distillation_scope", "unlabeled")
+        margin = data.get("margin", 0.3)
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
 
@@ -3011,6 +3054,12 @@ def submit_finetuning():
         logger.info(f"Corrections path: {actual_corrections_path}")
         logger.info(f"Output base: {output_base}")
 
+        # Auto-sync annotations from MinIO before training
+        try:
+            sync_all_annotations_from_minio()
+        except Exception as e:
+            logger.warning(f"Error syncing annotations before training: {e}")
+
         # Detect sparse annotations: check if any correction has source=sparse_volume
         has_sparse = False
         try:
@@ -3023,8 +3072,15 @@ def submit_finetuning():
         except Exception as e:
             logger.warning(f"Error checking for sparse annotations: {e}")
 
+        sparse_auto_switched = False
         if has_sparse:
             logger.info("Detected sparse annotations, will use mask_unannotated=True")
+            # Auto-switch to better defaults for sparse scribbles
+            if loss_type == "mse":  # only override if user hasn't explicitly chosen
+                loss_type = "margin"
+                distillation_lambda = 0.5
+                sparse_auto_switched = True
+                logger.info("Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations")
 
         # Submit job
         finetune_job = finetune_job_manager.submit_finetuning_job(
@@ -3040,6 +3096,9 @@ def submit_finetuning():
             mask_unannotated=has_sparse,
             loss_type=loss_type,
             label_smoothing=label_smoothing,
+            distillation_lambda=distillation_lambda,
+            distillation_scope=distillation_scope,
+            margin=margin,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
@@ -3052,13 +3111,17 @@ def submit_finetuning():
             elif hasattr(finetune_job.lsf_job, 'process'):
                 lsf_job_id = f"PID:{finetune_job.lsf_job.process.pid}"
 
-        return jsonify({
+        response = {
             "success": True,
             "job_id": finetune_job.job_id,
             "lsf_job_id": lsf_job_id,
             "output_dir": str(finetune_job.output_dir),
             "message": "Finetuning job submitted successfully"
-        })
+        }
+        if sparse_auto_switched:
+            response["note"] = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
+
+        return jsonify(response)
 
     except ValueError as e:
         logger.error(f"Validation error: {e}")
@@ -3345,9 +3408,15 @@ def restart_finetuning_job(job_id):
     try:
         data = request.get_json() or {}
 
+        # Sync annotations from MinIO before restarting training
+        try:
+            sync_all_annotations_from_minio()
+        except Exception as e:
+            logger.warning(f"Error syncing annotations before restart: {e}")
+
         # Extract updated parameters
         updated_params = {}
-        for key in ["num_epochs", "batch_size", "learning_rate"]:
+        for key in ["num_epochs", "batch_size", "learning_rate", "loss_type", "distillation_lambda", "distillation_scope", "margin"]:
             if key in data and data[key] is not None:
                 updated_params[key] = data[key]
 
