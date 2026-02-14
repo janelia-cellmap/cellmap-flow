@@ -377,21 +377,53 @@ Translation offset: `[61, 61, 61] voxels × 16 nm/voxel = [976, 976, 976] nm`
 
 ---
 
+## Recent Changes
+
+### Auto-Serve Finetuned Model After Training
+
+After training completes, the CLI automatically starts an inference server on the same GPU and prints a `CELLMAP_FLOW_SERVER_IP` marker. The dashboard's job monitor detects this marker and adds the finetuned model as a Neuroglancer layer.
+
+**Files changed:**
+- `cellmap_flow/finetune/cli.py`: Added `--auto-serve` and `--serve-data-path` flags; starts `CellMapFlowServer` in a daemon thread after training
+- `cellmap_flow/finetune/job_manager.py`: Added `_parse_inference_server_ready()` and `_add_finetuned_neuroglancer_layer()` to detect server startup and add layers
+- `cellmap_flow/dashboard/app.py`: Added `/api/finetune/job/<id>/inference-server` status endpoint
+- `cellmap_flow/dashboard/templates/_finetune_tab.html`: Added "Auto-load model after training" checkbox and inference server status display
+
+### Iterative Training (Restart on Same GPU)
+
+Users can restart training after completion without needing a new GPU allocation. The dashboard writes a `restart_signal.json` file, which the CLI detects in a polling loop.
+
+**Files changed:**
+- `cellmap_flow/finetune/cli.py`: Added restart signal polling loop with `_wait_for_restart_signal()`; retrains with updated parameters
+- `cellmap_flow/finetune/job_manager.py`: Added `restart_finetuning_job()`, `_archive_job_logs()`, and `_parse_training_restart()` for restart orchestration
+- `cellmap_flow/dashboard/app.py`: Added `/api/finetune/job/<id>/restart` endpoint
+- `cellmap_flow/dashboard/templates/_finetune_tab.html`: Added "Restart Training" button and modal with parameter override UI
+
+### Log Stream Filtering
+
+Noisy debug and werkzeug lines are filtered from the training log stream displayed in the dashboard.
+
+**Files changed:**
+- `cellmap_flow/dashboard/app.py`: Added regex-based line filtering in `stream_job_logs()` SSE endpoint
+
+### Model File Generation
+
+After training, model script (`.py`) and config (`.yaml`) files are automatically generated so the finetuned model can be loaded independently.
+
+**Files created:**
+- `cellmap_flow/finetune/model_templates.py`: Templates for generating model scripts and YAML configs
+
 ## Future Improvements
 
 1. **Active Learning:**
    - Model suggests uncertain regions
    - User prioritizes corrections on hard cases
 
-2. **Browser Integration:**
-   - Capture corrections directly in Neuroglancer
-   - Auto-trigger finetuning when threshold met
-
-3. **Validation Set:**
+2. **Validation Set:**
    - Split corrections into train/val
    - Track validation metrics during training
 
-4. **Multi-channel Finetuning:**
+3. **Multi-channel Finetuning:**
    - Extend to finetune multiple channels simultaneously
    - Joint optimization across organelles
 

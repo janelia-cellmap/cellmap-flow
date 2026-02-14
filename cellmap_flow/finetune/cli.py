@@ -373,8 +373,15 @@ def main():
         "--loss-type",
         type=str,
         default="combined",
-        choices=["dice", "bce", "combined"],
+        choices=["dice", "bce", "combined", "mse"],
         help="Loss function (default: combined)"
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        type=float,
+        default=0.0,
+        help="Label smoothing factor (e.g., 0.1 maps targets from 0/1 to 0.05/0.95). "
+             "Helps preserve gradual distance-like outputs. (default: 0.0)"
     )
     parser.add_argument(
         "--no-mixed-precision",
@@ -413,6 +420,11 @@ def main():
         type=int,
         default=0,
         help="Port for inference server (0 for auto-assignment)"
+    )
+    parser.add_argument(
+        "--mask-unannotated",
+        action="store_true",
+        help="Enable masked loss for sparse annotations (0=ignore, 1=bg, 2+=fg)"
     )
 
     args = parser.parse_args()
@@ -459,6 +471,7 @@ def main():
             channels=args.channels,
             input_voxel_size=tuple(args.input_voxel_size),
             output_voxel_size=tuple(args.output_voxel_size),
+            name=args.model_name,
         )
     elif args.model_type == "dacapo":
         if not args.model_checkpoint:
@@ -529,7 +542,8 @@ def main():
             use_mixed_precision=not args.no_mixed_precision,
             loss_type=args.loss_type,
             select_channel=select_channel,
-            mask_unannotated=False,
+            mask_unannotated=args.mask_unannotated,
+            label_smoothing=args.label_smoothing,
         )
 
         # Resume from checkpoint if specified (first iteration only)

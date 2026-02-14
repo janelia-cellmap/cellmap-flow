@@ -193,7 +193,10 @@ class FinetuneJobManager:
         queue: str = "gpu_h100",
         charge_group: str = "cellmap",
         checkpoint_path_override: Optional[Path] = None,
-        auto_serve: bool = True
+        auto_serve: bool = True,
+        mask_unannotated: bool = False,
+        loss_type: str = "combined",
+        label_smoothing: float = 0.0,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -343,11 +346,20 @@ class FinetuneJobManager:
             f"--num-epochs {num_epochs} "
             f"--batch-size {batch_size} "
             f"--learning-rate {learning_rate} "
+            f"--loss-type {loss_type} "
         )
+
+        # Add label smoothing if specified
+        if label_smoothing > 0:
+            cli_command += f"--label-smoothing {label_smoothing} "
 
         # Add auto-serve flags if enabled
         if auto_serve and serve_data_path:
             cli_command += f"--auto-serve --serve-data-path {serve_data_path} "
+
+        # Add mask_unannotated flag for sparse annotations
+        if mask_unannotated:
+            cli_command += "--mask-unannotated "
 
         cli_command += f"2>&1 | tee {log_file}"
 
@@ -371,6 +383,8 @@ class FinetuneJobManager:
                 "num_epochs": num_epochs,
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
+                "loss_type": loss_type,
+                "label_smoothing": label_smoothing,
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,

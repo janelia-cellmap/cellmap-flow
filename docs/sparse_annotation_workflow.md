@@ -133,7 +133,19 @@ Before training, ensure all browser edits are saved locally:
 
 ### Step 8: Train with Annotation Crops
 
-Once annotations are synced, use them for finetuning:
+Once annotations are synced, submit training directly from the dashboard:
+
+1. Configure training parameters (LoRA rank, epochs, learning rate, etc.)
+2. Click **"Submit Training Job"**
+3. Monitor training progress (loss, epoch) in the dashboard
+4. When training completes, the finetuned model **auto-loads in Neuroglancer**
+5. Inspect results and optionally **restart training** with more annotations
+
+**Auto-Serve:** After training completes, the finetuned model is automatically served for inference on the same GPU and added as a Neuroglancer layer — no manual model loading required.
+
+**Iterative Training:** Click **"Restart Training"** to retrain with additional annotations or updated parameters, reusing the same GPU allocation. The Neuroglancer layer updates automatically with the new model.
+
+Alternatively, train from the command line:
 
 ```bash
 cellmap_flow_finetune \
@@ -448,12 +460,15 @@ Typical annotation coverage with default parameters:
 ✅ You prefer an **interactive, visual editing** experience
 ✅ You're working with **<10 correction crops**
 ✅ You want **fast iteration** between annotation and training
+✅ You want the finetuned model to **auto-load in Neuroglancer** after training
+✅ You want to **iteratively retrain** on the same GPU without restarting jobs
 
 **Example Use Cases:**
 - Fixing false positives/negatives in a specific region
 - Refining boundary predictions
 - Creating gold-standard training examples
 - Quick prototyping of model corrections
+- Iterative annotate-train-inspect loops on a single GPU
 
 ## Use Sparse Point Workflow When:
 

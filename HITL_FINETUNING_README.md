@@ -498,26 +498,70 @@ Expected output:
 - Check correction quality: `python scripts/inspect_corrections.py`
 - Ensure sufficient corrections (50+ recommended)
 
-## Next Steps
+## Dashboard Workflow: Auto-Serve & Iterative Training
 
-### Browser Integration (Future Work)
+When finetuning is launched from the dashboard, two additional features streamline the workflow:
 
-1. **Correction Capture**:
-   - Add annotation layer to Neuroglancer viewer
-   - Implement `/api/corrections/submit` endpoint
-   - Store corrections to Zarr automatically
+### Auto-Serve After Training
 
-2. **Auto-trigger**:
-   - Background daemon monitors correction count
-   - Auto-submits LSF finetuning job when threshold met
-   - Notifies user when finetuned model ready
+After training completes, the finetuned model is automatically served for inference on the **same GPU** — no need to manually start a new inference job.
 
-3. **A/B Testing**:
+**How it works:**
+1. Training completes and saves LoRA adapters
+2. GPU memory is freed (`torch.cuda.empty_cache()`)
+3. An inference server starts on the same GPU in a background thread
+4. The finetuned model layer is automatically added to the Neuroglancer viewer
+5. The server runs until the training job is killed
+
+**Key details:**
+- The inference server shares the same model object as training — no extra GPU memory for a second model copy
+- The layer name includes a timestamp (e.g., `mito_finetuned_20260213_120000`) which changes on each retrain to bust the Neuroglancer tile cache
+- An "Auto-load model after training" checkbox in the Finetune tab controls this (enabled by default)
+
+### Iterative Training (Restart)
+
+After training completes and the model is served, you can restart training with updated parameters or additional annotations **without needing a new GPU allocation**.
+
+**Workflow:**
+1. Training completes → model is served → you inspect results in Neuroglancer
+2. Optionally add more annotation crops
+3. Click **"Restart Training"** in the dashboard
+4. Optionally update parameters (epochs, learning rate, etc.)
+5. Training restarts on the same GPU with the latest annotations
+6. When done, the Neuroglancer layer updates automatically with the new model
+
+**How it works internally:**
+- The dashboard writes a `restart_signal.json` file to the job's output directory
+- The CLI watches for this signal file in a polling loop
+- On restart, the training loop re-runs with updated parameters
+- Since the model object is shared between training and inference, the inference server automatically picks up new weights
+- The old Neuroglancer layer is replaced with a new one (new timestamp in name)
+- Training logs from previous iterations are archived as `training_log_1.txt`, `training_log_2.txt`, etc.
+
+### End-to-End Dashboard Workflow
+
+```
+1. Create annotation crops in Neuroglancer (Finetune tab)
+2. Paint corrections in the browser
+3. Click "Save Annotations to Disk"
+4. Configure training parameters
+5. Click "Submit Training Job"
+6. Monitor training progress in the dashboard
+7. Training completes → model auto-loads in Neuroglancer
+8. Inspect results, add more annotations if needed
+9. Click "Restart Training" for another iteration
+10. Repeat until satisfied
+11. Kill the training job when done
+```
+
+## Future Improvements
+
+1. **A/B Testing**:
    - Load base + finetuned models side-by-side in Neuroglancer
    - User compares and votes
    - System tracks which model performs better
 
-4. **Active Learning**:
+2. **Active Learning**:
    - Model suggests regions where it's uncertain
    - User prioritizes corrections on hard cases
    - Improves efficiency of human corrections
