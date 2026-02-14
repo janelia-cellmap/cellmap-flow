@@ -2361,6 +2361,7 @@ def submit_finetuning():
         batch_size = data.get("batch_size", 2)
         learning_rate = data.get("learning_rate", 1e-4)
         checkpoint_path_override = data.get("checkpoint_path")  # Optional override
+        auto_serve = data.get("auto_serve", True)  # Auto-serve by default
 
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
@@ -2415,7 +2416,8 @@ def submit_finetuning():
             batch_size=batch_size,
             learning_rate=learning_rate,
             output_base=output_base,
-            checkpoint_path_override=Path(checkpoint_path_override) if checkpoint_path_override else None
+            checkpoint_path_override=Path(checkpoint_path_override) if checkpoint_path_override else None,
+            auto_serve=auto_serve
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
@@ -2547,6 +2549,181 @@ def cancel_job(job_id):
 
     except Exception as e:
         logger.error(f"Error cancelling job: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/job/<job_id>/inference-server", methods=["GET"])
+def get_inference_server_status(job_id):
+    """Get inference server status for a finetuning job."""
+    try:
+        job = finetune_job_manager.get_job(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "ready": job.inference_server_ready,
+            "url": job.inference_server_url,
+            "model_name": job.finetuned_model_name,
+            "model_script_path": str(job.model_script_path) if job.model_script_path else None
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting inference server status: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/viewer/add-finetuned-layer", methods=["POST"])
+def add_finetuned_layer_to_viewer():
+    """Add finetuned model layer to Neuroglancer viewer and register model in system."""
+    try:
+        data = request.get_json()
+        server_url = data.get("server_url")
+        model_name = data.get("model_name")
+        model_script_path = data.get("model_script_path")
+
+        if not server_url or not model_name:
+            return jsonify({"success": False, "error": "Missing server_url or model_name"}), 400
+
+        logger.info(f"Registering finetuned model: {model_name} at {server_url}")
+
+        # 1. Load model config from script if provided
+        if model_script_path and Path(model_script_path).exists():
+            try:
+                model_config = load_safe_config(model_script_path)
+
+                # Add to models_config if not already there
+                if not hasattr(g, 'models_config'):
+                    g.models_config = []
+
+                # Remove old finetuned model configs with same base name
+                base_model_name = model_name.rsplit("_finetuned_", 1)[0] if "_finetuned_" in model_name else model_name
+                g.models_config = [
+                    mc for mc in g.models_config
+                    if not (hasattr(mc, 'name') and mc.name.startswith(f"{base_model_name}_finetuned"))
+                ]
+
+                # Add new config
+                g.models_config.append(model_config)
+                logger.info(f"✓ Loaded model config from {model_script_path}")
+            except Exception as e:
+                logger.warning(f"Could not load model config: {e}")
+
+        # 2. Add to model_catalog under "Finetuned" group
+        if not hasattr(g, 'model_catalog'):
+            g.model_catalog = {}
+
+        if "Finetuned" not in g.model_catalog:
+            g.model_catalog["Finetuned"] = {}
+
+        # Remove old finetuned models with same base name
+        base_model_name = model_name.rsplit("_finetuned_", 1)[0] if "_finetuned_" in model_name else model_name
+        g.model_catalog["Finetuned"] = {
+            name: path for name, path in g.model_catalog["Finetuned"].items()
+            if not name.startswith(f"{base_model_name}_finetuned")
+        }
+
+        # Add new finetuned model
+        g.model_catalog["Finetuned"][model_name] = model_script_path if model_script_path else ""
+        logger.info(f"✓ Added to model catalog: Finetuned/{model_name}")
+
+        # 3. Create a Job object for the running inference server
+        from cellmap_flow.utils.bsub_utils import LSFJob
+
+        # Extract job_id from the finetune job (the training job is running the server)
+        # Find the corresponding finetune job
+        finetune_job = None
+        for job_id, ft_job in finetune_job_manager.jobs.items():
+            if ft_job.finetuned_model_name == model_name:
+                finetune_job = ft_job
+                break
+
+        if finetune_job and finetune_job.job_id:
+            # Create Job object pointing to the running server
+            inference_job = LSFJob(job_id=finetune_job.job_id, model_name=model_name)
+            inference_job.host = server_url
+            inference_job.status = finetune_job.status
+
+            # Remove old jobs for this base model
+            g.jobs = [
+                j for j in g.jobs
+                if not (hasattr(j, 'model_name') and j.model_name and j.model_name.startswith(f"{base_model_name}_finetuned"))
+            ]
+
+            # Add to jobs
+            g.jobs.append(inference_job)
+            logger.info(f"✓ Created Job object for {model_name} with job_id {finetune_job.job_id}")
+        else:
+            logger.warning(f"Could not find finetune job for {model_name}, Job object not created")
+
+        # 4. Add neuroglancer layer
+        layer_name = model_name  # Use model name directly (not prefixed with "finetuned_")
+
+        with g.viewer.txn() as s:
+            # Remove old finetuned layer if it exists
+            if layer_name in s.layers:
+                logger.info(f"Removing old finetuned layer: {layer_name}")
+                del s.layers[layer_name]
+
+            # Add new layer pointing to inference server
+            from cellmap_flow.utils.neuroglancer_utils import get_norms_post_args
+            from cellmap_flow.utils.web_utils import ARGS_KEY
+
+            st_data = get_norms_post_args(g.input_norms, g.postprocess)
+
+            # Create image layer for finetuned model (same style as normal models)
+            import neuroglancer
+            s.layers[layer_name] = neuroglancer.ImageLayer(
+                source=f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
+                    #uicontrol vec3 color color(default="red");
+                    void main(){{emitRGB(color * normalized());}}""",
+            )
+
+        logger.info(f"✓ Added neuroglancer layer: {layer_name} -> {server_url}")
+
+        return jsonify({
+            "success": True,
+            "layer_name": layer_name,
+            "model_name": model_name,
+            "reload_page": True  # Signal frontend to reload to see new model in catalog
+        })
+
+    except Exception as e:
+        logger.error(f"Error adding finetuned layer: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
+def restart_finetuning_job(job_id):
+    """Restart training on the same GPU via signal file.
+
+    The CLI watches for a restart_signal.json file and restarts training
+    without needing a new job/GPU allocation.
+    """
+    try:
+        data = request.get_json() or {}
+
+        # Extract updated parameters
+        updated_params = {}
+        for key in ["num_epochs", "batch_size", "learning_rate"]:
+            if key in data and data[key] is not None:
+                updated_params[key] = data[key]
+
+        # Send restart signal (same job, same GPU)
+        job = finetune_job_manager.restart_finetuning_job(
+            job_id=job_id,
+            updated_params=updated_params
+        )
+
+        return jsonify({
+            "success": True,
+            "job_id": job.job_id,
+            "message": "Restart signal sent. Training will restart on the same GPU.",
+        })
+
+    except Exception as e:
+        logger.error(f"Error restarting job: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

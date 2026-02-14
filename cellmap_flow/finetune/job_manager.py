@@ -58,6 +58,10 @@ class FinetuneJob:
         current_epoch: Current training epoch (updated during training)
         total_epochs: Total number of epochs
         latest_loss: Most recent loss value
+        inference_server_url: URL of inference server (set when server starts)
+        inference_server_ready: Whether inference server is ready
+        previous_job_id: ID of previous job in restart chain
+        next_job_id: ID of next job in restart chain
     """
     job_id: str
     lsf_job: Optional[LSFJob]
@@ -73,6 +77,10 @@ class FinetuneJob:
     current_epoch: int = 0
     total_epochs: int = 10
     latest_loss: Optional[float] = None
+    inference_server_url: Optional[str] = None
+    inference_server_ready: bool = False
+    previous_job_id: Optional[str] = None
+    next_job_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -99,6 +107,10 @@ class FinetuneJob:
             "current_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
             "latest_loss": self.latest_loss,
+            "inference_server_url": self.inference_server_url,
+            "inference_server_ready": self.inference_server_ready,
+            "previous_job_id": self.previous_job_id,
+            "next_job_id": self.next_job_id,
         }
 
 
@@ -149,6 +161,26 @@ class FinetuneJobManager:
 
         return default
 
+    def _extract_data_path_from_corrections(self, corrections_path: Path) -> str:
+        """Extract dataset path from corrections metadata."""
+        # Look for first .zarr directory
+        zarr_dirs = list(corrections_path.glob("*.zarr"))
+        if not zarr_dirs:
+            raise ValueError("No .zarr directories found in corrections")
+
+        # Read .zattrs
+        zattrs_file = zarr_dirs[0] / ".zattrs"
+        if not zattrs_file.exists():
+            raise ValueError("No .zattrs metadata found in corrections")
+
+        with open(zattrs_file) as f:
+            metadata = json.load(f)
+
+        if "dataset_path" not in metadata:
+            raise ValueError("No 'dataset_path' found in corrections metadata")
+
+        return metadata["dataset_path"]
+
     def submit_finetuning_job(
         self,
         model_config,
@@ -160,7 +192,8 @@ class FinetuneJobManager:
         output_base: Optional[Path] = None,
         queue: str = "gpu_h100",
         charge_group: str = "cellmap",
-        checkpoint_path_override: Optional[Path] = None
+        checkpoint_path_override: Optional[Path] = None,
+        auto_serve: bool = True
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -176,6 +209,7 @@ class FinetuneJobManager:
             queue: LSF queue name (default: gpu_h100)
             charge_group: LSF charge group (default: cellmap)
             checkpoint_path_override: Optional path to override checkpoint detection (default: None)
+            auto_serve: Automatically start inference server after training (default: True)
 
         Returns:
             FinetuneJob object tracking the submitted job
@@ -276,6 +310,17 @@ class FinetuneJobManager:
         if not isinstance(output_voxel_size, list):
             output_voxel_size = list(output_voxel_size)
 
+        # Extract data path for inference server if auto-serve is enabled
+        serve_data_path = None
+        if auto_serve:
+            try:
+                serve_data_path = self._extract_data_path_from_corrections(corrections_path)
+                self.logger.info(f"Extracted dataset path for inference: {serve_data_path}")
+            except Exception as e:
+                self.logger.warning(f"Could not extract dataset path from corrections: {e}")
+                self.logger.warning("Auto-serve will be disabled")
+                auto_serve = False
+
         # Build CLI command
         cli_command = f"python -m cellmap_flow.finetune.cli "
         cli_command += f"--model-type {model_type} "
@@ -298,8 +343,13 @@ class FinetuneJobManager:
             f"--num-epochs {num_epochs} "
             f"--batch-size {batch_size} "
             f"--learning-rate {learning_rate} "
-            f"2>&1 | tee {log_file}"
         )
+
+        # Add auto-serve flags if enabled
+        if auto_serve and serve_data_path:
+            cli_command += f"--auto-serve --serve-data-path {serve_data_path} "
+
+        cli_command += f"2>&1 | tee {log_file}"
 
         self.logger.info(f"Training command: {cli_command}")
 
@@ -449,6 +499,12 @@ class FinetuneJobManager:
 
                 if finetune_job.log_file.exists():
                     try:
+                        # Check if file was truncated (e.g., during restart archival)
+                        file_size = finetune_job.log_file.stat().st_size
+                        if file_size < last_log_position:
+                            self.logger.info(f"Log file truncated (size {file_size} < position {last_log_position}), resetting")
+                            last_log_position = 0
+
                         with open(finetune_job.log_file, "r") as f:
                             # Seek to last read position
                             f.seek(last_log_position)
@@ -458,6 +514,10 @@ class FinetuneJobManager:
                             if new_content:
                                 # Parse for epoch and loss information
                                 self._parse_training_progress(finetune_job, new_content)
+                                # Parse for inference server ready marker
+                                self._parse_inference_server_ready(finetune_job, new_content)
+                                # Parse for restart/iteration markers
+                                self._parse_training_restart(finetune_job, new_content)
                     except Exception as e:
                         self.logger.debug(f"Error reading log file: {e}")
 
@@ -513,6 +573,150 @@ class FinetuneJobManager:
                     break
                 except ValueError:
                     pass
+
+    def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
+        """
+        Add (or replace) the finetuned model's neuroglancer layer.
+
+        Mirrors run_model() from cellmap_flow/models/run.py:
+        1. Create/update Job object in g.jobs
+        2. Add neuroglancer ImageLayer with pre/post processing args
+
+        Args:
+            finetune_job: Job with inference_server_url set
+            model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
+        """
+        from cellmap_flow.globals import g
+        from cellmap_flow.utils.web_utils import get_norms_post_args, ARGS_KEY
+        import neuroglancer
+
+        server_url = finetune_job.inference_server_url
+
+        # Create a Job object for the running server
+        inference_job = LSFJob(
+            job_id=finetune_job.lsf_job.job_id if finetune_job.lsf_job else "local",
+            model_name=model_name
+        )
+        inference_job.host = server_url
+        inference_job.status = LSFJobStatus.RUNNING
+
+        # Remove any old finetuned jobs for this base model
+        g.jobs = [
+            j for j in g.jobs
+            if not (hasattr(j, 'model_name') and j.model_name
+                    and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
+        ]
+
+        # Add to g.jobs
+        g.jobs.append(inference_job)
+        self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
+
+        # Get pre/post processing args (same hash as other models)
+        st_data = get_norms_post_args(g.input_norms, g.postprocess)
+
+        if g.viewer is None:
+            self.logger.error("g.viewer is None - neuroglancer not initialized yet")
+            return
+
+        source_url = f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}"
+        self.logger.info(f"Adding neuroglancer layer: {model_name}")
+        self.logger.info(f"  source: {source_url}")
+
+        with g.viewer.txn() as s:
+            # Remove old finetuned layer if it exists (exact name match)
+            old_layer_name = finetune_job.finetuned_model_name
+            if old_layer_name and old_layer_name in s.layers:
+                self.logger.info(f"Removing old finetuned layer: {old_layer_name}")
+                del s.layers[old_layer_name]
+
+            # Also remove by current name in case of re-add
+            if model_name in s.layers:
+                del s.layers[model_name]
+
+            # Add new layer - exact same format as run_model()
+            s.layers[model_name] = neuroglancer.ImageLayer(
+                source=source_url,
+                shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
+                    #uicontrol vec3 color color(default="red");
+                    void main(){{emitRGB(color * normalized());}}""",
+            )
+
+        # Update the stored name
+        finetune_job.finetuned_model_name = model_name
+        self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
+
+    def _parse_inference_server_ready(self, finetune_job: FinetuneJob, log_content: str):
+        """
+        Parse log for CELLMAP_FLOW_SERVER_IP marker and add finetuned model
+        to neuroglancer exactly like a normal inference model.
+
+        Args:
+            finetune_job: Job to update
+            log_content: New log content to parse
+        """
+        if finetune_job.inference_server_ready:
+            return
+
+        # Look for the standard server IP marker (same one start_hosts() uses)
+        from cellmap_flow.utils.web_utils import IP_PATTERN
+        ip_start = IP_PATTERN[0]
+        ip_end = IP_PATTERN[1]
+
+        pattern = re.escape(ip_start) + r"(.+?)" + re.escape(ip_end)
+        matches = re.findall(pattern, log_content)
+        if not matches:
+            return
+
+        server_url = matches[-1]
+        finetune_job.inference_server_url = server_url
+        finetune_job.inference_server_ready = True
+        self.logger.info(f"Finetuned inference server detected at {server_url}")
+
+        try:
+            # Use TRAINING_ITERATION_COMPLETE marker for the name with timestamp
+            # If not found, fall back to base name
+            iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
+            iter_matches = re.findall(iter_pattern, log_content)
+            if iter_matches:
+                model_name = iter_matches[-1]
+            else:
+                model_name = f"{finetune_job.model_name}_finetuned"
+
+            self._add_finetuned_neuroglancer_layer(finetune_job, model_name)
+
+        except Exception as e:
+            self.logger.error(f"Failed to add finetuned model to neuroglancer: {e}", exc_info=True)
+
+    def _parse_training_restart(self, finetune_job: FinetuneJob, log_content: str):
+        """
+        Parse log for RESTARTING_TRAINING and TRAINING_ITERATION_COMPLETE markers
+        to handle iterative training restarts.
+
+        On RESTARTING_TRAINING: reset training progress counters.
+        On TRAINING_ITERATION_COMPLETE: update the neuroglancer layer name with new timestamp.
+
+        Args:
+            finetune_job: Job to update
+            log_content: New log content to parse
+        """
+        # Check for restart marker - reset progress
+        if "RESTARTING_TRAINING" in log_content:
+            self.logger.info(f"Training restart detected for job {finetune_job.job_id}")
+            finetune_job.current_epoch = 0
+            finetune_job.latest_loss = None
+            finetune_job.status = JobStatus.RUNNING
+
+        # Check for iteration complete marker - update neuroglancer layer
+        iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
+        iter_matches = re.findall(iter_pattern, log_content)
+        if iter_matches and finetune_job.inference_server_ready:
+            new_model_name = iter_matches[-1]
+            if new_model_name != finetune_job.finetuned_model_name:
+                self.logger.info(f"New training iteration complete: {new_model_name}")
+                try:
+                    self._add_finetuned_neuroglancer_layer(finetune_job, new_model_name)
+                except Exception as e:
+                    self.logger.error(f"Failed to update neuroglancer layer: {e}", exc_info=True)
 
     def complete_job(self, finetune_job: FinetuneJob):
         """
@@ -584,26 +788,41 @@ class FinetuneJobManager:
             self.logger.error(f"Failed to create models directory {models_dir}: {e}")
             raise RuntimeError(f"Failed to create models directory: {e}")
 
-        # Get base model script path from metadata if available
-        metadata_file = finetune_job.output_dir / "metadata.json"
-        base_script_path = None
-        if metadata_file.exists():
+        # Check if files already exist (generated by CLI with auto-serve)
+        expected_script = models_dir / f"{finetuned_model_name}.py"
+        expected_yaml = models_dir / f"{finetuned_model_name}.yaml"
+        files_already_generated = expected_script.exists() and expected_yaml.exists()
+
+        if files_already_generated:
+            self.logger.info(f"Model files already generated by CLI, skipping generation")
+            finetune_job.model_script_path = expected_script
+            finetune_job.model_yaml_path = expected_yaml
+            script_path = expected_script
+            yaml_path = expected_yaml
+            # Skip to registration
+        else:
+            self.logger.info(f"Generating model files...")
+
+            # Get base model script path from metadata if available
+            metadata_file = finetune_job.output_dir / "metadata.json"
+            base_script_path = None
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file, "r") as f:
+                        metadata = json.load(f)
+                        base_script_path = metadata.get("model_script", None)
+                        self.logger.info(f"Found base model script in metadata: {base_script_path}")
+                except Exception as e:
+                    self.logger.warning(f"Could not read base script from metadata: {e}")
+
             try:
-                with open(metadata_file, "r") as f:
-                    metadata = json.load(f)
-                    base_script_path = metadata.get("model_script", None)
-                    self.logger.info(f"Found base model script in metadata: {base_script_path}")
-            except Exception as e:
-                self.logger.warning(f"Could not read base script from metadata: {e}")
+                # Generate .py script
+                self.logger.info(f"Generating finetuned model script for {finetuned_model_name}...")
+                self.logger.info(f"  Base script path: {base_script_path}")
+                self.logger.info(f"  LoRA adapter path: {adapter_path}")
+                self.logger.info(f"  Output path: {models_dir / f'{finetuned_model_name}.py'}")
 
-        try:
-            # Generate .py script
-            self.logger.info(f"Generating finetuned model script for {finetuned_model_name}...")
-            self.logger.info(f"  Base script path: {base_script_path}")
-            self.logger.info(f"  LoRA adapter path: {adapter_path}")
-            self.logger.info(f"  Output path: {models_dir / f'{finetuned_model_name}.py'}")
-
-            script_path = generate_finetuned_model_script(
+                script_path = generate_finetuned_model_script(
                 base_checkpoint=finetune_job.params.get("model_checkpoint", ""),
                 lora_adapter_path=str(adapter_path),
                 model_name=finetuned_model_name,
@@ -616,105 +835,105 @@ class FinetuneJobManager:
                 learning_rate=finetune_job.params.get("learning_rate", 1e-4),
                 output_path=models_dir / f"{finetuned_model_name}.py",
                 base_script_path=base_script_path
-            )
-
-            finetune_job.model_script_path = script_path
-            self.logger.info(f"Generated model script: {script_path}")
-
-            # === Extract configuration from base model and corrections ===
-            # NO PLACEHOLDERS - we must get real values from the training data
-
-            data_path = None
-            json_data = None
-            base_scale = "s0"  # Default scale (only safe default)
-
-            # 1. Get dataset_path from corrections metadata (REQUIRED)
-            self.logger.info("Extracting dataset path from corrections metadata...")
-            corrections_dir = Path(metadata.get("corrections_path", ""))
-            if corrections_dir.exists():
-                correction_dirs = [d for d in corrections_dir.iterdir() if d.is_dir() and (d / ".zattrs").exists()]
-                if correction_dirs:
-                    zattrs_file = correction_dirs[0] / ".zattrs"
-                    try:
-                        with open(zattrs_file, "r") as f:
-                            correction_attrs = json.load(f)
-                            data_path = correction_attrs.get("dataset_path")
-                            if data_path:
-                                self.logger.info(f"✓ Found dataset_path from corrections: {data_path}")
-                            else:
-                                self.logger.error(f"No dataset_path in correction metadata: {zattrs_file}")
-                    except Exception as e:
-                        self.logger.error(f"Failed to read correction metadata: {e}")
-                else:
-                    self.logger.error(f"No correction directories found in {corrections_dir}")
-            else:
-                self.logger.error(f"Corrections directory does not exist: {corrections_dir}")
-
-            # 2. Get normalization and preprocessing from base model YAML
-            if base_script_path:
-                self.logger.info("Extracting normalization from base model YAML...")
-                import yaml
-                base_yaml_path = Path(base_script_path).with_suffix('.yaml')
-                if base_yaml_path.exists():
-                    try:
-                        with open(base_yaml_path, 'r') as f:
-                            base_config = yaml.safe_load(f)
-
-                            # Get json_data (normalization and postprocessing)
-                            if 'json_data' in base_config:
-                                json_data = base_config['json_data']
-                                self.logger.info(f"✓ Found json_data from base model YAML")
-                            else:
-                                self.logger.warning(f"No json_data in base model YAML: {base_yaml_path}")
-
-                            # Get data_path from base model (fallback if not in corrections)
-                            if not data_path and 'data_path' in base_config:
-                                data_path = base_config['data_path']
-                                self.logger.info(f"✓ Using data_path from base model YAML: {data_path}")
-
-                            # Get scale
-                            if 'models' in base_config and len(base_config['models']) > 0:
-                                base_scale = base_config['models'][0].get('scale', 's0')
-                                self.logger.info(f"✓ Found scale from base model: {base_scale}")
-                    except Exception as e:
-                        self.logger.error(f"Failed to read base model YAML {base_yaml_path}: {e}")
-                else:
-                    self.logger.warning(f"Base model YAML not found: {base_yaml_path}")
-
-            # 3. Validate we have required data (NO PLACEHOLDERS!)
-            if not data_path:
-                raise RuntimeError(
-                    "Could not determine dataset_path for finetuned model. "
-                    "Checked corrections metadata and base model YAML. "
-                    "Cannot generate model config without actual dataset path."
                 )
 
-            if not json_data:
-                self.logger.warning(
-                    "No json_data (normalization/postprocessing) found. "
-                    "Finetuned model may not work correctly without proper normalization. "
-                    "Consider adding json_data to base model YAML."
+                finetune_job.model_script_path = script_path
+                self.logger.info(f"Generated model script: {script_path}")
+
+                # === Extract configuration from base model and corrections ===
+                # NO PLACEHOLDERS - we must get real values from the training data
+
+                data_path = None
+                json_data = None
+                base_scale = "s0"  # Default scale (only safe default)
+
+                # 1. Get dataset_path from corrections metadata (REQUIRED)
+                self.logger.info("Extracting dataset path from corrections metadata...")
+                corrections_dir = Path(metadata.get("corrections_path", ""))
+                if corrections_dir.exists():
+                    correction_dirs = [d for d in corrections_dir.iterdir() if d.is_dir() and (d / ".zattrs").exists()]
+                    if correction_dirs:
+                        zattrs_file = correction_dirs[0] / ".zattrs"
+                        try:
+                            with open(zattrs_file, "r") as f:
+                                correction_attrs = json.load(f)
+                                data_path = correction_attrs.get("dataset_path")
+                                if data_path:
+                                    self.logger.info(f"✓ Found dataset_path from corrections: {data_path}")
+                                else:
+                                    self.logger.error(f"No dataset_path in correction metadata: {zattrs_file}")
+                        except Exception as e:
+                            self.logger.error(f"Failed to read correction metadata: {e}")
+                    else:
+                        self.logger.error(f"No correction directories found in {corrections_dir}")
+                else:
+                    self.logger.error(f"Corrections directory does not exist: {corrections_dir}")
+
+                # 2. Get normalization and preprocessing from base model YAML
+                if base_script_path:
+                    self.logger.info("Extracting normalization from base model YAML...")
+                    import yaml
+                    base_yaml_path = Path(base_script_path).with_suffix('.yaml')
+                    if base_yaml_path.exists():
+                        try:
+                            with open(base_yaml_path, 'r') as f:
+                                base_config = yaml.safe_load(f)
+
+                                # Get json_data (normalization and postprocessing)
+                                if 'json_data' in base_config:
+                                    json_data = base_config['json_data']
+                                    self.logger.info(f"✓ Found json_data from base model YAML")
+                                else:
+                                    self.logger.warning(f"No json_data in base model YAML: {base_yaml_path}")
+
+                                # Get data_path from base model (fallback if not in corrections)
+                                if not data_path and 'data_path' in base_config:
+                                    data_path = base_config['data_path']
+                                    self.logger.info(f"✓ Using data_path from base model YAML: {data_path}")
+
+                                # Get scale
+                                if 'models' in base_config and len(base_config['models']) > 0:
+                                    base_scale = base_config['models'][0].get('scale', 's0')
+                                    self.logger.info(f"✓ Found scale from base model: {base_scale}")
+                        except Exception as e:
+                            self.logger.error(f"Failed to read base model YAML {base_yaml_path}: {e}")
+                    else:
+                        self.logger.warning(f"Base model YAML not found: {base_yaml_path}")
+
+                # 3. Validate we have required data (NO PLACEHOLDERS!)
+                if not data_path:
+                    raise RuntimeError(
+                        "Could not determine dataset_path for finetuned model. "
+                        "Checked corrections metadata and base model YAML. "
+                        "Cannot generate model config without actual dataset path."
+                    )
+
+                if not json_data:
+                    self.logger.warning(
+                        "No json_data (normalization/postprocessing) found. "
+                        "Finetuned model may not work correctly without proper normalization. "
+                        "Consider adding json_data to base model YAML."
+                    )
+
+                # Generate .yaml config
+                yaml_path = generate_finetuned_model_yaml(
+                    script_path=script_path,
+                    model_name=finetuned_model_name,
+                    resolution=finetune_job.params.get("input_voxel_size", [16, 16, 16])[0],
+                    output_path=models_dir / f"{finetuned_model_name}.yaml",
+                    data_path=data_path,
+                    json_data=json_data,
+                    scale=base_scale
                 )
 
-            # Generate .yaml config
-            yaml_path = generate_finetuned_model_yaml(
-                script_path=script_path,
-                model_name=finetuned_model_name,
-                resolution=finetune_job.params.get("input_voxel_size", [16, 16, 16])[0],
-                output_path=models_dir / f"{finetuned_model_name}.yaml",
-                data_path=data_path,
-                json_data=json_data,
-                scale=base_scale
-            )
+                finetune_job.model_yaml_path = yaml_path
+                self.logger.info(f"Generated model YAML: {yaml_path}")
 
-            finetune_job.model_yaml_path = yaml_path
-            self.logger.info(f"Generated model YAML: {yaml_path}")
-
-        except Exception as e:
-            import traceback
-            self.logger.error(f"Error generating model files: {e}")
-            self.logger.error(f"Traceback:\n{traceback.format_exc()}")
-            raise RuntimeError(f"Failed to generate model files: {e}")
+            except Exception as e:
+                import traceback
+                self.logger.error(f"Error generating model files: {e}")
+                self.logger.error(f"Traceback:\n{traceback.format_exc()}")
+                raise RuntimeError(f"Failed to generate model files: {e}")
 
         # === Update metadata file with completion info ===
 
@@ -809,6 +1028,11 @@ class FinetuneJobManager:
             "output_dir": str(finetune_job.output_dir),
             "log_file": str(finetune_job.log_file),
             "finetuned_model_name": finetune_job.finetuned_model_name,
+            "params": finetune_job.params,
+            "inference_server_ready": finetune_job.inference_server_ready,
+            "inference_server_url": finetune_job.inference_server_url,
+            "model_script_path": str(finetune_job.model_script_path) if finetune_job.model_script_path else None,
+            "model_yaml_path": str(finetune_job.model_yaml_path) if finetune_job.model_yaml_path else None,
         }
 
     def list_jobs(self) -> List[Dict[str, Any]]:
@@ -844,3 +1068,115 @@ class FinetuneJobManager:
         except Exception as e:
             self.logger.error(f"Error reading log file: {e}")
             return f"Error reading log file: {e}"
+
+    def get_job(self, job_id: str) -> Optional[FinetuneJob]:
+        """
+        Get a FinetuneJob object by ID.
+
+        Args:
+            job_id: Job ID to retrieve
+
+        Returns:
+            FinetuneJob object, or None if not found
+        """
+        return self.jobs.get(job_id)
+
+    def _archive_job_logs(self, job: FinetuneJob):
+        """
+        Archive logs before restart.
+
+        Args:
+            job: The job whose logs to archive
+        """
+        log_file = job.log_file
+        metadata_file = job.output_dir / "metadata.json"
+
+        # Find next archive number
+        archive_num = 1
+        while (job.output_dir / f"training_log_{archive_num}.txt").exists():
+            archive_num += 1
+
+        # Archive log (copy only - do NOT truncate, as tee still has an open file descriptor)
+        if log_file.exists():
+            import shutil
+            archive_log = job.output_dir / f"training_log_{archive_num}.txt"
+            shutil.copy(log_file, archive_log)
+            self.logger.info(f"Archived log to {archive_log}")
+
+        # Archive metadata
+        if metadata_file.exists():
+            import shutil
+            archive_meta = job.output_dir / f"metadata_{archive_num}.json"
+            shutil.copy(metadata_file, archive_meta)
+            self.logger.info(f"Archived metadata to {archive_meta}")
+
+    def restart_finetuning_job(
+        self,
+        job_id: str,
+        updated_params: Optional[Dict[str, Any]] = None
+    ) -> FinetuneJob:
+        """
+        Restart training on the same GPU by writing a signal file.
+
+        The CLI watches for this signal file and restarts training
+        without needing a new job/GPU allocation. The inference server
+        keeps running on the same port, and the shared model object
+        gets updated weights automatically.
+
+        Args:
+            job_id: ID of job to restart
+            updated_params: Dict of updated training parameters
+
+        Returns:
+            Same FinetuneJob object (updated in-place)
+
+        Raises:
+            ValueError: If job not found or not in a restartable state
+        """
+        if job_id not in self.jobs:
+            raise ValueError(f"Job {job_id} not found")
+
+        job = self.jobs[job_id]
+
+        # Only allow restart if the job is running (serving after training)
+        if job.status not in [JobStatus.RUNNING, JobStatus.COMPLETED]:
+            raise ValueError(
+                f"Job {job_id} is in state {job.status.value} - "
+                f"can only restart jobs that are RUNNING (serving) or COMPLETED"
+            )
+
+        if not job.inference_server_ready:
+            raise ValueError(
+                f"Job {job_id} inference server not ready - "
+                f"training must complete and server must start before restarting"
+            )
+
+        # 1. Archive current logs
+        self.logger.info(f"Archiving logs for job {job_id}...")
+        self._archive_job_logs(job)
+
+        # 2. Write restart signal file
+        signal_file = job.output_dir / "restart_signal.json"
+        signal_data = {
+            "restart": True,
+            "timestamp": datetime.now().isoformat(),
+            "params": updated_params or {}
+        }
+
+        with open(signal_file, 'w') as f:
+            json.dump(signal_data, f, indent=2)
+
+        self.logger.info(f"Wrote restart signal to {signal_file}")
+
+        # 3. Reset training progress (keep inference server info)
+        job.current_epoch = 0
+        job.latest_loss = None
+        job.status = JobStatus.RUNNING
+
+        # 4. Update stored params
+        if updated_params:
+            job.params.update(updated_params)
+
+        self.logger.info(f"Job {job_id} restart signal sent, waiting for CLI to pick it up")
+
+        return job

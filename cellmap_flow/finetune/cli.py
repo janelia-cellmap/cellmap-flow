@@ -20,14 +20,20 @@ Usage:
 """
 
 import argparse
+import gc
+import json
 import logging
+import socket
 import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 
-from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig
+from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, ModelConfig
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 from cellmap_flow.finetune.dataset import create_dataloader
 from cellmap_flow.finetune.trainer import LoRAFinetuner
@@ -38,6 +44,203 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _start_inference_server_background(args, model_config: ModelConfig, trained_model):
+    """
+    Start inference server in a background daemon thread.
+
+    The server shares the same model object, so retraining updates weights
+    automatically without needing to restart the server.
+
+    Args:
+        args: Command-line arguments
+        model_config: Base model configuration
+        trained_model: The trained LoRA model
+
+    Returns:
+        (thread, port) tuple
+    """
+    logger.info("=" * 60)
+    logger.info("Starting inference server with finetuned model...")
+    logger.info("=" * 60)
+
+    # Clear GPU cache from training
+    logger.info("Clearing GPU cache...")
+    torch.cuda.empty_cache()
+    gc.collect()
+    time.sleep(2)
+
+    # Validate serve data path
+    if not args.serve_data_path:
+        raise ValueError("--serve-data-path is required when --auto-serve is enabled")
+
+    if not Path(args.serve_data_path).exists():
+        raise ValueError(f"Data path not found: {args.serve_data_path}")
+
+    # Use the already-trained model
+    logger.info("Using trained LoRA model for inference...")
+
+    from cellmap_flow.models.models_config import _get_device
+    device = _get_device()
+    trained_model.eval()
+    logger.info(f"Model set to eval mode on {device}")
+
+    # Replace the model in the config with our finetuned version
+    model_config.config.model = trained_model
+
+    # Start server
+    from cellmap_flow.server import CellMapFlowServer
+    from cellmap_flow.utils.web_utils import get_free_port
+
+    logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
+    server = CellMapFlowServer(args.serve_data_path, model_config)
+
+    # Get port
+    port = args.serve_port if args.serve_port != 0 else get_free_port()
+
+    # Start in daemon thread (server.run() prints CELLMAP_FLOW_SERVER_IP marker automatically)
+    server_thread = threading.Thread(
+        target=server.run,
+        kwargs={'port': port, 'debug': False},
+        daemon=True
+    )
+    server_thread.start()
+
+    # Give the server a moment to start and print its marker
+    time.sleep(2)
+
+    host_url = f"http://{socket.gethostname()}:{port}"
+    logger.info("=" * 60)
+    logger.info(f"Inference server running at {host_url}")
+    logger.info("Server is running in background. Watching for restart signals...")
+    logger.info("=" * 60)
+
+    return server_thread, port
+
+
+def _wait_for_restart_signal(signal_file: Path, check_interval: float = 5.0):
+    """
+    Watch for a restart signal file. Blocks until signal appears.
+
+    The signal file is a JSON file written by the job manager when
+    the user clicks "Restart Training" in the dashboard.
+
+    Args:
+        signal_file: Path to watch for
+        check_interval: Seconds between checks
+
+    Returns:
+        Dict with restart parameters, or None if signal file is malformed
+    """
+    logger.info(f"Watching for restart signal at {signal_file}")
+
+    while True:
+        if signal_file.exists():
+            try:
+                with open(signal_file) as f:
+                    signal_data = json.load(f)
+                signal_file.unlink()  # Remove signal file
+                logger.info(f"Restart signal received: {signal_data}")
+                return signal_data
+            except Exception as e:
+                logger.error(f"Error reading restart signal: {e}")
+                # Remove malformed signal file
+                try:
+                    signal_file.unlink()
+                except OSError:
+                    pass
+                return None
+        time.sleep(check_interval)
+
+
+def _apply_restart_params(args, signal_data: dict):
+    """
+    Update args with parameters from restart signal.
+
+    Args:
+        args: argparse Namespace to update
+        signal_data: Dict from restart signal file
+    """
+    params = signal_data.get("params", {})
+    for key, value in params.items():
+        if hasattr(args, key) and value is not None:
+            old_value = getattr(args, key)
+            setattr(args, key, value)
+            if old_value != value:
+                logger.info(f"Updated {key}: {old_value} -> {value}")
+
+
+def _generate_model_files(args, model_config, timestamp):
+    """
+    Generate model script and YAML files after training.
+
+    Args:
+        args: Command-line arguments
+        model_config: Model configuration
+        timestamp: Timestamp string for naming
+
+    Returns:
+        (finetuned_model_name, script_path, yaml_path) tuple
+    """
+    from cellmap_flow.finetune.model_templates import (
+        generate_finetuned_model_script,
+        generate_finetuned_model_yaml
+    )
+
+    model_basename = model_config.name
+    finetuned_model_name = f"{model_basename}_finetuned_{timestamp}"
+
+    # Create models directory in output
+    output_dir_path = Path(args.output_dir)
+    session_path = output_dir_path.parent.parent.parent
+    models_dir = session_path / "models"
+    models_dir.mkdir(exist_ok=True, parents=True)
+
+    logger.info(f"Generating model files for {finetuned_model_name}...")
+
+    # Generate script
+    script_path = generate_finetuned_model_script(
+        base_checkpoint=args.model_checkpoint if args.model_checkpoint else None,
+        lora_adapter_path=str(output_dir_path / "lora_adapter"),
+        model_name=finetuned_model_name,
+        channels=args.channels,
+        input_voxel_size=tuple(args.input_voxel_size),
+        output_voxel_size=tuple(args.output_voxel_size),
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        num_epochs=args.num_epochs,
+        learning_rate=args.learning_rate,
+        output_path=models_dir / f"{finetuned_model_name}.py",
+        base_script_path=args.model_script if hasattr(args, 'model_script') and args.model_script else None
+    )
+    logger.info(f"Generated script: {script_path}")
+
+    # Extract data path from corrections
+    corrections_path = Path(args.corrections)
+    zarr_dirs = list(corrections_path.glob("*.zarr"))
+    data_path = None
+    if zarr_dirs:
+        zattrs_file = zarr_dirs[0] / ".zattrs"
+        if zattrs_file.exists():
+            with open(zattrs_file) as f:
+                metadata = json.load(f)
+                data_path = metadata.get("dataset_path")
+
+    if not data_path:
+        logger.warning("Could not extract data_path from corrections, using serve_data_path")
+        data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
+
+    yaml_path = generate_finetuned_model_yaml(
+        script_path=script_path,
+        model_name=finetuned_model_name,
+        resolution=args.output_voxel_size[0],
+        output_path=models_dir / f"{finetuned_model_name}.yaml",
+        data_path=data_path
+    )
+    logger.info(f"Generated YAML: {yaml_path}")
+
+    return finetuned_model_name, script_path, yaml_path
 
 
 def main():
@@ -193,20 +396,39 @@ def main():
         help="Path to checkpoint to resume from"
     )
 
+    # Auto-serve arguments
+    parser.add_argument(
+        "--auto-serve",
+        action="store_true",
+        help="Automatically start inference server after training completes"
+    )
+    parser.add_argument(
+        "--serve-data-path",
+        type=str,
+        default=None,
+        help="Dataset path for inference server (required if --auto-serve is used)"
+    )
+    parser.add_argument(
+        "--serve-port",
+        type=int,
+        default=0,
+        help="Port for inference server (0 for auto-assignment)"
+    )
+
     args = parser.parse_args()
 
     # Debug: Print all arguments
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"DEBUG: All parsed arguments:")
     for key, value in vars(args).items():
         print(f"  {key}: {value}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
     logger.info(f"DEBUG: All parsed arguments: {vars(args)}")
 
     # Print configuration
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info("LoRA Finetuning Configuration")
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info(f"Model type: {args.model_type}")
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
@@ -217,10 +439,9 @@ def main():
     logger.info(f"Learning rate: {args.learning_rate}")
     logger.info("")
 
-    # Load model
+    # === Load model (once) ===
     logger.info("Loading model...")
 
-    # Handle script-based models
     if args.model_script:
         from cellmap_flow.models.models_config import ScriptModelConfig
         logger.info(f"Using script-based model: {args.model_script}")
@@ -242,8 +463,6 @@ def main():
     elif args.model_type == "dacapo":
         if not args.model_checkpoint:
             raise ValueError("For dacapo models, --model-checkpoint is required")
-        # Parse dacapo run name and iteration from checkpoint path
-        # Expected format: /path/to/runs/{run_name}/model_checkpoint_{iteration}
         checkpoint_path = Path(args.model_checkpoint)
         iteration = int(checkpoint_path.stem.split('_')[-1])
         run_name = checkpoint_path.parent.name
@@ -256,15 +475,12 @@ def main():
         raise ValueError(f"Unknown model type: {args.model_type}")
 
     base_model = model_config.config.model
-    logger.info(f"✓ Model loaded: {type(base_model).__name__}")
+    logger.info(f"Model loaded: {type(base_model).__name__}")
 
-    # Determine which channel to select (if model outputs multiple channels)
-    # For fly models configured with specific channels, they already output only that channel
-    # So we don't need to select a channel during training
     select_channel = None
     logger.info(f"Model outputs {model_config.config.output_channels} channel(s), no channel selection needed during training")
 
-    # Wrap with LoRA
+    # === Wrap with LoRA (once - same object is reused across restarts) ===
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
     lora_model = wrap_model_with_lora(
         base_model,
@@ -273,66 +489,128 @@ def main():
         lora_dropout=args.lora_dropout,
     )
 
-    # Create dataloader
-    logger.info(f"Loading corrections from {args.corrections}...")
-    logger.info(f"DEBUG: args.corrections value: '{args.corrections}' (type: {type(args.corrections)})")
-    dataloader = create_dataloader(
-        args.corrections,
-        batch_size=args.batch_size,
-        patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
-        augment=not args.no_augment,
-        num_workers=args.num_workers,
-        shuffle=True,
-        model_name=args.model_name,
-        normalize=False,  # Dashboard corrections are already normalized
-    )
-    logger.info(f"✓ DataLoader created: {len(dataloader.dataset)} corrections")
+    # === Training loop (supports restart via signal file) ===
+    server_started = False
+    iteration = 0
 
-    # Create trainer
-    logger.info("Creating trainer...")
-    trainer = LoRAFinetuner(
-        lora_model,
-        dataloader,
-        output_dir=args.output_dir,
-        learning_rate=args.learning_rate,
-        num_epochs=args.num_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        use_mixed_precision=not args.no_mixed_precision,
-        loss_type=args.loss_type,
-        select_channel=select_channel,
-        mask_unannotated=False,  # Dense annotations, not sparse
-    )
+    while True:
+        iteration += 1
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Resume from checkpoint if specified
-    if args.resume:
-        logger.info(f"Resuming from checkpoint: {args.resume}")
-        trainer.load_checkpoint(args.resume)
+        if iteration > 1:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(f"Training Iteration {iteration}")
+            logger.info("=" * 60)
 
-    # Train
-    try:
-        stats = trainer.train()
+        # Create dataloader (re-created each iteration to pick up new annotations)
+        logger.info(f"Loading corrections from {args.corrections}...")
+        dataloader = create_dataloader(
+            args.corrections,
+            batch_size=args.batch_size,
+            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+            augment=not args.no_augment,
+            num_workers=args.num_workers,
+            shuffle=True,
+            model_name=args.model_name,
+            normalize=False,
+        )
+        logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
-        # Save final adapter
-        logger.info("\nSaving LoRA adapter...")
-        trainer.save_adapter()
+        # Create trainer (re-created each iteration for fresh optimizer/scheduler)
+        logger.info("Creating trainer...")
+        trainer = LoRAFinetuner(
+            lora_model,
+            dataloader,
+            output_dir=args.output_dir,
+            learning_rate=args.learning_rate,
+            num_epochs=args.num_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            use_mixed_precision=not args.no_mixed_precision,
+            loss_type=args.loss_type,
+            select_channel=select_channel,
+            mask_unannotated=False,
+        )
 
-        logger.info("\n" + "="*60)
-        logger.info("Finetuning Complete!")
-        logger.info(f"Best loss: {stats['best_loss']:.6f}")
-        logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
-        logger.info("="*60)
+        # Resume from checkpoint if specified (first iteration only)
+        if args.resume and iteration == 1:
+            logger.info(f"Resuming from checkpoint: {args.resume}")
+            trainer.load_checkpoint(args.resume)
 
-        return 0
+        # Train
+        try:
+            stats = trainer.train()
 
-    except KeyboardInterrupt:
-        logger.info("\nTraining interrupted by user")
-        logger.info("Saving current state...")
-        trainer.save_checkpoint(is_best=False)
-        return 1
+            # Save final adapter
+            logger.info("\nSaving LoRA adapter...")
+            trainer.save_adapter()
 
-    except Exception as e:
-        logger.error(f"Training failed: {e}", exc_info=True)
-        return 1
+            logger.info("\n" + "=" * 60)
+            logger.info("Finetuning Complete!")
+            logger.info(f"Best loss: {stats['best_loss']:.6f}")
+            logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            logger.info("=" * 60)
+
+            # Generate model files
+            finetuned_model_name, script_path, yaml_path = _generate_model_files(
+                args, model_config, timestamp
+            )
+
+            # Print completion marker with timestamp (for job manager to detect)
+            print(f"TRAINING_ITERATION_COMPLETE: {finetuned_model_name}", flush=True)
+
+            # Auto-serve if requested
+            if args.auto_serve:
+                if not server_started:
+                    # First time: start inference server in background thread
+                    try:
+                        _start_inference_server_background(
+                            args, model_config, lora_model
+                        )
+                        server_started = True
+                    except Exception as e:
+                        logger.error(f"Failed to start inference server: {e}", exc_info=True)
+                        print(f"INFERENCE_SERVER_FAILED: {e}", flush=True)
+                        return 0
+                else:
+                    # Server already running - just set model back to eval mode
+                    # The server shares the same model object, so it automatically
+                    # serves with the updated weights
+                    lora_model.eval()
+                    logger.info("Model updated and set to eval mode. Server continuing with new weights.")
+
+                # Watch for restart signal
+                signal_file = Path(args.output_dir) / "restart_signal.json"
+                restart_data = _wait_for_restart_signal(signal_file)
+
+                if restart_data is None:
+                    logger.error("Malformed restart signal, exiting")
+                    return 1
+
+                # Apply updated parameters
+                _apply_restart_params(args, restart_data)
+
+                # Prepare for retraining
+                lora_model.train()
+                torch.cuda.empty_cache()
+                gc.collect()
+
+                logger.info("Restarting training with updated parameters...")
+                print("RESTARTING_TRAINING", flush=True)
+                continue  # Loop back to retrain
+
+            # No auto-serve: just exit after training
+            return 0
+
+        except KeyboardInterrupt:
+            logger.info("\nTraining interrupted by user")
+            logger.info("Saving current state...")
+            trainer.save_checkpoint(is_best=False)
+            return 1
+
+        except Exception as e:
+            logger.error(f"Training failed: {e}", exc_info=True)
+            return 1
 
 
 if __name__ == "__main__":
