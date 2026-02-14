@@ -673,10 +673,12 @@ class FinetuneJobManager:
         self.logger.info(f"Finetuned inference server detected at {server_url}")
 
         try:
-            # Use TRAINING_ITERATION_COMPLETE marker for the name with timestamp
-            # If not found, fall back to base name
+            # Read the FULL log file to find TRAINING_ITERATION_COMPLETE marker.
+            # This marker is printed BEFORE the server starts, so it's typically
+            # in an earlier log chunk than the server IP marker.
             iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
-            iter_matches = re.findall(iter_pattern, log_content)
+            full_log = finetune_job.log_file.read_text()
+            iter_matches = re.findall(iter_pattern, full_log)
             if iter_matches:
                 model_name = iter_matches[-1]
             else:
@@ -706,9 +708,14 @@ class FinetuneJobManager:
             finetune_job.latest_loss = None
             finetune_job.status = JobStatus.RUNNING
 
-        # Check for iteration complete marker - update neuroglancer layer
+        # Check for iteration complete marker - update neuroglancer layer.
+        # Read full log in case the marker was in a previous chunk.
         iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
-        iter_matches = re.findall(iter_pattern, log_content)
+        try:
+            full_log = finetune_job.log_file.read_text()
+        except Exception:
+            full_log = log_content
+        iter_matches = re.findall(iter_pattern, full_log)
         if iter_matches and finetune_job.inference_server_ready:
             new_model_name = iter_matches[-1]
             if new_model_name != finetune_job.finetuned_model_name:
