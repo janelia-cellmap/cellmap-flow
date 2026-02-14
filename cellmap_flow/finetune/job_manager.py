@@ -516,8 +516,12 @@ class FinetuneJobManager:
                                 self._parse_training_progress(finetune_job, new_content)
                                 # Parse for inference server ready marker
                                 self._parse_inference_server_ready(finetune_job, new_content)
-                                # Parse for restart/iteration markers
-                                self._parse_training_restart(finetune_job, new_content)
+
+                        # Always check for restart/iteration markers (reads full log).
+                        # This must run every cycle, not just when there's new content,
+                        # because the marker may have been at the end of the previous
+                        # chunk and we need to detect it even if no new output follows.
+                        self._parse_training_restart(finetune_job, new_content if new_content else "")
                     except Exception as e:
                         self.logger.debug(f"Error reading log file: {e}")
 
@@ -724,6 +728,9 @@ class FinetuneJobManager:
                     self._add_finetuned_neuroglancer_layer(finetune_job, new_model_name)
                 except Exception as e:
                     self.logger.error(f"Failed to update neuroglancer layer: {e}", exc_info=True)
+                    # Still update the stored name so the frontend reflects the new model
+                    # and we don't retry the failed neuroglancer update every cycle
+                    finetune_job.finetuned_model_name = new_model_name
 
     def complete_job(self, finetune_job: FinetuneJob):
         """
