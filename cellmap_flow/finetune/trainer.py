@@ -129,9 +129,10 @@ class MarginLoss(nn.Module):
     - No loss when prediction is already correct with sufficient confidence.
     """
 
-    def __init__(self, margin: float = 0.3):
+    def __init__(self, margin: float = 0.3, balance_classes: bool = False):
         super().__init__()
         self.margin = margin
+        self.balance_classes = balance_classes
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         threshold_high = 1.0 - self.margin  # e.g., 0.7
@@ -141,6 +142,17 @@ class MarginLoss(nn.Module):
         fg_loss = torch.relu(threshold_high - pred) ** 2
         # Background loss: penalize if pred > threshold_low
         bg_loss = torch.relu(pred - threshold_low) ** 2
+
+        if self.balance_classes and mask is not None:
+            # Average each class separately so fg/bg contribute equally
+            # regardless of how many scribble voxels each has
+            fg_mask = target * mask
+            bg_mask = (1.0 - target) * mask
+            fg_count = fg_mask.sum().clamp(min=1)
+            bg_count = bg_mask.sum().clamp(min=1)
+            fg_contrib = (fg_loss * fg_mask).sum() / fg_count
+            bg_contrib = (bg_loss * bg_mask).sum() / bg_count
+            return (fg_contrib + bg_contrib) / 2.0
 
         # Blend by target: target=1 -> fg_loss, target=0 -> bg_loss
         loss = target * fg_loss + (1.0 - target) * bg_loss
@@ -206,6 +218,7 @@ class LoRAFinetuner:
         distillation_lambda: float = 0.0,
         distillation_all_voxels: bool = False,
         margin: float = 0.3,
+        balance_classes: bool = False,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -218,6 +231,7 @@ class LoRAFinetuner:
         self.label_smoothing = label_smoothing
         self.distillation_lambda = distillation_lambda
         self.distillation_all_voxels = distillation_all_voxels
+        self.balance_classes = balance_classes
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -254,7 +268,7 @@ class LoRAFinetuner:
             self.criterion = nn.MSELoss(reduction='none')
             self._use_mse = True
         elif loss_type == "margin":
-            self.criterion = MarginLoss(margin=margin)
+            self.criterion = MarginLoss(margin=margin, balance_classes=balance_classes)
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
 
@@ -262,6 +276,9 @@ class LoRAFinetuner:
         if loss_type == "margin" and self.label_smoothing > 0:
             logger.warning("Label smoothing is redundant with margin loss, setting to 0")
             self.label_smoothing = 0.0
+
+        if self.balance_classes:
+            logger.info("Class balancing enabled: fg and bg scribble voxels weighted equally")
 
         logger.info(f"Using {loss_type} loss")
         if self.label_smoothing > 0:
@@ -425,9 +442,18 @@ class LoRAFinetuner:
                 # Compute supervised loss with optional mask
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
-                    supervised_loss = self.criterion(pred, target)
-                    supervised_loss = supervised_loss * mask
-                    supervised_loss = supervised_loss.sum() / mask.sum().clamp(min=1)
+                    per_element_loss = self.criterion(pred, target)
+                    if self.balance_classes:
+                        # Average fg and bg separately so each contributes equally
+                        fg_mask = target * mask
+                        bg_mask = (1.0 - target) * mask
+                        fg_count = fg_mask.sum().clamp(min=1)
+                        bg_count = bg_mask.sum().clamp(min=1)
+                        fg_contrib = (per_element_loss * fg_mask).sum() / fg_count
+                        bg_contrib = (per_element_loss * bg_mask).sum() / bg_count
+                        supervised_loss = (fg_contrib + bg_contrib) / 2.0
+                    else:
+                        supervised_loss = (per_element_loss * mask).sum() / mask.sum().clamp(min=1)
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
                     # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
                     supervised_loss = self.criterion(pred, target, mask)

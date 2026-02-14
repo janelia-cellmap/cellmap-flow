@@ -403,6 +403,12 @@ def main():
              "Foreground must exceed 1-margin, background must stay below margin. (default: 0.3)"
     )
     parser.add_argument(
+        "--balance-classes",
+        action="store_true",
+        help="Balance fg/bg loss contribution so each class is weighted equally, "
+             "regardless of scribble voxel counts. Helps prevent foreground overprediction. (default: off)"
+    )
+    parser.add_argument(
         "--no-mixed-precision",
         action="store_true",
         help="Disable mixed precision (FP16) training"
@@ -566,6 +572,7 @@ def main():
             distillation_lambda=args.distillation_lambda,
             distillation_all_voxels=args.distillation_all_voxels,
             margin=args.margin,
+            balance_classes=args.balance_classes,
         )
 
         # Resume from checkpoint if specified (first iteration only)
