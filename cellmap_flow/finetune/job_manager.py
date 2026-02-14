@@ -200,6 +200,7 @@ class FinetuneJobManager:
         distillation_lambda: float = 0.0,
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
+        balance_classes: bool = False,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -374,6 +375,10 @@ class FinetuneJobManager:
         if mask_unannotated:
             cli_command += "--mask-unannotated "
 
+        # Add class balancing flag
+        if balance_classes:
+            cli_command += "--balance-classes "
+
         cli_command += f"2>&1 | tee {log_file}"
 
         self.logger.info(f"Training command: {cli_command}")
@@ -401,6 +406,7 @@ class FinetuneJobManager:
                 "distillation_lambda": distillation_lambda,
                 "distillation_scope": distillation_scope,
                 "margin": margin,
+                "balance_classes": balance_classes,
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,

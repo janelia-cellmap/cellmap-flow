@@ -3010,6 +3010,8 @@ def submit_finetuning():
         distillation_lambda = data.get("distillation_lambda", 0.0)
         distillation_scope = data.get("distillation_scope", "unlabeled")
         margin = data.get("margin", 0.3)
+        balance_classes = data.get("balance_classes", False)
+
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
 
@@ -3099,6 +3101,7 @@ def submit_finetuning():
             distillation_lambda=distillation_lambda,
             distillation_scope=distillation_scope,
             margin=margin,
+            balance_classes=balance_classes,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
