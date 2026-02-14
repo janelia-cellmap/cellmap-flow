@@ -143,6 +143,8 @@ cellmap_flow_app
 # 3. Create annotation crops at your current view position
 # 4. Edit annotations directly in Neuroglancer
 # 5. Annotations auto-sync to local disk every 30 seconds
+# 6. Submit training → model auto-loads in Neuroglancer
+# 7. Inspect results → restart training if needed
 ```
 
 **Features:**
@@ -150,6 +152,8 @@ cellmap_flow_app
 - Interactive browser-based annotation editing
 - Automatic bidirectional syncing (browser ↔ disk)
 - Model-aware crop sizing
+- Auto-serve: finetuned model loads in Neuroglancer automatically after training
+- Iterative training: restart on the same GPU with updated annotations/parameters
 - Ideal for dense corrections of specific errors
 
 ### Programmatic Sparse Annotation Workflow

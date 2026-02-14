@@ -107,6 +107,10 @@ minio_state = {
     "sync_thread": None,  # Background sync thread
 }
 
+# Track annotation volumes for sparse annotation workflow
+# Maps volume_id -> volume metadata dict
+annotation_volumes = {}
+
 # Session management for timestamped output directories
 # Maps base_output_path -> timestamped_session_path
 output_sessions = {}
@@ -336,6 +340,122 @@ def create_correction_zarr(
         return False, str(e)
 
 
+def create_annotation_volume_zarr(
+    zarr_path,
+    dataset_shape_voxels,
+    output_voxel_size,
+    dataset_offset_nm,
+    chunk_size,
+    dataset_path,
+    model_name,
+    input_size,
+    input_voxel_size,
+):
+    """
+    Create a sparse annotation volume zarr covering the full dataset extent.
+
+    The volume has chunk_size = model output_size so each chunk maps to one
+    training sample. Only metadata files are created (no chunk data), so the
+    zarr is tiny regardless of dataset size.
+
+    Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.
+
+    Args:
+        zarr_path: Path to create zarr
+        dataset_shape_voxels: Full dataset shape in output voxels [z, y, x]
+        output_voxel_size: nm per voxel for output [z, y, x]
+        dataset_offset_nm: Dataset offset in nm [z, y, x]
+        chunk_size: Chunk size in voxels = model output_size [z, y, x]
+        dataset_path: Source dataset path
+        model_name: Model name for metadata
+        input_size: Model input size in voxels [z, y, x]
+        input_voxel_size: nm per voxel for input [z, y, x]
+
+    Returns:
+        (success: bool, info: str)
+    """
+    try:
+        root = zarr.open(zarr_path, mode="w")
+
+        # Create annotation group with chunks = output_size
+        annotation_group = root.create_group("annotation")
+        annotation_group.create_dataset(
+            "s0",
+            shape=tuple(dataset_shape_voxels),
+            chunks=tuple(chunk_size),
+            dtype="uint8",
+            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            fill_value=0,
+        )
+
+        # OME-NGFF v0.4 metadata with translation for dataset offset
+        physical_translation = [
+            float(o) for o in dataset_offset_nm
+        ]
+        transforms = [
+            {"type": "scale", "scale": [float(v) for v in output_voxel_size]},
+            {"type": "translation", "translation": physical_translation},
+        ]
+        annotation_group.attrs["multiscales"] = [
+            {
+                "version": "0.4",
+                "name": "annotation",
+                "axes": [
+                    {"name": "z", "type": "space", "unit": "nanometer"},
+                    {"name": "y", "type": "space", "unit": "nanometer"},
+                    {"name": "x", "type": "space", "unit": "nanometer"},
+                ],
+                "datasets": [
+                    {"path": "s0", "coordinateTransformations": transforms}
+                ],
+            }
+        ]
+
+        # Root metadata marking this as an annotation volume
+        root.attrs["type"] = "annotation_volume"
+        root.attrs["model_name"] = model_name
+        root.attrs["dataset_path"] = dataset_path
+        root.attrs["chunk_size"] = (
+            chunk_size.tolist() if hasattr(chunk_size, "tolist") else list(chunk_size)
+        )
+        root.attrs["output_voxel_size"] = (
+            output_voxel_size.tolist()
+            if hasattr(output_voxel_size, "tolist")
+            else list(output_voxel_size)
+        )
+        root.attrs["input_size"] = (
+            input_size.tolist() if hasattr(input_size, "tolist") else list(input_size)
+        )
+        root.attrs["input_voxel_size"] = (
+            input_voxel_size.tolist()
+            if hasattr(input_voxel_size, "tolist")
+            else list(input_voxel_size)
+        )
+        root.attrs["dataset_offset_nm"] = (
+            dataset_offset_nm.tolist()
+            if hasattr(dataset_offset_nm, "tolist")
+            else list(dataset_offset_nm)
+        )
+        root.attrs["dataset_shape_voxels"] = (
+            dataset_shape_voxels.tolist()
+            if hasattr(dataset_shape_voxels, "tolist")
+            else list(dataset_shape_voxels)
+        )
+        root.attrs["created_at"] = datetime.now().isoformat()
+
+        logger.info(f"Created annotation volume zarr at {zarr_path}")
+        logger.info(
+            f"  Shape: {dataset_shape_voxels}, chunks: {chunk_size}, "
+            f"voxel size: {output_voxel_size}"
+        )
+
+        return True, zarr_path
+
+    except Exception as e:
+        logger.error(f"Error creating annotation volume zarr: {e}")
+        return False, str(e)
+
+
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
@@ -543,6 +663,308 @@ def sync_annotation_from_minio(crop_id, force=False):
         return False
 
 
+def _get_volume_metadata(volume_id, zarr_path=None):
+    """
+    Get volume metadata from in-memory cache or reconstruct from zarr attrs.
+
+    Used for server restart recovery -- if annotation_volumes dict was lost,
+    reconstruct metadata from the zarr's stored attributes.
+    """
+    if volume_id in annotation_volumes:
+        return annotation_volumes[volume_id]
+
+    # Reconstruct from zarr
+    if zarr_path is None:
+        return None
+
+    try:
+        root = zarr.open(zarr_path, mode="r")
+        attrs = dict(root.attrs)
+        if attrs.get("type") != "annotation_volume":
+            return None
+
+        metadata = {
+            "zarr_path": zarr_path,
+            "model_name": attrs.get("model_name", ""),
+            "output_size": attrs.get("chunk_size", [56, 56, 56]),
+            "input_size": attrs.get("input_size", [178, 178, 178]),
+            "input_voxel_size": attrs.get("input_voxel_size", [16, 16, 16]),
+            "output_voxel_size": attrs.get("output_voxel_size", [16, 16, 16]),
+            "dataset_path": attrs.get("dataset_path", ""),
+            "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
+            "corrections_dir": str(Path(zarr_path).parent),
+            "extracted_chunks": set(),
+        }
+        # Cache it
+        annotation_volumes[volume_id] = metadata
+        return metadata
+    except Exception as e:
+        logger.error(f"Error reconstructing volume metadata for {volume_id}: {e}")
+        return None
+
+
+def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
+    """
+    Extract a correction entry from a single annotated chunk in a sparse volume.
+
+    Reads the annotation chunk, extracts raw data with context padding, and
+    creates a standard correction zarr entry compatible with CorrectionDataset.
+
+    Args:
+        volume_id: Volume identifier
+        chunk_indices: Tuple (cz, cy, cx) of chunk indices
+        volume_metadata: Volume metadata dict
+
+    Returns:
+        bool: True if correction was created (chunk had annotations)
+    """
+    from cellmap_flow.image_data_interface import ImageDataInterface
+    from funlib.geometry import Roi, Coordinate
+
+    cz, cy, cx = chunk_indices
+    chunk_size = np.array(volume_metadata["output_size"])
+    output_voxel_size = np.array(volume_metadata["output_voxel_size"])
+    input_size = np.array(volume_metadata["input_size"])
+    input_voxel_size = np.array(volume_metadata["input_voxel_size"])
+    dataset_offset_nm = np.array(volume_metadata["dataset_offset_nm"])
+    corrections_dir = volume_metadata["corrections_dir"]
+
+    # Read annotation data from the local synced volume
+    vol_zarr_path = volume_metadata["zarr_path"]
+    vol = zarr.open(vol_zarr_path, mode="r")
+
+    z_start = cz * chunk_size[0]
+    y_start = cy * chunk_size[1]
+    x_start = cx * chunk_size[2]
+
+    annotation_data = vol["annotation/s0"][
+        z_start : z_start + chunk_size[0],
+        y_start : y_start + chunk_size[1],
+        x_start : x_start + chunk_size[2],
+    ]
+
+    # Skip if all zeros (unannotated or erased)
+    if not np.any(annotation_data):
+        return False
+
+    # Compute physical position of this chunk's center
+    chunk_offset_nm = dataset_offset_nm + np.array(
+        [z_start, y_start, x_start]
+    ) * output_voxel_size
+    chunk_center_nm = chunk_offset_nm + (chunk_size * output_voxel_size) / 2
+
+    # Extract raw data with full context padding
+    read_shape_nm = input_size * input_voxel_size
+    raw_roi = Roi(
+        offset=Coordinate(chunk_center_nm - read_shape_nm / 2),
+        shape=Coordinate(read_shape_nm),
+    )
+
+    logger.info(
+        f"Extracting raw for chunk ({cz},{cy},{cx}): "
+        f"ROI offset={raw_roi.offset}, shape={raw_roi.shape}"
+    )
+
+    idi = ImageDataInterface(
+        volume_metadata["dataset_path"], voxel_size=input_voxel_size
+    )
+    raw_data = idi.to_ndarray_ts(raw_roi)
+
+    # Create correction entry using existing function
+    correction_id = f"{volume_id}_chunk_{cz}_{cy}_{cx}"
+    correction_zarr_path = os.path.join(corrections_dir, f"{correction_id}.zarr")
+
+    raw_offset_voxels = (
+        (chunk_center_nm - read_shape_nm / 2) / input_voxel_size
+    ).astype(int)
+    annotation_offset_voxels = (chunk_offset_nm / output_voxel_size).astype(int)
+
+    success, zarr_info = create_correction_zarr(
+        zarr_path=correction_zarr_path,
+        raw_crop_shape=input_size,
+        raw_voxel_size=input_voxel_size,
+        raw_offset=raw_offset_voxels,
+        annotation_crop_shape=chunk_size,
+        annotation_voxel_size=output_voxel_size,
+        annotation_offset=annotation_offset_voxels,
+        dataset_path=volume_metadata["dataset_path"],
+        model_name=volume_metadata["model_name"],
+        output_channels=1,
+        raw_dtype=str(raw_data.dtype),
+        create_mask=False,
+    )
+
+    if not success:
+        logger.error(f"Failed to create correction zarr for chunk ({cz},{cy},{cx})")
+        return False
+
+    # Write data
+    corr_zarr = zarr.open(correction_zarr_path, mode="r+")
+    corr_zarr["raw/s0"][:] = raw_data
+    corr_zarr["annotation/s0"][:] = annotation_data
+
+    # Mark as sparse volume source
+    corr_zarr.attrs["source"] = "sparse_volume"
+    corr_zarr.attrs["volume_id"] = volume_id
+    corr_zarr.attrs["chunk_indices"] = [cz, cy, cx]
+
+    logger.info(f"Created correction {correction_id} from chunk ({cz},{cy},{cx})")
+    return True
+
+
+def sync_annotation_volume_from_minio(volume_id, force=False):
+    """
+    Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.
+
+    Steps:
+    1. Sync the full annotation zarr from MinIO to local disk
+    2. List chunk files in MinIO to find annotated chunks
+    3. For each new annotated chunk, extract raw data and create correction entry
+
+    Args:
+        volume_id: Volume identifier
+        force: Force re-extraction of all chunks
+
+    Returns:
+        bool: True if any corrections were created
+    """
+    if not minio_state["ip"] or not minio_state["port"] or not minio_state["output_base"]:
+        logger.warning("MinIO not initialized, skipping volume sync")
+        return False
+
+    try:
+        # Get volume metadata (from cache or reconstruct from zarr)
+        zarr_name = f"{volume_id}.zarr"
+        local_zarr_path = os.path.join(minio_state["output_base"], zarr_name)
+        volume_meta = _get_volume_metadata(volume_id, local_zarr_path)
+
+        if volume_meta is None:
+            logger.warning(f"No metadata for volume {volume_id}, skipping")
+            return False
+
+        # Setup S3 filesystem
+        s3 = s3fs.S3FileSystem(
+            anon=False,
+            key="minio",
+            secret="minio123",
+            client_kwargs={
+                "endpoint_url": f"http://{minio_state['ip']}:{minio_state['port']}",
+                "region_name": "us-east-1",
+            },
+        )
+
+        bucket = minio_state["bucket"]
+        src_annotation_path = f"{bucket}/{zarr_name}/annotation"
+
+        # Check if annotation group exists in MinIO
+        if not s3.exists(src_annotation_path):
+            logger.debug(f"No annotation group in MinIO for {volume_id}")
+            return False
+
+        # Sync the full annotation volume from MinIO to local
+        dst_annotation_path = Path(local_zarr_path) / "annotation"
+        dst_annotation_path.mkdir(parents=True, exist_ok=True)
+
+        src_store = s3fs.S3Map(root=src_annotation_path, s3=s3)
+        src_group = zarr.open_group(store=src_store, mode="r")
+
+        dst_store = zarr.DirectoryStore(str(dst_annotation_path))
+        dst_group = zarr.open_group(store=dst_store, mode="a")
+
+        # Copy array metadata and attributes
+        for key in src_group.array_keys():
+            src_array = src_group[key]
+            # Only create array structure if it doesn't exist
+            if key not in dst_group:
+                dst_group.create_dataset(
+                    key,
+                    shape=src_array.shape,
+                    chunks=src_array.chunks,
+                    dtype=src_array.dtype,
+                    fill_value=0,
+                    overwrite=True,
+                )
+            dst_group[key].attrs.update(src_array.attrs)
+        dst_group.attrs.update(src_group.attrs)
+
+        # List chunk files in MinIO to find which chunks have been written
+        s0_path = f"{bucket}/{zarr_name}/annotation/s0"
+        try:
+            chunk_files = s3.ls(s0_path)
+        except FileNotFoundError:
+            logger.debug(f"No chunks yet for volume {volume_id}")
+            minio_state["last_sync"][volume_id] = datetime.now()
+            return False
+
+        # Parse chunk indices from filenames (format: z.y.x)
+        annotated_chunks = []
+        for f in chunk_files:
+            basename = Path(f).name
+            if re.match(r"^\d+\.\d+\.\d+$", basename):
+                cz, cy, cx = map(int, basename.split("."))
+                annotated_chunks.append((cz, cy, cx))
+
+        if not annotated_chunks:
+            logger.debug(f"No annotated chunks found for volume {volume_id}")
+            minio_state["last_sync"][volume_id] = datetime.now()
+            return False
+
+        # Sync individual chunk data from MinIO to local
+        for cz, cy, cx in annotated_chunks:
+            chunk_key = f"{cz}.{cy}.{cx}"
+            src_chunk_path = f"{s0_path}/{chunk_key}"
+            dst_chunk_path = dst_annotation_path / "s0" / chunk_key
+            dst_chunk_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                s3.get(src_chunk_path, str(dst_chunk_path))
+            except Exception as e:
+                logger.debug(f"Error syncing chunk {chunk_key}: {e}")
+
+        logger.info(
+            f"Synced {len(annotated_chunks)} chunks for volume {volume_id}"
+        )
+
+        # Extract corrections for new/updated chunks
+        extracted_chunks = volume_meta.get("extracted_chunks", set())
+        created_any = False
+
+        for chunk_idx in annotated_chunks:
+            if not force and chunk_idx in extracted_chunks:
+                continue
+
+            try:
+                created = extract_correction_from_chunk(
+                    volume_id, chunk_idx, volume_meta
+                )
+                if created:
+                    extracted_chunks.add(chunk_idx)
+                    created_any = True
+            except Exception as e:
+                logger.error(
+                    f"Error extracting correction for chunk {chunk_idx}: {e}"
+                )
+                import traceback
+                logger.error(traceback.format_exc())
+
+        # Update tracked state
+        volume_meta["extracted_chunks"] = extracted_chunks
+        minio_state["last_sync"][volume_id] = datetime.now()
+
+        if created_any:
+            logger.info(
+                f"Created corrections for volume {volume_id}: "
+                f"{len(extracted_chunks)} total chunks extracted"
+            )
+
+        return created_any
+
+    except Exception as e:
+        logger.error(f"Error syncing annotation volume {volume_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
 def periodic_sync_annotations():
     """Background thread function to periodically sync annotations from MinIO."""
     logger.info("Starting periodic annotation sync thread")
@@ -569,13 +991,25 @@ def periodic_sync_annotations():
                     }
                 )
 
-                # List all crops in bucket
+                # List all zarrs in bucket
                 crops = s3.ls(minio_state['bucket'])
-                crop_ids = [Path(c).name.replace('.zarr', '') for c in crops if c.endswith('.zarr')]
+                zarr_ids = [Path(c).name.replace('.zarr', '') for c in crops if c.endswith('.zarr')]
 
-                # Sync each crop
-                for crop_id in crop_ids:
-                    sync_annotation_from_minio(crop_id, force=False)
+                # Sync each zarr (route volumes vs crops)
+                for zarr_id in zarr_ids:
+                    try:
+                        # Check if this is an annotation volume
+                        zarr_name = f"{zarr_id}.zarr"
+                        attrs_path = f"{minio_state['bucket']}/{zarr_name}/.zattrs"
+                        if s3.exists(attrs_path):
+                            root_attrs = json.loads(s3.cat(attrs_path))
+                            if root_attrs.get("type") == "annotation_volume":
+                                sync_annotation_volume_from_minio(zarr_id)
+                                continue
+                    except Exception:
+                        pass
+                    # Default: crop sync
+                    sync_annotation_from_minio(zarr_id, force=False)
 
             except Exception as e:
                 logger.debug(f"Error in periodic sync: {e}")
@@ -2235,9 +2669,165 @@ def create_annotation_crop():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/finetune/create-volume", methods=["POST"])
+def create_annotation_volume():
+    """Create a sparse annotation volume covering the full dataset extent."""
+    try:
+        from cellmap_flow.image_data_interface import ImageDataInterface
+        from funlib.geometry import Coordinate
+
+        data = request.get_json()
+        model_name = data.get("model_name")
+        output_path = data.get("output_path")
+
+        if not hasattr(g, "models_config") or not g.models_config:
+            return jsonify({"success": False, "error": "No models loaded"}), 400
+
+        # Find model config
+        model_config = None
+        for mc in g.models_config:
+            if mc.name == model_name:
+                model_config = mc
+                break
+
+        if not model_config:
+            return (
+                jsonify({"success": False, "error": f"Model {model_name} not found"}),
+                404,
+            )
+
+        # Get model parameters
+        config = model_config.config
+        read_shape = np.array(config.read_shape)
+        write_shape = np.array(config.write_shape)
+        input_voxel_size = np.array(config.input_voxel_size)
+        output_voxel_size = np.array(config.output_voxel_size)
+
+        # Compute output_size and input_size in voxels
+        output_size = (write_shape / output_voxel_size).astype(int)
+        input_size = (read_shape / input_voxel_size).astype(int)
+
+        # Get dataset path
+        dataset_path = getattr(g, "dataset_path", None)
+        if not dataset_path:
+            return (
+                jsonify({"success": False, "error": "No dataset path configured"}),
+                400,
+            )
+
+        # Get full dataset extent
+        logger.info(f"Getting dataset extent from {dataset_path}")
+        try:
+            idi = ImageDataInterface(dataset_path, voxel_size=output_voxel_size)
+            dataset_roi = idi.roi
+            dataset_offset_nm = np.array(dataset_roi.offset)
+            dataset_shape_nm = np.array(dataset_roi.shape)
+
+            # Convert to voxels at output resolution
+            dataset_shape_voxels = (dataset_shape_nm / output_voxel_size).astype(int)
+
+            # Snap up to chunk_size (output_size) multiples
+            dataset_shape_voxels = (
+                np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+            )
+
+            logger.info(
+                f"Dataset extent: offset={dataset_offset_nm} nm, "
+                f"shape={dataset_shape_voxels} voxels (at {output_voxel_size} nm/voxel)"
+            )
+        except Exception as e:
+            logger.error(f"Error getting dataset extent: {e}")
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": f"Failed to access dataset: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+        # Generate volume ID
+        volume_id = (
+            f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        )
+
+        # Set up output directory
+        if output_path:
+            session_path = get_or_create_session_path(output_path)
+            corrections_dir = os.path.join(session_path, "corrections")
+            os.makedirs(corrections_dir, exist_ok=True)
+            zarr.open_group(corrections_dir, mode="a")
+            zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
+            logger.info(f"Using session path: {session_path}")
+        else:
+            corrections_dir = os.path.expanduser("~/.cellmap_flow/corrections")
+            os.makedirs(corrections_dir, exist_ok=True)
+            zarr.open_group(corrections_dir, mode="a")
+            zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
+
+        # Create the annotation volume zarr
+        success, zarr_info = create_annotation_volume_zarr(
+            zarr_path=zarr_path,
+            dataset_shape_voxels=dataset_shape_voxels,
+            output_voxel_size=output_voxel_size,
+            dataset_offset_nm=dataset_offset_nm,
+            chunk_size=output_size,
+            dataset_path=dataset_path,
+            model_name=model_name,
+            input_size=input_size,
+            input_voxel_size=input_voxel_size,
+        )
+
+        if not success:
+            return jsonify({"success": False, "error": zarr_info}), 500
+
+        # Upload to MinIO
+        minio_url = ensure_minio_serving(
+            zarr_path, volume_id, output_base_dir=corrections_dir
+        )
+
+        # Store volume metadata for sync to use
+        annotation_volumes[volume_id] = {
+            "zarr_path": zarr_path,
+            "model_name": model_name,
+            "output_size": output_size.tolist(),
+            "input_size": input_size.tolist(),
+            "input_voxel_size": input_voxel_size.tolist(),
+            "output_voxel_size": output_voxel_size.tolist(),
+            "dataset_path": dataset_path,
+            "dataset_offset_nm": dataset_offset_nm.tolist(),
+            "corrections_dir": corrections_dir,
+            "extracted_chunks": set(),
+        }
+
+        return jsonify(
+            {
+                "success": True,
+                "volume_id": volume_id,
+                "zarr_path": zarr_path,
+                "minio_url": minio_url,
+                "neuroglancer_url": f"{minio_url}/annotation",
+                "metadata": {
+                    "dataset_shape_voxels": dataset_shape_voxels.tolist(),
+                    "chunk_size": output_size.tolist(),
+                    "output_voxel_size": output_voxel_size.tolist(),
+                    "dataset_offset_nm": dataset_offset_nm.tolist(),
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating annotation volume: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/finetune/add-to-viewer", methods=["POST"])
 def add_crop_to_viewer():
-    """Add annotation crop layer to Neuroglancer viewer."""
+    """Add annotation crop or volume layer to Neuroglancer viewer."""
     try:
         data = request.get_json()
         crop_id = data.get("crop_id")
@@ -2248,7 +2838,7 @@ def add_crop_to_viewer():
 
         # Add layer to viewer
         with g.viewer.txn() as s:
-            layer_name = f"annotation_{crop_id}"
+            layer_name = data.get("layer_name", f"annotation_{crop_id}")
             # Configure source with writing enabled
             source_config = {
                 "url": f"s3+{minio_url}",
@@ -2312,19 +2902,31 @@ def sync_annotations_manually():
                     }
                 )
 
-                crops = s3.ls(minio_state['bucket'])
-                crop_ids = [Path(c).name.replace('.zarr', '') for c in crops if c.endswith('.zarr')]
+                zarrs = s3.ls(minio_state['bucket'])
+                zarr_ids = [Path(c).name.replace('.zarr', '') for c in zarrs if c.endswith('.zarr')]
 
                 synced_count = 0
-                for cid in crop_ids:
-                    if sync_annotation_from_minio(cid, force=force):
+                for zid in zarr_ids:
+                    # Route volumes vs crops
+                    try:
+                        zarr_name = f"{zid}.zarr"
+                        attrs_path = f"{minio_state['bucket']}/{zarr_name}/.zattrs"
+                        if s3.exists(attrs_path):
+                            root_attrs = json.loads(s3.cat(attrs_path))
+                            if root_attrs.get("type") == "annotation_volume":
+                                if sync_annotation_volume_from_minio(zid, force=force):
+                                    synced_count += 1
+                                continue
+                    except Exception:
+                        pass
+                    if sync_annotation_from_minio(zid, force=force):
                         synced_count += 1
 
                 return jsonify({
                     "success": True,
                     "message": f"Synced {synced_count} annotations",
                     "synced_count": synced_count,
-                    "total_crops": len(crop_ids)
+                    "total_crops": len(zarr_ids)
                 })
 
             except Exception as e:
@@ -2362,6 +2964,8 @@ def submit_finetuning():
         learning_rate = data.get("learning_rate", 1e-4)
         checkpoint_path_override = data.get("checkpoint_path")  # Optional override
         auto_serve = data.get("auto_serve", True)  # Auto-serve by default
+        loss_type = data.get("loss_type", "mse")
+        label_smoothing = data.get("label_smoothing", 0.1)
 
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
@@ -2407,6 +3011,21 @@ def submit_finetuning():
         logger.info(f"Corrections path: {actual_corrections_path}")
         logger.info(f"Output base: {output_base}")
 
+        # Detect sparse annotations: check if any correction has source=sparse_volume
+        has_sparse = False
+        try:
+            for p in actual_corrections_path.iterdir():
+                if p.suffix == ".zarr" and (p / ".zattrs").exists():
+                    attrs = json.loads((p / ".zattrs").read_text())
+                    if attrs.get("source") == "sparse_volume":
+                        has_sparse = True
+                        break
+        except Exception as e:
+            logger.warning(f"Error checking for sparse annotations: {e}")
+
+        if has_sparse:
+            logger.info("Detected sparse annotations, will use mask_unannotated=True")
+
         # Submit job
         finetune_job = finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
@@ -2417,7 +3036,10 @@ def submit_finetuning():
             learning_rate=learning_rate,
             output_base=output_base,
             checkpoint_path_override=Path(checkpoint_path_override) if checkpoint_path_override else None,
-            auto_serve=auto_serve
+            auto_serve=auto_serve,
+            mask_unannotated=has_sparse,
+            loss_type=loss_type,
+            label_smoothing=label_smoothing,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")

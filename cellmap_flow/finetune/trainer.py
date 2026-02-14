@@ -169,6 +169,7 @@ class LoRAFinetuner:
         device: Optional[str] = None,
         select_channel: Optional[int] = None,
         mask_unannotated: bool = True,
+        label_smoothing: float = 0.0,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -178,6 +179,7 @@ class LoRAFinetuner:
         self.use_mixed_precision = use_mixed_precision
         self.select_channel = select_channel
         self.mask_unannotated = mask_unannotated
+        self.label_smoothing = label_smoothing
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -200,6 +202,8 @@ class LoRAFinetuner:
         )
 
         # Loss function
+        self._use_bce = False
+        self._use_mse = False
         if loss_type == "dice":
             self.criterion = DiceLoss()
         elif loss_type == "bce":
@@ -208,14 +212,15 @@ class LoRAFinetuner:
             self._use_bce = True
         elif loss_type == "combined":
             self.criterion = CombinedLoss()
-            self._use_bce = False
+        elif loss_type == "mse":
+            self.criterion = nn.MSELoss(reduction='none')
+            self._use_mse = True
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
 
-        if loss_type != "bce":
-            self._use_bce = False
-
         logger.info(f"Using {loss_type} loss")
+        if self.label_smoothing > 0:
+            logger.info(f"Label smoothing: {self.label_smoothing} (targets: {self.label_smoothing/2:.3f} to {1-self.label_smoothing/2:.3f})")
 
         # Mixed precision scaler
         self.scaler = GradScaler(enabled=use_mixed_precision)
@@ -333,6 +338,12 @@ class LoRAFinetuner:
                 # e.g., 0->0 (unannotated), 1->0 (background), 2->1 (foreground)
                 target = torch.clamp(target - 1, min=0)
 
+            # Apply label smoothing: 0 -> s/2, 1 -> 1-s/2
+            # This prevents the model from being pushed to extreme 0/1 outputs,
+            # preserving gradual distance-like predictions
+            if self.label_smoothing > 0:
+                target = target * (1 - self.label_smoothing) + self.label_smoothing / 2
+
             # Forward pass with mixed precision
             with autocast(enabled=self.use_mixed_precision):
                 pred = self.model(raw)
@@ -347,8 +358,8 @@ class LoRAFinetuner:
                         print(f"DEBUG trainer: pred.shape after channel selection = {pred.shape}")
 
                 # Compute loss with optional mask
-                if self._use_bce and mask is not None:
-                    # For standalone BCE loss, manually apply mask
+                if (self._use_bce or self._use_mse) and mask is not None:
+                    # For per-element losses (BCE, MSE), manually apply mask
                     loss = self.criterion(pred, target)
                     loss = loss * mask
                     loss = loss.sum() / mask.sum().clamp(min=1)
@@ -358,7 +369,7 @@ class LoRAFinetuner:
                 else:
                     # No masking needed
                     loss = self.criterion(pred, target)
-                    if self._use_bce:
+                    if self._use_bce or self._use_mse:
                         loss = loss.mean()
 
                 # Scale loss for gradient accumulation

@@ -51,15 +51,22 @@
     <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
   </div>
 
-  <!-- Create Crop Button -->
-  <button type="button" class="btn btn-primary" id="createCropBtn">
-    Create Annotation Crop
-  </button>
-
-  <!-- Save Annotations Button -->
-  <button type="button" class="btn btn-success ms-2" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
-    💾 Save Annotations to Disk
-  </button>
+  <!-- Create Buttons -->
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button type="button" class="btn btn-primary" id="createCropBtn">
+      Create Annotation Crop
+    </button>
+    <button type="button" class="btn btn-outline-primary" id="createVolumeBtn">
+      Create Annotation Volume
+    </button>
+    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+      Save Annotations to Disk
+    </button>
+  </div>
+  <small class="form-text text-muted d-block mt-1">
+    <strong>Crop:</strong> Small region at current view center (dense, paint 1=foreground).
+    <strong>Volume:</strong> Full dataset extent (sparse, paint 1=background, 2=foreground).
+  </small>
 
   <!-- MinIO Status -->
   <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
@@ -275,6 +282,8 @@
               <option value="0.00001">1e-5 (Very Conservative)</option>
               <option value="0.0001" selected>1e-4 (Standard)</option>
               <option value="0.001">1e-3 (Aggressive)</option>
+              <option value="0.01">1e-2 (Very Aggressive)</option>
+              <option value="0.1">1e-1 (Extremely Aggressive)</option>
             </select>
           </div>
         </div>
@@ -472,16 +481,85 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
-  function addToViewer(cropId, neuroglancerUrl) {
+  // Create annotation volume (sparse, full dataset)
+  const createVolumeBtn = document.getElementById("createVolumeBtn");
+  createVolumeBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createVolumeBtn.disabled = true;
+    createVolumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    finetuneLog.value += `Creating annotation volume for full dataset...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem("finetuneOutputPath", outputPath);
+          finetuneLog.value += `✓ Created annotation volume: ${data.volume_id}\n`;
+          finetuneLog.value += `  Dataset shape (voxels): [${data.metadata.dataset_shape_voxels.join(', ')}]\n`;
+          finetuneLog.value += `  Chunk size (voxels): [${data.metadata.chunk_size.join(', ')}]\n`;
+          finetuneLog.value += `  Voxel size (nm): [${data.metadata.output_voxel_size.join(', ')}]\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Label scheme: paint 1=background, 2=foreground, 0=unannotated\n`;
+
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          addToViewer(data.volume_id, data.neuroglancer_url, `sparse_annotation_${data.volume_id}`);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      });
+  });
+
+  function addToViewer(cropId, neuroglancerUrl, layerName) {
     finetuneLog.value += `Adding layer to viewer...\n`;
+
+    const payload = {
+      crop_id: cropId,
+      minio_url: neuroglancerUrl
+    };
+    if (layerName) {
+      payload.layer_name = layerName;
+    }
 
     fetch("/api/finetune/add-to-viewer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        crop_id: cropId,
-        minio_url: neuroglancerUrl
-      })
+      body: JSON.stringify(payload)
     })
       .then(res => res.json())
       .then(data => {
