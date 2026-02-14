@@ -2490,6 +2490,25 @@ def get_job_logs(job_id):
 @app.route("/api/finetune/job/<job_id>/logs/stream", methods=["GET"])
 def stream_job_logs(job_id):
     """Server-Sent Events stream for live training logs."""
+
+    import re as _re
+
+    # Patterns to filter out of the log stream
+    _log_filters = [
+        _re.compile(r"^DEBUG", _re.IGNORECASE),
+        _re.compile(r"^\s+base_model\.\S+\.lora_"),  # gradient norm lines
+        _re.compile(r"^INFO:werkzeug:"),
+        _re.compile(r"^Array metadata \(scale="),  # server chunk metadata
+        _re.compile(r"^Host name:"),
+        _re.compile(r"^DEBUG trainer:"),
+    ]
+
+    def _should_show(line):
+        for pat in _log_filters:
+            if pat.search(line):
+                return False
+        return True
+
     def generate():
         # Check if job exists
         if job_id not in finetune_job_manager.jobs:
@@ -2504,7 +2523,7 @@ def stream_job_logs(job_id):
                 with open(finetune_job.log_file, "r") as f:
                     existing_content = f.read()
                     for line in existing_content.split("\n"):
-                        if line:
+                        if line and _should_show(line):
                             yield f"data: {line}\n\n"
             except Exception as e:
                 logger.error(f"Error reading log file: {e}")
@@ -2522,7 +2541,7 @@ def stream_job_logs(job_id):
 
                         if new_content:
                             for line in new_content.split("\n"):
-                                if line:
+                                if line and _should_show(line):
                                     yield f"data: {line}\n\n"
 
                 time.sleep(1)  # Poll every second
