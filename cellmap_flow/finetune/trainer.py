@@ -311,12 +311,8 @@ class LoRAFinetuner:
         log_file = self.output_dir / "training_log.txt"
 
         def log_message(msg):
-            """Log to both console and file."""
-            print(msg, flush=True)  # Always print to console with immediate flush
-            logger.info(msg)  # Also log normally
-            with open(log_file, 'a') as f:
-                f.write(msg + '\n')
-                f.flush()  # Flush immediately for live streaming
+            """Log to console (tee handles writing to log file)."""
+            print(msg, flush=True)
 
         log_message("="*60)
         log_message("Starting LoRA Finetuning")
