@@ -344,9 +344,17 @@ def create_dataloader(
         model_name=model_name,
     )
 
+    # Clamp batch size to number of samples so DataLoader doesn't error
+    actual_batch_size = min(batch_size, len(dataset)) if len(dataset) > 0 else batch_size
+    if actual_batch_size != batch_size:
+        logger.info(
+            f"Clamped batch_size from {batch_size} to {actual_batch_size} "
+            f"(only {len(dataset)} samples available)"
+        )
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=batch_size,
+        batch_size=actual_batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=True,  # Faster GPU transfer
@@ -355,7 +363,7 @@ def create_dataloader(
 
     logger.info(
         f"Created DataLoader with {len(dataset)} samples, "
-        f"batch_size={batch_size}, num_workers={num_workers}"
+        f"batch_size={actual_batch_size}, num_workers={num_workers}"
     )
 
     return dataloader
