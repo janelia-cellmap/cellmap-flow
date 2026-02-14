@@ -197,6 +197,9 @@ class FinetuneJobManager:
         mask_unannotated: bool = False,
         loss_type: str = "combined",
         label_smoothing: float = 0.0,
+        distillation_lambda: float = 0.0,
+        distillation_scope: str = "unlabeled",
+        margin: float = 0.3,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -353,6 +356,16 @@ class FinetuneJobManager:
         if label_smoothing > 0:
             cli_command += f"--label-smoothing {label_smoothing} "
 
+        # Add distillation lambda if specified
+        if distillation_lambda > 0:
+            cli_command += f"--distillation-lambda {distillation_lambda} "
+            if distillation_scope == "all":
+                cli_command += "--distillation-all-voxels "
+
+        # Add margin if using margin loss
+        if loss_type == "margin":
+            cli_command += f"--margin {margin} "
+
         # Add auto-serve flags if enabled
         if auto_serve and serve_data_path:
             cli_command += f"--auto-serve --serve-data-path {serve_data_path} "
@@ -385,6 +398,9 @@ class FinetuneJobManager:
                 "learning_rate": learning_rate,
                 "loss_type": loss_type,
                 "label_smoothing": label_smoothing,
+                "distillation_lambda": distillation_lambda,
+                "distillation_scope": distillation_scope,
+                "margin": margin,
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,

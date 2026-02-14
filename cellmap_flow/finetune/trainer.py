@@ -118,6 +118,39 @@ class CombinedLoss(nn.Module):
         return self.dice_weight * dice + self.bce_weight * bce
 
 
+class MarginLoss(nn.Module):
+    """
+    Margin-based loss for sparse/scribble annotations.
+
+    Only penalizes predictions on the wrong side of a margin threshold.
+    For post-sigmoid outputs in [0, 1]:
+    - Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
+    - Background (target=0): loss = relu(pred - margin)^2
+    - No loss when prediction is already correct with sufficient confidence.
+    """
+
+    def __init__(self, margin: float = 0.3):
+        super().__init__()
+        self.margin = margin
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        threshold_high = 1.0 - self.margin  # e.g., 0.7
+        threshold_low = self.margin          # e.g., 0.3
+
+        # Foreground loss: penalize if pred < threshold_high
+        fg_loss = torch.relu(threshold_high - pred) ** 2
+        # Background loss: penalize if pred > threshold_low
+        bg_loss = torch.relu(pred - threshold_low) ** 2
+
+        # Blend by target: target=1 -> fg_loss, target=0 -> bg_loss
+        loss = target * fg_loss + (1.0 - target) * bg_loss
+
+        if mask is not None:
+            loss = loss * mask
+            return loss.sum() / mask.sum().clamp(min=1)
+        return loss.mean()
+
+
 class LoRAFinetuner:
     """
     Trainer for finetuning models with LoRA adapters.
@@ -170,6 +203,9 @@ class LoRAFinetuner:
         select_channel: Optional[int] = None,
         mask_unannotated: bool = True,
         label_smoothing: float = 0.0,
+        distillation_lambda: float = 0.0,
+        distillation_all_voxels: bool = False,
+        margin: float = 0.3,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -180,6 +216,8 @@ class LoRAFinetuner:
         self.select_channel = select_channel
         self.mask_unannotated = mask_unannotated
         self.label_smoothing = label_smoothing
+        self.distillation_lambda = distillation_lambda
+        self.distillation_all_voxels = distillation_all_voxels
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -215,12 +253,22 @@ class LoRAFinetuner:
         elif loss_type == "mse":
             self.criterion = nn.MSELoss(reduction='none')
             self._use_mse = True
+        elif loss_type == "margin":
+            self.criterion = MarginLoss(margin=margin)
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
+
+        # Label smoothing is redundant with margin loss
+        if loss_type == "margin" and self.label_smoothing > 0:
+            logger.warning("Label smoothing is redundant with margin loss, setting to 0")
+            self.label_smoothing = 0.0
 
         logger.info(f"Using {loss_type} loss")
         if self.label_smoothing > 0:
             logger.info(f"Label smoothing: {self.label_smoothing} (targets: {self.label_smoothing/2:.3f} to {1-self.label_smoothing/2:.3f})")
+        if self.distillation_lambda > 0:
+            scope_str = "all voxels" if self.distillation_all_voxels else "unlabeled voxels only"
+            logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
         # Mixed precision scaler
         self.scaler = GradScaler(enabled=use_mixed_precision)
@@ -322,6 +370,8 @@ class LoRAFinetuner:
     def _train_epoch(self) -> float:
         """Train for one epoch and return average loss."""
         epoch_loss = 0.0
+        epoch_supervised_loss = 0.0
+        epoch_distill_loss = 0.0
         num_batches = len(self.dataloader)
 
         for batch_idx, (raw, target) in enumerate(self.dataloader):
@@ -344,7 +394,22 @@ class LoRAFinetuner:
             if self.label_smoothing > 0:
                 target = target * (1 - self.label_smoothing) + self.label_smoothing / 2
 
-            # Forward pass with mixed precision
+            # Teacher forward pass for distillation (before student pass)
+            # Uses the base model without LoRA adapters as the teacher
+            teacher_pred = None
+            if self.distillation_lambda > 0:
+                with torch.no_grad():
+                    self.model.disable_adapter_layers()
+                    try:
+                        with autocast(enabled=self.use_mixed_precision):
+                            teacher_pred = self.model(raw)
+                            if self.select_channel is not None:
+                                teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
+                        teacher_pred = teacher_pred.detach()
+                    finally:
+                        self.model.enable_adapter_layers()
+
+            # Student forward pass with mixed precision
             with autocast(enabled=self.use_mixed_precision):
                 pred = self.model(raw)
 
@@ -357,20 +422,35 @@ class LoRAFinetuner:
                     if batch_idx == 0:
                         print(f"DEBUG trainer: pred.shape after channel selection = {pred.shape}")
 
-                # Compute loss with optional mask
+                # Compute supervised loss with optional mask
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
-                    loss = self.criterion(pred, target)
-                    loss = loss * mask
-                    loss = loss.sum() / mask.sum().clamp(min=1)
+                    supervised_loss = self.criterion(pred, target)
+                    supervised_loss = supervised_loss * mask
+                    supervised_loss = supervised_loss.sum() / mask.sum().clamp(min=1)
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
-                    # For custom losses that support masking (DiceLoss, CombinedLoss)
-                    loss = self.criterion(pred, target, mask)
+                    # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
+                    supervised_loss = self.criterion(pred, target, mask)
                 else:
                     # No masking needed
-                    loss = self.criterion(pred, target)
+                    supervised_loss = self.criterion(pred, target)
                     if self._use_bce or self._use_mse:
-                        loss = loss.mean()
+                        supervised_loss = supervised_loss.mean()
+
+                loss = supervised_loss
+
+                # Compute distillation loss
+                distillation_loss = torch.tensor(0.0, device=self.device)
+                if self.distillation_lambda > 0 and teacher_pred is not None:
+                    distill_loss_map = (pred - teacher_pred) ** 2  # per-element MSE
+                    if self.distillation_all_voxels or mask is None:
+                        # Apply on all voxels
+                        distillation_loss = distill_loss_map.mean()
+                    else:
+                        # Apply only on unlabeled voxels
+                        unlabeled_mask = 1.0 - mask  # 1 where unlabeled
+                        distillation_loss = (distill_loss_map * unlabeled_mask).sum() / unlabeled_mask.sum().clamp(min=1)
+                    loss = loss + self.distillation_lambda * distillation_loss
 
                 # Scale loss for gradient accumulation
                 loss = loss / self.gradient_accumulation_steps
@@ -398,16 +478,26 @@ class LoRAFinetuner:
                 self.optimizer.zero_grad()
                 self.global_step += 1
 
-            # Accumulate loss (unscaled)
+            # Accumulate losses (unscaled)
             epoch_loss += loss.item() * self.gradient_accumulation_steps
+            epoch_supervised_loss += supervised_loss.item()
+            epoch_distill_loss += distillation_loss.item()
 
             # Log progress every batch (since we have few batches)
             avg_loss = epoch_loss / (batch_idx + 1)
             if hasattr(self, '_log_message'):
-                self._log_message(
-                    f"  Batch {batch_idx+1}/{num_batches} - "
-                    f"Loss: {avg_loss:.6f}"
-                )
+                if self.distillation_lambda > 0:
+                    avg_sup = epoch_supervised_loss / (batch_idx + 1)
+                    avg_distill = epoch_distill_loss / (batch_idx + 1)
+                    self._log_message(
+                        f"  Batch {batch_idx+1}/{num_batches} - "
+                        f"Loss: {avg_loss:.6f} (sup: {avg_sup:.6f}, distill: {avg_distill:.6f})"
+                    )
+                else:
+                    self._log_message(
+                        f"  Batch {batch_idx+1}/{num_batches} - "
+                        f"Loss: {avg_loss:.6f}"
+                    )
             else:
                 # Fallback if _log_message not set
                 msg = f"  Batch {batch_idx+1}/{num_batches} - Loss: {avg_loss:.6f}"

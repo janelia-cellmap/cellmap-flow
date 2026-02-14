@@ -135,9 +135,12 @@
         <div class="mb-3">
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
-            <option value="1">1 (Low memory)</option>
-            <option value="2" selected>2 (Recommended)</option>
-            <option value="4">4 (High memory)</option>
+            <option value="1">1</option>
+            <option value="2" selected>2 (Default)</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+            <option value="32">32</option>
           </select>
           <small class="text-muted">Higher = faster but uses more GPU memory</small>
         </div>
@@ -146,13 +149,66 @@
         <div class="mb-3">
           <label for="learningRate" class="form-label">Learning Rate</label>
           <select id="learningRate" class="form-select">
-            <option value="0.00001">1e-5 (Very Conservative)</option>
+            <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+            <option value="0.000001">1e-6 (Very Conservative)</option>
+            <option value="0.00001">1e-5 (Conservative)</option>
             <option value="0.0001" selected>1e-4 (Standard)</option>
             <option value="0.001">1e-3 (Aggressive)</option>
             <option value="0.01">1e-2 (Very Aggressive)</option>
             <option value="0.1">1e-1 (Extremely Aggressive)</option>
           </select>
           <small class="text-muted">LoRA typically uses higher learning rates</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="lossType" class="form-label">Loss Function</label>
+          <select id="lossType" class="form-select">
+            <option value="margin" selected>Margin (for scribbles)</option>
+            <option value="mse">MSE</option>
+            <option value="bce">BCE</option>
+            <option value="dice">Dice</option>
+            <option value="combined">Combined (Dice + BCE)</option>
+          </select>
+          <small class="text-muted">Margin is recommended for sparse annotations</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="distillationLambda" class="form-label">
+            Distillation Weight
+          </label>
+          <select id="distillationLambda" class="form-select">
+            <option value="0">0 (Disabled)</option>
+            <option value="0.01">0.01</option>
+            <option value="0.05">0.05</option>
+            <option value="0.1">0.1</option>
+            <option value="0.2">0.2</option>
+            <option value="0.5" selected>0.5 (Default)</option>
+            <option value="1.0">1.0</option>
+            <option value="2.0">2.0</option>
+            <option value="5.0">5.0</option>
+            <option value="10.0">10.0</option>
+          </select>
+          <small class="text-muted">Keeps model close to original predictions</small>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="distillationScope" class="form-label">
+            Distillation Scope
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="distillationScope" class="form-select">
+            <option value="unlabeled" selected>Unlabeled voxels only</option>
+            <option value="all">All voxels</option>
+          </select>
+          <small class="text-muted">Where to apply distillation loss</small>
         </div>
       </div>
     </div>
@@ -271,19 +327,56 @@
           <div class="mb-2">
             <label class="form-label">Batch Size</label>
             <select id="restartBatchSize" class="form-select">
-              <option value="1">1 (Low memory)</option>
-              <option value="2" selected>2 (Recommended)</option>
-              <option value="4">4 (High memory)</option>
+              <option value="1">1</option>
+              <option value="2" selected>2 (Default)</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="32">32</option>
             </select>
           </div>
           <div class="mb-2">
             <label class="form-label">Learning Rate</label>
             <select id="restartLearningRate" class="form-select">
-              <option value="0.00001">1e-5 (Very Conservative)</option>
+              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+              <option value="0.000001">1e-6 (Very Conservative)</option>
+              <option value="0.00001">1e-5 (Conservative)</option>
               <option value="0.0001" selected>1e-4 (Standard)</option>
               <option value="0.001">1e-3 (Aggressive)</option>
               <option value="0.01">1e-2 (Very Aggressive)</option>
               <option value="0.1">1e-1 (Extremely Aggressive)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Loss Function</label>
+            <select id="restartLossType" class="form-select">
+              <option value="margin" selected>Margin (for scribbles)</option>
+              <option value="mse">MSE</option>
+              <option value="bce">BCE</option>
+              <option value="dice">Dice</option>
+              <option value="combined">Combined (Dice + BCE)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Distillation Weight</label>
+            <select id="restartDistillationLambda" class="form-select">
+              <option value="0">0 (Disabled)</option>
+              <option value="0.01">0.01</option>
+              <option value="0.05">0.05</option>
+              <option value="0.1">0.1</option>
+              <option value="0.2">0.2</option>
+              <option value="0.5" selected>0.5 (Default)</option>
+              <option value="1.0">1.0</option>
+              <option value="2.0">2.0</option>
+              <option value="5.0">5.0</option>
+              <option value="10.0">10.0</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Distillation Scope</label>
+            <select id="restartDistillationScope" class="form-select">
+              <option value="unlabeled" selected>Unlabeled voxels only</option>
+              <option value="all">All voxels</option>
             </select>
           </div>
         </div>
@@ -637,7 +730,10 @@ document.addEventListener("DOMContentLoaded", function () {
         num_epochs: parseInt(document.getElementById("numEpochs").value),
         batch_size: parseInt(document.getElementById("batchSize").value),
         learning_rate: parseFloat(document.getElementById("learningRate").value),
-        auto_serve: document.getElementById("autoServeCheck").checked
+        auto_serve: document.getElementById("autoServeCheck").checked,
+        loss_type: document.getElementById("lossType").value,
+        distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
+        distillation_scope: document.getElementById("distillationScope").value
       };
 
       // Add optional checkpoint path override if provided
@@ -674,6 +770,9 @@ document.addEventListener("DOMContentLoaded", function () {
           appendLog(`Job ID: ${result.job_id}`);
           appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
           appendLog(`Output directory: ${result.output_dir}`);
+          if (result.note) {
+            appendLog(`Note: ${result.note}`);
+          }
           appendLog(`\nWaiting for training to start...\n`);
 
           // Start log streaming and status polling
@@ -884,6 +983,9 @@ document.addEventListener("DOMContentLoaded", function () {
         requestBody.num_epochs = parseInt(document.getElementById('restartNumEpochs').value);
         requestBody.batch_size = parseInt(document.getElementById('restartBatchSize').value);
         requestBody.learning_rate = parseFloat(document.getElementById('restartLearningRate').value);
+        requestBody.loss_type = document.getElementById('restartLossType').value;
+        requestBody.distillation_lambda = parseFloat(document.getElementById('restartDistillationLambda').value);
+        requestBody.distillation_scope = document.getElementById('restartDistillationScope').value;
       }
 
       try {
