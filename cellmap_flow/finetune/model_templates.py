@@ -185,6 +185,7 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 import logging
+import time
 
 import gunpowder as gp
 import numpy as np
@@ -218,8 +219,11 @@ block_shape = np.array((*output_size, output_channels))
 
 # Load base model ONCE at module level
 logger.info(f"Loading base model from: {{BASE_SCRIPT}}")
+_load_t0 = time.perf_counter()
 _base_config = load_safe_config(BASE_SCRIPT, force_safe=False)
 _base_model = _base_config.model
+_base_elapsed = time.perf_counter() - _load_t0
+logger.info(f"Base model/script load time: {{_base_elapsed:.2f}}s")
 
 # Initialize device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -228,15 +232,22 @@ logger.info(f"Using device: {{device}}")
 # Apply LoRA adapter to base model
 from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 logger.info(f"Loading LoRA adapter from: {{LORA_ADAPTER_PATH}}")
+_lora_t0 = time.perf_counter()
 model = load_lora_adapter(
     _base_model,
     LORA_ADAPTER_PATH,
     is_trainable=False  # Inference mode
 )
+_lora_elapsed = time.perf_counter() - _lora_t0
 model = model.to(device)
 model.eval()
+_total_elapsed = time.perf_counter() - _load_t0
 
 logger.info("LoRA finetuned model loaded successfully")
+logger.info(
+    f"Model load timings (s): base={{_base_elapsed:.2f}}, "
+    f"lora={{_lora_elapsed:.2f}}, total={{_total_elapsed:.2f}}"
+)
 logger.info(f"Model classes: {{classes}}")
 logger.info(f"Input shape: {{input_size}}, Output shape: {{output_size}}")
 logger.info(f"Voxel sizes - Input: {{input_voxel_size}}, Output: {{output_voxel_size}}")
@@ -263,6 +274,7 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 import logging
+import time
 
 import gunpowder as gp
 import numpy as np
@@ -300,6 +312,7 @@ def load_base_model(checkpoint_path: str, num_channels: int, device) -> nn.Modul
     from fly_organelles.model import StandardUnet
 
     logger.info(f"Loading base model from: {{checkpoint_path}}")
+    t0 = time.perf_counter()
 
     # Load the base model
     model_backbone = StandardUnet(num_channels)
@@ -308,6 +321,8 @@ def load_base_model(checkpoint_path: str, num_channels: int, device) -> nn.Modul
 
     # Wrap with sigmoid
     model = torch.nn.Sequential(model_backbone, torch.nn.Sigmoid())
+    elapsed = time.perf_counter() - t0
+    logger.info(f"Base checkpoint load time: {{elapsed:.2f}}s")
 
     return model
 
@@ -315,24 +330,36 @@ def load_base_model(checkpoint_path: str, num_channels: int, device) -> nn.Modul
 def load_finetuned_model(device) -> nn.Module:
     """Load the base model and apply LoRA adapter."""
     from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
+    t0 = time.perf_counter()
 
     # Load base model
     if BASE_CHECKPOINT:
+        base_t0 = time.perf_counter()
         base_model = load_base_model(BASE_CHECKPOINT, len(classes), device)
+        base_elapsed = time.perf_counter() - base_t0
     else:
         # Model was trained from scratch - create fresh model
         logger.warning("No base checkpoint specified - model was trained from scratch")
+        base_t0 = time.perf_counter()
         from fly_organelles.model import StandardUnet
         model_backbone = StandardUnet(len(classes))
         base_model = torch.nn.Sequential(model_backbone, torch.nn.Sigmoid())
         base_model.to(device)
+        base_elapsed = time.perf_counter() - base_t0
 
     # Load LoRA adapter
     logger.info(f"Loading LoRA adapter from: {{LORA_ADAPTER_PATH}}")
+    lora_t0 = time.perf_counter()
     model = load_lora_adapter(
         base_model,
         LORA_ADAPTER_PATH,
         is_trainable=False  # Inference mode
+    )
+    lora_elapsed = time.perf_counter() - lora_t0
+    total_elapsed = time.perf_counter() - t0
+    logger.info(
+        f"Model load timings (s): base={{base_elapsed:.2f}}, "
+        f"lora={{lora_elapsed:.2f}}, total={{total_elapsed:.2f}}"
     )
 
     return model
