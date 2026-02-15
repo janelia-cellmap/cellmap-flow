@@ -738,6 +738,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let eventSource = null;
   let statusPollingInterval = null;
   let streamConnectedOnce = false;
+  let liveEpochState = null;
 
   // Start Finetuning button
   const startFinetuningBtn = document.getElementById("startFinetuningBtn");
@@ -851,6 +852,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource.onmessage = function(event) {
       appendLog(event.data);
+      updateProgressFromLogLine(event.data);
 
       // Auto-scroll if enabled
       const logsArea = document.getElementById("trainingLogs");
@@ -864,6 +866,35 @@ document.addEventListener("DOMContentLoaded", function () {
       // Do not close here - EventSource auto-reconnects by default.
       // Closing would permanently stop log updates for this job.
     };
+  }
+
+  function updateProgressFromLogLine(line) {
+    if (!line) return;
+
+    // Parse "Epoch X/Y" anywhere in the line.
+    const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
+    if (epochMatch) {
+      const current = parseInt(epochMatch[1], 10);
+      const total = parseInt(epochMatch[2], 10);
+      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0) {
+        const progressPercent = (current / total) * 100;
+        const progressBar = document.getElementById("trainingProgressBar");
+        progressBar.style.width = progressPercent + "%";
+        progressBar.textContent = `${current}/${total} epochs`;
+        document.getElementById("jobProgress").textContent = `Epoch ${current}/${total}`;
+        liveEpochState = { current, total };
+      }
+    }
+
+    // Parse "Loss: <value>" if present in the same log line.
+    const lossMatch = line.match(/Loss:\s*([0-9]*\.?[0-9]+)/i);
+    if (lossMatch && liveEpochState) {
+      const lossVal = parseFloat(lossMatch[1]);
+      if (!Number.isNaN(lossVal)) {
+        document.getElementById("jobProgress").textContent =
+          `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
+      }
+    }
   }
 
   function appendLog(message) {
@@ -898,7 +929,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Surface status transitions even if log stream is temporarily delayed
         if (data.status === "PENDING") {
           document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
-        } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs)) {
+        } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs) && !liveEpochState) {
           document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
         }
 
