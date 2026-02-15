@@ -224,6 +224,19 @@
       </div>
     </div>
 
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="gpuQueue" class="form-label">GPU Queue</label>
+          <select id="gpuQueue" class="form-select">
+            <option value="gpu_h100" selected>H100</option>
+            <option value="gpu_a100">A100</option>
+            <option value="gpu_h200">H200</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <!-- Auto-serve checkbox -->
     <div class="form-check mb-3">
       <input class="form-check-input" type="checkbox" id="autoServeCheck" checked>
@@ -753,7 +766,8 @@ document.addEventListener("DOMContentLoaded", function () {
         loss_type: document.getElementById("lossType").value,
         distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
         distillation_scope: document.getElementById("distillationScope").value,
-        balance_classes: document.getElementById("balanceClasses").checked
+        balance_classes: document.getElementById("balanceClasses").checked,
+        queue: document.getElementById("gpuQueue").value
       };
 
       // Add optional checkpoint path override if provided

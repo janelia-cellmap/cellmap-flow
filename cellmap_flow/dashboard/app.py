@@ -508,7 +508,8 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
         time.sleep(3)
 
         if minio_proc.poll() is not None:
-            raise RuntimeError("MinIO failed to start")
+            stderr = minio_proc.stderr.read().decode() if minio_proc.stderr else ""
+            raise RuntimeError(f"MinIO failed to start: {stderr}")
 
         minio_state["process"] = minio_proc
         minio_state["port"] = port
@@ -3013,6 +3014,7 @@ def submit_finetuning():
         distillation_scope = data.get("distillation_scope", "unlabeled")
         margin = data.get("margin", 0.3)
         balance_classes = data.get("balance_classes", False)
+        queue = data.get("queue", "gpu_h100")
 
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
@@ -3104,6 +3106,7 @@ def submit_finetuning():
             distillation_scope=distillation_scope,
             margin=margin,
             balance_classes=balance_classes,
+            queue=queue,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
