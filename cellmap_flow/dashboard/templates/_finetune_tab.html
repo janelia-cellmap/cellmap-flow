@@ -737,6 +737,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let eventSource = null;
   let statusPollingInterval = null;
+  let streamConnectedOnce = false;
 
   // Start Finetuning button
   const startFinetuningBtn = document.getElementById("startFinetuningBtn");
@@ -841,6 +842,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream`);
 
+    eventSource.onopen = function() {
+      if (!streamConnectedOnce) {
+        appendLog("Connected to live log stream.");
+        streamConnectedOnce = true;
+      }
+    };
+
     eventSource.onmessage = function(event) {
       appendLog(event.data);
 
@@ -853,7 +861,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource.onerror = function(error) {
       console.error("Log streaming error:", error);
-      eventSource.close();
+      // Do not close here - EventSource auto-reconnects by default.
+      // Closing would permanently stop log updates for this job.
     };
   }
 
@@ -885,6 +894,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Color code status
         statusBadge.className = "badge bg-" + getStatusColor(data.status);
+
+        // Surface status transitions even if log stream is temporarily delayed
+        if (data.status === "PENDING") {
+          document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
+        } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs)) {
+          document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
+        }
 
         // Update progress
         if (data.current_epoch && data.total_epochs) {
@@ -1036,7 +1052,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (data.success) {
           // Same job/GPU - just reset the UI for new training
           document.getElementById('trainingLogs').value = '';
-          appendLog('Restart signal sent - training will restart on same GPU...\n');
+          appendLog('Restart request sent - training will restart on same GPU...\n');
 
           // Reset progress bar
           const progressBar = document.getElementById('trainingProgressBar');

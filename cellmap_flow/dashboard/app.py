@@ -576,7 +576,7 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     return minio_url
 
 
-def sync_all_annotations_from_minio():
+def sync_all_annotations_from_minio(force: bool = True):
     """Sync all annotations from MinIO to local disk.
 
     Returns:
@@ -586,7 +586,7 @@ def sync_all_annotations_from_minio():
         logger.info("MinIO not initialized, skipping annotation sync")
         return -1
 
-    logger.info("Syncing annotations from MinIO before training...")
+    logger.info(f"Syncing annotations from MinIO before training/restart (force={force})...")
     s3 = s3fs.S3FileSystem(
         anon=False,
         key='minio',
@@ -606,12 +606,12 @@ def sync_all_annotations_from_minio():
             if s3.exists(attrs_path):
                 root_attrs = json.loads(s3.cat(attrs_path))
                 if root_attrs.get("type") == "annotation_volume":
-                    if sync_annotation_volume_from_minio(zid, force=True):
+                    if sync_annotation_volume_from_minio(zid, force=force):
                         synced += 1
                     continue
         except Exception:
             pass
-        if sync_annotation_from_minio(zid, force=True):
+        if sync_annotation_from_minio(zid, force=force):
             synced += 1
     logger.info(f"Synced {synced}/{len(zarr_ids)} annotations")
     return synced
@@ -1459,14 +1459,15 @@ def process():
             # response = requests.post(f"{host}/input_normalize", json=data)
             # print(f"Response from {host}: {response.json()}")
             st_data = encode_to_str(data)
+            layer_source = f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"
 
             if is_output_segmentation():
                 s.layers[model] = neuroglancer.SegmentationLayer(
-                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                    source=layer_source,
                 )
             else:
                 s.layers[model] = neuroglancer.ImageLayer(
-                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                    source=layer_source,
                 )
 
     logger.warning(f"Input normalizers: {g.input_norms}")
@@ -3062,7 +3063,8 @@ def submit_finetuning():
 
         # Auto-sync annotations from MinIO before training
         try:
-            sync_all_annotations_from_minio()
+            # Incremental sync on submit: avoid re-copying unchanged data.
+            sync_all_annotations_from_minio(force=False)
         except Exception as e:
             logger.warning(f"Error syncing annotations before training: {e}")
 
@@ -3188,7 +3190,6 @@ def stream_job_logs(job_id):
 
     # Patterns to filter out of the log stream
     _log_filters = [
-        _re.compile(r"^DEBUG", _re.IGNORECASE),
         _re.compile(r"^\s+base_model\.\S+\.lora_"),  # gradient norm lines
         _re.compile(r"^INFO:werkzeug:"),
         _re.compile(r"^Array metadata \(scale="),  # server chunk metadata
@@ -3202,42 +3203,122 @@ def stream_job_logs(job_id):
                 return False
         return True
 
+    def _iter_visible_lines(text):
+        for line in text.splitlines():
+            if line and _should_show(line):
+                yield line
+
+    def _sse_data_block(lines):
+        if not lines:
+            return None
+        payload = "\n".join(lines)
+        # SSE multiline payload requires each line to be prefixed with "data: ".
+        return "data: " + payload.replace("\n", "\ndata: ") + "\n\n"
+
+    def _read_bpeek_content(lsf_job_id):
+        try:
+            result = subprocess.run(
+                ["bpeek", str(lsf_job_id)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception as e:
+            logger.debug(f"bpeek call failed for job {lsf_job_id}: {e}")
+            return None
+
+        output = (result.stdout or "")
+        stderr = (result.stderr or "").strip()
+        if stderr and "Not yet started" not in stderr:
+            logger.debug(f"bpeek stderr for job {lsf_job_id}: {stderr}")
+        # Empty output can happen while pending; treat as no-new-data rather than error.
+        return output
+
     def generate():
+        # Keepalive cadence for SSE (helps prevent proxy/browser buffering)
+        heartbeat_interval_s = 1.0
+        last_heartbeat = time.perf_counter()
+
         # Check if job exists
         if job_id not in finetune_job_manager.jobs:
             yield f"data: Job {job_id} not found\n\n"
             return
 
         finetune_job = finetune_job_manager.jobs[job_id]
+        lsf_job_id = None
+        if finetune_job.lsf_job and hasattr(finetune_job.lsf_job, "job_id"):
+            lsf_job_id = finetune_job.lsf_job.job_id
 
-        # Send existing log content first
-        if finetune_job.log_file.exists():
+        use_bpeek = lsf_job_id is not None
+        last_bpeek_line_count = 0
+        last_bpeek_poll = 0.0
+        bpeek_poll_interval_s = 0.25
+
+        # Send existing content first (bpeek preferred, file fallback)
+        if use_bpeek:
+            initial = _read_bpeek_content(lsf_job_id)
+            if initial is None:
+                use_bpeek = False
+            else:
+                initial_lines = initial.splitlines()
+                last_bpeek_line_count = len(initial_lines)
+                block = _sse_data_block(list(_iter_visible_lines(initial)))
+                if block:
+                    yield block
+
+        if not use_bpeek and finetune_job.log_file.exists():
             try:
                 with open(finetune_job.log_file, "r") as f:
                     existing_content = f.read()
-                    for line in existing_content.split("\n"):
-                        if line and _should_show(line):
-                            yield f"data: {line}\n\n"
+                block = _sse_data_block(list(_iter_visible_lines(existing_content)))
+                if block:
+                    yield block
             except Exception as e:
                 logger.error(f"Error reading log file: {e}")
 
-        # Then tail for new content
+        # Then tail for new content (bpeek preferred, file fallback)
         last_position = finetune_job.log_file.stat().st_size if finetune_job.log_file.exists() else 0
 
         while finetune_job.status.value in ["PENDING", "RUNNING"]:
             try:
-                if finetune_job.log_file.exists():
+                now = time.perf_counter()
+
+                if use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
+                    last_bpeek_poll = now
+                    content = _read_bpeek_content(lsf_job_id)
+                    if content is None:
+                        # Fall back to file tailing for this stream connection
+                        use_bpeek = False
+                    else:
+                        current_lines = content.splitlines()
+                        if len(current_lines) < last_bpeek_line_count:
+                            # bpeek output rolled/restarted; resync from current full output.
+                            delta_lines = current_lines
+                        else:
+                            delta_lines = current_lines[last_bpeek_line_count:]
+                        last_bpeek_line_count = len(current_lines)
+                        if delta_lines:
+                            delta_text = "\n".join(delta_lines)
+                            block = _sse_data_block(list(_iter_visible_lines(delta_text)))
+                            if block:
+                                yield block
+
+                if not use_bpeek and finetune_job.log_file.exists():
                     with open(finetune_job.log_file, "r") as f:
                         f.seek(last_position)
                         new_content = f.read()
                         last_position = f.tell()
+                    if new_content:
+                        block = _sse_data_block(list(_iter_visible_lines(new_content)))
+                        if block:
+                            yield block
 
-                        if new_content:
-                            for line in new_content.split("\n"):
-                                if line and _should_show(line):
-                                    yield f"data: {line}\n\n"
+                # Emit heartbeat comments to force periodic flush and keep connection alive.
+                if now - last_heartbeat >= heartbeat_interval_s:
+                    yield ": ping\n\n"
+                    last_heartbeat = now
 
-                time.sleep(1)  # Poll every second
+                time.sleep(0.1)
 
             except Exception as e:
                 logger.error(f"Error streaming logs: {e}")
@@ -3245,7 +3326,15 @@ def stream_job_logs(job_id):
 
         yield f"data: === Training {finetune_job.status.value} ===\n\n"
 
-    return Response(generate(), mimetype="text/event-stream")
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/finetune/job/<job_id>/cancel", methods=["POST"])
@@ -3385,8 +3474,9 @@ def add_finetuned_layer_to_viewer():
 
             # Create image layer for finetuned model (same style as normal models)
             import neuroglancer
+            layer_source = f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}"
             s.layers[layer_name] = neuroglancer.ImageLayer(
-                source=f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
+                source=layer_source,
                 shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
                     #uicontrol vec3 color color(default="red");
                     void main(){{emitRGB(color * normalized());}}""",
@@ -3408,17 +3498,21 @@ def add_finetuned_layer_to_viewer():
 
 @app.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
 def restart_finetuning_job(job_id):
-    """Restart training on the same GPU via signal file.
-
-    The CLI watches for a restart_signal.json file and restarts training
-    without needing a new job/GPU allocation.
-    """
+    """Restart training on the same GPU via in-process control channel."""
     try:
+        restart_t0 = time.perf_counter()
         data = request.get_json() or {}
 
         # Sync annotations from MinIO before restarting training
         try:
-            sync_all_annotations_from_minio()
+            sync_t0 = time.perf_counter()
+            # Incremental sync on restart: copy only changed chunks/volumes.
+            synced = sync_all_annotations_from_minio(force=False)
+            sync_elapsed = time.perf_counter() - sync_t0
+            logger.info(
+                f"Restart pre-sync complete for job {job_id}: synced={synced}, "
+                f"elapsed={sync_elapsed:.2f}s"
+            )
         except Exception as e:
             logger.warning(f"Error syncing annotations before restart: {e}")
 
@@ -3428,16 +3522,23 @@ def restart_finetuning_job(job_id):
             if key in data and data[key] is not None:
                 updated_params[key] = data[key]
 
-        # Send restart signal (same job, same GPU)
+        # Send restart request (same job, same GPU)
+        signal_t0 = time.perf_counter()
         job = finetune_job_manager.restart_finetuning_job(
             job_id=job_id,
             updated_params=updated_params
+        )
+        signal_elapsed = time.perf_counter() - signal_t0
+        total_elapsed = time.perf_counter() - restart_t0
+        logger.info(
+            f"Restart request processed for job {job_id}: "
+            f"signal_write={signal_elapsed:.2f}s total={total_elapsed:.2f}s"
         )
 
         return jsonify({
             "success": True,
             "job_id": job.job_id,
-            "message": "Restart signal sent. Training will restart on the same GPU.",
+            "message": "Restart request sent. Training will restart on the same GPU.",
         })
 
     except Exception as e:
