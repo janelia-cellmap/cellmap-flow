@@ -21,7 +21,6 @@ from cellmap_flow.utils.cli_utils import (
     print_available_models,
 )
 
-logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +44,7 @@ def cli(log_level):
         cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
         cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()))
+    logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
 
 
 @cli.command(name="list-models")
