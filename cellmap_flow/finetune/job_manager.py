@@ -972,6 +972,7 @@ class FinetuneJobManager:
                     resolution=finetune_job.params.get("input_voxel_size", [16, 16, 16])[0],
                     output_path=models_dir / f"{finetuned_model_name}.yaml",
                     data_path=data_path,
+                    queue=finetune_job.params.get("queue", "gpu_h100"),
                     json_data=json_data,
                     scale=base_scale
                 )
