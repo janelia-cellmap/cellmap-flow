@@ -23,12 +23,15 @@ import argparse
 import gc
 import json
 import logging
+import os
 import socket
 import sys
 import threading
 import time
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -41,12 +44,62 @@ from cellmap_flow.finetune.trainer import LoRAFinetuner
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
 
-def _start_inference_server_background(args, model_config: ModelConfig, trained_model):
+class RestartController:
+    """In-memory restart control shared between training loop and server endpoint."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._pending = None
+
+    def request_restart(self, payload: Optional[dict]) -> bool:
+        signal_data = {
+            "restart": True,
+            "timestamp": datetime.now().isoformat(),
+            "params": {},
+        }
+        if isinstance(payload, dict):
+            if "timestamp" in payload and payload["timestamp"]:
+                signal_data["timestamp"] = payload["timestamp"]
+            if isinstance(payload.get("params"), dict):
+                signal_data["params"] = payload["params"]
+
+        with self._lock:
+            self._pending = signal_data
+            self._event.set()
+        return True
+
+    def get_if_triggered(self) -> Optional[dict]:
+        if not self._event.is_set():
+            return None
+        with self._lock:
+            signal_data = self._pending
+            self._pending = None
+            self._event.clear()
+        return signal_data
+
+
+def _wait_for_port_ready(host: str, port: int, timeout_s: float = 30.0, interval_s: float = 0.1) -> bool:
+    """Wait until a TCP port is accepting connections."""
+    deadline = time.perf_counter() + timeout_s
+    while time.perf_counter() < deadline:
+        try:
+            with closing(socket.create_connection((host, port), timeout=0.5)):
+                return True
+        except OSError:
+            time.sleep(interval_s)
+    return False
+
+
+def _start_inference_server_background(
+    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None
+):
     """
     Start inference server in a background daemon thread.
 
@@ -65,11 +118,14 @@ def _start_inference_server_background(args, model_config: ModelConfig, trained_
     logger.info("Starting inference server with finetuned model...")
     logger.info("=" * 60)
 
+    startup_t0 = time.perf_counter()
+
     # Clear GPU cache from training
+    cleanup_t0 = time.perf_counter()
     logger.info("Clearing GPU cache...")
     torch.cuda.empty_cache()
     gc.collect()
-    time.sleep(2)
+    cleanup_elapsed = time.perf_counter() - cleanup_t0
 
     # Validate serve data path
     if not args.serve_data_path:
@@ -93,8 +149,10 @@ def _start_inference_server_background(args, model_config: ModelConfig, trained_
     from cellmap_flow.server import CellMapFlowServer
     from cellmap_flow.utils.web_utils import get_free_port
 
+    setup_t0 = time.perf_counter()
     logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
-    server = CellMapFlowServer(args.serve_data_path, model_config)
+    restart_callback = restart_controller.request_restart if restart_controller is not None else None
+    server = CellMapFlowServer(args.serve_data_path, model_config, restart_callback=restart_callback)
 
     # Get port
     port = args.serve_port if args.serve_port != 0 else get_free_port()
@@ -106,42 +164,140 @@ def _start_inference_server_background(args, model_config: ModelConfig, trained_
         daemon=True
     )
     server_thread.start()
+    setup_elapsed = time.perf_counter() - setup_t0
 
-    # Give the server a moment to start and print its marker
-    time.sleep(2)
+    wait_t0 = time.perf_counter()
+    server_ready = _wait_for_port_ready("127.0.0.1", port)
+    wait_elapsed = time.perf_counter() - wait_t0
 
     host_url = f"http://{socket.gethostname()}:{port}"
+    total_elapsed = time.perf_counter() - startup_t0
     logger.info("=" * 60)
+    if server_ready:
+        logger.info(f"Inference server port is ready on 127.0.0.1:{port}")
+    else:
+        logger.warning(f"Inference server did not become ready within timeout on 127.0.0.1:{port}")
     logger.info(f"Inference server running at {host_url}")
+    logger.info(
+        f"Startup timings (s): cleanup={cleanup_elapsed:.2f}, setup={setup_elapsed:.2f}, "
+        f"wait_for_bind={wait_elapsed:.2f}, total={total_elapsed:.2f}"
+    )
     logger.info("Server is running in background. Watching for restart signals...")
     logger.info("=" * 60)
 
     return server_thread, port
 
 
-def _wait_for_restart_signal(signal_file: Path, check_interval: float = 5.0):
+def _wait_for_restart_signal(
+    signal_file: Optional[Path],
+    check_interval: float = 1.0,
+    restart_controller: Optional[RestartController] = None,
+):
     """
     Watch for a restart signal file. Blocks until signal appears.
 
-    The signal file is a JSON file written by the job manager when
-    the user clicks "Restart Training" in the dashboard.
+    Prefers in-memory restart events from the control endpoint, and
+    falls back to a signal file for backward compatibility.
 
     Args:
-        signal_file: Path to watch for
+        signal_file: Optional path to watch for legacy signal file
         check_interval: Seconds between checks
 
     Returns:
         Dict with restart parameters, or None if signal file is malformed
     """
-    logger.info(f"Watching for restart signal at {signal_file}")
+    logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
+    wait_started_perf = time.perf_counter()
+    wait_started_epoch = time.time()
+    wait_started_dt = datetime.now().isoformat()
+    host = socket.gethostname()
+    poll_count = 0
+    last_diag_emit_perf = wait_started_perf
+    diag_emit_interval_s = 10.0
+    logger.info(
+        f"Restart signal watcher context: host={host}, pid={os.getpid()}, "
+        f"check_interval={check_interval:.2f}s, wait_started={wait_started_dt}"
+    )
 
     while True:
-        if signal_file.exists():
+        poll_count += 1
+        now_perf = time.perf_counter()
+        now_epoch = time.time()
+        now_dt = datetime.now().isoformat()
+
+        if now_perf - last_diag_emit_perf >= diag_emit_interval_s:
+            loop_wait_s = now_perf - wait_started_perf
+            logger.info(
+                f"Restart watcher still waiting: elapsed={loop_wait_s:.2f}s "
+                f"polls={poll_count} now={now_dt}"
+            )
+            print(
+                f"RESTART_WATCHER_WAITING: elapsed={loop_wait_s:.2f}s polls={poll_count}",
+                flush=True,
+            )
+            last_diag_emit_perf = now_perf
+
+        if restart_controller is not None:
+            in_memory_signal = restart_controller.get_if_triggered()
+            if in_memory_signal is not None:
+                logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
+                signal_ts = in_memory_signal.get("timestamp")
+                if signal_ts:
+                    try:
+                        queued_at = datetime.fromisoformat(signal_ts)
+                        wait_s = (datetime.now() - queued_at).total_seconds()
+                        logger.info(
+                            f"Restart signal pickup latency: {wait_s:.2f}s "
+                            f"(dashboard timestamp -> worker now)"
+                        )
+                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
+                        print(
+                            f"RESTART_SIGNAL_DIAGNOSTICS: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
+                            f"source=http_control",
+                            flush=True,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
+                return in_memory_signal
+
+        if signal_file and signal_file.exists():
             try:
+                stat = signal_file.stat()
+                mtime_latency_s = now_epoch - stat.st_mtime
+                logger.info(
+                    f"Restart signal file observed: mtime={datetime.fromtimestamp(stat.st_mtime).isoformat()} "
+                    f"mtime_to_detect={mtime_latency_s:.2f}s size={stat.st_size}B"
+                )
+                print(f"RESTART_SIGNAL_MTIME_TO_DETECT: {mtime_latency_s:.2f}s", flush=True)
                 with open(signal_file) as f:
                     signal_data = json.load(f)
                 signal_file.unlink()  # Remove signal file
                 logger.info(f"Restart signal received: {signal_data}")
+                signal_ts = signal_data.get("timestamp")
+                if signal_ts:
+                    try:
+                        queued_at = datetime.fromisoformat(signal_ts)
+                        wait_s = (datetime.now() - queued_at).total_seconds()
+                        logger.info(
+                            f"Restart signal pickup latency: {wait_s:.2f}s "
+                            f"(dashboard timestamp -> worker now)"
+                        )
+                        logger.info(
+                            f"Restart signal diagnostics: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s, "
+                            f"mtime_to_detect={mtime_latency_s:.2f}s, "
+                            f"wait_started_epoch_to_mtime={stat.st_mtime - wait_started_epoch:.2f}s"
+                        )
+                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
+                        print(
+                            f"RESTART_SIGNAL_DIAGNOSTICS: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
+                            f"mtime_to_detect={mtime_latency_s:.2f}s",
+                            flush=True,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
                 return signal_data
             except Exception as e:
                 logger.error(f"Error reading restart signal: {e}")
@@ -529,6 +685,7 @@ def main():
 
     # === Training loop (supports restart via signal file) ===
     server_started = False
+    restart_controller = RestartController()
     iteration = 0
 
     while True:
@@ -608,7 +765,7 @@ def main():
                     # First time: start inference server in background thread
                     try:
                         _start_inference_server_background(
-                            args, model_config, lora_model
+                            args, model_config, lora_model, restart_controller=restart_controller
                         )
                         server_started = True
                     except Exception as e:
@@ -624,19 +781,27 @@ def main():
 
                 # Watch for restart signal
                 signal_file = Path(args.output_dir) / "restart_signal.json"
-                restart_data = _wait_for_restart_signal(signal_file)
+                restart_data = _wait_for_restart_signal(
+                    signal_file=signal_file,
+                    check_interval=1.0,
+                    restart_controller=restart_controller,
+                )
 
                 if restart_data is None:
                     logger.error("Malformed restart signal, exiting")
                     return 1
 
                 # Apply updated parameters
+                restart_apply_t0 = time.perf_counter()
                 _apply_restart_params(args, restart_data)
 
                 # Prepare for retraining
                 lora_model.train()
                 torch.cuda.empty_cache()
                 gc.collect()
+                restart_apply_elapsed = time.perf_counter() - restart_apply_t0
+                logger.info(f"Restart transition prep time: {restart_apply_elapsed:.2f}s")
+                print(f"RESTART_TRANSITION_PREP_TIME: {restart_apply_elapsed:.2f}s", flush=True)
 
                 logger.info("Restarting training with updated parameters...")
                 print("RESTARTING_TRAINING", flush=True)

@@ -12,6 +12,7 @@ import re
 import threading
 import time
 import uuid
+import requests
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
@@ -1167,12 +1168,11 @@ class FinetuneJobManager:
         updated_params: Optional[Dict[str, Any]] = None
     ) -> FinetuneJob:
         """
-        Restart training on the same GPU by writing a signal file.
+        Restart training on the same GPU via control endpoint.
 
-        The CLI watches for this signal file and restarts training
-        without needing a new job/GPU allocation. The inference server
-        keeps running on the same port, and the shared model object
-        gets updated weights automatically.
+        Primary path sends an HTTP restart request to the running
+        inference server in the same process as the training loop.
+        Falls back to file signal if control endpoint is unavailable.
 
         Args:
             job_id: ID of job to restart
@@ -1184,6 +1184,8 @@ class FinetuneJobManager:
         Raises:
             ValueError: If job not found or not in a restartable state
         """
+        restart_t0 = time.perf_counter()
+
         if job_id not in self.jobs:
             raise ValueError(f"Job {job_id} not found")
 
@@ -1204,30 +1206,59 @@ class FinetuneJobManager:
 
         # 1. Archive current logs
         self.logger.info(f"Archiving logs for job {job_id}...")
+        archive_t0 = time.perf_counter()
         self._archive_job_logs(job)
+        archive_elapsed = time.perf_counter() - archive_t0
 
-        # 2. Write restart signal file
-        signal_file = job.output_dir / "restart_signal.json"
         signal_data = {
             "restart": True,
             "timestamp": datetime.now().isoformat(),
             "params": updated_params or {}
         }
 
-        with open(signal_file, 'w') as f:
-            json.dump(signal_data, f, indent=2)
+        # 2. Send restart request to running inference server (primary path)
+        signal_write_mode = "http_control"
+        write_t0 = time.perf_counter()
+        http_error = None
+        if job.inference_server_url:
+            try:
+                control_url = job.inference_server_url.rstrip("/") + "/__control__/restart"
+                response = requests.post(control_url, json=signal_data, timeout=5)
+                response.raise_for_status()
+                data = response.json()
+                if not data.get("success", False):
+                    raise RuntimeError(data.get("error", "Unknown restart control failure"))
+                self.logger.info(f"Sent restart request via HTTP control endpoint: {control_url}")
+            except Exception as e:
+                http_error = e
+                self.logger.warning(f"HTTP restart control failed for job {job_id}: {e}")
+        else:
+            http_error = RuntimeError("No inference_server_url for HTTP restart control")
 
-        self.logger.info(f"Wrote restart signal to {signal_file}")
+        # 3. Fallback to signal file if HTTP control endpoint is unavailable
+        if http_error is not None:
+            signal_write_mode = "file_signal_fallback"
+            signal_file = job.output_dir / "restart_signal.json"
+            with open(signal_file, 'w') as f:
+                json.dump(signal_data, f, indent=2)
+            self.logger.info(f"Wrote fallback restart signal to {signal_file}")
+        write_elapsed = time.perf_counter() - write_t0
 
-        # 3. Reset training progress (keep inference server info)
+        # 4. Reset training progress (keep inference server info)
         job.current_epoch = 0
         job.latest_loss = None
         job.status = JobStatus.RUNNING
 
-        # 4. Update stored params
+        # 5. Update stored params
         if updated_params:
             job.params.update(updated_params)
 
-        self.logger.info(f"Job {job_id} restart signal sent, waiting for CLI to pick it up")
+        total_elapsed = time.perf_counter() - restart_t0
+        self.logger.info(
+            f"Restart signal timings for job {job_id}: "
+            f"archive={archive_elapsed:.2f}s write={write_elapsed:.2f}s "
+            f"mode={signal_write_mode} total={total_elapsed:.2f}s"
+        )
+        self.logger.info(f"Job {job_id} restart request sent, waiting for CLI to pick it up")
 
         return job
