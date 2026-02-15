@@ -379,7 +379,7 @@ class FinetuneJobManager:
         if balance_classes:
             cli_command += "--balance-classes "
 
-        cli_command += f"2>&1 | tee {log_file}"
+        cli_command = f"stdbuf -oL {cli_command} 2>&1 | tee {log_file}"
 
         self.logger.info(f"Training command: {cli_command}")
 
