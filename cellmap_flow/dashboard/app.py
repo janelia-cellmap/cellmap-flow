@@ -154,12 +154,14 @@ def get_local_ip():
 
 
 def find_available_port(start_port=9000):
-    """Find an available port for MinIO server."""
+    """Find an available port pair for MinIO server (API on port, console on port+1)."""
     for port in range(start_port, start_port + 100):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("", port))
-                return port
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s1:
+                s1.bind(("", port))
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s2:
+                    s2.bind(("", port + 1))
+                    return port
         except OSError:
             continue
     raise RuntimeError("Could not find available port for MinIO")
