@@ -546,14 +546,19 @@ class LoRAFinetuner:
         checkpoint_name = "best_checkpoint.pth" if is_best else f"checkpoint_epoch_{self.current_epoch+1}.pth"
         checkpoint_path = self.output_dir / checkpoint_name
 
+        # Save only trainable (LoRA) parameters to avoid writing the full
+        # 800M+ param base model to disk every checkpoint.
+        trainable_keys = {n for n, p in self.model.named_parameters() if p.requires_grad}
+        trainable_state = {k: v for k, v in self.model.state_dict().items() if k in trainable_keys}
         checkpoint = {
             'epoch': self.current_epoch,
             'global_step': self.global_step,
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': trainable_state,
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scaler_state_dict': self.scaler.state_dict(),
             'best_loss': self.best_loss,
             'training_stats': self.training_stats,
+            'lora_only': True,
         }
 
         torch.save(checkpoint, checkpoint_path)
@@ -583,7 +588,11 @@ class LoRAFinetuner:
         """
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        if checkpoint.get('lora_only', False):
+            # Checkpoint contains only trainable (LoRA) params — merge into full state
+            self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        else:
+            self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
