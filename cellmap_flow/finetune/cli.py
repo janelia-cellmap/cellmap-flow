@@ -39,6 +39,7 @@ import torch.nn as nn
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, ModelConfig
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 from cellmap_flow.finetune.dataset import create_dataloader
+from cellmap_flow.finetune.yaml_dataset import create_yaml_dataloader
 from cellmap_flow.finetune.trainer import LoRAFinetuner
 
 # Set up logging
@@ -372,20 +373,48 @@ def _generate_model_files(args, model_config, timestamp):
     )
     logger.info(f"Generated script: {script_path}")
 
-    # Extract data path from corrections
-    corrections_path = Path(args.corrections)
-    zarr_dirs = list(corrections_path.glob("*.zarr"))
+    # Extract data path
     data_path = None
-    if zarr_dirs:
-        zattrs_file = zarr_dirs[0] / ".zattrs"
-        if zattrs_file.exists():
-            with open(zattrs_file) as f:
-                metadata = json.load(f)
-                data_path = metadata.get("dataset_path")
+    if args.corrections:
+        corrections_path = Path(args.corrections)
+        zarr_dirs = list(corrections_path.glob("*.zarr"))
+        if zarr_dirs:
+            zattrs_file = zarr_dirs[0] / ".zattrs"
+            if zattrs_file.exists():
+                with open(zattrs_file) as f:
+                    metadata = json.load(f)
+                    data_path = metadata.get("dataset_path")
 
     if not data_path:
-        logger.warning("Could not extract data_path from corrections, using serve_data_path")
-        data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
+        if args.serve_data_path:
+            logger.warning("Could not extract data_path from corrections, using serve_data_path")
+            data_path = args.serve_data_path
+        elif args.data_yaml:
+            # For YAML datasets, use the YAML path as a reference
+            import yaml as _yaml
+            with open(args.data_yaml) as f:
+                yaml_cfg = _yaml.safe_load(f)
+            # Use the raw path of the first dataset
+            datasets = yaml_cfg.get("datasets", {})
+            for ds in datasets.values():
+                if "raw" in ds:
+                    # Get the zarr root (everything before the scale level)
+                    raw_path = ds["raw"]
+                    # Strip scale suffix like /s0 or /s1
+                    parts = raw_path.rsplit("/", 2)
+                    if len(parts) >= 3 and parts[-2] in ("em", "fibsem-uint8", "fibsem-uint16"):
+                        data_path = "/".join(parts[:-1])
+                    else:
+                        # Go up to the .zarr root
+                        zarr_idx = raw_path.find(".zarr")
+                        if zarr_idx >= 0:
+                            data_path = raw_path[:zarr_idx + 5]
+                        else:
+                            data_path = raw_path
+                    break
+        if not data_path:
+            data_path = "/path/to/data.zarr"
+            logger.warning(f"Could not determine data_path, using placeholder: {data_path}")
 
     yaml_path = generate_finetuned_model_yaml(
         script_path=script_path,
@@ -478,8 +507,34 @@ def main():
     parser.add_argument(
         "--corrections",
         type=str,
-        required=True,
+        default=None,
         help="Path to corrections.zarr directory"
+    )
+    parser.add_argument(
+        "--data-yaml",
+        type=str,
+        default=None,
+        help="Path to YAML data config file (alternative to --corrections)"
+    )
+    parser.add_argument(
+        "--input-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Model input shape in voxels (Z Y X). Required with --data-yaml"
+    )
+    parser.add_argument(
+        "--output-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Model output shape in voxels (Z Y X). Required with --data-yaml"
+    )
+    parser.add_argument(
+        "--samples-per-crop",
+        type=int,
+        default=None,
+        help="Fixed number of random samples per crop per epoch (for --data-yaml)"
     )
     parser.add_argument(
         "--patch-shape",
@@ -610,6 +665,18 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate: require either --corrections or --data-yaml
+    if not args.corrections and not args.data_yaml:
+        parser.error("Either --corrections or --data-yaml is required")
+    if args.corrections and args.data_yaml:
+        parser.error("Cannot use both --corrections and --data-yaml")
+    if args.data_yaml and not args.input_shape:
+        parser.error("--input-shape is required when using --data-yaml")
+    if args.data_yaml and not args.output_shape:
+        parser.error("--output-shape is required when using --data-yaml")
+
+    use_yaml_data = args.data_yaml is not None
+
     # Debug: Print all arguments
     print(f"\n{'=' * 60}")
     print(f"DEBUG: All parsed arguments:")
@@ -624,7 +691,12 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Model type: {args.model_type}")
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
-    logger.info(f"Corrections: {args.corrections}")
+    if use_yaml_data:
+        logger.info(f"Data YAML: {args.data_yaml}")
+        logger.info(f"Input shape: {args.input_shape}")
+        logger.info(f"Output shape: {args.output_shape}")
+    else:
+        logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
     logger.info(f"LoRA rank: {args.lora_r}")
     logger.info(f"Batch size: {args.batch_size}")
@@ -699,18 +771,33 @@ def main():
             logger.info("=" * 60)
 
         # Create dataloader (re-created each iteration to pick up new annotations)
-        logger.info(f"Loading corrections from {args.corrections}...")
-        dataloader = create_dataloader(
-            args.corrections,
-            batch_size=args.batch_size,
-            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
-            augment=not args.no_augment,
-            num_workers=args.num_workers,
-            shuffle=True,
-            model_name=args.model_name,
-            normalize=False,
-        )
-        logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
+        if use_yaml_data:
+            logger.info(f"Loading YAML dataset from {args.data_yaml}...")
+            dataloader = create_yaml_dataloader(
+                yaml_path=args.data_yaml,
+                input_shape=tuple(args.input_shape),
+                output_shape=tuple(args.output_shape),
+                batch_size=args.batch_size,
+                samples_per_crop=args.samples_per_crop,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                normalize=True,
+            )
+            logger.info(f"YAML DataLoader created: {len(dataloader.dataset)} samples")
+        else:
+            logger.info(f"Loading corrections from {args.corrections}...")
+            dataloader = create_dataloader(
+                args.corrections,
+                batch_size=args.batch_size,
+                patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                model_name=args.model_name,
+                normalize=False,
+            )
+            logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
         # Create trainer (re-created each iteration for fresh optimizer/scheduler)
         logger.info("Creating trainer...")

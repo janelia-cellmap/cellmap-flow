@@ -257,20 +257,27 @@ class FinetuneJobManager:
         if not corrections_path.exists():
             raise ValueError(f"Corrections path does not exist: {corrections_path}")
 
-        # 4. Count corrections (warn if few)
-        correction_dirs = list(corrections_path.glob("*/"))
-        num_corrections = len([d for d in correction_dirs if (d / ".zattrs").exists()])
+        # Detect if corrections_path is a YAML config file
+        is_yaml_data = corrections_path.suffix.lower() in (".yaml", ".yml") and corrections_path.is_file()
 
-        if num_corrections == 0:
-            raise ValueError(f"No corrections found in {corrections_path}")
+        if is_yaml_data:
+            self.logger.info(f"Detected YAML data config: {corrections_path}")
+            num_corrections = 0  # Not applicable for YAML mode
+        else:
+            # 4. Count corrections (warn if few)
+            correction_dirs = list(corrections_path.glob("*/"))
+            num_corrections = len([d for d in correction_dirs if (d / ".zattrs").exists()])
 
-        if num_corrections < 5:
-            self.logger.warning(
-                f"Only {num_corrections} corrections found. "
-                "Recommend at least 5-10 for meaningful finetuning."
-            )
+            if num_corrections == 0:
+                raise ValueError(f"No corrections found in {corrections_path}")
 
-        self.logger.info(f"Found {num_corrections} corrections for training")
+            if num_corrections < 5:
+                self.logger.warning(
+                    f"Only {num_corrections} corrections found. "
+                    "Recommend at least 5-10 for meaningful finetuning."
+                )
+
+            self.logger.info(f"Found {num_corrections} corrections for training")
 
         # === Setup output directory ===
 
@@ -321,13 +328,39 @@ class FinetuneJobManager:
         # Extract data path for inference server if auto-serve is enabled
         serve_data_path = None
         if auto_serve:
-            try:
-                serve_data_path = self._extract_data_path_from_corrections(corrections_path)
-                self.logger.info(f"Extracted dataset path for inference: {serve_data_path}")
-            except Exception as e:
-                self.logger.warning(f"Could not extract dataset path from corrections: {e}")
-                self.logger.warning("Auto-serve will be disabled")
-                auto_serve = False
+            if is_yaml_data:
+                # For YAML data, extract raw path from the first dataset
+                try:
+                    import yaml
+                    with open(corrections_path) as f:
+                        yaml_cfg = yaml.safe_load(f)
+                    datasets = yaml_cfg.get("datasets", {})
+                    for ds_info in datasets.values():
+                        raw_path = ds_info.get("raw")
+                        if raw_path:
+                            # Go up to the .zarr root for serving
+                            zarr_idx = raw_path.find(".zarr")
+                            if zarr_idx >= 0:
+                                serve_data_path = raw_path[:zarr_idx + 5]
+                            else:
+                                serve_data_path = raw_path
+                            break
+                    if serve_data_path:
+                        self.logger.info(f"Extracted dataset path from YAML for inference: {serve_data_path}")
+                    else:
+                        raise ValueError("No raw path found in YAML config")
+                except Exception as e:
+                    self.logger.warning(f"Could not extract dataset path from YAML: {e}")
+                    self.logger.warning("Auto-serve will be disabled")
+                    auto_serve = False
+            else:
+                try:
+                    serve_data_path = self._extract_data_path_from_corrections(corrections_path)
+                    self.logger.info(f"Extracted dataset path for inference: {serve_data_path}")
+                except Exception as e:
+                    self.logger.warning(f"Could not extract dataset path from corrections: {e}")
+                    self.logger.warning("Auto-serve will be disabled")
+                    auto_serve = False
 
         # Build CLI command
         cli_command = f"python -m cellmap_flow.finetune.cli "
@@ -339,8 +372,34 @@ class FinetuneJobManager:
         elif hasattr(model_config, 'script_path'):
             cli_command += f"--model-script {model_config.script_path} "
 
+        if is_yaml_data:
+            # Get input/output shapes from model config
+            read_shape = self._get_model_metadata(model_config, "read_shape", None)
+            write_shape = self._get_model_metadata(model_config, "write_shape", None)
+            if read_shape is None or write_shape is None:
+                # Fall back to computing from voxel sizes and a default physical size
+                try:
+                    config = model_config.config
+                    read_shape = list(config.read_shape)
+                    write_shape = list(config.write_shape)
+                except Exception:
+                    self.logger.warning("Could not determine read/write shape from model config, using defaults")
+                    read_shape = [96, 96, 96]
+                    write_shape = [64, 64, 64]
+            if not isinstance(read_shape, list):
+                read_shape = list(read_shape)
+            if not isinstance(write_shape, list):
+                write_shape = list(write_shape)
+
+            cli_command += (
+                f"--data-yaml {corrections_path} "
+                f"--input-shape {' '.join(map(str, read_shape))} "
+                f"--output-shape {' '.join(map(str, write_shape))} "
+            )
+        else:
+            cli_command += f"--corrections {corrections_path} "
+
         cli_command += (
-            f"--corrections {corrections_path} "
             f"--output-dir {output_dir} "
             f"--model-name {model_config.name} "
             f"--channels {' '.join(channels)} "

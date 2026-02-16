@@ -51,3 +51,39 @@ bbx_generator_state = {
     "viewer_url": None,
     "viewer_state": None
 }
+
+# --- Finetuning state ---
+from datetime import datetime
+from cellmap_flow.finetune.job_manager import FinetuneJobManager
+
+# Global finetuning job manager
+finetune_job_manager = FinetuneJobManager()
+
+# Session management for timestamped output directories
+# Maps base_output_path -> timestamped_session_path
+output_sessions = {}
+
+
+def get_or_create_session_path(base_output_path: str) -> str:
+    """
+    Get or create a timestamped session directory for the given base output path.
+
+    If a session already exists for this base path, reuse it.
+    Otherwise, create a new timestamped subdirectory.
+
+    Args:
+        base_output_path: Base output directory (e.g., "output/to/here")
+
+    Returns:
+        Timestamped session path (e.g., "output/to/here/20260213_123456")
+    """
+    base_output_path = os.path.expanduser(base_output_path)
+
+    if base_output_path not in output_sessions:
+        # Create new timestamped session
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_path = os.path.join(base_output_path, timestamp)
+        output_sessions[base_output_path] = session_path
+        logger.info(f"Created new session path: {session_path}")
+
+    return output_sessions[base_output_path]
