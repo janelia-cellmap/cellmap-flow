@@ -1,0 +1,37 @@
+<!-- Bounding Box JSON Format Template -->
+<div style="padding: 16px;">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+        Your JSON file should be an array of bounding box objects with the following structure:
+    </p>
+    <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px; border-left: 3px solid var(--accent-blue); margin-bottom: 12px; font-family: Menlo, Monaco, monospace; font-size: 11px; overflow-x: auto;">
+        <pre style="margin: 0; color: var(--text-primary);">[
+  {
+    "offset": [z, y, x],
+    "shape": [depth, height, width]
+  },
+  {
+    "offset": [z, y, x],
+    "shape": [depth, height, width]
+  }
+]</pre>
+    </div>
+    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;"><strong>Example:</strong></p>
+    <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px; border-left: 3px solid var(--accent-green); font-family: Menlo, Monaco, monospace; font-size: 11px; overflow-x: auto;">
+        <pre style="margin: 0; color: var(--text-primary);">[
+  {
+    "offset": [50915, 22126, 18411],
+    "shape": [22787, 11225, 12566]
+  },
+  {
+    "offset": [100000, 50000, 30000],
+    "shape": [20000, 15000, 10000]
+  }
+]</pre>
+    </div>
+    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 12px;">
+        <strong>Notes:</strong><br>
+        • Coordinates are in <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 2px;">nanometers</code><br>
+        • Order is always [z, y, x]<br>
+        • Shape represents the size in each dimension
+    </p>
+</div>

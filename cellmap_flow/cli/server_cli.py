@@ -20,6 +20,7 @@ from cellmap_flow.utils.cli_utils import (
     get_all_model_configs,
     print_available_models,
 )
+from cellmap_flow.utils.plugin_manager import load_plugins
 
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,9 @@ def register_all_server_commands():
         except Exception as e:
             logger.warning(f"Failed to register server command for {cli_name}: {e}")
 
+
+# Load user plugins before registering server commands
+load_plugins()
 
 # Register all commands at module load time
 register_all_server_commands()

@@ -361,12 +361,8 @@ def to_ndarray_tensorstore(
     #     padded_data[padded_slices] = dataset[valid_slices].read().result()
 
     if rescale_factor > 1:
-        rescale_factor = voxel_size[0] / output_voxel_size[0]
-        data = (
-            data.repeat(rescale_factor, 0)
-            .repeat(rescale_factor, 1)
-            .repeat(rescale_factor, 2)
-        )
+        rescale_factor = int(voxel_size[0] / output_voxel_size[0])
+        data = np.kron(data, np.ones((rescale_factor, rescale_factor, rescale_factor), dtype=data.dtype))
         data = data[snapped_slices]
 
     elif rescale_factor < 1:

@@ -33,12 +33,9 @@ def predict(read_roi, write_roi, config, **kwargs):
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
-        raw_input_torch = torch.from_numpy(raw_input).float()
-        if use_half_prediction:
-            raw_input_torch = raw_input_torch.half()
-        # raw_input_torch = raw_input_torch.to(device)
-        raw_input_torch = raw_input_torch.to(device, non_blocking=True)
-        return config.model.forward(raw_input_torch).detach().cpu().numpy()[0]
+        raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
+        raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
+        return config.model.forward(raw_input_torch).cpu().numpy()[0]
 
 
 class Inferencer:
