@@ -21,11 +21,65 @@
   <div id="modelInfoContent"></div>
 </div>
 
-<!-- Corrections Path -->
+<!-- Training Data -->
 <div class="mb-3">
-  <label for="outputPath" class="form-label">Training Data Path</label>
-  <input type="text" class="form-control" id="outputPath" placeholder="/path/to/corrections OR /path/to/data.yaml">
-  <small class="form-text text-muted">Path to correction crops directory OR a YAML data config file with raw + ground truth crops.</small>
+  <label class="form-label">Training Data</label>
+  <div class="d-flex gap-2 align-items-center">
+    <button type="button" class="btn btn-outline-primary" id="openTrainingDataBtn" data-bs-toggle="modal" data-bs-target="#trainingDataModal">
+      Configure Training Data <span class="badge bg-secondary" id="trainingDataCount">0</span>
+    </button>
+    <small class="text-muted" id="trainingDataStatus">No training data configured</small>
+  </div>
+  <!-- Hidden field storing the resolved YAML path for submission -->
+  <input type="hidden" id="trainingDataYamlPath" value="">
+</div>
+
+<!-- Training Data Manager Modal -->
+<div class="modal fade" id="trainingDataModal" tabindex="-1" aria-labelledby="trainingDataModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="trainingDataModalLabel">Training Data Manager</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Import/Export toolbar -->
+        <div class="d-flex gap-2 mb-3">
+          <div class="input-group input-group-sm" style="max-width: 500px;">
+            <input type="text" class="form-control" id="yamlImportPath" placeholder="/path/to/data.yaml">
+            <button class="btn btn-outline-secondary" type="button" id="importYamlBtn">Import from YAML</button>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" id="exportYamlBtn">Export to YAML</button>
+          <button class="btn btn-sm btn-outline-info" id="validateDataBtn">Validate</button>
+        </div>
+
+        <!-- Validation status -->
+        <div id="validationStatus" class="mb-2" style="display: none;"></div>
+
+        <!-- Dataset table -->
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+          <table class="table table-sm table-bordered" id="trainingDataTable">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 15%;">Dataset Name</th>
+                <th style="width: 35%;">Raw Path</th>
+                <th style="width: 40%;">GT Crops</th>
+                <th style="width: 10%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="trainingDataBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <button class="btn btn-sm btn-outline-success mt-2" id="addDatasetRowBtn">+ Add Dataset</button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="applyTrainingDataBtn">Apply</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Training Configuration Card -->
@@ -368,6 +422,196 @@ document.addEventListener("DOMContentLoaded", function () {
   let models = [];
   let selectedModel = null;
 
+  // === Training Data Manager State ===
+  let trainingDatasets = [];  // Array of { name, raw, crops: { cropName: path } }
+
+  function renderTrainingDataTable() {
+    const tbody = document.getElementById("trainingDataBody");
+    tbody.innerHTML = "";
+    trainingDatasets.forEach((ds, idx) => {
+      const cropEntries = Object.entries(ds.crops || {});
+      const cropHtml = cropEntries.map(([cn, cp]) =>
+        `<div class="d-flex gap-1 mb-1 align-items-center">
+          <input type="text" class="form-control form-control-sm" style="width:120px;" value="${cn}" placeholder="crop name"
+            onchange="updateCropName(${idx}, '${cn}', this.value)">
+          <input type="text" class="form-control form-control-sm" value="${cp}" placeholder="/path/to/crop/zarr"
+            onchange="updateCropPath(${idx}, '${cn}', this.value)">
+          <button class="btn btn-sm btn-outline-danger" onclick="removeCrop(${idx}, '${cn}')" title="Remove crop">&times;</button>
+        </div>`
+      ).join("");
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm" value="${ds.name}" placeholder="dataset_name"
+            onchange="trainingDatasets[${idx}].name = this.value"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${ds.raw}" placeholder="/path/to/raw/zarr"
+            onchange="trainingDatasets[${idx}].raw = this.value"></td>
+        <td>
+          <div id="crops-${idx}">${cropHtml}</div>
+          <button class="btn btn-sm btn-outline-secondary mt-1" onclick="addCrop(${idx})">+ Add Crop</button>
+        </td>
+        <td><button class="btn btn-sm btn-outline-danger" onclick="removeDataset(${idx})">Delete</button></td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    // Update count badge and status text
+    const totalCrops = trainingDatasets.reduce((sum, ds) => sum + Object.keys(ds.crops || {}).length, 0);
+    document.getElementById("trainingDataCount").textContent = trainingDatasets.length;
+    if (trainingDatasets.length > 0) {
+      document.getElementById("trainingDataStatus").textContent =
+        `${trainingDatasets.length} dataset(s), ${totalCrops} crop(s)`;
+    } else {
+      document.getElementById("trainingDataStatus").textContent = "No training data configured";
+    }
+  }
+
+  // Make these global so inline onclick handlers can access them
+  window.updateCropName = function(dsIdx, oldName, newName) {
+    if (oldName === newName) return;
+    const crops = trainingDatasets[dsIdx].crops;
+    const path = crops[oldName];
+    delete crops[oldName];
+    crops[newName] = path;
+    renderTrainingDataTable();
+  };
+
+  window.updateCropPath = function(dsIdx, cropName, newPath) {
+    trainingDatasets[dsIdx].crops[cropName] = newPath;
+  };
+
+  window.removeCrop = function(dsIdx, cropName) {
+    delete trainingDatasets[dsIdx].crops[cropName];
+    renderTrainingDataTable();
+  };
+
+  window.addCrop = function(dsIdx) {
+    const cropNum = Object.keys(trainingDatasets[dsIdx].crops).length + 1;
+    trainingDatasets[dsIdx].crops[`crop${cropNum}`] = "";
+    renderTrainingDataTable();
+  };
+
+  window.removeDataset = function(dsIdx) {
+    trainingDatasets.splice(dsIdx, 1);
+    renderTrainingDataTable();
+  };
+
+  // Add Dataset row
+  document.getElementById("addDatasetRowBtn").addEventListener("click", () => {
+    trainingDatasets.push({ name: "", raw: "", crops: {} });
+    renderTrainingDataTable();
+  });
+
+  // Import from YAML
+  document.getElementById("importYamlBtn").addEventListener("click", async () => {
+    const yamlPath = document.getElementById("yamlImportPath").value.trim();
+    if (!yamlPath) {
+      alert("Please enter a YAML file path");
+      return;
+    }
+    try {
+      const resp = await fetch(`/api/finetune/training-data/import?path=${encodeURIComponent(yamlPath)}`);
+      const data = await resp.json();
+      if (!data.success) {
+        alert("Import failed: " + data.error);
+        return;
+      }
+      trainingDatasets = data.datasets;
+      document.getElementById("trainingDataYamlPath").value = data.source_path;
+      renderTrainingDataTable();
+    } catch (e) {
+      alert("Import error: " + e.message);
+    }
+  });
+
+  // Export to YAML
+  document.getElementById("exportYamlBtn").addEventListener("click", async () => {
+    if (trainingDatasets.length === 0) {
+      alert("No datasets to export");
+      return;
+    }
+    const outputPath = prompt("Enter output YAML file path:", "training_data.yaml");
+    if (!outputPath) return;
+    try {
+      const resp = await fetch("/api/finetune/training-data/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: outputPath, datasets: trainingDatasets })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        alert("Exported to: " + data.path);
+        document.getElementById("trainingDataYamlPath").value = data.path;
+      } else {
+        alert("Export failed: " + data.error);
+      }
+    } catch (e) {
+      alert("Export error: " + e.message);
+    }
+  });
+
+  // Validate paths
+  document.getElementById("validateDataBtn").addEventListener("click", async () => {
+    if (trainingDatasets.length === 0) {
+      alert("No datasets to validate");
+      return;
+    }
+    const statusDiv = document.getElementById("validationStatus");
+    statusDiv.style.display = "block";
+    statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validating...';
+
+    try {
+      const resp = await fetch("/api/finetune/training-data/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datasets: trainingDatasets })
+      });
+      const data = await resp.json();
+      if (!data.success) {
+        statusDiv.innerHTML = `<div class="alert alert-danger py-1">${data.error}</div>`;
+        return;
+      }
+
+      let html = "";
+      data.results.forEach(r => {
+        const rawIcon = r.raw_valid ? '<span style="color:green;">&#10003;</span>' : '<span style="color:red;">&#10007;</span>';
+        const rawErr = r.raw_error ? ` <small class="text-danger">(${r.raw_error})</small>` : "";
+        html += `<div><strong>${r.name}</strong> - Raw: ${rawIcon}${rawErr}`;
+        const cropEntries = Object.entries(r.crops || {});
+        if (cropEntries.length > 0) {
+          html += "<ul class='mb-1' style='margin-top:2px;'>";
+          cropEntries.forEach(([cn, cv]) => {
+            const icon = cv.valid ? '<span style="color:green;">&#10003;</span>' : '<span style="color:red;">&#10007;</span>';
+            const err = cv.error ? ` <small class="text-danger">(${cv.error})</small>` : "";
+            html += `<li style="font-size:0.85rem;">${cn}: ${icon}${err}</li>`;
+          });
+          html += "</ul>";
+        }
+        html += "</div>";
+      });
+
+      const alertClass = data.all_valid ? "alert-success" : "alert-warning";
+      const summary = data.all_valid ? "All paths valid!" : "Some paths have issues";
+      statusDiv.innerHTML = `<div class="alert ${alertClass} py-2"><strong>${summary}</strong>${html}</div>`;
+    } catch (e) {
+      statusDiv.innerHTML = `<div class="alert alert-danger py-1">Validation error: ${e.message}</div>`;
+    }
+  });
+
+  // Apply button
+  document.getElementById("applyTrainingDataBtn").addEventListener("click", () => {
+    // If datasets were modified manually (not imported), clear the YAML path
+    // so the submit handler knows to export first
+    if (trainingDatasets.length > 0) {
+      const yamlPath = document.getElementById("trainingDataYamlPath").value;
+      if (!yamlPath) {
+        // Will be exported on submit
+      }
+    }
+    renderTrainingDataTable();  // Update badge count
+    bootstrap.Modal.getInstance(document.getElementById("trainingDataModal")).hide();
+  });
+
   // Load models on page load
   loadModels();
 
@@ -471,17 +715,39 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      // Get corrections path from output path field
-      const correctionsPath = document.getElementById("outputPath").value.trim();
-      if (!correctionsPath) {
-        alert("Please specify the output path where annotation crops are saved");
+      // Get training data path from modal state
+      const correctionsPath = document.getElementById("trainingDataYamlPath").value.trim();
+      if (!correctionsPath && trainingDatasets.length === 0) {
+        alert("Please configure training data first");
         return;
+      }
+
+      // If we have datasets but no YAML path, export to temp YAML first
+      let finalPath = correctionsPath;
+      if (!finalPath && trainingDatasets.length > 0) {
+        try {
+          const tmpPath = "/tmp/cellmap_flow_training_data_" + Date.now() + ".yaml";
+          const exportResp = await fetch("/api/finetune/training-data/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: tmpPath, datasets: trainingDatasets })
+          });
+          const exportResult = await exportResp.json();
+          if (!exportResult.success) {
+            alert("Failed to export training data: " + exportResult.error);
+            return;
+          }
+          finalPath = exportResult.path;
+        } catch (e) {
+          alert("Error exporting training data: " + e.message);
+          return;
+        }
       }
 
       // Get training parameters from form
       const params = {
         model_name: selectedModel.name,
-        corrections_path: correctionsPath,
+        corrections_path: finalPath,
         lora_r: parseInt(document.getElementById("loraRank").value),
         num_epochs: parseInt(document.getElementById("numEpochs").value),
         batch_size: parseInt(document.getElementById("batchSize").value),

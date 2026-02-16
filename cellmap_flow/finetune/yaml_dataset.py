@@ -155,6 +155,7 @@ class YamlCropDataset(Dataset):
         for dataset_name, dataset_info in datasets.items():
             raw_path = dataset_info.get("raw")
             crops = dataset_info.get("crops", {})
+            contrast = dataset_info.get("contrast", None)  # e.g. [0, 250]
 
             if not raw_path:
                 logger.warning(f"Dataset {dataset_name}: no raw path, skipping")
@@ -198,6 +199,7 @@ class YamlCropDataset(Dataset):
                         "raw_shape": np.array(raw_array.shape),
                         "raw_scale": raw_scale,
                         "raw_translation": raw_translation,
+                        "contrast": contrast,
                     })
 
                     logger.info(
@@ -254,6 +256,7 @@ class YamlCropDataset(Dataset):
         raw_scale = crop_info["raw_scale"]
         raw_trans = crop_info["raw_translation"]
         raw_shape = crop_info["raw_shape"]
+        contrast = crop_info["contrast"]
 
         oz, oy, ox = self.output_shape
         iz, iy, ix = self.input_shape
@@ -307,10 +310,15 @@ class YamlCropDataset(Dataset):
                 mode="reflect",
             )
 
-        # 7. Normalize raw
+        # 7. Normalize raw using contrast range from YAML (or default 0-255)
         if self.normalize:
-            if raw.max() > 1.0:
-                raw = (raw / 127.5) - 1.0
+            if contrast is not None and len(contrast) == 2:
+                min_val, max_val = float(contrast[0]), float(contrast[1])
+            else:
+                min_val, max_val = 0.0, 255.0
+            raw = np.clip(raw, min_val, max_val)
+            raw = (raw - min_val) / (max_val - min_val + 1e-8)
+            raw = raw * 2.0 - 1.0
 
         # 8. Augmentation (only when raw and target have same shape)
         if self.augment and raw.shape == target.shape:
