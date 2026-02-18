@@ -20,7 +20,7 @@ def run_model(model_path, name, st_data):
         logger.error(f"Model path is empty for {name}")
         return
     command = (
-        f"{SERVER_COMMAND} cellmap -f {model_path} -n {name} -d {g.dataset_path}"
+        f"{SERVER_COMMAND} cellmap-model -f {model_path} -n {name} -d {g.dataset_path}"
     )
     logger.error(f"To be submitted command : {command}")
     job = start_hosts(

@@ -6,6 +6,7 @@ This dynamically discovers ModelConfig subclasses just like cli_v2,
 making it easy to add new model types without modifying this file.
 """
 
+import os
 import sys
 import logging
 import click
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_multiple(
-    models: List[ModelConfig], dataset_path: str, charge_group: str, queue: str
+    models: List[ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
 ) -> None:
     """
     Submit multiple model inference jobs.
@@ -43,9 +44,8 @@ def run_multiple(
     for model in models:
         current_data_path = dataset_path
         if hasattr(model, "scale") and model.scale:
-            # Derive a scaled data path if 'scale' is provided
-            base_parts = dataset_path.rstrip("/").split("/")
-            current_data_path = "/".join(base_parts[:-1] + [model.scale])
+            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")   
+            current_data_path = os.path.join(dataset_path, model.scale)
 
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
         model_name = getattr(model, "name", None) or type(model).__name__
@@ -56,7 +56,7 @@ def run_multiple(
             command, job_name=model_name, queue=queue, charge_group=charge_group
         )
 
-    generate_neuroglancer_url(dataset_path)
+    generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
     logger.info("All jobs submitted. Monitoring...")
     # Prevent script from exiting immediately:
@@ -165,6 +165,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     data_path = config["data_path"]
     charge_group = config["charge_group"]
     queue = config["queue"]
+    wrap_raw = config.get("wrap_raw", True)
 
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
@@ -188,7 +189,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         return
 
     # Run the models
-    run_multiple(g.models_config, data_path, charge_group, queue)
+    run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
 
 
 if __name__ == "__main__":

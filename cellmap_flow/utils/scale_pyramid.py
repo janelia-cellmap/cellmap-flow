@@ -14,7 +14,7 @@ from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
 logger = logging.getLogger(__name__)
 
 
-def get_raw_layer(dataset_path, normalize=True):
+def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     # if multiscale dataset
     if (
         dataset_path.split("/")[-1].startswith("s")
@@ -37,33 +37,45 @@ def get_raw_layer(dataset_path, normalize=True):
         filetype = "precomputed"
 
     layers = []
+    if not wrap_raw:
+        return neuroglancer.ImageLayer(
+            source= f"{filetype}://{dataset_path}",
+            shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
+    #uicontrol vec3 color color(default="white");
+    void main(){{emitRGB(color * normalized());}}""",
+        )
 
     if is_multiscale:
-        scales = [
-            f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-        ]
-        scales.sort(key=lambda x: int(x[1:]))
-        for scale in scales:
-            image = ImageDataInterface(
-                f"{os.path.join(dataset_path, scale)}", normalize=normalize
-            )
-            # Use axes from the actual dataset - neuroglancer will use them as-is
-            layers.append(
-                neuroglancer.LocalVolume(
-                    data=image.ts,
-                    dimensions=neuroglancer.CoordinateSpace(
-                        names=image.axes_names,
-                        units="nm",
-                        scales=image.voxel_size,
-                    ),
-                    voxel_offset=image.offset,
+        try:
+            scales = [
+                f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
+            ]
+            scales.sort(key=lambda x: int(x[1:]))
+            for scale in scales:
+                image = ImageDataInterface(
+                    f"{os.path.join(dataset_path, scale)}", normalize=normalize
                 )
-            )
+                # Use axes from the actual dataset - neuroglancer will use them as-is
+                layers.append(
+                    neuroglancer.LocalVolume(
+                        data=image.ts,
+                        dimensions=neuroglancer.CoordinateSpace(
+                            names=image.axes_names,
+                            units="nm",
+                            scales=image.voxel_size,
+                        ),
+                        voxel_offset=image.offset,
+                    )
+                )
 
-        return neuroglancer.ImageLayer(
-            dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers))
-        )
-    else:
+            return neuroglancer.ImageLayer(
+                dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers))
+            )
+        except Exception as e:
+            logger.error(e)
+            is_multiscale = False
+
+    if not is_multiscale:
         image = ImageDataInterface(dataset_path)
         return neuroglancer.ImageLayer(
             source=neuroglancer.LocalVolume(
