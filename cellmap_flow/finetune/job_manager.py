@@ -748,6 +748,7 @@ class FinetuneJobManager:
             finetune_job.current_epoch = 0
             finetune_job.latest_loss = None
             finetune_job.status = JobStatus.RUNNING
+            finetune_job.inference_server_ready = False
 
         # Check for iteration complete marker - update neuroglancer layer.
         # Read full log in case the marker was in a previous chunk.
@@ -757,7 +758,13 @@ class FinetuneJobManager:
         except Exception:
             full_log = log_content
         iter_matches = re.findall(iter_pattern, full_log)
-        if iter_matches and finetune_job.inference_server_ready:
+        if iter_matches:
+            # For in-process restarts, the inference server usually stays on the same
+            # URL and does not emit a fresh CELLMAP_FLOW_SERVER_IP marker. Mark the
+            # server as ready once we see a completed training iteration if URL exists.
+            if finetune_job.inference_server_url:
+                finetune_job.inference_server_ready = True
+
             new_model_name = iter_matches[-1]
             if new_model_name != finetune_job.finetuned_model_name:
                 self.logger.info(f"New training iteration complete: {new_model_name}")
@@ -1248,6 +1255,7 @@ class FinetuneJobManager:
         job.current_epoch = 0
         job.latest_loss = None
         job.status = JobStatus.RUNNING
+        job.inference_server_ready = False
 
         # 5. Update stored params
         if updated_params:
