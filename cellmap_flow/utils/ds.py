@@ -153,7 +153,7 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         ".zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else ".n5"
     )
 
-    filename, dataset = dataset_path.split(splitter)
+    filename, dataset = dataset_path.rsplit(splitter, 1)
     if dataset.startswith("/"):
         dataset = dataset[1:]
     # include scale if present
@@ -361,12 +361,8 @@ def to_ndarray_tensorstore(
     #     padded_data[padded_slices] = dataset[valid_slices].read().result()
 
     if rescale_factor > 1:
-        rescale_factor = voxel_size[0] / output_voxel_size[0]
-        data = (
-            data.repeat(rescale_factor, 0)
-            .repeat(rescale_factor, 1)
-            .repeat(rescale_factor, 2)
-        )
+        rescale_factor = int(voxel_size[0] / output_voxel_size[0])
+        data = np.kron(data, np.ones((rescale_factor, rescale_factor, rescale_factor), dtype=data.dtype))
         data = data[snapped_slices]
 
     elif rescale_factor < 1:
