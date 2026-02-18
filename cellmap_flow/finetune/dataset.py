@@ -106,14 +106,18 @@ class CorrectionDataset(Dataset):
             has_mask = 'mask' in corr_group
             has_annotation = 'annotation' in corr_group
 
-            if not has_raw or not (has_mask or has_annotation):
+            has_raw_s0 = has_raw and 's0' in corr_group['raw']
+            has_mask_s0 = has_mask and 's0' in corr_group['mask']
+            has_annotation_s0 = has_annotation and 's0' in corr_group['annotation']
+
+            if not has_raw_s0 or not (has_mask_s0 or has_annotation_s0):
                 logger.warning(
-                    f"Skipping {correction_id}: missing raw or mask/annotation"
+                    f"Skipping {correction_id}: missing raw/s0 or mask|annotation/s0"
                 )
                 continue
 
             # Use 'mask' if available, otherwise use 'annotation'
-            mask_key = 'mask' if has_mask else 'annotation'
+            mask_key = 'mask' if has_mask_s0 else 'annotation'
 
             # Get metadata
             attrs = dict(corr_group.attrs)
@@ -122,10 +126,21 @@ class CorrectionDataset(Dataset):
             if self.model_name and attrs.get('model_name') != self.model_name:
                 continue
 
+            raw_path = self.corrections_path / correction_id / 'raw' / 's0'
+            mask_path = self.corrections_path / correction_id / mask_key / 's0'
+
+            if not raw_path.exists() or not mask_path.exists():
+                logger.warning(
+                    f"Skipping {correction_id}: missing paths "
+                    f"raw_path={raw_path} (exists={raw_path.exists()}), "
+                    f"mask_path={mask_path} (exists={mask_path.exists()})"
+                )
+                continue
+
             corrections.append({
                 'id': correction_id,
-                'raw_path': str(self.corrections_path / correction_id / 'raw' / 's0'),
-                'mask_path': str(self.corrections_path / correction_id / mask_key / 's0'),
+                'raw_path': str(raw_path),
+                'mask_path': str(mask_path),
                 'metadata': attrs,
             })
 
@@ -150,8 +165,15 @@ class CorrectionDataset(Dataset):
         correction = self.corrections[idx]
 
         # Load data from Zarr
-        raw = zarr.open(correction['raw_path'], mode='r')[:]
-        mask = zarr.open(correction['mask_path'], mode='r')[:]
+        try:
+            raw = zarr.open(correction['raw_path'], mode='r')[:]
+            mask = zarr.open(correction['mask_path'], mode='r')[:]
+        except Exception as e:
+            raise FileNotFoundError(
+                f"Failed loading correction '{correction.get('id', idx)}' "
+                f"raw_path='{correction.get('raw_path')}' "
+                f"mask_path='{correction.get('mask_path')}': {e}"
+            ) from e
 
         # Convert to float
         raw = raw.astype(np.float32)

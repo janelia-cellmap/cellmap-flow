@@ -53,10 +53,10 @@
 
   <!-- Create Buttons -->
   <div class="d-flex align-items-center gap-2 flex-wrap">
-    <button type="button" class="btn btn-primary" id="createCropBtn">
+    <button type="button" class="btn btn-outline-primary" id="createCropBtn">
       Create Annotation Crop
     </button>
-    <button type="button" class="btn btn-outline-primary" id="createVolumeBtn">
+    <button type="button" class="btn btn-primary" id="createVolumeBtn">
       Create Annotation Volume
     </button>
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
@@ -308,6 +308,13 @@
     </div>
   </div>
   <div class="card-body">
+    <div class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted">Loss vs Epoch</small>
+        <small id="lossPlotSummary" class="text-muted">No loss data yet</small>
+      </div>
+      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid #dee2e6; border-radius: 0.25rem;"></canvas>
+    </div>
     <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
               style="font-size: 0.85rem; white-space: pre;">No training job running...
     </textarea>
@@ -402,6 +409,21 @@
               <option value="unlabeled" selected>Unlabeled voxels only</option>
               <option value="all">All voxels</option>
             </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Label Smoothing</label>
+            <select id="restartLabelSmoothing" class="form-select">
+              <option value="0">0 (Disabled)</option>
+              <option value="0.01">0.01</option>
+              <option value="0.05">0.05</option>
+              <option value="0.1" selected>0.1 (Default)</option>
+              <option value="0.2">0.2</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Margin</label>
+            <input type="number" id="restartMargin" class="form-control" value="0.3" min="0" max="1" step="0.01">
+            <small class="text-muted">Used by margin loss.</small>
           </div>
           <div class="mb-2">
             <div class="form-check">
@@ -739,6 +761,10 @@ document.addEventListener("DOMContentLoaded", function () {
   let statusPollingInterval = null;
   let streamConnectedOnce = false;
   let liveEpochState = null;
+  let latestJobStatusData = null;
+  let restartEpochResetPending = false;
+  let isServingReady = false;
+  const lossByEpoch = new Map();
 
   // Start Finetuning button
   const startFinetuningBtn = document.getElementById("startFinetuningBtn");
@@ -802,6 +828,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
           // Clear logs and start streaming
           document.getElementById("trainingLogs").value = "";
+          latestJobStatusData = null;
+          liveEpochState = null;
+          restartEpochResetPending = false;
+          isServingReady = false;
+          resetProgressBarToWaiting();
+          resetLossPlot();
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          document.getElementById('restartJobBtn').style.display = 'none';
           appendLog("Finetuning job submitted successfully!");
           appendLog(`Job ID: ${result.job_id}`);
           appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
@@ -871,18 +905,25 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateProgressFromLogLine(line) {
     if (!line) return;
 
+    if (line.includes("RESTARTING_TRAINING")) {
+      restartEpochResetPending = true;
+      isServingReady = false;
+      liveEpochState = null;
+      document.getElementById('inferenceServerStatus').style.display = 'none';
+      document.getElementById("jobProgress").textContent = "Restarting training...";
+      resetProgressBarToWaiting();
+      resetLossPlot();
+      return;
+    }
+
     // Parse "Epoch X/Y" anywhere in the line.
     const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
     if (epochMatch) {
       const current = parseInt(epochMatch[1], 10);
       const total = parseInt(epochMatch[2], 10);
-      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0) {
-        const progressPercent = (current / total) * 100;
-        const progressBar = document.getElementById("trainingProgressBar");
-        progressBar.style.width = progressPercent + "%";
-        progressBar.textContent = `${current}/${total} epochs`;
+      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0 && shouldAcceptEpochProgress(current, total)) {
+        renderEpochProgress(current, total);
         document.getElementById("jobProgress").textContent = `Epoch ${current}/${total}`;
-        liveEpochState = { current, total };
       }
     }
 
@@ -893,6 +934,17 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!Number.isNaN(lossVal)) {
         document.getElementById("jobProgress").textContent =
           `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
+        upsertEpochLoss(liveEpochState.current, lossVal);
+      }
+    }
+
+    // Prefer explicit epoch-loss lines when available (e.g. "Epoch 18/20 - Loss: 0.011371")
+    const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
+    if (epochLossMatch) {
+      const epochVal = parseInt(epochLossMatch[1], 10);
+      const lossVal = parseFloat(epochLossMatch[3]);
+      if (!Number.isNaN(epochVal) && !Number.isNaN(lossVal)) {
+        upsertEpochLoss(epochVal, lossVal);
       }
     }
   }
@@ -900,6 +952,171 @@ document.addEventListener("DOMContentLoaded", function () {
   function appendLog(message) {
     const logsArea = document.getElementById("trainingLogs");
     logsArea.value += message + "\n";
+  }
+
+  function shouldAcceptEpochProgress(current, total) {
+    if (isServingReady && !restartEpochResetPending) {
+      return false;
+    }
+    if (!liveEpochState) {
+      return true;
+    }
+    if (restartEpochResetPending) {
+      return true;
+    }
+    if (total !== liveEpochState.total) {
+      return true;
+    }
+    if (current < liveEpochState.current) {
+      return false;
+    }
+    return true;
+  }
+
+  function renderEpochProgress(current, total) {
+    const safeTotal = total > 0 ? total : 1;
+    const progressPercent = Math.max(0, Math.min(100, (current / safeTotal) * 100));
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = progressPercent + "%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = `${current}/${safeTotal} epochs`;
+    liveEpochState = { current, total: safeTotal };
+    if (current > 0 || restartEpochResetPending) {
+      restartEpochResetPending = false;
+    }
+  }
+
+  function renderServingReadyProgress() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "100%";
+    progressBar.className = "progress-bar bg-success";
+    progressBar.textContent = "Serving - Ready for inference";
+    isServingReady = true;
+    restartEpochResetPending = false;
+  }
+
+  function resetProgressBarToWaiting() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "0%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = "0%";
+  }
+
+  function resetLossPlot() {
+    lossByEpoch.clear();
+    renderLossPlot();
+  }
+
+  function upsertEpochLoss(epoch, loss) {
+    if (!Number.isFinite(epoch) || epoch <= 0 || !Number.isFinite(loss)) {
+      return;
+    }
+    lossByEpoch.set(epoch, loss);
+    renderLossPlot();
+  }
+
+  function renderLossPlot() {
+    const canvas = document.getElementById("lossPlotCanvas");
+    const summary = document.getElementById("lossPlotSummary");
+    if (!canvas || !summary) return;
+
+    const width = Math.max(300, Math.floor(canvas.clientWidth || 600));
+    const height = 180;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const points = Array.from(lossByEpoch.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([epoch, loss]) => ({ epoch, loss }));
+
+    if (points.length === 0) {
+      summary.textContent = "No loss data yet";
+      ctx.fillStyle = "#6c757d";
+      ctx.font = "12px monospace";
+      ctx.fillText("Waiting for epoch loss...", 10, 20);
+      return;
+    }
+
+    const minLoss = Math.min(...points.map(p => p.loss));
+    const maxLoss = Math.max(...points.map(p => p.loss));
+    const minEpoch = points[0].epoch;
+    const maxEpoch = points[points.length - 1].epoch;
+    const pad = 24;
+    const chartW = Math.max(1, width - pad * 2);
+    const chartH = Math.max(1, height - pad * 2);
+    const lossSpan = Math.max(1e-9, maxLoss - minLoss);
+    const epochSpan = Math.max(1, maxEpoch - minEpoch);
+
+    const xFor = (e) => pad + ((e - minEpoch) / epochSpan) * chartW;
+    const yFor = (l) => pad + (1 - ((l - minLoss) / lossSpan)) * chartH;
+
+    // Axes
+    ctx.strokeStyle = "#ced4da";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad, height - pad);
+    ctx.lineTo(width - pad, height - pad);
+    ctx.stroke();
+
+    // Tick marks + labels
+    ctx.fillStyle = "#6c757d";
+    ctx.font = "10px monospace";
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#adb5bd";
+
+    const xTickCount = Math.min(6, Math.max(2, points.length));
+    for (let i = 0; i < xTickCount; i++) {
+      const t = xTickCount === 1 ? 0 : i / (xTickCount - 1);
+      const epochTick = Math.round(minEpoch + t * epochSpan);
+      const x = xFor(epochTick);
+      ctx.beginPath();
+      ctx.moveTo(x, height - pad);
+      ctx.lineTo(x, height - pad + 4);
+      ctx.stroke();
+      ctx.fillText(String(epochTick), x - 8, height - pad + 14);
+    }
+
+    const yTickCount = 5;
+    for (let i = 0; i < yTickCount; i++) {
+      const t = yTickCount === 1 ? 0 : i / (yTickCount - 1);
+      const lossTick = maxLoss - t * lossSpan;
+      const y = yFor(lossTick);
+      ctx.beginPath();
+      ctx.moveTo(pad - 4, y);
+      ctx.lineTo(pad, y);
+      ctx.stroke();
+      ctx.fillText(lossTick.toFixed(4), 2, y + 3);
+    }
+
+    // Line
+    ctx.strokeStyle = "#0d6efd";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p, idx) => {
+      const x = xFor(p.epoch);
+      const y = yFor(p.loss);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Last point marker
+    const last = points[points.length - 1];
+    const lx = xFor(last.epoch);
+    const ly = yFor(last.loss);
+    ctx.fillStyle = "#0d6efd";
+    ctx.beginPath();
+    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    summary.textContent = `Epoch ${last.epoch}: ${last.loss.toFixed(6)} (min ${minLoss.toFixed(6)})`;
   }
 
   // Status polling (every 3 seconds)
@@ -918,6 +1135,7 @@ document.addEventListener("DOMContentLoaded", function () {
           console.error("Error getting job status:", data.error);
           return;
         }
+        latestJobStatusData = data;
 
         // Update status display
         const statusBadge = document.getElementById("jobStatus");
@@ -929,20 +1147,22 @@ document.addEventListener("DOMContentLoaded", function () {
         // Surface status transitions even if log stream is temporarily delayed
         if (data.status === "PENDING") {
           document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
+          isServingReady = false;
         } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs) && !liveEpochState) {
           document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
+          isServingReady = false;
         }
 
         // Update progress
-        if (data.current_epoch && data.total_epochs) {
-          const progressPercent = (data.current_epoch / data.total_epochs) * 100;
-          const progressBar = document.getElementById("trainingProgressBar");
-          progressBar.style.width = progressPercent + "%";
-          progressBar.textContent = `${data.current_epoch}/${data.total_epochs} epochs`;
+        if (data.current_epoch && data.total_epochs && shouldAcceptEpochProgress(data.current_epoch, data.total_epochs)) {
+          renderEpochProgress(data.current_epoch, data.total_epochs);
 
           document.getElementById("jobProgress").textContent =
             `Epoch ${data.current_epoch}/${data.total_epochs}` +
             (data.loss ? ` - Loss: ${data.loss.toFixed(4)}` : "");
+          if (Number.isFinite(data.loss)) {
+            upsertEpochLoss(data.current_epoch, data.loss);
+          }
         }
 
         // Show restart button when inference server is ready (model is serving)
@@ -958,10 +1178,7 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById('neuroglancerLayer').textContent = data.finetuned_model_name;
 
           // Update progress bar to show serving state
-          const progressBar = document.getElementById("trainingProgressBar");
-          progressBar.style.width = "100%";
-          progressBar.className = "progress-bar bg-success";
-          progressBar.textContent = "Serving - Ready for inference";
+          renderServingReadyProgress();
         }
 
         // Handle terminal states
@@ -1043,6 +1260,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (restartJobBtn) {
     restartJobBtn.addEventListener('click', () => {
+      if (latestJobStatusData && latestJobStatusData.params) {
+        const params = latestJobStatusData.params;
+        if (params.lora_r !== undefined) document.getElementById('restartLoraRank').value = String(params.lora_r);
+        if (params.num_epochs !== undefined) document.getElementById('restartNumEpochs').value = String(params.num_epochs);
+        if (params.batch_size !== undefined) document.getElementById('restartBatchSize').value = String(params.batch_size);
+        if (params.learning_rate !== undefined) document.getElementById('restartLearningRate').value = String(params.learning_rate);
+        if (params.loss_type !== undefined) document.getElementById('restartLossType').value = String(params.loss_type);
+        if (params.distillation_lambda !== undefined) document.getElementById('restartDistillationLambda').value = String(params.distillation_lambda);
+        if (params.distillation_scope !== undefined) document.getElementById('restartDistillationScope').value = String(params.distillation_scope);
+        if (params.label_smoothing !== undefined) document.getElementById('restartLabelSmoothing').value = String(params.label_smoothing);
+        if (params.margin !== undefined) document.getElementById('restartMargin').value = String(params.margin);
+        if (params.balance_classes !== undefined) document.getElementById('restartBalanceClasses').checked = !!params.balance_classes;
+      }
       const modal = new bootstrap.Modal(document.getElementById('restartTrainingModal'));
       modal.show();
     });
@@ -1059,6 +1289,20 @@ document.addEventListener("DOMContentLoaded", function () {
       const useCurrentParams = document.getElementById('useCurrentParams').checked;
 
       const requestBody = {};
+      if (latestJobStatusData && latestJobStatusData.params) {
+        const p = latestJobStatusData.params;
+        requestBody.lora_r = p.lora_r;
+        requestBody.num_epochs = p.num_epochs;
+        requestBody.batch_size = p.batch_size;
+        requestBody.learning_rate = p.learning_rate;
+        requestBody.loss_type = p.loss_type;
+        requestBody.label_smoothing = p.label_smoothing;
+        requestBody.distillation_lambda = p.distillation_lambda;
+        requestBody.distillation_scope = p.distillation_scope;
+        requestBody.margin = p.margin;
+        requestBody.balance_classes = p.balance_classes;
+        requestBody.mask_unannotated = p.mask_unannotated;
+      }
       if (!useCurrentParams) {
         requestBody.lora_r = parseInt(document.getElementById('restartLoraRank').value);
         requestBody.num_epochs = parseInt(document.getElementById('restartNumEpochs').value);
@@ -1067,6 +1311,8 @@ document.addEventListener("DOMContentLoaded", function () {
         requestBody.loss_type = document.getElementById('restartLossType').value;
         requestBody.distillation_lambda = parseFloat(document.getElementById('restartDistillationLambda').value);
         requestBody.distillation_scope = document.getElementById('restartDistillationScope').value;
+        requestBody.label_smoothing = parseFloat(document.getElementById('restartLabelSmoothing').value);
+        requestBody.margin = parseFloat(document.getElementById('restartMargin').value);
         requestBody.balance_classes = document.getElementById('restartBalanceClasses').checked;
       }
 
@@ -1084,6 +1330,12 @@ document.addEventListener("DOMContentLoaded", function () {
           // Same job/GPU - just reset the UI for new training
           document.getElementById('trainingLogs').value = '';
           appendLog('Restart request sent - training will restart on same GPU...\n');
+          isServingReady = false;
+          restartEpochResetPending = true;
+          liveEpochState = null;
+          document.getElementById('jobProgress').textContent = 'Restarting training...';
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          resetLossPlot();
 
           // Reset progress bar
           const progressBar = document.getElementById('trainingProgressBar');
@@ -1105,5 +1357,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // Initialize empty loss plot on page load
+  renderLossPlot();
 });
 </script>

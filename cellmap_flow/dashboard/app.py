@@ -37,6 +37,7 @@ import uuid
 import zarr
 from pathlib import Path
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import s3fs
 from cellmap_flow.finetune.job_manager import FinetuneJobManager
 
@@ -104,6 +105,7 @@ minio_state = {
     "minio_root": None,  # Path to MinIO storage directory
     "output_base": None,  # Base output directory for syncing back
     "last_sync": {},  # Track last sync time per crop_id
+    "chunk_sync_state": {},  # Track per-zarr chunk mtimes seen from MinIO
     "sync_thread": None,  # Background sync thread
 }
 
@@ -617,6 +619,84 @@ def sync_all_annotations_from_minio(force: bool = True):
     return synced
 
 
+def _safe_epoch_timestamp(value) -> float:
+    """Convert LastModified-like values to epoch seconds, best-effort."""
+    if value is None:
+        return 0.0
+    if isinstance(value, datetime):
+        return float(value.timestamp())
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        parsed = datetime.fromisoformat(str(value))
+        return float(parsed.timestamp())
+    except Exception:
+        return 0.0
+
+
+def _get_sync_worker_count() -> int:
+    """
+    Determine thread count for chunk sync.
+
+    Prefer scheduler-provided CPU counts (e.g., LSF bsub -n), then fall back to
+    process CPU affinity / system CPU count.
+    """
+    env_candidates = [
+        "LSB_DJOB_NUMPROC",      # LSF: CPUs requested by bsub -n
+        "LSB_MAX_NUM_PROCESSORS",
+        "NSLOTS",                # SGE
+        "SLURM_CPUS_PER_TASK",   # SLURM
+        "OMP_NUM_THREADS",
+    ]
+    for key in env_candidates:
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            continue
+
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except Exception:
+        return max(1, os.cpu_count() or 1)
+
+
+def _copy_chunks_parallel(s3, copy_pairs):
+    """
+    Copy chunk files from MinIO in parallel.
+
+    Args:
+        s3: s3fs filesystem instance
+        copy_pairs: list of (src_chunk_path, dst_chunk_path_str)
+    """
+    if not copy_pairs:
+        return
+
+    available_workers = _get_sync_worker_count()
+    workers = max(1, min(len(copy_pairs), available_workers))
+    logger.info(
+        f"Chunk sync using {workers}/{available_workers} thread(s) "
+        f"for {len(copy_pairs)} chunk copy operations"
+    )
+
+    def _copy_one(src_dst):
+        src_chunk_path, dst_chunk_path = src_dst
+        s3.get(src_chunk_path, dst_chunk_path)
+        return src_chunk_path
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(_copy_one, pair) for pair in copy_pairs]
+        for fut in as_completed(futures):
+            try:
+                fut.result()
+            except Exception as e:
+                logger.debug(f"Error syncing chunk in parallel copy: {e}")
+
+
 def sync_annotation_from_minio(crop_id, force=False):
     """
     Sync a single annotation crop from MinIO to local filesystem.
@@ -654,23 +734,46 @@ def sync_annotation_from_minio(crop_id, force=False):
             logger.debug(f"Source annotation not found in MinIO: {src_path}")
             return False
 
-        # Check modification time
+        s0_path = f"{src_path}/s0"
         try:
-            s3_info = s3.info(f"{src_path}/s0/0.0.0")
-            s3_mtime = s3_info.get('LastModified', None)
+            chunk_files = s3.ls(s0_path)
+        except FileNotFoundError:
+            chunk_files = []
 
-            # Check if we've synced this before
-            last_sync = minio_state["last_sync"].get(crop_id, None)
+        remote_chunk_state = {}
+        for chunk_file in chunk_files:
+            chunk_key = Path(chunk_file).name
+            if not re.match(r"^\d+\.\d+\.\d+$", chunk_key):
+                continue
+            try:
+                info = s3.info(chunk_file)
+                remote_chunk_state[chunk_key] = _safe_epoch_timestamp(
+                    info.get("LastModified")
+                )
+            except Exception:
+                remote_chunk_state[chunk_key] = 0.0
 
-            if not force and last_sync and s3_mtime and s3_mtime <= last_sync:
-                # Not modified since last sync
+        known_chunk_state = minio_state["chunk_sync_state"].get(crop_id, {})
+        changed_chunk_keys = []
+        removed_chunk_keys = []
+        if force:
+            changed_chunk_keys = list(remote_chunk_state.keys())
+        else:
+            for chunk_key, remote_mtime in remote_chunk_state.items():
+                if known_chunk_state.get(chunk_key) != remote_mtime:
+                    changed_chunk_keys.append(chunk_key)
+            removed_chunk_keys = [
+                chunk_key for chunk_key in known_chunk_state.keys()
+                if chunk_key not in remote_chunk_state
+            ]
+            if not changed_chunk_keys and not removed_chunk_keys:
                 return False
-        except Exception as e:
-            logger.debug(f"Could not check modification time: {e}")
-            # Continue with sync if we can't check mtime
 
         # Perform sync using zarr
-        logger.info(f"Syncing annotation for {crop_id} from MinIO to local")
+        logger.info(
+            f"Syncing annotation for {crop_id} from MinIO to local "
+            f"(changed_chunks={len(changed_chunk_keys)}, removed_chunks={len(removed_chunk_keys)})"
+        )
 
         src_store = s3fs.S3Map(root=src_path, s3=s3)
         src_group = zarr.open_group(store=src_store, mode='r')
@@ -678,24 +781,44 @@ def sync_annotation_from_minio(crop_id, force=False):
         dst_store = zarr.DirectoryStore(str(dst_path))
         dst_group = zarr.open_group(store=dst_store, mode='a')
 
-        # Copy all arrays
+        # Ensure array metadata exists (data is copied chunk-wise below).
         for key in src_group.array_keys():
             src_array = src_group[key]
-            dst_array = dst_group.create_dataset(
-                key,
-                shape=src_array.shape,
-                chunks=src_array.chunks,
-                dtype=src_array.dtype,
-                overwrite=True
-            )
-            dst_array[:] = src_array[:]
-            dst_array.attrs.update(src_array.attrs)
+            if key not in dst_group:
+                dst_group.create_dataset(
+                    key,
+                    shape=src_array.shape,
+                    chunks=src_array.chunks,
+                    dtype=src_array.dtype,
+                    fill_value=0,
+                    overwrite=True
+                )
+            dst_group[key].attrs.update(src_array.attrs)
 
         # Copy group attributes
         dst_group.attrs.update(src_group.attrs)
 
+        # Copy only changed chunks
+        dst_s0 = dst_path / "s0"
+        dst_s0.mkdir(parents=True, exist_ok=True)
+        copy_pairs = [
+            (f"{s0_path}/{chunk_key}", str(dst_s0 / chunk_key))
+            for chunk_key in changed_chunk_keys
+        ]
+        _copy_chunks_parallel(s3, copy_pairs)
+
+        # Remove local chunks deleted remotely
+        for chunk_key in removed_chunk_keys:
+            local_chunk = dst_s0 / chunk_key
+            try:
+                if local_chunk.exists():
+                    local_chunk.unlink()
+            except Exception as e:
+                logger.debug(f"Error removing stale local crop chunk {crop_id}/{chunk_key}: {e}")
+
         # Update last sync time
         minio_state["last_sync"][crop_id] = datetime.now()
+        minio_state["chunk_sync_state"][crop_id] = remote_chunk_state
 
         logger.info(f"Successfully synced annotation for {crop_id}")
         return True
@@ -738,6 +861,7 @@ def _get_volume_metadata(volume_id, zarr_path=None):
             "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
             "corrections_dir": str(Path(zarr_path).parent),
             "extracted_chunks": set(),
+            "chunk_sync_state": {},
         }
         # Cache it
         annotation_volumes[volume_id] = metadata
@@ -940,42 +1064,73 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
             minio_state["last_sync"][volume_id] = datetime.now()
             return False
 
-        # Parse chunk indices from filenames (format: z.y.x)
-        annotated_chunks = []
+        # Parse chunk indices from filenames (format: z.y.x) and track mtimes
+        remote_chunk_state = {}
+        remote_chunk_indices = {}
         for f in chunk_files:
             basename = Path(f).name
             if re.match(r"^\d+\.\d+\.\d+$", basename):
                 cz, cy, cx = map(int, basename.split("."))
-                annotated_chunks.append((cz, cy, cx))
+                remote_chunk_indices[basename] = (cz, cy, cx)
+                try:
+                    info = s3.info(f)
+                    remote_chunk_state[basename] = _safe_epoch_timestamp(
+                        info.get("LastModified")
+                    )
+                except Exception:
+                    remote_chunk_state[basename] = 0.0
 
-        if not annotated_chunks:
+        if not remote_chunk_indices:
             logger.debug(f"No annotated chunks found for volume {volume_id}")
             minio_state["last_sync"][volume_id] = datetime.now()
             return False
 
-        # Sync individual chunk data from MinIO to local
-        for cz, cy, cx in annotated_chunks:
-            chunk_key = f"{cz}.{cy}.{cx}"
-            src_chunk_path = f"{s0_path}/{chunk_key}"
+        known_chunk_state = volume_meta.get("chunk_sync_state", {})
+        changed_chunk_keys = []
+        removed_chunk_keys = []
+        if force:
+            changed_chunk_keys = list(remote_chunk_state.keys())
+        else:
+            for chunk_key, remote_mtime in remote_chunk_state.items():
+                if known_chunk_state.get(chunk_key) != remote_mtime:
+                    changed_chunk_keys.append(chunk_key)
+            removed_chunk_keys = [
+                chunk_key for chunk_key in known_chunk_state.keys()
+                if chunk_key not in remote_chunk_state
+            ]
+            if not changed_chunk_keys and not removed_chunk_keys:
+                minio_state["last_sync"][volume_id] = datetime.now()
+                return False
+
+        # Sync only changed chunk data from MinIO to local
+        dst_s0_path = dst_annotation_path / "s0"
+        dst_s0_path.mkdir(parents=True, exist_ok=True)
+        copy_pairs = [
+            (f"{s0_path}/{chunk_key}", str(dst_s0_path / chunk_key))
+            for chunk_key in changed_chunk_keys
+        ]
+        _copy_chunks_parallel(s3, copy_pairs)
+
+        for chunk_key in removed_chunk_keys:
             dst_chunk_path = dst_annotation_path / "s0" / chunk_key
-            dst_chunk_path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                s3.get(src_chunk_path, str(dst_chunk_path))
+                if dst_chunk_path.exists():
+                    dst_chunk_path.unlink()
             except Exception as e:
-                logger.debug(f"Error syncing chunk {chunk_key}: {e}")
+                logger.debug(f"Error removing stale local chunk {chunk_key}: {e}")
 
         logger.info(
-            f"Synced {len(annotated_chunks)} chunks for volume {volume_id}"
+            f"Synced {len(changed_chunk_keys)} changed chunks for volume {volume_id}"
         )
 
-        # Extract corrections for new/updated chunks
+        # Extract corrections for changed chunks
         extracted_chunks = volume_meta.get("extracted_chunks", set())
+        changed_chunk_indices = [
+            remote_chunk_indices[k] for k in changed_chunk_keys if k in remote_chunk_indices
+        ]
         created_any = False
 
-        for chunk_idx in annotated_chunks:
-            if not force and chunk_idx in extracted_chunks:
-                continue
-
+        for chunk_idx in changed_chunk_indices:
             try:
                 created = extract_correction_from_chunk(
                     volume_id, chunk_idx, volume_meta
@@ -983,6 +1138,10 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
                 if created:
                     extracted_chunks.add(chunk_idx)
                     created_any = True
+                else:
+                    # Chunk exists but currently has no labels; allow future changes
+                    # to re-create a correction for this location.
+                    extracted_chunks.discard(chunk_idx)
             except Exception as e:
                 logger.error(
                     f"Error extracting correction for chunk {chunk_idx}: {e}"
@@ -992,15 +1151,16 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
 
         # Update tracked state
         volume_meta["extracted_chunks"] = extracted_chunks
+        volume_meta["chunk_sync_state"] = remote_chunk_state
         minio_state["last_sync"][volume_id] = datetime.now()
 
-        if created_any:
+        if created_any or changed_chunk_keys or removed_chunk_keys:
             logger.info(
                 f"Created corrections for volume {volume_id}: "
                 f"{len(extracted_chunks)} total chunks extracted"
             )
 
-        return created_any
+        return bool(created_any or changed_chunk_keys or removed_chunk_keys)
 
     except Exception as e:
         logger.error(f"Error syncing annotation volume {volume_id}: {e}")
@@ -2844,6 +3004,7 @@ def create_annotation_volume():
             "dataset_offset_nm": dataset_offset_nm.tolist(),
             "corrections_dir": corrections_dir,
             "extracted_chunks": set(),
+            "chunk_sync_state": {},
         }
 
         return jsonify(
@@ -3516,11 +3677,39 @@ def restart_finetuning_job(job_id):
         except Exception as e:
             logger.warning(f"Error syncing annotations before restart: {e}")
 
-        # Extract updated parameters
+        # Extract updated parameters. Allow full training config to pass through.
         updated_params = {}
-        for key in ["num_epochs", "batch_size", "learning_rate", "loss_type", "distillation_lambda", "distillation_scope", "margin"]:
+        passthrough_keys = [
+            "lora_r",
+            "lora_alpha",
+            "num_epochs",
+            "batch_size",
+            "learning_rate",
+            "loss_type",
+            "label_smoothing",
+            "distillation_lambda",
+            "margin",
+            "balance_classes",
+            "mask_unannotated",
+            "gradient_accumulation_steps",
+            "num_workers",
+            "no_augment",
+            "no_mixed_precision",
+            "patch_shape",
+        ]
+        for key in passthrough_keys:
             if key in data and data[key] is not None:
                 updated_params[key] = data[key]
+
+        # UI uses distillation_scope; CLI expects distillation_all_voxels.
+        if "distillation_scope" in data and data["distillation_scope"] is not None:
+            scope = str(data["distillation_scope"]).lower()
+            if scope in {"all", "unlabeled"}:
+                updated_params["distillation_all_voxels"] = (scope == "all")
+            else:
+                logger.warning(
+                    f"Ignoring invalid distillation_scope on restart for job {job_id}: {data['distillation_scope']}"
+                )
 
         # Send restart request (same job, same GPU)
         signal_t0 = time.perf_counter()
