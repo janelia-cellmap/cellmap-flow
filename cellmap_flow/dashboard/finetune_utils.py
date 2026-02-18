@@ -553,6 +553,82 @@ def _make_s3_filesystem():
     )
 
 
+def _sync_zarr_group_metadata(s3, src_path, dst_path):
+    """Sync zarr group structure and metadata from S3 to local disk.
+
+    Ensures destination arrays exist with correct shape/dtype and copies attrs.
+    """
+    src_store = s3fs.S3Map(root=src_path, s3=s3)
+    src_group = zarr.open_group(store=src_store, mode="r")
+
+    dst_store = zarr.DirectoryStore(str(dst_path))
+    dst_group = zarr.open_group(store=dst_store, mode="a")
+
+    for key in src_group.array_keys():
+        src_array = src_group[key]
+        if key not in dst_group:
+            dst_group.create_dataset(
+                key,
+                shape=src_array.shape,
+                chunks=src_array.chunks,
+                dtype=src_array.dtype,
+                fill_value=0,
+                overwrite=True,
+            )
+        dst_group[key].attrs.update(src_array.attrs)
+
+    dst_group.attrs.update(src_group.attrs)
+
+
+def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=False):
+    """Diff remote vs known chunk state and sync changed chunks to local disk.
+
+    Returns:
+        (changed_keys, removed_keys, remote_chunk_state)
+    """
+    try:
+        chunk_files = s3.ls(s0_path)
+    except FileNotFoundError:
+        chunk_files = []
+
+    remote_chunk_state = {}
+    for chunk_file in chunk_files:
+        chunk_key = Path(chunk_file).name
+        if not re.match(r"^\d+\.\d+\.\d+$", chunk_key):
+            continue
+        try:
+            info = s3.info(chunk_file)
+            remote_chunk_state[chunk_key] = _safe_epoch_timestamp(info.get("LastModified"))
+        except Exception:
+            remote_chunk_state[chunk_key] = 0.0
+
+    if force:
+        changed_keys = list(remote_chunk_state.keys())
+    else:
+        changed_keys = [k for k, v in remote_chunk_state.items() if known_chunk_state.get(k) != v]
+    removed_keys = [k for k in known_chunk_state if k not in remote_chunk_state]
+
+    if not changed_keys and not removed_keys:
+        return [], [], remote_chunk_state
+
+    # Copy changed chunks
+    dst_s0_path = Path(dst_s0_path)
+    dst_s0_path.mkdir(parents=True, exist_ok=True)
+    copy_pairs = [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed_keys]
+    _copy_chunks_parallel(s3, copy_pairs)
+
+    # Remove stale local chunks
+    for k in removed_keys:
+        local_chunk = dst_s0_path / k
+        try:
+            if local_chunk.exists():
+                local_chunk.unlink()
+        except Exception as e:
+            logger.debug(f"Error removing stale chunk {k}: {e}")
+
+    return changed_keys, removed_keys, remote_chunk_state
+
+
 # ---------------------------------------------------------------------------
 # Annotation sync (crop-based)
 # ---------------------------------------------------------------------------
@@ -581,85 +657,21 @@ def sync_annotation_from_minio(crop_id, force=False):
         if not s3.exists(src_path):
             return False
 
-        s0_path = f"{src_path}/s0"
-        try:
-            chunk_files = s3.ls(s0_path)
-        except FileNotFoundError:
-            chunk_files = []
-
-        remote_chunk_state = {}
-        for chunk_file in chunk_files:
-            chunk_key = Path(chunk_file).name
-            if not re.match(r"^\d+\.\d+\.\d+$", chunk_key):
-                continue
-            try:
-                info = s3.info(chunk_file)
-                remote_chunk_state[chunk_key] = _safe_epoch_timestamp(
-                    info.get("LastModified")
-                )
-            except Exception:
-                remote_chunk_state[chunk_key] = 0.0
-
         known_chunk_state = minio_state["chunk_sync_state"].get(crop_id, {})
-        changed_chunk_keys = []
-        removed_chunk_keys = []
-        if force:
-            changed_chunk_keys = list(remote_chunk_state.keys())
-        else:
-            for chunk_key, remote_mtime in remote_chunk_state.items():
-                if known_chunk_state.get(chunk_key) != remote_mtime:
-                    changed_chunk_keys.append(chunk_key)
-            removed_chunk_keys = [
-                chunk_key
-                for chunk_key in known_chunk_state.keys()
-                if chunk_key not in remote_chunk_state
-            ]
-            if not changed_chunk_keys and not removed_chunk_keys:
-                return False
+        s0_path = f"{src_path}/s0"
+        changed, removed, remote_chunk_state = _diff_and_sync_chunks(
+            s3, s0_path, dst_path / "s0", known_chunk_state, force=force
+        )
+
+        if not changed and not removed:
+            return False
 
         logger.info(
             f"Syncing annotation for {crop_id} "
-            f"(changed={len(changed_chunk_keys)}, removed={len(removed_chunk_keys)})"
+            f"(changed={len(changed)}, removed={len(removed)})"
         )
 
-        src_store = s3fs.S3Map(root=src_path, s3=s3)
-        src_group = zarr.open_group(store=src_store, mode="r")
-
-        dst_store = zarr.DirectoryStore(str(dst_path))
-        dst_group = zarr.open_group(store=dst_store, mode="a")
-
-        for key in src_group.array_keys():
-            src_array = src_group[key]
-            if key not in dst_group:
-                dst_group.create_dataset(
-                    key,
-                    shape=src_array.shape,
-                    chunks=src_array.chunks,
-                    dtype=src_array.dtype,
-                    fill_value=0,
-                    overwrite=True,
-                )
-            dst_group[key].attrs.update(src_array.attrs)
-
-        dst_group.attrs.update(src_group.attrs)
-
-        # Copy only changed chunks
-        dst_s0 = dst_path / "s0"
-        dst_s0.mkdir(parents=True, exist_ok=True)
-        copy_pairs = [
-            (f"{s0_path}/{chunk_key}", str(dst_s0 / chunk_key))
-            for chunk_key in changed_chunk_keys
-        ]
-        _copy_chunks_parallel(s3, copy_pairs)
-
-        # Remove local chunks deleted remotely
-        for chunk_key in removed_chunk_keys:
-            local_chunk = dst_s0 / chunk_key
-            try:
-                if local_chunk.exists():
-                    local_chunk.unlink()
-            except Exception as e:
-                logger.debug(f"Error removing stale local crop chunk {crop_id}/{chunk_key}: {e}")
+        _sync_zarr_group_metadata(s3, src_path, dst_path)
 
         minio_state["last_sync"][crop_id] = datetime.now()
         minio_state["chunk_sync_state"][crop_id] = remote_chunk_state
@@ -898,91 +910,21 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
         if not s3.exists(src_annotation_path):
             return False
 
-        # Sync the full annotation volume from MinIO to local
+        # Sync zarr group metadata
         dst_annotation_path = Path(local_zarr_path) / "annotation"
         dst_annotation_path.mkdir(parents=True, exist_ok=True)
+        _sync_zarr_group_metadata(s3, src_annotation_path, dst_annotation_path)
 
-        src_store = s3fs.S3Map(root=src_annotation_path, s3=s3)
-        src_group = zarr.open_group(store=src_store, mode="r")
-
-        dst_store = zarr.DirectoryStore(str(dst_annotation_path))
-        dst_group = zarr.open_group(store=dst_store, mode="a")
-
-        for key in src_group.array_keys():
-            src_array = src_group[key]
-            if key not in dst_group:
-                dst_group.create_dataset(
-                    key,
-                    shape=src_array.shape,
-                    chunks=src_array.chunks,
-                    dtype=src_array.dtype,
-                    fill_value=0,
-                    overwrite=True,
-                )
-            dst_group[key].attrs.update(src_array.attrs)
-        dst_group.attrs.update(src_group.attrs)
-
-        # List chunk files in MinIO to find which chunks have been written
+        # Diff and sync chunks
         s0_path = f"{bucket}/{zarr_name}/annotation/s0"
-        try:
-            chunk_files = s3.ls(s0_path)
-        except FileNotFoundError:
-            minio_state["last_sync"][volume_id] = datetime.now()
-            return False
-
-        remote_chunk_state = {}
-        remote_chunk_indices = {}
-        for f in chunk_files:
-            basename = Path(f).name
-            if re.match(r"^\d+\.\d+\.\d+$", basename):
-                cz, cy, cx = map(int, basename.split("."))
-                remote_chunk_indices[basename] = (cz, cy, cx)
-                try:
-                    info = s3.info(f)
-                    remote_chunk_state[basename] = _safe_epoch_timestamp(
-                        info.get("LastModified")
-                    )
-                except Exception:
-                    remote_chunk_state[basename] = 0.0
-
-        if not remote_chunk_indices:
-            minio_state["last_sync"][volume_id] = datetime.now()
-            return False
-
         known_chunk_state = volume_meta.get("chunk_sync_state", {})
-        changed_chunk_keys = []
-        removed_chunk_keys = []
-        if force:
-            changed_chunk_keys = list(remote_chunk_state.keys())
-        else:
-            for chunk_key, remote_mtime in remote_chunk_state.items():
-                if known_chunk_state.get(chunk_key) != remote_mtime:
-                    changed_chunk_keys.append(chunk_key)
-            removed_chunk_keys = [
-                chunk_key
-                for chunk_key in known_chunk_state.keys()
-                if chunk_key not in remote_chunk_state
-            ]
-            if not changed_chunk_keys and not removed_chunk_keys:
-                minio_state["last_sync"][volume_id] = datetime.now()
-                return False
+        changed_chunk_keys, removed_chunk_keys, remote_chunk_state = _diff_and_sync_chunks(
+            s3, s0_path, dst_annotation_path / "s0", known_chunk_state, force=force
+        )
 
-        # Sync only changed chunk data from MinIO to local
-        dst_s0_path = dst_annotation_path / "s0"
-        dst_s0_path.mkdir(parents=True, exist_ok=True)
-        copy_pairs = [
-            (f"{s0_path}/{chunk_key}", str(dst_s0_path / chunk_key))
-            for chunk_key in changed_chunk_keys
-        ]
-        _copy_chunks_parallel(s3, copy_pairs)
-
-        for chunk_key in removed_chunk_keys:
-            dst_chunk_path = dst_annotation_path / "s0" / chunk_key
-            try:
-                if dst_chunk_path.exists():
-                    dst_chunk_path.unlink()
-            except Exception as e:
-                logger.debug(f"Error removing stale local chunk {chunk_key}: {e}")
+        if not changed_chunk_keys and not removed_chunk_keys:
+            minio_state["last_sync"][volume_id] = datetime.now()
+            return False
 
         logger.info(
             f"Synced {len(changed_chunk_keys)} changed chunks for volume {volume_id}"
@@ -991,9 +933,8 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
         # Extract corrections for changed chunks
         extracted_chunks = volume_meta.get("extracted_chunks", set())
         changed_chunk_indices = [
-            remote_chunk_indices[k]
+            tuple(map(int, k.split(".")))
             for k in changed_chunk_keys
-            if k in remote_chunk_indices
         ]
         created_any = False
 
@@ -1040,40 +981,13 @@ def periodic_sync_annotations():
     while True:
         try:
             time.sleep(30)
-
             if not minio_state["output_base"]:
                 continue
             if not minio_state["ip"] or not minio_state["port"]:
                 continue
-
-            try:
-                s3 = _make_s3_filesystem()
-
-                crops = s3.ls(minio_state["bucket"])
-                zarr_ids = [
-                    Path(c).name.replace(".zarr", "")
-                    for c in crops
-                    if c.endswith(".zarr")
-                ]
-
-                for zarr_id in zarr_ids:
-                    try:
-                        zarr_name = f"{zarr_id}.zarr"
-                        attrs_path = f"{minio_state['bucket']}/{zarr_name}/.zattrs"
-                        if s3.exists(attrs_path):
-                            root_attrs = json.loads(s3.cat(attrs_path))
-                            if root_attrs.get("type") == "annotation_volume":
-                                sync_annotation_volume_from_minio(zarr_id)
-                                continue
-                    except Exception:
-                        pass
-                    sync_annotation_from_minio(zarr_id, force=False)
-
-            except Exception as e:
-                logger.debug(f"Error in periodic sync: {e}")
-
+            sync_all_annotations_from_minio(force=False)
         except Exception as e:
-            logger.error(f"Unexpected error in sync thread: {e}")
+            logger.debug(f"Error in periodic sync: {e}")
 
 
 def start_periodic_sync():
@@ -1085,17 +999,3 @@ def start_periodic_sync():
         logger.info("Started periodic annotation sync thread")
 
 
-# ---------------------------------------------------------------------------
-# Misc helpers
-# ---------------------------------------------------------------------------
-
-def is_output_segmentation():
-    """Check whether the current postprocess pipeline produces a segmentation."""
-    from cellmap_flow.globals import g
-
-    if len(g.postprocess) == 0:
-        return False
-
-    for postprocess in g.postprocess[::-1]:
-        if postprocess.is_segmentation is not None:
-            return postprocess.is_segmentation

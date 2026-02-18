@@ -881,33 +881,18 @@ class FinetuneJobManager:
                 self.logger.info(f"Generated model script: {script_path}")
 
                 # === Extract configuration from base model and corrections ===
-                # NO PLACEHOLDERS - we must get real values from the training data
 
                 data_path = None
                 json_data = None
                 base_scale = "s0"  # Default scale (only safe default)
 
                 # 1. Get dataset_path from corrections metadata (REQUIRED)
-                self.logger.info("Extracting dataset path from corrections metadata...")
                 corrections_dir = Path(metadata.get("corrections_path", ""))
-                if corrections_dir.exists():
-                    correction_dirs = [d for d in corrections_dir.iterdir() if d.is_dir() and (d / ".zattrs").exists()]
-                    if correction_dirs:
-                        zattrs_file = correction_dirs[0] / ".zattrs"
-                        try:
-                            with open(zattrs_file, "r") as f:
-                                correction_attrs = json.load(f)
-                                data_path = correction_attrs.get("dataset_path")
-                                if data_path:
-                                    self.logger.info(f"✓ Found dataset_path from corrections: {data_path}")
-                                else:
-                                    self.logger.error(f"No dataset_path in correction metadata: {zattrs_file}")
-                        except Exception as e:
-                            self.logger.error(f"Failed to read correction metadata: {e}")
-                    else:
-                        self.logger.error(f"No correction directories found in {corrections_dir}")
-                else:
-                    self.logger.error(f"Corrections directory does not exist: {corrections_dir}")
+                try:
+                    data_path = self._extract_data_path_from_corrections(corrections_dir)
+                    self.logger.info(f"Found dataset_path from corrections: {data_path}")
+                except (ValueError, Exception) as e:
+                    self.logger.error(f"Could not extract dataset_path: {e}")
 
                 # 2. Get normalization and preprocessing from base model YAML
                 if base_script_path:
@@ -1047,34 +1032,12 @@ class FinetuneJobManager:
             return None
 
         finetune_job = self.jobs[job_id]
-
-        # Get LSF job ID or local PID
-        lsf_job_id = None
-        if finetune_job.lsf_job:
-            if hasattr(finetune_job.lsf_job, 'job_id'):
-                lsf_job_id = finetune_job.lsf_job.job_id
-            elif hasattr(finetune_job.lsf_job, 'process'):
-                lsf_job_id = f"PID:{finetune_job.lsf_job.process.pid}"
-
-        return {
-            "job_id": job_id,
-            "lsf_job_id": lsf_job_id,
-            "model_name": finetune_job.model_name,
-            "status": finetune_job.status.value,
-            "current_epoch": finetune_job.current_epoch,
-            "total_epochs": finetune_job.total_epochs,
-            "loss": finetune_job.latest_loss,
-            "progress_percent": (finetune_job.current_epoch / finetune_job.total_epochs * 100) if finetune_job.total_epochs > 0 else 0,
-            "created_at": finetune_job.created_at.isoformat(),
-            "output_dir": str(finetune_job.output_dir),
-            "log_file": str(finetune_job.log_file),
-            "finetuned_model_name": finetune_job.finetuned_model_name,
-            "params": finetune_job.params,
-            "inference_server_ready": finetune_job.inference_server_ready,
-            "inference_server_url": finetune_job.inference_server_url,
-            "model_script_path": str(finetune_job.model_script_path) if finetune_job.model_script_path else None,
-            "model_yaml_path": str(finetune_job.model_yaml_path) if finetune_job.model_yaml_path else None,
-        }
+        result = finetune_job.to_dict()
+        result["loss"] = result.pop("latest_loss", None)
+        result["progress_percent"] = (
+            finetune_job.current_epoch / finetune_job.total_epochs * 100
+        ) if finetune_job.total_epochs > 0 else 0
+        return result
 
     def list_jobs(self) -> List[Dict[str, Any]]:
         """
