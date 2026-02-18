@@ -3,13 +3,13 @@
 Command-line interface for LoRA finetuning.
 
 Usage:
-    python -m cellmap_flow.finetune.cli \
+    python -m cellmap_flow.finetune.finetune_cli \
         --model-checkpoint /path/to/checkpoint \
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1
 
     # With custom settings
-    python -m cellmap_flow.finetune.cli \
+    python -m cellmap_flow.finetune.finetune_cli \
         --model-checkpoint /path/to/checkpoint \
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1 \
@@ -38,8 +38,8 @@ import torch.nn as nn
 
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, ModelConfig
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
-from cellmap_flow.finetune.dataset import create_dataloader
-from cellmap_flow.finetune.trainer import LoRAFinetuner
+from cellmap_flow.finetune.correction_dataset import create_dataloader
+from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 
 # Set up logging
 logging.basicConfig(
@@ -207,97 +207,20 @@ def _wait_for_restart_signal(
         Dict with restart parameters, or None if signal file is malformed
     """
     logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
-    wait_started_perf = time.perf_counter()
-    wait_started_epoch = time.time()
-    wait_started_dt = datetime.now().isoformat()
-    host = socket.gethostname()
-    poll_count = 0
-    last_diag_emit_perf = wait_started_perf
-    diag_emit_interval_s = 10.0
-    logger.info(
-        f"Restart signal watcher context: host={host}, pid={os.getpid()}, "
-        f"check_interval={check_interval:.2f}s, wait_started={wait_started_dt}"
-    )
 
     while True:
-        poll_count += 1
-        now_perf = time.perf_counter()
-        now_epoch = time.time()
-        now_dt = datetime.now().isoformat()
-
-        if now_perf - last_diag_emit_perf >= diag_emit_interval_s:
-            loop_wait_s = now_perf - wait_started_perf
-            logger.info(
-                f"Restart watcher still waiting: elapsed={loop_wait_s:.2f}s "
-                f"polls={poll_count} now={now_dt}"
-            )
-            print(
-                f"RESTART_WATCHER_WAITING: elapsed={loop_wait_s:.2f}s polls={poll_count}",
-                flush=True,
-            )
-            last_diag_emit_perf = now_perf
-
         if restart_controller is not None:
             in_memory_signal = restart_controller.get_if_triggered()
             if in_memory_signal is not None:
                 logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
-                signal_ts = in_memory_signal.get("timestamp")
-                if signal_ts:
-                    try:
-                        queued_at = datetime.fromisoformat(signal_ts)
-                        wait_s = (datetime.now() - queued_at).total_seconds()
-                        logger.info(
-                            f"Restart signal pickup latency: {wait_s:.2f}s "
-                            f"(dashboard timestamp -> worker now)"
-                        )
-                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
-                        print(
-                            f"RESTART_SIGNAL_DIAGNOSTICS: "
-                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
-                            f"source=http_control",
-                            flush=True,
-                        )
-                    except Exception as e:
-                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
                 return in_memory_signal
 
         if signal_file and signal_file.exists():
             try:
-                stat = signal_file.stat()
-                mtime_latency_s = now_epoch - stat.st_mtime
-                logger.info(
-                    f"Restart signal file observed: mtime={datetime.fromtimestamp(stat.st_mtime).isoformat()} "
-                    f"mtime_to_detect={mtime_latency_s:.2f}s size={stat.st_size}B"
-                )
-                print(f"RESTART_SIGNAL_MTIME_TO_DETECT: {mtime_latency_s:.2f}s", flush=True)
                 with open(signal_file) as f:
                     signal_data = json.load(f)
                 signal_file.unlink()  # Remove signal file
                 logger.info(f"Restart signal received: {signal_data}")
-                signal_ts = signal_data.get("timestamp")
-                if signal_ts:
-                    try:
-                        queued_at = datetime.fromisoformat(signal_ts)
-                        wait_s = (datetime.now() - queued_at).total_seconds()
-                        logger.info(
-                            f"Restart signal pickup latency: {wait_s:.2f}s "
-                            f"(dashboard timestamp -> worker now)"
-                        )
-                        logger.info(
-                            f"Restart signal diagnostics: "
-                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s, "
-                            f"mtime_to_detect={mtime_latency_s:.2f}s, "
-                            f"wait_started_epoch_to_mtime={stat.st_mtime - wait_started_epoch:.2f}s"
-                        )
-                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
-                        print(
-                            f"RESTART_SIGNAL_DIAGNOSTICS: "
-                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
-                            f"mtime_to_detect={mtime_latency_s:.2f}s",
-                            flush=True,
-                        )
-                    except Exception as e:
-                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
                 return signal_data
             except Exception as e:
                 logger.error(f"Error reading restart signal: {e}")
@@ -339,7 +262,7 @@ def _generate_model_files(args, model_config, timestamp):
     Returns:
         (finetuned_model_name, script_path, yaml_path) tuple
     """
-    from cellmap_flow.finetune.model_templates import (
+    from cellmap_flow.finetune.finetuned_model_templates import (
         generate_finetuned_model_script,
         generate_finetuned_model_yaml
     )
@@ -610,14 +533,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Debug: Print all arguments
-    print(f"\n{'=' * 60}")
-    print(f"DEBUG: All parsed arguments:")
-    for key, value in vars(args).items():
-        print(f"  {key}: {value}")
-    print(f"{'=' * 60}\n")
-    logger.info(f"DEBUG: All parsed arguments: {vars(args)}")
-
     # Print configuration
     logger.info("=" * 60)
     logger.info("LoRA Finetuning Configuration")
@@ -792,17 +707,12 @@ def main():
                     return 1
 
                 # Apply updated parameters
-                restart_apply_t0 = time.perf_counter()
                 _apply_restart_params(args, restart_data)
 
                 # Prepare for retraining
                 lora_model.train()
                 torch.cuda.empty_cache()
                 gc.collect()
-                restart_apply_elapsed = time.perf_counter() - restart_apply_t0
-                logger.info(f"Restart transition prep time: {restart_apply_elapsed:.2f}s")
-                print(f"RESTART_TRANSITION_PREP_TIME: {restart_apply_elapsed:.2f}s", flush=True)
-
                 logger.info("Restarting training with updated parameters...")
                 print("RESTARTING_TRAINING", flush=True)
                 continue  # Loop back to retrain
