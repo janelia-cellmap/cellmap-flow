@@ -120,75 +120,8 @@ still in development
 ## Using TensorFlow model:
 To run TensorFlow models, we suggest installing TensorFlow via conda: `conda install tensorflow-gpu==2.16.1`
 
-##  Run multiple model at once:
+##  Run multiple model at once: 
 ```bash
 cellmap_flow_multiple --script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -n script_base --dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -n using_dacapo -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
 ```
-
-## LoRA Model Finetuning
-
-CellMapFlow supports LoRA (Low-Rank Adaptation) finetuning for adapting pretrained models to your specific data. Two annotation workflows are available:
-
-### Interactive Dashboard Workflow (Recommended)
-
-Create and edit annotation crops directly in the Neuroglancer viewer:
-
-```bash
-# Start the dashboard
-cellmap_flow_app
-
-# In the web UI:
-# 1. Navigate to the Finetune tab
-# 2. Select your model
-# 3. Create annotation crops at your current view position
-# 4. Edit annotations directly in Neuroglancer
-# 5. Annotations auto-sync to local disk every 30 seconds
-# 6. Submit training → model auto-loads in Neuroglancer
-# 7. Inspect results → restart training if needed
-```
-
-**Features:**
-- One-click crop creation at cursor position
-- Interactive browser-based annotation editing
-- Automatic bidirectional syncing (browser ↔ disk)
-- Model-aware crop sizing
-- Auto-serve: finetuned model loads in Neuroglancer automatically after training
-- Iterative training: restart on the same GPU with updated annotations/parameters
-- Ideal for dense corrections of specific errors
-
-### Programmatic Sparse Annotation Workflow
-
-Generate sparse point annotations programmatically for large-scale labeling:
-
-```bash
-# Generate sparse annotations
-python scripts/generate_sparse_corrections.py
-
-# Train with sparse annotations
-python scripts/example_sparse_annotation_workflow.py
-```
-
-**Features:**
-- Automated point sampling from volumes
-- 3-level labeling (unannotated/background/foreground)
-- Masked loss computation (only on labeled regions)
-- Ideal for large-scale systematic annotation
-
-### Training on Annotations
-
-Once you have corrections from either workflow:
-
-```bash
-cellmap_flow_finetune \
-  --model-name your_model \
-  --corrections /path/to/corrections \
-  --output-dir output/finetuned_model \
-  --batch-size 1 \
-  --num-epochs 10 \
-  --learning-rate 1e-4
-```
-
-**Documentation:**
-- Detailed workflows: [`docs/sparse_annotation_workflow.md`](docs/sparse_annotation_workflow.md)
-- Dashboard guide, MinIO syncing, and troubleshooting included
 
