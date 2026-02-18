@@ -41,28 +41,10 @@ class JobStatus(Enum):
 
 @dataclass
 class FinetuneJob:
-    """
-    Track a finetuning job with metadata and status.
+    """Track a finetuning job with metadata, status, and training progress.
 
-    Attributes:
-        job_id: Unique identifier (UUID)
-        lsf_job: LSF job handle for cluster interaction
-        model_name: Base model name
-        output_dir: Directory for training outputs
-        params: Training parameters dict
-        status: Current job status
-        created_at: Timestamp of job creation
-        log_file: Path to training log file
-        finetuned_model_name: Name of the finetuned model (set after completion)
-        model_script_path: Path to generated .py script (set after completion)
-        model_yaml_path: Path to generated .yaml config (set after completion)
-        current_epoch: Current training epoch (updated during training)
-        total_epochs: Total number of epochs
-        latest_loss: Most recent loss value
-        inference_server_url: URL of inference server (set when server starts)
-        inference_server_ready: Whether inference server is ready
-        previous_job_id: ID of previous job in restart chain
-        next_job_id: ID of next job in restart chain
+    Manages lifecycle from submission through completion, including inference
+    server state and restart chain linkage.
     """
     job_id: str
     lsf_job: Optional[LSFJob]
@@ -330,7 +312,7 @@ class FinetuneJobManager:
                 auto_serve = False
 
         # Build CLI command
-        cli_command = f"python -m cellmap_flow.finetune.cli "
+        cli_command = f"python -m cellmap_flow.finetune.finetune_cli "
         cli_command += f"--model-type {model_type} "
 
         # Add checkpoint or script path depending on what's available
@@ -829,7 +811,7 @@ class FinetuneJobManager:
         # === Generate model script and YAML ===
 
         # Import here to avoid circular dependencies
-        from cellmap_flow.finetune.model_templates import (
+        from cellmap_flow.finetune.finetuned_model_templates import (
             generate_finetuned_model_script,
             generate_finetuned_model_yaml
         )

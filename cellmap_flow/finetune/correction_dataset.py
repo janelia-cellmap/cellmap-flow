@@ -50,11 +50,6 @@ class CorrectionDataset(Dataset):
         normalize: bool = True,
         model_name: Optional[str] = None,
     ):
-        print(f"\n{'='*60}")
-        print(f"DEBUG CorrectionDataset.__init__:")
-        print(f"  corrections_zarr_path (input): '{corrections_zarr_path}'")
-        print(f"  type: {type(corrections_zarr_path)}")
-        print(f"{'='*60}\n")
         self.corrections_path = Path(corrections_zarr_path)
         self.patch_shape = patch_shape
         self.augment = augment
@@ -67,7 +62,7 @@ class CorrectionDataset(Dataset):
         if len(self.corrections) == 0:
             raise ValueError(
                 f"No corrections found in {corrections_zarr_path}. "
-                f"Generate corrections first using scripts/generate_test_corrections.py"
+                f"Generate corrections first."
             )
 
         logger.info(
@@ -78,14 +73,6 @@ class CorrectionDataset(Dataset):
         """Load correction metadata from Zarr."""
         corrections = []
 
-        print(f"\n{'='*60}")
-        print(f"DEBUG _load_corrections:")
-        print(f"  self.corrections_path: '{self.corrections_path}'")
-        print(f"  str(self.corrections_path): '{str(self.corrections_path)}'")
-        print(f"  type: {type(self.corrections_path)}")
-        print(f"  exists(): {self.corrections_path.exists()}")
-        print(f"{'='*60}\n")
-
         logger.info(f"Loading corrections from: {self.corrections_path}")
 
         if not self.corrections_path.exists():
@@ -93,9 +80,7 @@ class CorrectionDataset(Dataset):
             return corrections
 
         path_str = str(self.corrections_path)
-        print(f"DEBUG: About to call zarr.open_group with path_str='{path_str}'")
         z = zarr.open_group(path_str, mode='r')
-        print(f"DEBUG: zarr.open_group succeeded!")
 
         for correction_id in z.keys():
             corr_group = z[correction_id]
@@ -164,10 +149,15 @@ class CorrectionDataset(Dataset):
         """
         correction = self.corrections[idx]
 
-        # Load data from Zarr
+        # Load data using ImageDataInterface for consistent data loading
+        from cellmap_flow.image_data_interface import ImageDataInterface
         try:
-            raw = zarr.open(correction['raw_path'], mode='r')[:]
-            mask = zarr.open(correction['mask_path'], mode='r')[:]
+            raw = ImageDataInterface(
+                correction['raw_path'], normalize=False
+            ).to_ndarray_ts()
+            mask = ImageDataInterface(
+                correction['mask_path'], normalize=False
+            ).to_ndarray_ts()
         except Exception as e:
             raise FileNotFoundError(
                 f"Failed loading correction '{correction.get('id', idx)}' "

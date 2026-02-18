@@ -13,12 +13,12 @@ from cellmap_flow.finetune.lora_wrapper import (
     save_lora_adapter,
 )
 
-from cellmap_flow.finetune.dataset import (
+from cellmap_flow.finetune.correction_dataset import (
     CorrectionDataset,
     create_dataloader,
 )
 
-from cellmap_flow.finetune.trainer import (
+from cellmap_flow.finetune.lora_trainer import (
     LoRAFinetuner,
     DiceLoss,
     CombinedLoss,
