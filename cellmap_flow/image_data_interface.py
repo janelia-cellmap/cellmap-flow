@@ -52,6 +52,7 @@ class ImageDataInterface:
         else:
             self.output_voxel_size = self.voxel_size
         self.normalize = normalize
+        logger.warning(str(self.info))
 
     @property
     def ts(self):
@@ -86,4 +87,5 @@ class ImageDataInterface:
             self.axes_names,
             self.custom_fill_value,
         )
+        # logger.warning(f"Read data with shape {res.shape} from dataset {self.path} with ROI {roi} and output voxel size {self.output_voxel_size}")
         return res

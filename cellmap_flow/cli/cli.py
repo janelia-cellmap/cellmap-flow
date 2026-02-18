@@ -3,6 +3,7 @@ Dynamic CLI generator that automatically detects ModelConfig subclasses
 and creates CLI commands based on their __init__ parameters.
 """
 
+import os
 import click
 import logging
 import inspect
@@ -20,7 +21,14 @@ from cellmap_flow.utils.cli_utils import (
     get_all_model_configs,
     print_available_models,
 )
+from cellmap_flow.utils.plugin_manager import (
+    register_plugin,
+    unregister_plugin,
+    list_plugins,
+    load_plugins,
+)
 
+logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
@@ -44,13 +52,64 @@ def cli(log_level):
         cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
         cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
+    logging.basicConfig(level=getattr(logging, log_level.upper()))
 
 
 @cli.command(name="list-models")
 def list_models():
     """List all available model configurations."""
     print_available_models("cellmap_flow")
+
+
+@cli.command(name="register")
+@click.argument("filepath", type=click.Path(exists=True))
+@click.option("--force", is_flag=True, help="Overwrite existing plugin with the same name.")
+def register_cmd(filepath, force):
+    """Register a custom plugin (normalizer, postprocessor, or model config).
+
+    FILEPATH is the path to a .py file defining subclasses of
+    InputNormalizer, PostProcessor, or ModelConfig.
+
+    Example:
+        cellmap_flow register my_normalizer.py
+    """
+    try:
+        dest = register_plugin(filepath, force=force)
+        click.echo(f"Registered plugin: {dest.name}")
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command(name="unregister")
+@click.argument("name")
+def unregister_cmd(name):
+    """Unregister a previously registered plugin by name.
+
+    NAME is the plugin filename (with or without .py extension).
+
+    Example:
+        cellmap_flow unregister my_normalizer
+    """
+    try:
+        unregister_plugin(name)
+        click.echo(f"Unregistered plugin: {name}")
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command(name="list-plugins")
+def list_plugins_cmd():
+    """List all registered plugins."""
+    plugins = list_plugins()
+    if not plugins:
+        click.echo("No plugins registered.")
+        return
+    click.echo("Registered plugins:\n")
+    for plugin_path in plugins:
+        click.echo(f"  {plugin_path.name}  ({plugin_path})")
+
 
 
 @cli.command(name="run")
@@ -115,16 +174,21 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
                 click.echo(f"  - {param_name}", err=True)
         sys.exit(1)
 
+    # Append scale to data_path if present in model config
+    final_data_path = data_path
+    if hasattr(model_config, 'scale') and model_config.scale:
+        final_data_path = os.path.join(data_path, model_config.scale)
+
     # Run the server check or full inference
     if server_check:
-        server = CellMapFlowServer(data_path, model_config)
+        server = CellMapFlowServer(final_data_path, model_config)
         server._chunk_impl(None, None, 2, 2, 2, None)
         click.echo("Server check passed")
     else:
-        command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+        command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
         logger.info(f"Executing command: {command}")
         start_hosts(command, queue, project, model_config.name or model_type)
-        neuroglancer_url = generate_neuroglancer_url(data_path)
+        neuroglancer_url = generate_neuroglancer_url(final_data_path)
         click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
 
@@ -169,17 +233,22 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
 
+        # Append scale to data_path if present in model config
+        final_data_path = data_path
+        if hasattr(model_config, 'scale') and model_config.scale:
+            final_data_path = os.path.join(data_path, model_config.scale)
+
         # Run server check or full inference
         if server_check:
-            server = CellMapFlowServer(data_path, model_config)
+            server = CellMapFlowServer(final_data_path, model_config)
             server._chunk_impl(None, None, 2, 2, 2, None)
             click.echo("Server check passed")
         else:
-            command = f"{SERVER_COMMAND} {model_config.command} -d {data_path}"
+            command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             start_hosts(command, queue, project, base_name)
-            neuroglancer_url = generate_neuroglancer_url(data_path)
+            neuroglancer_url = generate_neuroglancer_url(final_data_path)
             click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
     # Add docstring
@@ -241,6 +310,9 @@ def register_all_model_commands():
         except Exception as e:
             logger.warning(f"Failed to register command for {cli_name}: {e}")
 
+
+# Load user plugins before registering model commands
+load_plugins()
 
 # Register all commands at module load time
 register_all_model_commands()

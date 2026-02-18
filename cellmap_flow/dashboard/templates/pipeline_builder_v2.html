@@ -73,6 +73,10 @@
                         <span id="models-toggle">▼</span>
                     </button>
                     <div class="library-items" id="models-items"></div>
+                    <button class="action-btn" style="width: 100%; margin-top: 8px; background: var(--accent-blue);" 
+                            onclick="openCreateModelConfigModal()" title="Create a custom model configuration">
+                        ➕ Create Custom
+                    </button>
                 </div>
 
                 <div class="library-section">
@@ -151,6 +155,10 @@
                         Loading Neuroglancer viewer...
                     </div>
                 </div>
+                <div id="bbx-existing-boxes" style="padding: 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); max-height: 120px; overflow-y: auto; display: none;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">📦 Existing Bounding Boxes (you can delete them in Neuroglancer):</div>
+                    <div id="bbx-boxes-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                </div>
                 <div id="bbx-status" style="padding: 12px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);">
                     Waiting for bounding boxes...
                 </div>
@@ -177,6 +185,51 @@
                 <button class="action-btn" onclick="closeOutputChannelsModal()">Cancel</button>
                 <button class="action-btn" style="background: var(--accent-green); color: white;" 
                         onclick="saveOutputChannels()">✓ Save Channels</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bounding Box JSON Help Modal -->
+    <div id="bbx-json-help-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 600px; max-height: 70vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>📋 Bounding Box JSON Format</h2>
+                <button class="modal-close-btn" onclick="closeBBXJsonHelp()">✕</button>
+            </div>
+            <div id="bbx-json-template-content" class="modal-body">
+                <!-- Loaded dynamically from bbox_json_template.html -->
+                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading template...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeBBXJsonHelp()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Model Config Modal -->
+    <div id="create-model-config-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 600px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>Create Custom Model Configuration</h2>
+                <button class="modal-close-btn" onclick="closeCreateModelConfigModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px;">
+                    <label class="param-label">Model Type</label>
+                    <select id="model-config-type-select" class="param-input" 
+                            onchange="updateModelConfigForm(this.value)" style="width: 100%; padding: 8px;">
+                        <option value="">-- Select Model Type --</option>
+                    </select>
+                </div>
+                
+                <div id="model-config-form-container" style="display: none;">
+                    <div id="model-config-form"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeCreateModelConfigModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;" 
+                        onclick="submitCreateModelConfig()" id="create-model-config-btn">✓ Create Model</button>
             </div>
         </div>
     </div>
@@ -299,7 +352,7 @@
                 }
             }
 
-            // 1. INPUT → first normalizer (if any)
+            // 1. INPUT → first normalizer (if normalizers exist)
             if (pipeline.inputs.length > 0 && pipeline.normalizers.length > 0) {
                 addEdge(pipeline.inputs[0].id, pipeline.normalizers[0].id);
             }
@@ -309,22 +362,30 @@
                 addEdge(pipeline.normalizers[i].id, pipeline.normalizers[i + 1].id);
             }
 
-            // 3. Last normalizer → ALL models (or INPUT → models if no normalizers)
+            // 3. Determine source for models: last normalizer → models (or INPUT → models if no normalizers)
             const sourceForModels = pipeline.normalizers.length > 0 
                 ? pipeline.normalizers[pipeline.normalizers.length - 1].id 
                 : (pipeline.inputs.length > 0 ? pipeline.inputs[0].id : null);
             
-            if (sourceForModels) {
+            if (sourceForModels && pipeline.models.length > 0) {
                 pipeline.models.forEach(model => {
                     addEdge(sourceForModels, model.id);
                 });
             }
 
-            // 4. Chain postprocessors: each model → first postprocessor
-            if (pipeline.postprocessors.length > 0) {
-                pipeline.models.forEach(model => {
-                    addEdge(model.id, pipeline.postprocessors[0].id);
-                });
+            // 4. Determine sink for models: either to postprocessors or directly to output
+            if (pipeline.models.length > 0) {
+                if (pipeline.postprocessors.length > 0) {
+                    // Models → first postprocessor (if postprocessors exist)
+                    pipeline.models.forEach(model => {
+                        addEdge(model.id, pipeline.postprocessors[0].id);
+                    });
+                } else if (pipeline.outputs.length > 0) {
+                    // Models → OUTPUT directly (if no postprocessors but have output)
+                    pipeline.models.forEach(model => {
+                        addEdge(model.id, pipeline.outputs[0].id);
+                    });
+                }
             }
 
             // 5. Chain postprocessors: post1 → post2 → post3 → ...
@@ -332,7 +393,7 @@
                 addEdge(pipeline.postprocessors[i].id, pipeline.postprocessors[i + 1].id);
             }
 
-            // 6. Last postprocessor → OUTPUT (if any)
+            // 6. Last postprocessor → OUTPUT (if postprocessors exist)
             if (pipeline.postprocessors.length > 0 && pipeline.outputs.length > 0) {
                 addEdge(pipeline.postprocessors[pipeline.postprocessors.length - 1].id, pipeline.outputs[0].id);
             }
@@ -450,6 +511,7 @@
 
         // Node management with positions
         let draggedNode = null;
+        let selectedNode = null;  // Track the currently selected/front node
         let dragOffset = { x: 0, y: 0 };
 
         // Connection state
@@ -801,6 +863,113 @@
             document.getElementById('bbx-count-modal').style.display = 'none';
         }
 
+        function injectAnnotationsIntoIframe(iframe, boundingBoxes) {
+            if (!boundingBoxes || boundingBoxes.length === 0) {
+                return;
+            }
+            
+            try {
+                // Wait for Neuroglancer viewer to fully initialize
+                setTimeout(() => {
+                    const iframeWindow = iframe.contentWindow;
+                    
+                    // Try to inject annotations via postMessage
+                    const annotationData = boundingBoxes.map(bbox => ({
+                        type: 'bounding_box',
+                        pointA: bbox.offset,
+                        pointB: [
+                            bbox.offset[0] + bbox.shape[0],
+                            bbox.offset[1] + bbox.shape[1],
+                            bbox.offset[2] + bbox.shape[2]
+                        ]
+                    }));
+                    
+                    // Send message to iframe
+                    iframeWindow.postMessage({
+                        type: 'createAnnotations',
+                        annotations: annotationData
+                    }, '*');
+                    
+                    console.log('Sent annotations to iframe:', annotationData);
+                }, 2000);
+            } catch (err) {
+                console.error('Error injecting annotations into iframe:', err);
+            }
+        }
+
+        function triggerBBXFileUpload(inputNodeId) {
+            const fileInput = document.getElementById(`bbx-file-input-${inputNodeId}`);
+            fileInput.click();
+        }
+
+        function loadBBXFromFile(fileInput, inputNodeId) {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const bboxes = JSON.parse(content);
+                    
+                    // Validate structure
+                    if (!Array.isArray(bboxes)) {
+                        showMessage('Error: JSON must be an array of bounding boxes', 'error');
+                        return;
+                    }
+                    
+                    // Validate each bbox has offset and shape
+                    for (let bbox of bboxes) {
+                        if (!bbox.offset || !bbox.shape || !Array.isArray(bbox.offset) || !Array.isArray(bbox.shape)) {
+                            showMessage('Error: Each bbox must have "offset" and "shape" arrays', 'error');
+                            return;
+                        }
+                        if (bbox.offset.length !== 3 || bbox.shape.length !== 3) {
+                            showMessage('Error: offset and shape must have 3 elements each [z, y, x]', 'error');
+                            return;
+                        }
+                    }
+                    
+                    // Update the input node with loaded bboxes
+                    const inputNode = pipeline.inputs.find(n => n.id === inputNodeId);
+                    if (inputNode) {
+                        inputNode.params = inputNode.params || {};
+                        inputNode.params.bounding_boxes = bboxes;
+                        renderCanvas();
+                        showMessage(`✓ Loaded ${bboxes.length} bounding box(es) from file`, 'success');
+                    }
+                } catch (err) {
+                    showMessage(`Error parsing JSON: ${err.message}`, 'error');
+                }
+                
+                // Reset file input so same file can be re-uploaded
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function showBBXJsonHelp() {
+            // Load template content from the API route
+            fetch('/api/templates/bbox-json')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('bbx-json-template-content').innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Error loading bbox template:', err);
+                    document.getElementById('bbx-json-template-content').innerHTML = 
+                        '<p style="color: red;">Error loading template</p>';
+                });
+            
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('bbx-json-help-modal').style.display = 'block';
+        }
+
+        function closeBBXJsonHelp() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('bbx-json-help-modal').style.display = 'none';
+        }
+
         async function startBBXGeneration() {
             // Use a default or unlimited count - user can draw as many as they want
             const numBoxes = 999;  // Essentially unlimited
@@ -808,7 +977,7 @@
             bbxGeneratorState.numBoxes = numBoxes;
             bbxGeneratorState.createdBoxes = [];
 
-            // Find the input node to get dataset path
+            // Find the input node to get dataset path and existing bounding boxes
             const inputNode = pipeline.inputs.find(n => n.id === bbxGeneratorState.inputNodeId);
             if (!inputNode) {
                 showMessage('Input node not found', 'error');
@@ -820,6 +989,9 @@
                 showMessage('Please set the dataset path on the INPUT node first', 'error');
                 return;
             }
+
+            // Get existing bounding boxes if any
+            const existingBoundingBoxes = inputNode.params?.bounding_boxes || [];
 
             closeBBXCountModal();
             
@@ -834,17 +1006,54 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         dataset_path: datasetPath,
-                        num_boxes: numBoxes
+                        num_boxes: numBoxes,
+                        existing_bounding_boxes: existingBoundingBoxes
                     })
                 });
 
                 const result = await response.json();
                 if (response.ok) {
+                    // Store existing bounding boxes for iframe injection
+                    bbxGeneratorState.existingBoundingBoxes = result.existing_bounding_boxes || [];
+                    
                     // Open the Neuroglancer URL in the modal
                     const viewerContent = document.getElementById('bbx-viewer-content');
-                    viewerContent.innerHTML = `<iframe id="bbx-iframe" src="${result.viewer_url}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+                    const iframe = document.createElement('iframe');
+                    iframe.id = 'bbx-iframe';
+                    iframe.src = result.viewer_url;
+                    iframe.style.width = '100%';
+                    iframe.style.height = '100%';
+                    iframe.style.border = 'none';
+                    viewerContent.innerHTML = '';
+                    viewerContent.appendChild(iframe);
                     
-                    document.getElementById('bbx-status').textContent = `🎯 Draw bounding boxes in Neuroglancer. Click "Done - Save Boxes" when finished.`;
+                    // Wait for iframe to load, then inject annotations
+                    iframe.onload = function() {
+                        injectAnnotationsIntoIframe(iframe, bbxGeneratorState.existingBoundingBoxes);
+                    };
+                    
+                    const boxCount = result.existing_count || 0;
+                    const statusMsg = boxCount > 0 
+                        ? `🎯 Showing ${boxCount} existing box(es). Add more or delete existing ones. Click "Done - Save Boxes" when finished.`
+                        : `🎯 Draw bounding boxes in Neuroglancer. Click "Done - Save Boxes" when finished.`;
+                    document.getElementById('bbx-status').textContent = statusMsg;
+                    
+                    // Display existing bounding boxes in the list
+                    if (result.existing_bounding_boxes && result.existing_bounding_boxes.length > 0) {
+                        const existingBoxesDiv = document.getElementById('bbx-existing-boxes');
+                        const boxesList = document.getElementById('bbx-boxes-list');
+                        existingBoxesDiv.style.display = 'block';
+                        
+                        boxesList.innerHTML = result.existing_bounding_boxes.map((bbox, idx) => {
+                            const offset = bbox.offset || [];
+                            const shape = bbox.shape || [];
+                            return `<div style="background: var(--bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--accent-blue);">
+                                <div><strong>Box ${idx + 1}</strong></div>
+                                <div>Offset: [${offset.join(', ')}]</div>
+                                <div>Shape: [${shape.join(', ')}]</div>
+                            </div>`;
+                        }).join('');
+                    }
                     
                     // Start polling for completed boxes
                     pollBBXGeneration();
@@ -939,6 +1148,190 @@
                 inputNode.params = inputNode.params || {};
                 inputNode.params[paramName] = paramValue;
                 renderCanvas();
+            }
+        }
+
+        // ===== MODEL CONFIG CREATION =====
+        let availableModelConfigTypes = {};
+
+        async function openCreateModelConfigModal() {
+            const modal = document.getElementById('create-model-config-modal');
+            const overlay = document.getElementById('modal-overlay');
+            overlay.style.display = 'block';
+            modal.style.display = 'block';
+            
+            // Fetch available model config types if not already loaded
+            if (Object.keys(availableModelConfigTypes).length === 0) {
+                try {
+                    const response = await fetch('/api/model-config-types');
+                    availableModelConfigTypes = await response.json();
+                    populateModelConfigTypeSelect();
+                } catch (error) {
+                    console.error('Error loading model config types:', error);
+                    alert('Failed to load model types');
+                }
+            }
+        }
+
+        function closeCreateModelConfigModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('create-model-config-modal').style.display = 'none';
+        }
+
+        function populateModelConfigTypeSelect() {
+            const select = document.getElementById('model-config-type-select');
+            select.innerHTML = '<option value="">-- Select Model Type --</option>';
+            
+            Object.entries(availableModelConfigTypes).forEach(([className, config]) => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = `${config.display_name} - ${config.description}`;
+                select.appendChild(option);
+            });
+        }
+
+        function updateModelConfigForm(className) {
+            const container = document.getElementById('model-config-form-container');
+            const formDiv = document.getElementById('model-config-form');
+            
+            if (!className) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            const config = availableModelConfigTypes[className];
+            formDiv.innerHTML = '';
+            
+            // Group parameters into required and optional
+            const required = Object.entries(config.parameters).filter(([_, info]) => info.required);
+            const optional = Object.entries(config.parameters).filter(([_, info]) => !info.required);
+            
+            // Add required parameters section
+            if (required.length > 0) {
+                const requiredDiv = document.createElement('div');
+                requiredDiv.innerHTML = '<h3 style="margin-top: 0; margin-bottom: 12px; color: var(--text-primary);">Required Parameters</h3>';
+                required.forEach(([paramName, paramInfo]) => {
+                    const fieldDiv = createParameterField(paramName, paramInfo);
+                    requiredDiv.appendChild(fieldDiv);
+                });
+                formDiv.appendChild(requiredDiv);
+            }
+            
+            // Add optional parameters section
+            if (optional.length > 0) {
+                const optionalDiv = document.createElement('div');
+                optionalDiv.innerHTML = '<h3 style="margin-top: 16px; margin-bottom: 12px; color: var(--text-secondary);">Optional Parameters</h3>';
+                optional.forEach(([paramName, paramInfo]) => {
+                    const fieldDiv = createParameterField(paramName, paramInfo);
+                    optionalDiv.appendChild(fieldDiv);
+                });
+                formDiv.appendChild(optionalDiv);
+            }
+            
+            container.style.display = 'block';
+        }
+
+        function createParameterField(paramName, paramInfo) {
+            const fieldDiv = document.createElement('div');
+            fieldDiv.style.marginBottom = '12px';
+            
+            const label = document.createElement('label');
+            label.className = 'param-label';
+            label.textContent = paramInfo.description;
+            if (paramInfo.required) {
+                label.textContent += ' *';
+            }
+            fieldDiv.appendChild(label);
+            
+            const input = document.createElement('input');
+            input.id = `param-${paramName}`;
+            input.className = 'param-input';
+            input.placeholder = paramInfo.description;
+            input.style.width = '100%';
+            input.style.padding = '8px';
+            input.style.marginTop = '4px';
+            
+            if (paramInfo.input_type === 'number') {
+                input.type = 'number';
+                input.step = 'any';
+            } else if (paramInfo.input_type === 'file') {
+                input.type = 'text';
+                input.placeholder = `e.g., /path/to/${paramName}`;
+            } else if (paramInfo.input_type === 'textarea') {
+                const textarea = document.createElement('textarea');
+                textarea.id = `param-${paramName}`;
+                textarea.className = 'param-input';
+                textarea.placeholder = `e.g., ["ch0", "ch1"] or (16, 16, 16)`;
+                textarea.style.width = '100%';
+                textarea.style.padding = '8px';
+                textarea.style.minHeight = '60px';
+                textarea.style.marginTop = '4px';
+                textarea.style.fontFamily = 'monospace';
+                fieldDiv.appendChild(textarea);
+                return fieldDiv;
+            } else {
+                input.type = 'text';
+            }
+            
+            if (paramInfo.default !== undefined) {
+                input.placeholder += ` (default: ${paramInfo.default})`;
+            }
+            
+            fieldDiv.appendChild(input);
+            return fieldDiv;
+        }
+
+        async function submitCreateModelConfig() {
+            const className = document.getElementById('model-config-type-select').value;
+            if (!className) {
+                alert('Please select a model type');
+                return;
+            }
+            
+            const config = availableModelConfigTypes[className];
+            const params = {};
+            
+            // Collect all parameter values
+            Object.keys(config.parameters).forEach(paramName => {
+                const input = document.getElementById(`param-${paramName}`);
+                if (input) {
+                    const value = input.value.trim();
+                    params[paramName] = value || null;
+                }
+            });
+            
+            try {
+                const response = await fetch('/api/create-model-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ class_name: className, params })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                    return;
+                }
+                
+                const result = await response.json();
+                console.log('Model config created:', result);
+                
+                // Add the new model to the UI
+                const modelContainer = document.getElementById('models-items');
+                const elem = document.createElement('div');
+                elem.className = 'library-item';
+                elem.textContent = result.model_name;
+                elem.draggable = true;
+                elem.dataset.type = 'model';
+                elem.dataset.name = result.model_name;
+                elem.addEventListener('dragstart', handleDragStart);
+                modelContainer.appendChild(elem);
+                
+                alert(`✓ Created ${result.model_name}`);
+                closeCreateModelConfigModal();
+            } catch (error) {
+                console.error('Error creating model config:', error);
+                alert('Failed to create model config');
             }
         }
 
@@ -1093,9 +1486,18 @@
                         inputContent += `
                             <div class="param-group">
                                 <label class="param-label">Bounding Boxes</label>
-                                <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
-                                    📦 Generate (${bboxDisplay})
-                                </button>
+                                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                    <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
+                                        📦 Generate (${bboxDisplay})
+                                    </button>
+                                    <button class="configure-btn" style="background: var(--accent-blue); flex: 0;" onclick="triggerBBXFileUpload('${node.id}')">
+                                        📂 Load
+                                    </button>
+                                    <button class="configure-btn" style="background: var(--accent-green); flex: 0; padding: 6px 10px;" onclick="showBBXJsonHelp()">
+                                        ?
+                                    </button>
+                                </div>
+                                <input type="file" id="bbx-file-input-${node.id}" accept=".json" style="display: none;" onchange="loadBBXFromFile(this, '${node.id}')">
                                 <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
                                     ${bboxDisplay}
                                 </div>
@@ -1230,6 +1632,9 @@
 
                 if (!actualNode) return;
 
+                // Bring this node to front
+                bringNodeToFront(nodeEl);
+
                 draggedNode = {
                     element: nodeEl,
                     node: actualNode,
@@ -1245,6 +1650,17 @@
             });
 
             header.style.cursor = 'grab';
+        }
+
+        function bringNodeToFront(nodeEl) {
+            // Reset previous selected node to auto z-index
+            if (selectedNode && selectedNode !== nodeEl) {
+                selectedNode.style.zIndex = 'auto';
+            }
+            
+            // Set this node as selected and bring to front
+            selectedNode = nodeEl;
+            nodeEl.style.zIndex = 999;  // 999 so dragging can use 1000
         }
 
         function handleParamChange(input, nodeId, nodeType) {
@@ -2173,7 +2589,8 @@
                 const finalY = Math.max(0, draggedNode.originalY + dy);
 
                 draggedNode.node.position = { x: finalX, y: finalY };
-                draggedNode.element.style.zIndex = 'auto';
+                // Keep z-index at 999 since it's selected, instead of resetting to auto
+                draggedNode.element.style.zIndex = 999;
                 draggedNode.element.style.cursor = 'auto';
                 draggedNode = null;
 
