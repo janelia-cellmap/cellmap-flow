@@ -537,6 +537,12 @@ def main():
         help="Fixed number of random samples per crop per epoch (for --data-yaml)"
     )
     parser.add_argument(
+        "--samples-per-epoch",
+        type=int,
+        default=None,
+        help="Total samples per epoch, distributed proportionally across crops (for --data-yaml)"
+    )
+    parser.add_argument(
         "--patch-shape",
         type=int,
         nargs=3,
@@ -618,6 +624,14 @@ def main():
         action="store_true",
         help="Balance fg/bg loss contribution so each class is weighted equally, "
              "regardless of scribble voxel counts. Helps prevent foreground overprediction. (default: off)"
+    )
+    parser.add_argument(
+        "--select-channel",
+        type=str,
+        default=None,
+        help="Select a single output channel for finetuning from a multi-channel model. "
+             "Can be a channel name (e.g., 'mito') or a 0-based index (e.g., '2'). "
+             "The model output is sliced to this channel before computing loss against the single-channel target."
     )
     parser.add_argument(
         "--no-mixed-precision",
@@ -743,8 +757,38 @@ def main():
     base_model = model_config.config.model
     logger.info(f"Model loaded: {type(base_model).__name__}")
 
+    # Resolve --select-channel to an integer index
     select_channel = None
-    logger.info(f"Model outputs {model_config.config.output_channels} channel(s), no channel selection needed during training")
+    num_output_channels = model_config.config.output_channels
+    if args.select_channel is not None:
+        # Try as integer index first
+        try:
+            idx = int(args.select_channel)
+            if idx < 0 or idx >= num_output_channels:
+                raise ValueError(
+                    f"Channel index {idx} out of range [0, {num_output_channels - 1}]"
+                )
+            select_channel = idx
+        except ValueError as e:
+            if "out of range" in str(e):
+                raise
+            # Try as channel name
+            channel_names = [c.lower() for c in (args.channels or [])]
+            target = args.select_channel.lower()
+            if target in channel_names:
+                select_channel = channel_names.index(target)
+            else:
+                raise ValueError(
+                    f"Unknown channel '{args.select_channel}'. "
+                    f"Available channels: {args.channels}. "
+                    f"Or use a 0-based index (0-{num_output_channels - 1})."
+                )
+        logger.info(
+            f"Model outputs {num_output_channels} channel(s), "
+            f"selected channel {select_channel} ('{args.select_channel}') for finetuning"
+        )
+    else:
+        logger.info(f"Model outputs {num_output_channels} channel(s), training all channels")
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
@@ -779,6 +823,7 @@ def main():
                 output_shape=tuple(args.output_shape),
                 batch_size=args.batch_size,
                 samples_per_crop=args.samples_per_crop,
+                samples_per_epoch=args.samples_per_epoch,
                 augment=not args.no_augment,
                 num_workers=args.num_workers,
                 shuffle=True,

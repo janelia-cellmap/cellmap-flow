@@ -27,12 +27,20 @@ def get_finetune_models():
             for model_config in g.models_config:
                 try:
                     config = model_config.config
+                    # Get channel names from various possible attributes
+                    channel_names = None
+                    for attr in ["channels", "channels_names", "class_names"]:
+                        val = getattr(config, attr, None) or getattr(model_config, attr, None)
+                        if val:
+                            channel_names = list(val)
+                            break
                     models.append(
                         {
                             "name": model_config.name,
                             "write_shape": list(config.write_shape),
                             "output_voxel_size": list(config.output_voxel_size),
                             "output_channels": config.output_channels,
+                            "channel_names": channel_names,
                         }
                     )
                 except Exception as e:
@@ -171,6 +179,7 @@ def submit_finetuning():
         margin = data.get("margin", 0.3)
         balance_classes = data.get("balance_classes", False)
         queue = data.get("queue", "gpu_h100")
+        select_channel = data.get("select_channel", None)  # e.g. "mito" or "2"
 
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
@@ -268,6 +277,7 @@ def submit_finetuning():
             margin=margin,
             balance_classes=balance_classes,
             queue=queue,
+            select_channel=select_channel,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")

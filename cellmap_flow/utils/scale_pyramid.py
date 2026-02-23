@@ -14,20 +14,38 @@ from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
 logger = logging.getLogger(__name__)
 
 
+def _get_precomputed_num_scales(dataset_path):
+    """Get number of scales from a precomputed:// dataset's info file."""
+    import json
+
+    local_path = dataset_path[len("precomputed://"):]
+    if not local_path.startswith("/"):
+        local_path = "/" + local_path
+    info_path = os.path.join(local_path, "info")
+    with open(info_path) as f:
+        info = json.load(f)
+    return len(info.get("scales", []))
+
+
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+    is_precomputed = dataset_path.startswith("precomputed://")
+
     # if multiscale dataset
-    if (
-        dataset_path.split("/")[-1].startswith("s")
-        and dataset_path.split("/")[-1][1:].isdigit()
-    ):
-        dataset_path = dataset_path.rsplit("/", 1)[0]
-        is_multiscale = True
-    else:
-        try:
+    try:
+        if (
+            dataset_path.split("/")[-1].startswith("s")
+            and dataset_path.split("/")[-1][1:].isdigit()
+        ):
+            dataset_path = dataset_path.rsplit("/", 1)[0]
+            is_multiscale = True
+        elif is_precomputed:
+            num_scales = _get_precomputed_num_scales(dataset_path)
+            is_multiscale = num_scales > 1
+        else:
             is_multiscale = check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]
-        except Exception as e:
-            logger.error(e)
-            is_multiscale = False
+    except Exception as e:
+        logger.error(e)
+        is_multiscale = False
 
     if ".zarr" in dataset_path:
         filetype = "zarr"
@@ -38,8 +56,12 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     layers = []
     if not wrap_raw:
+        if is_precomputed:
+            source = dataset_path
+        else:
+            source = f"{filetype}://{dataset_path}"
         return neuroglancer.ImageLayer(
-            source= f"{filetype}://{dataset_path}",
+            source=source,
             shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
     #uicontrol vec3 color color(default="white");
     void main(){{emitRGB(color * normalized());}}""",
@@ -47,14 +69,20 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_multiscale:
         try:
-            scales = [
-                f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-            ]
-            scales.sort(key=lambda x: int(x[1:]))
+            if is_precomputed:
+                num_scales = _get_precomputed_num_scales(dataset_path)
+                scales = [f"s{i}" for i in range(num_scales)]
+            else:
+                scales = [
+                    f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
+                ]
+                scales.sort(key=lambda x: int(x[1:]))
             for scale in scales:
-                image = ImageDataInterface(
-                    f"{os.path.join(dataset_path, scale)}", normalize=normalize
-                )
+                if is_precomputed:
+                    scale_path = f"{dataset_path}/{scale}"
+                else:
+                    scale_path = os.path.join(dataset_path, scale)
+                image = ImageDataInterface(scale_path, normalize=normalize)
                 # Use axes from the actual dataset - neuroglancer will use them as-is
                 layers.append(
                     neuroglancer.LocalVolume(

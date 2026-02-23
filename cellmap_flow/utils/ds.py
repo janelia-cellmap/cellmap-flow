@@ -225,6 +225,21 @@ def open_ds_tensorstore(
         filetype = "neuroglancer_precomputed"
         kvstore = dataset_path
         extra_args = {"scale_index": scale_index}
+    elif dataset_path.startswith("precomputed://"):
+        local_path = dataset_path[len("precomputed://"):]
+        if not local_path.startswith("/"):
+            local_path = "/" + local_path
+        if ends_with_scale(local_path):
+            scale_index = int(local_path.rsplit("/s")[1])
+            local_path = local_path.rsplit("/s")[0]
+        else:
+            scale_index = 0
+        filetype = "neuroglancer_precomputed"
+        kvstore = {
+            "driver": "file",
+            "path": os.path.normpath(local_path),
+        }
+        extra_args = {"scale_index": scale_index}
     else:
         kvstore = {
             "driver": "file",
@@ -249,8 +264,8 @@ def open_ds_tensorstore(
     else:
         dataset_future = ts.open(spec, read=False, write=True)
 
-    if dataset_path.startswith("gs://"):
-        # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
+    if dataset_path.startswith("gs://") or dataset_path.startswith("precomputed://"):
+        # neuroglancer_precomputed driver includes a channel dimension, index it out
         ts_dataset = dataset_future.result()[ts.d["channel"][0]]
     else:
         ts_dataset = dataset_future.result()
@@ -813,6 +828,18 @@ def get_ds_info(path: str, mode: str = "r"):
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
         file_type = "gs"
+        return voxel_size, chunk_shape, shape, roi, axes_names, file_type
+
+    elif path.startswith("precomputed://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        voxel_size = Coordinate(
+            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
+        )
+        axes_names = list(ts_info.spec().transform.input_labels[:3])
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
+        file_type = "precomputed"
         return voxel_size, chunk_shape, shape, roi, axes_names, file_type
 
     filename, ds_name = split_dataset_path(path)

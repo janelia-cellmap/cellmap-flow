@@ -202,6 +202,7 @@ class FinetuneJobManager:
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
         balance_classes: bool = False,
+        select_channel: Optional[str] = None,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -338,12 +339,10 @@ class FinetuneJobManager:
                     for ds_info in datasets.values():
                         raw_path = ds_info.get("raw")
                         if raw_path:
-                            # Go up to the .zarr root for serving
-                            zarr_idx = raw_path.find(".zarr")
-                            if zarr_idx >= 0:
-                                serve_data_path = raw_path[:zarr_idx + 5]
-                            else:
-                                serve_data_path = raw_path
+                            # Use the full raw path (not just the .zarr root)
+                            # The server's ImageDataInterface can handle
+                            # both zarr groups (with multiscales) and direct arrays
+                            serve_data_path = raw_path
                             break
                     if serve_data_path:
                         self.logger.info(f"Extracted dataset path from YAML for inference: {serve_data_path}")
@@ -373,28 +372,42 @@ class FinetuneJobManager:
             cli_command += f"--model-script {model_config.script_path} "
 
         if is_yaml_data:
-            # Get input/output shapes from model config
-            read_shape = self._get_model_metadata(model_config, "read_shape", None)
-            write_shape = self._get_model_metadata(model_config, "write_shape", None)
-            if read_shape is None or write_shape is None:
-                # Fall back to computing from voxel sizes and a default physical size
+            # Get input/output shapes from model config (in nm) and convert to voxels
+            read_shape_nm = self._get_model_metadata(model_config, "read_shape", None)
+            write_shape_nm = self._get_model_metadata(model_config, "write_shape", None)
+            if read_shape_nm is None or write_shape_nm is None:
                 try:
                     config = model_config.config
-                    read_shape = list(config.read_shape)
-                    write_shape = list(config.write_shape)
+                    read_shape_nm = list(config.read_shape)
+                    write_shape_nm = list(config.write_shape)
                 except Exception:
-                    self.logger.warning("Could not determine read/write shape from model config, using defaults")
-                    read_shape = [96, 96, 96]
-                    write_shape = [64, 64, 64]
-            if not isinstance(read_shape, list):
-                read_shape = list(read_shape)
-            if not isinstance(write_shape, list):
-                write_shape = list(write_shape)
+                    self.logger.warning("Could not determine read/write shape from model config, using defaults (voxels)")
+                    read_shape_nm = None
+                    write_shape_nm = None
+            if not isinstance(read_shape_nm, list) and read_shape_nm is not None:
+                read_shape_nm = list(read_shape_nm)
+            if not isinstance(write_shape_nm, list) and write_shape_nm is not None:
+                write_shape_nm = list(write_shape_nm)
+
+            # Convert from nm to voxels by dividing by voxel size
+            if read_shape_nm is not None:
+                input_shape_voxels = [int(s / v) for s, v in zip(read_shape_nm, input_voxel_size)]
+            else:
+                input_shape_voxels = [96, 96, 96]
+            if write_shape_nm is not None:
+                output_shape_voxels = [int(s / v) for s, v in zip(write_shape_nm, output_voxel_size)]
+            else:
+                output_shape_voxels = [64, 64, 64]
+
+            self.logger.info(
+                f"YAML data shapes: read_nm={read_shape_nm} write_nm={write_shape_nm} "
+                f"voxel_size={input_voxel_size} -> input_voxels={input_shape_voxels} output_voxels={output_shape_voxels}"
+            )
 
             cli_command += (
                 f"--data-yaml {corrections_path} "
-                f"--input-shape {' '.join(map(str, read_shape))} "
-                f"--output-shape {' '.join(map(str, write_shape))} "
+                f"--input-shape {' '.join(map(str, input_shape_voxels))} "
+                f"--output-shape {' '.join(map(str, output_shape_voxels))} "
             )
         else:
             cli_command += f"--corrections {corrections_path} "
@@ -438,6 +451,10 @@ class FinetuneJobManager:
         # Add class balancing flag
         if balance_classes:
             cli_command += "--balance-classes "
+
+        # Add channel selection for single-organelle finetuning
+        if select_channel:
+            cli_command += f"--select-channel {select_channel} "
 
         cli_command = f"stdbuf -oL {cli_command} 2>&1 | tee {log_file}"
 

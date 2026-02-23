@@ -37,7 +37,8 @@ dependencies = [
     "neuroglancer",
     "pydantic",
     "funlib.persistence==0.6.1",
-    "daisy"
+    "daisy",
+    "peft"
     ]
 
 # extras

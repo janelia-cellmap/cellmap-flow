@@ -45,34 +45,28 @@ def load_config(path: str) -> Dict[str, Any]:
     if "data_path" not in config:
         logger.error("Missing required field in YAML: data_path")
         sys.exit(1)
-    if "charge_group" not in config:
-        logger.error("Missing required field in YAML: charge_group")
-        sys.exit(1)
-
     # If queue is missing, set default
     if "queue" not in config or not config["queue"]:
-        logger.warning(
-            f"Missing 'queue' in YAML, using default: {DEFAULT_SERVER_QUEUE}"
-        )
         config["queue"] = DEFAULT_SERVER_QUEUE
 
-    # Models must be present and non-empty (can be dict or list for backward compatibility)
-    if "models" not in config:
-        logger.error("YAML must contain 'models' field")
-        sys.exit(1)
-    
-    if isinstance(config["models"], dict):
-        if not config["models"]:
-            logger.error("YAML 'models' dict is empty")
-            sys.exit(1)
+    # Models are optional - if not present, flow will open for data viewing only
+    if "models" not in config or not config["models"]:
+        logger.info("No models specified in YAML - will open for data viewing only")
+        config["models"] = {}
+    elif isinstance(config["models"], dict):
+        pass  # valid format
     elif isinstance(config["models"], list):
-        if not config["models"]:
-            logger.error("YAML 'models' list is empty")
-            sys.exit(1)
-        # logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
+        pass  # valid format (backward compatibility)
     else:
         logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)
+
+    # charge_group is required only when models are specified
+    if "charge_group" not in config:
+        if config["models"]:
+            logger.error("Missing required field in YAML: charge_group (required when models are specified)")
+            sys.exit(1)
+        config["charge_group"] = None
 
     return config
 

@@ -172,13 +172,17 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     logger.info(f"Queue: {queue}")
 
     # Build model configuration objects dynamically
-    logger.info("Building model configurations...")
-    g.models_config = build_models(config["models"])
+    if config["models"]:
+        logger.info("Building model configurations...")
+        g.models_config = build_models(config["models"])
 
-    logger.info(f"Configured {len(g.models_config)} model(s):")
-    for i, model in enumerate(g.models_config, 1):
-        model_name = getattr(model, "name", None) or type(model).__name__
-        logger.info(f"  {i}. {model_name} ({type(model).__name__})")
+        logger.info(f"Configured {len(g.models_config)} model(s):")
+        for i, model in enumerate(g.models_config, 1):
+            model_name = getattr(model, "name", None) or type(model).__name__
+            logger.info(f"  {i}. {model_name} ({type(model).__name__})")
+    else:
+        g.models_config = []
+        logger.info("No models configured - opening data viewer only")
 
     # Validation mode - exit without running
     if validate_only:
@@ -188,8 +192,15 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Queue: {queue}")
         return
 
-    # Run the models
-    run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
+    if not g.models_config:
+        # No models - just open neuroglancer for data viewing
+        generate_neuroglancer_url(data_path, wrap_raw=wrap_raw)
+        logger.info("Neuroglancer URL generated for data viewing (no models)")
+        while True:
+            pass
+    else:
+        # Run the models
+        run_multiple(g.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw)
 
 
 if __name__ == "__main__":

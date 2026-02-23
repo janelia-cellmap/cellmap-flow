@@ -233,11 +233,27 @@ class YamlCropDataset(Dataset):
                 n = max(1, round(samples_per_epoch * vol / total_vol))
                 self.sample_index.extend([i] * n)
         else:
-            # Auto: ~1 sample per non-overlapping output patch
-            for i, crop_info in enumerate(self.crops):
+            # Auto: proportional to crop volume, capped at a reasonable total.
+            # Compute raw patch counts first, then scale down if too many.
+            raw_counts = []
+            for crop_info in self.crops:
                 shape = crop_info["crop_shape"]
                 n_patches = max(1, int(np.prod(shape / self.output_shape)))
-                self.sample_index.extend([i] * n_patches)
+                raw_counts.append(n_patches)
+
+            total_raw = sum(raw_counts)
+            max_samples = max(100, len(self.crops) * 10)  # ~10 samples/crop, min 100
+            scale = min(1.0, max_samples / total_raw) if total_raw > 0 else 1.0
+
+            for i, n in enumerate(raw_counts):
+                n_scaled = max(1, round(n * scale))
+                self.sample_index.extend([i] * n_scaled)
+
+            if scale < 1.0:
+                logger.info(
+                    f"Auto-sampling: scaled {total_raw} raw patches -> "
+                    f"{len(self.sample_index)} samples (cap={max_samples})"
+                )
 
         logger.info(f"Total samples per epoch: {len(self.sample_index)}")
 

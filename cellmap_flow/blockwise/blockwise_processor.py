@@ -179,6 +179,18 @@ class CellMapFlowBlockwiseProcessor:
         self.idi_raw = ImageDataInterface(
             self.input_path, voxel_size=self.input_voxel_size
         )
+        self.data_axes = list(self.idi_raw.axes_names[:3])
+        logger.info(f"Data axes order: {self.data_axes}")
+
+        # Bounding boxes from the pipeline builder always come in z,y,x order
+        # (neuroglancer convention). Check if we need to reverse them to match data axes.
+        self._bbox_needs_reverse = (
+            len(self.data_axes) >= 3
+            and self.data_axes[0].lower() == 'x'
+        )
+        if self._bbox_needs_reverse:
+            logger.info("Data is in x,y,z order — will reverse bounding box coordinates from z,y,x to x,y,z")
+
         self.output_arrays = []
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
@@ -188,8 +200,13 @@ class CellMapFlowBlockwiseProcessor:
             if len(self.bounding_boxes)>1:
                 raise Exception("separate_bounding_boxes_zarrs can only be used with one bounding box")
             bounding_box = self.bounding_boxes[0]
-            offset = tuple(bounding_box.get("offset", [0, 0, 0]))
-            shape = tuple(bounding_box.get("shape", [0, 0, 0]))
+            offset = list(bounding_box.get("offset", [0, 0, 0]))
+            shape = list(bounding_box.get("shape", [0, 0, 0]))
+            if self._bbox_needs_reverse:
+                offset = offset[::-1]
+                shape = shape[::-1]
+            offset = tuple(offset)
+            shape = tuple(shape)
             roi = daisy.Roi(offset, shape)
             roi2 = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
             if roi2 != roi:
@@ -261,9 +278,9 @@ class CellMapFlowBlockwiseProcessor:
                             else (1,) + tuple(self.output_voxel_size)
                         ),
                         axis_names=(
-                            ["z", "y", "x"]
+                            self.data_axes
                             if len(final_output_shape) == 3
-                            else ["c", "z", "y", "x"]
+                            else ["c"] + self.data_axes
                         ),
                         units=(
                             ["nanometer"] * 3
@@ -293,19 +310,19 @@ class CellMapFlowBlockwiseProcessor:
                             metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
                             metadata_translation = list(final_offset)
                             metadata_units = [""] + ["nanometer"] * 3
-                            metadata_axes = ["c", "z", "y", "x"]
+                            metadata_axes = ["c"] + self.data_axes
                         else:
                             # 3D metadata
                             metadata_voxel_size = self.output_voxel_size
                             metadata_translation = list(final_offset)
                             metadata_units = ["nanometer"] * 3
-                            metadata_axes = ["z", "y", "x"]
+                            metadata_axes = self.data_axes
                     else:
                         # List format - 3D metadata
                         metadata_voxel_size = self.output_voxel_size
                         metadata_translation = list(final_offset)
                         metadata_units = ["nanometer"] * 3
-                        metadata_axes = ["z", "y", "x"]
+                        metadata_axes = self.data_axes
 
                     zattrs = generate_singlescale_metadata(
                         arr_name="s0",
@@ -482,9 +499,12 @@ class CellMapFlowBlockwiseProcessor:
                 conflicts = True
             
             for i, bbox in enumerate(bounding_boxes):
-                offset = tuple(bbox.get("offset", [0, 0, 0]))
-                shape = tuple(bbox.get("shape", [0, 0, 0]))
-                roi = daisy.Roi(offset, shape)
+                offset = list(bbox.get("offset", [0, 0, 0]))
+                shape = list(bbox.get("shape", [0, 0, 0]))
+                if self._bbox_needs_reverse:
+                    offset = offset[::-1]
+                    shape = shape[::-1]
+                roi = daisy.Roi(tuple(offset), tuple(shape))
                 roi = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
                 rois_to_process.append(roi)
                 logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
@@ -495,6 +515,7 @@ class CellMapFlowBlockwiseProcessor:
             logger.info(f"Processing entire dataset: {total_write_roi}")
 
         # Process each ROI
+        tasks = []
         for roi_idx, total_write_roi in enumerate(rois_to_process):
             total_read_roi = total_write_roi.grow(context, context)
             
@@ -521,10 +542,11 @@ class CellMapFlowBlockwiseProcessor:
                 timeout=None,
                 num_workers=self.workers,
             )
+            tasks.append(task)
 
-            task_state = daisy.run_blockwise([task])
-            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
-
+        task_state = daisy.run_blockwise(tasks)
+        for roi_idx, task in enumerate(tasks):
+            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)}")
 
 def check_block(tmp_dir, block: daisy.Block) -> bool:
     return (tmp_dir / f"{block.block_id[1]}").exists()

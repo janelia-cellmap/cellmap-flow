@@ -153,6 +153,19 @@
       </div>
     </div>
 
+    <!-- Channel Selection (only visible for multi-channel models) -->
+    <div class="row" id="channelSelectionRow" style="display: none;">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="selectChannel" class="form-label">Target Channel</label>
+          <select id="selectChannel" class="form-select">
+            <option value="">All channels (train all outputs)</option>
+          </select>
+          <small class="text-muted">For multi-channel models: select which organelle to finetune</small>
+        </div>
+      </div>
+    </div>
+
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
@@ -687,16 +700,45 @@ document.addEventListener("DOMContentLoaded", function () {
       Math.round(s / model.output_voxel_size[i])
     );
 
+    const channelInfo = model.channel_names
+      ? `${model.output_channels} (${model.channel_names.join(', ')})`
+      : `${model.output_channels}`;
+
     modelInfoContent.innerHTML = `
       <small>
         <strong>Name:</strong> ${model.name}<br>
         <strong>Output Size (nm):</strong> [${model.write_shape.join(', ')}]<br>
         <strong>Voxel Size (nm):</strong> [${model.output_voxel_size.join(', ')}]<br>
         <strong>Crop Shape (voxels):</strong> [${voxelShape.join(', ')}]<br>
-        <strong>Channels:</strong> ${model.output_channels}
+        <strong>Channels:</strong> ${channelInfo}
       </small>
     `;
     modelInfo.style.display = "block";
+
+    // Update channel selector dropdown
+    const channelSelect = document.getElementById("selectChannel");
+    const channelRow = document.getElementById("channelSelectionRow");
+    channelSelect.innerHTML = '<option value="">All channels (train all outputs)</option>';
+
+    if (model.output_channels > 1 && model.channel_names) {
+      model.channel_names.forEach((name, idx) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = `${idx}: ${name}`;
+        channelSelect.appendChild(opt);
+      });
+      channelRow.style.display = "";
+    } else if (model.output_channels > 1) {
+      for (let i = 0; i < model.output_channels; i++) {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = `Channel ${i}`;
+        channelSelect.appendChild(opt);
+      }
+      channelRow.style.display = "";
+    } else {
+      channelRow.style.display = "none";
+    }
   }
 
   // === FINETUNING JOB MANAGEMENT ===
@@ -764,6 +806,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const checkpointPath = document.getElementById("checkpointPath").value.trim();
       if (checkpointPath) {
         params.checkpoint_path = checkpointPath;
+      }
+
+      // Add channel selection for single-organelle finetuning
+      const selectChannel = document.getElementById("selectChannel").value;
+      if (selectChannel) {
+        params.select_channel = selectChannel;
       }
 
       // Disable button and show loading
