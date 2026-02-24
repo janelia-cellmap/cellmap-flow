@@ -57,7 +57,11 @@ class CellMapFlowServer:
         for axis_name in ["c^", "c", "channel"]:
             if axis_name in self.axes:
                 self.axes.remove(axis_name)
-        # add channel axis at the end
+
+        # The model output spatial axes match the input data axes (not the
+        # hardcoded default which assumes z,y,x).  Override so that
+        # _reorder_to_zarr_axes applies the correct permutation.
+        self.model_output_axes = ("c",) + tuple(self.axes)
 
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5

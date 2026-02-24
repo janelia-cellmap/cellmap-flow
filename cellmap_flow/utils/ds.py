@@ -348,17 +348,6 @@ def to_ndarray_tensorstore(
                 mode="constant",
                 constant_values=fill_value,
             )
-    # else:
-    #     padded_data = (
-    #         np.ones(output_shape, dtype=dataset.dtype.numpy_dtype) * fill_value
-    #     )
-    #     padded_slices = tuple(
-    #         slice(valid_slice.start - s.start, valid_slice.stop - s.start)
-    #         for s, valid_slice in zip(roi_slices, valid_slices)
-    #     )
-
-    #     # Read the region of interest from the dataset
-    #     padded_data[padded_slices] = dataset[valid_slices].read().result()
 
     if rescale_factor > 1:
         rescale_factor = int(voxel_size[0] / output_voxel_size[0])
