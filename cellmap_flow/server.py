@@ -44,6 +44,7 @@ class CellMapFlowServer:
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
         self.output_dtype = model_config.output_dtype
+        self.model_output_axes = model_config.chunk_output_axes
 
         self.inferencer = Inferencer(model_config)
         self.restart_callback = restart_callback
@@ -57,7 +58,11 @@ class CellMapFlowServer:
         for axis_name in ["c^", "c", "channel"]:
             if axis_name in self.axes:
                 self.axes.remove(axis_name)
-        # add channel axis at the end
+
+        # The model output spatial axes match the input data axes (not the
+        # hardcoded default which assumes z,y,x).  Override so that
+        # _reorder_to_zarr_axes applies the correct permutation.
+        self.model_output_axes = ("c",) + tuple(self.axes)
 
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5
@@ -112,6 +117,7 @@ class CellMapFlowServer:
         @self.app.route(
             "/<path:dataset>/s<int:scale>/<int:chunk_z>.<int:chunk_y>.<int:chunk_x>.<int:chunk_c>",
             methods=["GET"],
+            strict_slashes=False,
         )
         def chunk(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
             return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c)
@@ -230,6 +236,9 @@ class CellMapFlowServer:
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
+        # Reorder model output axes to Zarr-expected (z, y, x, c) order
+        chunk_data = self._reorder_to_zarr_axes(chunk_data)
+
         chunk_data = chunk_data.astype(g.get_output_dtype(self.output_dtype))
 
         current_time = time.time()
@@ -258,15 +267,38 @@ class CellMapFlowServer:
                 continue
 
         # Encode using Zarr format
-        encoded = numcodecs.Blosc(
-            cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE
-        ).encode(chunk_data)
+        encoded = self.chunk_encoder.encode(chunk_data)
 
         return (
             encoded,
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
+
+    def _reorder_to_zarr_axes(self, data: np.ndarray) -> np.ndarray:
+        """Reorder data from model output axes to Zarr-expected order matching self.axes + channel."""
+        zarr_axes = tuple(self.axes) + ("c",)
+        model_axes = self.model_output_axes
+
+        if len(model_axes) != data.ndim:
+            logger.warning(
+                f"Model output ndim ({data.ndim}) != declared axes {model_axes}, "
+                "skipping reorder"
+            )
+            return data
+
+        if tuple(model_axes) == zarr_axes:
+            return data
+
+        # For single-channel output the byte layout is identical regardless of
+        # where the size-1 channel axis sits, so skip the expensive copy.
+        c_idx = model_axes.index("c")
+        if data.shape[c_idx] == 1:
+            return data.reshape([data.shape[model_axes.index(ax)] for ax in zarr_axes])
+
+        # Build permutation from model axes order to zarr axes order
+        perm = tuple(model_axes.index(ax) for ax in zarr_axes)
+        return np.ascontiguousarray(data.transpose(perm))
 
     def _initialize_chunk_encoder(self):
         return numcodecs.Blosc(cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE)

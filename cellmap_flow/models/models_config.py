@@ -64,6 +64,18 @@ class ModelConfig:
         logger.warning(f"Model config validated: {self.__str__()}")
 
     @property
+    def chunk_output_axes(self) -> tuple[str, ...]:
+        """Returns the axes order of processed chunk output. Defaults to ('c', 'z', 'y', 'x').
+
+        Models can override by setting config.chunk_output_axes.
+        Note: this is distinct from config.output_axes used by BioModelConfig
+        for raw bioimageio model axes.
+        """
+        if hasattr(self.config, "chunk_output_axes"):
+            return tuple(self.config.chunk_output_axes)
+        return ("c", "z", "y", "x")
+
+    @property
     def output_dtype(self):
         """Returns the output dtype of the model. Defaults to np.float32."""
         if hasattr(self.config, "output_dtype"):
@@ -125,11 +137,12 @@ class ScriptModelConfig(ModelConfig):
 
 class DaCapoModelConfig(ModelConfig):
 
-    def __init__(self, run_name: str, iteration: int, name=None):
+    def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()
         self.run_name = run_name
         self.iteration = iteration
         self.name = name
+        self.scale = scale
 
     @property
     def command(self):
@@ -192,6 +205,8 @@ class DaCapoModelConfig(ModelConfig):
         }
         if self.name is not None:
             result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
         return result
 
 
@@ -206,6 +221,7 @@ class FlyModelConfig(ModelConfig):
         name: str = None,
         input_size=None,
         output_size=None,
+        scale=None,
     ):
         super().__init__()
         self.name = name
@@ -213,6 +229,7 @@ class FlyModelConfig(ModelConfig):
         self.channels = channels
         self.input_voxel_size = input_voxel_size
         self.output_voxel_size = output_voxel_size
+        self.scale = scale
         self._model = None
         if input_size is None or output_size is None:
             input_size = (178, 178, 178)
@@ -290,6 +307,8 @@ class FlyModelConfig(ModelConfig):
             result["input_size"] = list(self.input_size)
         if self.output_size is not None:
             result["output_size"] = list(self.output_size)
+        if self.scale is not None:
+            result["scale"] = self.scale
         return result
 
 
@@ -300,11 +319,13 @@ class BioModelConfig(ModelConfig):
         voxel_size,
         edge_length_to_process=None,
         name=None,
+        scale=None,
     ):
         super().__init__()
         self.model_name = model_name
         self.voxel_size = voxel_size
         self.name = name
+        self.scale = scale
         self.voxels_to_process = None
         if edge_length_to_process:
             self.voxels_to_process = edge_length_to_process**3
@@ -454,6 +475,8 @@ class BioModelConfig(ModelConfig):
         }
         if self.name is not None:
             result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
         if self.voxels_to_process is not None:
             # Reconstruct edge_length_to_process from voxels_to_process
             edge_length = round(self.voxels_to_process ** (1/3))
