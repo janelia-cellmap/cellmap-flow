@@ -9,6 +9,7 @@ runnables:
   - id: run
     name: Run Inference
     description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
+    conda_env: cflow_v2
     command: cellmap_flow_yaml
     parameters:
       - name: Config File
