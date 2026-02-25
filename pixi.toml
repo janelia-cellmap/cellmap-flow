@@ -1,0 +1,20 @@
+[project]
+name = "cellmap-flow"
+version = "0.1.7"
+description = "Real-time neural network inference on EM microscopy data"
+channels = ["nvidia", "conda-forge", "pytorch"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.11,<4.0"
+pip = "*"
+cuda-toolkit = ">=12.0"
+
+[tasks]
+install = "pip install -e ."
+cellmap_flow_yaml = "cellmap_flow_yaml"
+cellmap_flow_blockwise = "cellmap_flow_blockwise"
+cellmap_flow_blockwise_multiple = "cellmap_flow_blockwise_multiple"
+cellmap_flow = "cellmap_flow"
+cellmap_flow_server = "cellmap_flow_server"
+cellmap_flow_app = "cellmap_flow_app"

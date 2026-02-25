@@ -1,0 +1,124 @@
+name: CellMap Flow
+description: Real-time neural network inference on EM microscopy data.
+version: "0.1.7"
+
+requirements:
+  - "pixi>=0.40"
+
+runnables:
+  - id: run
+    name: Run Inference
+    description: Run model inference from a YAML configuration file.
+    command: pixi run cellmap_flow_yaml
+    parameters:
+      - flag: ""
+        name: Config File
+        type: file
+        description: Path to YAML config file (defines data_path, models, normalization, etc.)
+        required: true
+
+      - flag: --validate-only
+        name: Validate Only
+        type: boolean
+        description: Validate the configuration without running inference
+        required: false
+        default: false
+
+      - section: Advanced Options
+        description: Optional tuning parameters
+        collapsed: true
+        parameters:
+          - flag: --log-level
+            name: Log Level
+            type: string
+            description: Set the logging level
+            required: false
+            default: INFO
+            choices:
+              - DEBUG
+              - INFO
+              - WARNING
+              - ERROR
+              - CRITICAL
+
+    resources:
+      cpus: 4
+      gpus: 1
+      memory: "32 GB"
+      walltime: "08:00"
+
+  - id: run-blockwise
+    name: Run Blockwise
+    description: Run distributed blockwise inference from a YAML config with output_path and task_name.
+    command: pixi run cellmap_flow_blockwise
+    parameters:
+      - flag: ""
+        name: Config File
+        type: file
+        description: Path to YAML config file with blockwise settings (output_path, task_name, workers)
+        required: true
+
+      - section: Advanced Options
+        description: Optional tuning parameters
+        collapsed: true
+        parameters:
+          - flag: -c
+            name: Run as Client
+            type: boolean
+            description: Run as a client worker instead of the server
+            required: false
+            default: false
+
+          - flag: --log-level
+            name: Log Level
+            type: string
+            description: Set the logging level
+            required: false
+            default: INFO
+            choices:
+              - DEBUG
+              - INFO
+              - WARNING
+              - ERROR
+              - CRITICAL
+
+    resources:
+      cpus: 4
+      gpus: 1
+      memory: "32 GB"
+      walltime: "24:00"
+
+  - id: serve
+    name: Inference Server
+    type: service
+    description: Start a cellmap-flow inference server for real-time prediction via neuroglancer.
+    command: pixi run cellmap_flow
+    parameters:
+      - flag: ""
+        name: Config File
+        type: file
+        description: Path to YAML config file
+        required: true
+
+      - section: Advanced Options
+        description: Optional server parameters
+        collapsed: true
+        parameters:
+          - flag: --log-level
+            name: Log Level
+            type: string
+            description: Set the logging level
+            required: false
+            default: INFO
+            choices:
+              - DEBUG
+              - INFO
+              - WARNING
+              - ERROR
+              - CRITICAL
+
+    resources:
+      cpus: 4
+      gpus: 1
+      memory: "32 GB"
+      walltime: "08:00"
