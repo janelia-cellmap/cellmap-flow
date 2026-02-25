@@ -11,6 +11,7 @@ import sys
 import logging
 import click
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
@@ -41,10 +42,10 @@ def run_multiple(
     g.queue = queue
     g.charge_group = charge_group
 
-    for model in models:
+    def _submit_model(model):
         current_data_path = dataset_path
         if hasattr(model, "scale") and model.scale:
-            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")   
+            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
             current_data_path = os.path.join(dataset_path, model.scale)
 
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
@@ -55,6 +56,18 @@ def run_multiple(
         start_hosts(
             command, job_name=model_name, queue=queue, charge_group=charge_group
         )
+        return model_name
+
+    with ThreadPoolExecutor(max_workers=len(models)) as executor:
+        futures = {executor.submit(_submit_model, model): model for model in models}
+        for future in as_completed(futures):
+            try:
+                name = future.result()
+                logger.info(f"Job for {name} is ready")
+            except Exception as e:
+                model = futures[future]
+                model_name = getattr(model, "name", None) or type(model).__name__
+                logger.error(f"Failed to start job for {model_name}: {e}")
 
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
