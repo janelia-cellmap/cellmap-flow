@@ -61,14 +61,6 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     # .replace("zouinkhim-lm1", "192.168.1.167")
     print("viewer", viewer_url)
     url = create_and_run_app(neuroglancer_url=viewer_url)
-    try:
-        service_url_path = os.environ.get("SERVICE_URL_PATH")
-        if service_url_path:
-            with open(service_url_path, "w") as f:
-                f.write(url)
-    except Exception as e:
-        logger.warning(f"Failed to write service URL to {service_url_path}: {e}")
-    show(url)
     return url
 
 

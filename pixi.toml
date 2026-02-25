@@ -1,7 +1,7 @@
-[project]
+[workspace]
 name = "cellmap-flow"
 version = "0.1.7"
-description = "Real-time neural network inference on EM microscopy data"
+description = "Realtime prediction using neuroglancer"
 channels = ["nvidia", "conda-forge", "pytorch"]
 platforms = ["linux-64"]
 
@@ -9,9 +9,75 @@ platforms = ["linux-64"]
 python = ">=3.11,<4.0"
 pip = "*"
 cuda-toolkit = ">=12.0"
+numpy = "*"
+pyyaml = "*"
+h5py = "*"
+scikit-image = "*"
+flask = "*"
+flask-cors = "*"
+gunicorn = "*"
+marshmallow = "*"
+pydantic = "*"
+s3fs = "*"
+zarr = "2.18.4"
+numcodecs = "0.15.0"
+xarray = "2024.7.0"
+
+[pypi-dependencies]
+cellmap-flow = { path = ".", editable = true }
+
+[feature.dacapo.pypi-dependencies]
+dacapo-ml = "*"
+
+[feature.cellpose.pypi-dependencies]
+cellpose = "==3.1.1.1"
+
+[feature.bioimageio.pypi-dependencies]
+bioimageio-core = { version = "==0.7.0", extras = ["onnx", "pytorch"] }
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+
+[feature.test.pypi-dependencies]
+pytest-lazy-fixtures = "*"
+
+[feature.dev.dependencies]
+black = "*"
+mypy = "*"
+ruff = "*"
+pre-commit = "*"
+
+[feature.dev.pypi-dependencies]
+pdbpp = "*"
+rich = "*"
+
+[feature.docs.pypi-dependencies]
+sphinx-autodoc-typehints = "*"
+sphinx-autoapi = "*"
+sphinx-click = "*"
+sphinx-rtd-theme = "*"
+myst-parser = "*"
+nbsphinx = "*"
+myst-nb = "*"
+jupytext = "*"
+
+[feature.postprocess.pypi-dependencies]
+edt = "*"
+mwatershed = { git = "https://github.com/pattonw/mwatershed" }
+funlib-math = { git = "https://github.com/funkelab/funlib.math.git" }
+
+[environments]
+default = { solve-group = "default" }
+dacapo = { features = ["dacapo"], solve-group = "default" }
+cellpose = { features = ["cellpose"], solve-group = "default" }
+bioimageio = { features = ["bioimageio"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+dev = { features = ["dev", "test"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+postprocess = { features = ["postprocess"], solve-group = "default" }
 
 [tasks]
-install = "pip install -e ."
 cellmap_flow_yaml = "cellmap_flow_yaml"
 cellmap_flow_blockwise = "cellmap_flow_blockwise"
 cellmap_flow_blockwise_multiple = "cellmap_flow_blockwise_multiple"

@@ -301,6 +301,15 @@ class CellMapFlowServer:
 
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
+        try:
+            import os
+            service_url_path = os.environ.get("SERVICE_URL_PATH")
+            if service_url_path:
+                with open(service_url_path, "w") as f:
+                    f.write(output)
+        except Exception as e:
+            logger.warning(f"Failed to write service URL to {service_url_path}: {e}")
+
         logger.error(output)
         print(output, flush=True)
 
