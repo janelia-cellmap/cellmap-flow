@@ -184,6 +184,9 @@ class FinetuneJobManager:
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
         balance_classes: bool = False,
+        output_type: str = "binary",
+        select_channel: Optional[int] = None,
+        offsets: Optional[str] = None,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -361,6 +364,14 @@ class FinetuneJobManager:
         # Add class balancing flag
         if balance_classes:
             cli_command += "--balance-classes "
+
+        # Add output type and related args
+        if output_type != "binary":
+            cli_command += f"--output-type {output_type} "
+        if select_channel is not None:
+            cli_command += f"--select-channel {select_channel} "
+        if offsets is not None:
+            cli_command += f"--offsets '{offsets}' "
 
         cli_command = f"stdbuf -oL {cli_command} 2>&1 | tee {log_file}"
 

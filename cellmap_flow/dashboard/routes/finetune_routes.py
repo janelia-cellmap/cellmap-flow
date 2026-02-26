@@ -601,6 +601,9 @@ def submit_finetuning():
         margin = data.get("margin", 0.3)
         balance_classes = data.get("balance_classes", False)
         queue = data.get("queue", "gpu_h100")
+        output_type = data.get("output_type", None)  # None = auto-detect
+        select_channel = data.get("select_channel", None)
+        offsets = data.get("offsets", None)
 
         if not model_name:
             return jsonify({"success": False, "error": "model_name is required"}), 400
@@ -684,6 +687,37 @@ def submit_finetuning():
                     "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
                 )
 
+        # Auto-detect output_type and offsets from model script
+        from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
+        if output_type is None:
+            # Try to auto-detect from model script
+            if hasattr(model_config, 'script_path'):
+                script_offsets = _read_offsets_from_script(model_config.script_path)
+                if script_offsets is not None:
+                    output_type = "affinities"
+                    offsets = json.dumps(script_offsets)
+                    logger.info(
+                        f"Auto-detected output_type='affinities' with "
+                        f"{len(script_offsets)} offsets from model script"
+                    )
+            if output_type is None:
+                output_type = "binary"
+
+        if output_type == "affinities" and offsets is None:
+            if hasattr(model_config, 'script_path'):
+                offsets = _read_offsets_from_script(model_config.script_path)
+                if offsets is not None:
+                    logger.info(f"Auto-detected {len(offsets)} offsets from model script")
+                    offsets = json.dumps(offsets)
+            if offsets is None:
+                return jsonify({
+                    "success": False,
+                    "error": "output_type='affinities' requires offsets. "
+                             "Define 'offsets' in the model script or pass them in the request."
+                }), 400
+        elif isinstance(offsets, list):
+            offsets = json.dumps(offsets)
+
         finetune_job = state.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
@@ -704,6 +738,9 @@ def submit_finetuning():
             margin=margin,
             balance_classes=balance_classes,
             queue=queue,
+            output_type=output_type,
+            select_channel=select_channel,
+            offsets=offsets,
         )
 
         logger.info(f"Submitted finetuning job: {finetune_job.job_id}")
@@ -1156,6 +1193,9 @@ def restart_finetuning_job(job_id):
             "no_augment",
             "no_mixed_precision",
             "patch_shape",
+            "output_type",
+            "select_channel",
+            "offsets",
         ]
         for key in passthrough_keys:
             if key in data and data[key] is not None:
