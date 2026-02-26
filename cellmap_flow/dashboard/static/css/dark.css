@@ -147,3 +147,73 @@
     border-color: #2980b9;
     color: #cce5ff;
   }
+
+  /* Modal styling for dark mode */
+  .modal-content {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #555;
+  }
+
+  .modal-header {
+    border-bottom-color: #555;
+  }
+
+  .modal-footer {
+    border-top-color: #555;
+  }
+
+  /* Form controls in dark mode */
+  .form-control, .form-select {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border-color: #555;
+  }
+
+  .form-control:focus, .form-select:focus {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border-color: #0d6efd;
+  }
+
+  /* Muted text readable on dark backgrounds */
+  .text-muted, .form-text {
+    color: #adb5bd !important;
+  }
+
+  /* Card styling for dark mode */
+  .card {
+    background-color: #1e1e1e;
+    border-color: #555;
+    color: #ffffff;
+  }
+
+  .card-header {
+    background-color: #2a2a2a;
+    border-bottom-color: #555;
+    color: #ffffff;
+  }
+
+  .card-body {
+    color: #ffffff;
+  }
+
+  /* Labels and headings in dark mode */
+  .form-label, label {
+    color: #e0e0e0 !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+  }
+
+  /* Badge secondary needs contrast */
+  .badge.bg-secondary {
+    color: #ffffff;
+  }
+
+  /* Placeholder text */
+  .form-control::placeholder {
+    color: #888 !important;
+    opacity: 1;
+  }

@@ -1,0 +1,1364 @@
+<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
+  <strong>Finetune:</strong> Create annotation crops and submit training jobs to the GPU cluster.
+  <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
+</div>
+
+<!-- Tabs for Annotation Crops and Training -->
+<ul class="nav nav-tabs mb-3" id="finetuneTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="crops-tab" data-bs-toggle="tab" data-bs-target="#crops" type="button" role="tab">
+      Annotation Crops
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+      Training
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="finetuneTabContent">
+  <!-- Annotation Crops Tab -->
+  <div class="tab-pane fade show active" id="crops" role="tabpanel">
+
+<form id="finetuneForm">
+  <!-- Model Selection (conditionally shown) -->
+  <div id="modelSelectionDiv" class="mb-3">
+    <label for="modelSelect" class="form-label">Select Model</label>
+    <div class="d-flex gap-2">
+      <select class="form-select" id="modelSelect">
+        <!-- Populated by JavaScript -->
+      </select>
+      <button type="button" class="btn btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list">
+        &#x21bb;
+      </button>
+    </div>
+    <small class="form-text text-muted">
+      Crop will be sized to model's output inference size
+    </small>
+  </div>
+
+  <!-- Model Info Display -->
+  <div id="modelInfo" class="mb-3 p-2 border rounded" style="display: none;">
+    <h6>Model Configuration</h6>
+    <div id="modelInfoContent"></div>
+  </div>
+
+  <!-- Output Path for Zarr Files -->
+  <div class="mb-3">
+    <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
+    <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
+    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
+  </div>
+
+  <!-- Create Buttons -->
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button type="button" class="btn btn-outline-primary" id="createCropBtn">
+      Create Annotation Crop
+    </button>
+    <button type="button" class="btn btn-primary" id="createVolumeBtn">
+      Create Annotation Volume
+    </button>
+    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+      Save Annotations to Disk
+    </button>
+  </div>
+  <small class="form-text text-muted d-block mt-1">
+    <strong>Crop:</strong> Small region at current view center (dense, paint 1=foreground).
+    <strong>Volume:</strong> Full dataset extent (sparse, paint 1=background, 2=foreground).
+  </small>
+
+  <!-- MinIO Status -->
+  <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
+    <h6>MinIO Status</h6>
+    <div id="minioStatusContent"></div>
+  </div>
+
+  <!-- Log Output -->
+  <div class="mt-3">
+    <label class="form-label">Log</label>
+    <textarea
+      id="finetuneLog"
+      class="form-control"
+      rows="8"
+      readonly
+      style="color: gray; font-size: 0.9rem; background-color: transparent; border: 1px solid gray;"
+    ></textarea>
+  </div>
+</form>
+</div><!-- End Crops Tab -->
+
+<!-- Training Tab -->
+<div class="tab-pane fade" id="training" role="tabpanel">
+
+<!-- Training Configuration Card -->
+<div class="card mb-3">
+  <div class="card-header">
+    <h5>Training Configuration</h5>
+  </div>
+  <div class="card-body">
+    <!-- Optional: Manual checkpoint path override -->
+    <div class="mb-3">
+      <label for="checkpointPath" class="form-label">
+        Checkpoint Path (Optional)
+        <span class="badge bg-secondary">Advanced</span>
+      </label>
+      <input type="text" id="checkpointPath" class="form-control" placeholder="Leave empty to auto-detect from model config">
+      <small class="text-muted">
+        Override the base model checkpoint to finetune from. If left empty, the system will attempt to extract it from the model configuration or script.
+      </small>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="loraRank" class="form-label">LoRA Rank</label>
+          <select id="loraRank" class="form-select">
+            <option value="4">4 (Fast, lower capacity)</option>
+            <option value="8" selected>8 (Balanced) - Recommended</option>
+            <option value="16">16 (High capacity)</option>
+          </select>
+          <small class="text-muted">Higher rank = more trainable parameters</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="numEpochs" class="form-label">Number of Epochs</label>
+          <input type="number" id="numEpochs" class="form-control" value="10" min="5" max="50" step="1">
+          <small class="text-muted">Typical range: 10-20 epochs</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="batchSize" class="form-label">Batch Size</label>
+          <select id="batchSize" class="form-select">
+            <option value="1">1</option>
+            <option value="2" selected>2 (Default)</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+            <option value="32">32</option>
+          </select>
+          <small class="text-muted">Higher = faster but uses more GPU memory</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="learningRate" class="form-label">Learning Rate</label>
+          <select id="learningRate" class="form-select">
+            <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+            <option value="0.000001">1e-6 (Very Conservative)</option>
+            <option value="0.00001">1e-5 (Conservative)</option>
+            <option value="0.0001" selected>1e-4 (Standard)</option>
+            <option value="0.001">1e-3 (Aggressive)</option>
+            <option value="0.01">1e-2 (Very Aggressive)</option>
+            <option value="0.1">1e-1 (Extremely Aggressive)</option>
+          </select>
+          <small class="text-muted">LoRA typically uses higher learning rates</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="lossType" class="form-label">Loss Function</label>
+          <select id="lossType" class="form-select">
+            <option value="margin" selected>Margin (for scribbles)</option>
+            <option value="mse">MSE</option>
+            <option value="bce">BCE</option>
+            <option value="dice">Dice</option>
+            <option value="combined">Combined (Dice + BCE)</option>
+          </select>
+          <small class="text-muted">Margin is recommended for sparse annotations</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="distillationLambda" class="form-label">
+            Distillation Weight
+          </label>
+          <select id="distillationLambda" class="form-select">
+            <option value="0">0 (Disabled)</option>
+            <option value="0.01">0.01</option>
+            <option value="0.05">0.05</option>
+            <option value="0.1">0.1</option>
+            <option value="0.2">0.2</option>
+            <option value="0.5" selected>0.5 (Default)</option>
+            <option value="1.0">1.0</option>
+            <option value="2.0">2.0</option>
+            <option value="5.0">5.0</option>
+            <option value="10.0">10.0</option>
+          </select>
+          <small class="text-muted">Keeps model close to original predictions</small>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="distillationScope" class="form-label">
+            Distillation Scope
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="distillationScope" class="form-select">
+            <option value="unlabeled" selected>Unlabeled voxels only</option>
+            <option value="all">All voxels</option>
+          </select>
+          <small class="text-muted">Where to apply distillation loss</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="balanceClasses" checked>
+            <label class="form-check-label" for="balanceClasses">
+              Balance fg/bg classes
+            </label>
+          </div>
+          <small class="text-muted">Weight fg and bg equally in loss regardless of scribble ratio. Prevents foreground overprediction.</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="gpuQueue" class="form-label">GPU Queue</label>
+          <select id="gpuQueue" class="form-select">
+            <option value="gpu_h100" selected>H100</option>
+            <option value="gpu_a100">A100</option>
+            <option value="gpu_h200">H200</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-serve checkbox -->
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" id="autoServeCheck" checked>
+      <label class="form-check-label" for="autoServeCheck">
+        Auto-load model after training
+        <small class="text-muted">(Automatically start inference server and add to Neuroglancer)</small>
+      </label>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button type="button" class="btn btn-primary btn-lg" id="startFinetuningBtn">
+        🚀 Start Finetuning
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Training Status Card (hidden initially) -->
+<div class="card mb-3" id="trainingStatusCard" style="display: none;">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Status</h5>
+    <div>
+      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
+        🔄 Restart Training
+      </button>
+      <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
+        ❌ Cancel
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <p class="mb-1"><strong>Job ID:</strong> <span id="jobId" class="font-monospace">-</span></p>
+      <p class="mb-1"><strong>Model:</strong> <span id="jobModelName">-</span></p>
+      <p class="mb-1"><strong>Status:</strong> <span id="jobStatus" class="badge bg-secondary">-</span></p>
+      <p class="mb-1"><strong>Progress:</strong> <span id="jobProgress">-</span></p>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress mb-3" style="height: 25px;">
+      <div id="trainingProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">
+        0%
+      </div>
+    </div>
+
+    <!-- Inference Server Status (shown when ready) -->
+    <div id="inferenceServerStatus" style="display: none;">
+      <hr>
+      <h6>Inference Server</h6>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted">Status:</span>
+        <span id="inferenceServerReady" class="badge bg-success">Ready</span>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="text-muted">Layer:</span>
+        <span id="neuroglancerLayer" class="font-monospace small">-</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Training Logs Card -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Logs</h5>
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="autoScrollLogs" checked>
+      <label class="form-check-label" for="autoScrollLogs">Auto-scroll</label>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted">Loss vs Epoch</small>
+        <small id="lossPlotSummary" class="text-muted">No loss data yet</small>
+      </div>
+      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid #dee2e6; border-radius: 0.25rem;"></canvas>
+    </div>
+    <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
+              style="font-size: 0.85rem; white-space: pre;">No training job running...
+    </textarea>
+  </div>
+</div>
+</div><!-- End Training Tab -->
+</div><!-- End Tab Content -->
+
+<!-- Restart Training Modal -->
+<div class="modal fade" id="restartTrainingModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Restart Training</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>This will archive current logs and restart training with the same or updated parameters.</p>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="useCurrentParams" checked>
+          <label class="form-check-label" for="useCurrentParams">
+            Use current training parameters
+          </label>
+        </div>
+
+        <div id="updateParamsSection" style="display: none;">
+          <h6>Update Parameters</h6>
+          <div class="mb-2">
+            <label class="form-label">LoRA Rank</label>
+            <select id="restartLoraRank" class="form-select">
+              <option value="4">4 (Fast, lower capacity)</option>
+              <option value="8" selected>8 (Balanced)</option>
+              <option value="16">16 (High capacity)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Number of Epochs</label>
+            <input type="number" id="restartNumEpochs" class="form-control" value="10" min="5" max="50">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Batch Size</label>
+            <select id="restartBatchSize" class="form-select">
+              <option value="1">1</option>
+              <option value="2" selected>2 (Default)</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="32">32</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Learning Rate</label>
+            <select id="restartLearningRate" class="form-select">
+              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+              <option value="0.000001">1e-6 (Very Conservative)</option>
+              <option value="0.00001">1e-5 (Conservative)</option>
+              <option value="0.0001" selected>1e-4 (Standard)</option>
+              <option value="0.001">1e-3 (Aggressive)</option>
+              <option value="0.01">1e-2 (Very Aggressive)</option>
+              <option value="0.1">1e-1 (Extremely Aggressive)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Loss Function</label>
+            <select id="restartLossType" class="form-select">
+              <option value="margin" selected>Margin (for scribbles)</option>
+              <option value="mse">MSE</option>
+              <option value="bce">BCE</option>
+              <option value="dice">Dice</option>
+              <option value="combined">Combined (Dice + BCE)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Distillation Weight</label>
+            <select id="restartDistillationLambda" class="form-select">
+              <option value="0">0 (Disabled)</option>
+              <option value="0.01">0.01</option>
+              <option value="0.05">0.05</option>
+              <option value="0.1">0.1</option>
+              <option value="0.2">0.2</option>
+              <option value="0.5" selected>0.5 (Default)</option>
+              <option value="1.0">1.0</option>
+              <option value="2.0">2.0</option>
+              <option value="5.0">5.0</option>
+              <option value="10.0">10.0</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Distillation Scope</label>
+            <select id="restartDistillationScope" class="form-select">
+              <option value="unlabeled" selected>Unlabeled voxels only</option>
+              <option value="all">All voxels</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Label Smoothing</label>
+            <select id="restartLabelSmoothing" class="form-select">
+              <option value="0">0 (Disabled)</option>
+              <option value="0.01">0.01</option>
+              <option value="0.05">0.05</option>
+              <option value="0.1" selected>0.1 (Default)</option>
+              <option value="0.2">0.2</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Margin</label>
+            <input type="number" id="restartMargin" class="form-control" value="0.3" min="0" max="1" step="0.01">
+            <small class="text-muted">Used by margin loss.</small>
+          </div>
+          <div class="mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="restartBalanceClasses" checked>
+              <label class="form-check-label" for="restartBalanceClasses">
+                Balance fg/bg classes
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmRestartBtn">Restart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modelSelect = document.getElementById("modelSelect");
+  const modelSelectionDiv = document.getElementById("modelSelectionDiv");
+  const modelInfo = document.getElementById("modelInfo");
+  const modelInfoContent = document.getElementById("modelInfoContent");
+  const createCropBtn = document.getElementById("createCropBtn");
+  const finetuneLog = document.getElementById("finetuneLog");
+  const minioStatus = document.getElementById("minioStatus");
+  const minioStatusContent = document.getElementById("minioStatusContent");
+  const outputPathInput = document.getElementById("outputPath");
+  const saveAnnotationsBtn = document.getElementById("saveAnnotationsBtn");
+
+  let models = [];
+  let selectedModel = null;
+
+  // Load saved output path from localStorage
+  const savedOutputPath = localStorage.getItem("finetuneOutputPath");
+  if (savedOutputPath) {
+    outputPathInput.value = savedOutputPath;
+  }
+
+  // Load models on page load
+  loadModels();
+
+  // Refresh button handler
+  const refreshModelsBtn = document.getElementById("refreshModelsBtn");
+  if (refreshModelsBtn) {
+    refreshModelsBtn.addEventListener("click", function() {
+      finetuneLog.value += "Refreshing model list...\n";
+      models = [];
+      selectedModel = null;
+      modelSelect.innerHTML = "";
+      loadModels();
+    });
+  }
+
+  function loadModels() {
+    fetch("/api/finetune/models")
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          finetuneLog.value += `Error: ${data.error}\n`;
+          createCropBtn.disabled = true;
+          return;
+        }
+
+        models = data.models;
+
+        if (models.length === 0) {
+          finetuneLog.value += "Error: No models available for finetuning\n";
+          finetuneLog.value += "  → Submit a model from the main tab first, then click the refresh button (↻) above\n";
+          createCropBtn.disabled = true;
+          return;
+        }
+
+        // If only one model, hide dropdown and auto-select
+        if (models.length === 1) {
+          modelSelectionDiv.style.display = "none";
+          selectedModel = models[0];
+          displayModelInfo(selectedModel);
+        } else {
+          // Populate dropdown
+          models.forEach(model => {
+            const option = document.createElement("option");
+            option.value = model.name;
+            option.textContent = model.name;
+            modelSelect.appendChild(option);
+          });
+
+          // Set initial selection
+          if (data.selected_model) {
+            modelSelect.value = data.selected_model;
+          }
+
+          // Update on selection change
+          modelSelect.addEventListener("change", function() {
+            const modelName = this.value;
+            selectedModel = models.find(m => m.name === modelName);
+            displayModelInfo(selectedModel);
+          });
+
+          // Display initial model
+          selectedModel = models.find(m => m.name === modelSelect.value);
+          displayModelInfo(selectedModel);
+        }
+
+        // Enable create button if we have models
+        createCropBtn.disabled = false;
+        finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+      })
+      .catch(err => {
+        finetuneLog.value += `Error loading models: ${err}\n`;
+        console.error(err);
+        createCropBtn.disabled = true;
+      });
+  }
+
+  function displayModelInfo(model) {
+    if (!model) return;
+
+    const voxelShape = model.write_shape.map((s, i) =>
+      Math.round(s / model.output_voxel_size[i])
+    );
+
+    modelInfoContent.innerHTML = `
+      <small>
+        <strong>Name:</strong> ${model.name}<br>
+        <strong>Output Size (nm):</strong> [${model.write_shape.join(', ')}]<br>
+        <strong>Voxel Size (nm):</strong> [${model.output_voxel_size.join(', ')}]<br>
+        <strong>Crop Shape (voxels):</strong> [${voxelShape.join(', ')}]<br>
+        <strong>Channels:</strong> ${model.output_channels}
+      </small>
+    `;
+    modelInfo.style.display = "block";
+  }
+
+  // Create annotation crop
+  createCropBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createCropBtn.disabled = true;
+    createCropBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    finetuneLog.value += `Creating annotation crop at current view center...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-crop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // Save output path to localStorage for next time
+          localStorage.setItem("finetuneOutputPath", outputPath);
+
+          finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
+          finetuneLog.value += `  Center (nm): [${data.metadata.center_position_nm.map(v => v.toFixed(1)).join(', ')}]\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Raw crop - Offset (voxels): [${data.metadata.raw_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Raw crop - Shape (voxels): [${data.metadata.raw_crop_shape.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Offset (voxels): [${data.metadata.annotation_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Shape (voxels): [${data.metadata.annotation_crop_shape.join(', ')}]\n`;
+
+          // Update MinIO status
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          // Add to viewer
+          addToViewer(data.crop_id, data.neuroglancer_url);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
+      });
+  });
+
+  // Create annotation volume (sparse, full dataset)
+  const createVolumeBtn = document.getElementById("createVolumeBtn");
+  createVolumeBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createVolumeBtn.disabled = true;
+    createVolumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    finetuneLog.value += `Creating annotation volume for full dataset...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem("finetuneOutputPath", outputPath);
+          finetuneLog.value += `✓ Created annotation volume: ${data.volume_id}\n`;
+          finetuneLog.value += `  Dataset shape (voxels): [${data.metadata.dataset_shape_voxels.join(', ')}]\n`;
+          finetuneLog.value += `  Chunk size (voxels): [${data.metadata.chunk_size.join(', ')}]\n`;
+          finetuneLog.value += `  Voxel size (nm): [${data.metadata.output_voxel_size.join(', ')}]\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Label scheme: paint 1=background, 2=foreground, 0=unannotated\n`;
+
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          addToViewer(data.volume_id, data.neuroglancer_url, `sparse_annotation_${data.volume_id}`);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      });
+  });
+
+  function addToViewer(cropId, neuroglancerUrl, layerName) {
+    finetuneLog.value += `Adding layer to viewer...\n`;
+
+    const payload = {
+      crop_id: cropId,
+      minio_url: neuroglancerUrl
+    };
+    if (layerName) {
+      payload.layer_name = layerName;
+    }
+
+    fetch("/api/finetune/add-to-viewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ Layer added: ${data.layer_name}\n`;
+        } else {
+          finetuneLog.value += `✗ Error adding layer: ${data.error}\n`;
+        }
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+      });
+  }
+
+  // Save annotations to disk
+  saveAnnotationsBtn.addEventListener("click", function() {
+    saveAnnotationsBtn.disabled = true;
+    const originalText = saveAnnotationsBtn.textContent;
+    saveAnnotationsBtn.textContent = "💾 Syncing...";
+    finetuneLog.value += `Syncing all annotations from MinIO to local disk...\n`;
+
+    fetch("/api/finetune/sync-annotations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force: true })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ ${data.message}\n`;
+          if (data.synced_count !== undefined) {
+            finetuneLog.value += `  Synced ${data.synced_count} / ${data.total_crops} crops\n`;
+          }
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error || data.message}\n`;
+        }
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      });
+  });
+
+  // === FINETUNING JOB MANAGEMENT ===
+
+  let eventSource = null;
+  let statusPollingInterval = null;
+  let streamConnectedOnce = false;
+  let liveEpochState = null;
+  let latestJobStatusData = null;
+  let restartEpochResetPending = false;
+  let isServingReady = false;
+  const lossByEpoch = new Map();
+
+  // Start Finetuning button
+  const startFinetuningBtn = document.getElementById("startFinetuningBtn");
+  if (startFinetuningBtn) {
+    startFinetuningBtn.addEventListener("click", async function() {
+      if (!selectedModel) {
+        alert("Please select a model first");
+        return;
+      }
+
+      // Get corrections path from output path field
+      const correctionsPath = document.getElementById("outputPath").value.trim();
+      if (!correctionsPath) {
+        alert("Please specify the output path where annotation crops are saved");
+        return;
+      }
+
+      // Get training parameters from form
+      const params = {
+        model_name: selectedModel.name,
+        corrections_path: correctionsPath,
+        lora_r: parseInt(document.getElementById("loraRank").value),
+        num_epochs: parseInt(document.getElementById("numEpochs").value),
+        batch_size: parseInt(document.getElementById("batchSize").value),
+        learning_rate: parseFloat(document.getElementById("learningRate").value),
+        auto_serve: document.getElementById("autoServeCheck").checked,
+        loss_type: document.getElementById("lossType").value,
+        distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
+        distillation_scope: document.getElementById("distillationScope").value,
+        balance_classes: document.getElementById("balanceClasses").checked,
+        queue: document.getElementById("gpuQueue").value
+      };
+
+      // Add optional checkpoint path override if provided
+      const checkpointPath = document.getElementById("checkpointPath").value.trim();
+      if (checkpointPath) {
+        params.checkpoint_path = checkpointPath;
+      }
+
+      // Disable button and show loading
+      startFinetuningBtn.disabled = true;
+      startFinetuningBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+
+      try {
+        // Submit job
+        const response = await fetch("/api/finetune/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Show training status card
+          document.getElementById("trainingStatusCard").style.display = "block";
+          document.getElementById("jobId").textContent = result.job_id;
+          document.getElementById("jobModelName").textContent = params.model_name;
+          document.getElementById("jobStatus").textContent = "SUBMITTED";
+          document.getElementById("jobStatus").className = "badge bg-warning";
+
+          // Clear logs and start streaming
+          document.getElementById("trainingLogs").value = "";
+          latestJobStatusData = null;
+          liveEpochState = null;
+          restartEpochResetPending = false;
+          isServingReady = false;
+          resetProgressBarToWaiting();
+          resetLossPlot();
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          document.getElementById('restartJobBtn').style.display = 'none';
+          appendLog("Finetuning job submitted successfully!");
+          appendLog(`Job ID: ${result.job_id}`);
+          appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
+          appendLog(`Output directory: ${result.output_dir}`);
+          if (result.note) {
+            appendLog(`Note: ${result.note}`);
+          }
+          appendLog(`\nWaiting for training to start...\n`);
+
+          // Start log streaming and status polling
+          startLogStreaming(result.job_id);
+          startStatusPolling(result.job_id);
+
+          // Request notification permission if not already granted
+          if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+          }
+        } else {
+          alert(`Failed to submit job: ${result.error}`);
+          appendLog(`✗ Error: ${result.error}\n`);
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+        appendLog(`✗ Error: ${error.message}\n`);
+      } finally {
+        // Re-enable button
+        startFinetuningBtn.disabled = false;
+        startFinetuningBtn.innerHTML = '🚀 Start Finetuning';
+      }
+    });
+  }
+
+  // Log streaming via SSE
+  function startLogStreaming(jobId) {
+    // Close existing stream if any
+    if (eventSource) {
+      eventSource.close();
+    }
+
+    eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream`);
+
+    eventSource.onopen = function() {
+      if (!streamConnectedOnce) {
+        appendLog("Connected to live log stream.");
+        streamConnectedOnce = true;
+      }
+    };
+
+    eventSource.onmessage = function(event) {
+      appendLog(event.data);
+      updateProgressFromLogLine(event.data);
+
+      // Auto-scroll if enabled
+      const logsArea = document.getElementById("trainingLogs");
+      if (document.getElementById("autoScrollLogs").checked) {
+        logsArea.scrollTop = logsArea.scrollHeight;
+      }
+    };
+
+    eventSource.onerror = function(error) {
+      console.error("Log streaming error:", error);
+      // Do not close here - EventSource auto-reconnects by default.
+      // Closing would permanently stop log updates for this job.
+    };
+  }
+
+  function updateProgressFromLogLine(line) {
+    if (!line) return;
+
+    if (line.includes("RESTARTING_TRAINING")) {
+      restartEpochResetPending = true;
+      isServingReady = false;
+      liveEpochState = null;
+      document.getElementById('inferenceServerStatus').style.display = 'none';
+      document.getElementById("jobProgress").textContent = "Restarting training...";
+      resetProgressBarToWaiting();
+      resetLossPlot();
+      return;
+    }
+
+    // Parse "Epoch X/Y" anywhere in the line.
+    const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
+    if (epochMatch) {
+      const current = parseInt(epochMatch[1], 10);
+      const total = parseInt(epochMatch[2], 10);
+      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0 && shouldAcceptEpochProgress(current, total)) {
+        renderEpochProgress(current, total);
+        document.getElementById("jobProgress").textContent = `Epoch ${current}/${total}`;
+      }
+    }
+
+    // Parse "Loss: <value>" if present in the same log line.
+    const lossMatch = line.match(/Loss:\s*([0-9]*\.?[0-9]+)/i);
+    if (lossMatch && liveEpochState) {
+      const lossVal = parseFloat(lossMatch[1]);
+      if (!Number.isNaN(lossVal)) {
+        document.getElementById("jobProgress").textContent =
+          `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
+        upsertEpochLoss(liveEpochState.current, lossVal);
+      }
+    }
+
+    // Prefer explicit epoch-loss lines when available (e.g. "Epoch 18/20 - Loss: 0.011371")
+    const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
+    if (epochLossMatch) {
+      const epochVal = parseInt(epochLossMatch[1], 10);
+      const lossVal = parseFloat(epochLossMatch[3]);
+      if (!Number.isNaN(epochVal) && !Number.isNaN(lossVal)) {
+        upsertEpochLoss(epochVal, lossVal);
+      }
+    }
+  }
+
+  function appendLog(message) {
+    const logsArea = document.getElementById("trainingLogs");
+    logsArea.value += message + "\n";
+  }
+
+  function shouldAcceptEpochProgress(current, total) {
+    if (isServingReady && !restartEpochResetPending) {
+      return false;
+    }
+    if (!liveEpochState) {
+      return true;
+    }
+    if (restartEpochResetPending) {
+      return true;
+    }
+    if (total !== liveEpochState.total) {
+      return true;
+    }
+    if (current < liveEpochState.current) {
+      return false;
+    }
+    return true;
+  }
+
+  function renderEpochProgress(current, total) {
+    const safeTotal = total > 0 ? total : 1;
+    const progressPercent = Math.max(0, Math.min(100, (current / safeTotal) * 100));
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = progressPercent + "%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = `${current}/${safeTotal} epochs`;
+    liveEpochState = { current, total: safeTotal };
+    if (current > 0 || restartEpochResetPending) {
+      restartEpochResetPending = false;
+    }
+  }
+
+  function renderServingReadyProgress() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "100%";
+    progressBar.className = "progress-bar bg-success";
+    progressBar.textContent = "Serving - Ready for inference";
+    isServingReady = true;
+    restartEpochResetPending = false;
+  }
+
+  function resetProgressBarToWaiting() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "0%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = "0%";
+  }
+
+  function resetLossPlot() {
+    lossByEpoch.clear();
+    renderLossPlot();
+  }
+
+  function upsertEpochLoss(epoch, loss) {
+    if (!Number.isFinite(epoch) || epoch <= 0 || !Number.isFinite(loss)) {
+      return;
+    }
+    lossByEpoch.set(epoch, loss);
+    renderLossPlot();
+  }
+
+  function renderLossPlot() {
+    const canvas = document.getElementById("lossPlotCanvas");
+    const summary = document.getElementById("lossPlotSummary");
+    if (!canvas || !summary) return;
+
+    const width = Math.max(300, Math.floor(canvas.clientWidth || 600));
+    const height = 180;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const points = Array.from(lossByEpoch.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([epoch, loss]) => ({ epoch, loss }));
+
+    if (points.length === 0) {
+      summary.textContent = "No loss data yet";
+      ctx.fillStyle = "#6c757d";
+      ctx.font = "12px monospace";
+      ctx.fillText("Waiting for epoch loss...", 10, 20);
+      return;
+    }
+
+    const minLoss = Math.min(...points.map(p => p.loss));
+    const maxLoss = Math.max(...points.map(p => p.loss));
+    const minEpoch = points[0].epoch;
+    const maxEpoch = points[points.length - 1].epoch;
+    const pad = 24;
+    const chartW = Math.max(1, width - pad * 2);
+    const chartH = Math.max(1, height - pad * 2);
+    const lossSpan = Math.max(1e-9, maxLoss - minLoss);
+    const epochSpan = Math.max(1, maxEpoch - minEpoch);
+
+    const xFor = (e) => pad + ((e - minEpoch) / epochSpan) * chartW;
+    const yFor = (l) => pad + (1 - ((l - minLoss) / lossSpan)) * chartH;
+
+    // Axes
+    ctx.strokeStyle = "#ced4da";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad, height - pad);
+    ctx.lineTo(width - pad, height - pad);
+    ctx.stroke();
+
+    // Tick marks + labels
+    ctx.fillStyle = "#6c757d";
+    ctx.font = "10px monospace";
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#adb5bd";
+
+    const xTickCount = Math.min(6, Math.max(2, points.length));
+    for (let i = 0; i < xTickCount; i++) {
+      const t = xTickCount === 1 ? 0 : i / (xTickCount - 1);
+      const epochTick = Math.round(minEpoch + t * epochSpan);
+      const x = xFor(epochTick);
+      ctx.beginPath();
+      ctx.moveTo(x, height - pad);
+      ctx.lineTo(x, height - pad + 4);
+      ctx.stroke();
+      ctx.fillText(String(epochTick), x - 8, height - pad + 14);
+    }
+
+    const yTickCount = 5;
+    for (let i = 0; i < yTickCount; i++) {
+      const t = yTickCount === 1 ? 0 : i / (yTickCount - 1);
+      const lossTick = maxLoss - t * lossSpan;
+      const y = yFor(lossTick);
+      ctx.beginPath();
+      ctx.moveTo(pad - 4, y);
+      ctx.lineTo(pad, y);
+      ctx.stroke();
+      ctx.fillText(lossTick.toFixed(4), 2, y + 3);
+    }
+
+    // Line
+    ctx.strokeStyle = "#0d6efd";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p, idx) => {
+      const x = xFor(p.epoch);
+      const y = yFor(p.loss);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Last point marker
+    const last = points[points.length - 1];
+    const lx = xFor(last.epoch);
+    const ly = yFor(last.loss);
+    ctx.fillStyle = "#0d6efd";
+    ctx.beginPath();
+    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    summary.textContent = `Epoch ${last.epoch}: ${last.loss.toFixed(6)} (min ${minLoss.toFixed(6)})`;
+  }
+
+  // Status polling (every 3 seconds)
+  function startStatusPolling(jobId) {
+    // Clear existing interval
+    if (statusPollingInterval) {
+      clearInterval(statusPollingInterval);
+    }
+
+    statusPollingInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/status`);
+        const data = await response.json();
+
+        if (!data.success) {
+          console.error("Error getting job status:", data.error);
+          return;
+        }
+        latestJobStatusData = data;
+
+        // Update status display
+        const statusBadge = document.getElementById("jobStatus");
+        statusBadge.textContent = data.status;
+
+        // Color code status
+        statusBadge.className = "badge bg-" + getStatusColor(data.status);
+
+        // Surface status transitions even if log stream is temporarily delayed
+        if (data.status === "PENDING") {
+          document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
+          isServingReady = false;
+        } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs) && !liveEpochState) {
+          document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
+          isServingReady = false;
+        }
+
+        // Update progress
+        if (data.current_epoch && data.total_epochs && shouldAcceptEpochProgress(data.current_epoch, data.total_epochs)) {
+          renderEpochProgress(data.current_epoch, data.total_epochs);
+
+          document.getElementById("jobProgress").textContent =
+            `Epoch ${data.current_epoch}/${data.total_epochs}` +
+            (data.loss ? ` - Loss: ${data.loss.toFixed(4)}` : "");
+          if (Number.isFinite(data.loss)) {
+            upsertEpochLoss(data.current_epoch, data.loss);
+          }
+        }
+
+        // Show restart button when inference server is ready (model is serving)
+        const restartBtn = document.getElementById("restartJobBtn");
+        if (data.inference_server_ready) {
+          restartBtn.style.display = "inline-block";
+        }
+
+        // Handle inference server becoming ready (training iteration complete)
+        if (data.inference_server_ready && data.finetuned_model_name) {
+          // Update inference server status display
+          document.getElementById('inferenceServerStatus').style.display = 'block';
+          document.getElementById('neuroglancerLayer').textContent = data.finetuned_model_name;
+
+          // Update progress bar to show serving state
+          renderServingReadyProgress();
+        }
+
+        // Handle terminal states
+        if (data.status === "FAILED" || data.status === "CANCELLED") {
+          clearInterval(statusPollingInterval);
+          eventSource?.close();
+
+          showNotification(
+            "Training " + data.status,
+            "Check logs for details.",
+            "error"
+          );
+        }
+      } catch (error) {
+        console.error("Status polling error:", error);
+      }
+    }, 3000);  // Poll every 3 seconds
+  }
+
+  function getStatusColor(status) {
+    const colors = {
+      "PENDING": "warning",
+      "RUNNING": "primary",
+      "COMPLETED": "success",
+      "FAILED": "danger",
+      "CANCELLED": "secondary"
+    };
+    return colors[status] || "secondary";
+  }
+
+  function showNotification(title, message, type) {
+    // Browser notification
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body: message });
+    }
+
+    // Also show in-page alert
+    alert(`${title}\n\n${message}`);
+  }
+
+  // Cancel button
+  const cancelJobBtn = document.getElementById("cancelJobBtn");
+  if (cancelJobBtn) {
+    cancelJobBtn.addEventListener("click", async function() {
+      const jobId = document.getElementById("jobId").textContent;
+      if (!jobId || jobId === '-') {
+        alert("No active job to cancel");
+        return;
+      }
+
+      if (!confirm("Are you sure you want to cancel this training job?")) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/cancel`, {
+          method: "POST"
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          appendLog("\n=== TRAINING CANCELLED BY USER ===\n");
+        } else {
+          alert(`Failed to cancel: ${result.error}`);
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    });
+  }
+
+  // (Inference server status is now detected via the regular status polling above)
+
+  // Restart modal event handlers
+  const restartJobBtn = document.getElementById('restartJobBtn');
+  const useCurrentParamsCheck = document.getElementById('useCurrentParams');
+  const updateParamsSection = document.getElementById('updateParamsSection');
+  const confirmRestartBtn = document.getElementById('confirmRestartBtn');
+
+  if (restartJobBtn) {
+    restartJobBtn.addEventListener('click', () => {
+      if (latestJobStatusData && latestJobStatusData.params) {
+        const params = latestJobStatusData.params;
+        if (params.lora_r !== undefined) document.getElementById('restartLoraRank').value = String(params.lora_r);
+        if (params.num_epochs !== undefined) document.getElementById('restartNumEpochs').value = String(params.num_epochs);
+        if (params.batch_size !== undefined) document.getElementById('restartBatchSize').value = String(params.batch_size);
+        if (params.learning_rate !== undefined) document.getElementById('restartLearningRate').value = String(params.learning_rate);
+        if (params.loss_type !== undefined) document.getElementById('restartLossType').value = String(params.loss_type);
+        if (params.distillation_lambda !== undefined) document.getElementById('restartDistillationLambda').value = String(params.distillation_lambda);
+        if (params.distillation_scope !== undefined) document.getElementById('restartDistillationScope').value = String(params.distillation_scope);
+        if (params.label_smoothing !== undefined) document.getElementById('restartLabelSmoothing').value = String(params.label_smoothing);
+        if (params.margin !== undefined) document.getElementById('restartMargin').value = String(params.margin);
+        if (params.balance_classes !== undefined) document.getElementById('restartBalanceClasses').checked = !!params.balance_classes;
+      }
+      const modal = new bootstrap.Modal(document.getElementById('restartTrainingModal'));
+      modal.show();
+    });
+  }
+
+  if (useCurrentParamsCheck) {
+    useCurrentParamsCheck.addEventListener('change', (e) => {
+      updateParamsSection.style.display = e.target.checked ? 'none' : 'block';
+    });
+  }
+
+  if (confirmRestartBtn) {
+    confirmRestartBtn.addEventListener('click', async () => {
+      const useCurrentParams = document.getElementById('useCurrentParams').checked;
+
+      const requestBody = {};
+      if (latestJobStatusData && latestJobStatusData.params) {
+        const p = latestJobStatusData.params;
+        requestBody.lora_r = p.lora_r;
+        requestBody.num_epochs = p.num_epochs;
+        requestBody.batch_size = p.batch_size;
+        requestBody.learning_rate = p.learning_rate;
+        requestBody.loss_type = p.loss_type;
+        requestBody.label_smoothing = p.label_smoothing;
+        requestBody.distillation_lambda = p.distillation_lambda;
+        requestBody.distillation_scope = p.distillation_scope;
+        requestBody.margin = p.margin;
+        requestBody.balance_classes = p.balance_classes;
+        requestBody.mask_unannotated = p.mask_unannotated;
+      }
+      if (!useCurrentParams) {
+        requestBody.lora_r = parseInt(document.getElementById('restartLoraRank').value);
+        requestBody.num_epochs = parseInt(document.getElementById('restartNumEpochs').value);
+        requestBody.batch_size = parseInt(document.getElementById('restartBatchSize').value);
+        requestBody.learning_rate = parseFloat(document.getElementById('restartLearningRate').value);
+        requestBody.loss_type = document.getElementById('restartLossType').value;
+        requestBody.distillation_lambda = parseFloat(document.getElementById('restartDistillationLambda').value);
+        requestBody.distillation_scope = document.getElementById('restartDistillationScope').value;
+        requestBody.label_smoothing = parseFloat(document.getElementById('restartLabelSmoothing').value);
+        requestBody.margin = parseFloat(document.getElementById('restartMargin').value);
+        requestBody.balance_classes = document.getElementById('restartBalanceClasses').checked;
+      }
+
+      try {
+        const jobId = document.getElementById('jobId').textContent;
+        const response = await fetch(`/api/finetune/job/${jobId}/restart`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Same job/GPU - just reset the UI for new training
+          document.getElementById('trainingLogs').value = '';
+          appendLog('Restart request sent - training will restart on same GPU...\n');
+          isServingReady = false;
+          restartEpochResetPending = true;
+          liveEpochState = null;
+          document.getElementById('jobProgress').textContent = 'Restarting training...';
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          resetLossPlot();
+
+          // Reset progress bar
+          const progressBar = document.getElementById('trainingProgressBar');
+          progressBar.style.width = '0%';
+          progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+          progressBar.textContent = '0%';
+
+          // Hide restart button until next training completes
+          document.getElementById('restartJobBtn').style.display = 'none';
+
+          // Close modal
+          bootstrap.Modal.getInstance(document.getElementById('restartTrainingModal')).hide();
+        } else {
+          alert('Failed to restart training: ' + data.error);
+        }
+      } catch (error) {
+        console.error('Error restarting training:', error);
+        alert('Failed to restart training');
+      }
+    });
+  }
+
+  // Initialize empty loss plot on page load
+  renderLossPlot();
+});
+</script>

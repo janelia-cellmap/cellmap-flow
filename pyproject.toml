@@ -70,6 +70,14 @@ postprocess = ["edt",
     "mwatershed @ git+https://github.com/pattonw/mwatershed",
     "funlib.math @ git+https://github.com/funkelab/funlib.math.git",]
 
+finetune = [
+    "peft>=0.7.0",           # HuggingFace Parameter-Efficient Fine-Tuning
+    "transformers>=4.35.0",  # Required by peft
+    "accelerate>=0.20.0",    # Training utilities
+    "minio-client",          # For annotations
+    "minio-server"           # For annotations
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -93,3 +101,4 @@ cellmap_flow_yaml = "cellmap_flow.cli.yaml_cli:main"
 cellmap_flow_blockwise = "cellmap_flow.blockwise.cli:cli"
 cellmap_flow_blockwise_multiple = "cellmap_flow.blockwise.multiple_cli:cli"
 cellmap_flow_app = "cellmap_flow.dashboard.app:create_and_run_app"
+cellmap_flow_viewer = "cellmap_flow.cli.viewer_cli:main"

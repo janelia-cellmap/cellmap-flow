@@ -153,7 +153,7 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         ".zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else ".n5"
     )
 
-    filename, dataset = dataset_path.split(splitter)
+    filename, dataset = dataset_path.rsplit(splitter, 1)
     if dataset.startswith("/"):
         dataset = dataset[1:]
     # include scale if present

@@ -23,7 +23,6 @@ from cellmap_flow.utils.cli_utils import (
 from cellmap_flow.utils.plugin_manager import load_plugins
 
 
-logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +46,7 @@ def cli(log_level):
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
         cellmap_flow_server cellmap-model -f /path/to/model -n mymodel -d /path/to/data
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()))
+    logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
 
 
 @cli.command(name="list-models")
@@ -81,6 +80,9 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
         type_hints = get_type_hints(config_class.__init__)
     except:
         type_hints = {}
+
+    # Track used short names to avoid collisions with common options.
+    used_short_names = {"-d", "-p"}
 
     # Create the command function
     def command_func(**kwargs):
@@ -141,7 +143,9 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
 
     # Add model-specific options based on constructor parameters
     for param_name, param_info in reversed(list(sig.parameters.items())):
-        option_config = create_click_option_from_param(param_name, param_info)
+        option_config = create_click_option_from_param(
+            param_name, param_info, used_short_names
+        )
         if option_config:
             command_func = click.option(
                 *option_config.pop("param_decls"), **option_config
