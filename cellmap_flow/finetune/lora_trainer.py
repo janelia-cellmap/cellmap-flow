@@ -188,6 +188,10 @@ class LoRAFinetuner:
         mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
                          Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
                          This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
+                         Ignored if target_transform is provided.
+        target_transform: Optional TargetTransform instance that converts raw annotations
+                         to (target, mask) pairs. Overrides mask_unannotated when provided.
+                         See cellmap_flow.finetune.target_transforms.
 
     Examples:
         >>> lora_model = wrap_model_with_lora(model)
@@ -219,6 +223,7 @@ class LoRAFinetuner:
         distillation_all_voxels: bool = False,
         margin: float = 0.3,
         balance_classes: bool = False,
+        target_transform=None,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -232,6 +237,7 @@ class LoRAFinetuner:
         self.distillation_lambda = distillation_lambda
         self.distillation_all_voxels = distillation_all_voxels
         self.balance_classes = balance_classes
+        self.target_transform = target_transform
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -394,8 +400,10 @@ class LoRAFinetuner:
 
             # Handle partial annotations: create mask and shift labels
             mask = None
-            if self.mask_unannotated:
-                # Create mask for annotated regions (target > 0)
+            if self.target_transform is not None:
+                target, mask = self.target_transform(target)
+            elif self.mask_unannotated:
+                # Legacy behavior: binary single-channel
                 mask = (target > 0).float()  # (B, C, Z, Y, X)
                 # Shift labels down by 1 (but keep 0 as 0)
                 # e.g., 0->0 (unannotated), 1->0 (background), 2->1 (foreground)
