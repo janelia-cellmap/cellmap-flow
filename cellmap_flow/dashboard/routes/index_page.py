@@ -6,7 +6,6 @@ from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.globals import g
-import cellmap_flow.dashboard.state as state
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,8 @@ def index():
 
     return render_template(
         "index.html",
-        neuroglancer_url=state.NEUROGLANCER_URL,
-        inference_servers=state.INFERENCE_SERVER,
+        neuroglancer_url=g.NEUROGLANCER_URL,
+        inference_servers=g.INFERENCE_SERVER,
         input_normalizers=input_norms,
         output_postprocessors=output_postprocessors,
         model_mergers=model_mergers,

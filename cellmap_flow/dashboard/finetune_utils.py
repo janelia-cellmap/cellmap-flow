@@ -21,11 +21,11 @@ import numpy as np
 import s3fs
 import zarr
 
-from cellmap_flow.dashboard.state import (
-    minio_state,
-    annotation_volumes,
-    output_sessions,
-)
+from cellmap_flow.globals import g
+
+minio_state = g.minio_state
+annotation_volumes = g.annotation_volumes
+output_sessions = g.output_sessions
 
 logger = logging.getLogger(__name__)
 

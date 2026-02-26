@@ -5,8 +5,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 
-from cellmap_flow.dashboard import state
-from cellmap_flow.dashboard.state import LogHandler
+from cellmap_flow.globals import g, LogHandler
 from cellmap_flow.dashboard.routes.logging_routes import logging_bp
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
@@ -42,8 +41,8 @@ app.register_blueprint(finetune_bp)
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):
-    state.NEUROGLANCER_URL = neuroglancer_url
-    state.INFERENCE_SERVER = inference_servers
+    g.NEUROGLANCER_URL = neuroglancer_url
+    g.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
     port = 0
     logger.warning(f"Host name: {hostname}")
