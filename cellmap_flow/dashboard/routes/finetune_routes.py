@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.globals import g
 from cellmap_flow.utils.load_py import load_safe_config
-from cellmap_flow.dashboard import state
+from cellmap_flow.globals import g
 from cellmap_flow.dashboard.finetune_utils import (
     get_or_create_session_path,
     create_correction_zarr,
@@ -467,7 +467,7 @@ def create_annotation_volume():
             zarr_path, volume_id, output_base_dir=corrections_dir
         )
 
-        state.annotation_volumes[volume_id] = {
+        g.annotation_volumes[volume_id] = {
             "zarr_path": zarr_path,
             "model_name": model_name,
             "output_size": output_size.tolist(),
@@ -718,7 +718,7 @@ def submit_finetuning():
         elif isinstance(offsets, list):
             offsets = json.dumps(offsets)
 
-        finetune_job = state.finetune_job_manager.submit_finetuning_job(
+        finetune_job = g.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
             lora_r=lora_r,
@@ -780,7 +780,7 @@ def submit_finetuning():
 def get_finetuning_jobs():
     """Get list of all finetuning jobs."""
     try:
-        jobs = state.finetune_job_manager.list_jobs()
+        jobs = g.finetune_job_manager.list_jobs()
         return jsonify({"success": True, "jobs": jobs})
     except Exception as e:
         logger.error(f"Error getting jobs: {e}")
@@ -791,7 +791,7 @@ def get_finetuning_jobs():
 def get_job_status(job_id):
     """Get detailed status of a specific job."""
     try:
-        status = state.finetune_job_manager.get_job_status(job_id)
+        status = g.finetune_job_manager.get_job_status(job_id)
         if status is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
 
@@ -805,7 +805,7 @@ def get_job_status(job_id):
 def get_job_logs(job_id):
     """Get training logs for a specific job."""
     try:
-        logs = state.finetune_job_manager.get_job_logs(job_id)
+        logs = g.finetune_job_manager.get_job_logs(job_id)
         if logs is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
 
@@ -868,7 +868,7 @@ def stream_job_logs(job_id):
         heartbeat_interval_s = 1.0
         last_heartbeat = time.perf_counter()
 
-        fjm = state.finetune_job_manager
+        fjm = g.finetune_job_manager
         if job_id not in fjm.jobs:
             yield f"data: Job {job_id} not found\n\n"
             return
@@ -978,7 +978,7 @@ def stream_job_logs(job_id):
 def cancel_job(job_id):
     """Cancel a running finetuning job."""
     try:
-        success = state.finetune_job_manager.cancel_job(job_id)
+        success = g.finetune_job_manager.cancel_job(job_id)
 
         if success:
             return jsonify({"success": True, "message": f"Job {job_id} cancelled"})
@@ -994,7 +994,7 @@ def cancel_job(job_id):
 def get_inference_server_status(job_id):
     """Get inference server status for a finetuning job."""
     try:
-        job = state.finetune_job_manager.get_job(job_id)
+        job = g.finetune_job_manager.get_job(job_id)
         if not job:
             return jsonify({"success": False, "error": "Job not found"}), 404
 
@@ -1088,7 +1088,7 @@ def add_finetuned_layer_to_viewer():
         from cellmap_flow.utils.bsub_utils import LSFJob
 
         finetune_job = None
-        for job_id, ft_job in state.finetune_job_manager.jobs.items():
+        for job_id, ft_job in g.finetune_job_manager.jobs.items():
             if ft_job.finetuned_model_name == model_name:
                 finetune_job = ft_job
                 break
@@ -1212,7 +1212,7 @@ def restart_finetuning_job(job_id):
                 )
 
         signal_t0 = time.perf_counter()
-        job = state.finetune_job_manager.restart_finetuning_job(
+        job = g.finetune_job_manager.restart_finetuning_job(
             job_id=job_id, updated_params=updated_params
         )
         signal_elapsed = time.perf_counter() - signal_t0
