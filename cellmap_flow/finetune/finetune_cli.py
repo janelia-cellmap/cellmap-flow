@@ -729,7 +729,6 @@ def main():
             num_workers=args.num_workers,
             shuffle=True,
             model_name=args.model_name,
-            normalize=False,
         )
         logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
