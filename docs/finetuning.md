@@ -13,6 +13,7 @@ cellmap_flow_yaml my_yamls/jrc_c-elegans-bw-1_affinities.yaml
 This starts the dashboard with your dataset and model loaded into the Neuroglancer viewer.
 
 ## 2. Create an Annotation Volume
+![Annotation Crops tab](screenshots/finetune_annotation_crops.png)
 
 Navigate to the **Finetune** tab in the dashboard.
 
@@ -23,7 +24,9 @@ Under **Annotation Crops**, you will see your model configuration (name, output 
    - This creates a sparse annotation zarr covering the full dataset extent, where each chunk maps to one training sample.
    - A MinIO server will start automatically to serve the zarr for editing in Neuroglancer.
 
+
 ## 3. Set Up Annotation Tools in Neuroglancer
+![Draw tab with bound keys](screenshots/finetune_draw_tab.png)
 
 Once the annotation volume is created and added to the viewer:
 
@@ -33,6 +36,8 @@ Once the annotation volume is created and added to the viewer:
    - Click the small box next to each tool name (e.g. `[A] Brush`, `[S] Flood Fill`, `[D] Seg Picker`).
    - Press the letter you want to assign to that tool.
    - Once bound, activate a tool by pressing **Shift + the assigned letter**.
+
+
 
 ## 4. Annotate
 
@@ -52,6 +57,8 @@ Annotate as many chunks as you like across the dataset. Only chunks with non-zer
 ## 5. Training
 
 Switch to the **Training** tab in the Finetune section.
+
+![Training tab](screenshots/finetune_training_tab.png)
 
 ### Training configuration options
 
