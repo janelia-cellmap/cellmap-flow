@@ -322,6 +322,86 @@ def _generate_model_files(args, model_config, timestamp):
     return finetuned_model_name, script_path, yaml_path
 
 
+def _build_target_transform(args, model_config):
+    """Build a TargetTransform based on CLI args."""
+    from cellmap_flow.finetune.target_transforms import (
+        BinaryTargetTransform,
+        BroadcastBinaryTargetTransform,
+        AffinityTargetTransform,
+    )
+
+    output_type = args.output_type
+    num_channels = model_config.config.output_channels
+
+    if output_type == "binary":
+        if num_channels > 1 and args.select_channel is None:
+            logger.warning(
+                f"Model has {num_channels} output channels but --output-type is 'binary' "
+                f"and --select-channel is not set. Consider using --select-channel or "
+                f"--output-type binary_broadcast."
+            )
+        return BinaryTargetTransform()
+
+    elif output_type == "binary_broadcast":
+        logger.info(f"Broadcasting binary target to {num_channels} channels")
+        return BroadcastBinaryTargetTransform(num_channels)
+
+    elif output_type == "affinities":
+        offsets = None
+
+        # Try CLI arg first
+        if args.offsets:
+            offsets = json.loads(args.offsets)
+
+        # Try reading from model script
+        if offsets is None and args.model_script:
+            offsets = _read_offsets_from_script(args.model_script)
+
+        if offsets is None:
+            raise ValueError(
+                "Affinity output type requires offsets. Provide --offsets as a JSON list "
+                "(e.g. '[[1,0,0],[0,1,0],[0,0,1]]') or define an 'offsets' variable in "
+                "the model script."
+            )
+
+        if len(offsets) > num_channels:
+            raise ValueError(
+                f"Number of offsets ({len(offsets)}) exceeds model output channels "
+                f"({num_channels})."
+            )
+
+        if len(offsets) < num_channels:
+            logger.info(
+                f"Model has {num_channels} output channels but only {len(offsets)} affinity offsets. "
+                f"Remaining {num_channels - len(offsets)} channels (e.g. LSDs) will be masked out."
+            )
+
+        logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
+        return AffinityTargetTransform(offsets, num_channels=num_channels)
+
+    else:
+        raise ValueError(f"Unknown output type: {output_type}")
+
+
+def _read_offsets_from_script(script_path):
+    """Try to read an 'offsets' variable from a model script via AST parsing."""
+    import ast
+
+    try:
+        with open(script_path, "r") as f:
+            tree = ast.parse(f.read())
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "offsets":
+                        return ast.literal_eval(node.value)
+    except Exception as e:
+        logger.debug(f"Could not read offsets from {script_path}: {e}")
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Finetune CellMap-Flow models with LoRA using user corrections"
@@ -531,6 +611,35 @@ def main():
         help="Enable masked loss for sparse annotations (0=ignore, 1=bg, 2+=fg)"
     )
 
+    # Output type and target transform arguments
+    parser.add_argument(
+        "--output-type",
+        type=str,
+        default="binary",
+        choices=["binary", "binary_broadcast", "affinities"],
+        help="How to generate training targets from annotations. "
+             "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
+             "'binary_broadcast': broadcast binary target to all output channels. "
+             "'affinities': compute affinity targets from instance labels (requires offsets). "
+             "(default: binary)"
+    )
+    parser.add_argument(
+        "--select-channel",
+        type=int,
+        default=None,
+        help="Select a single channel from multi-channel model output for binary training. "
+             "Only used with --output-type binary. (default: None, use all channels)"
+    )
+    parser.add_argument(
+        "--offsets",
+        type=str,
+        default=None,
+        help="JSON list of [dz,dy,dx] offsets for affinity target generation. "
+             "Example: '[[1,0,0],[0,1,0],[0,0,1]]'. "
+             "If not provided with --output-type affinities, will try to read 'offsets' "
+             "from the model script."
+    )
+
     args = parser.parse_args()
 
     # Print configuration
@@ -586,9 +695,6 @@ def main():
     base_model = model_config.config.model
     logger.info(f"Model loaded: {type(base_model).__name__}")
 
-    select_channel = None
-    logger.info(f"Model outputs {model_config.config.output_channels} channel(s), no channel selection needed during training")
-
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
     lora_model = wrap_model_with_lora(
@@ -627,6 +733,11 @@ def main():
         )
         logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
+        # Build target transform (re-built each iteration to pick up restart params)
+        select_channel = args.select_channel
+        target_transform = _build_target_transform(args, model_config)
+        logger.info(f"output_type={args.output_type}, select_channel={select_channel}")
+
         # Create trainer (re-created each iteration for fresh optimizer/scheduler)
         logger.info("Creating trainer...")
         trainer = LoRAFinetuner(
@@ -645,6 +756,7 @@ def main():
             distillation_all_voxels=args.distillation_all_voxels,
             margin=args.margin,
             balance_classes=args.balance_classes,
+            target_transform=target_transform,
         )
 
         # Resume from checkpoint if specified (first iteration only)
