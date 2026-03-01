@@ -7,7 +7,7 @@ requirements:
 
 runnables:
   - id: run
-  type: service
+    type: service
     name: Run Inference
     description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
     conda_env: cellmap-flow
@@ -20,6 +20,5 @@ runnables:
 
     resources:
       cpus: 4
-      gpus: 0
       memory: "32 GB"
       walltime: "08:00"
