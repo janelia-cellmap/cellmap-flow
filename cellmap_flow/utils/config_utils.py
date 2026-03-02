@@ -205,7 +205,7 @@ def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
     YAML format:
     models:
       my_model_1:
-        type: cellmap-model
+        type: cellmap
         checkpoint_path: /path/to/checkpoint
       my_model_2:
         type: dacapo

@@ -50,7 +50,7 @@ def cli(log_level):
     Examples:
         cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
         cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
+        cellmap_flow_v2 cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
@@ -117,7 +117,7 @@ def list_plugins_cmd():
     "-m",
     "--model-type",
     required=True,
-    help="Model type (e.g., dacapo, script, cellmap-model)",
+    help="Model type (e.g., dacapo, script, cellmap)",
 )
 @click.option("-d", "--data-path", required=True, help="Path to the dataset")
 @click.option("-q", "--queue", default="gpu_h100", help="Queue for job submission")

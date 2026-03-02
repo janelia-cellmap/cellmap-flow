@@ -2,7 +2,7 @@ import logging
 import warnings
 import copy
 
-from cellmap_flow.models.cellmap_models import CellmapModel
+from cellmap_models.model_export.cellmap_model import CellmapModel, get_huggingface_model
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
@@ -97,6 +97,8 @@ class ModelConfig:
 
 class ScriptModelConfig(ModelConfig):
 
+    cli_name = "script"
+
     def __init__(self, script_path, name=None, scale=None):
         super().__init__()
         self.script_path = script_path
@@ -136,6 +138,8 @@ class ScriptModelConfig(ModelConfig):
 
 
 class DaCapoModelConfig(ModelConfig):
+
+    cli_name = "dacapo"
 
     def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()
@@ -211,6 +215,8 @@ class DaCapoModelConfig(ModelConfig):
 
 
 class FlyModelConfig(ModelConfig):
+
+    cli_name = "fly"
 
     def __init__(
         self,
@@ -307,6 +313,9 @@ class FlyModelConfig(ModelConfig):
 
 
 class BioModelConfig(ModelConfig):
+
+    cli_name = "bioimage"
+
     def __init__(
         self,
         model_name: str,
@@ -566,15 +575,20 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
 class CellMapModelConfig(ModelConfig):
     """Configuration class for a CellmapModel."""
 
-    def __init__(self, folder_path, name, scale=None):
+    cli_name = "cellmap"
+
+    def __init__(self, folder_path, name=None, scale=None):
         super().__init__()
         self.cellmap_model = CellmapModel(folder_path=folder_path)
+        if name is None:
+            # folder name 
+            name = folder_path.rstrip("/").split("/")[-1]
         self.name = name
         self.scale = scale
 
     @property
     def command(self) -> str:
-        return f"cellmap-model --folder-path {self.cellmap_model.folder_path} --name {self.name}"
+        return f"cellmap --folder-path {self.cellmap_model.folder_path} --name {self.name}"
 
     def _get_config(self) -> Config:
         config = Config()
@@ -606,9 +620,50 @@ class CellMapModelConfig(ModelConfig):
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
         result = {
-            "type": "cellmap-model",
+            "type": "cellmap",
             "folder_path": self.cellmap_model.folder_path,
         }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
+        return result
+
+class HuggingFaceModelConfig(ModelConfig):
+    """Configuration class for a Hugging Face model."""
+
+    cli_name = "huggingface"
+
+    def __init__(self, repo, revision=None, name=None, scale=None):
+        super().__init__()
+        self.repo = repo
+        self.revision = revision
+        if name is None:
+            # Use repo name as default
+            name = repo.split("/")[-1]
+        self.name = name
+        self.scale = scale
+
+    @property
+    def command(self) -> str:
+        cmd = f"huggingface --repo {self.repo}"
+        if self.revision:
+            cmd += f" --revision {self.revision}"
+        return cmd
+
+    def _get_config(self) -> Config:
+        cellmap_model = get_huggingface_model(self.repo, self.revision)
+        config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
+        return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "huggingface",
+            "repo": self.repo,
+        }
+        if self.revision is not None:
+            result["revision"] = self.revision
         if self.name is not None:
             result["name"] = self.name
         if self.scale is not None:
