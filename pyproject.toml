@@ -39,7 +39,8 @@ dependencies = [
     "pydantic",
     "funlib.persistence==0.6.1",
     "daisy",
-    "cellmap-models"
+    "cellmap-models",
+    "huggingface_hub"
     ]
 
 # extras
