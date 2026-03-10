@@ -6,6 +6,7 @@ corrections with mixed-precision training and gradient accumulation.
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Optional, Dict, Any
 import time
@@ -13,7 +14,7 @@ import time
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,10 @@ class MarginLoss(nn.Module):
         self.balance_classes = balance_classes
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # Apply sigmoid if pred contains raw logits (not already in [0, 1])
+        if pred.min() < 0 or pred.max() > 1:
+            pred = torch.sigmoid(pred)
+
         threshold_high = 1.0 - self.margin  # e.g., 0.7
         threshold_low = self.margin          # e.g., 0.3
 
@@ -294,13 +299,63 @@ class LoRAFinetuner:
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
         # Mixed precision scaler
-        self.scaler = GradScaler(enabled=use_mixed_precision)
+        self.scaler = GradScaler('cuda', enabled=use_mixed_precision)
 
         # Training state
         self.current_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
         self.training_stats = []
+
+    def _fallback_to_fp32(self):
+        """Disable mixed precision training."""
+        self.use_mixed_precision = False
+        self.scaler = GradScaler('cuda', enabled=False)
+        torch.cuda.empty_cache()
+
+    def _reset_training_state(self):
+        """Reset LoRA weights, optimizer, and training counters for a fresh start."""
+        from peft import PeftModel
+        if isinstance(self.model, PeftModel):
+            # Reset LoRA adapter weights to zero (equivalent to base model)
+            for name, param in self.model.named_parameters():
+                if 'lora_' in name and param.requires_grad:
+                    nn.init.zeros_(param) if 'lora_B' in name else nn.init.kaiming_uniform_(param, a=math.sqrt(5))
+        self.optimizer = AdamW(
+            filter(lambda p: p.requires_grad, self.model.parameters()),
+            lr=self.optimizer.defaults['lr'],
+        )
+        self.current_epoch = 0
+        self.global_step = 0
+        self.best_loss = float('inf')
+        self.training_stats = []
+
+    def _halve_batch_size(self):
+        """Halve batch size and double gradient accumulation to keep effective batch size.
+
+        Returns True if batch size was reduced, False if already at 1.
+        """
+        old_bs = self.dataloader.batch_size
+        new_bs = max(1, old_bs // 2)
+        if new_bs >= old_bs:
+            return False
+        old_accum = self.gradient_accumulation_steps
+        self.gradient_accumulation_steps = old_accum * (old_bs // new_bs)
+        self.dataloader = DataLoader(
+            self.dataloader.dataset,
+            batch_size=new_bs,
+            shuffle=True,
+            num_workers=self.dataloader.num_workers,
+            pin_memory=self.dataloader.pin_memory,
+            multiprocessing_context=self.dataloader.multiprocessing_context,
+        )
+        self._log_message(
+            f"Halved batch size {old_bs} → {new_bs}, "
+            f"gradient accumulation {old_accum} → {self.gradient_accumulation_steps} "
+            f"(effective batch size unchanged)"
+        )
+        torch.cuda.empty_cache()
+        return True
 
     def train(self) -> Dict[str, Any]:
         """
@@ -335,12 +390,77 @@ class LoRAFinetuner:
         self.model.train()
         start_time = time.time()
 
-        # Store log function for use in _train_epoch
+        # Store log function for use in _train_epoch and helpers
         self._log_message = log_message
+
+        # Probe for FP16 stability: run a single forward pass and check for NaN.
+        # Some model+data combinations produce NaN under FP16 autocast.
+        if self.use_mixed_precision:
+            try:
+                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = probe_raw.to(self.device)
+                with torch.no_grad(), autocast('cuda', enabled=True):
+                    probe_out = self.model(probe_raw)
+                if not torch.isfinite(probe_out).all():
+                    log_message("WARNING: Model produces NaN/Inf under FP16 — falling back to FP32.")
+                    self._fallback_to_fp32()
+                del probe_raw, probe_out
+                torch.cuda.empty_cache()
+            except torch.cuda.OutOfMemoryError:
+                log_message("WARNING: FP16 probe OOM — falling back to FP32 with smaller batch.")
+                self._fallback_to_fp32()
+                self._halve_batch_size()
+            except Exception as e:
+                log_message(f"WARNING: FP16 probe failed ({e}) — falling back to FP32.")
+                self._fallback_to_fp32()
 
         for epoch in range(self.num_epochs):
             self.current_epoch = epoch
-            epoch_loss = self._train_epoch()
+            try:
+                epoch_loss = self._train_epoch()
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                if not self._halve_batch_size():
+                    log_message("ERROR: OOM even at batch_size=1. Cannot continue.")
+                    return {
+                        'final_loss': float('nan'),
+                        'best_loss': self.best_loss,
+                        'total_epochs': epoch,
+                        'total_steps': self.global_step,
+                        'training_time': time.time() - start_time,
+                        'diverged': True,
+                    }
+                log_message(f"OOM at epoch {epoch+1} — retrying with smaller batch size.")
+                # Reset optimizer state (accumulated grads are stale after OOM)
+                self.optimizer.zero_grad(set_to_none=True)
+                epoch_loss = self._train_epoch()
+
+            # Handle NaN/Inf loss
+            if not math.isfinite(epoch_loss):
+                if self.use_mixed_precision:
+                    # NaN likely caused by FP16 overflow on specific data —
+                    # fall back to FP32 and restart training from scratch
+                    log_message(
+                        f"WARNING: NaN loss at epoch {epoch+1} under FP16 — "
+                        f"falling back to FP32 and restarting training."
+                    )
+                    self._fallback_to_fp32()
+                    self._reset_training_state()
+                    return self.train()
+
+                self._log_message(
+                    f"ERROR: Loss is {epoch_loss} at epoch {epoch+1}. "
+                    f"Stopping training."
+                )
+                print("TRAINING_DIVERGED", flush=True)
+                return {
+                    'final_loss': epoch_loss,
+                    'best_loss': self.best_loss,
+                    'total_epochs': epoch + 1,
+                    'total_steps': self.global_step,
+                    'training_time': time.time() - start_time,
+                    'diverged': True,
+                }
 
             # Log epoch results
             self._log_message(
@@ -422,17 +542,22 @@ class LoRAFinetuner:
                 with torch.no_grad():
                     self.model.disable_adapter_layers()
                     try:
-                        with autocast(enabled=self.use_mixed_precision):
+                        with autocast('cuda', enabled=self.use_mixed_precision):
                             teacher_pred = self.model(raw)
                             if self.select_channel is not None:
                                 teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
                         teacher_pred = teacher_pred.detach()
                     finally:
                         self.model.enable_adapter_layers()
+                if not torch.isfinite(teacher_pred).all():
+                    logger.warning(f"NaN/Inf in teacher_pred! range=[{teacher_pred.min():.4f}, {teacher_pred.max():.4f}]")
 
             # Student forward pass with mixed precision
-            with autocast(enabled=self.use_mixed_precision):
+            with autocast('cuda', enabled=self.use_mixed_precision):
                 pred = self.model(raw)
+
+                if not torch.isfinite(pred).all():
+                    logger.warning(f"NaN/Inf in student pred! range=[{pred.min():.4f}, {pred.max():.4f}]")
 
                 # Select specific channel if requested (e.g., mito = channel 2 from 8-channel output)
                 if self.select_channel is not None:
@@ -464,6 +589,9 @@ class LoRAFinetuner:
 
                 loss = supervised_loss
 
+                if not torch.isfinite(supervised_loss):
+                    logger.warning(f"NaN/Inf supervised_loss: {supervised_loss.item()}")
+
                 # Compute distillation loss
                 distillation_loss = torch.tensor(0.0, device=self.device)
                 if self.distillation_lambda > 0 and teacher_pred is not None:
@@ -472,9 +600,13 @@ class LoRAFinetuner:
                         # Apply on all voxels
                         distillation_loss = distill_loss_map.mean()
                     else:
-                        # Apply only on unlabeled voxels
-                        unlabeled_mask = 1.0 - mask  # 1 where unlabeled
-                        distillation_loss = (distill_loss_map * unlabeled_mask).sum() / unlabeled_mask.sum().clamp(min=1)
+                        # Apply only on unlabeled voxels.
+                        # Cast to float32 before multiply/sum to avoid FP16 overflow
+                        # when summing over many voxels (e.g., 13-channel models).
+                        unlabeled_mask = (1.0 - mask).float()
+                        distillation_loss = (distill_loss_map.float() * unlabeled_mask).sum() / unlabeled_mask.sum().clamp(min=1)
+                    if not torch.isfinite(distillation_loss):
+                        logger.warning(f"NaN/Inf distillation_loss: {distillation_loss.item()}")
                     loss = loss + self.distillation_lambda * distillation_loss
 
                 # Scale loss for gradient accumulation
@@ -491,7 +623,11 @@ class LoRAFinetuner:
                 self.global_step += 1
 
             # Accumulate losses (unscaled)
-            epoch_loss += loss.item() * self.gradient_accumulation_steps
+            batch_loss = loss.item() * self.gradient_accumulation_steps
+            if not math.isfinite(batch_loss):
+                logger.warning(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}. Aborting epoch.")
+                return float('nan')
+            epoch_loss += batch_loss
             epoch_supervised_loss += supervised_loss.item()
             epoch_distill_loss += distillation_loss.item()
 
