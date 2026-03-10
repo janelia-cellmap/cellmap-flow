@@ -720,6 +720,8 @@ def main():
             logger.info("=" * 60)
 
         # Create dataloader (re-created each iteration to pick up new annotations)
+        if iteration > 1:
+            print("RESTART_STATUS: Loading corrections...", flush=True)
         logger.info(f"Loading corrections from {args.corrections}...")
         dataloader = create_dataloader(
             args.corrections,
@@ -738,6 +740,8 @@ def main():
         logger.info(f"output_type={args.output_type}, select_channel={select_channel}")
 
         # Create trainer (re-created each iteration for fresh optimizer/scheduler)
+        if iteration > 1:
+            print("RESTART_STATUS: Preparing trainer...", flush=True)
         logger.info("Creating trainer...")
         trainer = LoRAFinetuner(
             lora_model,
@@ -765,7 +769,46 @@ def main():
 
         # Train
         try:
+            if iteration > 1:
+                print("RESTART_STATUS: Starting training...", flush=True)
             stats = trainer.train()
+
+            # If training diverged (NaN/Inf), skip saving and wait for restart
+            if stats.get('diverged'):
+                logger.warning("Training diverged — skipping model save.")
+                if args.auto_serve:
+                    # Still wait for restart so the user can adjust params
+                    signal_file = Path(args.output_dir) / "restart_signal.json"
+                    restart_data = _wait_for_restart_signal(
+                        signal_file=signal_file,
+                        check_interval=1.0,
+                        restart_controller=restart_controller,
+                    )
+                    if restart_data is None:
+                        logger.error("Malformed restart signal, exiting")
+                        return 1
+                    _apply_restart_params(args, restart_data)
+
+                    # Reset LoRA weights for fresh restart
+                    logger.info("Resetting LoRA adapter weights for fresh restart...")
+                    from peft import PeftModel
+                    if isinstance(lora_model, PeftModel):
+                        base = lora_model.unload()
+                        lora_model = wrap_model_with_lora(
+                            base,
+                            lora_r=args.lora_r,
+                            lora_alpha=args.lora_alpha,
+                            lora_dropout=args.lora_dropout,
+                        )
+
+                    lora_model.train()
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    logger.info("Restarting training with fresh LoRA weights...")
+                    print("RESTARTING_TRAINING", flush=True)
+                    continue
+                else:
+                    return 1
 
             # Save final adapter
             logger.info("\nSaving LoRA adapter...")
@@ -820,11 +863,25 @@ def main():
                 # Apply updated parameters
                 _apply_restart_params(args, restart_data)
 
-                # Prepare for retraining
+                # Reset LoRA weights to initial state for a true restart.
+                # Delete the current adapter and re-create it so training
+                # starts from the frozen base model, not from the previous
+                # finetuned weights.
+                logger.info("Resetting LoRA adapter weights for fresh restart...")
+                from peft import PeftModel
+                if isinstance(lora_model, PeftModel):
+                    base = lora_model.unload()
+                    lora_model = wrap_model_with_lora(
+                        base,
+                        lora_r=args.lora_r,
+                        lora_alpha=args.lora_alpha,
+                        lora_dropout=args.lora_dropout,
+                    )
+
                 lora_model.train()
                 torch.cuda.empty_cache()
                 gc.collect()
-                logger.info("Restarting training with updated parameters...")
+                logger.info("Restarting training with fresh LoRA weights...")
                 print("RESTARTING_TRAINING", flush=True)
                 continue  # Loop back to retrain
 
