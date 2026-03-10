@@ -343,6 +343,7 @@ def create_dataloader(
         num_workers=num_workers,
         pin_memory=True,  # Faster GPU transfer
         persistent_workers=num_workers > 0,  # Keep workers alive between epochs
+        multiprocessing_context='spawn' if num_workers > 0 else None,  # tensorstore threading incompatible with fork
     )
 
     logger.info(
