@@ -916,6 +916,13 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    // Show restart sub-status updates (e.g. "Loading corrections...", "Preparing trainer...")
+    const restartStatusMatch = line.match(/RESTART_STATUS:\s*(.+)/);
+    if (restartStatusMatch) {
+      document.getElementById("jobProgress").textContent = restartStatusMatch[1].trim();
+      return;
+    }
+
     // Parse "Epoch X/Y" anywhere in the line.
     const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
     if (epochMatch) {
