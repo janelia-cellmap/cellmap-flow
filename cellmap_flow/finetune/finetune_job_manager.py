@@ -64,6 +64,7 @@ class FinetuneJob:
     inference_server_ready: bool = False
     previous_job_id: Optional[str] = None
     next_job_id: Optional[str] = None
+    _processed_iteration_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -735,6 +736,12 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
+        # Check for diverged marker - training produced NaN/Inf loss
+        if "TRAINING_DIVERGED" in log_content:
+            self.logger.warning(f"Training diverged for job {finetune_job.job_id}")
+            finetune_job.status = JobStatus.RUNNING  # still alive, waiting for restart
+            finetune_job.latest_loss = None
+
         # Check for restart marker - reset progress
         if "RESTARTING_TRAINING" in log_content:
             self.logger.info(f"Training restart detected for job {finetune_job.job_id}")
@@ -751,7 +758,13 @@ class FinetuneJobManager:
         except Exception:
             full_log = log_content
         iter_matches = re.findall(iter_pattern, full_log)
-        if iter_matches:
+        # Only process new iteration-complete markers (ignore ones already handled).
+        # After a restart, _processed_iteration_count stays at the old count so
+        # previously-seen markers don't re-trigger inference_server_ready or
+        # neuroglancer layer updates.
+        if len(iter_matches) > finetune_job._processed_iteration_count:
+            finetune_job._processed_iteration_count = len(iter_matches)
+
             # For in-process restarts, the inference server usually stays on the same
             # URL and does not emit a fresh CELLMAP_FLOW_SERVER_IP marker. Mark the
             # server as ready once we see a completed training iteration if URL exists.
