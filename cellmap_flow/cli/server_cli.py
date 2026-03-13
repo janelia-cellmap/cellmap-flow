@@ -45,7 +45,7 @@ def cli(log_level):
     Examples:
         cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_server cellmap-model -f /path/to/model -n mymodel -d /path/to/data
+        cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 

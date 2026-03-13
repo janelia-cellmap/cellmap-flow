@@ -5,6 +5,7 @@ import logging
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.globals import g
+import os
 
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
@@ -60,7 +61,6 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     # .replace("zouinkhim-lm1", "192.168.1.167")
     print("viewer", viewer_url)
     url = create_and_run_app(neuroglancer_url=viewer_url)
-    show(url)
     return url
 
 
