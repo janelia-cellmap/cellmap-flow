@@ -29,6 +29,9 @@ cellmap-flow = { path = ".", editable = true }
 [feature.dacapo.pypi-dependencies]
 dacapo-ml = "*"
 
+[feature.cellpose.dependencies]
+numpy = "<2.1"
+
 [feature.cellpose.pypi-dependencies]
 cellpose = "==3.1.1.1"
 
@@ -69,13 +72,13 @@ funlib-math = { git = "https://github.com/funkelab/funlib.math.git" }
 
 [environments]
 default = { solve-group = "default" }
-dacapo = { features = ["dacapo"], solve-group = "default" }
-cellpose = { features = ["cellpose"], solve-group = "default" }
-bioimageio = { features = ["bioimageio"], solve-group = "default" }
-test = { features = ["test"], solve-group = "default" }
-dev = { features = ["dev", "test"], solve-group = "default" }
-docs = { features = ["docs"], solve-group = "default" }
-postprocess = { features = ["postprocess"], solve-group = "default" }
+dacapo = { features = ["dacapo"], solve-group = "dacapo" }
+cellpose = { features = ["cellpose"], solve-group = "cellpose" }
+bioimageio = { features = ["bioimageio"], solve-group = "bioimageio" }
+test = { features = ["test"], solve-group = "test" }
+dev = { features = ["dev", "test"], solve-group = "dev" }
+docs = { features = ["docs"], solve-group = "docs" }
+postprocess = { features = ["postprocess"], solve-group = "postprocess" }
 
 [tasks]
 cellmap_flow_yaml = "cellmap_flow_yaml"

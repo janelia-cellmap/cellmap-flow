@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
     help="Path to the dataset (zarr or n5)",
 )
 @click.option(
+    "-P", "--project", default=None, help="Project/chargeback group for billing"
+)
+@click.option(
     "--log-level",
     type=click.Choice(
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
     default="INFO",
     help="Set the logging level",
 )
-def main(dataset, log_level):
+def main(dataset, project, log_level):
     """
     Start CellMap Flow viewer with a dataset.
 
@@ -39,6 +42,7 @@ def main(dataset, log_level):
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
     logger.info(f"Starting CellMap Flow viewer with dataset: {dataset}")
+    logger.info(f"Project: {project}")
 
     # Set up neuroglancer server
     neuroglancer.set_server_bind_address("0.0.0.0")
@@ -49,6 +53,8 @@ def main(dataset, log_level):
     # Set dataset path in globals
     g.dataset_path = dataset
     g.viewer = viewer
+    if project:
+        g.charge_group = project
 
     # Add dataset layer to viewer
     with viewer.txn() as s:
