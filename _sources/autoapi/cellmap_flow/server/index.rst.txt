@@ -58,6 +58,9 @@ Module Contents
    .. py:attribute:: axes
 
 
+   .. py:attribute:: has_channel
+
+
    .. py:attribute:: refresh_rate_seconds
       :value: 5
 
@@ -66,9 +69,6 @@ Module Contents
    .. py:attribute:: previous_refresh_time
       :value: 0
 
-
-
-   .. py:attribute:: vol_shape
 
 
    .. py:attribute:: chunk_encoder

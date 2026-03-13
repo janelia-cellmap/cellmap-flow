@@ -1,0 +1,41 @@
+cellmap_flow.cli.viewer_cli
+===========================
+
+.. py:module:: cellmap_flow.cli.viewer_cli
+
+.. autoapi-nested-parse::
+
+   Simple CLI for viewing datasets with CellMap Flow without requiring model configs.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.viewer_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.viewer_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: main(dataset, log_level)
+
+   Start CellMap Flow viewer with a dataset.
+
+   .. rubric:: Example
+
+   cellmap_flow_viewer -d /path/to/dataset.zarr
+
+

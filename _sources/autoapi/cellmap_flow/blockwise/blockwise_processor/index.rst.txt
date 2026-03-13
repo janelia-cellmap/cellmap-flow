@@ -58,8 +58,6 @@ Module Contents
 
 
    .. py:attribute:: output_channels_is_dict
-      :value: False
-
 
 
    .. py:attribute:: cpu_workers

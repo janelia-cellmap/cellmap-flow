@@ -12,6 +12,7 @@ Submodules
 
    /autoapi/cellmap_flow/cli/cli/index
    /autoapi/cellmap_flow/cli/server_cli/index
+   /autoapi/cellmap_flow/cli/viewer_cli/index
    /autoapi/cellmap_flow/cli/yaml_cli/index
 
 

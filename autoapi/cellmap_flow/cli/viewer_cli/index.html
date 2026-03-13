@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>cellmap_flow.utils.neuroglancer_utils &mdash; CellMap Flow  documentation</title>
+  <title>cellmap_flow.cli.viewer_cli &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
@@ -24,8 +24,8 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils.plugin_manager" href="../plugin_manager/index.html" />
-    <link rel="prev" title="cellmap_flow.utils.load_py" href="../load_py/index.html" /> 
+    <link rel="next" title="cellmap_flow.cli.yaml_cli" href="../yaml_cli/index.html" />
+    <link rel="prev" title="cellmap_flow.cli.server_cli" href="../server_cli/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -59,7 +59,7 @@
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
@@ -68,7 +68,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
-<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
 </ul>
 </li>
 </ul>
@@ -93,10 +93,10 @@
       <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
           <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
-          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
-      <li class="breadcrumb-item active">cellmap_flow.utils.neuroglancer_utils</li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.cli</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.cli.viewer_cli</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../../../../_sources/autoapi/cellmap_flow/utils/neuroglancer_utils/index.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../../../../_sources/autoapi/cellmap_flow/cli/viewer_cli/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -104,13 +104,14 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-cellmap_flow.utils.neuroglancer_utils">
-<span id="cellmap-flow-utils-neuroglancer-utils"></span><h1>cellmap_flow.utils.neuroglancer_utils<a class="headerlink" href="#module-cellmap_flow.utils.neuroglancer_utils" title="Link to this heading"></a></h1>
+  <section id="module-cellmap_flow.cli.viewer_cli">
+<span id="cellmap-flow-cli-viewer-cli"></span><h1>cellmap_flow.cli.viewer_cli<a class="headerlink" href="#module-cellmap_flow.cli.viewer_cli" title="Link to this heading"></a></h1>
+<p>Simple CLI for viewing datasets with CellMap Flow without requiring model configs.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.logger" title="cellmap_flow.utils.neuroglancer_utils.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.viewer_cli.logger" title="cellmap_flow.cli.viewer_cli.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -120,11 +121,8 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url" title="cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_neuroglancer_url</span></code></a>(dataset_path[, wrap_raw])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.show" title="cellmap_flow.utils.neuroglancer_utils.show"><code class="xref py py-obj docutils literal notranslate"><span class="pre">show</span></code></a>(viewer)</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.viewer_cli.main" title="cellmap_flow.cli.viewer_cli.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>(dataset, log_level)</p></td>
+<td><p>Start CellMap Flow viewer with a dataset.</p></td>
 </tr>
 </tbody>
 </table>
@@ -132,19 +130,17 @@
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.logger">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.logger" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.cli.viewer_cli.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.viewer_cli.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.cli.viewer_cli.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">generate_neuroglancer_url</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrap_raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.show">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">show</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.show" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dt class="sig sig-object py" id="cellmap_flow.cli.viewer_cli.main">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.viewer_cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.viewer_cli.main" title="Link to this definition"></a></dt>
+<dd><p>Start CellMap Flow viewer with a dataset.</p>
+<p class="rubric">Example</p>
+<p>cellmap_flow_viewer -d /path/to/dataset.zarr</p>
+</dd></dl>
 
 </section>
 </section>
@@ -153,8 +149,8 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../load_py/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.load_py" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../plugin_manager/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.plugin_manager" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../server_cli/index.html" class="btn btn-neutral float-left" title="cellmap_flow.cli.server_cli" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../yaml_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.yaml_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
