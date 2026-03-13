@@ -1,7 +1,7 @@
 """
 Simple CLI for viewing datasets with CellMap Flow without requiring model configs.
 """
-
+import os
 import click
 import logging
 import neuroglancer
@@ -53,9 +53,10 @@ def main(dataset, project, log_level):
     # Set dataset path in globals
     g.dataset_path = dataset
     g.viewer = viewer
+    if "LSB_PROJECT_NAME" in os.environ:
+        g.charge_group = os.environ["LSB_PROJECT_NAME"]
     if project:
         g.charge_group = project
-
     # Add dataset layer to viewer
     with viewer.txn() as s:
         # Set coordinate space
