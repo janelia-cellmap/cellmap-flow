@@ -10,8 +10,8 @@ runnables:
     type: service
     name: Run Inference
     description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
-    conda_env: cellmap-flow
-    command: cellmap_flow_view
+    # conda_env: cellmap-flow
+    command: pixi run cellmap_flow_view
     parameters:
       - flag: -d
         name: Dataset Path
