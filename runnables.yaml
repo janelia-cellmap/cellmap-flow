@@ -11,11 +11,12 @@ runnables:
     name: Run Inference
     description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
     conda_env: cellmap-flow
-    command: cellmap_flow_yaml
+    command: cellmap_flow_view
     parameters:
-      - name: Config File
-        type: file
-        description: Path to YAML config file (defines data_path, models, normalization, etc.)
+      - flag: -d
+        name: Dataset Path
+        type: directory
+        description: Path to the EM dataset (e.g., Zarr file).
         required: true
 
     resources:
