@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SECURITY = "http"
 DEFAULT_QUEUE = "gpu_h100"
 DEFAULT_CHARGE_GROUP = "cellmap"
-SERVER_COMMAND = "cellmap_flow_server"
+SERVER_COMMAND = "pixi run cellmap_flow_server"
 
 
 class JobStatus(Enum):

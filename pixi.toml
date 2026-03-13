@@ -19,9 +19,9 @@ gunicorn = "*"
 marshmallow = "*"
 pydantic = "*"
 s3fs = "*"
-zarr = "2.18.4"
-numcodecs = "0.15.0"
-xarray = "2024.7.0"
+zarr = "==2.18.4"
+numcodecs = "==0.15.0"
+xarray = "==2024.7.0"
 
 [pypi-dependencies]
 cellmap-flow = { path = ".", editable = true }
