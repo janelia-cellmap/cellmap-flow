@@ -250,6 +250,12 @@ class FlyModelConfig(ModelConfig):
 
         if checkpoint_path.endswith(".ts"):
             model_backbone = torch.jit.load(checkpoint_path, map_location=device)
+        elif checkpoint_path.endswith("model.pt"):
+            # Load full model directly (for trusted fly_organelles models)
+            model = torch.load(checkpoint_path, weights_only=False, map_location=device)
+            model.to(device)
+            model.eval()
+            return model
         else:
             from fly_organelles.model import StandardUnet
 
@@ -574,7 +580,7 @@ class CellMapModelConfig(ModelConfig):
 
     @property
     def command(self) -> str:
-        return f"cellmap-model --folder-path {self.cellmap_model.folder_path} --name {self.name}"
+        return f"cellmap --folder-path {self.cellmap_model.folder_path} --name {self.name}"
 
     def _get_config(self) -> Config:
         config = Config()

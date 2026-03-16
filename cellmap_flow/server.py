@@ -3,7 +3,7 @@ import socket
 from http import HTTPStatus
 import numpy as np
 import numcodecs
-from flask import Flask, jsonify, redirect
+from flask import Flask, jsonify, redirect, request
 from flask_cors import CORS
 from flasgger import Swagger
 from funlib.geometry import Roi
@@ -33,7 +33,7 @@ class CellMapFlowServer:
     All routes are defined via Flask decorators for convenience.
     """
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig):
+    def __init__(self, dataset_name: str, model_config: ModelConfig, restart_callback=None):
         """
         Initialize the server and set up routes via decorators.
         """
@@ -47,6 +47,7 @@ class CellMapFlowServer:
         self.model_output_axes = model_config.chunk_output_axes
 
         self.inferencer = Inferencer(model_config)
+        self.restart_callback = restart_callback
 
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
@@ -98,6 +99,20 @@ class CellMapFlowServer:
         @self.app.route("/")
         def home():
             return redirect("/apidocs/")
+
+        @self.app.route("/__control__/restart", methods=["POST"])
+        def control_restart():
+            if self.restart_callback is None:
+                return jsonify({"success": False, "error": "Restart control not enabled"}), HTTPStatus.NOT_IMPLEMENTED
+            try:
+                payload = request.get_json(silent=True) or {}
+                accepted = self.restart_callback(payload)
+                if not accepted:
+                    return jsonify({"success": False, "error": "Restart request rejected"}), HTTPStatus.CONFLICT
+                return jsonify({"success": True}), HTTPStatus.OK
+            except Exception as e:
+                logger.error(f"Failed to process restart control request: {e}", exc_info=True)
+                return jsonify({"success": False, "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
         @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
