@@ -82,6 +82,9 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     except:
         type_hints = {}
 
+    # Track used short names to avoid duplicates
+    used_short_names = set(["-d", "-p"])  # Reserved for common options
+
     # Create the command function
     def command_func(**kwargs):
         # Separate model config kwargs from server kwargs
@@ -141,7 +144,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
 
     # Add model-specific options based on constructor parameters
     for param_name, param_info in reversed(list(sig.parameters.items())):
-        option_config = create_click_option_from_param(param_name, param_info)
+        option_config = create_click_option_from_param(param_name, param_info, used_short_names)
         if option_config:
             command_func = click.option(
                 *option_config.pop("param_decls"), **option_config
