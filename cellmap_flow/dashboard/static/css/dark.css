@@ -1,149 +1,500 @@
-/* Container styling */
+/* ============================================
+   CellMap Flow — Dark Theme
+   Inspired by agentok's clean design system
+   ============================================ */
+
+/* ---------- Design Tokens ---------- */
+:root {
+  /* Background layers */
+  --bg-base: #09090b;
+  --bg-surface: #0f1117;
+  --bg-elevated: #18181b;
+  --bg-muted: #1e293b;
+  --bg-input: #131620;
+
+  /* Foreground / text */
+  --text-primary: #f1f5f9;
+  --text-secondary: #b0bec5;
+  --text-muted: #8896a6;
+  --text-placeholder: #5a6878;
+
+  /* Borders */
+  --border: #1e293b;
+  --border-subtle: #162032;
+  --border-hover: #334155;
+
+  /* Accent — emerald green */
+  --accent: #10b981;
+  --accent-hover: #34d399;
+  --accent-muted: rgba(16, 185, 129, 0.15);
+
+  /* Semantic */
+  --danger: #f87171;
+  --success: #4ade80;
+  --info: #38bdf8;
+  --warning: #fbbf24;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+
+  /* Transitions */
+  --transition: 150ms ease;
+}
+
+/* ---------- Global Reset ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Typography ---------- */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+h3 { font-size: 20px; }
+h5 { font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+
+small, .text-muted {
+  color: var(--text-muted) !important;
+  font-size: 15px;
+}
+
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* ---------- Bootstrap Overrides: Nav Tabs ---------- */
+.nav-tabs {
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+
+.nav-tabs .nav-link {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.nav-tabs .nav-link:hover {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-hover);
+  background: transparent;
+}
+
+.nav-tabs .nav-link.active {
+  background: transparent;
+  color: #ffffff;
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  border-bottom-width: 3px;
+}
+
+/* ---------- Tab Panes ---------- */
+.tab-pane {
+  background: transparent;
+}
+
+.tab-content {
+  padding-top: 4px;
+}
+
+/* ---------- Accordion ---------- */
+.accordion {
+  --bs-accordion-bg: transparent;
+  --bs-accordion-border-color: var(--border);
+  --bs-accordion-border-width: 1px;
+  --bs-accordion-border-radius: var(--radius-md);
+}
+
+.accordion-item {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.accordion-item:first-of-type,
+.accordion-item:last-of-type {
+  border-radius: var(--radius-md) !important;
+}
+
+.accordion-button {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 16px;
+  border: none;
+  box-shadow: none !important;
+  transition: background var(--transition), color var(--transition);
+}
+
+.accordion-button:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.accordion-button.collapsed {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.accordion-button:not(.collapsed) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.accordion-button::after {
+  filter: invert(0.5);
+  width: 14px;
+  height: 14px;
+  background-size: 14px;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+}
+
+.accordion-body {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 14px 16px;
+  font-size: 16px;
+}
+
+/* ---------- Forms ---------- */
+.form-control,
+.form-control:focus,
+.form-select,
+.form-select:focus {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  padding: 8px 12px;
+  transition: border-color var(--transition);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  outline: none;
+}
+
+.form-control::placeholder {
+  color: var(--text-placeholder);
+}
+
+.form-control-sm {
+  font-size: 15px;
+  padding: 7px 12px;
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+.form-check-input {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-hover);
+  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.form-check-input:focus {
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  border-color: var(--accent);
+}
+
+.form-check-label {
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  font-size: 15px;
+  font-weight: 500;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+}
+
+.btn-outline-secondary {
+  background: transparent;
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.btn-outline-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  font-size: 14px;
+  padding: 6px 14px;
+}
+
+/* ---------- Cards / Containers ---------- */
 .container.my-4.bg-dark.text-light {
-    border-radius: 0.25rem;
-    min-height: 80vh;
-  }
-  
-  /* Dark background on the nav tabs */
-  .nav-tabs .nav-link {
-    background-color: #444;
-    color: #ddd;
-    border: 1px solid #555;
-  }
-  
-  /* Active tab styling */
-  .nav-tabs .nav-link.active {
-    background-color: #222;
-    color: #fff;
-    border-color: #555 #555 #222;
-  }
-  
-  /* Dark background on tab panes */
-  .tab-pane {
-    background-color: #333;
-  }
-  
-  .editor {
-    width: 100%;
-    height: 300px;
-    border: 1px solid #ccc;
-    font-family: monospace;
-    font-size: 14px;
-    padding: 10px;
-    border-radius: 4px;
-  }
-  .error {
-    color: red;
-    margin-top: 5px;
-    white-space: pre-wrap; /* Preserve formatting */
-  }
+  background: transparent !important;
+  border-radius: 0;
+  min-height: auto;
+  padding: 0 12px !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+}
 
-  /* -------------- */
-  body {
-    background-color: #121212;
-    color: #ffffff;
-  }
+/* ---------- Drag & Drop Items ---------- */
+.normalizer-item,
+.postprocessor-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 10px 12px !important;
+  margin-bottom: 6px !important;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
 
-  /* Accordion Items */
-  .accordion-item {
-    background-color: #1e1e1e;  /* dark gray */
-    border: none;
-  }
+.normalizer-item:hover,
+.postprocessor-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover) !important;
+}
 
-  /* Accordion Button (header) */
-  .accordion-button {
-    background-color: #333333;
-    color: #ffffff;
-    border: none;
-  }
+.normalizer-item[draggable="true"]:active,
+.postprocessor-item[draggable="true"]:active {
+  cursor: grabbing;
+}
 
-  .accordion-button.collapsed {
-    color: #d2d2d2;
-    background-color: #575141;
-  }
+/* Checked/selected items get a brighter border */
+.normalizer-item.item-checked,
+.postprocessor-item.item-checked,
+.normalizer-item:has(.form-check-input:checked),
+.postprocessor-item:has(.form-check-input:checked) {
+  border-color: var(--accent) !important;
+}
 
-  .accordion-button:focus {
-    box-shadow: none; /* Remove focus outline */
-  }
+/* Override Bootstrap .form-check positioning when drag handle is present */
+.normalizer-item .form-check,
+.postprocessor-item .form-check {
+  padding-left: 0;
+}
 
-  /* When the accordion is open */
-  .accordion-button:not(.collapsed) {
-    color: #ffffff;
-    background-color: #444444;
-  }
+.normalizer-item .form-check .form-check-input,
+.postprocessor-item .form-check .form-check-input {
+  position: static;
+  margin-left: 0;
+  margin-top: 0;
+  float: none;
+}
 
-  /* Accordion Body */
-  .accordion-body {
-    background-color: #1e1e1e;
-    color: #ffffff;
-  }
+.drag-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: -2px;
+  transition: color var(--transition);
+}
 
-  /* Form Elements */
-  .form-check-input {
-    background-color: #1e1e1e;
-    border: 1px solid #555;
-  }
-  .form-check-input:checked {
-    background-color: #0d6efd; /* Bootstrap primary color */
-    border-color: #0d6efd;
-  }
-  .form-check-label {
-    color: #ffffff;
-  }
+.drag-handle:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
 
-  /* Buttons */
-  .btn-primary {
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-  }
-  .btn-primary:hover {
-    background-color: #0b5ed7;
-    border-color: #0a58ca;
-  }
+.drag-handle:active {
+  cursor: grabbing;
+}
 
-  /* Textarea for logs */
-  #submissionLogModels {
-    background-color: #1e1e1e;
-    color: #cccccc;
-    border: 1px solid #555;
-    resize: none;
-  }
+/* ---------- Alerts ---------- */
+.alert-info {
+  background: var(--accent-muted);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--accent-hover);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  padding: 10px 14px;
+}
 
-  /* Spacing and overall styling */
-  .container {
-    max-width: 800px;
-    margin: 20px auto;
-  }
+.alert-info strong {
+  font-weight: 600;
+}
 
-  /* Drag and Drop Styling */
-  .normalizer-item, .postprocessor-item {
-    background-color: #2a2a2a;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
+/* ---------- Textareas / Log areas ---------- */
+textarea.form-control[readonly] {
+  background: var(--bg-base);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  resize: none;
+  border-radius: var(--radius-sm);
+}
 
-  .normalizer-item:hover, .postprocessor-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-  }
+#submissionLogModels,
+#modelSubmissionLogModels {
+  background: var(--bg-base);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  resize: none;
+}
 
-  .normalizer-item[draggable="true"]:active, 
-  .postprocessor-item[draggable="true"]:active {
-    cursor: grabbing;
-  }
+/* ---------- Spinner ---------- */
+.spinner-border-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  color: var(--accent);
+}
 
-  .drag-handle {
-    color: #888;
-    user-select: none;
-    font-size: 1.2rem;
-  }
+/* ---------- Modal ---------- */
+.modal-content.bg-dark {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
 
-  .drag-handle:hover {
-    color: #aaa;
-  }
+.modal-header.border-secondary {
+  border-color: var(--border) !important;
+  padding: 16px 20px;
+}
 
-  /* Alert styling for dark mode */
-  .alert-info {
-    background-color: #1a4971;
-    border-color: #2980b9;
-    color: #cce5ff;
-  }
+.modal-header .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 16px 20px;
+}
+
+.modal-footer.border-secondary {
+  border-color: var(--border) !important;
+  padding: 12px 20px;
+}
+
+/* ---------- Editor ---------- */
+.editor {
+  width: 100%;
+  height: 300px;
+  border: 1px solid var(--border);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 15px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+/* ---------- Error ---------- */
+.error, .text-danger {
+  color: var(--danger) !important;
+  font-size: 15px;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+/* ---------- Utility ---------- */
+.bg-dark {
+  background-color: var(--bg-base) !important;
+}
+
+.text-light {
+  color: var(--text-primary) !important;
+}
+
+.border {
+  border-color: var(--border) !important;
+}
+
+/* ---------- Section headings in tabs ---------- */
+.tab-pane h5 {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab-pane h5:first-child {
+  margin-top: 4px;
+}

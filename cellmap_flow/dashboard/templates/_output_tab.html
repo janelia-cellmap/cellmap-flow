@@ -1,6 +1,5 @@
-<!-- <h3>Post-Processing</h3> -->
-<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
-  <strong>Tip:</strong> Drag to reorder postprocessing steps. They will be applied in the order shown.
+<div class="alert alert-info" role="alert">
+  Drag to reorder. Steps apply in the order shown.
 </div>
 <form id="postProcessForm">
   <div id="postProcessList">
@@ -8,9 +7,9 @@
     {# Check if this post-processor is in the default_post_process dict #}
     {% set is_checked = normalizer.name in default_post_process and normalizer.name != 'custom_code' %}
 
-    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ normalizer.name }}" draggable="true">
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ normalizer.name }}">
       <div class="form-check mb-2 d-flex align-items-center">
-        <span class="drag-handle me-2" style="cursor: move;">⋮⋮</span>
+        <span class="drag-handle me-2">⋮⋮</span>
         <input
           class="form-check-input postProcessCheckbox"
           type="checkbox"
@@ -75,7 +74,7 @@
     id="customCodeParams_postProcess"
     style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
   >
-    <h3>Python Code Editor (PostProcess)</h3>
+    <h5 style="text-transform: none; letter-spacing: 0;">Code Editor</h5>
     <textarea
       id="pythonEditor_postProcess"
       class="form-control"
@@ -94,9 +93,8 @@
     <textarea
       id="submissionLog_postProcess"
       class="form-control"
-      rows="5"
+      rows="3"
       readonly
-      style="color: gray; font-size: x-small; background-color: transparent; border: 1px solid gray;"
     ></textarea>
   </div>
 </form>
@@ -107,13 +105,15 @@ document.addEventListener("DOMContentLoaded", function () {
   const postProcessCheckboxes = document.querySelectorAll(
     "#postProcessForm .postProcessCheckbox"
   );
-  postProcessCheckboxes.forEach((checkbox) => {
-    checkbox.addEventListener("change", function () {
-      const paramDiv = document.getElementById("postProcess_" + this.value + "Params");
-      if (paramDiv) {
-        paramDiv.style.display = this.checked ? "block" : "none";
-      }
-    });
+  function updatePostItemState(checkbox) {
+    const item = checkbox.closest(".postprocessor-item");
+    if (item) item.classList.toggle("item-checked", checkbox.checked);
+    const paramDiv = document.getElementById("postProcess_" + checkbox.value + "Params");
+    if (paramDiv) paramDiv.style.display = checkbox.checked ? "block" : "none";
+  }
+  postProcessCheckboxes.forEach(function (checkbox) {
+    updatePostItemState(checkbox);
+    checkbox.addEventListener("change", function () { updatePostItemState(this); });
   });
 
   // Toggle custom code
@@ -149,20 +149,37 @@ document.addEventListener("DOMContentLoaded", function () {
 
   editor.addEventListener("input", debounce(checkSyntax, 500));
 
-  // Drag and drop functionality for reordering postprocessors
+  // Drag and drop functionality — only via the drag handle
   const postProcessList = document.getElementById("postProcessList");
   let draggedPostItem = null;
 
+  // Make the parent item draggable only while the handle is held
+  postProcessList.querySelectorAll(".drag-handle").forEach(function (handle) {
+    handle.addEventListener("mousedown", function () {
+      const item = handle.closest(".postprocessor-item");
+      item.setAttribute("draggable", "true");
+    });
+  });
+
+  document.addEventListener("mouseup", function () {
+    postProcessList.querySelectorAll(".postprocessor-item[draggable]").forEach(function (item) {
+      item.removeAttribute("draggable");
+    });
+  });
+
   postProcessList.addEventListener("dragstart", function (e) {
-    if (e.target.classList.contains("postprocessor-item")) {
-      draggedPostItem = e.target;
-      e.target.style.opacity = "0.5";
+    const item = e.target.closest ? e.target.closest(".postprocessor-item") : e.target;
+    if (item && item.classList.contains("postprocessor-item")) {
+      draggedPostItem = item;
+      item.style.opacity = "0.5";
     }
   });
 
   postProcessList.addEventListener("dragend", function (e) {
-    if (e.target.classList.contains("postprocessor-item")) {
-      e.target.style.opacity = "1";
+    const item = e.target.closest ? e.target.closest(".postprocessor-item") : e.target;
+    if (item && item.classList.contains("postprocessor-item")) {
+      item.style.opacity = "1";
+      item.removeAttribute("draggable");
     }
   });
 
@@ -178,7 +195,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function getDragAfterElementPost(container, y) {
     const draggableElements = [...container.querySelectorAll(".postprocessor-item:not(.dragging)")];
-    return draggableElements.reduce((closest, child) => {
+    return draggableElements.reduce(function (closest, child) {
       const box = child.getBoundingClientRect();
       const offset = y - box.top - box.height / 2;
       if (offset < 0 && offset > closest.offset) {

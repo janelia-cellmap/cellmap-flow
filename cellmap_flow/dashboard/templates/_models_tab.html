@@ -1,6 +1,6 @@
 <form id="modelSelectionForm">
     <!-- Local Catalog Section -->
-    <h5 class="mt-2 mb-2">Local Catalog</h5>
+    <h5>Local Catalog</h5>
     <div class="accordion" id="modelAccordion">
       {% for group_name, models in model_catalog.items() %}
         <div class="accordion-item">
@@ -50,7 +50,7 @@
     </div>
 
     <!-- Hugging Face Section -->
-    <h5 class="mt-4 mb-2">Hugging Face</h5>
+    <h5>Hugging Face</h5>
     <div class="accordion" id="hfModelAccordion">
       <div class="accordion-item">
         <h2 class="accordion-header" id="heading_hf">
@@ -62,7 +62,7 @@
             aria-expanded="false"
             aria-controls="collapse_hf"
           >
-            Hugging Face Models
+            cellmap
             <span id="hfLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
           </button>
         </h2>
@@ -83,7 +83,7 @@
     </div>
 
     <!-- Server Config Section -->
-    <h5 class="mt-4 mb-2">Server Config</h5>
+    <h5>Server Config</h5>
     <div class="accordion" id="serverConfigAccordion">
       <div class="accordion-item">
         <h2 class="accordion-header" id="heading_server_config">
@@ -136,14 +136,13 @@
       Submit Models
     </button>
 
-    <!-- Optional: an area to display logs or messages -->
+    <!-- Log area -->
     <div class="mt-3">
       <textarea
         id="modelSubmissionLogModels"
         class="form-control"
-        rows="4"
+        rows="3"
         readonly
-        style="color: gray; font-size: 0.9rem;"
       ></textarea>
     </div>
   </form>
