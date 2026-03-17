@@ -41,20 +41,29 @@ def load_config(path: str) -> Dict[str, Any]:
     with open(path, "r") as f:
         config = yaml.safe_load(f)
 
+    from cellmap_flow.globals import load_server_config_cache, SERVER_CONFIG_DEFAULTS
+
     # Required top-level fields
     if "data_path" not in config:
         logger.error("Missing required field in YAML: data_path")
         sys.exit(1)
-    if "charge_group" not in config:
-        logger.error("Missing required field in YAML: charge_group")
-        sys.exit(1)
 
-    # If queue is missing, set default
+    # Fall back to cache then defaults for charge_group and queue
+    cached = load_server_config_cache() or {}
+
+    if "charge_group" not in config or not config["charge_group"]:
+        fallback = cached.get("charge_group", SERVER_CONFIG_DEFAULTS.get("charge_group"))
+        if fallback:
+            logger.warning(f"Missing 'charge_group' in YAML, using cached value: {fallback}")
+            config["charge_group"] = fallback
+        else:
+            logger.error("Missing required field in YAML: charge_group (no cache available)")
+            sys.exit(1)
+
     if "queue" not in config or not config["queue"]:
-        logger.warning(
-            f"Missing 'queue' in YAML, using default: {DEFAULT_SERVER_QUEUE}"
-        )
-        config["queue"] = DEFAULT_SERVER_QUEUE
+        fallback = cached.get("queue", DEFAULT_SERVER_QUEUE)
+        logger.warning(f"Missing 'queue' in YAML, using: {fallback}")
+        config["queue"] = fallback
 
     # Models must be present and non-empty (can be dict or list for backward compatibility)
     if "models" not in config:
@@ -205,7 +214,7 @@ def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
     YAML format:
     models:
       my_model_1:
-        type: cellmap-model
+        type: cellmap
         checkpoint_path: /path/to/checkpoint
       my_model_2:
         type: dacapo

@@ -10,6 +10,7 @@
 <body>
     <div class="app-container">
         <div class="header">
+            <a href="/" class="action-btn" style="text-decoration:none; margin-right:8px;">← Back</a>
             <h1>CellMapFlow Pipeline</h1>
             <div class="header-actions">
                 <button class="action-btn" onclick="exportYAML()">📥 Export YAML</button>
@@ -301,16 +302,22 @@
             if (m.config && typeof m.config === 'object') {
                 model.config = m.config;
                 // Normalize channels field to always be an array
-                if (model.config.channels) {
-                    if (typeof model.config.channels === 'string') {
+                // Support both 'channels' (FlyModel etc.) and 'channels_names' (HuggingFace)
+                const chKey = model.config.channels ? 'channels' : (model.config.channels_names ? 'channels_names' : null);
+                if (chKey) {
+                    if (typeof model.config[chKey] === 'string') {
                         try {
-                            model.config.channels = JSON.parse(model.config.channels);
-                            if (!Array.isArray(model.config.channels)) {
-                                model.config.channels = [model.config.channels];
+                            model.config[chKey] = JSON.parse(model.config[chKey]);
+                            if (!Array.isArray(model.config[chKey])) {
+                                model.config[chKey] = [model.config[chKey]];
                             }
                         } catch {
-                            model.config.channels = [model.config.channels];
+                            model.config[chKey] = [model.config[chKey]];
                         }
+                    }
+                    // Ensure 'channels' is always set for downstream code
+                    if (chKey === 'channels_names' && !model.config.channels) {
+                        model.config.channels = model.config.channels_names;
                     }
                 }
                 // Also populate params from config for UI display (exclude 'name')
@@ -720,8 +727,8 @@
             // If no edges, use all models in pipeline
             if (connectedModelIds.size === 0) {
                 pipeline.models.forEach(model => {
-                    if (model.config?.channels) {
-                        const channels = model.config.channels;
+                    if (model.config?.channels || model.config?.channels_names) {
+                        const channels = model.config.channels || model.config.channels_names;
                         // Ensure channels is an array
                         if (Array.isArray(channels)) {
                             outputChannelsModalState.availableChannels = [...channels];
@@ -740,8 +747,8 @@
                 // Use channels from connected models
                 connectedModelIds.forEach(modelId => {
                     const model = pipeline.models.find(m => m.id === modelId);
-                    if (model && model.config?.channels) {
-                        const channels = model.config.channels;
+                    if (model && model.config?.channels || model.config?.channels_names) {
+                        const channels = model.config.channels || model.config.channels_names;
                         // Ensure channels is an array
                         if (Array.isArray(channels)) {
                             outputChannelsModalState.availableChannels = [...channels];
@@ -758,10 +765,12 @@
                 });
             }
 
-            // Fallback: if still no channels, show default channels
+            // If no channels found, show error and return
             if (outputChannelsModalState.availableChannels.length === 0) {
-                outputChannelsModalState.availableChannels = ['mito', 'nucleus', 'er', 'membrane'];
-                console.warn('No model channels found, using defaults');
+                console.warn('No model channels found');
+                const body = document.getElementById('output-channels-body');
+                body.innerHTML = '<p style="color: #f87171; margin: 16px 0;">No channels detected from connected models. Make sure your models have channel information in their configuration.</p>';
+                return;
             }
 
             console.log('Available channels:', outputChannelsModalState.availableChannels);
