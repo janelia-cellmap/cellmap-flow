@@ -180,6 +180,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
 
+    # Update globals and save to cache
+    g.queue = queue
+    g.charge_group = charge_group
+    g.save_server_config()
+
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
     logger.info(f"Queue: {queue}")

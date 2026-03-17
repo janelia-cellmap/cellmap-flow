@@ -1,5 +1,6 @@
 <form id="modelSelectionForm">
-    <!-- Use a Bootstrap Accordion for collapsible groups -->
+    <!-- Local Catalog Section -->
+    <h5 class="mt-2 mb-2">Local Catalog</h5>
     <div class="accordion" id="modelAccordion">
       {% for group_name, models in model_catalog.items() %}
         <div class="accordion-item">
@@ -16,7 +17,7 @@
               {{ group_name }}
             </button>
           </h2>
-  
+
           <!-- Accordion Body (the collapsible part) -->
           <div
             id="collapse_{{ loop.index }}"
@@ -24,7 +25,6 @@
             aria-labelledby="heading_{{ loop.index }}"
           >
             <div class="accordion-body">
-              <!-- <p>Select the models you want from <strong>{{ group_name }}</strong>:</p> -->
               {% for model_name in models %}
                 <div class="form-check mb-2">
                   <input
@@ -48,7 +48,85 @@
         </div>
       {% endfor %}
     </div>
-  
+
+    <!-- Hugging Face Section -->
+    <h5 class="mt-4 mb-2">Hugging Face</h5>
+    <div class="accordion" id="hfModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_hf">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_hf"
+            aria-expanded="false"
+            aria-controls="collapse_hf"
+          >
+            Hugging Face Models
+            <span id="hfLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_hf"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_hf"
+        >
+          <div class="accordion-body" id="hfModelsContainer">
+            <div class="d-flex gap-2 mb-2">
+              <input type="text" class="form-control" id="hfSearchBar" placeholder="Search models..." style="display: none;" />
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="hfRefreshBtn" style="display: none; white-space: nowrap;" title="Refresh from Hugging Face">Refresh</button>
+            </div>
+            <p class="text-muted" id="hfPlaceholder">Click to load Hugging Face models...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Server Config Section -->
+    <h5 class="mt-4 mb-2">Server Config</h5>
+    <div class="accordion" id="serverConfigAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_server_config">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_server_config"
+            aria-expanded="false"
+            aria-controls="collapse_server_config"
+          >
+            Server Configuration
+          </button>
+        </h2>
+        <div
+          id="collapse_server_config"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_server_config"
+        >
+          <div class="accordion-body" id="serverConfigContainer">
+            <div class="mb-2">
+              <label class="form-label" for="cfg_queue">Queue</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_queue" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_charge_group">Charge Group</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_charge_group" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_nb_cores_worker">Cores per Worker</label>
+              <input type="number" class="form-control form-control-sm" id="cfg_nb_cores_worker" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_nb_workers">Number of Workers</label>
+              <input type="number" class="form-control form-control-sm" id="cfg_nb_workers" />
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="updateServerConfigBtn">Update</button>
+            <span id="serverConfigStatus" class="ms-2" style="font-size: 0.85rem;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Submit button -->
     <button
       type="button"
@@ -57,7 +135,7 @@
     >
       Submit Models
     </button>
-  
+
     <!-- Optional: an area to display logs or messages -->
     <div class="mt-3">
       <textarea
@@ -73,20 +151,167 @@
     document.addEventListener("DOMContentLoaded", function () {
       const submitBtn = document.getElementById("submitModelsBtn");
       const logArea   = document.getElementById("modelSubmissionLogModels");
-    
+      const defaultHfRepos = {{ default_hf_repos | tojson }};
+      let hfModelsLoaded = false;
+
+      function renderHfModels(data) {
+        const container = document.getElementById("hfModelsContainer");
+        const searchBar = document.getElementById("hfSearchBar");
+        const refreshBtn = document.getElementById("hfRefreshBtn");
+
+        // Remove old model items
+        container.querySelectorAll(".hf-model-item").forEach(function (el) { el.remove(); });
+        const placeholder = document.getElementById("hfPlaceholder");
+        if (placeholder) placeholder.remove();
+
+        if (data.error) {
+          const p = document.createElement("p");
+          p.className = "text-danger";
+          p.textContent = "Error: " + data.error;
+          container.appendChild(p);
+          return;
+        }
+
+        const modelIds = Object.keys(data);
+        if (modelIds.length === 0) {
+          const p = document.createElement("p");
+          p.className = "text-muted";
+          p.textContent = "No models found.";
+          container.appendChild(p);
+          return;
+        }
+
+        searchBar.style.display = "";
+        refreshBtn.style.display = "";
+
+        modelIds.forEach(function (modelId) {
+          const metadata = data[modelId];
+          const displayName = modelId.split("/").pop();
+          const searchStr = (modelId + " " + JSON.stringify(metadata)).toLowerCase();
+          const div = document.createElement("div");
+          div.className = "form-check mb-2 hf-model-item";
+          div.setAttribute("data-search", searchStr);
+          const isChecked = defaultHfRepos.includes(modelId) ? ' checked' : '';
+          div.innerHTML =
+            '<input class="form-check-input hf-model-checkbox" type="checkbox" ' +
+            'name="selected_hf_models" id="chk_hf_' + displayName + '" ' +
+            'value="' + modelId + '"' + isChecked + ' />' +
+            '<label class="form-check-label" for="chk_hf_' + displayName + '">' +
+            displayName +
+            (metadata.description ? ' <small style="color: #aaa;">- ' + metadata.description + '</small>' : '') +
+            '</label>';
+          container.appendChild(div);
+        });
+      }
+
+      function loadHfModels(url) {
+        const spinner = document.getElementById("hfLoadingSpinner");
+        spinner.classList.remove("d-none");
+
+        fetch(url, { method: url.includes("refresh") ? "POST" : "GET" })
+          .then((res) => res.json())
+          .then((data) => {
+            spinner.classList.add("d-none");
+            renderHfModels(data);
+            hfModelsLoaded = true;
+          })
+          .catch((err) => {
+            spinner.classList.add("d-none");
+            const placeholder = document.getElementById("hfPlaceholder");
+            if (placeholder) placeholder.textContent = "Error loading models: " + err;
+            hfModelsLoaded = false;
+          });
+      }
+
+      // Load HF models when the accordion is expanded
+      document.getElementById("collapse_hf").addEventListener("show.bs.collapse", function () {
+        if (hfModelsLoaded) return;
+        loadHfModels("/api/huggingface-models");
+      });
+
+      // Refresh button
+      document.getElementById("hfRefreshBtn").addEventListener("click", function () {
+        loadHfModels("/api/huggingface-models/refresh");
+      });
+
+      // Search bar filtering
+      document.getElementById("hfSearchBar").addEventListener("input", function () {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll(".hf-model-item").forEach(function (item) {
+          const searchData = item.getAttribute("data-search");
+          item.style.display = searchData.includes(query) ? "" : "none";
+        });
+      });
+
+      // Server Config: load values when accordion opens
+      let serverConfigLoaded = false;
+      document.getElementById("collapse_server_config").addEventListener("show.bs.collapse", function () {
+        if (serverConfigLoaded) return;
+        loadServerConfig();
+      });
+
+      function loadServerConfig() {
+        fetch("/api/server-config")
+          .then((res) => res.json())
+          .then((data) => {
+            document.getElementById("cfg_queue").value = data.queue || "";
+            document.getElementById("cfg_charge_group").value = data.charge_group || "";
+            document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
+            document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
+            serverConfigLoaded = true;
+          });
+      }
+
+      document.getElementById("updateServerConfigBtn").addEventListener("click", function () {
+        const payload = {
+          queue: document.getElementById("cfg_queue").value,
+          charge_group: document.getElementById("cfg_charge_group").value,
+          nb_cores_worker: document.getElementById("cfg_nb_cores_worker").value,
+          nb_workers: document.getElementById("cfg_nb_workers").value,
+        };
+        const statusEl = document.getElementById("serverConfigStatus");
+        fetch("/api/server-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              statusEl.style.color = "#4ade80";
+              statusEl.textContent = "Saved!";
+            } else {
+              statusEl.style.color = "#f87171";
+              statusEl.textContent = "Error";
+            }
+            setTimeout(function () { statusEl.textContent = ""; }, 3000);
+          })
+          .catch((err) => {
+            statusEl.style.color = "#f87171";
+            statusEl.textContent = "Error: " + err;
+          });
+      });
+
       submitBtn.addEventListener("click", function () {
-        // Gather all checked checkboxes
-        const checked = document.querySelectorAll("#modelSelectionForm input.model-checkbox:checked");
+        // Gather checked local catalog models
+        const checkedLocal = document.querySelectorAll("#modelSelectionForm input.model-checkbox:checked");
         const selected = [];
-        checked.forEach((checkbox) => {
+        checkedLocal.forEach((checkbox) => {
           selected.push(checkbox.value);
         });
-    
-        console.log("Selected models:", selected);
+
+        // Gather checked HF models
+        const checkedHf = document.querySelectorAll("#modelSelectionForm input.hf-model-checkbox:checked");
+        const selectedHf = [];
+        checkedHf.forEach((checkbox) => {
+          selectedHf.push(checkbox.value);
+        });
+
+        console.log("Selected models:", selected, "HF models:", selectedHf);
         fetch("/api/models", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ selected_models: selected }),
+          body: JSON.stringify({ selected_models: selected, selected_hf_models: selectedHf }),
         })
           .then((res) => res.json())
           .then((data) => {
@@ -95,8 +320,8 @@
           })
           .catch((err) => {
             console.error("Error:", err);
-            alert("Error submitting model selection"+err);
+            alert("Error submitting model selection" + err);
           });
       });
     });
-    </script>  
+    </script>

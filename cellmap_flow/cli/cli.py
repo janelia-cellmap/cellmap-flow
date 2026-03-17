@@ -14,6 +14,7 @@ from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 from cellmap_flow.models.models_config import ModelConfig
+from cellmap_flow.globals import g
 from cellmap_flow.utils.cli_utils import (
     get_all_subclasses,
     create_click_option_from_param,
@@ -50,7 +51,7 @@ def cli(log_level):
     Examples:
         cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
         cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_v2 cellmap-model -f /path/to/model -n mymodel -d /path/to/data
+        cellmap_flow_v2 cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
@@ -117,7 +118,7 @@ def list_plugins_cmd():
     "-m",
     "--model-type",
     required=True,
-    help="Model type (e.g., dacapo, script, cellmap-model)",
+    help="Model type (e.g., dacapo, script, cellmap)",
 )
 @click.option("-d", "--data-path", required=True, help="Path to the dataset")
 @click.option("-q", "--queue", default="gpu_h100", help="Queue for job submission")
@@ -137,6 +138,10 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     Example:
         cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
     """
+    # Fall back to cached values if not provided
+    if project is None:
+        project = g.charge_group
+
     model_configs = get_all_model_configs()
 
     if model_type not in model_configs:
@@ -179,6 +184,12 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     if hasattr(model_config, 'scale') and model_config.scale:
         final_data_path = os.path.join(data_path, model_config.scale)
 
+    # Save server config to cache
+    g.queue = queue
+    if project:
+        g.charge_group = project
+    g.save_server_config()
+
     # Run the server check or full inference
     if server_check:
         server = CellMapFlowServer(final_data_path, model_config)
@@ -217,6 +228,10 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
 
+        # Fall back to cached values if not provided
+        if project is None:
+            project = g.charge_group
+
         # Process kwargs for the model config
         for key, value in kwargs.items():
             if value is not None:
@@ -237,6 +252,12 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         final_data_path = data_path
         if hasattr(model_config, 'scale') and model_config.scale:
             final_data_path = os.path.join(data_path, model_config.scale)
+
+        # Save server config to cache
+        g.queue = queue
+        if project:
+            g.charge_group = project
+        g.save_server_config()
 
         # Run server check or full inference
         if server_check:
