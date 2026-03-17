@@ -44,8 +44,21 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     state.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
     port = 0
-    logger.warning(f"Host name: {hostname}")
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+    from werkzeug.serving import make_server
+    server = make_server("0.0.0.0", port, app)
+    actual_port = server.socket.getsockname()[1]
+    url = f"http://{hostname}:{actual_port}"
+    logger.warning(f"Dashboard running at: {url}")
+    print(f"\n * Dashboard URL: {url}\n")
+    try:
+        service_url_path = os.environ.get("SERVICE_URL_PATH")
+        if service_url_path:
+            with open(service_url_path, "w") as f:
+                f.write(url)
+    except Exception as e:
+        logger.warning(f"Failed to write service URL to {service_url_path}: {e}")
+    server.serve_forever()
 
 
 if __name__ == "__main__":

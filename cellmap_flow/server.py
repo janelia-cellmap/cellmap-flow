@@ -327,6 +327,7 @@ class CellMapFlowServer:
 
         address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
+
         logger.error(output)
         print(output, flush=True)
 

@@ -740,6 +740,7 @@ class HuggingFaceModelConfig(ModelConfig):
             self._metadata = {}
         return self._metadata
 
+
     @property
     def command(self) -> str:
         cmd = f"huggingface --repo {self.repo}"
