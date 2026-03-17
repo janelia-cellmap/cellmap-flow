@@ -46,7 +46,7 @@ class ModelConfig:
         return self._config
 
     def _validate_config(self):
-        """Ensure config has required attributes."""
+        """Ensure config has required attributes and shapes are consistent."""
         required = [
             "read_shape",
             "write_shape",
@@ -61,7 +61,87 @@ class ModelConfig:
         for attr in required:
             if not hasattr(self._config, attr):
                 raise AttributeError(f"{attr} not found in config")
+
+        self._validate_model_shapes()
         logger.warning(f"Model config validated: {self.__str__()}")
+
+    def _validate_model_shapes(self):
+        """Run a dummy forward pass to verify declared shapes match actual model output."""
+        config = self._config
+        if not hasattr(config, "model"):
+            return
+
+        model = config.model
+        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
+        declared_output_size = np.array(config.write_shape) // np.array(
+            config.output_voxel_size
+        )
+        declared_block_spatial = np.array(config.block_shape)[:3]
+
+        try:
+            device = next(model.parameters()).device
+            dummy = torch.zeros(
+                (1, 1, *[int(s) for s in input_size]), device=device
+            )
+            was_training = model.training
+            model.eval()
+            with torch.no_grad():
+                out = model(dummy)
+            if was_training:
+                model.train()
+
+            actual_output = np.array(out.shape[1:])  # drop batch dim
+            # Determine actual spatial shape (skip channel dim if present)
+            if len(actual_output) == 4:
+                actual_channels = actual_output[0]
+                actual_spatial = actual_output[1:]
+            elif len(actual_output) == 3:
+                actual_channels = 1
+                actual_spatial = actual_output
+            else:
+                logger.warning(
+                    f"Unexpected model output ndim={len(actual_output)}, "
+                    "skipping shape validation"
+                )
+                return
+
+            errors = []
+            if not np.array_equal(actual_spatial, declared_output_size):
+                errors.append(
+                    f"write_shape mismatch: declared write_shape / output_voxel_size = "
+                    f"{declared_output_size.tolist()} but model actually outputs "
+                    f"spatial shape {actual_spatial.tolist()}. "
+                    f"Expected write_shape = "
+                    f"{(actual_spatial * np.array(config.output_voxel_size)).tolist()}"
+                )
+            if not np.array_equal(actual_spatial, declared_block_spatial):
+                errors.append(
+                    f"block_shape mismatch: declared block_shape spatial dims = "
+                    f"{declared_block_spatial.tolist()} but model actually outputs "
+                    f"spatial shape {actual_spatial.tolist()}. "
+                    f"Expected block_shape = "
+                    f"{[*actual_spatial.tolist(), int(actual_channels)]}"
+                )
+            if int(actual_channels) != int(config.output_channels):
+                errors.append(
+                    f"output_channels mismatch: declared {config.output_channels} "
+                    f"but model actually outputs {int(actual_channels)} channels"
+                )
+            if errors:
+                msg = (
+                    f"Script config shape validation failed for "
+                    f"{getattr(self, 'script_path', 'unknown')}:\n"
+                    + "\n".join(f"  - {e}" for e in errors)
+                )
+                raise ValueError(msg)
+
+            logger.info(
+                f"Shape validation passed: input {input_size.tolist()} -> "
+                f"output spatial {actual_spatial.tolist()}, "
+                f"channels {int(actual_channels)}"
+            )
+        except (RuntimeError, TypeError) as e:
+            logger.warning(f"Could not validate model shapes (forward pass failed): {e}")
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
