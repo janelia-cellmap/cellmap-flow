@@ -138,6 +138,9 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="cellmap_flow.models.models_config.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a CellmapModel.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="cellmap_flow.models.models_config.HuggingFaceModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HuggingFaceModelConfig</span></code></a></p></td>
+<td><p>Configuration class for a Hugging Face model.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -207,6 +210,11 @@ for raw bioimageio model axes.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ScriptModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">ScriptModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">script_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ScriptModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'script'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ScriptModelConfig.script_path">
 <span class="sig-name descname"><span class="pre">script_path</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig.script_path" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -238,6 +246,11 @@ for raw bioimageio model axes.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.DaCapoModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">DaCapoModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.DaCapoModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dacapo'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.DaCapoModelConfig.run_name">
 <span class="sig-name descname"><span class="pre">run_name</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig.run_name" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -274,6 +287,11 @@ for raw bioimageio model axes.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">FlyModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'fly'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig.name">
 <span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.name" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -341,6 +359,11 @@ for raw bioimageio model axes.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">BioModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_length_to_process</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'bioimage'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.model_name">
 <span class="sig-name descname"><span class="pre">model_name</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.model_name" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -427,8 +450,13 @@ for raw bioimageio model axes.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">CellMapModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">CellMapModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="Link to this definition"></a></dt>
 <dd><p>Configuration class for a CellmapModel.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.cellmap_model">
 <span class="sig-name descname"><span class="pre">cellmap_model</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.cellmap_model" title="Link to this definition"></a></dt>
@@ -436,7 +464,7 @@ for raw bioimageio model axes.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.name">
-<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.name" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.name" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -452,6 +480,48 @@ for raw bioimageio model axes.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Export configuration for use with build_model_from_entry.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">HuggingFaceModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">repo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">revision</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="Link to this definition"></a></dt>
+<dd><p>Configuration class for a Hugging Face model.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'huggingface'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.repo">
+<span class="sig-name descname"><span class="pre">repo</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.repo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.revision">
+<span class="sig-name descname"><span class="pre">revision</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.revision" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.command">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.command" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.to_dict" title="Link to this definition"></a></dt>
 <dd><p>Export configuration for use with build_model_from_entry.</p>
 </dd></dl>
 

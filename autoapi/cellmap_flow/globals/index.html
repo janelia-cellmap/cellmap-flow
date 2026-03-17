@@ -112,16 +112,25 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.logger" title="cellmap_flow.globals.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.input_norms" title="cellmap_flow.globals.input_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">input_norms</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.SERVER_CONFIG_PATH" title="cellmap_flow.globals.SERVER_CONFIG_PATH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_CONFIG_PATH</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.postprocess" title="cellmap_flow.globals.postprocess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">postprocess</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.SERVER_CONFIG_DEFAULTS" title="cellmap_flow.globals.SERVER_CONFIG_DEFAULTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_CONFIG_DEFAULTS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.viewer" title="cellmap_flow.globals.viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">viewer</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.SERVER_CONFIG_KEYS" title="cellmap_flow.globals.SERVER_CONFIG_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_CONFIG_KEYS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.g" title="cellmap_flow.globals.g"><code class="xref py py-obj docutils literal notranslate"><span class="pre">g</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.input_norms" title="cellmap_flow.globals.input_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">input_norms</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.postprocess" title="cellmap_flow.globals.postprocess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">postprocess</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.viewer" title="cellmap_flow.globals.viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">viewer</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.g" title="cellmap_flow.globals.g"><code class="xref py py-obj docutils literal notranslate"><span class="pre">g</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -137,12 +146,52 @@
 </tbody>
 </table>
 </section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.load_server_config_cache" title="cellmap_flow.globals.load_server_config_cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_server_config_cache</span></code></a>(→ Optional[Dict[str, Any]])</p></td>
+<td><p>Load server config from cache file. Returns None if not found.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.save_server_config_cache" title="cellmap_flow.globals.save_server_config_cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_server_config_cache</span></code></a>(→ None)</p></td>
+<td><p>Save server config to cache file.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.globals.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.globals.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.globals.SERVER_CONFIG_PATH">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">SERVER_CONFIG_PATH</span></span><a class="headerlink" href="#cellmap_flow.globals.SERVER_CONFIG_PATH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.globals.SERVER_CONFIG_DEFAULTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">SERVER_CONFIG_DEFAULTS</span></span><a class="headerlink" href="#cellmap_flow.globals.SERVER_CONFIG_DEFAULTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.globals.SERVER_CONFIG_KEYS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">SERVER_CONFIG_KEYS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['queue',</span> <span class="pre">'charge_group',</span> <span class="pre">'nb_cores_master',</span> <span class="pre">'nb_cores_worker',</span> <span class="pre">'nb_workers']</span></span><a class="headerlink" href="#cellmap_flow.globals.SERVER_CONFIG_KEYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.globals.load_server_config_cache">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">load_server_config_cache</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.globals.load_server_config_cache" title="Link to this definition"></a></dt>
+<dd><p>Load server config from cache file. Returns None if not found.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.globals.save_server_config_cache">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">save_server_config_cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.globals.save_server_config_cache" title="Link to this definition"></a></dt>
+<dd><p>Save server config to cache file.</p>
+</dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.globals.input_norms">
@@ -291,6 +340,12 @@
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.to_dict" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.save_server_config">
+<span class="sig-name descname"><span class="pre">save_server_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.save_server_config" title="Link to this definition"></a></dt>
+<dd><p>Save current server config attributes to cache.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.get_output_dtype">

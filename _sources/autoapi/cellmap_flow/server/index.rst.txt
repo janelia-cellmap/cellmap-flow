@@ -71,6 +71,9 @@ Module Contents
 
 
 
+   .. py:attribute:: vol_shape
+
+
    .. py:attribute:: chunk_encoder
 
 

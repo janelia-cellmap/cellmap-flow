@@ -75,7 +75,7 @@ Module Contents
    YAML format:
    models:
      my_model_1:
-       type: cellmap-model
+       type: cellmap
        checkpoint_path: /path/to/checkpoint
      my_model_2:
        type: dacapo

@@ -23,6 +23,7 @@ Classes
    cellmap_flow.models.models_config.FlyModelConfig
    cellmap_flow.models.models_config.BioModelConfig
    cellmap_flow.models.models_config.CellMapModelConfig
+   cellmap_flow.models.models_config.HuggingFaceModelConfig
 
 
 Functions
@@ -76,6 +77,11 @@ Module Contents
 
 
 
+   .. py:attribute:: cli_name
+      :value: 'script'
+
+
+
    .. py:attribute:: script_path
 
 
@@ -99,6 +105,11 @@ Module Contents
 
 
 .. py:class:: DaCapoModelConfig(run_name: str, iteration: int, name=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'dacapo'
 
 
 
@@ -128,6 +139,11 @@ Module Contents
 
 
 .. py:class:: FlyModelConfig(checkpoint_path: str, channels: list[str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=None, output_size=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'fly'
 
 
 
@@ -182,6 +198,11 @@ Module Contents
 
 
 .. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'bioimage'
 
 
 
@@ -244,17 +265,65 @@ Module Contents
 
 .. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
 
-.. py:class:: CellMapModelConfig(folder_path, name, scale=None)
+.. py:class:: CellMapModelConfig(folder_path, name=None, scale=None)
 
 
 
    Configuration class for a CellmapModel.
 
 
+   .. py:attribute:: cli_name
+      :value: 'cellmap'
+
+
+
    .. py:attribute:: cellmap_model
 
 
    .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: command
+      :type: str
+
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+
+
+.. py:class:: HuggingFaceModelConfig(repo, revision=None, name=None, scale=None)
+
+
+
+   Configuration class for a Hugging Face model.
+
+
+   .. py:attribute:: cli_name
+      :value: 'huggingface'
+
+
+
+   .. py:attribute:: repo
+
+
+   .. py:attribute:: revision
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
 
 
    .. py:attribute:: scale

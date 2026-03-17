@@ -133,8 +133,20 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.create_model_config" title="cellmap_flow.dashboard.routes.models.create_model_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_model_config</span></code></a>()</p></td>
 <td><p>Create a ModelConfig instance from user-provided parameters</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_huggingface_models" title="cellmap_flow.dashboard.routes.models.get_huggingface_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_huggingface_models</span></code></a>()</p></td>
+<td><p>Get available models from Hugging Face (uses cache if available)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route" title="cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_huggingface_models_route</span></code></a>()</p></td>
+<td><p>Force refresh the Hugging Face models cache</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.submit_models" title="cellmap_flow.dashboard.routes.models.submit_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_models</span></code></a>()</p></td>
 <td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="cellmap_flow.dashboard.routes.models.get_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_server_config</span></code></a>()</p></td>
+<td><p>Get current server configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.update_server_config" title="cellmap_flow.dashboard.routes.models.update_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_server_config</span></code></a>()</p></td>
+<td><p>Update server configuration and save to cache.</p></td>
 </tr>
 </tbody>
 </table>
@@ -170,9 +182,33 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.get_huggingface_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">get_huggingface_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.get_huggingface_models" title="Link to this definition"></a></dt>
+<dd><p>Get available models from Hugging Face (uses cache if available)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">refresh_huggingface_models_route</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route" title="Link to this definition"></a></dt>
+<dd><p>Force refresh the Hugging Face models cache</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.submit_models">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">submit_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.submit_models" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.get_server_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">get_server_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="Link to this definition"></a></dt>
+<dd><p>Get current server configuration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.update_server_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">update_server_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.update_server_config" title="Link to this definition"></a></dt>
+<dd><p>Update server configuration and save to cache.</p>
+</dd></dl>
 
 </section>
 </section>

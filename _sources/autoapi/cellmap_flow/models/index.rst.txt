@@ -10,7 +10,6 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   /autoapi/cellmap_flow/models/cellmap_models/index
    /autoapi/cellmap_flow/models/model_merger/index
    /autoapi/cellmap_flow/models/model_registry/index
    /autoapi/cellmap_flow/models/models_config/index

@@ -123,7 +123,10 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.run.run_model" title="cellmap_flow.models.run.run_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_model</span></code></a>(model_path, name, st_data)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.run.update_run_models" title="cellmap_flow.models.run.update_run_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_run_models</span></code></a>(names)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.run.run_hf_model" title="cellmap_flow.models.run.run_hf_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_hf_model</span></code></a>(repo, name, st_data)</p></td>
+<td><p>Run a Hugging Face model by repo ID.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.run.update_run_models" title="cellmap_flow.models.run.update_run_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_run_models</span></code></a>(names[, hf_repos])</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -142,8 +145,14 @@
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.run.run_hf_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.run.</span></span><span class="sig-name descname"><span class="pre">run_hf_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">repo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">st_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.run.run_hf_model" title="Link to this definition"></a></dt>
+<dd><p>Run a Hugging Face model by repo ID.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.run.update_run_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.run.</span></span><span class="sig-name descname"><span class="pre">update_run_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.run.update_run_models" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.run.</span></span><span class="sig-name descname"><span class="pre">update_run_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hf_repos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.run.update_run_models" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>

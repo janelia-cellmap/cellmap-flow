@@ -18,6 +18,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.models.run.run_model
+   cellmap_flow.models.run.run_hf_model
    cellmap_flow.models.run.update_run_models
 
 
@@ -28,5 +29,10 @@ Module Contents
 
 .. py:function:: run_model(model_path, name, st_data)
 
-.. py:function:: update_run_models(names: List[str])
+.. py:function:: run_hf_model(repo, name, st_data)
+
+   Run a Hugging Face model by repo ID.
+
+
+.. py:function:: update_run_models(names: List[str], hf_repos: List[str] = None)
 

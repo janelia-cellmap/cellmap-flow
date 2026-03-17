@@ -10,6 +10,9 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.globals.logger
+   cellmap_flow.globals.SERVER_CONFIG_PATH
+   cellmap_flow.globals.SERVER_CONFIG_DEFAULTS
+   cellmap_flow.globals.SERVER_CONFIG_KEYS
    cellmap_flow.globals.input_norms
    cellmap_flow.globals.postprocess
    cellmap_flow.globals.viewer
@@ -24,10 +27,37 @@ Classes
    cellmap_flow.globals.Flow
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.globals.load_server_config_cache
+   cellmap_flow.globals.save_server_config_cache
+
+
 Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:data:: SERVER_CONFIG_PATH
+
+.. py:data:: SERVER_CONFIG_DEFAULTS
+
+.. py:data:: SERVER_CONFIG_KEYS
+   :value: ['queue', 'charge_group', 'nb_cores_master', 'nb_cores_worker', 'nb_workers']
+
+
+.. py:function:: load_server_config_cache() -> Optional[Dict[str, Any]]
+
+   Load server config from cache file. Returns None if not found.
+
+
+.. py:function:: save_server_config_cache(config: Dict[str, Any]) -> None
+
+   Save server config to cache file.
+
 
 .. py:data:: input_norms
    :value: []
@@ -144,6 +174,12 @@ Module Contents
 
 
    .. py:method:: to_dict()
+
+
+   .. py:method:: save_server_config()
+
+      Save current server config attributes to cache.
+
 
 
    .. py:method:: get_output_dtype(model_output_dtype)

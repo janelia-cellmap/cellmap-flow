@@ -114,6 +114,15 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES" title="cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODEL_CONFIG_CLASSES</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME" title="cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HUGGING_FACE_ORGS_NAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HF_CACHE_DIR" title="cellmap_flow.models.model_registry.HF_CACHE_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HF_CACHE_DIR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HF_CACHE_FILE" title="cellmap_flow.models.model_registry.HF_CACHE_FILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HF_CACHE_FILE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -130,6 +139,12 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.instantiate_model_config" title="cellmap_flow.models.model_registry.instantiate_model_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">instantiate_model_config</span></code></a>(→ Any)</p></td>
 <td><p>Instantiate a ModelConfig subclass with the provided parameters.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.list_huggingface_models" title="cellmap_flow.models.model_registry.list_huggingface_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_huggingface_models</span></code></a>(→ Dict[str, Any])</p></td>
+<td><p>List available Hugging Face models, using cache if available.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.refresh_huggingface_models" title="cellmap_flow.models.model_registry.refresh_huggingface_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_huggingface_models</span></code></a>(→ Dict[str, Any])</p></td>
+<td><p>Force refresh the Hugging Face models cache.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -138,6 +153,21 @@
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">MODEL_CONFIG_CLASSES</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap'</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HF_CACHE_DIR">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HF_CACHE_DIR</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HF_CACHE_DIR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HF_CACHE_FILE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HF_CACHE_FILE</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HF_CACHE_FILE" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
@@ -206,6 +236,26 @@
 <dd class="field-odd"><p><strong>ValueError</strong> – If class_name is not recognized or params are invalid</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.list_huggingface_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">list_huggingface_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">org_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.list_huggingface_models" title="Link to this definition"></a></dt>
+<dd><p>List available Hugging Face models, using cache if available.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>org_name</strong> – Hugging Face organization name to filter models (default: “cellmap”)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dict mapping model IDs to their metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.refresh_huggingface_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">refresh_huggingface_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">org_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.refresh_huggingface_models" title="Link to this definition"></a></dt>
+<dd><p>Force refresh the Hugging Face models cache.</p>
 </dd></dl>
 
 </section>

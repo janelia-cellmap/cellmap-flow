@@ -15,6 +15,9 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES
+   cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME
+   cellmap_flow.models.model_registry.HF_CACHE_DIR
+   cellmap_flow.models.model_registry.HF_CACHE_FILE
 
 
 Functions
@@ -25,12 +28,22 @@ Functions
    cellmap_flow.models.model_registry.get_parameter_info
    cellmap_flow.models.model_registry.get_all_model_configs
    cellmap_flow.models.model_registry.instantiate_model_config
+   cellmap_flow.models.model_registry.list_huggingface_models
+   cellmap_flow.models.model_registry.refresh_huggingface_models
 
 
 Module Contents
 ---------------
 
 .. py:data:: MODEL_CONFIG_CLASSES
+
+.. py:data:: HUGGING_FACE_ORGS_NAME
+   :value: 'cellmap'
+
+
+.. py:data:: HF_CACHE_DIR
+
+.. py:data:: HF_CACHE_FILE
 
 .. py:function:: get_parameter_info(cls) -> Dict[str, Any]
 
@@ -84,5 +97,19 @@ Module Contents
    :returns: An instance of the ModelConfig subclass
 
    :raises ValueError: If class_name is not recognized or params are invalid
+
+
+.. py:function:: list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   List available Hugging Face models, using cache if available.
+
+   :param org_name: Hugging Face organization name to filter models (default: "cellmap")
+
+   :returns: A dict mapping model IDs to their metadata
+
+
+.. py:function:: refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   Force refresh the Hugging Face models cache.
 
 

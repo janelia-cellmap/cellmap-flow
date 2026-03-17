@@ -19,6 +19,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.dashboard.routes.index_page.index
+   cellmap_flow.dashboard.routes.index_page.set_data
 
 
 Module Contents
@@ -29,4 +30,9 @@ Module Contents
 .. py:data:: index_bp
 
 .. py:function:: index()
+
+.. py:function:: set_data()
+
+   Set up neuroglancer viewer with a dataset path.
+
 

@@ -21,7 +21,11 @@ Functions
    cellmap_flow.dashboard.routes.models.get_available_models
    cellmap_flow.dashboard.routes.models.get_model_config_types
    cellmap_flow.dashboard.routes.models.create_model_config
+   cellmap_flow.dashboard.routes.models.get_huggingface_models
+   cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route
    cellmap_flow.dashboard.routes.models.submit_models
+   cellmap_flow.dashboard.routes.models.get_server_config
+   cellmap_flow.dashboard.routes.models.update_server_config
 
 
 Module Contents
@@ -46,5 +50,25 @@ Module Contents
    Create a ModelConfig instance from user-provided parameters
 
 
+.. py:function:: get_huggingface_models()
+
+   Get available models from Hugging Face (uses cache if available)
+
+
+.. py:function:: refresh_huggingface_models_route()
+
+   Force refresh the Hugging Face models cache
+
+
 .. py:function:: submit_models()
+
+.. py:function:: get_server_config()
+
+   Get current server configuration.
+
+
+.. py:function:: update_server_config()
+
+   Update server configuration and save to cache.
+
 
