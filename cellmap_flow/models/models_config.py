@@ -685,6 +685,7 @@ class CellMapModelConfig(ModelConfig):
         config.input_voxel_size = Coordinate(metadata.input_voxel_size)
         config.output_voxel_size = Coordinate(metadata.output_voxel_size)
         config.channels_names = metadata.channels_names
+        config.channels = metadata.channels_names  # alias for compatibility
 
         config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
         config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
