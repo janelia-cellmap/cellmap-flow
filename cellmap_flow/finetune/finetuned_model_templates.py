@@ -14,9 +14,29 @@ from typing import List, Tuple, Optional
 logger = logging.getLogger(__name__)
 
 
+def _extract_tuple_from_ast(node):
+    """Try to extract a tuple of ints from an AST node, handling Coordinate(...) calls."""
+    # Direct literal: (196, 196, 196)
+    try:
+        val = ast.literal_eval(node)
+        if isinstance(val, (tuple, list)):
+            return tuple(int(v) for v in val)
+    except (ValueError, TypeError):
+        pass
+
+    # Coordinate((196, 196, 196)) or Coordinate((...))
+    if isinstance(node, ast.Call) and len(node.args) == 1:
+        return _extract_tuple_from_ast(node.args[0])
+
+    return None
+
+
 def extract_shapes_from_script(script_path: str) -> Tuple[Optional[Tuple], Optional[Tuple]]:
     """
     Safely extract input_size and output_size from a Python script using AST parsing.
+
+    Also derives input_size/output_size from read_shape/write_shape and voxel sizes
+    if the direct variables are not defined.
 
     This avoids executing the script (which may try to load models on GPU).
 
@@ -35,24 +55,46 @@ def extract_shapes_from_script(script_path: str) -> Tuple[Optional[Tuple], Optio
 
         input_size = None
         output_size = None
+        # Also track read_shape/write_shape and voxel sizes for derivation
+        read_shape_voxels = None
+        write_shape_voxels = None
+        input_voxel_size = None
+        output_voxel_size = None
 
         # Walk through all assignment nodes
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
-                # Check if this is an assignment to input_size or output_size
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         if target.id == 'input_size':
-                            # Try to evaluate the value
-                            try:
-                                input_size = ast.literal_eval(node.value)
-                            except:
-                                pass
+                            input_size = _extract_tuple_from_ast(node.value)
                         elif target.id == 'output_size':
-                            try:
-                                output_size = ast.literal_eval(node.value)
-                            except:
-                                pass
+                            output_size = _extract_tuple_from_ast(node.value)
+                        elif target.id == 'read_shape':
+                            # Only capture the first assignment (before multiplication)
+                            if read_shape_voxels is None:
+                                read_shape_voxels = _extract_tuple_from_ast(node.value)
+                        elif target.id == 'write_shape':
+                            if write_shape_voxels is None:
+                                write_shape_voxels = _extract_tuple_from_ast(node.value)
+                        elif target.id == 'input_voxel_size':
+                            input_voxel_size = _extract_tuple_from_ast(node.value)
+                        elif target.id == 'output_voxel_size':
+                            output_voxel_size = _extract_tuple_from_ast(node.value)
+
+        # Derive input_size from read_shape if not found directly
+        if input_size is None and read_shape_voxels is not None:
+            if input_voxel_size is not None and read_shape_voxels == input_voxel_size:
+                # read_shape was already in nm (unlikely but possible)
+                pass
+            else:
+                # Assume read_shape was defined in voxels (common pattern)
+                input_size = read_shape_voxels
+                logger.info(f"Derived input_size={input_size} from read_shape")
+
+        if output_size is None and write_shape_voxels is not None:
+            output_size = write_shape_voxels
+            logger.info(f"Derived output_size={output_size} from write_shape")
 
         logger.info(f"Extracted shapes from {script_path}: input_size={input_size}, output_size={output_size}")
         return input_size, output_size
@@ -73,6 +115,16 @@ def extract_shapes_from_script(script_path: str) -> Tuple[Optional[Tuple], Optio
                 input_size = tuple(map(int, input_match.groups()))
             if output_match:
                 output_size = tuple(map(int, output_match.groups()))
+
+            # Also try read_shape/write_shape patterns
+            if not input_size:
+                read_match = re.search(r'read_shape\s*=\s*(?:Coordinate\s*\()?\s*\((\d+),\s*(\d+),\s*(\d+)\)', content)
+                if read_match:
+                    input_size = tuple(map(int, read_match.groups()))
+            if not output_size:
+                write_match = re.search(r'write_shape\s*=\s*(?:Coordinate\s*\()?\s*\((\d+),\s*(\d+),\s*(\d+)\)', content)
+                if write_match:
+                    output_size = tuple(map(int, write_match.groups()))
 
             if input_size or output_size:
                 logger.info(f"Regex extracted shapes from {script_path}: input_size={input_size}, output_size={output_size}")

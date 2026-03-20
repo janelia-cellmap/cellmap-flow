@@ -249,11 +249,31 @@ def open_ds_tensorstore(
     else:
         dataset_future = ts.open(spec, read=False, write=True)
 
-    if dataset_path.startswith("gs://"):
-        # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
-        ts_dataset = dataset_future.result()[ts.d["channel"][0]]
-    else:
-        ts_dataset = dataset_future.result()
+    try:
+        if dataset_path.startswith("gs://"):
+            # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
+            ts_dataset = dataset_future.result()[ts.d["channel"][0]]
+        else:
+            ts_dataset = dataset_future.result()
+    except ValueError as e:
+        if "extra members" in str(e) and filetype == "zarr":
+            # Some zarr files have extra fields (e.g. "checksum") in the
+            # compressor metadata that tensorstore doesn't recognize.
+            # Fix by providing the metadata explicitly without the extra fields.
+            import json
+            zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
+            with open(zarray_path) as f:
+                zarray = json.load(f)
+            if "compressor" in zarray and isinstance(zarray["compressor"], dict):
+                zarray["compressor"].pop("checksum", None)
+            spec["metadata"] = zarray
+            if mode == "r":
+                dataset_future = ts.open(spec, read=True, write=False, assume_metadata=True)
+            else:
+                dataset_future = ts.open(spec, read=False, write=True, assume_metadata=True)
+            ts_dataset = dataset_future.result()
+        else:
+            raise
 
     # return ts_dataset
     if normalize:

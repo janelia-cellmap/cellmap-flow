@@ -111,7 +111,7 @@ def wrap_model_with_lora(
     lora_alpha: int = 16,
     lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
-    task_type: str = "FEATURE_EXTRACTION",
+    task_type: Optional[str] = None,
 ) -> nn.Module:
     """
     Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
@@ -183,6 +183,8 @@ def wrap_model_with_lora(
         logger.info(f"Auto-detected {len(target_modules)} target modules for LoRA")
 
     # Map task type string to PEFT TaskType enum
+    # None means PEFT uses the base PeftModel with a clean forward() passthrough,
+    # which is correct for custom nn.Module models (not HuggingFace transformers).
     task_type_map = {
         "FEATURE_EXTRACTION": TaskType.FEATURE_EXTRACTION,
         "SEQ_CLS": TaskType.SEQ_CLS,
@@ -190,16 +192,11 @@ def wrap_model_with_lora(
         "CAUSAL_LM": TaskType.CAUSAL_LM,
     }
 
-    if task_type not in task_type_map:
-        logger.warning(
-            f"Unknown task_type '{task_type}', using FEATURE_EXTRACTION. "
-            f"Valid options: {list(task_type_map.keys())}"
-        )
-        task_type = "FEATURE_EXTRACTION"
+    peft_task_type = task_type_map.get(task_type) if task_type else None
 
     # Create LoRA config
     lora_config = LoraConfig(
-        task_type=task_type_map[task_type],
+        task_type=peft_task_type,
         r=lora_r,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,

@@ -235,19 +235,40 @@ def _wait_for_restart_signal(
 
 def _apply_restart_params(args, signal_data: dict):
     """
-    Update args with parameters from restart signal.
+    Update args with parameters from restart signal and persist to metadata.json.
 
     Args:
         args: argparse Namespace to update
         signal_data: Dict from restart signal file
     """
     params = signal_data.get("params", {})
+    changed = False
     for key, value in params.items():
         if hasattr(args, key) and value is not None:
             old_value = getattr(args, key)
             setattr(args, key, value)
             if old_value != value:
                 logger.info(f"Updated {key}: {old_value} -> {value}")
+                changed = True
+
+    # Persist updated params to metadata.json
+    if changed and hasattr(args, 'output_dir') and args.output_dir:
+        metadata_file = Path(args.output_dir) / "metadata.json"
+        if metadata_file.exists():
+            try:
+                import json as json_mod
+                with open(metadata_file, "r") as f:
+                    metadata = json_mod.load(f)
+                if "params" in metadata:
+                    for key, value in params.items():
+                        if key in metadata["params"]:
+                            metadata["params"][key] = value
+                metadata["last_restart_at"] = signal_data.get("timestamp")
+                with open(metadata_file, "w") as f:
+                    json_mod.dump(metadata, f, indent=2)
+                logger.info(f"Updated metadata.json with restart params")
+            except Exception as e:
+                logger.warning(f"Failed to update metadata.json: {e}")
 
 
 def _generate_model_files(args, model_config, timestamp):

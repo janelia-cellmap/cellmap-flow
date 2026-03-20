@@ -757,6 +757,7 @@ def submit_finetuning():
             "job_id": finetune_job.job_id,
             "lsf_job_id": lsf_job_id,
             "output_dir": str(finetune_job.output_dir),
+            "output_type": output_type,
             "message": "Finetuning job submitted successfully",
         }
         if sparse_auto_switched:

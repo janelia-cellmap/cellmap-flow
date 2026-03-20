@@ -111,14 +111,35 @@ class ScriptModelConfig(ModelConfig):
         from cellmap_flow.utils.load_py import load_safe_config
 
         config = load_safe_config(self.script_path)
-        if not hasattr(config, "read_shape"):
+
+        # Derive read_shape/write_shape from input_size/output_size or vice versa
+        has_input_size = hasattr(config, "input_size")
+        has_output_size = hasattr(config, "output_size")
+        has_read_shape = hasattr(config, "read_shape")
+        has_write_shape = hasattr(config, "write_shape")
+
+        if not has_read_shape and has_input_size:
             config.read_shape = Coordinate(config.input_size) * Coordinate(
                 config.input_voxel_size
             )
-        if not hasattr(config, "write_shape"):
+        if not has_write_shape and has_output_size:
             config.write_shape = Coordinate(config.output_size) * Coordinate(
                 config.output_voxel_size
             )
+        # Reverse: derive input_size/output_size from read_shape/write_shape
+        if not has_input_size and has_read_shape:
+            config.input_size = tuple(
+                int(s)
+                for s in Coordinate(config.read_shape)
+                / Coordinate(config.input_voxel_size)
+            )
+        if not has_output_size and has_write_shape:
+            config.output_size = tuple(
+                int(s)
+                for s in Coordinate(config.write_shape)
+                / Coordinate(config.output_voxel_size)
+            )
+
         if not hasattr(config, "block_shape"):
             config.block_shape = np.array(
                 tuple(config.output_size) + (config.output_channels,)

@@ -405,6 +405,7 @@ class FinetuneJobManager:
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,
+                "output_type": output_type,
             },
             "queue": queue,
             "charge_group": charge_group,
@@ -918,36 +919,15 @@ class FinetuneJobManager:
                 except (ValueError, Exception) as e:
                     self.logger.error(f"Could not extract dataset_path: {e}")
 
-                # 2. Get normalization and preprocessing from base model YAML
-                if base_script_path:
-                    self.logger.info("Extracting normalization from base model YAML...")
-                    import yaml
-                    base_yaml_path = Path(base_script_path).with_suffix('.yaml')
-                    if base_yaml_path.exists():
-                        try:
-                            with open(base_yaml_path, 'r') as f:
-                                base_config = yaml.safe_load(f)
-
-                                # Get json_data (normalization and postprocessing)
-                                if 'json_data' in base_config:
-                                    json_data = base_config['json_data']
-                                    self.logger.info(f"✓ Found json_data from base model YAML")
-                                else:
-                                    self.logger.warning(f"No json_data in base model YAML: {base_yaml_path}")
-
-                                # Get data_path from base model (fallback if not in corrections)
-                                if not data_path and 'data_path' in base_config:
-                                    data_path = base_config['data_path']
-                                    self.logger.info(f"✓ Using data_path from base model YAML: {data_path}")
-
-                                # Get scale
-                                if 'models' in base_config and len(base_config['models']) > 0:
-                                    base_scale = base_config['models'][0].get('scale', 's0')
-                                    self.logger.info(f"✓ Found scale from base model: {base_scale}")
-                        except Exception as e:
-                            self.logger.error(f"Failed to read base model YAML {base_yaml_path}: {e}")
-                    else:
-                        self.logger.warning(f"Base model YAML not found: {base_yaml_path}")
+                # 2. Get normalization and preprocessing from the running server's config
+                from cellmap_flow.globals import g as g_globals
+                from cellmap_flow.utils.serilization_utils import serialize_norms_posts_to_json
+                if hasattr(g_globals, 'input_norms') and g_globals.input_norms:
+                    import json as json_mod
+                    json_data = json_mod.loads(serialize_norms_posts_to_json(
+                        g_globals.input_norms, g_globals.postprocess
+                    ))
+                    self.logger.info(f"✓ Found json_data from running server config")
 
                 # 3. Validate we have required data (NO PLACEHOLDERS!)
                 if not data_path:

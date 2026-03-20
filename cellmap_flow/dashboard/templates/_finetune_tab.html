@@ -117,6 +117,7 @@
             <option value="4">4 (Fast, lower capacity)</option>
             <option value="8" selected>8 (Balanced) - Recommended</option>
             <option value="16">16 (High capacity)</option>
+            <option value="64">64 (Very high capacity)</option>
           </select>
           <small class="text-muted">Higher rank = more trainable parameters</small>
         </div>
@@ -124,7 +125,7 @@
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
-          <input type="number" id="numEpochs" class="form-control" value="10" min="5" max="50" step="1">
+          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="50" step="1">
           <small class="text-muted">Typical range: 10-20 epochs</small>
         </div>
       </div>
@@ -185,9 +186,9 @@
             <option value="0">0 (Disabled)</option>
             <option value="0.01">0.01</option>
             <option value="0.05">0.05</option>
-            <option value="0.1">0.1</option>
+            <option value="0.1" selected>0.1 (Default)</option>
             <option value="0.2">0.2</option>
-            <option value="0.5" selected>0.5 (Default)</option>
+            <option value="0.5">0.5</option>
             <option value="1.0">1.0</option>
             <option value="2.0">2.0</option>
             <option value="5.0">5.0</option>
@@ -271,6 +272,7 @@
     <div class="mb-3">
       <p class="mb-1"><strong>Job ID:</strong> <span id="jobId" class="font-monospace">-</span></p>
       <p class="mb-1"><strong>Model:</strong> <span id="jobModelName">-</span></p>
+      <p class="mb-1"><strong>Output Type:</strong> <span id="jobOutputType" class="badge bg-info">-</span></p>
       <p class="mb-1"><strong>Status:</strong> <span id="jobStatus" class="badge bg-secondary">-</span></p>
       <p class="mb-1"><strong>Progress:</strong> <span id="jobProgress">-</span></p>
     </div>
@@ -349,11 +351,12 @@
               <option value="4">4 (Fast, lower capacity)</option>
               <option value="8" selected>8 (Balanced)</option>
               <option value="16">16 (High capacity)</option>
+              <option value="64">64 (Very high capacity)</option>
             </select>
           </div>
           <div class="mb-2">
             <label class="form-label">Number of Epochs</label>
-            <input type="number" id="restartNumEpochs" class="form-control" value="10" min="5" max="50">
+            <input type="number" id="restartNumEpochs" class="form-control" value="20" min="5" max="50">
           </div>
           <div class="mb-2">
             <label class="form-label">Batch Size</label>
@@ -394,9 +397,9 @@
               <option value="0">0 (Disabled)</option>
               <option value="0.01">0.01</option>
               <option value="0.05">0.05</option>
-              <option value="0.1">0.1</option>
+              <option value="0.1" selected>0.1 (Default)</option>
               <option value="0.2">0.2</option>
-              <option value="0.5" selected>0.5 (Default)</option>
+              <option value="0.5">0.5</option>
               <option value="1.0">1.0</option>
               <option value="2.0">2.0</option>
               <option value="5.0">5.0</option>
@@ -459,11 +462,69 @@ document.addEventListener("DOMContentLoaded", function () {
   let models = [];
   let selectedModel = null;
 
-  // Load saved output path from localStorage
-  const savedOutputPath = localStorage.getItem("finetuneOutputPath");
-  if (savedOutputPath) {
-    outputPathInput.value = savedOutputPath;
+  // === Persist all finetune form state to localStorage ===
+  const FINETUNE_STATE_KEY = "finetuneFormState";
+
+  function saveFinetuneState() {
+    const state = {
+      outputPath: outputPathInput.value,
+      checkpointPath: document.getElementById("checkpointPath").value,
+      loraRank: document.getElementById("loraRank").value,
+      numEpochs: document.getElementById("numEpochs").value,
+      batchSize: document.getElementById("batchSize").value,
+      learningRate: document.getElementById("learningRate").value,
+      lossType: document.getElementById("lossType").value,
+      distillationLambda: document.getElementById("distillationLambda").value,
+      distillationScope: document.getElementById("distillationScope").value,
+      balanceClasses: document.getElementById("balanceClasses").checked,
+      autoServe: document.getElementById("autoServeCheck").checked,
+      gpuQueue: document.getElementById("gpuQueue").value,
+      selectedModelName: modelSelect.value,
+    };
+    localStorage.setItem(FINETUNE_STATE_KEY, JSON.stringify(state));
   }
+
+  function restoreFinetuneState() {
+    const raw = localStorage.getItem(FINETUNE_STATE_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  // Attach change listeners to all form elements to auto-save state
+  function attachStateListeners() {
+    const ids = [
+      "outputPath", "checkpointPath", "loraRank", "numEpochs",
+      "batchSize", "learningRate", "lossType", "distillationLambda",
+      "distillationScope", "balanceClasses", "autoServeCheck", "gpuQueue",
+      "modelSelect"
+    ];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("change", saveFinetuneState);
+      // Also save on input for text fields
+      if (el && (el.type === "text" || el.type === "number")) {
+        el.addEventListener("input", saveFinetuneState);
+      }
+    });
+  }
+
+  // Restore saved state (non-model fields applied immediately)
+  const savedState = restoreFinetuneState();
+  if (savedState) {
+    if (savedState.outputPath) outputPathInput.value = savedState.outputPath;
+    if (savedState.checkpointPath) document.getElementById("checkpointPath").value = savedState.checkpointPath;
+    if (savedState.loraRank) document.getElementById("loraRank").value = savedState.loraRank;
+    if (savedState.numEpochs) document.getElementById("numEpochs").value = savedState.numEpochs;
+    if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
+    if (savedState.learningRate) document.getElementById("learningRate").value = savedState.learningRate;
+    if (savedState.lossType) document.getElementById("lossType").value = savedState.lossType;
+    if (savedState.distillationLambda) document.getElementById("distillationLambda").value = savedState.distillationLambda;
+    if (savedState.distillationScope) document.getElementById("distillationScope").value = savedState.distillationScope;
+    if (savedState.balanceClasses !== undefined) document.getElementById("balanceClasses").checked = savedState.balanceClasses;
+    if (savedState.autoServe !== undefined) document.getElementById("autoServeCheck").checked = savedState.autoServe;
+    if (savedState.gpuQueue) document.getElementById("gpuQueue").value = savedState.gpuQueue;
+  }
+  attachStateListeners();
 
   // Load models on page load
   loadModels();
@@ -513,8 +574,11 @@ document.addEventListener("DOMContentLoaded", function () {
             modelSelect.appendChild(option);
           });
 
-          // Set initial selection
-          if (data.selected_model) {
+          // Set initial selection (prefer saved state, fall back to server)
+          const savedModelName = savedState && savedState.selectedModelName;
+          if (savedModelName && models.find(m => m.name === savedModelName)) {
+            modelSelect.value = savedModelName;
+          } else if (data.selected_model) {
             modelSelect.value = data.selected_model;
           }
 
@@ -592,7 +656,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(data => {
         if (data.success) {
           // Save output path to localStorage for next time
-          localStorage.setItem("finetuneOutputPath", outputPath);
+          saveFinetuneState();
 
           finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
           finetuneLog.value += `  Center (nm): [${data.metadata.center_position_nm.map(v => v.toFixed(1)).join(', ')}]\n`;
@@ -660,7 +724,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          localStorage.setItem("finetuneOutputPath", outputPath);
+          saveFinetuneState();
           finetuneLog.value += `✓ Created annotation volume: ${data.volume_id}\n`;
           finetuneLog.value += `  Dataset shape (voxels): [${data.metadata.dataset_shape_voxels.join(', ')}]\n`;
           finetuneLog.value += `  Chunk size (voxels): [${data.metadata.chunk_size.join(', ')}]\n`;
@@ -823,6 +887,9 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById("trainingStatusCard").style.display = "block";
           document.getElementById("jobId").textContent = result.job_id;
           document.getElementById("jobModelName").textContent = params.model_name;
+          const outputType = result.output_type || "binary";
+          document.getElementById("jobOutputType").textContent = outputType;
+          document.getElementById("jobOutputType").className = "badge " + (outputType === "affinities" ? "bg-warning" : "bg-info");
           document.getElementById("jobStatus").textContent = "SUBMITTED";
           document.getElementById("jobStatus").className = "badge bg-warning";
 
@@ -1054,7 +1121,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const maxLoss = Math.max(...points.map(p => p.loss));
     const minEpoch = points[0].epoch;
     const maxEpoch = points[points.length - 1].epoch;
-    const pad = 24;
+    const pad = 48;
     const chartW = Math.max(1, width - pad * 2);
     const chartH = Math.max(1, height - pad * 2);
     const lossSpan = Math.max(1e-9, maxLoss - minLoss);
@@ -1099,7 +1166,9 @@ document.addEventListener("DOMContentLoaded", function () {
       ctx.moveTo(pad - 4, y);
       ctx.lineTo(pad, y);
       ctx.stroke();
-      ctx.fillText(lossTick.toFixed(4), 2, y + 3);
+      const label = lossTick.toFixed(4);
+      const labelW = ctx.measureText(label).width;
+      ctx.fillText(label, pad - 6 - labelW, y + 3);
     }
 
     // Line
@@ -1143,6 +1212,13 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
         latestJobStatusData = data;
+
+        // Update output type from job params
+        if (data.params && data.params.output_type) {
+          const ot = data.params.output_type;
+          document.getElementById("jobOutputType").textContent = ot;
+          document.getElementById("jobOutputType").className = "badge " + (ot === "affinities" ? "bg-warning" : "bg-info");
+        }
 
         // Update status display
         const statusBadge = document.getElementById("jobStatus");

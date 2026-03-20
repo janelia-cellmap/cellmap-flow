@@ -169,11 +169,6 @@ class CorrectionDataset(Dataset):
         raw = raw.astype(np.float32)
         mask = mask.astype(np.float32)
 
-        # Normalize mask to [0, 1]
-        # Only normalize pixel-intensity masks (0-255 range), not class labels (0, 1, 2)
-        # Class labels are small integers used by mask_unannotated logic in trainer
-        if mask.max() > 2.0:
-            mask = mask / 255.0
 
         # For models with different input/output sizes, we keep raw at full size
         # Patching is disabled for this case - use full corrections

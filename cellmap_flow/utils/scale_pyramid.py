@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+    original_dataset_path = dataset_path
     # if multiscale dataset
     if (
         dataset_path.split("/")[-1].startswith("s")
@@ -39,7 +40,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     layers = []
     if not wrap_raw:
         return neuroglancer.ImageLayer(
-            source= f"{filetype}://{dataset_path}",
+            source=f"{filetype}://{dataset_path}",
             shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
     #uicontrol vec3 color color(default="white");
     void main(){{emitRGB(color * normalized());}}""",
@@ -76,7 +77,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             is_multiscale = False
 
     if not is_multiscale:
-        image = ImageDataInterface(dataset_path)
+        image = ImageDataInterface(original_dataset_path)
         return neuroglancer.ImageLayer(
             source=neuroglancer.LocalVolume(
                 data=image.ts,
