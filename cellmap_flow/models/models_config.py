@@ -2,7 +2,7 @@ import logging
 import warnings
 import copy
 
-from cellmap_flow.models.cellmap_models import CellmapModel
+from cellmap_models.model_export.cellmap_model import CellmapModel, get_huggingface_model
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
@@ -46,7 +46,7 @@ class ModelConfig:
         return self._config
 
     def _validate_config(self):
-        """Ensure config has required attributes."""
+        """Ensure config has required attributes and shapes are consistent."""
         required = [
             "read_shape",
             "write_shape",
@@ -61,7 +61,87 @@ class ModelConfig:
         for attr in required:
             if not hasattr(self._config, attr):
                 raise AttributeError(f"{attr} not found in config")
+
+        self._validate_model_shapes()
         logger.warning(f"Model config validated: {self.__str__()}")
+
+    def _validate_model_shapes(self):
+        """Run a dummy forward pass to verify declared shapes match actual model output."""
+        config = self._config
+        if not hasattr(config, "model"):
+            return
+
+        model = config.model
+        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
+        declared_output_size = np.array(config.write_shape) // np.array(
+            config.output_voxel_size
+        )
+        declared_block_spatial = np.array(config.block_shape)[:3]
+
+        try:
+            device = next(model.parameters()).device
+            dummy = torch.zeros(
+                (1, 1, *[int(s) for s in input_size]), device=device
+            )
+            was_training = model.training
+            model.eval()
+            with torch.no_grad():
+                out = model(dummy)
+            if was_training:
+                model.train()
+
+            actual_output = np.array(out.shape[1:])  # drop batch dim
+            # Determine actual spatial shape (skip channel dim if present)
+            if len(actual_output) == 4:
+                actual_channels = actual_output[0]
+                actual_spatial = actual_output[1:]
+            elif len(actual_output) == 3:
+                actual_channels = 1
+                actual_spatial = actual_output
+            else:
+                logger.warning(
+                    f"Unexpected model output ndim={len(actual_output)}, "
+                    "skipping shape validation"
+                )
+                return
+
+            errors = []
+            if not np.array_equal(actual_spatial, declared_output_size):
+                errors.append(
+                    f"write_shape mismatch: declared write_shape / output_voxel_size = "
+                    f"{declared_output_size.tolist()} but model actually outputs "
+                    f"spatial shape {actual_spatial.tolist()}. "
+                    f"Expected write_shape = "
+                    f"{(actual_spatial * np.array(config.output_voxel_size)).tolist()}"
+                )
+            if not np.array_equal(actual_spatial, declared_block_spatial):
+                errors.append(
+                    f"block_shape mismatch: declared block_shape spatial dims = "
+                    f"{declared_block_spatial.tolist()} but model actually outputs "
+                    f"spatial shape {actual_spatial.tolist()}. "
+                    f"Expected block_shape = "
+                    f"{[*actual_spatial.tolist(), int(actual_channels)]}"
+                )
+            if int(actual_channels) != int(config.output_channels):
+                errors.append(
+                    f"output_channels mismatch: declared {config.output_channels} "
+                    f"but model actually outputs {int(actual_channels)} channels"
+                )
+            if errors:
+                msg = (
+                    f"Script config shape validation failed for "
+                    f"{getattr(self, 'script_path', 'unknown')}:\n"
+                    + "\n".join(f"  - {e}" for e in errors)
+                )
+                raise ValueError(msg)
+
+            logger.info(
+                f"Shape validation passed: input {input_size.tolist()} -> "
+                f"output spatial {actual_spatial.tolist()}, "
+                f"channels {int(actual_channels)}"
+            )
+        except (RuntimeError, TypeError) as e:
+            logger.warning(f"Could not validate model shapes (forward pass failed): {e}")
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
@@ -96,6 +176,8 @@ class ModelConfig:
 
 
 class ScriptModelConfig(ModelConfig):
+
+    cli_name = "script"
 
     def __init__(self, script_path, name=None, scale=None):
         super().__init__()
@@ -157,6 +239,8 @@ class ScriptModelConfig(ModelConfig):
 
 
 class DaCapoModelConfig(ModelConfig):
+
+    cli_name = "dacapo"
 
     def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()
@@ -232,6 +316,8 @@ class DaCapoModelConfig(ModelConfig):
 
 
 class FlyModelConfig(ModelConfig):
+
+    cli_name = "fly"
 
     def __init__(
         self,
@@ -334,6 +420,9 @@ class FlyModelConfig(ModelConfig):
 
 
 class BioModelConfig(ModelConfig):
+
+    cli_name = "bioimage"
+
     def __init__(
         self,
         model_name: str,
@@ -593,9 +682,14 @@ def format_output_bioimage(self, output_sample, output_names=None, output_axes=N
 class CellMapModelConfig(ModelConfig):
     """Configuration class for a CellmapModel."""
 
-    def __init__(self, folder_path, name, scale=None):
+    cli_name = "cellmap"
+
+    def __init__(self, folder_path, name=None, scale=None):
         super().__init__()
         self.cellmap_model = CellmapModel(folder_path=folder_path)
+        if name is None:
+            # folder name 
+            name = folder_path.rstrip("/").split("/")[-1]
         self.name = name
         self.scale = scale
 
@@ -618,12 +712,14 @@ class CellMapModelConfig(ModelConfig):
         config.input_voxel_size = Coordinate(metadata.input_voxel_size)
         config.output_voxel_size = Coordinate(metadata.output_voxel_size)
         config.channels_names = metadata.channels_names
+        config.channels = metadata.channels_names  # alias for compatibility
 
-        read_shape = metadata.inference_input_shape
-        write_shape = metadata.inference_output_shape
-        config.read_shape = Coordinate(read_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(write_shape) * config.output_voxel_size
-        config.block_shape = [*write_shape, metadata.out_channels]
+        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
+        config.inference_input_shape = Coordinate(metadata.inference_input_shape)* config.input_voxel_size
+        config.inference_output_shape = Coordinate(metadata.inference_output_shape)* config.output_voxel_size
+        
+        config.block_shape = [*metadata.output_shape, metadata.out_channels]
 
         config.model = self.cellmap_model.ts_model
         config.model.to(_get_device())
@@ -633,11 +729,78 @@ class CellMapModelConfig(ModelConfig):
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
         result = {
-            "type": "cellmap-model",
+            "type": "cellmap",
             "folder_path": self.cellmap_model.folder_path,
         }
         if self.name is not None:
             result["name"] = self.name
         if self.scale is not None:
             result["scale"] = self.scale
+        return result
+
+class HuggingFaceModelConfig(ModelConfig):
+    """Configuration class for a Hugging Face model."""
+
+    cli_name = "huggingface"
+
+    def __init__(self, repo, revision=None, name=None, scale=None):
+        super().__init__()
+        self.repo = repo
+        self.revision = revision
+        if name is None:
+            # Use repo name as default
+            name = repo.split("/")[-1]
+        self.name = name
+        self.scale = scale
+        self._metadata = None
+
+    def _load_metadata(self):
+        """Load metadata.json from the HuggingFace repo (cached after first call)."""
+        if self._metadata is not None:
+            return self._metadata
+        try:
+            from huggingface_hub import hf_hub_download
+            import json
+            path = hf_hub_download(self.repo, "metadata.json", revision=self.revision)
+            with open(path) as f:
+                self._metadata = json.load(f)
+        except Exception:
+            self._metadata = {}
+        return self._metadata
+
+    @property
+    def command(self) -> str:
+        cmd = f"huggingface --repo {self.repo}"
+        if self.revision:
+            cmd += f" --revision {self.revision}"
+        return cmd
+
+    def _get_config(self) -> Config:
+        cellmap_model = get_huggingface_model(self.repo, self.revision)
+        config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
+        return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry."""
+        result = {
+            "type": "huggingface",
+            "repo": self.repo,
+        }
+        if self.revision is not None:
+            result["revision"] = self.revision
+        if self.name is not None:
+            result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
+
+        # Include metadata from HuggingFace model for pipeline builder display
+        metadata = self._load_metadata()
+        if metadata:
+            for key in ("channels_names", "input_voxel_size", "output_voxel_size",
+                        "inference_input_shape", "inference_output_shape",
+                        "in_channels", "out_channels", "model_type", "framework",
+                        "spatial_dims", "iteration", "model_name", "description"):
+                if key in metadata:
+                    result[key] = metadata[key]
+
         return result

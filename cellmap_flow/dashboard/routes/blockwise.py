@@ -80,7 +80,7 @@ def generate_blockwise_task():
             # Remove trailing slashes
             output_path = output_path.rstrip('/\\')
             # Add .zarr if not already present
-            if not output_path.endswith('.zarr'):
+            if '.zarr' not in output_path:
                 output_path = output_path + '.zarr'
 
         # Create task YAML content

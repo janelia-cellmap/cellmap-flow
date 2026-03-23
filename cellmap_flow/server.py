@@ -59,10 +59,18 @@ class CellMapFlowServer:
             if axis_name in self.axes:
                 self.axes.remove(axis_name)
 
-        # The model output spatial axes match the input data axes (not the
-        # hardcoded default which assumes z,y,x).  Override so that
-        # _reorder_to_zarr_axes applies the correct permutation.
-        self.model_output_axes = ("c",) + tuple(self.axes)
+        # Determine whether the model output includes a channel axis
+        self.has_channel = any(
+            ax in model_config.chunk_output_axes for ax in ("c", "c^", "channel")
+        )
+
+        if self.has_channel:
+            # The model output spatial axes match the input data axes (not the
+            # hardcoded default which assumes z,y,x).  Override so that
+            # _reorder_to_zarr_axes applies the correct permutation.
+            self.model_output_axes = ("c",) + tuple(self.axes)
+        else:
+            self.model_output_axes = tuple(self.axes)
 
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5
@@ -72,7 +80,11 @@ class CellMapFlowServer:
             * np.array(self.input_voxel_size)
             / np.array(self.output_voxel_size)
         )
-        self.vol_shape = [*output_shape, self.output_channels]
+        if self.has_channel:
+            self.vol_shape = [*output_shape, self.output_channels]
+        else:
+            self.vol_shape = [int(x) for x in output_shape]
+        self.vol_shape = [int(x) for x in self.vol_shape]
 
         # Chunk encoding for Zarr
         self.chunk_encoder = self._initialize_chunk_encoder()
@@ -119,8 +131,16 @@ class CellMapFlowServer:
             methods=["GET"],
             strict_slashes=False,
         )
-        def chunk(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
-            return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c)
+        def chunk_4d(dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
+            return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
+
+        @self.app.route(
+            "/<path:dataset>/s<int:scale>/<int:chunk_z>.<int:chunk_y>.<int:chunk_x>",
+            methods=["GET"],
+            strict_slashes=False,
+        )
+        def chunk_3d(dataset, scale, chunk_z, chunk_y, chunk_x):
+            return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
 
     def _configure_swagger(self):
         self.app.config["SWAGGER"] = {
@@ -148,7 +168,7 @@ class CellMapFlowServer:
         g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
 
         for postprocess in g.postprocess:
-            if hasattr(postprocess, "num_channels"):
+            if hasattr(postprocess, "num_channels") and self.has_channel:
                 self.vol_shape[-1] = postprocess.num_channels
                 self.zarr_block_shape[-1] = postprocess.num_channels
 
@@ -162,19 +182,19 @@ class CellMapFlowServer:
         datasets = []
         for s in range(max_scale + 1):
             scale_factor = 2**s
+            scale_values = [
+                float(self.output_voxel_size[i] * scale_factor)
+                for i in range(len(self.output_voxel_size))
+            ]
+            translation_values = [0.0] * len(self.output_voxel_size)
+            if self.has_channel:
+                scale_values.append(1.0)
+                translation_values.append(0.0)
             datasets.append(
                 {
                     "coordinateTransformations": [
-                        {
-                            "type": "scale",
-                            "scale": [
-                                float(self.output_voxel_size[0] * scale_factor),
-                                float(self.output_voxel_size[1] * scale_factor),
-                                float(self.output_voxel_size[2] * scale_factor),
-                                1.0,
-                            ],
-                        },
-                        {"type": "translation", "translation": [0.0, 0.0, 0.0, 0.0]},
+                        {"type": "scale", "scale": scale_values},
+                        {"type": "translation", "translation": translation_values},
                     ],
                     "path": f"s{s}",
                 }
@@ -183,7 +203,12 @@ class CellMapFlowServer:
         axes_list = []
         for axis_name in self.axes:
             axes_list.append({"name": axis_name, "type": "space", "unit": "nanometer"})
-        axes_list.append({"name": "c", "type": "channel"})
+        if self.has_channel:
+            axes_list.append({"name": "c", "type": "channel"})
+
+        top_scale = [1.0] * len(self.axes)
+        if self.has_channel:
+            top_scale.append(1.0)
 
         attr = {
             "multiscales": [
@@ -193,7 +218,7 @@ class CellMapFlowServer:
                     "axes": axes_list,
                     "datasets": datasets,
                     "coordinateTransformations": [
-                        {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0]}
+                        {"type": "scale", "scale": top_scale}
                     ],
                 }
             ]
@@ -230,14 +255,15 @@ class CellMapFlowServer:
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
-    def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x, chunk_c):
+    def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
         corner = self.zarr_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, self.zarr_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
 
-        # Reorder model output axes to Zarr-expected (z, y, x, c) order
-        chunk_data = self._reorder_to_zarr_axes(chunk_data)
+        # Reorder model output axes to Zarr-expected order
+        if self.has_channel:
+            chunk_data = self._reorder_to_zarr_axes(chunk_data)
 
         chunk_data = chunk_data.astype(g.get_output_dtype(self.output_dtype))
 

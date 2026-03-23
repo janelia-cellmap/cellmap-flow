@@ -1,4 +1,4 @@
-<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
+<div class="alert alert-info" role="alert">
   <strong>Finetune:</strong> Create annotation crops and submit training jobs to the GPU cluster.
   <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
 </div>
@@ -82,7 +82,7 @@
       class="form-control"
       rows="8"
       readonly
-      style="color: gray; font-size: 0.9rem; background-color: transparent; border: 1px solid gray;"
+      style="color: var(--text-muted); font-size: 15px; background-color: var(--bg-input); border: 1px solid var(--border);"
     ></textarea>
   </div>
 </form>
@@ -315,10 +315,10 @@
         <small class="text-muted">Loss vs Epoch</small>
         <small id="lossPlotSummary" class="text-muted">No loss data yet</small>
       </div>
-      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid #dee2e6; border-radius: 0.25rem;"></canvas>
+      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid var(--border); border-radius: var(--radius-sm);"></canvas>
     </div>
     <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
-              style="font-size: 0.85rem; white-space: pre;">No training job running...
+              style="font-size: 15px; white-space: pre;">No training job running...
     </textarea>
   </div>
 </div>
@@ -670,7 +670,7 @@ document.addEventListener("DOMContentLoaded", function () {
           // Update MinIO status
           minioStatusContent.innerHTML = `
             <small>
-              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
               <strong>URL:</strong> ${data.minio_url}
             </small>
           `;
@@ -735,7 +735,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
           minioStatusContent.innerHTML = `
             <small>
-              <strong>Status:</strong> <span style="color: #28a745;">Running</span><br>
+              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
               <strong>URL:</strong> ${data.minio_url}
             </small>
           `;
@@ -1105,13 +1105,20 @@ document.addEventListener("DOMContentLoaded", function () {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
+    // Read CSS design tokens for chart colors
+    const styles = getComputedStyle(document.documentElement);
+    const colorMuted = styles.getPropertyValue("--text-muted").trim() || "#8896a6";
+    const colorBorder = styles.getPropertyValue("--border").trim() || "#1e293b";
+    const colorBorderHover = styles.getPropertyValue("--border-hover").trim() || "#334155";
+    const colorAccent = styles.getPropertyValue("--accent").trim() || "#10b981";
+
     const points = Array.from(lossByEpoch.entries())
       .sort((a, b) => a[0] - b[0])
       .map(([epoch, loss]) => ({ epoch, loss }));
 
     if (points.length === 0) {
       summary.textContent = "No loss data yet";
-      ctx.fillStyle = "#6c757d";
+      ctx.fillStyle = colorMuted;
       ctx.font = "12px monospace";
       ctx.fillText("Waiting for epoch loss...", 10, 20);
       return;
@@ -1131,7 +1138,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const yFor = (l) => pad + (1 - ((l - minLoss) / lossSpan)) * chartH;
 
     // Axes
-    ctx.strokeStyle = "#ced4da";
+    ctx.strokeStyle = colorBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(pad, pad);
@@ -1140,10 +1147,10 @@ document.addEventListener("DOMContentLoaded", function () {
     ctx.stroke();
 
     // Tick marks + labels
-    ctx.fillStyle = "#6c757d";
+    ctx.fillStyle = colorMuted;
     ctx.font = "10px monospace";
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "#adb5bd";
+    ctx.strokeStyle = colorBorderHover;
 
     const xTickCount = Math.min(6, Math.max(2, points.length));
     for (let i = 0; i < xTickCount; i++) {
@@ -1172,7 +1179,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Line
-    ctx.strokeStyle = "#0d6efd";
+    ctx.strokeStyle = colorAccent;
     ctx.lineWidth = 2;
     ctx.beginPath();
     points.forEach((p, idx) => {
@@ -1187,7 +1194,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const last = points[points.length - 1];
     const lx = xFor(last.epoch);
     const ly = yFor(last.loss);
-    ctx.fillStyle = "#0d6efd";
+    ctx.fillStyle = colorAccent;
     ctx.beginPath();
     ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
     ctx.fill();

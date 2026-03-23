@@ -8,10 +8,38 @@ import logging
 import threading
 import numpy as np
 from collections import deque
-from typing import Any, List, Optional
+import logging
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
+
+SERVER_CONFIG_DEFAULTS = {
+    "queue": "gpu_h100",
+    "charge_group": "",
+    "nb_cores_master": 4,
+    "nb_cores_worker": 12,
+    "nb_workers": 14,
+}
+
+SERVER_CONFIG_KEYS = list(SERVER_CONFIG_DEFAULTS.keys())
+
+
+def load_server_config_cache() -> Optional[Dict[str, Any]]:
+    """Load server config from cache file. Returns None if not found."""
+    if os.path.exists(SERVER_CONFIG_PATH):
+        with open(SERVER_CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f) or {}
+    return None
+
+
+def save_server_config_cache(config: Dict[str, Any]) -> None:
+    """Save server config to cache file."""
+    os.makedirs(os.path.dirname(SERVER_CONFIG_PATH), exist_ok=True)
+    with open(SERVER_CONFIG_PATH, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
 
 # input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
 # postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
@@ -50,6 +78,7 @@ class Flow:
     pipeline_postprocessors: List[Any]
     shaders: dict
     shader_controls: dict
+    _server_config_cached: bool
 
     # Dashboard state (moved from cellmap_flow.dashboard.state)
     log_buffer: deque
@@ -84,11 +113,21 @@ class Flow:
             with open(models_path, "r") as f:
                 cls._instance.model_catalog = yaml.safe_load(f)
 
-            cls._instance.queue = "gpu_h100"
-            cls._instance.charge_group = "cellmap"
-            cls._instance.nb_cores_master = 4
-            cls._instance.nb_cores_worker = 12
-            cls._instance.nb_workers = 14
+            # Load server config from cache or use defaults
+            cached = load_server_config_cache()
+            if cached:
+                cls._instance.queue = cached.get("queue", SERVER_CONFIG_DEFAULTS["queue"])
+                cls._instance.charge_group = cached.get("charge_group", SERVER_CONFIG_DEFAULTS["charge_group"])
+                cls._instance.nb_cores_master = cached.get("nb_cores_master", SERVER_CONFIG_DEFAULTS["nb_cores_master"])
+                cls._instance.nb_cores_worker = cached.get("nb_cores_worker", SERVER_CONFIG_DEFAULTS["nb_cores_worker"])
+                cls._instance.nb_workers = cached.get("nb_workers", SERVER_CONFIG_DEFAULTS["nb_workers"])
+            else:
+                cls._instance.queue = SERVER_CONFIG_DEFAULTS["queue"]
+                cls._instance.charge_group = SERVER_CONFIG_DEFAULTS["charge_group"]
+                cls._instance.nb_cores_master = SERVER_CONFIG_DEFAULTS["nb_cores_master"]
+                cls._instance.nb_cores_worker = SERVER_CONFIG_DEFAULTS["nb_cores_worker"]
+                cls._instance.nb_workers = SERVER_CONFIG_DEFAULTS["nb_workers"]
+            cls._instance._server_config_cached = cached is not None
             cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
             cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
@@ -162,6 +201,12 @@ class Flow:
 
     def __str__(self):
         return f"Flow({self.__dict__})"
+
+    def save_server_config(self):
+        """Save current server config attributes to cache."""
+        config = {k: getattr(self, k) for k in SERVER_CONFIG_KEYS}
+        save_server_config_cache(config)
+        self._server_config_cached = True
 
     def get_output_dtype(self, model_output_dtype):
 

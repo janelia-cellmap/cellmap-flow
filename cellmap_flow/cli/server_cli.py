@@ -44,7 +44,7 @@ def cli(log_level):
     Examples:
         cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_server cellmap-model -f /path/to/model -n mymodel -d /path/to/data
+        cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
 
@@ -81,8 +81,8 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     except:
         type_hints = {}
 
-    # Track used short names to avoid collisions with common options.
-    used_short_names = {"-d", "-p"}
+    # Track used short names to avoid duplicates
+    used_short_names = set(["-d", "-p"])  # Reserved for common options
 
     # Create the command function
     def command_func(**kwargs):
@@ -143,9 +143,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
 
     # Add model-specific options based on constructor parameters
     for param_name, param_info in reversed(list(sig.parameters.items())):
-        option_config = create_click_option_from_param(
-            param_name, param_info, used_short_names
-        )
+        option_config = create_click_option_from_param(param_name, param_info, used_short_names)
         if option_config:
             command_func = click.option(
                 *option_config.pop("param_decls"), **option_config
