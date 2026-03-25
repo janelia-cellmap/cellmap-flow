@@ -83,6 +83,7 @@ class CellMapFlowServer:
             self.vol_shape = [*output_shape, self.output_channels]
         else:
             self.vol_shape = [int(x) for x in output_shape]
+        self.vol_shape = [int(x) for x in self.vol_shape]
 
         # Chunk encoding for Zarr
         self.chunk_encoder = self._initialize_chunk_encoder()
