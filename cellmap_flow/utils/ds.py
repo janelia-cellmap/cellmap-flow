@@ -190,6 +190,51 @@ class LazyNormalization:
         return at
 
 
+def _clean_zarr_compressor(dataset_path: str):
+    """Read .zarray metadata and strip unknown compressor fields for tensorstore compatibility.
+
+    Tensorstore is strict about compressor fields and rejects unknown ones
+    (e.g. 'checksum' added by newer numcodecs). Returns cleaned metadata dict
+    or None if not applicable.
+    """
+    zarray_path = os.path.join(dataset_path, ".zarray")
+    if not os.path.isfile(zarray_path):
+        return None
+    try:
+        with open(zarray_path) as f:
+            meta = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    compressor = meta.get("compressor")
+    if not compressor or not isinstance(compressor, dict):
+        return None
+
+    # Known fields per compressor type that tensorstore accepts
+    known_fields = {
+        "zstd": {"id", "level"},
+        "zlib": {"id", "level"},
+        "gzip": {"id", "level"},
+        "bz2": {"id", "level"},
+        "blosc": {"id", "cname", "clevel", "shuffle", "blocksize"},
+    }
+    codec_id = compressor.get("id", "")
+    allowed = known_fields.get(codec_id)
+    if allowed is None:
+        return None
+
+    extra_keys = set(compressor.keys()) - allowed
+    if not extra_keys:
+        return None
+
+    logger.info(
+        f"Stripping unsupported compressor fields {extra_keys} for tensorstore compatibility"
+    )
+    cleaned_compressor = {k: v for k, v in compressor.items() if k in allowed}
+    meta["compressor"] = cleaned_compressor
+    return meta
+
+
 def open_ds_tensorstore(
     dataset_path: str, mode="r", concurrency_limit=None, normalize=True
 ):
@@ -231,6 +276,15 @@ def open_ds_tensorstore(
             "path": os.path.normpath(dataset_path),
         }
 
+    # For local zarr files, clean compressor metadata to remove fields
+    # unsupported by tensorstore (e.g. 'checksum' from newer numcodecs)
+    _assume_metadata = False
+    if filetype == "zarr" and isinstance(kvstore, dict) and kvstore.get("driver") == "file":
+        cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
+        if cleaned_metadata is not None:
+            extra_args["metadata"] = cleaned_metadata
+            _assume_metadata = True
+
     if concurrency_limit:
         spec = {
             "driver": filetype,
@@ -245,9 +299,9 @@ def open_ds_tensorstore(
         spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
 
     if mode == "r":
-        dataset_future = ts.open(spec, read=True, write=False)
+        dataset_future = ts.open(spec, read=True, write=False, open=True, assume_metadata=_assume_metadata)
     else:
-        dataset_future = ts.open(spec, read=False, write=True)
+        dataset_future = ts.open(spec, read=False, write=True, open=True, assume_metadata=_assume_metadata)
 
     if dataset_path.startswith("gs://"):
         # NOTE: Currently a hack since google store is for some reason stored as mutlichannel

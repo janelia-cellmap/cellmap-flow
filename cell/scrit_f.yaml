@@ -1,0 +1,20 @@
+# data_path: /nrs/cellmap/data/jrc_mus-liver-zon-1/jrc_mus-liver-zon-1.zarr/recon-1/em/fibsem-uint8/
+# data_path: /nrs/mengwang/data/jrc_celegans-dlon-2/jrc_celegans-dlon-2.zarr/recon-1/em/fibsem-uint8
+data_path: /nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8
+queue: gpu_a100
+charge_group: cellmap
+json_data:
+  input_norm:
+    MinMaxNormalizer:
+      min_value: 0
+      max_value: 250
+      invert: false
+    LambdaNormalizer:
+      expression: x*2-1
+  postprocess: {}
+models:
+  fish:
+    type: script
+    name: cell_16nm
+    script_path: /groups/cellmap/cellmap/zouinkhim/cellmap-flow/cell/get_model.py
+
