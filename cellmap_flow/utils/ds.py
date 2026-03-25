@@ -298,10 +298,14 @@ def open_ds_tensorstore(
     else:
         spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
 
+    open_kwargs = {}
+    if _assume_metadata:
+        open_kwargs = {"open": True, "assume_metadata": True}
+
     if mode == "r":
-        dataset_future = ts.open(spec, read=True, write=False, open=True, assume_metadata=_assume_metadata)
+        dataset_future = ts.open(spec, read=True, write=False, **open_kwargs)
     else:
-        dataset_future = ts.open(spec, read=False, write=True, open=True, assume_metadata=_assume_metadata)
+        dataset_future = ts.open(spec, read=False, write=True, **open_kwargs)
 
     if dataset_path.startswith("gs://"):
         # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
