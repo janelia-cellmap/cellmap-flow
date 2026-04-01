@@ -55,7 +55,7 @@ Package Contents
    .. py:attribute:: cpu_workers
 
 
-   .. py:attribute:: tmp_dir
+   .. py:attribute:: track_progress
 
 
    .. py:attribute:: models
