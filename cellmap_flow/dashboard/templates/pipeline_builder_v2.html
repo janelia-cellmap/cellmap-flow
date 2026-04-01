@@ -2302,7 +2302,9 @@
                         }
                     }
                 } else if (trimmed.includes(':')) {
-                    const [key, value] = trimmed.split(':').map(s => s.trim());
+                    const colonIdx = trimmed.indexOf(':');
+                    const key = trimmed.slice(0, colonIdx).trim();
+                    const value = trimmed.slice(colonIdx + 1).trim();
                     if (!currentItem) return;
 
                     // Handle shape inside bounding boxes
