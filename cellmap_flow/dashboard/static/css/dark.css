@@ -423,11 +423,24 @@ textarea.form-control[readonly] {
 }
 
 /* ---------- Modal ---------- */
-.modal-content.bg-dark {
-  background: var(--bg-surface) !important;
+.modal-content {
+  background: var(--bg-surface);
+  color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+
+.modal-content.bg-dark {
+  background: var(--bg-surface) !important;
+}
+
+.modal-header {
+  border-bottom-color: var(--border);
+}
+
+.modal-footer {
+  border-top-color: var(--border);
 }
 
 .modal-header.border-secondary {
