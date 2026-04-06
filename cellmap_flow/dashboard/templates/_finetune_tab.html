@@ -1002,13 +1002,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Parse "Loss: <value>" if present in the same log line.
+    // Only update the progress text from batch lines, but don't plot them —
+    // the plot is updated only from epoch-level summary lines below.
     const lossMatch = line.match(/Loss:\s*([0-9]*\.?[0-9]+)/i);
     if (lossMatch && liveEpochState) {
       const lossVal = parseFloat(lossMatch[1]);
       if (!Number.isNaN(lossVal)) {
         document.getElementById("jobProgress").textContent =
           `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
-        upsertEpochLoss(liveEpochState.current, lossVal);
       }
     }
 
