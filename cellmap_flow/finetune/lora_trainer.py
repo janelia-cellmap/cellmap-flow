@@ -694,6 +694,9 @@ class LoRAFinetuner:
         """
         Save only the LoRA adapter (not the full model).
 
+        Automatically loads the best checkpoint weights before saving
+        so the exported adapter reflects the best training epoch.
+
         Args:
             adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter
         """
@@ -701,6 +704,18 @@ class LoRAFinetuner:
 
         if adapter_path is None:
             adapter_path = str(self.output_dir / "lora_adapter")
+
+        # Load best checkpoint weights before saving
+        best_ckpt = self.output_dir / "best_checkpoint.pth"
+        if best_ckpt.exists():
+            checkpoint = torch.load(best_ckpt, map_location=self.device)
+            if checkpoint.get('lora_only', False):
+                self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+            else:
+                self.model.load_state_dict(checkpoint['model_state_dict'])
+            logger.info(f"Loaded best checkpoint (epoch {checkpoint['epoch'] + 1}, loss {checkpoint['best_loss']:.6f}) before saving adapter")
+        else:
+            logger.warning("No best checkpoint found, saving adapter from final epoch weights")
 
         save_lora_adapter(self.model, adapter_path)
         logger.info(f"LoRA adapter saved to: {adapter_path}")
