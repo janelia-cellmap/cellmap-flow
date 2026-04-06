@@ -9,7 +9,7 @@ import os
 import zarr
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
+from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info, _is_zarr_container
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             logger.error(e)
             is_multiscale = False
 
-    if ".zarr" in dataset_path:
+    if ".zarr" in dataset_path or _is_zarr_container(dataset_path):
         filetype = "zarr"
     elif ".n5" in dataset_path:
         filetype = "n5"
