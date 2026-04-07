@@ -2,6 +2,22 @@
 
 This guide walks through the full finetuning workflow in CellMap-Flow: loading data, creating annotations, and training a finetuned model — all from the dashboard.
 
+## Installation
+
+Create a conda environment with the finetuning dependencies:
+
+```bash
+mamba create -n cellmap-flow-finetune python=3.11 minio-server minio-client -c conda-forge -y
+mamba activate cellmap-flow-finetune
+pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation
+pip install -e ".[finetune]"
+```
+
+This installs:
+- **MinIO** (server + client) — local S3-compatible server for serving annotation zarr files to Neuroglancer
+- **Neuroglancer** (voxel annotation branch) — adds voxel-level annotation tools needed for painting labels
+- **LoRA/PEFT dependencies** — for parameter-efficient finetuning
+
 ## 1. Launch the Dashboard
 
 Start by loading your data and model with a YAML configuration file:

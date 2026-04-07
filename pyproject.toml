@@ -76,8 +76,10 @@ finetune = [
     "peft>=0.7.0",           # HuggingFace Parameter-Efficient Fine-Tuning
     "transformers>=4.35.0",  # Required by peft
     "accelerate>=0.20.0",    # Training utilities
-    "minio-client",          # For annotations
-    "minio-server"           # For annotations
+    # MinIO server and client are required for annotations but not available on PyPI.
+    # Install via conda-forge: mamba install minio-server minio-client -c conda-forge
+    # Neuroglancer with voxel annotation support is required but not yet on PyPI.
+    # Install via: pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation
 ]
 
 [build-system]
