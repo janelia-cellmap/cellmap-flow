@@ -1001,24 +1001,16 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
 
-    // Parse "Loss: <value>" if present in the same log line.
-    // Only update the progress text from batch lines, but don't plot them —
-    // the plot is updated only from epoch-level summary lines below.
-    const lossMatch = line.match(/Loss:\s*([0-9]*\.?[0-9]+)/i);
-    if (lossMatch && liveEpochState) {
-      const lossVal = parseFloat(lossMatch[1]);
-      if (!Number.isNaN(lossVal)) {
-        document.getElementById("jobProgress").textContent =
-          `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
-      }
-    }
-
-    // Prefer explicit epoch-loss lines when available (e.g. "Epoch 18/20 - Loss: 0.011371")
+    // Only update progress text and plot from epoch-level summary lines
+    // (e.g. "Epoch 18/20 - Loss: 0.011371"), not per-batch lines.
     const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
     if (epochLossMatch) {
       const epochVal = parseInt(epochLossMatch[1], 10);
+      const totalVal = parseInt(epochLossMatch[2], 10);
       const lossVal = parseFloat(epochLossMatch[3]);
       if (!Number.isNaN(epochVal) && !Number.isNaN(lossVal)) {
+        document.getElementById("jobProgress").textContent =
+          `Epoch ${epochVal}/${totalVal} - Loss: ${lossVal.toFixed(4)}`;
         upsertEpochLoss(epochVal, lossVal);
       }
     }
@@ -1377,6 +1369,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (confirmRestartBtn) {
     confirmRestartBtn.addEventListener('click', async () => {
+      // Show loading state immediately
+      confirmRestartBtn.disabled = true;
+      const originalBtnText = confirmRestartBtn.textContent;
+      confirmRestartBtn.textContent = 'Syncing annotations & restarting...';
+
       const useCurrentParams = document.getElementById('useCurrentParams').checked;
 
       const requestBody = {};
@@ -1445,9 +1442,103 @@ document.addEventListener("DOMContentLoaded", function () {
       } catch (error) {
         console.error('Error restarting training:', error);
         alert('Failed to restart training');
+      } finally {
+        confirmRestartBtn.disabled = false;
+        confirmRestartBtn.textContent = originalBtnText;
       }
     });
   }
+
+  // === RESTORE ACTIVE JOB ON PAGE LOAD ===
+
+  async function restoreActiveJob() {
+    try {
+      const response = await fetch('/api/finetune/jobs');
+      const data = await response.json();
+      if (!data.success || !data.jobs || data.jobs.length === 0) return;
+
+      // Find the most recent active job (RUNNING, or COMPLETED/serving)
+      const activeJob = data.jobs.find(j =>
+        j.status === 'RUNNING' ||
+        (j.status === 'COMPLETED' && j.inference_server_ready)
+      );
+      if (!activeJob) return;
+
+      const jobId = activeJob.job_id;
+
+      // Show the training status card
+      document.getElementById('trainingStatusCard').style.display = 'block';
+      document.getElementById('jobId').textContent = jobId;
+      document.getElementById('jobModelName').textContent = activeJob.model_name;
+
+      const outputType = (activeJob.params && activeJob.params.output_type) || 'binary';
+      document.getElementById('jobOutputType').textContent = outputType;
+      document.getElementById('jobOutputType').className = 'badge ' + (outputType === 'affinities' ? 'bg-warning' : 'bg-info');
+
+      // Restore status badge
+      const statusBadge = document.getElementById('jobStatus');
+      statusBadge.textContent = activeJob.status;
+      statusBadge.className = 'badge bg-' + getStatusColor(activeJob.status);
+
+      // Restore progress
+      if (activeJob.current_epoch && activeJob.total_epochs) {
+        renderEpochProgress(activeJob.current_epoch, activeJob.total_epochs);
+        document.getElementById('jobProgress').textContent =
+          `Epoch ${activeJob.current_epoch}/${activeJob.total_epochs}` +
+          (activeJob.loss ? ` - Loss: ${activeJob.loss.toFixed(4)}` : '');
+      }
+
+      // Restore inference server ready state
+      if (activeJob.inference_server_ready) {
+        renderServingReadyProgress();
+        document.getElementById('restartJobBtn').style.display = 'inline-block';
+        if (activeJob.finetuned_model_name) {
+          document.getElementById('inferenceServerStatus').style.display = 'block';
+          document.getElementById('neuroglancerLayer').textContent = activeJob.finetuned_model_name;
+        }
+      }
+
+      // Restore logs and loss plot from the log file
+      try {
+        const logResp = await fetch(`/api/finetune/job/${jobId}/logs`);
+        const logData = await logResp.json();
+        if (logData.success && logData.logs) {
+          document.getElementById('trainingLogs').value = logData.logs;
+          // Parse existing logs for loss data to restore the plot
+          for (const line of logData.logs.split('\n')) {
+            const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
+            if (epochLossMatch) {
+              const epoch = parseInt(epochLossMatch[1], 10);
+              const loss = parseFloat(epochLossMatch[3]);
+              if (Number.isFinite(epoch) && Number.isFinite(loss)) {
+                lossByEpoch.set(epoch, loss);
+              }
+            }
+          }
+          renderLossPlot();
+          // Scroll to bottom
+          const logsArea = document.getElementById('trainingLogs');
+          logsArea.scrollTop = logsArea.scrollHeight;
+        }
+      } catch (e) {
+        console.warn('Could not restore logs:', e);
+      }
+
+      // Store latest status data for restart modal
+      latestJobStatusData = activeJob;
+
+      // Resume polling and streaming if job is still running
+      if (activeJob.status === 'RUNNING') {
+        startLogStreaming(jobId);
+        startStatusPolling(jobId);
+      }
+
+    } catch (e) {
+      console.warn('Could not restore active finetuning job:', e);
+    }
+  }
+
+  restoreActiveJob();
 
   // Initialize empty loss plot on page load
   renderLossPlot();

@@ -721,9 +721,67 @@ class FinetuneJobManager:
                 model_name = f"{finetune_job.model_name}_finetuned"
 
             self._add_finetuned_neuroglancer_layer(finetune_job, model_name)
-
         except Exception as e:
             self.logger.error(f"Failed to add finetuned model to neuroglancer: {e}", exc_info=True)
+
+        try:
+            self._register_finetune_model_config(finetune_job, model_name)
+        except Exception as e:
+            self.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
+
+    def _register_finetune_model_config(
+        self, finetune_job: FinetuneJob, finetuned_model_name: str
+    ):
+        """Register a FinetuneModelConfig in g.models_config so it appears
+        in the pipeline builder with auto-populated parameters."""
+        from cellmap_flow.globals import g
+        from cellmap_flow.models.models_config import FinetuneModelConfig
+
+        adapter_path = str(finetune_job.output_dir / "lora_adapter")
+        params = finetune_job.params
+
+        # Find the base model's to_dict() from g.models_config
+        base_model_dict = None
+        if hasattr(g, "models_config") and g.models_config:
+            for mc in g.models_config:
+                if getattr(mc, "name", None) == finetune_job.model_name:
+                    base_model_dict = mc.to_dict()
+                    break
+
+        if base_model_dict is None:
+            # Fallback: reconstruct from job params
+            base_model_dict = {"type": "fly"}
+            if params.get("model_checkpoint"):
+                base_model_dict["checkpoint_path"] = params["model_checkpoint"]
+            for key in ("channels", "input_voxel_size", "output_voxel_size"):
+                if key in params:
+                    base_model_dict[key] = params[key]
+
+        ft_config = FinetuneModelConfig(
+            lora_adapter_path=adapter_path,
+            base_model=base_model_dict,
+            name=finetuned_model_name,
+            scale=params.get("scale"),
+        )
+
+        if not hasattr(g, "models_config"):
+            g.models_config = []
+
+        # Remove any previous finetuned versions of the same base model
+        base_model_name = finetune_job.model_name
+        g.models_config = [
+            mc
+            for mc in g.models_config
+            if not (
+                hasattr(mc, "name")
+                and mc.name.startswith(f"{base_model_name}_finetuned")
+            )
+        ]
+
+        g.models_config.append(ft_config)
+        self.logger.info(
+            f"Registered FinetuneModelConfig: {finetuned_model_name}"
+        )
 
     def _parse_training_restart(self, finetune_job: FinetuneJob, log_content: str):
         """
@@ -782,6 +840,10 @@ class FinetuneJobManager:
                     # Still update the stored name so the frontend reflects the new model
                     # and we don't retry the failed neuroglancer update every cycle
                     finetune_job.finetuned_model_name = new_model_name
+                try:
+                    self._register_finetune_model_config(finetune_job, new_model_name)
+                except Exception as e:
+                    self.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
 
     def complete_job(self, finetune_job: FinetuneJob):
         """
