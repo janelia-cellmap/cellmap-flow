@@ -264,14 +264,28 @@ def open_ds_tensorstore(
     filetype = _detect_filetype(dataset_path)
     extra_args = {}
 
-    if dataset_path.startswith("http://"):
+    if dataset_path.startswith("precomputed://"):
+        # precomputed:// URLs point to neuroglancer precomputed format
+        raw_path = "/" + dataset_path[len("precomputed://"):].lstrip("/")
+        if ends_with_scale(raw_path):
+            scale_index = int(raw_path.rsplit("/s")[1])
+            raw_path = raw_path.rsplit("/s")[0]
+        else:
+            scale_index = 0
+        filetype = "neuroglancer_precomputed"
+        kvstore = {
+            "driver": "file",
+            "path": os.path.normpath(raw_path),
+        }
+        extra_args = {"scale_index": scale_index}
+    elif dataset_path.startswith("http://"):
         path = dataset_path.split("http://")[1]
         kvstore = {
             "driver": "http",
             "base_url": "http://",
             "path": path,
         }
-    if dataset_path.startswith("s3://"):
+    elif dataset_path.startswith("s3://"):
         kvstore = {
             "driver": "s3",
             "bucket": dataset_path.split("/")[2],
@@ -315,8 +329,8 @@ def open_ds_tensorstore(
         dataset_future = ts.open(spec, read=False, write=True)
 
     try:
-        if dataset_path.startswith("gs://"):
-            # NOTE: Currently a hack since google store is for some reason stored as mutlichannel
+        if dataset_path.startswith("gs://") or dataset_path.startswith("precomputed://"):
+            # NOTE: Currently a hack since google store / precomputed is stored as multichannel
             ts_dataset = dataset_future.result()[ts.d["channel"][0]]
         else:
             ts_dataset = dataset_future.result()
@@ -900,6 +914,17 @@ def get_ds_info(path: str, mode: str = "r"):
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
         file_type = "gs"
         return voxel_size, chunk_shape, shape, roi, axes_names, file_type
+
+    elif path.startswith("precomputed://"):
+        ts_info = open_ds_tensorstore(path)
+        shape = ts_info.shape
+        voxel_size = Coordinate(
+            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
+        )
+        axes_names = list(ts_info.spec().transform.input_labels[:3])
+        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
+        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
+        return voxel_size, chunk_shape, shape, roi, axes_names, "precomputed"
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):

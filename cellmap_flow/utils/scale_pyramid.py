@@ -16,8 +16,12 @@ logger = logging.getLogger(__name__)
 
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     original_dataset_path = dataset_path
+    is_precomputed = dataset_path.startswith("precomputed://")
     # if multiscale dataset
-    if (
+    if is_precomputed:
+        # precomputed format handles scales internally via tensorstore
+        is_multiscale = False
+    elif (
         dataset_path.split("/")[-1].startswith("s")
         and dataset_path.split("/")[-1][1:].isdigit()
     ):
@@ -30,7 +34,9 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             logger.error(e)
             is_multiscale = False
 
-    if ".zarr" in dataset_path or _is_zarr_container(dataset_path):
+    if is_precomputed:
+        filetype = "precomputed"
+    elif ".zarr" in dataset_path or _is_zarr_container(dataset_path):
         filetype = "zarr"
     elif ".n5" in dataset_path:
         filetype = "n5"
@@ -39,8 +45,12 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     layers = []
     if not wrap_raw:
+        if is_precomputed:
+            source = dataset_path
+        else:
+            source = f"{filetype}://{dataset_path}"
         return neuroglancer.ImageLayer(
-            source=f"{filetype}://{dataset_path}",
+            source=source,
             shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
     #uicontrol vec3 color color(default="white");
     void main(){{emitRGB(color * normalized());}}""",

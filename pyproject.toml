@@ -69,8 +69,8 @@ docs = [
 ]
 
 postprocess = ["edt",
-    "mwatershed @ git+https://github.com/pattonw/mwatershed",
-    "funlib.math @ git+https://github.com/funkelab/funlib.math.git",]
+    "mwatershed",
+    "funlib.math",]
 
 finetune = [
     "peft>=0.7.0",           # HuggingFace Parameter-Efficient Fine-Tuning
