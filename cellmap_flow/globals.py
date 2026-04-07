@@ -2,9 +2,12 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
+import queue
 import yaml
+import logging
 import threading
 import numpy as np
+from collections import deque
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -77,6 +80,18 @@ class Flow:
     shader_controls: dict
     _server_config_cached: bool
 
+    # Dashboard state (moved from cellmap_flow.dashboard.state)
+    log_buffer: deque
+    log_clients: list
+    NEUROGLANCER_URL: Optional[str]
+    INFERENCE_SERVER: Optional[Any]
+    CUSTOM_CODE_FOLDER: str
+    bbx_generator_state: dict
+    finetune_job_manager: Any
+    minio_state: dict
+    annotation_volumes: dict
+    output_sessions: dict
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Flow, cls).__new__(cls)
@@ -129,7 +144,54 @@ class Flow:
             cls._instance.shaders = {}
             # ShaderControls state: key = layer name, value = shaderControls dict
             cls._instance.shader_controls = {}
+
+            # Dashboard state (moved from cellmap_flow.dashboard.state)
+            cls._instance.log_buffer = deque(maxlen=1000)
+            cls._instance.log_clients = []
+            cls._instance.NEUROGLANCER_URL = None
+            cls._instance.INFERENCE_SERVER = None
+            cls._instance.CUSTOM_CODE_FOLDER = os.path.expanduser(
+                os.environ.get(
+                    "CUSTOM_CODE_FOLDER",
+                    "~/Desktop/cellmap/cellmap-flow/example/example_norm",
+                )
+            )
+            cls._instance.bbx_generator_state = {
+                "dataset_path": None,
+                "num_boxes": 0,
+                "bounding_boxes": [],
+                "viewer": None,
+                "viewer_process": None,
+                "viewer_url": None,
+                "viewer_state": None,
+            }
+            cls._instance.minio_state = {
+                "process": None,
+                "port": None,
+                "ip": None,
+                "bucket": "annotations",
+                "minio_root": None,
+                "output_base": None,
+                "last_sync": {},
+                "chunk_sync_state": {},
+                "sync_thread": None,
+            }
+            cls._instance.annotation_volumes = {}
+            cls._instance.output_sessions = {}
+            cls._instance._finetune_job_manager = None
+
         return cls._instance
+
+    @property
+    def finetune_job_manager(self):
+        if self._finetune_job_manager is None:
+            from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+            self._finetune_job_manager = FinetuneJobManager()
+        return self._finetune_job_manager
+
+    @finetune_job_manager.setter
+    def finetune_job_manager(self, value):
+        self._finetune_job_manager = value
 
     def to_dict(self):
         return self.__dict__.items()
@@ -231,3 +293,24 @@ class Flow:
 
 
 g = Flow()
+
+
+# Custom handler to capture logs into Flow singleton
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = self.format(record)
+        g.log_buffer.append(log_entry)
+        # Send to all connected clients
+        for client_queue in g.log_clients:
+            try:
+                client_queue.put_nowait(log_entry)
+            except queue.Full:
+                pass
+
+
+def get_blockwise_tasks_dir():
+    tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
+        "~/.cellmap_flow/blockwise_tasks"
+    )
+    os.makedirs(tasks_dir, exist_ok=True)
+    return tasks_dir

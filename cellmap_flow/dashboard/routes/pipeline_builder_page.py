@@ -147,8 +147,10 @@ def pipeline_builder():
                     for model_name, model_data in available_models.items():
                         model_name_stripped = model_name.replace('_server', '')
                         logger.warning(f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if model_name_stripped == job_model_name and isinstance(model_data, dict) and 'config' in model_data:
-                            model_dict['config'] = model_data['config']
+                        if model_name_stripped == job_model_name and isinstance(model_data, dict):
+                            # Models from g.models_config store to_dict() directly
+                            # (no nested 'config' key); use the dict itself as config
+                            model_dict['config'] = model_data.get('config', model_data)
                             logger.warning(f"    ✓ Config attached from available_models: {model_dict['config']}")
                             config_found = True
                             break

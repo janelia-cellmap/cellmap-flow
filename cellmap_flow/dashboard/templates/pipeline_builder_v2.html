@@ -13,13 +13,14 @@
             <a href="/" class="action-btn" style="text-decoration:none; margin-right:8px;">← Back</a>
             <h1>CellMapFlow Pipeline</h1>
             <div class="header-actions">
+                <button class="action-btn" onclick="autoLayoutNodes()" title="Auto-arrange nodes in a clean left-to-right layout">Auto Arrange</button>
                 <button class="action-btn" onclick="exportYAML()">📥 Export YAML</button>
                 <!-- <button class="action-btn" onclick="exportJSON()">📥 Export JSON</button> -->
                 <label class="import-btn">
                     📂 Import YAML
                     <input type="file" class="file-input" accept=".yaml,.json" id="import-file" onchange="importFile()">
                 </label>
-                <button class="apply-btn" onclick="applyPipeline()">✓ Apply to Flow</button>
+                <!-- Apply is now automatic via debounced auto-sync -->
                 <button class="action-btn" onclick="toggleBlockwiseBar()" title="Show/Hide blockwise configuration section" style="background-color: rgba(255, 111, 0, 0.799);">Blockwise</button>
             </div>
         </div>
@@ -282,7 +283,7 @@
         pipeline.outputs = (pipeline.outputs || []).map((n, i) => ({
             id: n.id || `output-${i}-${Date.now()}`,
             name: 'OUTPUT',
-            params: {},
+            params: n.params || {},
             position: n.position || { x: 900, y: 20 + (i * 180) }
         }));
         pipeline.normalizers = (pipeline.normalizers || []).map((n, i) => ({
@@ -406,10 +407,146 @@
             }
         }
 
+        // Auto-layout nodes based on graph topology (edges), measuring actual DOM sizes.
+        // Must be called AFTER renderCanvas() so nodes are in the DOM.
+        function autoLayoutNodes() {
+            const COL_GAP = 80;
+            const ROW_SPACING = 40;
+            const LEFT_MARGIN = 40;
+            const TOP_MARGIN = 40;
+
+            // Collect all connected nodes (exclude blockwise-config)
+            const allNodes = [
+                ...pipeline.inputs,
+                ...pipeline.normalizers,
+                ...pipeline.models,
+                ...pipeline.postprocessors,
+                ...pipeline.outputs
+            ];
+            if (allNodes.length === 0) return;
+
+            const nodeById = {};
+            allNodes.forEach(n => { nodeById[n.id] = n; });
+
+            // Measure actual DOM sizes
+            const nodeSize = {};
+            allNodes.forEach(n => {
+                const el = document.getElementById(`node-${n.id}`);
+                if (el) {
+                    nodeSize[n.id] = { w: el.offsetWidth, h: el.offsetHeight };
+                } else {
+                    nodeSize[n.id] = { w: 300, h: 120 };  // fallback
+                }
+            });
+
+            // Build adjacency
+            const incomingCount = {};
+            const outgoing = {};
+            allNodes.forEach(n => {
+                incomingCount[n.id] = 0;
+                outgoing[n.id] = [];
+            });
+            pipeline.edges.forEach(e => {
+                if (nodeById[e.from] && nodeById[e.to]) {
+                    outgoing[e.from].push(e.to);
+                    incomingCount[e.to] = (incomingCount[e.to] || 0) + 1;
+                }
+            });
+
+            // Assign layers via topological BFS (longest-path layering)
+            const layer = {};
+            allNodes.forEach(n => { layer[n.id] = 0; });
+            const queue = allNodes.filter(n => incomingCount[n.id] === 0).map(n => n.id);
+            const visited = new Set();
+            while (queue.length > 0) {
+                const nid = queue.shift();
+                if (visited.has(nid)) continue;
+                visited.add(nid);
+                outgoing[nid].forEach(childId => {
+                    layer[childId] = Math.max(layer[childId], layer[nid] + 1);
+                    incomingCount[childId]--;
+                    if (incomingCount[childId] <= 0) {
+                        queue.push(childId);
+                    }
+                });
+            }
+
+            // Disconnected nodes get layer 0
+            allNodes.forEach(n => {
+                if (!visited.has(n.id)) {
+                    layer[n.id] = 0;
+                    visited.add(n.id);
+                }
+            });
+
+            // Group by layer
+            const layers = {};
+            allNodes.forEach(n => {
+                const l = layer[n.id];
+                if (!layers[l]) layers[l] = [];
+                layers[l].push(n);
+            });
+            const sortedLayerKeys = Object.keys(layers).map(Number).sort((a, b) => a - b);
+
+            // Compute column heights using actual measured node heights
+            const colHeights = {};
+            sortedLayerKeys.forEach(k => {
+                const nodes = layers[k];
+                colHeights[k] = nodes.reduce((sum, n) => sum + nodeSize[n.id].h, 0) + (nodes.length - 1) * ROW_SPACING;
+            });
+            const maxColHeight = Math.max(...Object.values(colHeights));
+
+            // Compute x positions: each column starts after the widest node in the previous column
+            const colX = {};
+            let currentX = LEFT_MARGIN;
+            sortedLayerKeys.forEach((k, i) => {
+                colX[k] = currentX;
+                const maxWidth = Math.max(...layers[k].map(n => nodeSize[n.id].w));
+                currentX += maxWidth + COL_GAP;
+            });
+
+            // Position each layer
+            sortedLayerKeys.forEach(k => {
+                const colNodes = layers[k];
+                const x = colX[k];
+                const yOffset = TOP_MARGIN + (maxColHeight - colHeights[k]) / 2;
+
+                let y = yOffset;
+                colNodes.forEach(node => {
+                    node.position = { x, y };
+                    // Update DOM element directly (no re-render needed)
+                    const el = document.getElementById(`node-${node.id}`);
+                    if (el) {
+                        el.style.left = x + 'px';
+                        el.style.top = y + 'px';
+                    }
+                    y += nodeSize[node.id].h + ROW_SPACING;
+                });
+            });
+
+            // Position blockwise-config below the main flow
+            if (pipeline.blockwise_config && pipeline.blockwise_config.length > 0) {
+                const bottomY = TOP_MARGIN + maxColHeight + 60;
+                pipeline.blockwise_config.forEach((node, i) => {
+                    const size = nodeSize[node.id] || { w: 350 };
+                    node.position = { x: LEFT_MARGIN + i * (size.w + COL_GAP), y: bottomY };
+                    const el = document.getElementById(`node-${node.id}`);
+                    if (el) {
+                        el.style.left = node.position.x + 'px';
+                        el.style.top = node.position.y + 'px';
+                    }
+                });
+            }
+
+            // Redraw connections with new positions
+            renderConnections();
+        }
+
         // Run auto-connect if we have nodes
-        if (pipeline.inputs.length > 0 || pipeline.normalizers.length > 0 || 
+        if (pipeline.inputs.length > 0 || pipeline.normalizers.length > 0 ||
             pipeline.models.length > 0 || pipeline.postprocessors.length > 0) {
             autoConnectNodes();
+            // autoLayoutNodes() is called after first renderCanvas() in initializeLibrary()
         }
 
         // Initialize library
@@ -478,6 +615,8 @@
             canvas.addEventListener('drop', handleDrop);
 
             renderCanvas();
+            // Auto-layout after first render so we can measure actual DOM sizes
+            autoLayoutNodes();
         }
 
         function toggleSection(btn, sectionId) {
@@ -602,6 +741,11 @@
                     // Store the full config if available
                     if (modelDef.config) {
                         modelConfig = { ...modelDef.config };
+                    } else if (modelDef.type) {
+                        // Models from g.models_config have to_dict() as the
+                        // entry itself (no nested .config key). Use the whole
+                        // definition as config so params auto-populate.
+                        modelConfig = { ...modelDef };
                     }
                 }
             } else if (type === 'postprocessor') {
@@ -641,10 +785,59 @@
                 pipeline.blockwise_config.push(node);
             }
 
-            // Auto-connect the new node into the pipeline
-            autoConnectNodes();
-            renderCanvas();
+            // Intelligently connect just the new node (don't wipe existing edges)
+            connectNewNode(node, type);
+
+            // Append just this node to the canvas (don't rebuild everything)
+            const canvas = document.getElementById('canvas-content');
+            const nodeWithType = { ...node, type };
+            const nodeEl = createNodeElement(nodeWithType);
+            canvas.appendChild(nodeEl);
+            setupNodeDragging(nodeEl, nodeWithType);
+            renderConnections();
+            debouncedApply();
             showMessage(`Added ${name}`, 'success');
+        }
+
+        // Connect a newly added node based on its type, without wiping existing edges
+        function connectNewNode(node, type) {
+            function addEdge(fromId, toId) {
+                if (fromId && toId) {
+                    const exists = pipeline.edges.some(e => e.from === fromId && e.to === toId);
+                    if (!exists) {
+                        pipeline.edges.push({
+                            id: `edge-${Date.now()}-${Math.random()}`,
+                            from: fromId,
+                            to: toId
+                        });
+                    }
+                }
+            }
+
+            if (type === 'input') {
+                // Connect to first normalizer if exists, else first model
+                const target = pipeline.normalizers[0] || pipeline.models[0];
+                if (target) addEdge(node.id, target.id);
+            } else if (type === 'output') {
+                // Connect from last postprocessor if exists, else last model
+                const source = pipeline.postprocessors.length > 0
+                    ? pipeline.postprocessors[pipeline.postprocessors.length - 1]
+                    : (pipeline.models.length > 0 ? pipeline.models[pipeline.models.length - 1] : null);
+                if (source) addEdge(source.id, node.id);
+            } else if (type === 'normalizer') {
+                // No auto-connect — user can drag connections manually
+            } else if (type === 'model') {
+                // Connect from last normalizer (or input) if exists
+                const source = pipeline.normalizers.length > 0
+                    ? pipeline.normalizers[pipeline.normalizers.length - 1]
+                    : (pipeline.inputs.length > 0 ? pipeline.inputs[0] : null);
+                if (source) addEdge(source.id, node.id);
+                // Connect to first postprocessor or output
+                const target = pipeline.postprocessors[0] || (pipeline.outputs.length > 0 ? pipeline.outputs[0] : null);
+                if (target) addEdge(node.id, target.id);
+            } else if (type === 'postprocessor') {
+                // No auto-connect — user can drag connections manually
+            }
         }
 
         function removeNode(id, type) {
@@ -664,9 +857,11 @@
             } else if (type === 'blockwise-config') {
                 pipeline.blockwise_config = pipeline.blockwise_config.filter(c => c.id !== id);
             }
-            // Re-auto-connect remaining nodes
-            autoConnectNodes();
-            renderCanvas();
+            // Remove the node's DOM element and re-render connections
+            const nodeEl = document.getElementById(`node-${id}`);
+            if (nodeEl) nodeEl.remove();
+            renderConnections();
+            debouncedApply();
             showMessage('Node removed', 'success');
         }
 
@@ -1443,7 +1638,7 @@
                     const checked = value ? 'checked' : '';
                     inputHTML = `
                         <select class="param-input" data-key="${key}" data-type="boolean"
-                                onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                                oninput="handleParamChange(this, '${node.id}', '${node.type}')">
                             <option value="true" ${value === true ? 'selected' : ''}>true</option>
                             <option value="false" ${value === false ? 'selected' : ''}>false</option>
                         </select>
@@ -1452,13 +1647,13 @@
                     inputHTML = `
                         <input type="number" class="param-input" data-key="${key}" data-type="number"
                                value="${displayValue}"
-                               onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                               oninput="handleParamChange(this, '${node.id}', '${node.type}')">
                     `;
                 } else {
                     inputHTML = `
                         <input type="text" class="param-input" data-key="${key}" data-type="text"
                                value="${displayValue}"
-                               onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                               oninput="handleParamChange(this, '${node.id}', '${node.type}')">
                     `;
                 }
 
@@ -1483,7 +1678,7 @@
                             <label class="param-label">${labelText}</label>
                             <input type="text" class="param-input" data-key="dataset_path" data-type="text"
                                    value="${displayPath}"
-                                   onchange="handleParamChange(this, '${node.id}', '${node.type}')">
+                                   oninput="handleParamChange(this, '${node.id}', '${node.type}')">
                         </div>
                     `;
                     
@@ -1548,7 +1743,6 @@
                             <div class="node-title">${node.name}</div>
                         </div>
                         <div class="node-actions">
-                            <button class="icon-btn save" onclick="saveNode('${node.id}', '${node.type}')">💾</button>
                             <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
                         </div>
                     </div>
@@ -1576,7 +1770,7 @@
                             <label class="param-label">${field.label}</label>
                             <input type="${inputType}" class="param-input" data-key="${field.key}" data-type="${inputType}"
                                    value="${displayValue}"
-                                   onchange="handleParamChange(this, '${node.id}', 'blockwise-config')">
+                                   oninput="handleParamChange(this, '${node.id}', 'blockwise-config')">
                         </div>
                     `;
                 });
@@ -1587,7 +1781,6 @@
                             <div class="node-title">⚙️ Blockwise Config</div>
                         </div>
                         <div class="node-actions">
-                            <button class="icon-btn save" onclick="saveNode('${node.id}', 'blockwise-config')">💾</button>
                             <button class="icon-btn delete" onclick="removeNode('${node.id}', 'blockwise-config')">🗑️</button>
                         </div>
                     </div>
@@ -1605,7 +1798,6 @@
                             <div class="node-type">${node.type}</div>
                         </div>
                         <div class="node-actions">
-                            <button class="icon-btn save" onclick="saveNode('${node.id}', '${node.type}')">💾</button>
                             <button class="icon-btn reset" onclick="resetNode('${node.id}', '${node.type}')">↻</button>
                             <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
                         </div>
@@ -1672,9 +1864,49 @@
             nodeEl.style.zIndex = 999;  // 999 so dragging can use 1000
         }
 
+        // Debounced auto-apply to backend
+        let _applyTimer = null;
+        function debouncedApply() {
+            if (_applyTimer) clearTimeout(_applyTimer);
+            _applyTimer = setTimeout(() => applyPipeline(), 2000);
+        }
+
+        // Always sync on page leave (covers back button, link clicks, etc.)
+        window.addEventListener('beforeunload', () => {
+            if (_applyTimer) clearTimeout(_applyTimer);
+            const payload = buildApplyPayload();
+            navigator.sendBeacon('/api/pipeline/apply', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+        });
+
         function handleParamChange(input, nodeId, nodeType) {
-            const nodeBox = document.getElementById(`node-${nodeId}`);
-            nodeBox.classList.add('dirty');
+            // Immediately update the pipeline object
+            const key = input.dataset.key;
+            const type = input.dataset.type || 'text';
+            let value;
+            if (type === 'boolean') {
+                value = input.value === 'true';
+            } else if (type === 'number') {
+                value = parseFloat(input.value);
+                if (isNaN(value)) return;
+            } else {
+                try { value = JSON.parse(input.value); } catch { value = input.value; }
+            }
+
+            let node;
+            if (nodeType === 'input') node = pipeline.inputs.find(n => n.id === nodeId);
+            else if (nodeType === 'output') node = pipeline.outputs.find(n => n.id === nodeId);
+            else if (nodeType === 'normalizer') node = pipeline.normalizers.find(n => n.id === nodeId);
+            else if (nodeType === 'model') node = pipeline.models.find(m => m.id === nodeId);
+            else if (nodeType === 'postprocessor') node = pipeline.postprocessors.find(p => p.id === nodeId);
+            else if (nodeType === 'blockwise-config') node = pipeline.blockwise_config.find(c => c.id === nodeId);
+
+            if (node) {
+                node.params[key] = value;
+                if (nodeType === 'model' && node.config) {
+                    node.config[key] = value;
+                }
+            }
+            debouncedApply();
         }
 
         function saveNode(nodeId, nodeType) {
@@ -1829,9 +2061,8 @@
             setTimeout(() => div.remove(), 5000);
         }
 
-        async function applyPipeline() {
-            // Transform pipeline data to backend format - include complete state for persistence
-            const payload = {
+        function buildApplyPayload() {
+            return {
                 input_normalizers: pipeline.normalizers.map(n => ({
                     id: n.id,
                     name: n.name,
@@ -1852,10 +2083,12 @@
                 })),
                 inputs: pipeline.inputs.map(i => ({
                     id: i.id,
+                    params: i.params,
                     position: i.position
                 })),
                 outputs: pipeline.outputs.map(o => ({
                     id: o.id,
+                    params: o.params,
                     position: o.position
                 })),
                 edges: pipeline.edges.map(e => ({
@@ -1864,22 +2097,22 @@
                     to: e.to
                 }))
             };
+        }
 
+        async function applyPipeline() {
+            const payload = buildApplyPayload();
             try {
                 const response = await fetch('/api/pipeline/apply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
                 const result = await response.json();
-                if (response.ok) {
-                    showMessage('✓ Pipeline applied successfully!', 'success');
-                } else {
-                    showMessage('Error: ' + (result.error || 'Unknown error'), 'error');
+                if (!response.ok) {
+                    console.error('Pipeline sync error:', result.error || 'Unknown error');
                 }
             } catch (err) {
-                showMessage('Failed: ' + err.message, 'error');
+                console.error('Pipeline sync failed:', err.message);
             }
         }
 
@@ -2134,7 +2367,9 @@
                     };
 
                     console.log('Final pipeline:', pipeline);  // Debug log
+                    autoConnectNodes();
                     renderCanvas();
+                    autoLayoutNodes();
                     
                     // If blockwise config is imported, sync it to backend globals
                     if (pipeline.blockwise_config.length > 0) {
@@ -2493,6 +2728,7 @@
                             to: toNodeId
                         });
                         renderConnections();
+                        debouncedApply();
                         showMessage('Connection created', 'success');
                     } else {
                         showMessage('Connection already exists', 'info');
@@ -2516,6 +2752,18 @@
             return `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
         }
 
+        // Get connection dot center relative to canvas-content coordinate space.
+        // Both dot and canvas-content are children of the same scroll container,
+        // so their getBoundingClientRect difference is already scroll-independent.
+        function getDotPosition(dot) {
+            const containerRect = document.getElementById('canvas-content').getBoundingClientRect();
+            const dotRect = dot.getBoundingClientRect();
+            return {
+                x: dotRect.left + dotRect.width / 2 - containerRect.left,
+                y: dotRect.top + dotRect.height / 2 - containerRect.top
+            };
+        }
+
         function renderConnections() {
             const svg = document.querySelector('.connections-svg');
             if (!svg) return;
@@ -2523,6 +2771,20 @@
             // Remove old connections (but keep temp connection if it exists)
             const existingPaths = svg.querySelectorAll('.connection-path:not(.dragging-connection)');
             existingPaths.forEach(p => p.remove());
+
+            // Compute extent of all nodes to size the SVG properly
+            const canvas = document.getElementById('canvas-content');
+            const nodeBoxes = canvas.querySelectorAll('.node-box');
+            let maxRight = 600, maxBottom = 600;
+            nodeBoxes.forEach(box => {
+                const right = box.offsetLeft + box.offsetWidth;
+                const bottom = box.offsetTop + box.offsetHeight;
+                if (right > maxRight) maxRight = right;
+                if (bottom > maxBottom) maxBottom = bottom;
+            });
+            // Expand canvas-content to fit all nodes so SVG (100% of parent) covers everything
+            canvas.style.minWidth = (maxRight + 100) + 'px';
+            canvas.style.minHeight = (maxBottom + 100) + 'px';
 
             // Render each edge
             pipeline.edges.forEach(edge => {
@@ -2536,18 +2798,12 @@
 
                 if (!fromDot || !toDot) return;
 
-                const canvasRect = document.getElementById('canvas-content').getBoundingClientRect();
-                const fromRect = fromDot.getBoundingClientRect();
-                const toRect = toDot.getBoundingClientRect();
-
-                const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
-                const y1 = fromRect.top + fromRect.height / 2 - canvasRect.top;
-                const x2 = toRect.left + toRect.width / 2 - canvasRect.left;
-                const y2 = toRect.top + toRect.height / 2 - canvasRect.top;
+                const from = getDotPosition(fromDot);
+                const to = getDotPosition(toDot);
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.classList.add('connection-path');
-                path.setAttribute('d', createBezierPath(x1, y1, x2, y2));
+                path.setAttribute('d', createBezierPath(from.x, from.y, to.x, to.y));
                 path.dataset.edgeId = edge.id;
                 path.style.pointerEvents = 'stroke';
 
@@ -2564,6 +2820,7 @@
         function deleteConnection(edgeId) {
             pipeline.edges = pipeline.edges.filter(e => e.id !== edgeId);
             renderConnections();
+            debouncedApply();
             showMessage('Connection deleted', 'success');
         }
 
@@ -2600,6 +2857,7 @@
                 const finalY = Math.max(0, draggedNode.originalY + dy);
 
                 draggedNode.node.position = { x: finalX, y: finalY };
+                debouncedApply();
                 // Keep z-index at 999 since it's selected, instead of resetting to auto
                 draggedNode.element.style.zIndex = 999;
                 draggedNode.element.style.cursor = 'auto';

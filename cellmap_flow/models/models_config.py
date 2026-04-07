@@ -193,14 +193,35 @@ class ScriptModelConfig(ModelConfig):
         from cellmap_flow.utils.load_py import load_safe_config
 
         config = load_safe_config(self.script_path)
-        if not hasattr(config, "read_shape"):
+
+        # Derive read_shape/write_shape from input_size/output_size or vice versa
+        has_input_size = hasattr(config, "input_size")
+        has_output_size = hasattr(config, "output_size")
+        has_read_shape = hasattr(config, "read_shape")
+        has_write_shape = hasattr(config, "write_shape")
+
+        if not has_read_shape and has_input_size:
             config.read_shape = Coordinate(config.input_size) * Coordinate(
                 config.input_voxel_size
             )
-        if not hasattr(config, "write_shape"):
+        if not has_write_shape and has_output_size:
             config.write_shape = Coordinate(config.output_size) * Coordinate(
                 config.output_voxel_size
             )
+        # Reverse: derive input_size/output_size from read_shape/write_shape
+        if not has_input_size and has_read_shape:
+            config.input_size = tuple(
+                int(s)
+                for s in Coordinate(config.read_shape)
+                / Coordinate(config.input_voxel_size)
+            )
+        if not has_output_size and has_write_shape:
+            config.output_size = tuple(
+                int(s)
+                for s in Coordinate(config.write_shape)
+                / Coordinate(config.output_voxel_size)
+            )
+
         if not hasattr(config, "block_shape"):
             config.block_shape = np.array(
                 tuple(config.output_size) + (config.output_channels,)
@@ -336,6 +357,12 @@ class FlyModelConfig(ModelConfig):
 
         if checkpoint_path.endswith(".ts"):
             model_backbone = torch.jit.load(checkpoint_path, map_location=device)
+        elif checkpoint_path.endswith("model.pt"):
+            # Load full model directly (for trusted fly_organelles models)
+            model = torch.load(checkpoint_path, weights_only=False, map_location=device)
+            model.to(device)
+            model.eval()
+            return model
         else:
             from fly_organelles.model import StandardUnet
 
@@ -710,6 +737,118 @@ class CellMapModelConfig(ModelConfig):
         if self.scale is not None:
             result["scale"] = self.scale
         return result
+
+class FinetuneModelConfig(ModelConfig):
+    """Configuration class for a LoRA-finetuned model.
+
+    Wraps any base ModelConfig with a LoRA adapter applied on top.
+    The base model is loaded via its own ModelConfig, then the adapter
+    is applied using PEFT.
+    """
+
+    cli_name = "finetune"
+
+    def __init__(
+        self,
+        lora_adapter_path: str,
+        base_model: dict,
+        name: str = None,
+        scale=None,
+    ):
+        """
+        Args:
+            lora_adapter_path: Path to the saved LoRA adapter directory.
+            base_model: Dict describing the base model (same format as a YAML
+                model entry, e.g. {"type": "fly", "checkpoint_path": "...", ...}).
+            name: Display name for this model.
+            scale: Optional scale override.
+        """
+        super().__init__()
+        self.lora_adapter_path = lora_adapter_path
+        self.base_model_dict = base_model
+        self.name = name
+        self.scale = scale
+        self._base_model_config = None
+
+    @property
+    def base_model_config(self):
+        """Lazily build the base ModelConfig from the stored dict."""
+        if self._base_model_config is None:
+            from cellmap_flow.utils.config_utils import build_model_from_entry
+
+            base_name = self.base_model_dict.get("name", "base_model")
+            self._base_model_config = build_model_from_entry(
+                self.base_model_dict, model_name=base_name
+            )
+        return self._base_model_config
+
+    @property
+    def command(self):
+        return f"finetune --lora-adapter-path {self.lora_adapter_path}"
+
+    def _get_config(self):
+        from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
+
+        # Get the fully-populated config from the base model
+        base_cfg = self.base_model_config.config
+
+        # Apply LoRA adapter to the base model
+        base_model = base_cfg.model
+        device = next(base_model.parameters()).device
+        model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
+        model.to(device)
+        model.eval()
+
+        # Replace the model in the config, keep everything else
+        config = Config()
+        config.model = model
+        config.input_voxel_size = base_cfg.input_voxel_size
+        config.output_voxel_size = base_cfg.output_voxel_size
+        config.read_shape = base_cfg.read_shape
+        config.write_shape = base_cfg.write_shape
+        config.output_channels = base_cfg.output_channels
+        config.block_shape = base_cfg.block_shape
+
+        # Copy optional attributes from base config
+        for attr in ("channels", "axes_names", "chunk_output_axes", "output_dtype"):
+            if hasattr(base_cfg, attr):
+                setattr(config, attr, getattr(base_cfg, attr))
+
+        return config
+
+    def to_dict(self):
+        """Export configuration for use with build_model_from_entry.
+
+        Surfaces key base model fields at the top level so the pipeline
+        builder UI can display them alongside the finetune-specific fields.
+        """
+        result = {
+            "type": "finetune",
+            "lora_adapter_path": self.lora_adapter_path,
+            "base_model": self.base_model_dict,
+        }
+        if self.name is not None:
+            result["name"] = self.name
+        if self.scale is not None:
+            result["scale"] = self.scale
+
+        # Surface base model fields for UI display
+        base = self.base_model_dict
+        for key in (
+            "channels",
+            "checkpoint_path",
+            "input_voxel_size",
+            "output_voxel_size",
+            "input_size",
+            "output_size",
+        ):
+            if key in base and key not in result:
+                result[key] = base[key]
+        if "type" in base:
+            result["base_type"] = base["type"]
+
+        return result
+
 
 class HuggingFaceModelConfig(ModelConfig):
     """Configuration class for a Hugging Face model."""

@@ -76,7 +76,7 @@ def get_array_path_if_needed(zarr_grp_path, target_resolution):
         # If successful, it's a dataset path
         return zarr_grp_path
     except Exception as e:
-        if ".zarr" not in zarr_grp_path:
+        if ".zarr" not in zarr_grp_path and not _is_zarr_container(zarr_grp_path):
             raise RuntimeError(
                 f"Failed to open dataset at {zarr_grp_path}: {e}\n Multiscale is only supported for zarr groups. Please provide a valid dataset path."
             )
@@ -137,6 +137,18 @@ def ends_with_scale(string):
     return bool(re.search(pattern, string))
 
 
+def _is_zarr_container(path: str) -> bool:
+    """Check if a local path is a zarr container by looking for zarr metadata files.
+
+    Works for zarr directories that don't have a .zarr extension.
+    """
+    return os.path.isdir(path) and (
+        os.path.exists(os.path.join(path, ".zgroup"))
+        or os.path.exists(os.path.join(path, ".zarray"))
+        or os.path.exists(os.path.join(path, ".zattrs"))
+    )
+
+
 def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
     """Split the dataset path into the filename and dataset
 
@@ -148,19 +160,55 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         Tuple of filename and dataset
     """
 
-    # split at .zarr or .n5, whichever comes last
-    splitter = (
-        ".zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else ".n5"
+    has_zarr = ".zarr" in dataset_path
+    has_n5 = ".n5" in dataset_path
+
+    if has_zarr or has_n5:
+        # split at .zarr or .n5, whichever comes last
+        splitter = (
+            ".zarr"
+            if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
+            else ".n5"
+        )
+
+        filename, dataset = dataset_path.rsplit(splitter, 1)
+        if dataset.startswith("/"):
+            dataset = dataset[1:]
+        # include scale if present
+        if scale is not None:
+            dataset += f"/s{scale}"
+
+        return filename + splitter, dataset
+
+    # No .zarr or .n5 extension — walk up the path to find a zarr group container.
+    # Prefer .zgroup (container root) over .zarray (leaf dataset).
+    path = os.path.normpath(dataset_path)
+    parts = []
+    fallback = None  # track first .zarray-only match as fallback
+    while path and path != os.path.dirname(path):
+        if os.path.isdir(path):
+            if os.path.exists(os.path.join(path, ".zgroup")):
+                dataset = "/".join(reversed(parts))
+                if scale is not None:
+                    dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
+                return path, dataset
+            if fallback is None and os.path.exists(
+                os.path.join(path, ".zarray")
+            ):
+                fallback = (path, list(parts))
+        path, part = os.path.split(path)
+        parts.append(part)
+
+    if fallback is not None:
+        fb_path, fb_parts = fallback
+        dataset = "/".join(reversed(fb_parts))
+        if scale is not None:
+            dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
+        return fb_path, dataset
+
+    raise RuntimeError(
+        f"Could not find a zarr or n5 container in path: {dataset_path}"
     )
-
-    filename, dataset = dataset_path.split(splitter)
-    if dataset.startswith("/"):
-        dataset = dataset[1:]
-    # include scale if present
-    if scale is not None:
-        dataset += f"/s{scale}"
-
-    return filename + splitter, dataset
 
 
 def apply_norms(data):
@@ -190,13 +238,30 @@ class LazyNormalization:
         return at
 
 
+def _detect_filetype(dataset_path: str) -> str:
+    """Detect whether a dataset path is zarr or n5."""
+    if ".zarr" in dataset_path or ".n5" in dataset_path:
+        return (
+            "zarr"
+            if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
+            else "n5"
+        )
+    # No extension — check filesystem for zarr metadata
+    normalized = os.path.normpath(dataset_path)
+    path = normalized
+    while path and path != os.path.dirname(path):
+        if _is_zarr_container(path):
+            return "zarr"
+        path = os.path.dirname(path)
+    # Default to zarr
+    return "zarr"
+
+
 def open_ds_tensorstore(
     dataset_path: str, mode="r", concurrency_limit=None, normalize=True
 ):
     # open with zarr or n5 depending on extension
-    filetype = (
-        "zarr" if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5") else "n5"
-    )
+    filetype = _detect_filetype(dataset_path)
     extra_args = {}
 
     if dataset_path.startswith("precomputed://"):
@@ -263,11 +328,31 @@ def open_ds_tensorstore(
     else:
         dataset_future = ts.open(spec, read=False, write=True)
 
-    if dataset_path.startswith("gs://") or dataset_path.startswith("precomputed://"):
-        # NOTE: Currently a hack since google store / precomputed is stored as multichannel
-        ts_dataset = dataset_future.result()[ts.d["channel"][0]]
-    else:
-        ts_dataset = dataset_future.result()
+    try:
+        if dataset_path.startswith("gs://") or dataset_path.startswith("precomputed://"):
+            # NOTE: Currently a hack since google store / precomputed is stored as multichannel
+            ts_dataset = dataset_future.result()[ts.d["channel"][0]]
+        else:
+            ts_dataset = dataset_future.result()
+    except ValueError as e:
+        if "extra members" in str(e) and filetype == "zarr":
+            # Some zarr files have extra fields (e.g. "checksum") in the
+            # compressor metadata that tensorstore doesn't recognize.
+            # Fix by providing the metadata explicitly without the extra fields.
+            import json
+            zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
+            with open(zarray_path) as f:
+                zarray = json.load(f)
+            if "compressor" in zarray and isinstance(zarray["compressor"], dict):
+                zarray["compressor"].pop("checksum", None)
+            spec["metadata"] = zarray
+            if mode == "r":
+                dataset_future = ts.open(spec, read=True, write=False, assume_metadata=True)
+            else:
+                dataset_future = ts.open(spec, read=False, write=True, assume_metadata=True)
+            ts_dataset = dataset_future.result()
+        else:
+            raise
 
     # return ts_dataset
     if normalize:
@@ -416,6 +501,18 @@ def separate_store_path(store, path):
     new_store, path_prefix = os.path.split(store)
     if ".zarr" in path_prefix or ".n5" in path_prefix:
         return store, path
+    # For extensionless zarr containers, check for zarr metadata on disk.
+    # Strip file:// protocol prefix for filesystem check.
+    local_path = store
+    if local_path.startswith("file://"):
+        local_path = local_path[len("file://"):]
+    if os.path.exists(os.path.join(local_path, ".zgroup")) or os.path.exists(
+        os.path.join(local_path, ".zarray")
+    ):
+        return store, path
+    if new_store == store:
+        # Reached the root without finding a container
+        raise RuntimeError(f"Could not find zarr/n5 container in path: {store}")
     return separate_store_path(new_store, os.path.join(path_prefix, path))
 
 
@@ -830,14 +927,16 @@ def get_ds_info(path: str, mode: str = "r"):
         return voxel_size, chunk_shape, shape, roi, axes_names, "precomputed"
 
     filename, ds_name = split_dataset_path(path)
-    if filename.endswith(".zarr") or filename.endswith(".zip"):
+    if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):
         assert (
             not filename.endswith(".zip") or mode == "r"
         ), "Only reading supported for zarr ZipStore"
 
         logger.debug("opening zarr dataset %s in %s", ds_name, filename)
         try:
-            ds = zarr.open(filename, mode=mode)[ds_name]
+            ds = zarr.open(filename, mode=mode)
+            if ds_name:
+                ds = ds[ds_name]
         except Exception as e:
             logger.error("failed to open %s/%s" % (filename, ds_name))
             raise e

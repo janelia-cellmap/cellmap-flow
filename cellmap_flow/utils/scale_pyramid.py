@@ -9,14 +9,14 @@ import os
 import zarr
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
+from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info, _is_zarr_container
 
 logger = logging.getLogger(__name__)
 
 
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+    original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
-
     # if multiscale dataset
     if is_precomputed:
         # precomputed format handles scales internally via tensorstore
@@ -36,7 +36,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_precomputed:
         filetype = "precomputed"
-    elif ".zarr" in dataset_path:
+    elif ".zarr" in dataset_path or _is_zarr_container(dataset_path):
         filetype = "zarr"
     elif ".n5" in dataset_path:
         filetype = "n5"
@@ -87,7 +87,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             is_multiscale = False
 
     if not is_multiscale:
-        image = ImageDataInterface(dataset_path)
+        image = ImageDataInterface(original_dataset_path)
         return neuroglancer.ImageLayer(
             source=neuroglancer.LocalVolume(
                 data=image.ts,

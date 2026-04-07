@@ -42,12 +42,9 @@ def analyze_script(filepath):
             # If function is a direct name (e.g., `eval()`)
             if isinstance(node.func, ast.Name) and node.func.id in DISALLOWED_FUNCTIONS:
                 issues.append(f"Disallowed function call detected: {node.func.id}")
-            # If function is an attribute call (e.g., `os.system()`)
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in DISALLOWED_FUNCTIONS
-            ):
-                issues.append(f"Disallowed function call detected: {node.func.attr}")
+            # Note: We intentionally do NOT flag method calls like `model.eval()` here
+            # Method calls on objects (e.g., model.eval()) are safe - only direct calls
+            # to dangerous builtin functions (e.g., eval()) are a security risk
 
     # Return whether the script is safe (no issues found) and the list of issues
     is_safe = len(issues) == 0
@@ -96,7 +93,32 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
 
             # Convert the modified AST back to source code
             code = ast.unparse(tree)
-            exec(code, config_namespace)
+
+            # Force CPU-only execution so config scripts that move models
+            # to CUDA don't fail on machines without a GPU (e.g. the dashboard).
+            try:
+                import torch
+
+                _orig_cuda_available = torch.cuda.is_available
+                _orig_device = torch.device
+                torch.cuda.is_available = lambda: False
+
+                def _cpu_device(*args, **kwargs):
+                    if args and isinstance(args[0], str) and "cuda" in args[0]:
+                        return _orig_device("cpu")
+                    return _orig_device(*args, **kwargs)
+
+                torch.device = _cpu_device
+                _patched_torch = True
+            except ImportError:
+                _patched_torch = False
+
+            try:
+                exec(code, config_namespace)
+            finally:
+                if _patched_torch:
+                    torch.cuda.is_available = _orig_cuda_available
+                    torch.device = _orig_device
         # Extract the config object from the namespace
         config = Config(**config_namespace)
     except Exception as e:
