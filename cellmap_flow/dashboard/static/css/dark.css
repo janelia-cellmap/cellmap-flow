@@ -423,11 +423,24 @@ textarea.form-control[readonly] {
 }
 
 /* ---------- Modal ---------- */
-.modal-content.bg-dark {
-  background: var(--bg-surface) !important;
+.modal-content {
+  background: var(--bg-surface);
+  color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+
+.modal-content.bg-dark {
+  background: var(--bg-surface) !important;
+}
+
+.modal-header {
+  border-bottom-color: var(--border);
+}
+
+.modal-footer {
+  border-top-color: var(--border);
 }
 
 .modal-header.border-secondary {
@@ -447,6 +460,30 @@ textarea.form-control[readonly] {
 .modal-footer.border-secondary {
   border-color: var(--border) !important;
   padding: 12px 20px;
+}
+
+/* ---------- Alert ---------- */
+.alert-info {
+  background-color: var(--bg-muted);
+  border-color: var(--info);
+  color: var(--text-primary);
+}
+
+/* ---------- Card ---------- */
+.card {
+  background-color: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.card-header {
+  background-color: var(--bg-elevated);
+  border-bottom-color: var(--border);
+  color: var(--text-primary);
+}
+
+.card-body {
+  color: var(--text-primary);
 }
 
 /* ---------- Editor ---------- */

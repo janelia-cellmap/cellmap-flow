@@ -1,3 +1,5 @@
+my_yamls/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -163,3 +165,12 @@ cython_debug/
 
 # Misc
 .vscode/
+
+# Project-specific
+ignore/
+*.zarr/
+.claude/
+test_corrections.zarr/
+correction_slices/
+corrections/
+output/
