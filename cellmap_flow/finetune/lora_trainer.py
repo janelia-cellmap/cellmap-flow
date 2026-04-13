@@ -37,6 +37,7 @@ class DiceLoss(nn.Module):
         """
         super().__init__()
         self.smooth = smooth
+        self.apply_sigmoid = True
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -54,8 +55,7 @@ class DiceLoss(nn.Module):
         pred = pred.reshape(pred.size(0), pred.size(1), -1)  # (B, C, N)
         target = target.reshape(target.size(0), target.size(1), -1)  # (B, C, N)
 
-        # Apply sigmoid if pred is logits (not already in [0, 1])
-        if pred.min() < 0 or pred.max() > 1:
+        if self.apply_sigmoid:
             pred = torch.sigmoid(pred)
 
         # Apply mask if provided
@@ -134,10 +134,10 @@ class MarginLoss(nn.Module):
         super().__init__()
         self.margin = margin
         self.balance_classes = balance_classes
+        self.apply_sigmoid = True
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # Apply sigmoid if pred contains raw logits (not already in [0, 1])
-        if pred.min() < 0 or pred.max() > 1:
+        if self.apply_sigmoid:
             pred = torch.sigmoid(pred)
 
         threshold_high = 1.0 - self.margin  # e.g., 0.7
@@ -413,6 +413,34 @@ class LoRAFinetuner:
             except Exception as e:
                 log_message(f"WARNING: FP16 probe failed ({e}) — falling back to FP32.")
                 self._fallback_to_fp32()
+
+        # Probe for built-in sigmoid: if model outputs are bounded to [0,1]
+        # even with extreme inputs, the model has sigmoid baked in.
+        # In that case, switch BCEWithLogitsLoss to BCELoss to avoid double-sigmoid,
+        # and tell DiceLoss/MarginLoss to skip their sigmoid.
+        try:
+            probe_raw, _ = next(iter(self.dataloader))
+            probe_extreme = torch.randn_like(probe_raw) * 100
+            probe_extreme = probe_extreme.to(self.device)
+            with torch.no_grad():
+                probe_out = self.model(probe_extreme)
+            model_has_sigmoid = probe_out.min() >= 0 and probe_out.max() <= 1
+            if model_has_sigmoid:
+                log_message("Detected built-in sigmoid in model output")
+                if self._use_bce:
+                    log_message("Switching BCEWithLogitsLoss to BCELoss to avoid double-sigmoid")
+                    self.criterion = nn.BCELoss(reduction='none')
+                if hasattr(self.criterion, 'bce_loss'):
+                    self.criterion.bce_loss = nn.BCELoss(reduction='none')
+                # Tell DiceLoss/MarginLoss to skip their sigmoid
+                if hasattr(self.criterion, 'apply_sigmoid'):
+                    self.criterion.apply_sigmoid = False
+                if hasattr(self.criterion, 'dice_loss') and hasattr(self.criterion.dice_loss, 'apply_sigmoid'):
+                    self.criterion.dice_loss.apply_sigmoid = False
+            del probe_extreme, probe_out
+            torch.cuda.empty_cache()
+        except Exception as e:
+            log_message(f"WARNING: Sigmoid probe failed ({e}) — assuming raw logits output.")
 
         for epoch in range(self.num_epochs):
             self.current_epoch = epoch
