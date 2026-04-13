@@ -687,7 +687,7 @@ def submit_finetuning():
                     "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
                 )
 
-        # Auto-detect output_type and offsets from model script
+        # Auto-detect output_type and offsets from model script or channel names
         from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
         if output_type is None:
             # Try to auto-detect from model script
@@ -699,6 +699,28 @@ def submit_finetuning():
                     logger.info(
                         f"Auto-detected output_type='affinities' with "
                         f"{len(script_offsets)} offsets from model script"
+                    )
+            # Try to detect from channel names (e.g., mito_aff_1, mito_aff_2)
+            if output_type is None:
+                channels = None
+                try:
+                    # Use lightweight metadata for HuggingFace models
+                    if hasattr(model_config, '_load_metadata'):
+                        meta = model_config._load_metadata()
+                        channels = meta.get("channels_names")
+                    elif hasattr(model_config, '_config') and hasattr(model_config._config, 'channels'):
+                        channels = model_config._config.channels
+                except Exception:
+                    pass
+                if channels and any("_aff" in c for c in channels):
+                    output_type = "affinities"
+                    # Infer nearest-neighbor offsets from number of affinity channels
+                    n_aff = sum(1 for c in channels if "_aff" in c)
+                    default_offsets = [[1 if j == i else 0 for j in range(3)] for i in range(min(n_aff, 3))]
+                    offsets = json.dumps(default_offsets)
+                    logger.info(
+                        f"Auto-detected output_type='affinities' from "
+                        f"channel names: {channels}, offsets: {default_offsets}"
                     )
             if output_type is None:
                 output_type = "binary"
