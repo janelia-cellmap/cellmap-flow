@@ -34,9 +34,9 @@ from pathlib import Path
 from typing import Optional
 
 import torch
-import torch.nn as nn
 
-from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, ModelConfig
+from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
+from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 from cellmap_flow.finetune.correction_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
@@ -131,7 +131,7 @@ def _start_inference_server_background(
     if not args.serve_data_path:
         raise ValueError("--serve-data-path is required when --auto-serve is enabled")
 
-    if not Path(args.serve_data_path).exists():
+    if not _is_remote_path(args.serve_data_path) and not Path(args.serve_data_path).exists():
         raise ValueError(f"Data path not found: {args.serve_data_path}")
 
     # Use the already-trained model
@@ -273,7 +273,7 @@ def _apply_restart_params(args, signal_data: dict):
 
 def _generate_model_files(args, model_config, timestamp):
     """
-    Generate model script and YAML files after training.
+    Generate YAML config file after training.
 
     Args:
         args: Command-line arguments
@@ -281,10 +281,9 @@ def _generate_model_files(args, model_config, timestamp):
         timestamp: Timestamp string for naming
 
     Returns:
-        (finetuned_model_name, script_path, yaml_path) tuple
+        (finetuned_model_name, yaml_path) tuple
     """
     from cellmap_flow.finetune.finetuned_model_templates import (
-        generate_finetuned_model_script,
         generate_finetuned_model_yaml
     )
 
@@ -297,24 +296,7 @@ def _generate_model_files(args, model_config, timestamp):
     models_dir = session_path / "models"
     models_dir.mkdir(exist_ok=True, parents=True)
 
-    logger.info(f"Generating model files for {finetuned_model_name}...")
-
-    # Generate script
-    script_path = generate_finetuned_model_script(
-        base_checkpoint=args.model_checkpoint if args.model_checkpoint else None,
-        lora_adapter_path=str(output_dir_path / "lora_adapter"),
-        model_name=finetuned_model_name,
-        channels=args.channels,
-        input_voxel_size=tuple(args.input_voxel_size),
-        output_voxel_size=tuple(args.output_voxel_size),
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        num_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        output_path=models_dir / f"{finetuned_model_name}.py",
-        base_script_path=args.model_script if hasattr(args, 'model_script') and args.model_script else None
-    )
-    logger.info(f"Generated script: {script_path}")
+    logger.info(f"Generating model config for {finetuned_model_name}...")
 
     # Extract data path from corrections
     corrections_path = Path(args.corrections)
@@ -332,15 +314,15 @@ def _generate_model_files(args, model_config, timestamp):
         data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
 
     yaml_path = generate_finetuned_model_yaml(
-        script_path=script_path,
+        lora_adapter_path=str(output_dir_path / "lora_adapter"),
+        base_model_dict=model_config.to_dict(),
         model_name=finetuned_model_name,
-        resolution=args.output_voxel_size[0],
         output_path=models_dir / f"{finetuned_model_name}.yaml",
-        data_path=data_path
+        data_path=data_path,
     )
     logger.info(f"Generated YAML: {yaml_path}")
 
-    return finetuned_model_name, script_path, yaml_path
+    return finetuned_model_name, yaml_path
 
 
 def _build_target_transform(args, model_config):
@@ -433,8 +415,8 @@ def main():
         "--model-type",
         type=str,
         default="fly",
-        choices=["fly", "dacapo"],
-        help="Model type (fly or dacapo)"
+        choices=["fly", "dacapo", "huggingface"],
+        help="Model type (fly, dacapo, or huggingface)"
     )
     parser.add_argument(
         "--model-checkpoint",
@@ -449,6 +431,20 @@ def main():
         required=False,
         default=None,
         help="Path to model script (alternative to checkpoint)"
+    )
+    parser.add_argument(
+        "--repo",
+        type=str,
+        required=False,
+        default=None,
+        help="HuggingFace model repository (e.g., janelia-cellmap/mito_aff_unet_setup_16)"
+    )
+    parser.add_argument(
+        "--revision",
+        type=str,
+        required=False,
+        default=None,
+        help="HuggingFace model revision (optional)"
     )
     parser.add_argument(
         "--model-name",
@@ -710,11 +706,40 @@ def main():
             run_name=run_name,
             iteration=iteration,
         )
+    elif args.model_type == "huggingface":
+        if not args.repo:
+            raise ValueError("For huggingface models, --repo is required")
+        model_config = HuggingFaceModelConfig(
+            repo=args.repo,
+            revision=args.revision,
+            name=args.model_name,
+        )
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
 
     base_model = model_config.config.model
     logger.info(f"Model loaded: {type(base_model).__name__}")
+
+    # TorchScript models (RecursiveScriptModule) don't expose named modules
+    # properly, so LoRA can't detect adaptable layers. Load the native PyTorch
+    # model (model.pt) instead when available.
+    if isinstance(base_model, torch.jit.ScriptModule):
+        logger.info("TorchScript model detected — loading native PyTorch model for LoRA compatibility...")
+        if args.model_type == "huggingface":
+            from cellmap_models.model_export.cellmap_model import get_huggingface_model
+            cellmap_model = get_huggingface_model(args.repo, args.revision)
+            pt_path = os.path.join(cellmap_model.folder_path, "model.pt")
+        elif hasattr(model_config, 'cellmap_model'):
+            pt_path = os.path.join(model_config.cellmap_model.folder_path, "model.pt")
+        else:
+            pt_path = None
+
+        if pt_path and os.path.exists(pt_path):
+            base_model = torch.load(pt_path, weights_only=False, map_location="cuda" if torch.cuda.is_available() else "cpu")
+            base_model.eval()
+            logger.info(f"Native PyTorch model loaded: {type(base_model).__name__}")
+        else:
+            logger.warning("No native PyTorch model (model.pt) found — LoRA may fail on TorchScript model")
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
@@ -842,7 +867,7 @@ def main():
             logger.info("=" * 60)
 
             # Generate model files
-            finetuned_model_name, script_path, yaml_path = _generate_model_files(
+            finetuned_model_name, _ = _generate_model_files(
                 args, model_config, timestamp
             )
 

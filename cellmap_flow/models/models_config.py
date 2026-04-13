@@ -1,4 +1,5 @@
 import logging
+import os
 import warnings
 import copy
 
@@ -794,6 +795,28 @@ class FinetuneModelConfig(ModelConfig):
 
         # Apply LoRA adapter to the base model
         base_model = base_cfg.model
+
+        # TorchScript models don't expose named modules for LoRA.
+        # Load the native PyTorch model (model.pt) instead when available.
+        if isinstance(base_model, torch.jit.ScriptModule):
+            base_type = self.base_model_dict.get("type", "")
+            pt_path = None
+            if base_type == "huggingface":
+                repo = self.base_model_dict.get("repo")
+                revision = self.base_model_dict.get("revision")
+                if repo:
+                    cellmap_model = get_huggingface_model(repo, revision)
+                    pt_path = os.path.join(cellmap_model.folder_path, "model.pt")
+            elif base_type == "cellmap":
+                folder_path = self.base_model_dict.get("folder_path")
+                if folder_path:
+                    pt_path = os.path.join(folder_path, "model.pt")
+
+            if pt_path and os.path.exists(pt_path):
+                device = _get_device()
+                base_model = torch.load(pt_path, weights_only=False, map_location=device)
+                base_model.eval()
+
         device = next(base_model.parameters()).device
         model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
         model.to(device)
