@@ -60,13 +60,36 @@ def generate_singlescale_metadata(
 
 def get_scale_info(zarr_grp):
     attrs = zarr_grp.attrs
+    ms = attrs["multiscales"][0]
+
+    # Determine which axes are spatial so we can skip channel axes
+    axes = ms.get("axes", [])
+    spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
+    # If no axes metadata, assume all dimensions are spatial
+    if not spatial_indices:
+        spatial_indices = None
+
     resolutions = {}
     offsets = {}
     shapes = {}
-    for scale in attrs["multiscales"][0]["datasets"]:
-        resolutions[scale["path"]] = scale["coordinateTransformations"][0]["scale"]
-        offsets[scale["path"]] = scale["coordinateTransformations"][1]["translation"]
-        shapes[scale["path"]] = zarr_grp[scale["path"]].shape
+    for scale in ms["datasets"]:
+        transforms = scale["coordinateTransformations"]
+        full_res = transforms[0]["scale"]
+        # Translation is optional (e.g. s0 often has only scale)
+        full_translation = next(
+            (t["translation"] for t in transforms if t["type"] == "translation"),
+            [0.0] * len(full_res),
+        )
+        full_shape = zarr_grp[scale["path"]].shape
+
+        if spatial_indices is not None:
+            resolutions[scale["path"]] = [full_res[i] for i in spatial_indices]
+            offsets[scale["path"]] = [full_translation[i] for i in spatial_indices]
+            shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
+        else:
+            resolutions[scale["path"]] = full_res
+            offsets[scale["path"]] = full_translation
+            shapes[scale["path"]] = full_shape
     return offsets, resolutions, shapes
 
 
@@ -82,12 +105,12 @@ def get_array_path_if_needed(zarr_grp_path, target_resolution):
             )
         # Otherwise, it's a group path; find the appropriate scale
         target_scale, _, _ = find_target_scale(zarr_grp_path, target_resolution)
-        return os.path.join(zarr_grp_path, target_scale)
+        return _join_path(zarr_grp_path, target_scale)
 
 
 def find_target_scale(zarr_grp_path, target_resolution):
     try:
-        zarr_grp = zarr.open(zarr_grp_path, mode="r")
+        zarr_grp = _open_zarr(zarr_grp_path, mode="r")
     except Exception as e:
         raise RuntimeError(f"Failed to open zarr group at {zarr_grp_path}: {e}")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
@@ -103,7 +126,7 @@ def find_target_scale(zarr_grp_path, target_resolution):
 
 
 def find_closest_scale(zarr_grp_path, target_resolution):
-    zarr_grp = zarr.open(zarr_grp_path, mode="r")
+    zarr_grp = _open_zarr(zarr_grp_path, mode="r")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
     target_scale = None
     last_scale = None
@@ -137,11 +160,46 @@ def ends_with_scale(string):
     return bool(re.search(pattern, string))
 
 
+def _normalize_path(path: str) -> str:
+    """Remove shell-escape backslashes from a filesystem path.
+
+    Users often copy-paste paths from a terminal where spaces are escaped
+    (e.g. ``/path/to/file\\ name.zarr``).  YAML preserves the literal
+    backslashes, but the filesystem expects plain spaces.
+    """
+    if _is_remote_path(path):
+        return path
+    return path.replace("\\ ", " ")
+
+
+def _is_remote_path(path: str) -> bool:
+    return path.startswith("http://") or path.startswith("https://")
+
+
+def _open_zarr(path, mode="r"):
+    """Open a zarr dataset, handling HTTP/HTTPS URLs via fsspec."""
+    path = _normalize_path(path)
+    if _is_remote_path(path):
+        import fsspec
+
+        return zarr.open(fsspec.get_mapper(path), mode=mode)
+    return zarr.open(path, mode=mode)
+
+
+def _join_path(base, *parts):
+    """Join path components, handling URLs correctly."""
+    if _is_remote_path(base):
+        return "/".join([base.rstrip("/"), *parts])
+    return os.path.join(base, *parts)
+
+
 def _is_zarr_container(path: str) -> bool:
     """Check if a local path is a zarr container by looking for zarr metadata files.
 
     Works for zarr directories that don't have a .zarr extension.
     """
+    if _is_remote_path(path):
+        return False
     return os.path.isdir(path) and (
         os.path.exists(os.path.join(path, ".zgroup"))
         or os.path.exists(os.path.join(path, ".zarray"))
@@ -181,6 +239,10 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         return filename + splitter, dataset
 
     # No .zarr or .n5 extension — walk up the path to find a zarr group container.
+    if _is_remote_path(dataset_path):
+        raise RuntimeError(
+            f"Remote URL must contain .zarr or .n5 in the path: {dataset_path}"
+        )
     # Prefer .zgroup (container root) over .zarray (leaf dataset).
     path = os.path.normpath(dataset_path)
     parts = []
@@ -278,12 +340,11 @@ def open_ds_tensorstore(
             "path": os.path.normpath(raw_path),
         }
         extra_args = {"scale_index": scale_index}
-    elif dataset_path.startswith("http://"):
-        path = dataset_path.split("http://")[1]
+    elif dataset_path.startswith("http://") or dataset_path.startswith("https://"):
         kvstore = {
             "driver": "http",
-            "base_url": "http://",
-            "path": path,
+            "base_url": dataset_path.rstrip("/"),
+            "path": "",
         }
     elif dataset_path.startswith("s3://"):
         kvstore = {
@@ -329,11 +390,16 @@ def open_ds_tensorstore(
         dataset_future = ts.open(spec, read=False, write=True)
 
     try:
-        if dataset_path.startswith("gs://") or dataset_path.startswith("precomputed://"):
-            # NOTE: Currently a hack since google store / precomputed is stored as multichannel
-            ts_dataset = dataset_future.result()[ts.d["channel"][0]]
-        else:
-            ts_dataset = dataset_future.result()
+        ts_dataset = dataset_future.result()
+        if ts_dataset.ndim > 3:
+            from cellmap_flow.norm.input_normalize import ChannelSelector
+
+            channel = 0
+            for norm in g.input_norms:
+                if isinstance(norm, ChannelSelector):
+                    channel = norm.channel
+                    break
+            ts_dataset = ts_dataset[channel]
     except ValueError as e:
         if "extra members" in str(e) and filetype == "zarr":
             # Some zarr files have extra fields (e.g. "checksum") in the
@@ -861,7 +927,7 @@ def get_ds_info(path: str, mode: str = "r"):
 
         filename:
 
-            The name of the container "file" (which is a directory for Zarr and
+            The name of the container "file" (which is a directory for zarr and
             N5).
 
         ds_name:
@@ -873,6 +939,7 @@ def get_ds_info(path: str, mode: str = "r"):
         A :class:`Array` pointing to the dataset.
     """
 
+    path = _normalize_path(path)
     axes_names = ["x", "y", "z"]
     if path.startswith("s3://"):
         ts_info = open_ds_tensorstore(path)
@@ -925,6 +992,140 @@ def get_ds_info(path: str, mode: str = "r"):
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
         return voxel_size, chunk_shape, shape, roi, axes_names, "precomputed"
+
+    if _is_remote_path(path):
+        ds = _open_zarr(path, mode="r")
+
+        # If the URL points to a zarr Group (e.g. multiscale container),
+        # read OME-Zarr multiscales metadata and navigate into the first array.
+        if isinstance(ds, zarr.hierarchy.Group):
+            multiscales = ds.attrs.get("multiscales", None)
+            if multiscales:
+                ms = multiscales[0]
+                first_dataset = ms["datasets"][0]
+                ds = ds[first_dataset["path"]]
+
+                # Extract spatial axes info (skip channel axes)
+                axes = ms.get("axes", [])
+                spatial_indices = [
+                    i for i, a in enumerate(axes) if a.get("type") == "space"
+                ]
+                axes_names = [axes[i]["name"] for i in spatial_indices]
+
+                scale_transform = first_dataset["coordinateTransformations"][0]["scale"]
+                voxel_size = Coordinate(scale_transform[i] for i in spatial_indices)
+
+                translation = next(
+                    (
+                        t["translation"]
+                        for t in first_dataset["coordinateTransformations"]
+                        if t["type"] == "translation"
+                    ),
+                    [0.0] * len(scale_transform),
+                )
+                offset = Coordinate(translation[i] for i in spatial_indices)
+
+                shape = Coordinate(ds.shape[i] for i in spatial_indices)
+                chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
+                roi = Roi(offset, voxel_size * shape)
+                return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
+            else:
+                for key in sorted(ds.keys()):
+                    if isinstance(ds[key], zarr.core.Array):
+                        ds = ds[key]
+                        break
+
+        # The path points to a sub-array (e.g. .zarr/raw/s0). Try to read
+        # multiscale metadata from the parent zarr Group.
+        if ".zarr" in path or ".n5" in path:
+            container, sub_path = split_dataset_path(path)
+            if sub_path:
+                try:
+                    parent = _open_zarr(container, mode="r")
+                    multiscales = parent.attrs.get("multiscales", None)
+                    if multiscales:
+                        ms = multiscales[0]
+                        axes = ms.get("axes", [])
+                        spatial_indices = [
+                            i
+                            for i, a in enumerate(axes)
+                            if a.get("type") == "space"
+                        ]
+                        if not spatial_indices:
+                            spatial_indices = list(range(len(ds.shape)))
+
+                        # Find the matching dataset entry
+                        dataset_entry = next(
+                            (
+                                d
+                                for d in ms["datasets"]
+                                if d["path"] == sub_path
+                            ),
+                            ms["datasets"][0],
+                        )
+                        scale_transform = dataset_entry[
+                            "coordinateTransformations"
+                        ][0]["scale"]
+                        voxel_size = Coordinate(
+                            scale_transform[i] for i in spatial_indices
+                        )
+                        translation = next(
+                            (
+                                t["translation"]
+                                for t in dataset_entry[
+                                    "coordinateTransformations"
+                                ]
+                                if t["type"] == "translation"
+                            ),
+                            [0.0] * len(scale_transform),
+                        )
+                        offset = Coordinate(
+                            translation[i] for i in spatial_indices
+                        )
+                        axes_names = [axes[i]["name"] for i in spatial_indices] if axes else ["z", "y", "x"]
+                        shape = Coordinate(
+                            ds.shape[i] for i in spatial_indices
+                        )
+                        chunk_shape = tuple(
+                            ds.chunks[i] for i in spatial_indices
+                        )
+                        roi = Roi(offset, voxel_size * shape)
+                        return (
+                            voxel_size,
+                            chunk_shape,
+                            shape,
+                            roi,
+                            axes_names,
+                            "zarr",
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "failed to read parent multiscale metadata for %s: %s"
+                        % (path, e)
+                    )
+
+        # Fallback for remote arrays without multiscales metadata
+        try:
+            order = ds.attrs["order"]
+        except KeyError:
+            try:
+                order = ds.order
+            except Exception:
+                logger.error("no order attribute found, set default C")
+                order = "C"
+        try:
+            voxel_size, offset = _read_voxel_size_offset(ds, order)
+        except Exception:
+            logger.error(
+                "failed to read voxel size and offset for %s, Will use default values"
+                % path
+            )
+            voxel_size = Coordinate((1,) * 3)
+            offset = Coordinate((0,) * 3)
+        shape = Coordinate(ds.shape[-len(voxel_size) :])
+        roi = Roi(offset, voxel_size * shape)
+        chunk_shape = ds.chunks
+        return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):
