@@ -459,8 +459,28 @@ class LoRAFinetuner:
         except Exception as e:
             log_message(f"WARNING: Sigmoid probe failed ({e}) — assuming raw logits output.")
 
+        stop_signal_path = self.output_dir / "stop_signal.json"
+        # Make sure no stale signal from a previous run lingers.
+        try:
+            if stop_signal_path.exists():
+                stop_signal_path.unlink()
+        except Exception:
+            pass
+
         for epoch in range(self.num_epochs):
             self.current_epoch = epoch
+            # User-requested graceful stop: drop out of the training loop so
+            # the outer flow (inference server + wait for restart) kicks in.
+            if stop_signal_path.exists():
+                log_message(
+                    f"Stop signal received at epoch {epoch+1}/{self.num_epochs}; "
+                    f"exiting training loop early."
+                )
+                try:
+                    stop_signal_path.unlink()
+                except Exception:
+                    pass
+                break
             try:
                 epoch_loss = self._train_epoch()
             except torch.cuda.OutOfMemoryError:
