@@ -23,7 +23,6 @@ import argparse
 import gc
 import json
 import logging
-import os
 import socket
 import sys
 import threading
@@ -720,26 +719,33 @@ def main():
     base_model = model_config.config.model
     logger.info(f"Model loaded: {type(base_model).__name__}")
 
-    # TorchScript models (RecursiveScriptModule) don't expose named modules
-    # properly, so LoRA can't detect adaptable layers. Load the native PyTorch
-    # model (model.pt) instead when available.
+    # TorchScript models (RecursiveScriptModule) can't be used with LoRA.
+    # Use cellmap_model.train() to get a trainable nn.Module via torch.export
+    # unflatten — no fly_organelles dependency needed.
     if isinstance(base_model, torch.jit.ScriptModule):
-        logger.info("TorchScript model detected — loading native PyTorch model for LoRA compatibility...")
+        logger.info("TorchScript model detected — loading trainable model via cellmap_model.train()...")
+        cellmap_model = None
         if args.model_type == "huggingface":
             from cellmap_models.model_export.cellmap_model import get_huggingface_model
             cellmap_model = get_huggingface_model(args.repo, args.revision)
-            pt_path = os.path.join(cellmap_model.folder_path, "model.pt")
         elif hasattr(model_config, 'cellmap_model'):
-            pt_path = os.path.join(model_config.cellmap_model.folder_path, "model.pt")
-        else:
-            pt_path = None
+            cellmap_model = model_config.cellmap_model
 
-        if pt_path and os.path.exists(pt_path):
-            base_model = torch.load(pt_path, weights_only=False, map_location="cuda" if torch.cuda.is_available() else "cpu")
-            base_model.eval()
-            logger.info(f"Native PyTorch model loaded: {type(base_model).__name__}")
+        if cellmap_model is not None:
+            trainable = cellmap_model.train()
+            if trainable is not None:
+                # UnflattenedModule (from torch.export) often has fixed batch=1.
+                # Wrap it so the trainer can use any batch size.
+                if type(trainable).__name__ == 'UnflattenedModule':
+                    from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
+                    trainable = BatchLoopWrapper(trainable)
+                    logger.info("Wrapped UnflattenedModule with BatchLoopWrapper for variable batch sizes")
+                base_model = trainable
+                logger.info(f"Trainable model loaded: {type(base_model).__name__}")
+            else:
+                logger.warning("cellmap_model.train() returned None — LoRA may fail")
         else:
-            logger.warning("No native PyTorch model (model.pt) found — LoRA may fail on TorchScript model")
+            logger.warning("No CellmapModel available — LoRA may fail on TorchScript model")
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")

@@ -59,8 +59,13 @@ def detect_adaptable_layers(
     adaptable = []
 
     for name, module in model.named_modules():
-        # Check if it's a convolutional or linear layer
-        if not isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)):
+        is_adaptable = isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear))
+
+        # Fallback: detect by parameter shape (e.g. InterpreterModule from torch.export)
+        if not is_adaptable and hasattr(module, 'weight') and isinstance(module.weight, torch.Tensor):
+            is_adaptable = module.weight.ndim >= 2
+
+        if not is_adaptable:
             continue
 
         # Apply include patterns if specified
@@ -80,6 +85,77 @@ def detect_adaptable_layers(
         logger.debug(f"Adaptable layers: {adaptable[:5]}..." if len(adaptable) > 5 else f"Adaptable layers: {adaptable}")
 
     return adaptable
+
+
+def _replace_interpreter_modules(model: nn.Module) -> int:
+    """Replace non-standard leaf modules (e.g. InterpreterModule from torch.export
+    unflatten) with real nn.Conv*/nn.Linear that share the same weight/bias tensors.
+
+    PEFT's dispatch only accepts nn.Conv1d/2d/3d, nn.Linear, etc., so unflattened
+    modules need to be swapped before LoRA wrapping. The FX graph's call_module
+    will invoke whatever module is registered under the name, so the swap doesn't
+    break the forward pass.
+
+    Returns the number of modules replaced.
+    """
+    count = 0
+    for name, module in list(model.named_modules()):
+        if isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)):
+            continue
+        if not hasattr(module, 'weight') or not isinstance(module.weight, torch.Tensor):
+            continue
+
+        w = module.weight
+        b = getattr(module, 'bias', None)
+        if b is not None and not isinstance(b, torch.Tensor):
+            b = None
+
+        if w.ndim == 5:
+            out_c, in_c, kz, ky, kx = w.shape
+            new_mod = nn.Conv3d(in_c, out_c, (kz, ky, kx), padding=0, bias=(b is not None))
+        elif w.ndim == 4:
+            out_c, in_c, ky, kx = w.shape
+            new_mod = nn.Conv2d(in_c, out_c, (ky, kx), padding=0, bias=(b is not None))
+        elif w.ndim == 3:
+            out_c, in_c, k = w.shape
+            new_mod = nn.Conv1d(in_c, out_c, k, padding=0, bias=(b is not None))
+        elif w.ndim == 2:
+            out_f, in_f = w.shape
+            new_mod = nn.Linear(in_f, out_f, bias=(b is not None))
+        else:
+            continue
+
+        new_mod.weight = nn.Parameter(w)
+        if b is not None:
+            new_mod.bias = nn.Parameter(b)
+
+        parts = name.split('.')
+        parent = model
+        for p in parts[:-1]:
+            parent = getattr(parent, p)
+        setattr(parent, parts[-1], new_mod)
+        count += 1
+
+    if count > 0:
+        logger.info(f"Replaced {count} non-standard modules with nn.Conv/Linear for PEFT compatibility")
+    return count
+
+
+class BatchLoopWrapper(nn.Module):
+    """Wraps a model with fixed batch_size=1 (e.g. UnflattenedModule from
+    torch.export without dynamic shapes) so it accepts arbitrary batch sizes
+    by looping over the batch dim.
+    """
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x, *args, **kwargs):
+        if x.shape[0] == 1:
+            return self.model(x, *args, **kwargs)
+        outs = [self.model(x[i:i + 1], *args, **kwargs) for i in range(x.shape[0])]
+        return torch.cat(outs, dim=0)
 
 
 class SequentialWrapper(nn.Module):
@@ -171,6 +247,10 @@ def wrap_model_with_lora(
     if isinstance(model, nn.Sequential):
         logger.info("Wrapping Sequential model for PEFT compatibility")
         model = SequentialWrapper(model)
+
+    # Replace any non-standard leaf modules (e.g. InterpreterModule) with
+    # real nn.Conv*/Linear so PEFT's dispatch can wrap them.
+    _replace_interpreter_modules(model)
 
     # Auto-detect target modules if not specified
     if target_modules is None:
