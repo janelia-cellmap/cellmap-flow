@@ -27,34 +27,27 @@ def detect_adaptable_layers(
     Automatically detect layers suitable for LoRA adaptation.
 
     Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
-    By default, excludes batch norm, layer norm, and final output layers.
+    By default, only excludes batch/layer-norm style modules. Output/head
+    layers are deliberately INCLUDED so the model can fully adapt its
+    feature→output mapping for cross-domain finetuning. (Previously
+    'final', 'head', 'output' were excluded; that left the output projection
+    frozen, which prevented learning when the base model's predictions on
+    the target dataset were poor.)
 
     Args:
         model: PyTorch model to inspect
         include_patterns: List of regex patterns for layer names to include
                          If None, includes all Conv/Linear layers
         exclude_patterns: List of substrings for layer names to exclude
-                         Default: ['bn', 'norm', 'final', 'head']
+                         Default: ['bn', 'norm']
 
     Returns:
         List of layer names suitable for LoRA adaptation
-
-    Examples:
-        >>> model = my_unet_model()
-        >>> layers = detect_adaptable_layers(model)
-        >>> print(f"Found {len(layers)} adaptable layers")
-        Found 24 adaptable layers
-
-        >>> # Only adapt encoder layers
-        >>> layers = detect_adaptable_layers(
-        ...     model,
-        ...     include_patterns=[r".*encoder.*"]
-        ... )
     """
     import re
 
     if exclude_patterns is None:
-        exclude_patterns = ['bn', 'norm', 'final', 'head', 'output']
+        exclude_patterns = ['bn', 'norm']
 
     adaptable = []
 
