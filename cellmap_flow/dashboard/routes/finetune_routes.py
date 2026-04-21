@@ -390,11 +390,12 @@ def create_annotation_volume():
         config = model_config.config
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
-        input_voxel_size = np.array(config.input_voxel_size)
-        output_voxel_size = np.array(config.output_voxel_size)
+        claimed_input_voxel_size = np.array(config.input_voxel_size)
+        claimed_output_voxel_size = np.array(config.output_voxel_size)
 
-        output_size = (write_shape / output_voxel_size).astype(int)
-        input_size = (read_shape / input_voxel_size).astype(int)
+        # Voxel-counts the model expects per crop.
+        output_size = (write_shape / claimed_output_voxel_size).astype(int)
+        input_size = (read_shape / claimed_input_voxel_size).astype(int)
 
         dataset_path = getattr(g, "dataset_path", None)
         if not dataset_path:
@@ -403,21 +404,46 @@ def create_annotation_volume():
                 400,
             )
 
+        # Resolve the closest available raw scale to the model's claimed voxel
+        # size. We use that scale's actual voxel size for ALL coordinate
+        # computations so that annotations and raw end up on the same physical
+        # voxel grid (no resampling, no nm→voxel arithmetic mismatch).
+        from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
+        try:
+            effective_output_voxel_size = np.array(
+                get_raw_closest_scale(dataset_path, tuple(claimed_output_voxel_size))
+                or claimed_output_voxel_size
+            )
+            effective_input_voxel_size = np.array(
+                get_raw_closest_scale(dataset_path, tuple(claimed_input_voxel_size))
+                or claimed_input_voxel_size
+            )
+        except Exception:
+            effective_output_voxel_size = claimed_output_voxel_size
+            effective_input_voxel_size = claimed_input_voxel_size
+        if not np.array_equal(effective_output_voxel_size, claimed_output_voxel_size):
+            logger.info(
+                f"Model declares output_voxel_size={tuple(claimed_output_voxel_size)}; "
+                f"dataset's closest available scale is {tuple(effective_output_voxel_size)}. "
+                f"Using {tuple(effective_output_voxel_size)} for grid alignment — "
+                f"model will train on data at this scale without resampling."
+            )
+
         logger.info(f"Getting dataset extent from {dataset_path}")
         try:
-            idi = ImageDataInterface(dataset_path, voxel_size=output_voxel_size)
+            idi = ImageDataInterface(dataset_path, voxel_size=effective_output_voxel_size)
             dataset_roi = idi.roi
             dataset_offset_nm = np.array(dataset_roi.offset)
             dataset_shape_nm = np.array(dataset_roi.shape)
 
-            dataset_shape_voxels = (dataset_shape_nm / output_voxel_size).astype(int)
+            dataset_shape_voxels = (dataset_shape_nm / effective_output_voxel_size).astype(int)
             dataset_shape_voxels = (
                 np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
             )
 
             logger.info(
                 f"Dataset extent: offset={dataset_offset_nm} nm, "
-                f"shape={dataset_shape_voxels} voxels (at {output_voxel_size} nm/voxel)"
+                f"shape={dataset_shape_voxels} voxels (at {effective_output_voxel_size} nm/voxel)"
             )
         except Exception as e:
             logger.error(f"Error getting dataset extent: {e}")
@@ -451,13 +477,15 @@ def create_annotation_volume():
         success, zarr_info = create_annotation_volume_zarr(
             zarr_path=zarr_path,
             dataset_shape_voxels=dataset_shape_voxels,
-            output_voxel_size=output_voxel_size,
+            output_voxel_size=effective_output_voxel_size,
             dataset_offset_nm=dataset_offset_nm,
             chunk_size=output_size,
             dataset_path=dataset_path,
             model_name=model_name,
             input_size=input_size,
-            input_voxel_size=input_voxel_size,
+            input_voxel_size=effective_input_voxel_size,
+            claimed_output_voxel_size=claimed_output_voxel_size,
+            claimed_input_voxel_size=claimed_input_voxel_size,
         )
 
         if not success:
@@ -472,14 +500,20 @@ def create_annotation_volume():
             "model_name": model_name,
             "output_size": output_size.tolist(),
             "input_size": input_size.tolist(),
-            "input_voxel_size": input_voxel_size.tolist(),
-            "output_voxel_size": output_voxel_size.tolist(),
+            "input_voxel_size": effective_input_voxel_size.tolist(),
+            "output_voxel_size": effective_output_voxel_size.tolist(),
+            "claimed_input_voxel_size": claimed_input_voxel_size.tolist(),
+            "claimed_output_voxel_size": claimed_output_voxel_size.tolist(),
             "dataset_path": dataset_path,
             "dataset_offset_nm": dataset_offset_nm.tolist(),
             "corrections_dir": corrections_dir,
             "extracted_chunks": set(),
             "chunk_sync_state": {},
         }
+
+        # Refresh the annotated_regions layer (will be empty initially
+        # but registering keeps the layer ready as chunks get painted).
+        refresh_annotated_regions_layer()
 
         return jsonify(
             {
@@ -491,7 +525,8 @@ def create_annotation_volume():
                 "metadata": {
                     "dataset_shape_voxels": dataset_shape_voxels.tolist(),
                     "chunk_size": output_size.tolist(),
-                    "output_voxel_size": output_voxel_size.tolist(),
+                    "output_voxel_size": effective_output_voxel_size.tolist(),
+                    "claimed_output_voxel_size": claimed_output_voxel_size.tolist(),
                     "dataset_offset_nm": dataset_offset_nm.tolist(),
                 },
             }
@@ -545,91 +580,99 @@ def set_user_prefs():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@finetune_bp.route("/api/finetune/show-annotated-regions", methods=["POST"])
-def show_annotated_regions():
-    """Add a neuroglancer LocalAnnotationLayer with one bounding box per
-    annotated chunk so the user can see where they've painted.
+def refresh_annotated_regions_layer(corrections_path=None):
+    """Rebuild the "annotated_regions" LocalAnnotationLayer from chunk .zattrs
+    so the user can see where they've painted. Safe to call any time — if the
+    viewer isn't initialized or there are no chunks, it silently no-ops.
 
-    Body: {"corrections_path": "/path/to/.../corrections"} (optional —
-    defaults to scanning all volumes in g.annotation_volumes).
+    Args:
+        corrections_path: Optional single corrections dir to scan. Defaults to
+            scanning all corrections_dirs registered in g.annotation_volumes.
+
+    Returns:
+        Number of bounding boxes added (0 if nothing to show / viewer missing).
     """
-    try:
-        if not hasattr(g, "viewer") or g.viewer is None:
-            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+    if not hasattr(g, "viewer") or g.viewer is None:
+        return 0
 
-        data = request.get_json() or {}
-        corrections_path = data.get("corrections_path")
+    scan_dirs = []
+    if corrections_path:
+        scan_dirs.append(corrections_path)
+    else:
+        for vol in (getattr(g, "annotation_volumes", {}) or {}).values():
+            cdir = vol.get("corrections_dir")
+            if cdir and cdir not in scan_dirs:
+                scan_dirs.append(cdir)
+    if not scan_dirs:
+        return 0
 
-        # Determine corrections dirs to scan
-        scan_dirs = []
-        if corrections_path:
-            scan_dirs.append(corrections_path)
-        else:
-            for vol in (getattr(g, "annotation_volumes", {}) or {}).values():
-                cdir = vol.get("corrections_dir")
-                if cdir and cdir not in scan_dirs:
-                    scan_dirs.append(cdir)
-        if not scan_dirs:
-            return jsonify({"success": False, "error": "No corrections paths available"}), 400
-
-        # Collect bounding boxes from each chunk's .zattrs.
-        # NOTE: annotation_offset/annotation_shape are stored in VOXEL units
-        # (see finetune_utils.py:842), not nm. Convert via annotation_voxel_size.
-        boxes = []
-        for cdir in scan_dirs:
-            if not os.path.isdir(cdir):
+    # Collect bounding boxes from each chunk's .zattrs.
+    # NOTE: annotation_offset/annotation_shape are stored in VOXEL units
+    # (see finetune_utils.py:842), not nm. Convert via annotation_voxel_size.
+    boxes = []
+    for cdir in scan_dirs:
+        if not os.path.isdir(cdir):
+            continue
+        for entry in sorted(os.listdir(cdir)):
+            if "_chunk_" not in entry or not entry.endswith(".zarr"):
                 continue
-            for entry in sorted(os.listdir(cdir)):
-                if "_chunk_" not in entry or not entry.endswith(".zarr"):
+            zattrs_file = os.path.join(cdir, entry, ".zattrs")
+            if not os.path.exists(zattrs_file):
+                continue
+            try:
+                with open(zattrs_file) as f:
+                    meta = json.load(f)
+                roi = meta.get("roi", {})
+                offset_vox = roi.get("annotation_offset")
+                shape_vox = roi.get("annotation_shape")
+                voxel = meta.get("annotation_voxel_size")
+                if not (offset_vox and shape_vox and voxel):
                     continue
-                zattrs_file = os.path.join(cdir, entry, ".zattrs")
-                if not os.path.exists(zattrs_file):
-                    continue
-                try:
-                    with open(zattrs_file) as f:
-                        meta = json.load(f)
-                    roi = meta.get("roi", {})
-                    offset_vox = roi.get("annotation_offset")
-                    shape_vox = roi.get("annotation_shape")
-                    voxel = meta.get("annotation_voxel_size")
-                    if not (offset_vox and shape_vox and voxel):
-                        continue
 
-                    voxel_arr = np.array(voxel, dtype=np.float64)
-                    lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
-                    hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
-                    boxes.append({
-                        "chunk": entry,
-                        "lo": lo.tolist(),
-                        "hi": hi.tolist(),
-                    })
-                except Exception as e:
-                    logger.warning(f"Could not read chunk metadata for {entry}: {e}")
+                voxel_arr = np.array(voxel, dtype=np.float64)
+                lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
+                hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
+                boxes.append({
+                    "chunk": entry,
+                    "lo": lo.tolist(),
+                    "hi": hi.tolist(),
+                })
+            except Exception as e:
+                logger.warning(f"Could not read chunk metadata for {entry}: {e}")
 
-        if not boxes:
-            return jsonify({"success": True, "added": 0, "message": "No annotated chunks found"})
-
-        # Match the raw layer's axes order so boxes aren't transposed.
-        axes_names = ["z", "y", "x"]
+    layer_name = "annotated_regions"
+    if not boxes:
+        # If the layer already exists but there are no chunks, remove it so
+        # the viewer doesn't show a stale count.
         try:
-            if hasattr(g, "raw") and g.raw is not None:
-                src = getattr(g.raw, "source", None)
-                if src is not None and hasattr(src, "dimensions"):
-                    axes_names = list(src.dimensions.names)
+            with g.viewer.txn() as s:
+                if layer_name in s.layers:
+                    del s.layers[layer_name]
         except Exception:
             pass
+        return 0
 
-        layer_name = "annotated_regions"
-        annotations = [
-            neuroglancer.AxisAlignedBoundingBoxAnnotation(
-                point_a=b["lo"],
-                point_b=b["hi"],
-                id=str(i),
-                description=b["chunk"],
-            )
-            for i, b in enumerate(boxes)
-        ]
+    # Match the raw layer's axes order so boxes aren't transposed.
+    axes_names = ["z", "y", "x"]
+    try:
+        if hasattr(g, "raw") and g.raw is not None:
+            src = getattr(g.raw, "source", None)
+            if src is not None and hasattr(src, "dimensions"):
+                axes_names = list(src.dimensions.names)
+    except Exception:
+        pass
 
+    annotations = [
+        neuroglancer.AxisAlignedBoundingBoxAnnotation(
+            point_a=b["lo"],
+            point_b=b["hi"],
+            id=str(i),
+            description=b["chunk"],
+        )
+        for i, b in enumerate(boxes)
+    ]
+
+    try:
         with g.viewer.txn() as s:
             s.layers[layer_name] = neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
@@ -639,17 +682,11 @@ def show_annotated_regions():
                 ),
                 annotations=annotations,
             )
-
-        return jsonify({
-            "success": True,
-            "added": len(boxes),
-            "layer_name": layer_name,
-        })
     except Exception as e:
-        logger.error(f"Error showing annotated regions: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.warning(f"Could not update annotated_regions layer: {e}")
+        return 0
+
+    return len(boxes)
 
 
 @finetune_bp.route("/api/finetune/list-existing-sessions", methods=["POST"])
@@ -837,24 +874,8 @@ def load_existing_volume():
             "chunk_sync_state": {},
         }
 
-        # Detect which segment IDs were painted so we can pre-select them in
-        # the SegmentationLayer (otherwise the layer renders nothing by default).
-        painted_segments = set()
-        try:
-            for entry in os.listdir(new_corrections):
-                if "_chunk_" not in entry or not entry.endswith(".zarr"):
-                    continue
-                ann_arr_path = os.path.join(new_corrections, entry, "annotation", "s0")
-                if not os.path.isdir(ann_arr_path):
-                    continue
-                try:
-                    arr = zarr.open_array(ann_arr_path, mode="r", zarr_format=2)
-                    uniq = np.unique(arr[:])
-                    painted_segments.update(int(v) for v in uniq if v != 0)
-                except Exception:
-                    continue
-        except Exception as e:
-            logger.warning(f"Could not detect painted segment IDs: {e}")
+        # Refresh annotated regions layer now that chunks have been copied in.
+        refresh_annotated_regions_layer()
 
         return jsonify({
             "success": True,
@@ -866,7 +887,6 @@ def load_existing_volume():
             "copied_count": len(copied),
             "copied_minio": copied_minio,
             "painted_chunk_count": s0_count,
-            "painted_segments": sorted(painted_segments),
             "metadata": volume_meta,
         })
     except Exception as e:
@@ -883,9 +903,6 @@ def add_crop_to_viewer():
         data = request.get_json()
         crop_id = data.get("crop_id")
         minio_url = data.get("minio_url")
-        # Optional list of segment IDs to pre-select (otherwise nothing renders
-        # for SegmentationLayers — they only show explicitly visible segments).
-        segments = data.get("segments") or []
 
         if not hasattr(g, "viewer") or g.viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
@@ -896,16 +913,10 @@ def add_crop_to_viewer():
                 "url": f"s3+{minio_url}",
                 "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
             }
-            layer_kwargs = {"source": source_config}
-            if segments:
-                layer_kwargs["segments"] = [int(sid) for sid in segments]
-            layer = neuroglancer.SegmentationLayer(**layer_kwargs)
+            layer = neuroglancer.SegmentationLayer(source=source_config)
             s.layers[layer_name] = layer
 
-        logger.info(
-            f"Added layer {layer_name} to viewer "
-            f"(pre-selected segments: {segments or 'none'})"
-        )
+        logger.info(f"Added layer {layer_name} to viewer")
 
         return jsonify(
             {
@@ -932,6 +943,9 @@ def sync_annotations_manually():
 
         if crop_id:
             success = sync_annotation_from_minio(crop_id, force=force)
+            # Any sync may have produced new chunk .zarr files on disk, so
+            # refresh the annotated_regions overlay.
+            refresh_annotated_regions_layer()
             if success:
                 return jsonify(
                     {"success": True, "message": f"Synced annotation for {crop_id}"}
@@ -942,6 +956,7 @@ def sync_annotations_manually():
                 )
         else:
             synced = sync_all_annotations_from_minio(force=force)
+            refresh_annotated_regions_layer()
             if synced == -1:
                 return (
                     jsonify({"success": False, "error": "MinIO not initialized"}),
@@ -1391,6 +1406,50 @@ def cancel_job(job_id):
 
     except Exception as e:
         logger.error(f"Error cancelling job: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
+def stop_training_early(job_id):
+    """Ask the trainer to exit the current training loop gracefully after the
+    active epoch finishes. The LSF job stays alive, the inference server comes
+    up on the partially-trained adapter, and the user can then hit Restart
+    with updated params.
+
+    Writes a stop_signal.json marker in the job's output_dir; the trainer
+    polls for this between epochs.
+    """
+    try:
+        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
+        job = jobs.get(job_id)
+        if job is None:
+            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
+
+        output_dir = Path(job.output_dir)
+        if not output_dir.exists():
+            return jsonify({
+                "success": False,
+                "error": f"Job output dir missing: {output_dir}",
+            }), 400
+
+        signal_path = output_dir / "stop_signal.json"
+        with open(signal_path, "w") as f:
+            json.dump({
+                "requested_at": datetime.now().isoformat(),
+                "reason": "user_requested_stop_early",
+            }, f, indent=2)
+
+        logger.info(f"Wrote stop_signal.json for job {job_id} at {signal_path}")
+        return jsonify({
+            "success": True,
+            "message": (
+                "Stop requested. Training will exit after the current epoch; "
+                "the inference server will then start so you can restart with "
+                "updated parameters."
+            ),
+        })
+    except Exception as e:
+        logger.error(f"Error requesting stop-early: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

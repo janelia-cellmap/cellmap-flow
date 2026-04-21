@@ -252,6 +252,8 @@ def create_annotation_volume_zarr(
     model_name,
     input_size,
     input_voxel_size,
+    claimed_output_voxel_size=None,
+    claimed_input_voxel_size=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -261,6 +263,14 @@ def create_annotation_volume_zarr(
     zarr is tiny regardless of dataset size.
 
     Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.
+
+    Args:
+        output_voxel_size, input_voxel_size: the EFFECTIVE voxel sizes used
+            for the actual grid alignment (typically the dataset's closest
+            available scale to the model's claimed voxel size).
+        claimed_output_voxel_size, claimed_input_voxel_size: optional —
+            the model's originally-declared voxel sizes, recorded for
+            provenance.
 
     Returns:
         (success: bool, info: str)
@@ -329,6 +339,21 @@ def create_annotation_volume_zarr(
             if hasattr(dataset_shape_voxels, "tolist")
             else list(dataset_shape_voxels)
         )
+        # Record the model's originally-declared voxel sizes for provenance.
+        # These may differ from the active output_voxel_size/input_voxel_size
+        # above when we've snapped to the dataset's closest available scale.
+        if claimed_output_voxel_size is not None:
+            root.attrs["claimed_output_voxel_size"] = (
+                claimed_output_voxel_size.tolist()
+                if hasattr(claimed_output_voxel_size, "tolist")
+                else list(claimed_output_voxel_size)
+            )
+        if claimed_input_voxel_size is not None:
+            root.attrs["claimed_input_voxel_size"] = (
+                claimed_input_voxel_size.tolist()
+                if hasattr(claimed_input_voxel_size, "tolist")
+                else list(claimed_input_voxel_size)
+            )
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(
@@ -836,6 +861,14 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
     correction_id = f"{volume_id}_chunk_{cz}_{cy}_{cx}"
     correction_zarr_path = os.path.join(corrections_dir, f"{correction_id}.zarr")
 
+    # If a stale zarr exists (e.g. copied in during Resume Existing Volume),
+    # wipe it before recreating. zarr's mode="w" only overwrites top-level
+    # metadata and can leave stale subarrays behind, causing
+    # KeyError: 'annotation/s0' when we later index into the group.
+    if os.path.isdir(correction_zarr_path):
+        import shutil
+        shutil.rmtree(correction_zarr_path, ignore_errors=True)
+
     raw_offset_voxels = (
         (chunk_center_nm - read_shape_nm / 2) / input_voxel_size
     ).astype(int)
@@ -985,7 +1018,17 @@ def periodic_sync_annotations():
                 continue
             if not minio_state["ip"] or not minio_state["port"]:
                 continue
-            sync_all_annotations_from_minio(force=False)
+            synced = sync_all_annotations_from_minio(force=False)
+            # After each successful sync, refresh the bounding-box overlay so
+            # the user sees where they've painted without clicking a button.
+            if synced and synced > 0:
+                try:
+                    from cellmap_flow.dashboard.routes.finetune_routes import (
+                        refresh_annotated_regions_layer,
+                    )
+                    refresh_annotated_regions_layer()
+                except Exception as e:
+                    logger.debug(f"Periodic sync: refresh_annotated_regions_layer failed: {e}")
         except Exception as e:
             logger.debug(f"Error in periodic sync: {e}")
 
