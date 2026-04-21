@@ -692,9 +692,38 @@ class FinetuneJobManager:
             self.logger.error("g.viewer is None - neuroglancer not initialized yet")
             return
 
-        source_url = f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}"
+        # Lie about the model's voxel size so the layer overlays the raw at
+        # the closest available scale (e.g. trained at 16nm but raw is
+        # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
+        from cellmap_flow.utils.neuroglancer_utils import (
+            build_prediction_source,
+            get_raw_closest_scale,
+        )
+        override_scales = None
+        try:
+            output_voxel_size = tuple(
+                finetune_job.params.get("output_voxel_size") or ()
+            )
+            dataset_path = getattr(g, "dataset_path", None)
+            if output_voxel_size and dataset_path:
+                closest = get_raw_closest_scale(dataset_path, output_voxel_size)
+                if closest is not None and tuple(closest) != tuple(output_voxel_size):
+                    override_scales = closest
+                    self.logger.info(
+                        f"Finetuned model '{model_name}' output_voxel_size="
+                        f"{output_voxel_size} overridden to closest raw scale "
+                        f"{closest} for viewer overlay"
+                    )
+        except Exception as e:
+            self.logger.warning(
+                f"Could not compute override scales for finetuned '{model_name}': {e}"
+            )
+
+        source_spec = build_prediction_source(
+            server_url, model_name, st_data, override_scales
+        )
         self.logger.info(f"Adding neuroglancer layer: {model_name}")
-        self.logger.info(f"  source: {source_url}")
+        self.logger.info(f"  source: {source_spec}")
 
         with g.viewer.txn() as s:
             # Remove old finetuned layer if it exists (exact name match)
@@ -709,7 +738,7 @@ class FinetuneJobManager:
 
             # Add new layer - exact same format as run_model()
             s.layers[model_name] = neuroglancer.ImageLayer(
-                source=source_url,
+                source=source_spec,
                 shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
                     #uicontrol vec3 color color(default="red");
                     void main(){{emitRGB(color * normalized());}}""",
