@@ -51,22 +51,87 @@
     <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
   </div>
 
-  <!-- Create Buttons -->
-  <div class="d-flex align-items-center gap-2 flex-wrap">
-    <button type="button" class="btn btn-outline-primary" id="createCropBtn">
-      Create Annotation Crop
-    </button>
-    <button type="button" class="btn btn-primary" id="createVolumeBtn">
-      Create Annotation Volume
-    </button>
-    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
-      Save Annotations to Disk
-    </button>
+  <!-- Primary actions: start or resume an annotation volume -->
+  <div class="mb-2">
+    <label class="form-label fw-bold mb-1">Start or resume an annotation volume</label>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary" id="createVolumeBtn">
+        New Volume
+      </button>
+      <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
+        Resume Existing Volume
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">
+      Sparse volume across full dataset extent (paint <code>1</code>=background, <code>2</code>=foreground).
+      Resuming copies the chosen session into a new one, leaving the original intact.
+    </small>
   </div>
-  <small class="form-text text-muted d-block mt-1">
-    <strong>Crop:</strong> Small region at current view center (dense, paint 1=foreground).
-    <strong>Volume:</strong> Full dataset extent (sparse, paint 1=background, 2=foreground).
-  </small>
+
+  <!-- Save / inspect actions -->
+  <div class="mb-2">
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+        Save Annotations to Disk
+      </button>
+      <button type="button" class="btn btn-warning" id="showAnnotatedRegionsBtn" title="Add bounding boxes to the viewer for every chunk you've annotated">
+        Show Annotated Regions
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">
+      Save persists in-progress annotations from MinIO to disk. Show overlays a colored bounding box per painted chunk (red = dense, blue = sparse).
+    </small>
+  </div>
+
+  <!-- Load Existing Volume Modal -->
+  <div class="modal fade" id="loadExistingModal" tabindex="-1" aria-labelledby="loadExistingLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loadExistingLabel">Load Existing Annotation Volume</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            The selected session will be <strong>copied</strong> into a new session directory so your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.
+          </p>
+          <div class="mb-2">
+            <label for="existingBrowseRoot" class="form-label">Search in</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="existingBrowseRoot" placeholder="/path/to/output/directory">
+              <button type="button" class="btn btn-outline-secondary" id="existingBrowseRefreshBtn">Scan</button>
+            </div>
+            <small class="form-text text-muted">Directory containing timestamped sessions. Output Path is used as default.</small>
+          </div>
+          <div class="mb-2">
+            <label for="existingSessionsList" class="form-label">Existing Sessions</label>
+            <select class="form-select" id="existingSessionsList" size="10">
+              <option>Scan a directory above...</option>
+            </select>
+          </div>
+          <div id="existingSessionsEmpty" class="text-muted small" style="display:none;">
+            No existing sessions found under this directory.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="loadExistingConfirmBtn" disabled>Load Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Deprecated/advanced: dense crop at view center -->
+  <details class="mt-2">
+    <summary class="text-muted small" style="cursor: pointer;">Advanced (deprecated): dense crop at view center</summary>
+    <div class="mt-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="createCropBtn">
+        Create Annotation Crop
+      </button>
+      <small class="form-text text-muted d-block mt-1">
+        Small dense region at current view center (paint <code>1</code>=foreground). Rarely used.
+      </small>
+    </div>
+  </details>
 
   <!-- MinIO Status -->
   <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
@@ -508,6 +573,33 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Server-side prefs override port-scoped localStorage so output path
+  // survives dashboard restarts (which use a random port -> new origin).
+  fetch("/api/finetune/user-prefs")
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.success && d.prefs && d.prefs.outputPath && !outputPathInput.value) {
+        outputPathInput.value = d.prefs.outputPath;
+      }
+    })
+    .catch(() => {});
+
+  // Persist outputPath server-side on change so it sticks across restarts.
+  let _outputPathSaveTimer = null;
+  outputPathInput.addEventListener("input", () => {
+    clearTimeout(_outputPathSaveTimer);
+    _outputPathSaveTimer = setTimeout(() => {
+      const val = outputPathInput.value.trim();
+      if (val) {
+        fetch("/api/finetune/user-prefs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ outputPath: val }),
+        }).catch(() => {});
+      }
+    }, 500);
+  });
+
   // Restore saved state (non-model fields applied immediately)
   const savedState = restoreFinetuneState();
   if (savedState) {
@@ -756,7 +848,141 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
-  function addToViewer(cropId, neuroglancerUrl, layerName) {
+  // Load Existing Volume modal handling
+  const loadExistingBtn = document.getElementById("loadExistingVolumeBtn");
+  const existingSessionsList = document.getElementById("existingSessionsList");
+  const existingSessionsEmpty = document.getElementById("existingSessionsEmpty");
+  const existingBrowseRoot = document.getElementById("existingBrowseRoot");
+  const existingBrowseRefreshBtn = document.getElementById("existingBrowseRefreshBtn");
+  const loadExistingConfirmBtn = document.getElementById("loadExistingConfirmBtn");
+  let loadExistingModal = null;
+
+  function scanExistingSessions() {
+    const rootPath = existingBrowseRoot.value.trim();
+    if (!rootPath) {
+      existingSessionsList.innerHTML = '<option disabled>Enter a directory above and click Scan</option>';
+      existingSessionsEmpty.style.display = "none";
+      return;
+    }
+    try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
+    existingSessionsList.innerHTML = '<option>Loading...</option>';
+    existingSessionsEmpty.style.display = "none";
+    loadExistingConfirmBtn.disabled = true;
+
+    fetch("/api/finetune/list-existing-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ output_path: rootPath })
+    })
+      .then(res => res.json())
+      .then(data => {
+        existingSessionsList.innerHTML = "";
+        if (!data.success) {
+          existingSessionsList.innerHTML = `<option disabled>Error: ${data.error}</option>`;
+          return;
+        }
+        if (!data.sessions || data.sessions.length === 0) {
+          existingSessionsEmpty.style.display = "block";
+          return;
+        }
+        data.sessions.forEach(s => {
+          const volNames = s.volumes.map(v => v.volume_id).join(", ") || "(no volume)";
+          const opt = document.createElement("option");
+          opt.value = s.session_path;
+          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks — ${volNames}`;
+          opt.disabled = s.volumes.length === 0;
+          existingSessionsList.appendChild(opt);
+        });
+      })
+      .catch(err => {
+        existingSessionsList.innerHTML = `<option disabled>Error: ${err}</option>`;
+      });
+  }
+
+  existingSessionsList.addEventListener("change", () => {
+    loadExistingConfirmBtn.disabled = !existingSessionsList.value;
+  });
+  existingBrowseRefreshBtn.addEventListener("click", scanExistingSessions);
+  existingBrowseRoot.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); scanExistingSessions(); }
+  });
+
+  loadExistingBtn.addEventListener("click", function() {
+    if (!loadExistingModal) {
+      loadExistingModal = new bootstrap.Modal(document.getElementById("loadExistingModal"));
+    }
+    // Seed the root: prefer outputPath field, then last used, then blank
+    const outputPath = document.getElementById("outputPath").value.trim();
+    const saved = (() => { try { return localStorage.getItem("existingBrowseRoot"); } catch (_) { return null; } })();
+    existingBrowseRoot.value = outputPath || saved || "";
+    loadExistingModal.show();
+    if (existingBrowseRoot.value) scanExistingSessions();
+    else {
+      existingSessionsList.innerHTML = '<option disabled>Enter a directory above and click Scan</option>';
+      existingSessionsEmpty.style.display = "none";
+      loadExistingConfirmBtn.disabled = true;
+    }
+  });
+
+  loadExistingConfirmBtn.addEventListener("click", function() {
+    const sessionPath = existingSessionsList.value;
+    // Target output path: use the outputPath field if set, otherwise the
+    // parent of the source session (so we save back into the same root).
+    let outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      outputPath = existingBrowseRoot.value.trim();
+      if (outputPath) {
+        // Mirror it back into the main field so downstream save/train uses it.
+        document.getElementById("outputPath").value = outputPath;
+      }
+    }
+    if (!sessionPath || !outputPath) return;
+
+    loadExistingConfirmBtn.disabled = true;
+    loadExistingConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+    finetuneLog.value += `Loading existing volume from: ${sessionPath}\n`;
+
+    fetch("/api/finetune/load-existing-volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_session_path: sessionPath,
+        output_path: outputPath,
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        loadExistingConfirmBtn.disabled = false;
+        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        if (!data.success) {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+          return;
+        }
+        finetuneLog.value += `✓ Loaded volume ${data.volume_id} into ${data.new_session_path}\n`;
+        finetuneLog.value += `  Copied ${data.copied_count} files. ${data.painted_chunk_count || 0} painted chunks served.\n`;
+        if (data.copied_minio) {
+          finetuneLog.value += `  Migrated MinIO storage from source session.\n`;
+        }
+        finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+        if (data.painted_segments && data.painted_segments.length) {
+          finetuneLog.value += `  Pre-selecting segment IDs: ${data.painted_segments.join(", ")}\n`;
+        }
+        if (loadExistingModal) loadExistingModal.hide();
+        addToViewer(
+          data.volume_id,
+          data.neuroglancer_url,
+          `sparse_annotation_${data.volume_id}`,
+          data.painted_segments,
+        );
+      })
+      .catch(err => {
+        loadExistingConfirmBtn.disabled = false;
+        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        finetuneLog.value += `✗ Error: ${err}\n`;
+      });
+  });
+
+  function addToViewer(cropId, neuroglancerUrl, layerName, segments) {
     finetuneLog.value += `Adding layer to viewer...\n`;
 
     const payload = {
@@ -765,6 +991,9 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     if (layerName) {
       payload.layer_name = layerName;
+    }
+    if (segments && segments.length) {
+      payload.segments = segments;
     }
 
     fetch("/api/finetune/add-to-viewer", {
@@ -818,6 +1047,42 @@ document.addEventListener("DOMContentLoaded", function () {
         saveAnnotationsBtn.textContent = originalText;
       });
   });
+
+  // Show annotated regions as bounding boxes in viewer
+  const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
+  if (showAnnotatedRegionsBtn) {
+    showAnnotatedRegionsBtn.addEventListener("click", function() {
+      const originalText = showAnnotatedRegionsBtn.textContent;
+      showAnnotatedRegionsBtn.disabled = true;
+      showAnnotatedRegionsBtn.textContent = "Scanning...";
+      finetuneLog.value += `Scanning corrections for annotated chunks...\n`;
+
+      fetch("/api/finetune/show-annotated-regions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      })
+        .then(res => res.json())
+        .then(data => {
+          showAnnotatedRegionsBtn.disabled = false;
+          showAnnotatedRegionsBtn.textContent = originalText;
+          if (!data.success) {
+            finetuneLog.value += `✗ Error: ${data.error || data.message}\n`;
+            return;
+          }
+          if (data.added === 0) {
+            finetuneLog.value += `No annotated chunks found.\n`;
+          } else {
+            finetuneLog.value += `✓ Added ${data.added} bounding boxes as layer "${data.layer_name}"\n`;
+          }
+        })
+        .catch(err => {
+          showAnnotatedRegionsBtn.disabled = false;
+          showAnnotatedRegionsBtn.textContent = originalText;
+          finetuneLog.value += `✗ Error: ${err}\n`;
+        });
+    });
+  }
 
   // === FINETUNING JOB MANAGEMENT ===
 

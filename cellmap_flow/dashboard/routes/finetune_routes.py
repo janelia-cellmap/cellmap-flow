@@ -504,6 +504,378 @@ def create_annotation_volume():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+_USER_PREFS_FILE = os.path.expanduser("~/.cellmap_flow/user_prefs.json")
+
+
+def _load_user_prefs():
+    try:
+        if os.path.exists(_USER_PREFS_FILE):
+            with open(_USER_PREFS_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _save_user_prefs(prefs):
+    try:
+        os.makedirs(os.path.dirname(_USER_PREFS_FILE), exist_ok=True)
+        with open(_USER_PREFS_FILE, "w") as f:
+            json.dump(prefs, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save user prefs: {e}")
+
+
+@finetune_bp.route("/api/finetune/user-prefs", methods=["GET"])
+def get_user_prefs():
+    """Return persisted user preferences (e.g. last output path)."""
+    return jsonify({"success": True, "prefs": _load_user_prefs()})
+
+
+@finetune_bp.route("/api/finetune/user-prefs", methods=["POST"])
+def set_user_prefs():
+    """Merge new key/values into persisted user preferences."""
+    try:
+        data = request.get_json() or {}
+        prefs = _load_user_prefs()
+        prefs.update({k: v for k, v in data.items() if v is not None})
+        _save_user_prefs(prefs)
+        return jsonify({"success": True, "prefs": prefs})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@finetune_bp.route("/api/finetune/show-annotated-regions", methods=["POST"])
+def show_annotated_regions():
+    """Add a neuroglancer LocalAnnotationLayer with one bounding box per
+    annotated chunk so the user can see where they've painted.
+
+    Body: {"corrections_path": "/path/to/.../corrections"} (optional —
+    defaults to scanning all volumes in g.annotation_volumes).
+    """
+    try:
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+
+        data = request.get_json() or {}
+        corrections_path = data.get("corrections_path")
+
+        # Determine corrections dirs to scan
+        scan_dirs = []
+        if corrections_path:
+            scan_dirs.append(corrections_path)
+        else:
+            for vol in (getattr(g, "annotation_volumes", {}) or {}).values():
+                cdir = vol.get("corrections_dir")
+                if cdir and cdir not in scan_dirs:
+                    scan_dirs.append(cdir)
+        if not scan_dirs:
+            return jsonify({"success": False, "error": "No corrections paths available"}), 400
+
+        # Collect bounding boxes from each chunk's .zattrs.
+        # NOTE: annotation_offset/annotation_shape are stored in VOXEL units
+        # (see finetune_utils.py:842), not nm. Convert via annotation_voxel_size.
+        boxes = []
+        for cdir in scan_dirs:
+            if not os.path.isdir(cdir):
+                continue
+            for entry in sorted(os.listdir(cdir)):
+                if "_chunk_" not in entry or not entry.endswith(".zarr"):
+                    continue
+                zattrs_file = os.path.join(cdir, entry, ".zattrs")
+                if not os.path.exists(zattrs_file):
+                    continue
+                try:
+                    with open(zattrs_file) as f:
+                        meta = json.load(f)
+                    roi = meta.get("roi", {})
+                    offset_vox = roi.get("annotation_offset")
+                    shape_vox = roi.get("annotation_shape")
+                    voxel = meta.get("annotation_voxel_size")
+                    if not (offset_vox and shape_vox and voxel):
+                        continue
+
+                    voxel_arr = np.array(voxel, dtype=np.float64)
+                    lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
+                    hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
+                    boxes.append({
+                        "chunk": entry,
+                        "lo": lo.tolist(),
+                        "hi": hi.tolist(),
+                    })
+                except Exception as e:
+                    logger.warning(f"Could not read chunk metadata for {entry}: {e}")
+
+        if not boxes:
+            return jsonify({"success": True, "added": 0, "message": "No annotated chunks found"})
+
+        # Match the raw layer's axes order so boxes aren't transposed.
+        axes_names = ["z", "y", "x"]
+        try:
+            if hasattr(g, "raw") and g.raw is not None:
+                src = getattr(g.raw, "source", None)
+                if src is not None and hasattr(src, "dimensions"):
+                    axes_names = list(src.dimensions.names)
+        except Exception:
+            pass
+
+        layer_name = "annotated_regions"
+        annotations = [
+            neuroglancer.AxisAlignedBoundingBoxAnnotation(
+                point_a=b["lo"],
+                point_b=b["hi"],
+                id=str(i),
+                description=b["chunk"],
+            )
+            for i, b in enumerate(boxes)
+        ]
+
+        with g.viewer.txn() as s:
+            s.layers[layer_name] = neuroglancer.LocalAnnotationLayer(
+                dimensions=neuroglancer.CoordinateSpace(
+                    names=axes_names,
+                    units="nm",
+                    scales=[1, 1, 1],
+                ),
+                annotations=annotations,
+            )
+
+        return jsonify({
+            "success": True,
+            "added": len(boxes),
+            "layer_name": layer_name,
+        })
+    except Exception as e:
+        logger.error(f"Error showing annotated regions: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@finetune_bp.route("/api/finetune/list-existing-sessions", methods=["POST"])
+def list_existing_sessions():
+    """List existing annotation sessions/volumes under a base output path.
+
+    Returns a list of session timestamps and the volumes they contain so
+    the user can select one to load and continue annotating.
+    """
+    try:
+        data = request.get_json() or {}
+        output_path = data.get("output_path", "")
+        if not output_path:
+            return jsonify({"success": False, "error": "output_path required"}), 400
+
+        base = os.path.expanduser(output_path)
+        if not os.path.isdir(base):
+            return jsonify({"success": True, "sessions": []})
+
+        sessions = []
+        for entry in sorted(os.listdir(base), reverse=True):
+            session_dir = os.path.join(base, entry)
+            corrections_dir = os.path.join(session_dir, "corrections")
+            if not os.path.isdir(corrections_dir):
+                continue
+
+            volumes = []
+            chunks = []
+            for item in os.listdir(corrections_dir):
+                if not item.endswith(".zarr"):
+                    continue
+                full = os.path.join(corrections_dir, item)
+                if "_chunk_" in item:
+                    chunks.append(item)
+                else:
+                    volumes.append({
+                        "volume_id": item.replace(".zarr", ""),
+                        "path": full,
+                    })
+
+            if volumes or chunks:
+                sessions.append({
+                    "session_id": entry,
+                    "session_path": session_dir,
+                    "volumes": volumes,
+                    "chunk_count": len(chunks),
+                })
+
+        return jsonify({"success": True, "sessions": sessions})
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@finetune_bp.route("/api/finetune/load-existing-volume", methods=["POST"])
+def load_existing_volume():
+    """Copy an existing annotation volume (and its chunk corrections) into a
+    new session so the user can continue annotating without mutating the
+    original (which may be associated with a completed training run)."""
+    try:
+        import shutil
+
+        data = request.get_json() or {}
+        source_session_path = data.get("source_session_path")
+        output_path = data.get("output_path")
+
+        if not source_session_path or not output_path:
+            return jsonify({
+                "success": False,
+                "error": "source_session_path and output_path required",
+            }), 400
+
+        source_session_path = os.path.expanduser(source_session_path)
+        source_corrections = os.path.join(source_session_path, "corrections")
+        if not os.path.isdir(source_corrections):
+            return jsonify({
+                "success": False,
+                "error": f"No corrections found in {source_session_path}",
+            }), 404
+
+        # Find the volume zarr (the one without _chunk_ in the name)
+        volume_entries = [
+            d for d in os.listdir(source_corrections)
+            if d.endswith(".zarr") and "_chunk_" not in d
+        ]
+        if not volume_entries:
+            return jsonify({
+                "success": False,
+                "error": f"No annotation volume found in {source_corrections}",
+            }), 404
+        volume_dir = volume_entries[0]
+        volume_id = volume_dir.replace(".zarr", "")
+
+        # Create a new session and copy contents
+        new_session_path = get_or_create_session_path(output_path)
+        new_corrections = os.path.join(new_session_path, "corrections")
+        os.makedirs(new_corrections, exist_ok=True)
+        # The corrections dir itself is a zarr group (parent of all chunk
+        # zarrs). Without a root .zgroup, the trainer's zarr.open_group()
+        # call fails with GroupNotFoundError.
+        zarr.open_group(new_corrections, mode="a")
+
+        copied = []
+        for item in os.listdir(source_corrections):
+            if not item.endswith(".zarr"):
+                continue
+            src = os.path.join(source_corrections, item)
+            dst = os.path.join(new_corrections, item)
+            if os.path.exists(dst):
+                logger.info(f"Skipping {item} (already exists in target)")
+                continue
+            shutil.copytree(src, dst)
+            copied.append(item)
+
+        # Also copy MinIO storage if present — that's where the actually-served
+        # painted data lives. Periodic sync mirrors it to the local volume zarr,
+        # but if anything was unsynced (or the format differs), MinIO is the
+        # source of truth. Copying it lets a fresh MinIO start with the painted
+        # bucket already populated.
+        from cellmap_flow.dashboard.finetune_utils import minio_state
+        source_minio = os.path.join(source_corrections, ".minio")
+        new_minio = os.path.join(new_corrections, ".minio")
+        copied_minio = False
+        if os.path.isdir(source_minio):
+            if minio_state.get("process") is not None and minio_state["process"].poll() is None:
+                logger.warning(
+                    "MinIO already running with a different output_base; cannot rebind. "
+                    "Falling back to mc mirror upload — painted data may be incomplete "
+                    "if the source had unsynced chunks."
+                )
+            else:
+                if not os.path.exists(new_minio):
+                    shutil.copytree(source_minio, new_minio)
+                    copied_minio = True
+                    logger.info(f"Copied .minio storage from {source_minio} -> {new_minio}")
+
+        # Record lineage in metadata
+        lineage_file = os.path.join(new_session_path, "loaded_from.json")
+        with open(lineage_file, "w") as f:
+            json.dump({
+                "source_session_path": source_session_path,
+                "loaded_at": datetime.now().isoformat(),
+                "copied_files": copied,
+            }, f, indent=2)
+
+        # Read volume metadata so we can register it with the running server
+        new_volume_path = os.path.join(new_corrections, volume_dir)
+        zattrs_file = os.path.join(new_volume_path, ".zattrs")
+        volume_meta = {}
+        if os.path.exists(zattrs_file):
+            with open(zattrs_file) as f:
+                volume_meta = json.load(f)
+
+        # Sanity-log: count painted s0 chunks before serving
+        s0_dir = os.path.join(new_volume_path, "annotation", "s0")
+        s0_count = 0
+        if os.path.isdir(s0_dir):
+            s0_count = sum(
+                1 for f in os.listdir(s0_dir) if not f.startswith(".")
+            )
+        logger.info(
+            f"Resume: copied {len(copied)} zarr entries; "
+            f"volume has {s0_count} painted s0 chunks ready to serve"
+        )
+
+        # Re-serve via MinIO
+        minio_url = ensure_minio_serving(
+            new_volume_path, volume_id, output_base_dir=new_corrections
+        )
+
+        # Register in g.annotation_volumes for sync/UI to pick up
+        if not hasattr(g, "annotation_volumes"):
+            g.annotation_volumes = {}
+        g.annotation_volumes[volume_id] = {
+            "zarr_path": new_volume_path,
+            "model_name": volume_meta.get("model_name"),
+            "output_size": volume_meta.get("chunk_size"),
+            "input_size": volume_meta.get("input_size"),
+            "input_voxel_size": volume_meta.get("input_voxel_size"),
+            "output_voxel_size": volume_meta.get("output_voxel_size"),
+            "dataset_path": volume_meta.get("dataset_path"),
+            "dataset_offset_nm": volume_meta.get("dataset_offset_nm"),
+            "corrections_dir": new_corrections,
+            "extracted_chunks": set(),
+            "chunk_sync_state": {},
+        }
+
+        # Detect which segment IDs were painted so we can pre-select them in
+        # the SegmentationLayer (otherwise the layer renders nothing by default).
+        painted_segments = set()
+        try:
+            for entry in os.listdir(new_corrections):
+                if "_chunk_" not in entry or not entry.endswith(".zarr"):
+                    continue
+                ann_arr_path = os.path.join(new_corrections, entry, "annotation", "s0")
+                if not os.path.isdir(ann_arr_path):
+                    continue
+                try:
+                    arr = zarr.open_array(ann_arr_path, mode="r", zarr_format=2)
+                    uniq = np.unique(arr[:])
+                    painted_segments.update(int(v) for v in uniq if v != 0)
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning(f"Could not detect painted segment IDs: {e}")
+
+        return jsonify({
+            "success": True,
+            "volume_id": volume_id,
+            "new_session_path": new_session_path,
+            "zarr_path": new_volume_path,
+            "minio_url": minio_url,
+            "neuroglancer_url": f"{minio_url}/annotation",
+            "copied_count": len(copied),
+            "copied_minio": copied_minio,
+            "painted_chunk_count": s0_count,
+            "painted_segments": sorted(painted_segments),
+            "metadata": volume_meta,
+        })
+    except Exception as e:
+        logger.error(f"Error loading existing volume: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @finetune_bp.route("/api/finetune/add-to-viewer", methods=["POST"])
 def add_crop_to_viewer():
     """Add annotation crop or volume layer to Neuroglancer viewer."""
@@ -511,6 +883,9 @@ def add_crop_to_viewer():
         data = request.get_json()
         crop_id = data.get("crop_id")
         minio_url = data.get("minio_url")
+        # Optional list of segment IDs to pre-select (otherwise nothing renders
+        # for SegmentationLayers — they only show explicitly visible segments).
+        segments = data.get("segments") or []
 
         if not hasattr(g, "viewer") or g.viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
@@ -521,10 +896,16 @@ def add_crop_to_viewer():
                 "url": f"s3+{minio_url}",
                 "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
             }
-            layer = neuroglancer.SegmentationLayer(source=source_config)
+            layer_kwargs = {"source": source_config}
+            if segments:
+                layer_kwargs["segments"] = [int(sid) for sid in segments]
+            layer = neuroglancer.SegmentationLayer(**layer_kwargs)
             s.layers[layer_name] = layer
 
-        logger.info(f"Added layer {layer_name} to viewer")
+        logger.info(
+            f"Added layer {layer_name} to viewer "
+            f"(pre-selected segments: {segments or 'none'})"
+        )
 
         return jsonify(
             {
@@ -1150,12 +1531,48 @@ def add_finetuned_layer_to_viewer():
                 logger.info(f"Removing old finetuned layer: {layer_name}")
                 del s.layers[layer_name]
 
-            from cellmap_flow.utils.neuroglancer_utils import get_norms_post_args
-            from cellmap_flow.utils.web_utils import ARGS_KEY
+            from cellmap_flow.utils.neuroglancer_utils import (
+                get_norms_post_args,
+                build_prediction_source,
+                get_raw_closest_scale,
+            )
 
             st_data = get_norms_post_args(g.input_norms, g.postprocess)
 
-            layer_source = f"zarr://{server_url}/{model_name}{ARGS_KEY}{st_data}{ARGS_KEY}"
+            # Lie about the model's voxel size so it overlays the raw at
+            # the closest available scale (e.g. trained at 16nm but raw is
+            # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
+            override_scales = None
+            try:
+                output_voxel_size = None
+                if finetune_job is not None and finetune_job.params:
+                    output_voxel_size = tuple(
+                        finetune_job.params.get("output_voxel_size") or ()
+                    )
+                # Fallback: look up from g.models_config via finetune model name
+                if not output_voxel_size:
+                    for mc in (getattr(g, "models_config", []) or []):
+                        if mc.name == model_name:
+                            output_voxel_size = tuple(mc.config.output_voxel_size)
+                            break
+                dataset_path = getattr(g, "dataset_path", None)
+                if output_voxel_size and dataset_path:
+                    closest = get_raw_closest_scale(dataset_path, output_voxel_size)
+                    if closest is not None and tuple(closest) != tuple(output_voxel_size):
+                        override_scales = closest
+                        logger.info(
+                            f"Finetuned model '{model_name}' output_voxel_size="
+                            f"{output_voxel_size} overridden to closest raw scale "
+                            f"{closest} for viewer overlay"
+                        )
+            except Exception as e:
+                logger.warning(
+                    f"Could not compute override scales for finetuned '{model_name}': {e}"
+                )
+
+            layer_source = build_prediction_source(
+                server_url, model_name, st_data, override_scales
+            )
             s.layers[layer_name] = neuroglancer.ImageLayer(
                 source=layer_source,
                 shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
