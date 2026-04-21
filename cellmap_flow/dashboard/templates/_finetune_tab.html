@@ -68,18 +68,15 @@
     </small>
   </div>
 
-  <!-- Save / inspect actions -->
+  <!-- Save action -->
   <div class="mb-2">
-    <div class="d-flex gap-2 flex-wrap">
-      <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
-        Save Annotations to Disk
-      </button>
-      <button type="button" class="btn btn-warning" id="showAnnotatedRegionsBtn" title="Add bounding boxes to the viewer for every chunk you've annotated">
-        Show Annotated Regions
-      </button>
-    </div>
+    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+      Save Annotations to Disk
+    </button>
     <small class="form-text text-muted d-block mt-1">
-      Save persists in-progress annotations from MinIO to disk. Show overlays a colored bounding box per painted chunk (red = dense, blue = sparse).
+      Persists in-progress annotations from MinIO to disk. Painted regions are
+      automatically outlined as bounding boxes in the viewer (toggle via the
+      "annotated_regions" layer).
     </small>
   </div>
 
@@ -241,6 +238,25 @@
           </select>
           <small class="text-muted">Margin is recommended for sparse annotations</small>
         </div>
+        <div class="mb-3" id="marginGroup">
+          <label for="marginValue" class="form-label">
+            Margin
+            <span class="badge bg-secondary">margin loss only</span>
+          </label>
+          <input
+            type="number"
+            id="marginValue"
+            class="form-control"
+            value="0.3"
+            min="0"
+            max="0.5"
+            step="0.05"
+          />
+          <small class="text-muted">
+            Smaller = stricter (more learning signal). Predictions outside
+            <code>[margin, 1-margin]</code> get zero gradient.
+          </small>
+        </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
@@ -275,6 +291,24 @@
             <option value="all">All voxels</option>
           </select>
           <small class="text-muted">Where to apply distillation loss</small>
+        </div>
+        <div class="mb-3">
+          <label for="labelSmoothing" class="form-label">
+            Label Smoothing
+          </label>
+          <input
+            type="number"
+            id="labelSmoothing"
+            class="form-control"
+            value="0.1"
+            min="0"
+            max="0.5"
+            step="0.01"
+          />
+          <small class="text-muted">
+            Softens hard 0/1 targets to [s/2, 1-s/2]. Default 0.1.
+            Set to 0 for clean annotations where you want sharp 0/1 outputs.
+          </small>
         </div>
       </div>
       <div class="col-md-6">
@@ -327,6 +361,9 @@
     <div>
       <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
         🔄 Restart Training
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" title="Exit the training loop after the current epoch. The job stays alive — the inference server starts and you can then restart with updated params.">
+        ⏸ Stop Early
       </button>
       <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
         ❌ Cancel
@@ -391,126 +428,6 @@
 </div><!-- End Tab Content -->
 
 <!-- Restart Training Modal -->
-<div class="modal fade" id="restartTrainingModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Restart Training</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>This will archive current logs and restart training with the same or updated parameters.</p>
-
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" id="useCurrentParams" checked>
-          <label class="form-check-label" for="useCurrentParams">
-            Use current training parameters
-          </label>
-        </div>
-
-        <div id="updateParamsSection" style="display: none;">
-          <h6>Update Parameters</h6>
-          <div class="mb-2">
-            <label class="form-label">LoRA Rank</label>
-            <select id="restartLoraRank" class="form-select">
-              <option value="4">4 (Fast, lower capacity)</option>
-              <option value="8" selected>8 (Balanced)</option>
-              <option value="16">16 (High capacity)</option>
-              <option value="64">64 (Very high capacity)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Number of Epochs</label>
-            <input type="number" id="restartNumEpochs" class="form-control" value="20" min="5" max="50">
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Batch Size</label>
-            <select id="restartBatchSize" class="form-select">
-              <option value="1">1</option>
-              <option value="2" selected>2 (Default)</option>
-              <option value="4">4</option>
-              <option value="8">8</option>
-              <option value="16">16</option>
-              <option value="32">32</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Learning Rate</label>
-            <select id="restartLearningRate" class="form-select">
-              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
-              <option value="0.000001">1e-6 (Very Conservative)</option>
-              <option value="0.00001">1e-5 (Conservative)</option>
-              <option value="0.0001" selected>1e-4 (Standard)</option>
-              <option value="0.001">1e-3 (Aggressive)</option>
-              <option value="0.01">1e-2 (Very Aggressive)</option>
-              <option value="0.1">1e-1 (Extremely Aggressive)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Loss Function</label>
-            <select id="restartLossType" class="form-select">
-              <option value="margin" selected>Margin (for scribbles)</option>
-              <option value="mse">MSE</option>
-              <option value="bce">BCE</option>
-              <option value="dice">Dice</option>
-              <option value="combined">Combined (Dice + BCE)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Distillation Weight</label>
-            <select id="restartDistillationLambda" class="form-select">
-              <option value="0">0 (Disabled)</option>
-              <option value="0.01">0.01</option>
-              <option value="0.05">0.05</option>
-              <option value="0.1" selected>0.1 (Default)</option>
-              <option value="0.2">0.2</option>
-              <option value="0.5">0.5</option>
-              <option value="1.0">1.0</option>
-              <option value="2.0">2.0</option>
-              <option value="5.0">5.0</option>
-              <option value="10.0">10.0</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Distillation Scope</label>
-            <select id="restartDistillationScope" class="form-select">
-              <option value="unlabeled" selected>Unlabeled voxels only</option>
-              <option value="all">All voxels</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Label Smoothing</label>
-            <select id="restartLabelSmoothing" class="form-select">
-              <option value="0">0 (Disabled)</option>
-              <option value="0.01">0.01</option>
-              <option value="0.05">0.05</option>
-              <option value="0.1" selected>0.1 (Default)</option>
-              <option value="0.2">0.2</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Margin</label>
-            <input type="number" id="restartMargin" class="form-control" value="0.3" min="0" max="1" step="0.01">
-            <small class="text-muted">Used by margin loss.</small>
-          </div>
-          <div class="mb-2">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="restartBalanceClasses" checked>
-              <label class="form-check-label" for="restartBalanceClasses">
-                Balance fg/bg classes
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirmRestartBtn">Restart</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const modelSelect = document.getElementById("modelSelect");
@@ -539,6 +456,8 @@ document.addEventListener("DOMContentLoaded", function () {
       batchSize: document.getElementById("batchSize").value,
       learningRate: document.getElementById("learningRate").value,
       lossType: document.getElementById("lossType").value,
+      marginValue: document.getElementById("marginValue").value,
+      labelSmoothing: document.getElementById("labelSmoothing").value,
       distillationLambda: document.getElementById("distillationLambda").value,
       distillationScope: document.getElementById("distillationScope").value,
       balanceClasses: document.getElementById("balanceClasses").checked,
@@ -555,13 +474,27 @@ document.addEventListener("DOMContentLoaded", function () {
     try { return JSON.parse(raw); } catch { return null; }
   }
 
+  // Show/hide margin field based on selected loss (main training form and
+  // restart modal both have their own loss dropdown + margin input).
+  function _bindMarginVisibility(lossSelectId, marginGroupId) {
+    const lossSel = document.getElementById(lossSelectId);
+    const marginGroup = document.getElementById(marginGroupId);
+    if (!lossSel || !marginGroup) return;
+    const update = () => {
+      marginGroup.style.display = lossSel.value === "margin" ? "" : "none";
+    };
+    lossSel.addEventListener("change", update);
+    update();
+  }
+  _bindMarginVisibility("lossType", "marginGroup");
+
   // Attach change listeners to all form elements to auto-save state
   function attachStateListeners() {
     const ids = [
       "outputPath", "checkpointPath", "loraRank", "numEpochs",
-      "batchSize", "learningRate", "lossType", "distillationLambda",
-      "distillationScope", "balanceClasses", "autoServeCheck", "gpuQueue",
-      "modelSelect"
+      "batchSize", "learningRate", "lossType", "marginValue", "labelSmoothing",
+      "distillationLambda", "distillationScope",
+      "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
     ];
     ids.forEach(id => {
       const el = document.getElementById(id);
@@ -610,6 +543,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
     if (savedState.learningRate) document.getElementById("learningRate").value = savedState.learningRate;
     if (savedState.lossType) document.getElementById("lossType").value = savedState.lossType;
+    if (savedState.marginValue) document.getElementById("marginValue").value = savedState.marginValue;
+    if (savedState.labelSmoothing !== undefined && savedState.labelSmoothing !== null) {
+      document.getElementById("labelSmoothing").value = savedState.labelSmoothing;
+    }
     if (savedState.distillationLambda) document.getElementById("distillationLambda").value = savedState.distillationLambda;
     if (savedState.distillationScope) document.getElementById("distillationScope").value = savedState.distillationScope;
     if (savedState.balanceClasses !== undefined) document.getElementById("balanceClasses").checked = savedState.balanceClasses;
@@ -964,15 +901,11 @@ document.addEventListener("DOMContentLoaded", function () {
           finetuneLog.value += `  Migrated MinIO storage from source session.\n`;
         }
         finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
-        if (data.painted_segments && data.painted_segments.length) {
-          finetuneLog.value += `  Pre-selecting segment IDs: ${data.painted_segments.join(", ")}\n`;
-        }
         if (loadExistingModal) loadExistingModal.hide();
         addToViewer(
           data.volume_id,
           data.neuroglancer_url,
           `sparse_annotation_${data.volume_id}`,
-          data.painted_segments,
         );
       })
       .catch(err => {
@@ -982,7 +915,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
-  function addToViewer(cropId, neuroglancerUrl, layerName, segments) {
+  function addToViewer(cropId, neuroglancerUrl, layerName) {
     finetuneLog.value += `Adding layer to viewer...\n`;
 
     const payload = {
@@ -991,9 +924,6 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     if (layerName) {
       payload.layer_name = layerName;
-    }
-    if (segments && segments.length) {
-      payload.segments = segments;
     }
 
     fetch("/api/finetune/add-to-viewer", {
@@ -1048,42 +978,6 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
-  // Show annotated regions as bounding boxes in viewer
-  const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
-  if (showAnnotatedRegionsBtn) {
-    showAnnotatedRegionsBtn.addEventListener("click", function() {
-      const originalText = showAnnotatedRegionsBtn.textContent;
-      showAnnotatedRegionsBtn.disabled = true;
-      showAnnotatedRegionsBtn.textContent = "Scanning...";
-      finetuneLog.value += `Scanning corrections for annotated chunks...\n`;
-
-      fetch("/api/finetune/show-annotated-regions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      })
-        .then(res => res.json())
-        .then(data => {
-          showAnnotatedRegionsBtn.disabled = false;
-          showAnnotatedRegionsBtn.textContent = originalText;
-          if (!data.success) {
-            finetuneLog.value += `✗ Error: ${data.error || data.message}\n`;
-            return;
-          }
-          if (data.added === 0) {
-            finetuneLog.value += `No annotated chunks found.\n`;
-          } else {
-            finetuneLog.value += `✓ Added ${data.added} bounding boxes as layer "${data.layer_name}"\n`;
-          }
-        })
-        .catch(err => {
-          showAnnotatedRegionsBtn.disabled = false;
-          showAnnotatedRegionsBtn.textContent = originalText;
-          finetuneLog.value += `✗ Error: ${err}\n`;
-        });
-    });
-  }
-
   // === FINETUNING JOB MANAGEMENT ===
 
   let eventSource = null;
@@ -1124,8 +1018,15 @@ document.addEventListener("DOMContentLoaded", function () {
         distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
         distillation_scope: document.getElementById("distillationScope").value,
         balance_classes: document.getElementById("balanceClasses").checked,
+        label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
         queue: document.getElementById("gpuQueue").value
       };
+
+      // Forward margin value when using margin loss
+      if (params.loss_type === "margin") {
+        const m = parseFloat(document.getElementById("marginValue").value);
+        if (Number.isFinite(m)) params.margin = m;
+      }
 
       // Add optional checkpoint path override if provided
       const checkpointPath = document.getElementById("checkpointPath").value.trim();
@@ -1598,89 +1499,99 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Stop Early — graceful, keeps the job alive for Restart.
+  const stopEarlyBtn = document.getElementById("stopEarlyBtn");
+  if (stopEarlyBtn) {
+    stopEarlyBtn.addEventListener("click", async function() {
+      const jobId = document.getElementById("jobId").textContent;
+      if (!jobId || jobId === "-") {
+        alert("No active job to stop.");
+        return;
+      }
+      if (!confirm(
+        "Stop training early after the current epoch?\n\n" +
+        "The job stays alive and the inference server will come up on the " +
+        "partially-trained adapter. You can then click Restart Training to " +
+        "re-run with updated parameters."
+      )) {
+        return;
+      }
+      stopEarlyBtn.disabled = true;
+      const originalText = stopEarlyBtn.textContent;
+      stopEarlyBtn.textContent = "⏸ Stop requested...";
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/stop-early`, {
+          method: "POST"
+        });
+        const result = await response.json();
+        if (result.success) {
+          appendLog("\n=== STOP EARLY REQUESTED — exiting after current epoch ===\n");
+        } else {
+          alert(`Failed to request stop: ${result.error}`);
+          stopEarlyBtn.disabled = false;
+          stopEarlyBtn.textContent = originalText;
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+        stopEarlyBtn.disabled = false;
+        stopEarlyBtn.textContent = originalText;
+      }
+    });
+  }
+
   // (Inference server status is now detected via the regular status polling above)
 
-  // Restart modal event handlers
+  // Restart uses whatever's currently in the main training form as the source
+  // of truth — no separate modal. User edits the form to change params, hits
+  // Restart, confirms.
   const restartJobBtn = document.getElementById('restartJobBtn');
-  const useCurrentParamsCheck = document.getElementById('useCurrentParams');
-  const updateParamsSection = document.getElementById('updateParamsSection');
-  const confirmRestartBtn = document.getElementById('confirmRestartBtn');
-
   if (restartJobBtn) {
-    restartJobBtn.addEventListener('click', () => {
-      if (latestJobStatusData && latestJobStatusData.params) {
-        const params = latestJobStatusData.params;
-        if (params.lora_r !== undefined) document.getElementById('restartLoraRank').value = String(params.lora_r);
-        if (params.num_epochs !== undefined) document.getElementById('restartNumEpochs').value = String(params.num_epochs);
-        if (params.batch_size !== undefined) document.getElementById('restartBatchSize').value = String(params.batch_size);
-        if (params.learning_rate !== undefined) document.getElementById('restartLearningRate').value = String(params.learning_rate);
-        if (params.loss_type !== undefined) document.getElementById('restartLossType').value = String(params.loss_type);
-        if (params.distillation_lambda !== undefined) document.getElementById('restartDistillationLambda').value = String(params.distillation_lambda);
-        if (params.distillation_scope !== undefined) document.getElementById('restartDistillationScope').value = String(params.distillation_scope);
-        if (params.label_smoothing !== undefined) document.getElementById('restartLabelSmoothing').value = String(params.label_smoothing);
-        if (params.margin !== undefined) document.getElementById('restartMargin').value = String(params.margin);
-        if (params.balance_classes !== undefined) document.getElementById('restartBalanceClasses').checked = !!params.balance_classes;
+    restartJobBtn.addEventListener('click', async () => {
+      const lossType = document.getElementById('lossType').value;
+      const requestBody = {
+        lora_r: parseInt(document.getElementById('loraRank').value),
+        num_epochs: parseInt(document.getElementById('numEpochs').value),
+        batch_size: parseInt(document.getElementById('batchSize').value),
+        learning_rate: parseFloat(document.getElementById('learningRate').value),
+        loss_type: lossType,
+        distillation_lambda: parseFloat(document.getElementById('distillationLambda').value),
+        distillation_scope: document.getElementById('distillationScope').value,
+        balance_classes: document.getElementById('balanceClasses').checked,
+        label_smoothing: parseFloat(document.getElementById('labelSmoothing').value) || 0,
+      };
+      if (lossType === 'margin') {
+        const m = parseFloat(document.getElementById('marginValue').value);
+        if (Number.isFinite(m)) requestBody.margin = m;
       }
-      const modal = new bootstrap.Modal(document.getElementById('restartTrainingModal'));
-      modal.show();
-    });
-  }
 
-  if (useCurrentParamsCheck) {
-    useCurrentParamsCheck.addEventListener('change', (e) => {
-      updateParamsSection.style.display = e.target.checked ? 'none' : 'block';
-    });
-  }
+      // Build a short summary so user can sanity-check before confirming.
+      const summary =
+        `Restart training with current form values?\n\n` +
+        `  loss:           ${requestBody.loss_type}` +
+        (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
+        `  learning_rate:  ${requestBody.learning_rate}\n` +
+        `  lora_r:         ${requestBody.lora_r}\n` +
+        `  epochs:         ${requestBody.num_epochs}\n` +
+        `  batch_size:     ${requestBody.batch_size}\n` +
+        `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
+        `  label_smoothing:${requestBody.label_smoothing}\n` +
+        `  balance_classes:${requestBody.balance_classes}\n`;
+      if (!confirm(summary)) return;
 
-  if (confirmRestartBtn) {
-    confirmRestartBtn.addEventListener('click', async () => {
-      // Show loading state immediately
-      confirmRestartBtn.disabled = true;
-      const originalBtnText = confirmRestartBtn.textContent;
-      confirmRestartBtn.textContent = 'Syncing annotations & restarting...';
-
-      const useCurrentParams = document.getElementById('useCurrentParams').checked;
-
-      const requestBody = {};
-      if (latestJobStatusData && latestJobStatusData.params) {
-        const p = latestJobStatusData.params;
-        requestBody.lora_r = p.lora_r;
-        requestBody.num_epochs = p.num_epochs;
-        requestBody.batch_size = p.batch_size;
-        requestBody.learning_rate = p.learning_rate;
-        requestBody.loss_type = p.loss_type;
-        requestBody.label_smoothing = p.label_smoothing;
-        requestBody.distillation_lambda = p.distillation_lambda;
-        requestBody.distillation_scope = p.distillation_scope;
-        requestBody.margin = p.margin;
-        requestBody.balance_classes = p.balance_classes;
-        requestBody.mask_unannotated = p.mask_unannotated;
-      }
-      if (!useCurrentParams) {
-        requestBody.lora_r = parseInt(document.getElementById('restartLoraRank').value);
-        requestBody.num_epochs = parseInt(document.getElementById('restartNumEpochs').value);
-        requestBody.batch_size = parseInt(document.getElementById('restartBatchSize').value);
-        requestBody.learning_rate = parseFloat(document.getElementById('restartLearningRate').value);
-        requestBody.loss_type = document.getElementById('restartLossType').value;
-        requestBody.distillation_lambda = parseFloat(document.getElementById('restartDistillationLambda').value);
-        requestBody.distillation_scope = document.getElementById('restartDistillationScope').value;
-        requestBody.label_smoothing = parseFloat(document.getElementById('restartLabelSmoothing').value);
-        requestBody.margin = parseFloat(document.getElementById('restartMargin').value);
-        requestBody.balance_classes = document.getElementById('restartBalanceClasses').checked;
-      }
+      const originalBtnText = restartJobBtn.textContent;
+      restartJobBtn.disabled = true;
+      restartJobBtn.textContent = 'Restarting...';
 
       try {
         const jobId = document.getElementById('jobId').textContent;
         const response = await fetch(`/api/finetune/job/${jobId}/restart`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
+          body: JSON.stringify(requestBody),
         });
-
         const data = await response.json();
 
         if (data.success) {
-          // Same job/GPU - just reset the UI for new training
           document.getElementById('trainingLogs').value = '';
           appendLog('Restart request sent - training will restart on same GPU...\n');
           isServingReady = false;
@@ -1690,17 +1601,12 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById('inferenceServerStatus').style.display = 'none';
           resetLossPlot();
 
-          // Reset progress bar
           const progressBar = document.getElementById('trainingProgressBar');
           progressBar.style.width = '0%';
           progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
           progressBar.textContent = '0%';
 
-          // Hide restart button until next training completes
-          document.getElementById('restartJobBtn').style.display = 'none';
-
-          // Close modal
-          bootstrap.Modal.getInstance(document.getElementById('restartTrainingModal')).hide();
+          restartJobBtn.style.display = 'none';
         } else {
           alert('Failed to restart training: ' + data.error);
         }
@@ -1708,8 +1614,8 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error('Error restarting training:', error);
         alert('Failed to restart training');
       } finally {
-        confirmRestartBtn.disabled = false;
-        confirmRestartBtn.textContent = originalBtnText;
+        restartJobBtn.disabled = false;
+        restartJobBtn.textContent = originalBtnText;
       }
     });
   }
