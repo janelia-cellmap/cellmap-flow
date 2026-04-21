@@ -58,9 +58,11 @@ class DiceLoss(nn.Module):
         if self.apply_sigmoid:
             pred = torch.sigmoid(pred)
 
-        # Apply mask if provided
+        # Apply mask if provided. Mask may be (B, 1, ...) for a shared mask
+        # or (B, C, ...) for a per-channel mask (e.g. AffinityTargetTransform
+        # produces one mask per affinity offset).
         if mask is not None:
-            mask = mask.reshape(mask.size(0), 1, -1)  # (B, 1, N)
+            mask = mask.reshape(mask.size(0), mask.size(1), -1)  # (B, Cmask, N)
             pred = pred * mask
             target = target * mask
 
@@ -295,6 +297,21 @@ class LoRAFinetuner:
         if self.label_smoothing > 0:
             logger.info(f"Label smoothing: {self.label_smoothing} (targets: {self.label_smoothing/2:.3f} to {1-self.label_smoothing/2:.3f})")
         if self.distillation_lambda > 0:
+            # FX-interpreted models (torch.export UnflattenedModule, often
+            # wrapped in BatchLoopWrapper) keep every intermediate tensor
+            # alive in the FX env, so distillation's two passes can OOM
+            # even on H100/A100 80GB. We don't auto-disable here — request
+            # a larger node if needed; the OOM handler in train() will
+            # disable it as a last resort if memory actually runs out.
+            inner = getattr(self.model, "model", self.model)
+            base = getattr(inner, "model", inner)
+            if type(base).__name__ in ("UnflattenedModule",) or type(inner).__name__ == "BatchLoopWrapper":
+                logger.warning(
+                    "Distillation enabled with an FX-interpreted base model "
+                    "(UnflattenedModule). This requires substantial GPU memory; "
+                    "if you OOM, distillation will be disabled automatically as "
+                    "a fallback in the OOM handler."
+                )
             scope_str = "all voxels" if self.distillation_all_voxels else "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
@@ -448,8 +465,23 @@ class LoRAFinetuner:
                 epoch_loss = self._train_epoch()
             except torch.cuda.OutOfMemoryError:
                 torch.cuda.empty_cache()
-                if not self._halve_batch_size():
-                    log_message("ERROR: OOM even at batch_size=1. Cannot continue.")
+                # Try successive mitigations before giving up:
+                #   1) halve batch size
+                #   2) disable distillation (saves the teacher activations)
+                #   3) fail
+                mitigated = False
+                if self._halve_batch_size():
+                    log_message(f"OOM at epoch {epoch+1} — retrying with smaller batch size.")
+                    mitigated = True
+                elif self.distillation_lambda > 0:
+                    log_message(
+                        f"OOM at epoch {epoch+1} and batch already at 1 — "
+                        f"disabling distillation (was lambda={self.distillation_lambda}) and retrying."
+                    )
+                    self.distillation_lambda = 0
+                    mitigated = True
+                if not mitigated:
+                    log_message("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
                     return {
                         'final_loss': float('nan'),
                         'best_loss': self.best_loss,
@@ -458,9 +490,9 @@ class LoRAFinetuner:
                         'training_time': time.time() - start_time,
                         'diverged': True,
                     }
-                log_message(f"OOM at epoch {epoch+1} — retrying with smaller batch size.")
                 # Reset optimizer state (accumulated grads are stale after OOM)
                 self.optimizer.zero_grad(set_to_none=True)
+                torch.cuda.empty_cache()
                 epoch_loss = self._train_epoch()
 
             # Handle NaN/Inf loss
