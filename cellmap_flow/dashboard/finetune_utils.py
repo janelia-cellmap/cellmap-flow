@@ -591,7 +591,16 @@ def _sync_zarr_group_metadata(s3, src_path, dst_path):
 
     for key in src_group.array_keys():
         src_array = src_group[key]
-        if key not in dst_group:
+        if key in dst_group:
+            dst_array = dst_group[key]
+            shape_mismatch = (
+                tuple(dst_array.shape) != tuple(src_array.shape)
+                or tuple(dst_array.chunks) != tuple(src_array.chunks)
+                or dst_array.dtype != src_array.dtype
+            )
+        else:
+            shape_mismatch = True
+        if shape_mismatch:
             dst_group.create_dataset(
                 key,
                 shape=src_array.shape,

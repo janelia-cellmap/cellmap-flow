@@ -1428,9 +1428,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
           // Update progress bar to show serving state
           renderServingReadyProgress();
+
+          // Training loop has exited (either naturally or via stop-early) and
+          // inference is up — clear any lingering "Stop requested..." state.
+          resetStopEarlyButton();
         }
 
         // Handle terminal states
+        if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "COMPLETED") {
+          resetStopEarlyButton();
+        }
         if (data.status === "FAILED" || data.status === "CANCELLED") {
           clearInterval(statusPollingInterval);
           eventSource?.close();
@@ -1500,6 +1507,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Stop Early — graceful, keeps the job alive for Restart.
+  function resetStopEarlyButton() {
+    const btn = document.getElementById("stopEarlyBtn");
+    if (!btn) return;
+    btn.disabled = false;
+    btn.textContent = "⏸ Stop Early";
+  }
+
   const stopEarlyBtn = document.getElementById("stopEarlyBtn");
   if (stopEarlyBtn) {
     stopEarlyBtn.addEventListener("click", async function() {
@@ -1517,7 +1531,6 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
       stopEarlyBtn.disabled = true;
-      const originalText = stopEarlyBtn.textContent;
       stopEarlyBtn.textContent = "⏸ Stop requested...";
       try {
         const response = await fetch(`/api/finetune/job/${jobId}/stop-early`, {
@@ -1528,13 +1541,11 @@ document.addEventListener("DOMContentLoaded", function () {
           appendLog("\n=== STOP EARLY REQUESTED — exiting after current epoch ===\n");
         } else {
           alert(`Failed to request stop: ${result.error}`);
-          stopEarlyBtn.disabled = false;
-          stopEarlyBtn.textContent = originalText;
+          resetStopEarlyButton();
         }
       } catch (error) {
         alert(`Error: ${error.message}`);
-        stopEarlyBtn.disabled = false;
-        stopEarlyBtn.textContent = originalText;
+        resetStopEarlyButton();
       }
     });
   }
@@ -1599,6 +1610,7 @@ document.addEventListener("DOMContentLoaded", function () {
           liveEpochState = null;
           document.getElementById('jobProgress').textContent = 'Restarting training...';
           document.getElementById('inferenceServerStatus').style.display = 'none';
+          resetStopEarlyButton();
           resetLossPlot();
 
           const progressBar = document.getElementById('trainingProgressBar');

@@ -481,39 +481,45 @@ class LoRAFinetuner:
                 except Exception:
                     pass
                 break
-            try:
-                epoch_loss = self._train_epoch()
-            except torch.cuda.OutOfMemoryError:
-                torch.cuda.empty_cache()
-                # Try successive mitigations before giving up:
-                #   1) halve batch size
-                #   2) disable distillation (saves the teacher activations)
-                #   3) fail
-                mitigated = False
-                if self._halve_batch_size():
-                    log_message(f"OOM at epoch {epoch+1} — retrying with smaller batch size.")
-                    mitigated = True
-                elif self.distillation_lambda > 0:
-                    log_message(
-                        f"OOM at epoch {epoch+1} and batch already at 1 — "
-                        f"disabling distillation (was lambda={self.distillation_lambda}) and retrying."
-                    )
-                    self.distillation_lambda = 0
-                    mitigated = True
-                if not mitigated:
-                    log_message("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
-                    return {
-                        'final_loss': float('nan'),
-                        'best_loss': self.best_loss,
-                        'total_epochs': epoch,
-                        'total_steps': self.global_step,
-                        'training_time': time.time() - start_time,
-                        'diverged': True,
-                    }
-                # Reset optimizer state (accumulated grads are stale after OOM)
-                self.optimizer.zero_grad(set_to_none=True)
-                torch.cuda.empty_cache()
-                epoch_loss = self._train_epoch()
+            # Mitigation loop: keep applying mitigations (halve batch, then
+            # disable distillation) and retrying until the epoch succeeds or
+            # there's nothing left to try. A single try/except wasn't enough —
+            # users can restart with a much larger lora_r/batch_size combo and
+            # the second attempt also OOMs, so we need to iterate.
+            epoch_loss = None
+            while True:
+                try:
+                    epoch_loss = self._train_epoch()
+                    break
+                except torch.cuda.OutOfMemoryError:
+                    torch.cuda.empty_cache()
+                    mitigated = False
+                    if self._halve_batch_size():
+                        log_message(
+                            f"OOM at epoch {epoch+1} — retrying with smaller batch size "
+                            f"(now {self.dataloader.batch_size})."
+                        )
+                        mitigated = True
+                    elif self.distillation_lambda > 0:
+                        log_message(
+                            f"OOM at epoch {epoch+1} and batch already at 1 — "
+                            f"disabling distillation (was lambda={self.distillation_lambda}) and retrying."
+                        )
+                        self.distillation_lambda = 0
+                        mitigated = True
+                    if not mitigated:
+                        log_message("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
+                        return {
+                            'final_loss': float('nan'),
+                            'best_loss': self.best_loss,
+                            'total_epochs': epoch,
+                            'total_steps': self.global_step,
+                            'training_time': time.time() - start_time,
+                            'diverged': True,
+                        }
+                    # Reset optimizer state (accumulated grads are stale after OOM)
+                    self.optimizer.zero_grad(set_to_none=True)
+                    torch.cuda.empty_cache()
 
             # Handle NaN/Inf loss
             if not math.isfinite(epoch_loss):
