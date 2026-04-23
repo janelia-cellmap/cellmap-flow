@@ -104,14 +104,16 @@ Switch to the **Training** tab in the Finetune section.
 | Parameter | Description |
 |---|---|
 | **Checkpoint Path** | (Optional, Advanced) Override the base model checkpoint to finetune from. Leave empty to auto-detect from the model configuration or script. |
-| **LoRA Rank** | Controls the number of trainable parameters. Higher rank = more capacity but more memory. Typical values: 4 (low), 8 (default), 16 (high). |
-| **Number of Epochs** | How many passes over the training data. Typical range: 10–20. |
-| **Batch Size** | Number of samples per training step. Higher = faster but uses more GPU memory. |
-| **Learning Rate** | Step size for optimization. 1e-4 is a good starting point for LoRA. |
-| **Loss Function** | The training objective. **MSE** for standard regression. **Margin** is recommended for sparse annotations (auto-selected when sparse volumes are detected). |
-| **Distillation Weight** | Keeps the finetuned model close to the original model's predictions. 0.5 is a good default. Set to 0.0 to disable. |
+| **LoRA Rank** | Controls the number of trainable parameters. The current UI exposes `4`, `8`, `16`, and `64`. Higher rank = more capacity and more memory use. |
+| **Number of Epochs** | How many passes over the training data. The UI currently defaults to `20`. |
+| **Batch Size** | Number of samples per training step. The UI currently exposes `1`, `2`, `4`, `8`, `16`, and `32`. Higher = faster but uses more GPU memory. |
+| **Learning Rate** | Step size for optimization. The UI currently exposes values from `1e-7` through `1e-1`, with `1e-4` as the standard default. |
+| **Loss Function** | The training objective. The current UI exposes **Margin**, **MSE**, **BCE**, **Dice**, and **Combined (Dice + BCE)**. **Margin** is the default and is generally the best fit for sparse scribble-style annotations. |
+| **Margin** | Only used when **Loss Function** is set to **Margin**. Controls how strict the margin loss is; smaller values provide more learning signal, while larger values create a wider no-gradient band. |
+| **Distillation Weight** | Keeps the finetuned model close to the original model's predictions. The UI currently exposes `0`, `0.01`, `0.05`, `0.1`, `0.2`, `0.5`, `1.0`, `2.0`, `5.0`, and `10.0`, with `0.1` as the current default. Set to `0` to disable distillation. |
 | **Distillation Scope** | (Advanced) Where to apply distillation loss — **Unlabeled** (only on unannotated voxels) or **All** (everywhere). |
-| **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class has more annotations. |
+| **Label Smoothing** | Softens hard `0/1` targets. Useful when annotations are noisy; set to `0` if you want sharp targets. |
+| **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
 | **GPU Queue** | Which GPU queue to submit the training job to (e.g. H100, H200). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
 
