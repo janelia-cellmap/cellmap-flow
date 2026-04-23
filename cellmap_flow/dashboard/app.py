@@ -13,7 +13,7 @@ from cellmap_flow.dashboard.routes.models import models_bp
 from cellmap_flow.dashboard.routes.pipeline import pipeline_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
-from cellmap_flow.dashboard.routes.finetune_routes import finetune_bp
+from cellmap_flow.dashboard.routes.finetune import finetune_bp
 
 logger = logging.getLogger(__name__)
 

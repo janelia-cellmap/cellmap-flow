@@ -404,7 +404,7 @@ def _read_offsets_from_script(script_path):
     return None
 
 
-def main():
+def build_arg_parser():
     parser = argparse.ArgumentParser(
         description="Finetune CellMap-Flow models with LoRA using user corrections"
     )
@@ -414,8 +414,8 @@ def main():
         "--model-type",
         type=str,
         default="fly",
-        choices=["fly", "dacapo", "huggingface"],
-        help="Model type (fly, dacapo, or huggingface)"
+        choices=["fly", "dacapo", "huggingface", "script"],
+        help="Model type (fly, dacapo, huggingface, or script)"
     )
     parser.add_argument(
         "--model-checkpoint",
@@ -656,6 +656,12 @@ def main():
              "from the model script."
     )
 
+    return parser
+
+
+def main():
+    parser = build_arg_parser()
+
     args = parser.parse_args()
 
     # Print configuration
@@ -682,6 +688,8 @@ def main():
             script_path=args.model_script,
             name=args.model_name or "script_model"
         )
+    elif args.model_type == "script":
+        raise ValueError("For script models, --model-script is required")
     elif args.model_type == "fly":
         if not args.model_checkpoint:
             raise ValueError(

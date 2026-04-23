@@ -1032,7 +1032,7 @@ def periodic_sync_annotations():
             # the user sees where they've painted without clicking a button.
             if synced and synced > 0:
                 try:
-                    from cellmap_flow.dashboard.routes.finetune_routes import (
+                    from cellmap_flow.dashboard.routes.finetune import (
                         refresh_annotated_regions_layer,
                     )
                     refresh_annotated_regions_layer()
@@ -1049,5 +1049,4 @@ def start_periodic_sync():
         thread.start()
         minio_state["sync_thread"] = thread
         logger.info("Started periodic annotation sync thread")
-
 

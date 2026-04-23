@@ -8,12 +8,14 @@ This module provides:
 
 import json
 import logging
+import shlex
 import re
+import sys
 import threading
 import time
 import uuid
 import requests
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -197,6 +199,171 @@ class FinetuneJobManager:
             result["checkpoint_path"] = checkpoint
         return result
 
+    def _resolve_model_type(self, model_config) -> str:
+        """Infer the finetuning CLI model type from the model config."""
+        model_type = getattr(type(model_config), "cli_name", "fly")
+        if model_type == "fly" and "dacapo" in model_config.name.lower():
+            return "dacapo"
+        return model_type
+
+    def _normalize_metadata_list(self, value, default):
+        """Return model metadata as a plain list for CLI serialization."""
+        if value is None:
+            return list(default)
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return value
+        return list(value)
+
+    def _build_finetune_command(
+        self,
+        *,
+        model_config,
+        model_type: str,
+        checkpoint_path: Optional[Path],
+        corrections_path: Path,
+        output_dir: Path,
+        log_file: Path,
+        channels: List[str],
+        input_voxel_size: List[int],
+        output_voxel_size: List[int],
+        lora_r: int,
+        num_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        loss_type: str,
+        label_smoothing: float,
+        distillation_lambda: float,
+        distillation_scope: str,
+        margin: float,
+        auto_serve: bool,
+        serve_data_path: Optional[str],
+        mask_unannotated: bool,
+        balance_classes: bool,
+        output_type: str,
+        select_channel: Optional[int],
+        offsets: Optional[str],
+    ) -> str:
+        """Build the shell command used to launch finetuning."""
+        command_parts = [
+            sys.executable,
+            "-m",
+            "cellmap_flow.finetune.finetune_cli",
+            "--model-type", model_type,
+        ]
+
+        if model_type == "huggingface":
+            command_parts += ["--repo", str(model_config.repo)]
+            if getattr(model_config, "revision", None):
+                command_parts += ["--revision", str(model_config.revision)]
+        elif checkpoint_path:
+            command_parts += ["--model-checkpoint", str(checkpoint_path)]
+        elif hasattr(model_config, "script_path"):
+            command_parts += ["--model-script", str(model_config.script_path)]
+
+        command_parts += [
+            "--corrections", str(corrections_path),
+            "--output-dir", str(output_dir),
+            "--model-name", str(model_config.name),
+            "--channels", *map(str, channels),
+            "--input-voxel-size", *map(str, input_voxel_size),
+            "--output-voxel-size", *map(str, output_voxel_size),
+            "--lora-r", str(lora_r),
+            "--lora-alpha", str(lora_r * 2),
+            "--num-epochs", str(num_epochs),
+            "--batch-size", str(batch_size),
+            "--learning-rate", str(learning_rate),
+            "--loss-type", str(loss_type),
+        ]
+
+        if label_smoothing > 0:
+            command_parts += ["--label-smoothing", str(label_smoothing)]
+        if distillation_lambda > 0:
+            command_parts += ["--distillation-lambda", str(distillation_lambda)]
+            if distillation_scope == "all":
+                command_parts.append("--distillation-all-voxels")
+        if loss_type == "margin":
+            command_parts += ["--margin", str(margin)]
+        if auto_serve and serve_data_path:
+            command_parts += ["--auto-serve", "--serve-data-path", str(serve_data_path)]
+        if mask_unannotated:
+            command_parts.append("--mask-unannotated")
+        if balance_classes:
+            command_parts.append("--balance-classes")
+        if output_type != "binary":
+            command_parts += ["--output-type", str(output_type)]
+        if select_channel is not None:
+            command_parts += ["--select-channel", str(select_channel)]
+        if offsets is not None:
+            command_parts += ["--offsets", str(offsets)]
+
+        command = " ".join(shlex.quote(part) for part in command_parts)
+        return f"stdbuf -oL {command} 2>&1 | tee {shlex.quote(str(log_file))}"
+
+    def _build_submission_metadata(
+        self,
+        *,
+        model_config,
+        model_type: str,
+        checkpoint_path: Optional[Path],
+        corrections_path: Path,
+        num_corrections: int,
+        output_dir: Path,
+        lora_r: int,
+        num_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        loss_type: str,
+        label_smoothing: float,
+        distillation_lambda: float,
+        distillation_scope: str,
+        margin: float,
+        balance_classes: bool,
+        channels: List[str],
+        input_voxel_size: List[int],
+        output_voxel_size: List[int],
+        output_type: str,
+        queue: str,
+        charge_group: str,
+        command: str,
+    ) -> dict:
+        """Build metadata persisted for a submitted finetuning job."""
+        return {
+            "job_id": str(uuid.uuid4()),
+            "model_name": model_config.name,
+            "model_type": model_type,
+            "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
+            "model_script": str(model_config.script_path) if hasattr(model_config, "script_path") else None,
+            "repo": model_config.repo if model_type == "huggingface" else None,
+            "revision": getattr(model_config, "revision", None) if model_type == "huggingface" else None,
+            "corrections_path": str(corrections_path),
+            "num_corrections": num_corrections,
+            "output_dir": str(output_dir),
+            "params": {
+                "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
+                "lora_r": lora_r,
+                "lora_alpha": lora_r * 2,
+                "num_epochs": num_epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "loss_type": loss_type,
+                "label_smoothing": label_smoothing,
+                "distillation_lambda": distillation_lambda,
+                "distillation_scope": distillation_scope,
+                "margin": margin,
+                "balance_classes": balance_classes,
+                "channels": channels,
+                "input_voxel_size": input_voxel_size,
+                "output_voxel_size": output_voxel_size,
+                "output_type": output_type,
+            },
+            "queue": queue,
+            "charge_group": charge_group,
+            "created_at": datetime.now().isoformat(),
+            "command": command,
+        }
+
     def submit_finetuning_job(
         self,
         model_config,
@@ -311,9 +478,7 @@ class FinetuneJobManager:
         # === Build training command ===
 
         # Get model type from the config class's cli_name (e.g., "fly", "dacapo", "huggingface")
-        model_type = getattr(type(model_config), 'cli_name', 'fly')
-        if model_type == "fly" and "dacapo" in model_config.name.lower():
-            model_type = "dacapo"
+        model_type = self._resolve_model_type(model_config)
 
         # Get channels - try multiple attribute names
         channels = None
@@ -323,18 +488,14 @@ class FinetuneJobManager:
                 break
         if channels is None:
             channels = ["mito"]  # Default fallback
-        if isinstance(channels, str):
-            channels = [channels]
+        channels = self._normalize_metadata_list(channels, ["mito"])
 
         # Get voxel sizes
         input_voxel_size = self._get_model_metadata(model_config, "input_voxel_size", [16, 16, 16])
         output_voxel_size = self._get_model_metadata(model_config, "output_voxel_size", [16, 16, 16])
 
-        # Convert to list if needed (in case they're Coordinate objects)
-        if not isinstance(input_voxel_size, list):
-            input_voxel_size = list(input_voxel_size)
-        if not isinstance(output_voxel_size, list):
-            output_voxel_size = list(output_voxel_size)
+        input_voxel_size = self._normalize_metadata_list(input_voxel_size, [16, 16, 16])
+        output_voxel_size = self._normalize_metadata_list(output_voxel_size, [16, 16, 16])
 
         # Extract data path for inference server if auto-serve is enabled
         serve_data_path = None
@@ -347,109 +508,63 @@ class FinetuneJobManager:
                 self.logger.warning("Auto-serve will be disabled")
                 auto_serve = False
 
-        # Build CLI command
-        cli_command = f"python -m cellmap_flow.finetune.finetune_cli "
-        cli_command += f"--model-type {model_type} "
-
-        # Add model source depending on type
-        if model_type == "huggingface":
-            cli_command += f"--repo {model_config.repo} "
-            if getattr(model_config, 'revision', None):
-                cli_command += f"--revision {model_config.revision} "
-        elif checkpoint_path:
-            cli_command += f"--model-checkpoint {checkpoint_path} "
-        elif hasattr(model_config, 'script_path'):
-            cli_command += f"--model-script {model_config.script_path} "
-
-        cli_command += (
-            f"--corrections {corrections_path} "
-            f"--output-dir {output_dir} "
-            f"--model-name {model_config.name} "
-            f"--channels {' '.join(channels)} "
-            f"--input-voxel-size {' '.join(map(str, input_voxel_size))} "
-            f"--output-voxel-size {' '.join(map(str, output_voxel_size))} "
-            f"--lora-r {lora_r} "
-            f"--lora-alpha {lora_r * 2} "
-            f"--num-epochs {num_epochs} "
-            f"--batch-size {batch_size} "
-            f"--learning-rate {learning_rate} "
-            f"--loss-type {loss_type} "
+        cli_command = self._build_finetune_command(
+            model_config=model_config,
+            model_type=model_type,
+            checkpoint_path=checkpoint_path,
+            corrections_path=corrections_path,
+            output_dir=output_dir,
+            log_file=log_file,
+            channels=channels,
+            input_voxel_size=input_voxel_size,
+            output_voxel_size=output_voxel_size,
+            lora_r=lora_r,
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            loss_type=loss_type,
+            label_smoothing=label_smoothing,
+            distillation_lambda=distillation_lambda,
+            distillation_scope=distillation_scope,
+            margin=margin,
+            auto_serve=auto_serve,
+            serve_data_path=serve_data_path,
+            mask_unannotated=mask_unannotated,
+            balance_classes=balance_classes,
+            output_type=output_type,
+            select_channel=select_channel,
+            offsets=offsets,
         )
-
-        # Add label smoothing if specified
-        if label_smoothing > 0:
-            cli_command += f"--label-smoothing {label_smoothing} "
-
-        # Add distillation lambda if specified
-        if distillation_lambda > 0:
-            cli_command += f"--distillation-lambda {distillation_lambda} "
-            if distillation_scope == "all":
-                cli_command += "--distillation-all-voxels "
-
-        # Add margin if using margin loss
-        if loss_type == "margin":
-            cli_command += f"--margin {margin} "
-
-        # Add auto-serve flags if enabled
-        if auto_serve and serve_data_path:
-            cli_command += f"--auto-serve --serve-data-path {serve_data_path} "
-
-        # Add mask_unannotated flag for sparse annotations
-        if mask_unannotated:
-            cli_command += "--mask-unannotated "
-
-        # Add class balancing flag
-        if balance_classes:
-            cli_command += "--balance-classes "
-
-        # Add output type and related args
-        if output_type != "binary":
-            cli_command += f"--output-type {output_type} "
-        if select_channel is not None:
-            cli_command += f"--select-channel {select_channel} "
-        if offsets is not None:
-            cli_command += f"--offsets '{offsets}' "
-
-        cli_command = f"stdbuf -oL {cli_command} 2>&1 | tee {log_file}"
 
         self.logger.info(f"Training command: {cli_command}")
 
         # === Save job metadata ===
 
-        metadata = {
-            "job_id": str(uuid.uuid4()),
-            "model_name": model_config.name,
-            "model_type": model_type,
-            "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
-            "model_script": str(model_config.script_path) if hasattr(model_config, 'script_path') else None,
-            "repo": model_config.repo if model_type == "huggingface" else None,
-            "revision": getattr(model_config, 'revision', None) if model_type == "huggingface" else None,
-            "corrections_path": str(corrections_path),
-            "num_corrections": num_corrections,
-            "output_dir": str(output_dir),
-            "params": {
-                "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
-                "lora_r": lora_r,
-                "lora_alpha": lora_r * 2,
-                "num_epochs": num_epochs,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate,
-                "loss_type": loss_type,
-                "label_smoothing": label_smoothing,
-                "distillation_lambda": distillation_lambda,
-                "distillation_scope": distillation_scope,
-                "margin": margin,
-                "balance_classes": balance_classes,
-                "channels": channels,
-                "input_voxel_size": input_voxel_size,
-                "output_voxel_size": output_voxel_size,
-                "output_type": output_type,
-            },
-            "queue": queue,
-            "charge_group": charge_group,
-            "created_at": datetime.now().isoformat(),
-            "command": cli_command,
-        }
+        metadata = self._build_submission_metadata(
+            model_config=model_config,
+            model_type=model_type,
+            checkpoint_path=checkpoint_path,
+            corrections_path=corrections_path,
+            num_corrections=num_corrections,
+            output_dir=output_dir,
+            lora_r=lora_r,
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            loss_type=loss_type,
+            label_smoothing=label_smoothing,
+            distillation_lambda=distillation_lambda,
+            distillation_scope=distillation_scope,
+            margin=margin,
+            balance_classes=balance_classes,
+            channels=channels,
+            input_voxel_size=input_voxel_size,
+            output_voxel_size=output_voxel_size,
+            output_type=output_type,
+            queue=queue,
+            charge_group=charge_group,
+            command=cli_command,
+        )
 
         metadata_file = output_dir / "metadata.json"
         with open(metadata_file, "w") as f:
@@ -1051,7 +1166,8 @@ class FinetuneJobManager:
                     model_name=finetuned_model_name,
                     output_path=expected_yaml,
                     data_path=data_path,
-                    queue=finetune_job.params.get("queue", "gpu_h100"),
+                    queue=metadata.get("queue", "gpu_h100"),
+                    charge_group=metadata.get("charge_group", "cellmap"),
                     json_data=json_data,
                     scale=base_scale,
                 )
