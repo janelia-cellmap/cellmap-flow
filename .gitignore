@@ -1,6 +1,11 @@
+cellmap_flow/sam/
+corrections.zarr/
+corrections/
+ignore/
+tmp/
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
+*.py[cod]ho
 *$py.class
 
 # C extensions

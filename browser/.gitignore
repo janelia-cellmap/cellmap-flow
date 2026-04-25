@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.vite/
+# Generated assets (rebuild via scripts/export_demo_onnx.py and
+# scripts/render-dashboard.py). Tracked outputs would rot quickly.
+public/demo-model.onnx
+public/dashboard.html
+public/pipeline_builder.html

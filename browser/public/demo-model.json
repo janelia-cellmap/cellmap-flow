@@ -1,0 +1,15 @@
+{
+  "inputVoxelSize": [1, 1, 1],
+  "outputVoxelSize": [1, 1, 1],
+  "readShape": [16, 128, 128],
+  "writeShape": [16, 128, 128],
+  "inputDtype": "float32",
+  "outputDtype": "uint8",
+  "outputChannels": 1,
+  "blockShape": [16, 128, 128],
+  "tensorLayout": "BatchZ_NCHW",
+  "normalize": { "type": "identity" },
+  "postprocess": [
+    { "type": "scale", "factor": 255 }
+  ]
+}
