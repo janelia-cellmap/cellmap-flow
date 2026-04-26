@@ -213,20 +213,27 @@ def open_ds_tensorstore(
             "path": os.path.normpath(raw_path),
         }
         extra_args = {"scale_index": scale_index}
-    elif dataset_path.startswith("http://"):
-        path = dataset_path.split("http://")[1]
+    elif dataset_path.startswith("http://") or dataset_path.startswith("https://"):
+        # Split scheme://host from the rest so tensorstore's http driver gets
+        # a proper base_url (the previous version dropped the host into path,
+        # which then collapsed "https://host/..." down to "https:/host/...").
+        scheme = "https://" if dataset_path.startswith("https://") else "http://"
+        rest = dataset_path[len(scheme):]
+        host, _, p = rest.partition("/")
         kvstore = {
             "driver": "http",
-            "base_url": "http://",
-            "path": path,
+            "base_url": f"{scheme}{host}",
+            "path": "/" + p,
         }
     elif dataset_path.startswith("s3://"):
         kvstore = {
             "driver": "s3",
             "bucket": dataset_path.split("/")[2],
             "path": "/".join(dataset_path.split("/")[3:]),
+            # tensorstore's S3 driver expects a credential spec keyed by
+            # "type". The older "anonymous: True" form is rejected.
             "aws_credentials": {
-                "anonymous": True,
+                "type": "anonymous",
             },
         }
     elif dataset_path.startswith("gs://"):
