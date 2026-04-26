@@ -83,7 +83,10 @@ except Exception as e:  # noqa: BLE001
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 TEMPLATES = REPO / "cellmap_flow" / "dashboard" / "templates"
-OUT_DIR = HERE.parent / "public"
+# Render to the browser/ root so Vite picks them up as multi-page entries.
+# The script tags then resolve through Vite's pipeline (otherwise public/
+# files are served as-is and module imports break).
+OUT_DIR = HERE.parent
 
 
 def url_for(_endpoint: str, filename: str = "", **_kwargs: object) -> str:
@@ -105,6 +108,13 @@ def render(template_name: str, out_filename: str) -> None:
     env.globals["url_for"] = url_for
     template = env.get_template(template_name)
     html = template.render(**populate_context())
+
+    # Inject our browser-side shim that wires the dashboard's existing JS to
+    # our in-browser /vz/ pipeline. Placed just before </body> so it runs
+    # after the dashboard's inline scripts have bound their handlers.
+    shim = '<script type="module" src="/src/dashboard-shim.ts"></script>\n'
+    html = html.replace("</body>", f"  {shim}</body>", 1)
+
     out_path = OUT_DIR / out_filename
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html)

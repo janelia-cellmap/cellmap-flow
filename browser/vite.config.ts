@@ -138,5 +138,14 @@ export default defineConfig({
     exclude: ["onnxruntime-web"],
     include: ["neuroglancer"],
   },
-  plugins: [ortAssets()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(here, "index.html"),
+        dashboard: path.resolve(here, "dashboard.html"),
+        pipeline_builder: path.resolve(here, "pipeline_builder.html"),
+      },
+    },
+  },
+  plugins: [dashboardStatic(), ortAssets()],
 });

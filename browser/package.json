@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
+    "render-dashboard": "python ../browser/scripts/render-dashboard.py || python3 ../browser/scripts/render-dashboard.py",
+    "dev": "npm run render-dashboard && vite --host",
+    "build": "npm run render-dashboard && vite build",
     "preview": "vite preview --host",
-    "start": "vite build && vite preview --host"
+    "start": "npm run build && vite preview --host"
   },
   "dependencies": {
     "neuroglancer": "^2.41.2",

@@ -1,6 +1,6 @@
 import { openArray, readSubvolume3D, toFloat32 } from "./zarr-client";
 import type { ZarrArray } from "./zarr-client";
-import { createSession, runModel } from "./onnx-session";
+import { createSession, runModel, type ProgressCallback } from "./onnx-session";
 import type * as ort from "onnxruntime-web/webgpu";
 import {
   type ModelSpec,
@@ -36,8 +36,11 @@ interface ActiveState {
 
 let state: ActiveState | null = null;
 
-export async function activate(cfg: VzConfig): Promise<ActiveState> {
-  const raw = await openArray(cfg.zarrUrl);
+export async function activate(
+  cfg: VzConfig,
+  onModelDownload?: ProgressCallback,
+): Promise<ActiveState> {
+  const raw = await openArray(cfg.zarrUrl, cfg.spec.inputVoxelSize);
   if (raw.shape.length < 3) throw new Error(`need ndim >= 3, got ${raw.shape.length}`);
 
   // Volume in INPUT voxels = last 3 dims of source zarr.
@@ -53,7 +56,7 @@ export async function activate(cfg: VzConfig): Promise<ActiveState> {
     Math.floor((inVoxels[2] * ivs[2]) / ovs[2]),
   ];
 
-  const { session } = await createSession(cfg.modelUrl);
+  const { session } = await createSession(cfg.modelUrl, onModelDownload);
   state = { cfg, raw, session, outShape };
   return state;
 }

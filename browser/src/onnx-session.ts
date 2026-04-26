@@ -21,13 +21,50 @@ function loadOrt(): Promise<typeof ortNS> {
   return ortPromise;
 }
 
-export async function createSession(
-  url: string,
-): Promise<{ session: ortNS.InferenceSession; info: SessionInfo }> {
-  const ort = await loadOrt();
+export type ProgressCallback = (loaded: number, total: number | undefined) => void;
+
+async function fetchWithProgress(url: string, onProgress?: ProgressCallback): Promise<Uint8Array> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`failed to fetch model (${resp.status}) at ${url}`);
-  const bytes = new Uint8Array(await resp.arrayBuffer());
+  const totalHeader = resp.headers.get("content-length");
+  const total = totalHeader ? parseInt(totalHeader, 10) : undefined;
+  if (!resp.body) {
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    onProgress?.(buf.byteLength, total);
+    return buf;
+  }
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  let lastReport = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    // Throttle progress callbacks to ~10/sec so we don't thrash the DOM.
+    const now = performance.now();
+    if (now - lastReport > 100) {
+      onProgress?.(loaded, total);
+      lastReport = now;
+    }
+  }
+  onProgress?.(loaded, total);
+  const out = new Uint8Array(loaded);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+export async function createSession(
+  url: string,
+  onProgress?: ProgressCallback,
+): Promise<{ session: ortNS.InferenceSession; info: SessionInfo }> {
+  const ort = await loadOrt();
+  const bytes = await fetchWithProgress(url, onProgress);
 
   let session: ortNS.InferenceSession;
   let provider = "webgpu";

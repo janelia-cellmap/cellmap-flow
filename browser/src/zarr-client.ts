@@ -9,11 +9,98 @@ export interface ArraySummary {
 
 export type ZarrArray = zarr.Array<zarr.DataType, zarr.FetchStore>;
 
-export async function openArray(url: string): Promise<ZarrArray> {
-  const u = new URL(url);
+export function normalizeZarrUrl(input: string): string {
+  let url = input.trim();
+  // Strip Neuroglancer-style protocol prefixes (zarr://, n5://, precomputed://).
+  url = url.replace(/^(zarr|zarr2|zarr3|n5|precomputed):\/\//, "");
+  // Translate cloud-bucket schemes to HTTPS so the browser fetch can use them.
+  if (url.startsWith("s3://")) {
+    const rest = url.slice(5);
+    const i = rest.indexOf("/");
+    const bucket = i === -1 ? rest : rest.slice(0, i);
+    const key = i === -1 ? "" : rest.slice(i);
+    return `https://${bucket}.s3.amazonaws.com${key}`;
+  }
+  if (url.startsWith("gs://")) {
+    const rest = url.slice(5);
+    const i = rest.indexOf("/");
+    const bucket = i === -1 ? rest : rest.slice(0, i);
+    const key = i === -1 ? "" : rest.slice(i);
+    return `https://storage.googleapis.com/${bucket}${key}`;
+  }
+  return url;
+}
+
+export async function openArray(
+  url: string,
+  preferredVoxelSize?: [number, number, number],
+): Promise<ZarrArray> {
+  const u = new URL(normalizeZarrUrl(url));
   const base = `${u.origin}${u.pathname.replace(/\/$/, "")}`;
   const store = new zarr.FetchStore(base);
-  return zarr.open(store, { kind: "array" }) as Promise<ZarrArray>;
+
+  // Try opening as an array first.
+  try {
+    return (await zarr.open(store, { kind: "array" })) as ZarrArray;
+  } catch (arrErr) {
+    // Fall back: maybe it's an OME-Zarr group; follow multiscales and pick
+    // the level whose voxel size best matches preferredVoxelSize (or the
+    // first level if none is preferred).
+    try {
+      const zattrsResp = await fetch(`${base}/.zattrs`);
+      if (!zattrsResp.ok) throw arrErr;
+      const attrs = (await zattrsResp.json()) as {
+        multiscales?: {
+          datasets?: {
+            path?: string;
+            coordinateTransformations?: { type: string; scale?: number[] }[];
+          }[];
+        }[];
+      };
+      const datasets = attrs.multiscales?.[0]?.datasets ?? [];
+      if (datasets.length === 0) throw arrErr;
+
+      const chosen = pickBestMultiscale(datasets, preferredVoxelSize);
+      const subUrl = `${base.replace(/\/$/, "")}/${chosen.path}`;
+      const subStore = new zarr.FetchStore(subUrl);
+      return (await zarr.open(subStore, { kind: "array" })) as ZarrArray;
+    } catch {
+      throw new Error(
+        `not a zarr array at ${base}. ` +
+          `If this is an OME-Zarr group, append a scale path like '/s0'. ` +
+          `Underlying error: ${(arrErr as Error).message}`,
+      );
+    }
+  }
+}
+
+interface MultiscaleDataset {
+  path?: string;
+  coordinateTransformations?: { type: string; scale?: number[] }[];
+}
+
+function pickBestMultiscale(
+  datasets: MultiscaleDataset[],
+  preferred?: [number, number, number],
+): { path: string; scale: number[] | undefined } {
+  const usable = datasets.filter((d) => d.path);
+  if (!preferred) {
+    const d = usable[0];
+    return { path: d.path!, scale: d.coordinateTransformations?.find((t) => t.type === "scale")?.scale };
+  }
+  // For each dataset, derive its voxel-scale (last 3 elements). Pick the one
+  // closest to `preferred` in log-space.
+  let best = usable[0];
+  let bestErr = Infinity;
+  for (const d of usable) {
+    const scale = d.coordinateTransformations?.find((t) => t.type === "scale")?.scale;
+    if (!scale) continue;
+    const xyz = scale.slice(-3);
+    const err = preferred.reduce((acc, p, i) => acc + Math.abs(Math.log2(xyz[i] / p)), 0);
+    if (err < bestErr) { bestErr = err; best = d; }
+  }
+  const bestScale = best.coordinateTransformations?.find((t) => t.type === "scale")?.scale;
+  return { path: best.path!, scale: bestScale };
 }
 
 export function summarize(arr: ZarrArray): ArraySummary {
