@@ -8,8 +8,8 @@
   "outputChannels": 1,
   "blockShape": [16, 128, 128],
   "tensorLayout": "BatchZ_NCHW",
-  "normalize": { "type": "identity" },
+  "normalize": [],
   "postprocess": [
-    { "type": "scale", "factor": 255 }
+    { "name": "DefaultPostprocessor", "clip_min": 0, "clip_max": 1, "bias": 0, "multiplier": 255 }
   ]
 }

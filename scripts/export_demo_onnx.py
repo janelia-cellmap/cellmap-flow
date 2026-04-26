@@ -71,8 +71,16 @@ def main() -> None:
         "outputChannels": 1,
         "blockShape": [16, 128, 128],
         "tensorLayout": "BatchZ_NCHW",
-        "normalize": {"type": "identity"},
-        "postprocess": [{"type": "scale", "factor": 255}],
+        "normalize": [],
+        "postprocess": [
+            {
+                "name": "DefaultPostprocessor",
+                "clip_min": 0,
+                "clip_max": 1,
+                "bias": 0,
+                "multiplier": 255,
+            }
+        ],
     }
     spec_path = out.with_suffix(".json")
     spec_path.write_text(json.dumps(spec, indent=2))

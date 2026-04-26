@@ -68,11 +68,11 @@ function specFromHfMetadata(m: HfMetadata): ModelSpec {
   const ivs = m.input_voxel_size ?? [1, 1, 1];
   const ovs = m.output_voxel_size ?? ivs;
 
-  // Prefer the smaller `input_shape`/`output_shape` (training tile) over
-  // `inference_input_shape`/`inference_output_shape` so chunks stay in a
-  // browser-tractable size. cellmap models with dynamic axes accept both.
-  const inVox = m.input_shape ?? m.inference_input_shape ?? [128, 128, 128];
-  const outVox = m.output_shape ?? m.inference_output_shape ?? [64, 64, 64];
+  // ONNX exports use the inference tile (the model is shape-fixed unless
+  // exported with dynamic axes), so prefer inference_* over training shapes.
+  // Fall back to training shape only if inference_* isn't in the metadata.
+  const inVox = m.inference_input_shape ?? m.input_shape ?? [128, 128, 128];
+  const outVox = m.inference_output_shape ?? m.output_shape ?? [64, 64, 64];
 
   const tensorLayout: TensorLayout = (m.spatial_dims ?? 3) === 3 ? "NCDHW" : "BatchZ_NCHW";
 
@@ -86,12 +86,14 @@ function specFromHfMetadata(m: HfMetadata): ModelSpec {
     outputChannels: m.out_channels ?? 1,
     blockShape: outVox,
     tensorLayout,
-    // Common cellmap convention: divide raw uint8 by 255.
-    normalize: { type: "scale_offset", scale: 1 / 255, offset: 0 },
-    // Clip + scale to uint8 (model output is typically [0, 1]).
+    // Common cellmap convention: rescale raw uint8 [0,255] -> [0,1].
+    normalize: [
+      { name: "MinMaxNormalizer", min_value: 0, max_value: 255 },
+    ],
+    // Standard output mapping: clip [-1, 1], shift to [0, 2], multiply by 127.5
+    // -> uint8 [0, 255]. (cellmap-flow's DefaultPostprocessor defaults.)
     postprocess: [
-      { type: "clip", min: 0, max: 1 },
-      { type: "scale", factor: 255 },
+      { name: "DefaultPostprocessor" },
     ],
   };
 }

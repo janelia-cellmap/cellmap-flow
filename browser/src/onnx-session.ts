@@ -15,6 +15,10 @@ function loadOrt(): Promise<typeof ortNS> {
     ortPromise = import("onnxruntime-web/webgpu").then((m) => {
       m.env.wasm.wasmPaths = "/ort/";
       m.env.wasm.numThreads = 1;
+      // Verbose so the WebGPU EP prints node-by-node assignment decisions.
+      // Surfaces "node X falls back to CPU because <reason>" — exactly what
+      // we need to know when Conv3d gets refused.
+      m.env.logLevel = "verbose";
       return m;
     });
   }
@@ -66,14 +70,40 @@ export async function createSession(
   const ort = await loadOrt();
   const bytes = await fetchWithProgress(url, onProgress);
 
+  // WebGPU is required for 3D models (the WASM backend doesn't implement
+  // Conv3d). We try WebGPU first; if it fails we surface the actual error
+  // and do NOT silently fall back to WASM — silent fallback was hiding
+  // the root cause and producing useless "Only Conv1d/Conv2d supported"
+  // errors at runtime. Pass `?wasm` in the URL to force WASM (only useful
+  // for 2D models).
   let session: ortNS.InferenceSession;
   let provider = "webgpu";
+  const allowWasm = url.includes("?wasm") || url.includes("&wasm");
+
+  if (typeof navigator !== "undefined" && !(navigator as Navigator & { gpu?: object }).gpu) {
+    console.warn(
+      "[ort] navigator.gpu is undefined — your browser does not expose WebGPU. " +
+        "3D UNet models will not run. Use a recent Chrome (>= 113) on a desktop GPU.",
+    );
+  }
+
   try {
     session = await ort.InferenceSession.create(bytes, {
       executionProviders: ["webgpu"],
+      logSeverityLevel: 0, // 0 = verbose
+      logVerbosityLevel: 1,
     });
   } catch (e) {
-    console.warn("webgpu unavailable, falling back to wasm:", e);
+    const ge = e as Error;
+    console.error("[ort] WebGPU session.create failed:", ge.message);
+    if (!allowWasm) {
+      throw new Error(
+        `WebGPU unavailable for this model. ` +
+          `Underlying error: ${ge.message}. ` +
+          `If you're sure the model is 2D-only, append "?wasm" to the model URL to force the WASM backend.`,
+      );
+    }
+    console.warn("[ort] explicit ?wasm — falling back to WASM backend (no Conv3d support).");
     provider = "wasm";
     session = await ort.InferenceSession.create(bytes, {
       executionProviders: ["wasm"],

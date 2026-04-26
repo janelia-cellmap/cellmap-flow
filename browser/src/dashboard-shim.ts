@@ -20,7 +20,50 @@ interceptApiFetches();
 document.addEventListener("DOMContentLoaded", () => {
   rewireConnectPanel();
   wireHfAccordion();
+  restoreLastInputs();
+  maybeAutoResumeAfterReload();
 });
+
+const LS_KEY = "cmf-dashboard-state";
+
+interface PersistedState {
+  zarrUrl: string;
+  hfRepo: string;
+  resumePending?: boolean; // true if a Connect click triggered the SW reload
+}
+
+function readLs(): PersistedState {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}");
+  } catch {
+    return { zarrUrl: "", hfRepo: "" };
+  }
+}
+
+function writeLs(s: PersistedState): void {
+  localStorage.setItem(LS_KEY, JSON.stringify(s));
+}
+
+function restoreLastInputs(): void {
+  const s = readLs();
+  const zarr = document.getElementById("datasetPathInput") as HTMLInputElement | null;
+  const hf = document.getElementById("hfRepoInput") as HTMLInputElement | null;
+  if (zarr && s.zarrUrl) zarr.value = s.zarrUrl;
+  if (hf && s.hfRepo) hf.value = s.hfRepo;
+}
+
+function maybeAutoResumeAfterReload(): void {
+  const s = readLs();
+  if (!s.resumePending) return;
+  // Clear the flag so we don't loop on every load.
+  writeLs({ ...s, resumePending: false });
+  // Only auto-activate if the SW is now controlling the page.
+  if (!navigator.serviceWorker?.controller) return;
+  const btn = document.getElementById("setDataBtn") as HTMLButtonElement | null;
+  if (btn) {
+    setTimeout(() => btn.click(), 50);
+  }
+}
 
 // Patch window.fetch so the dashboard's existing /api/* calls hit our
 // in-browser handlers instead of the missing Flask backend. Today this only
@@ -115,6 +158,9 @@ function rewireConnectPanel(): void {
       status.textContent = "Please enter a zarr URL.";
       return;
     }
+    // Persist inputs + flag a pending resume in case the SW first-install
+    // reload kicks in. After the reload, we auto-click this button.
+    writeLs({ zarrUrl, hfRepo, resumePending: true });
     clone.disabled = true;
     clone.textContent = "Activating...";
     status.style.color = "var(--text-muted)";
@@ -153,6 +199,8 @@ function rewireConnectPanel(): void {
       status.textContent = "mounting Neuroglancer ...";
       mountNgIntoDashboard(st, spec, sourceZarrUrl);
 
+      // Activation succeeded; clear the resume flag so reloads start fresh.
+      writeLs({ zarrUrl, hfRepo, resumePending: false });
       status.style.color = "#4ade80";
       status.textContent = `Active. vol=${st.outShape.join("x")} (vox ${spec.outputVoxelSize.join(",")} nm) channels=${spec.outputChannels}`;
     } catch (err) {
@@ -175,26 +223,25 @@ function mountNgIntoDashboard(st: VzState, spec: ModelSpec, sourceZarrUrl: strin
 
   const NM = 1e-9;
   const ovs = spec.outputVoxelSize;
-  const extent: [number, number, number] = [
-    st.outShape[0] * ovs[0],
-    st.outShape[1] * ovs[1],
-    st.outShape[2] * ovs[2],
-  ];
 
-  // Translate the user-typed source URL into something NG's zarr datasource
-  // can read directly (it understands s3:// natively, but the user may have
-  // pasted https or zarr://). For raw layer NG fetches the source zarr
-  // independently of our /vz/ pipeline, so we bypass the SW.
   const rawSource = normalizeForNg(sourceZarrUrl);
 
+  // NG auto-promotes the output-dim scale to match the source's voxel size,
+  // so we declare dims at `ovs` (in meters) and express position + scales
+  // in OUTPUT VOXELS — that way 1 NG unit == 1 voxel and our numbers don't
+  // get reinterpreted under us.
   mountNg({
-    dimensions: { x: [NM, "m"], y: [NM, "m"], z: [NM, "m"] },
-    position: [extent[2] / 2, extent[1] / 2, extent[0] / 2],
-    crossSectionScale: NM * Math.max(...ovs),
-    projectionScale: Math.max(...extent) * NM * 2,
+    dimensions: {
+      z: [ovs[0] * NM, "m"],
+      y: [ovs[1] * NM, "m"],
+      x: [ovs[2] * NM, "m"],
+    },
+    position: [st.outShape[0] / 2, st.outShape[1] / 2, st.outShape[2] / 2],
+    crossSectionScale: 1, // 1 voxel per pixel at center
+    projectionScale: Math.max(...st.outShape) * 2,
     layers: [
-      { type: "image", source: rawSource, name: "raw" },
-      { type: "image", source: `zarr://${location.origin}/vz/`, name: "inference" },
+      { type: "image", source: rawSource, name: "raw", visible: true },
+      { type: "image", source: `zarr://${location.origin}/vz/`, name: "inference", visible: true },
     ],
     selectedLayer: { visible: true, layer: "inference" },
     layout: "4panel",

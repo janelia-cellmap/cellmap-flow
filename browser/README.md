@@ -58,21 +58,26 @@ in **world units** (e.g. nanometers).
   "blockShape":      [68, 68, 68],       // chunk shape in OUTPUT voxels (z,y,x)
   "tensorLayout":    "NCDHW",            // or "NDHWC" or "BatchZ_NCHW"
 
-  "normalize": { "type": "scale_offset", "scale": 0.00392156862745, "offset": 0 },
-  // alternatives:
-  //   { "type": "identity" }
-  //   { "type": "mean_std", "mean": 128, "std": 64 }
-  //   { "type": "minmax", "min": 0, "max": 65535 }
-
+  // Pipeline: each entry is a cellmap-flow class name + its constructor
+  // kwargs. Same shape as cellmap-flow's `to_dict()` output, so a pipeline
+  // exported from the Python pipeline builder loads as-is.
+  "normalize": [
+    { "name": "MinMaxNormalizer", "min_value": 0, "max_value": 255 }
+  ],
   "postprocess": [
-    { "type": "clip", "min": 0, "max": 1 },
-    { "type": "scale", "factor": 255 }
-    // also: { "type": "offset", "value": 5 }
-    //       { "type": "channel", "index": 0 }
-    //       { "type": "threshold", "value": 0.5, "below": 0, "above": 1 }
+    { "name": "DefaultPostprocessor", "clip_min": -1, "clip_max": 1, "bias": 1, "multiplier": 127.5 }
   ]
 }
 ```
+
+Supported normalizers (browser ports of `cellmap_flow/norm/input_normalize.py`):
+`MinMaxNormalizer`, `ZScoreNormalizer`. Python-only (won't run in browser):
+`Dilate`, `EuclideanDistance`, `LambdaNormalizer`.
+
+Supported postprocessors (browser ports of `cellmap_flow/post/postprocessors.py`):
+`DefaultPostprocessor`, `ThresholdPostprocessor`, `ChannelSelection`. Python-only:
+`LabelPostprocessor`, `MortonSegmentationRelabeling`, `AffinityPostprocessor`,
+`SimpleBlockwiseMerger`, `LambdaPostprocessor`.
 
 ### Translating a Python `model_spec.py`
 

@@ -18,18 +18,17 @@ export type DType = "uint8" | "uint16" | "int16" | "float32";
 //   "BatchZ_NCHW"  -> (Dz, Cin, Dy, Dx)    — Z-as-batch, for 2D models
 export type TensorLayout = "NCDHW" | "NDHWC" | "BatchZ_NCHW";
 
-export type NormSpec =
-  | { type: "identity" }
-  | { type: "scale_offset"; scale: number; offset: number }   // (x*scale)+offset
-  | { type: "mean_std"; mean: number; std: number }            // (x - mean) / std
-  | { type: "minmax"; min: number; max: number };              // (x - min) / (max - min)
-
-export type PostSpec =
-  | { type: "clip"; min: number; max: number }
-  | { type: "scale"; factor: number }                  // y *= factor
-  | { type: "offset"; value: number }                  // y += value
-  | { type: "channel"; index: number }                 // pick one channel
-  | { type: "threshold"; value: number; below?: number; above?: number };
+// cellmap-flow class-name-based pipeline. Mirrors cellmap_flow's
+// `to_dict()` output so a spec exported from the Python pipeline builder
+// works as-is here. See browser/src/cellmap-pipeline.ts for ports.
+export type { NormSpec, PostSpec, PostContext } from "./cellmap-pipeline";
+import {
+  type NormSpec,
+  type PostSpec,
+  type PostContext,
+  makeNormalizer,
+  makePostprocessor,
+} from "./cellmap-pipeline";
 
 export interface ModelSpec {
   // Geometry — all shapes are in WORLD UNITS (e.g. nanometers).
@@ -47,8 +46,10 @@ export interface ModelSpec {
   // Tensor layout
   tensorLayout: TensorLayout;
 
-  // Pipeline ops (applied in order to the input -> tensor -> output stream)
-  normalize?: NormSpec;
+  // Pipeline ops, declared by cellmap-flow class name + kwargs.
+  // `normalize` runs in order on the float input volume before the model.
+  // `postprocess` runs in order on the float (C, Dz, Dy, Dx) output.
+  normalize?: NormSpec[];
   postprocess?: PostSpec[];
 }
 
@@ -64,8 +65,12 @@ export const DEMO_SPEC: ModelSpec = {
   outputChannels: 1,
   blockShape: [16, 128, 128],
   tensorLayout: "BatchZ_NCHW",
-  normalize: { type: "identity" },             // demo model does /255 itself
-  postprocess: [{ type: "scale", factor: 255 }],
+  // Demo model bakes /255 into its own forward; output sigmoid is in [0,1].
+  // Map to uint8 with bias=0, multiplier=255 (no clip needed).
+  normalize: [],
+  postprocess: [
+    { name: "DefaultPostprocessor", clip_min: 0, clip_max: 1, bias: 0, multiplier: 255 },
+  ],
 };
 
 export async function loadSpec(url: string): Promise<ModelSpec> {
@@ -111,7 +116,7 @@ function validateSpec(raw: Partial<ModelSpec>): ModelSpec {
     outputChannels: raw.outputChannels!,
     blockShape: raw.blockShape!,
     tensorLayout: raw.tensorLayout!,
-    normalize: raw.normalize ?? { type: "identity" },
+    normalize: raw.normalize ?? [],
     postprocess: raw.postprocess ?? [],
   };
 }
@@ -125,59 +130,32 @@ export function context(spec: ModelSpec): Triple {
   ];
 }
 
-// Apply the normalize op in-place on a Float32Array.
-export function applyNormalize(buf: Float32Array, n: NormSpec | undefined): Float32Array {
-  if (!n || n.type === "identity") return buf;
-  if (n.type === "scale_offset") {
-    for (let i = 0; i < buf.length; i++) buf[i] = buf[i] * n.scale + n.offset;
-    return buf;
+// Apply normalize ops in order. Each instance comes from cellmap-pipeline's
+// registry by class name (cellmap-flow's InputNormalizer subclasses).
+export function applyNormalize(buf: Float32Array, ops: NormSpec[] | undefined): Float32Array {
+  if (!ops || ops.length === 0) return buf;
+  let cur = buf;
+  for (const spec of ops) {
+    cur = makeNormalizer(spec).process(cur);
   }
-  if (n.type === "mean_std") {
-    const inv = 1 / (n.std || 1);
-    for (let i = 0; i < buf.length; i++) buf[i] = (buf[i] - n.mean) * inv;
-    return buf;
-  }
-  if (n.type === "minmax") {
-    const range = n.max - n.min || 1;
-    for (let i = 0; i < buf.length; i++) buf[i] = (buf[i] - n.min) / range;
-    return buf;
-  }
-  return buf;
+  return cur;
 }
 
 // Apply postprocess ops in order. `data` is (C, Dz, Dy, Dx) flattened C-major.
-// Returns possibly a new buffer + new channel count (channel-select reduces C).
+// Each instance comes from cellmap-pipeline's PostProcessor registry by name.
 export function applyPostprocess(
   data: Float32Array,
   channels: number,
   spatial: number,
   ops: PostSpec[],
+  ctx: PostContext,
 ): { data: Float32Array; channels: number } {
   let cur = data;
   let curC = channels;
-  for (const op of ops) {
-    if (op.type === "clip") {
-      for (let i = 0; i < cur.length; i++) {
-        const v = cur[i];
-        cur[i] = v < op.min ? op.min : v > op.max ? op.max : v;
-      }
-    } else if (op.type === "scale") {
-      for (let i = 0; i < cur.length; i++) cur[i] *= op.factor;
-    } else if (op.type === "offset") {
-      for (let i = 0; i < cur.length; i++) cur[i] += op.value;
-    } else if (op.type === "threshold") {
-      const below = op.below ?? 0;
-      const above = op.above ?? 1;
-      for (let i = 0; i < cur.length; i++) cur[i] = cur[i] > op.value ? above : below;
-    } else if (op.type === "channel") {
-      if (op.index < 0 || op.index >= curC) {
-        throw new Error(`channel ${op.index} out of range [0, ${curC})`);
-      }
-      const out = new Float32Array(spatial);
-      out.set(cur.subarray(op.index * spatial, (op.index + 1) * spatial));
-      cur = out;
-      curC = 1;
-    }
+  for (const spec of ops) {
+    const r = makePostprocessor(spec).process(cur, curC, spatial, ctx);
+    cur = r.data;
+    curC = r.channels;
   }
   return { data: cur, channels: curC };
 }

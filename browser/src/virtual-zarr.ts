@@ -70,22 +70,27 @@ export async function handleRequest(path: string): Promise<VzResponse> {
   // OME-Zarr v0.4 layout: /vz/ is the group, /vz/0/ is the array.
   if (path === "" || path === ".zgroup") return jsonResp({ zarr_format: 2 });
   if (path === ".zattrs") {
+    const multichannel = spec.outputChannels > 1;
+    const axes = [
+      { name: "z", type: "space", unit: "nanometer" },
+      { name: "y", type: "space", unit: "nanometer" },
+      { name: "x", type: "space", unit: "nanometer" },
+    ];
+    const scale = [spec.outputVoxelSize[0], spec.outputVoxelSize[1], spec.outputVoxelSize[2]];
+    if (multichannel) {
+      axes.push({ name: "c", type: "channel", unit: "" });
+      scale.push(1);
+    }
     return jsonResp({
       multiscales: [
         {
           version: "0.4",
           name: "inference",
-          axes: [
-            { name: "z", type: "space", unit: "nanometer" },
-            { name: "y", type: "space", unit: "nanometer" },
-            { name: "x", type: "space", unit: "nanometer" },
-          ],
+          axes,
           datasets: [
             {
               path: "0",
-              coordinateTransformations: [
-                { type: "scale", scale: [spec.outputVoxelSize[0], spec.outputVoxelSize[1], spec.outputVoxelSize[2]] },
-              ],
+              coordinateTransformations: [{ type: "scale", scale }],
             },
           ],
         },
@@ -121,7 +126,7 @@ export async function handleRequest(path: string): Promise<VzResponse> {
   // First three coords are spatial; if 4D path, last must be 0 (single chunk in C).
   if (coords.length === 4 && coords[3] !== 0) return text(404, "channel chunk index must be 0");
 
-  const bytes = await computeChunk([coords[0], coords[1], coords[2]]);
+  const bytes = await withChunkSlot(() => computeChunk([coords[0], coords[1], coords[2]]));
   return {
     status: 200,
     headers: {
@@ -130,6 +135,29 @@ export async function handleRequest(path: string): Promise<VzResponse> {
     },
     body: bytes,
   };
+}
+
+// Cap concurrent chunk computations. Each computeChunk fans out into many
+// S3 reads from zarrita, plus a serialized ORT run; with NG firing off
+// dozens of chunk requests in parallel we exhaust Chrome's HTTP socket
+// pool (ERR_INSUFFICIENT_RESOURCES). N=2 keeps S3 reads in flight enough
+// to hide latency without saturating.
+const MAX_CONCURRENT_CHUNKS = 2;
+let inFlight = 0;
+const waiters: (() => void)[] = [];
+
+async function withChunkSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (inFlight >= MAX_CONCURRENT_CHUNKS) {
+    await new Promise<void>((resolve) => waiters.push(resolve));
+  }
+  inFlight++;
+  try {
+    return await fn();
+  } finally {
+    inFlight--;
+    const next = waiters.shift();
+    if (next) next();
+  }
 }
 
 function jsonResp(obj: unknown): VzResponse {
@@ -190,12 +218,12 @@ async function computeChunk(coords: Triple): Promise<ArrayBuffer> {
     Math.round((readWorldX[1] - readWorldX[0]) / ivs[2]),
   ];
 
-  // 6) Normalize.
-  applyNormalize(inputBuf, spec.normalize);
+  // 6) Normalize (cellmap-flow InputNormalizer chain).
+  const normalized = applyNormalize(inputBuf, spec.normalize);
 
   // 7) Run the model. Cin is 1 for now (multi-channel input is phase 2).
   const dims = tensorDims(spec.tensorLayout, 1, expectedReadVox[0], expectedReadVox[1], expectedReadVox[2]);
-  const out = await runModel(session, inputBuf, dims);
+  const out = await runModel(session, normalized, dims);
 
   // 8) Reshape ORT output to (Cout, Dz_out, Dy_out, Dx_out).
   const expectedWriteVox: Triple = [
@@ -213,9 +241,13 @@ async function computeChunk(coords: Triple): Promise<ArrayBuffer> {
     expectedWriteVox[2],
   );
 
-  // 9) Postprocess (ops mutate cdhw in place except channel-select).
+  // 9) Postprocess (cellmap-flow PostProcessor chain).
   const spatial = expectedWriteVox[0] * expectedWriteVox[1] * expectedWriteVox[2];
-  const post = applyPostprocess(cdhw, spec.outputChannels, spatial, spec.postprocess ?? []);
+  const blockVoxels = spec.blockShape[0] * spec.blockShape[1] * spec.blockShape[2];
+  const post = applyPostprocess(cdhw, spec.outputChannels, spatial, spec.postprocess ?? [], {
+    chunkCorner: [cz, cy, cx],
+    chunkNumVoxels: blockVoxels,
+  });
 
   // 10) Pad to full block shape (when at volume edge, output is smaller).
   const padded = padToBlock(post.data, post.channels, expectedWriteVox, spec.blockShape);

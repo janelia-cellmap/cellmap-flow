@@ -29,6 +29,7 @@ export async function registerVirtualZarrSW(): Promise<ServiceWorkerRegistration
       port.postMessage(res);
     } catch (err) {
       const e = err as Error;
+      console.error(`[vz handler] ${data.path}:`, e);
       port.postMessage({
         status: 500,
         headers: { "content-type": "text/plain" },
