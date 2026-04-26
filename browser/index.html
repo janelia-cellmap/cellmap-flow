@@ -14,10 +14,7 @@
         color: #eee;
         font-family: system-ui, sans-serif;
       }
-      body {
-        display: flex;
-        flex-direction: column;
-      }
+      body { display: flex; flex-direction: column; }
       #topbar {
         flex: 0 0 auto;
         padding: 0.5rem;
@@ -36,9 +33,8 @@
         font-family: ui-monospace, monospace;
         font-size: 0.8rem;
       }
-      #zarr-url { flex: 1; min-width: 18rem; }
-      #onnx-url { width: 12rem; }
-      #spec-url { width: 14rem; }
+      #server-url { flex: 1; min-width: 18rem; }
+      #dataset-path { width: 18rem; }
       #topbar button {
         background: #2a5;
         color: #fff;
@@ -47,16 +43,10 @@
         cursor: pointer;
         font-size: 0.85rem;
       }
-      #topbar button:disabled {
-        background: #444;
-        cursor: not-allowed;
-      }
       #status {
         font-family: ui-monospace, monospace;
         font-size: 0.75rem;
         color: #8c8;
-        white-space: pre-wrap;
-        max-width: 40rem;
       }
       #viewer {
         flex: 1;
@@ -64,20 +54,15 @@
         min-height: 0;
         background: #000;
       }
-      #ng-host {
-        width: 100%;
-        height: 100%;
-        position: relative;
-      }
+      #ng-host { width: 100%; height: 100%; position: relative; }
     </style>
   </head>
   <body>
     <div id="topbar">
-      <input id="zarr-url" type="text" placeholder="zarr URL" value="https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr/0" />
-      <input id="onnx-url" type="text" placeholder="ONNX URL" value="/demo-model.onnx" />
-      <input id="spec-url" type="text" placeholder="spec JSON URL (blank = demo defaults)" value="/demo-model.json" />
-      <button id="activate">Activate &amp; open in NG</button>
-      <span id="status">idle. click Activate.</span>
+      <input id="server-url" type="text" placeholder="cellmap-flow server URL (HF Space or Colab+ngrok)" value="https://your-name-cellmapflow.hf.space" />
+      <input id="dataset-path" type="text" placeholder="dataset slug" value="dataset" />
+      <button id="activate">Open in NG</button>
+      <span id="status">idle. fill in the URL of a cellmap-flow inference server.</span>
     </div>
     <div id="viewer">
       <div id="ng-host"></div>

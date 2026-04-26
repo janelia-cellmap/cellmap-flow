@@ -1,124 +1,97 @@
 # cellmap-flow (browser)
 
-In-browser cellmap-flow. Open Neuroglancer; every chunk it requests is the
-output of an ONNX model running in your tab — no server. Mirrors the Python
-pipeline (`server.py` + `inferencer.py`) entirely client-side.
+Browser front-end for cellmap-flow. Renders cellmap-flow's actual dashboard
+templates and embeds Neuroglancer; inference happens on an external
+cellmap-flow server (Hugging Face Space or Colab + ngrok).
 
-## How it works
+## Why no in-browser inference
 
-1. **Service worker** at `/sw.js` intercepts fetches under `/vz/*`.
-2. Page holds an **ONNX Runtime Web** session and an open zarr (raw input).
-   When the SW hands a chunk request to the page:
-   - Compute write ROI (output voxels) → world units → expand by `context =
-     (read_shape - write_shape) / 2` → read ROI in input voxels.
-   - Read raw subvolume (zero-pad at edges).
-   - Apply `normalize`.
-   - Run model in the spec's `tensorLayout`.
-   - Reshape output to `(C, Dz, Dy, Dx)`.
-   - Apply `postprocess` ops.
-   - Encode as Zarr v2 chunk in `outputDtype`.
-3. **Neuroglancer is bundled inline** from the `neuroglancer` npm package
-   (Vite). Pointed at `zarr://<origin>/vz/`, it fetches OME-Zarr metadata +
-   chunks from the SW like a real volume on disk.
+Tried it. ONNX Runtime Web's WebGPU EP doesn't yet implement Conv3d; every
+real cellmap-flow UNet hits "Only Conv1d and Conv2d are supported." 2D-only
+demo models worked, but real models can't run client-side until ORT Web
+catches up. So the browser app now points Neuroglancer at a remote
+cellmap-flow inference server.
 
-## Run locally
+## Architecture
+
+```
+┌─────────────────────────┐       ┌──────────────────────────────┐
+│  browser (this app)     │       │  cellmap-flow server          │
+│                         │       │  (HF Space / Colab + ngrok)   │
+│  - cellmap-flow         │       │                              │
+│    dashboard chrome     │       │  - cellmap_flow_server        │
+│  - bundled Neuroglancer │ HTTP  │    huggingface --repo X       │
+│  - HF metadata loader   │ ───▶ │    -d <zarr URL>              │
+│    (display only)       │       │                              │
+│                         │       │  - virtual zarr at:           │
+│  zarr://<server>/<ds>/  │       │    /<ds>/.zattrs              │
+└─────────────────────────┘       │    /<ds>/sN/.zarray           │
+                                  │    /<ds>/sN/Z.Y.X[.C]        │
+                                  └──────────────────────────────┘
+```
+
+## Run the front-end
 
 ```bash
-# one-time: build the demo ONNX + matching spec
-python ../scripts/export_demo_onnx.py
-
-# build + serve (production preview)
 cd browser
 npm install
-npm run start
+npm run start          # builds + serves; opens at http://localhost:4173
 ```
 
-Open the printed URL, paste your zarr URL + ONNX URL + spec URL, click
-"Activate & open in NG".
+> **Why not `npm run dev`?** Vite dev mode doesn't correctly serve
+> Neuroglancer's worker bundles via the dep optimizer. `npm run start`
+> uses `vite build && vite preview` instead.
 
-> **Why `npm run start` (production preview), not `npm run dev`** — Vite
-> dev-mode doesn't correctly serve Neuroglancer's `chunk_worker.bundle.js`
-> via its dep optimizer. `vite build && vite preview` works. Iteration is a
-> build per change.
+## Stand up an inference server
 
-## Model spec (`spec.json`)
+Pick one:
 
-Browser-side analogue of cellmap-flow's Python `model_spec.py`. All shapes
-in **world units** (e.g. nanometers).
+### Hugging Face Space (free, slow, always-on)
 
-```jsonc
-{
-  "inputVoxelSize":  [8, 8, 8],          // input zarr nm/voxel
-  "outputVoxelSize": [16, 16, 16],       // model output nm/voxel
-  "readShape":       [1728, 1728, 1728], // input ROI in nm  (216 vox * 8)
-  "writeShape":      [1088, 1088, 1088], // output ROI in nm (68 vox * 16)
-  "inputDtype":      "float32",          // dtype of values fed to ONNX
-  "outputDtype":     "uint8",            // dtype of chunk bytes
-  "outputChannels":  1,
-  "blockShape":      [68, 68, 68],       // chunk shape in OUTPUT voxels (z,y,x)
-  "tensorLayout":    "NCDHW",            // or "NDHWC" or "BatchZ_NCHW"
+See [`../hf-space/`](../hf-space/). Fork the Space template, set
+`CELLMAP_HF_REPO` and `CELLMAP_DATASET` in the Space's Settings, and the
+public URL `https://your-space.hf.space` is your inference server.
 
-  // Pipeline: each entry is a cellmap-flow class name + its constructor
-  // kwargs. Same shape as cellmap-flow's `to_dict()` output, so a pipeline
-  // exported from the Python pipeline builder loads as-is.
-  "normalize": [
-    { "name": "MinMaxNormalizer", "min_value": 0, "max_value": 255 }
-  ],
-  "postprocess": [
-    { "name": "DefaultPostprocessor", "clip_min": -1, "clip_max": 1, "bias": 1, "multiplier": 127.5 }
-  ]
-}
+Free CPU tier: ~minutes per chunk on 3D UNets. Fine for demos. Sleeps
+after idle (~30 s wake-up).
+
+### Google Colab (free GPU, ephemeral)
+
+Open [`notebooks/cellmap-flow-colab.ipynb`](../notebooks/cellmap-flow-colab.ipynb)
+in Colab. Run all cells; copy the printed ngrok URL.
+
+Free T4 GPU: real-time-ish inference. Catches: only works while *your*
+Colab session is alive.
+
+### Local cellmap-flow server
+
+If you have a workstation with a GPU and `cellmap-flow` installed:
+
+```bash
+cellmap_flow_server huggingface \\
+  --repo cellmap/jrc_mus-livers_16nm_to_8nm_mito \\
+  -d s3://janelia-cosem-datasets/.../jrc_mus-liver.zarr/.../fibsem-uint8/ \\
+  --port 8765
 ```
 
-Supported normalizers (browser ports of `cellmap_flow/norm/input_normalize.py`):
-`MinMaxNormalizer`, `ZScoreNormalizer`. Python-only (won't run in browser):
-`Dilate`, `EuclideanDistance`, `LambdaNormalizer`.
+Tunnel it (e.g. via ngrok or `cloudflared tunnel`) and use that URL.
 
-Supported postprocessors (browser ports of `cellmap_flow/post/postprocessors.py`):
-`DefaultPostprocessor`, `ThresholdPostprocessor`, `ChannelSelection`. Python-only:
-`LabelPostprocessor`, `MortonSegmentationRelabeling`, `AffinityPostprocessor`,
-`SimpleBlockwiseMerger`, `LambdaPostprocessor`.
+## Use it
 
-### Translating a Python `model_spec.py`
-
-| Python                                     | JSON                          |
-| ------------------------------------------ | ----------------------------- |
-| `voxel_size` / `input_voxel_size`          | `inputVoxelSize`              |
-| `output_voxel_size`                        | `outputVoxelSize`             |
-| `read_shape` (already in world units)      | `readShape`                   |
-| `write_shape` (already in world units)     | `writeShape`                  |
-| `output_channels`                          | `outputChannels`              |
-| `block_shape[:3]` (in output voxels)       | `blockShape`                  |
-| Model input shape `(1, 1, D, H, W)`        | `tensorLayout: "NCDHW"`       |
-| Per-Z 2D model `(Z, 1, H, W)`              | `tensorLayout: "BatchZ_NCHW"` |
-| Channels-last (uncommon)                   | `tensorLayout: "NDHWC"`       |
-| Custom `process_chunk` Python function     | not portable — express as `normalize` + `postprocess` |
-
-If the Python spec applies `(raw - mean) / std` before the model: `normalize:
-{ type: "mean_std", mean, std }`. If it `clip(0, 1) * 255` after: `postprocess:
-[{ type: "clip", min: 0, max: 1 }, { type: "scale", factor: 255 }]`.
+1. Start the inference server (above).
+2. Open this app's dashboard.
+3. Paste the server URL + a dataset slug; click **Open in NG**.
 
 ## Layout
 
-- `index.html` — single-page app (zarr-url, onnx-url, spec-url + Activate).
-- `src/main.ts` — wires up activate flow.
-- `src/model-spec.ts` — `ModelSpec` type, normalize/postprocess executors,
-  chunk encoder, tensor reshape utilities.
-- `src/virtual-zarr.ts` — read-ROI/context expansion, runs the model,
-  postprocess + chunk encode. The JS analogue of `Inferencer.process_chunk_basic`.
-- `src/onnx-session.ts` — lazy ORT session create + serialized `runModel`.
-- `src/zarr-client.ts` — zarrita wrappers for the input zarr.
-- `src/sw-register.ts` — registers `/sw.js`, reloads on first install.
-- `src/ng-entry.ts` — NG kvstore/datasource/layer registrations + `setupDefaultViewer`.
-- `public/sw.js` — service worker. Forwards `/vz/*` requests to the page.
-
-## Limitations / next steps
-
-- LAN deployments need a secure context (use SSH tunnel to localhost or
-  HTTPS). Service workers refuse to register otherwise.
-- WASM ORT does not implement Conv3d. 3D UNets (most cellmap-flow models)
-  require WebGPU. WebGPU is enabled by default in modern Chrome.
-- Single-channel input only in this version. Multi-channel input
-  (`(Cin, D, H, W)`) is straightforward but not yet wired through.
-- No mirror-padding or smoothing at volume edges; we zero-pad. Most models
-  tolerate this.
+- `index.html` / `dashboard.html` — entry pages. Dashboard is the main one;
+  it's rendered from `cellmap_flow/dashboard/templates/` via `scripts/render-dashboard.py`.
+- `src/main.ts` — minimal entry for `index.html`.
+- `src/dashboard-shim.ts` — wires the cellmap-flow dashboard's existing JS
+  to our HF-Space/Colab flow (replaces Flask `/api/*` calls with browser
+  equivalents, intercepts the HF accordion, mounts Neuroglancer).
+- `src/ng-entry.ts` — Neuroglancer registrations + `setupDefaultViewer`,
+  bundled by Vite from the `neuroglancer` npm package.
+- `src/hf.ts` — fetch HF metadata.json for display.
+- `scripts/render-dashboard.py` — renders cellmap-flow's Jinja templates to
+  static HTML at build time.

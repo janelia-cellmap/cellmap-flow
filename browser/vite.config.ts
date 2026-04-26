@@ -4,17 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const ortDir = path.resolve(here, "node_modules", "onnxruntime-web", "dist");
-
-function shouldServe(name: string): boolean {
-  return /(^ort-wasm.*\.(wasm|mjs)|^ort\.webgpu\..*\.mjs)$/.test(name);
-}
-
-const mime: Record<string, string> = {
-  ".wasm": "application/wasm",
-  ".mjs": "application/javascript",
-  ".js": "application/javascript",
-};
 
 // Expose cellmap_flow's dashboard static dir at /dashboard-static/. The
 // dashboard HTML (rendered by scripts/render-dashboard.py) references its
@@ -69,38 +58,10 @@ function dashboardStatic(): Plugin {
   };
 }
 
-function ortAssets(): Plugin {
-  return {
-    name: "cellmap-flow-ort-assets",
-    configureServer(server) {
-      server.middlewares.use("/ort", (req, res, next) => {
-        if (!req.url) return next();
-        const name = decodeURIComponent(req.url.split("?")[0].replace(/^\/+/, ""));
-        if (!shouldServe(name)) return next();
-        const p = path.join(ortDir, name);
-        if (!p.startsWith(ortDir) || !fs.existsSync(p)) return next();
-        res.setHeader("Content-Type", mime[path.extname(p)] ?? "application/octet-stream");
-        res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-        fs.createReadStream(p).pipe(res);
-      });
-    },
-    generateBundle() {
-      for (const f of fs.readdirSync(ortDir)) {
-        if (!shouldServe(f)) continue;
-        this.emitFile({
-          type: "asset",
-          fileName: `ort/${f}`,
-          source: fs.readFileSync(path.join(ortDir, f)),
-        });
-      }
-    },
-  };
-}
-
 // Neuroglancer gates bundled features by package.json "imports" conditions.
 // These flip the :enabled variants on so zarr/n5/precomputed datasources,
 // http/s3/etc kvstores, and image/segmentation/annotation layers get real
-// code instead of the false-stub fallback. (See tourguide/web-app/vite.config.ts.)
+// code instead of the false-stub fallback.
 const NG_CONDITIONS = [
   "neuroglancer/datasource/zarr:enabled",
   "neuroglancer/datasource/n5:enabled",
@@ -128,16 +89,9 @@ export default defineConfig({
       interval: 1000,
     },
   },
-  resolve: {
-    conditions: NG_CONDITIONS,
-  },
-  worker: {
-    format: "es",
-  },
-  optimizeDeps: {
-    exclude: ["onnxruntime-web"],
-    include: ["neuroglancer"],
-  },
+  resolve: { conditions: NG_CONDITIONS },
+  worker: { format: "es" },
+  optimizeDeps: { include: ["neuroglancer"] },
   build: {
     rollupOptions: {
       input: {
@@ -147,5 +101,5 @@ export default defineConfig({
       },
     },
   },
-  plugins: [dashboardStatic(), ortAssets()],
+  plugins: [dashboardStatic()],
 });

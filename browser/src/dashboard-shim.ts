@@ -1,74 +1,165 @@
-// Browser-side glue between cellmap-flow's rendered dashboard HTML and our
-// in-browser /vz/ pipeline. The dashboard expects to talk to a Flask backend
-// for things like /api/set-data; we replace those handlers with calls into
-// our SW + ORT pipeline so the same UI works without a server.
+// Browser-side glue between cellmap-flow's rendered dashboard HTML and an
+// EXTERNAL cellmap-flow inference server (Hugging Face Space or Colab +
+// ngrok). Replaces the dashboard's Flask-bound JS:
+//   - "Connect" → opens NG pointed at zarr://<server>/<dataset>/
+//   - HF accordion → real list of cellmap org models from HF Hub
+//
+// All inference happens on the inference server; the browser is just NG +
+// the dashboard chrome. No service worker, no ORT.
 
-import { activate as activateVz } from "./virtual-zarr";
-import type { activate as activateVzT } from "./virtual-zarr";
-import { registerVirtualZarrSW } from "./sw-register";
 import { mountNg } from "./ng-entry";
-import { DEMO_SPEC, loadSpec, type ModelSpec } from "./model-spec";
 import { loadHfModel } from "./hf";
-
-type VzState = Awaited<ReturnType<typeof activateVzT>>;
-
-const DEFAULT_MODEL_URL = "/demo-model.onnx";
-const DEFAULT_SPEC_URL = "/demo-model.json";
-
-interceptApiFetches();
 
 document.addEventListener("DOMContentLoaded", () => {
   rewireConnectPanel();
   wireHfAccordion();
+  interceptApiFetches();
   restoreLastInputs();
-  maybeAutoResumeAfterReload();
 });
 
 const LS_KEY = "cmf-dashboard-state";
 
 interface PersistedState {
-  zarrUrl: string;
+  serverUrl: string;
+  datasetPath: string;
   hfRepo: string;
-  resumePending?: boolean; // true if a Connect click triggered the SW reload
 }
 
 function readLs(): PersistedState {
   try {
     return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}");
   } catch {
-    return { zarrUrl: "", hfRepo: "" };
+    return { serverUrl: "", datasetPath: "", hfRepo: "" };
   }
 }
-
 function writeLs(s: PersistedState): void {
   localStorage.setItem(LS_KEY, JSON.stringify(s));
 }
 
 function restoreLastInputs(): void {
   const s = readLs();
-  const zarr = document.getElementById("datasetPathInput") as HTMLInputElement | null;
+  const server = document.getElementById("serverUrlInput") as HTMLInputElement | null;
+  const dataset = document.getElementById("datasetPathInput") as HTMLInputElement | null;
   const hf = document.getElementById("hfRepoInput") as HTMLInputElement | null;
-  if (zarr && s.zarrUrl) zarr.value = s.zarrUrl;
+  if (server && s.serverUrl) server.value = s.serverUrl;
+  if (dataset && s.datasetPath) dataset.value = s.datasetPath;
   if (hf && s.hfRepo) hf.value = s.hfRepo;
 }
 
-function maybeAutoResumeAfterReload(): void {
-  const s = readLs();
-  if (!s.resumePending) return;
-  // Clear the flag so we don't loop on every load.
-  writeLs({ ...s, resumePending: false });
-  // Only auto-activate if the SW is now controlling the page.
-  if (!navigator.serviceWorker?.controller) return;
+function rewireConnectPanel(): void {
   const btn = document.getElementById("setDataBtn") as HTMLButtonElement | null;
-  if (btn) {
-    setTimeout(() => btn.click(), 50);
+  const datasetInput = document.getElementById("datasetPathInput") as HTMLInputElement | null;
+  const status = document.getElementById("setDataStatus");
+  const panel = document.getElementById("noNeuroglancerPanel");
+  if (!btn || !datasetInput || !status || !panel) return;
+
+  // The rendered dashboard only ships a dataset-path input. Inject a
+  // server-URL input above it (where the user pastes their HF Space or
+  // Colab+ngrok URL), and an HF repo input below for choosing the model.
+  // The UI flow is: "where's the inference server" + "what model" +
+  // "what dataset" → "Open in NG".
+  const inputGroup = datasetInput.closest(".no-data-input-group") as HTMLElement | null;
+  if (inputGroup && !document.getElementById("serverUrlInput")) {
+    const wrap = document.createElement("div");
+    wrap.className = "no-data-input-group";
+    wrap.style.marginBottom = "8px";
+    wrap.innerHTML =
+      '<input type="text" id="serverUrlInput" class="form-control" ' +
+      'placeholder="cellmap-flow server URL (HF Space, Colab+ngrok, etc.)" ' +
+      'value="https://your-name-cellmapflow.hf.space" style="flex:1;" />';
+    inputGroup.parentElement?.insertBefore(wrap, inputGroup);
   }
+  if (inputGroup && !document.getElementById("hfRepoInput")) {
+    const wrap = document.createElement("div");
+    wrap.className = "no-data-input-group";
+    wrap.style.marginBottom = "8px";
+    wrap.innerHTML =
+      '<input type="text" id="hfRepoInput" class="form-control" ' +
+      'placeholder="HF model repo (informational; configure model on the server)" ' +
+      'style="flex:1;" />';
+    inputGroup.parentElement?.insertBefore(wrap, inputGroup);
+  }
+
+  // Replace the original click handler with ours.
+  const clone = btn.cloneNode(true) as HTMLButtonElement;
+  clone.textContent = "Open in NG";
+  btn.parentElement?.replaceChild(clone, btn);
+
+  clone.addEventListener("click", async () => {
+    const serverInput = document.getElementById("serverUrlInput") as HTMLInputElement;
+    const hfInput = document.getElementById("hfRepoInput") as HTMLInputElement;
+    const serverUrl = serverInput.value.trim().replace(/\/$/, "");
+    const datasetPath = datasetInput.value.trim().replace(/^\/+/, "").replace(/\/$/, "");
+    const hfRepo = hfInput.value.trim();
+
+    if (!serverUrl) {
+      status.textContent = "Please enter the inference server URL.";
+      return;
+    }
+    if (!datasetPath) {
+      status.textContent = "Please enter a dataset slug.";
+      return;
+    }
+
+    writeLs({ serverUrl, datasetPath, hfRepo });
+
+    clone.disabled = true;
+    clone.textContent = "Opening...";
+    status.style.color = "var(--text-muted)";
+
+    try {
+      // If the user pasted an HF repo, fetch metadata for display only —
+      // the actual model choice has to be configured on the server side.
+      let voxelSizeNm = 8;
+      if (hfRepo) {
+        try {
+          status.textContent = `loading HF model metadata for ${hfRepo} ...`;
+          const hf = await loadHfModel(hfRepo);
+          voxelSizeNm = hf.spec.outputVoxelSize[0] || 8;
+          status.textContent = `metadata ok (${hf.metadata.out_channels ?? "?"}c, voxel ${voxelSizeNm} nm). Make sure the inference server is configured for this model.`;
+        } catch (err) {
+          status.style.color = "#facc15";
+          status.textContent = `metadata: ${(err as Error).message}. Continuing anyway.`;
+        }
+      }
+
+      replaceNgPanel();
+      const NM = 1e-9;
+      const sourceUrl = `zarr://${serverUrl}/${datasetPath}/`;
+      mountNg({
+        dimensions: {
+          z: [voxelSizeNm * NM, "m"],
+          y: [voxelSizeNm * NM, "m"],
+          x: [voxelSizeNm * NM, "m"],
+        },
+        layers: [
+          { type: "image", source: sourceUrl, name: "inference", visible: true },
+        ],
+        selectedLayer: { visible: true, layer: "inference" },
+        layout: "4panel",
+      });
+      status.style.color = "#4ade80";
+      status.textContent = `Open. Source: ${sourceUrl}`;
+    } catch (err) {
+      const e = err as Error;
+      status.style.color = "#f87171";
+      status.textContent = "Error: " + e.message;
+      console.error(e);
+      clone.disabled = false;
+      clone.textContent = "Open in NG";
+    }
+  });
 }
 
-// Patch window.fetch so the dashboard's existing /api/* calls hit our
-// in-browser handlers instead of the missing Flask backend. Today this only
-// returns real data for /api/huggingface-models; everything else returns a
-// friendly 501 so the dashboard's UI doesn't hang.
+function replaceNgPanel(): void {
+  const panel = document.getElementById("noNeuroglancerPanel");
+  const slot = panel?.parentElement;
+  if (!slot) throw new Error("missing dashboard NG slot");
+  slot.innerHTML = '<div id="ng-host" style="width:100%;height:100%;position:relative;background:#000;"></div>';
+}
+
+// Patch fetch so the rendered dashboard's /api/* calls hit our handlers
+// instead of the missing Flask backend.
 function interceptApiFetches(): void {
   const orig = window.fetch.bind(window);
   window.fetch = async (input, init) => {
@@ -79,17 +170,11 @@ function interceptApiFetches(): void {
     if (u.origin !== location.origin || !u.pathname.startsWith("/api/")) {
       return orig(input, init);
     }
-
     if (u.pathname === "/api/huggingface-models" || u.pathname === "/api/huggingface-models/refresh") {
       try {
         const list = await fetch("https://huggingface.co/api/models?author=cellmap&limit=100").then(r => r.json());
         const out: Record<string, Record<string, unknown>> = {};
-        for (const m of list as { modelId: string }[]) {
-          // Try to fetch metadata.json per repo (may 404 for some). Run in
-          // parallel; failures yield empty metadata.
-          out[m.modelId] = {};
-        }
-        // Fetch metadata in parallel (best-effort).
+        for (const m of list as { modelId: string }[]) out[m.modelId] = {};
         await Promise.all(
           Object.keys(out).map(async (repo) => {
             try {
@@ -103,18 +188,13 @@ function interceptApiFetches(): void {
         return new Response(JSON.stringify({ error: (err as Error).message }), { status: 502, headers: { "content-type": "application/json" } });
       }
     }
-
     return new Response(
-      JSON.stringify({ error: `${u.pathname} is not implemented in the browser version` }),
+      JSON.stringify({ error: `${u.pathname} is not implemented in the browser-only mode` }),
       { status: 501, headers: { "content-type": "application/json" } },
     );
   };
 }
 
-// When the user checks a model in the dashboard's HF accordion, mirror the
-// repo into the Connect panel's HF input so they can activate it with one
-// click. Multiple checkboxes are allowed in the original UI; we use the
-// most-recently-checked one.
 function wireHfAccordion(): void {
   document.addEventListener("change", (e) => {
     const t = e.target as HTMLInputElement;
@@ -127,131 +207,4 @@ function wireHfAccordion(): void {
       hfInput.focus();
     }
   });
-}
-
-function rewireConnectPanel(): void {
-  const btn = document.getElementById("setDataBtn") as HTMLButtonElement | null;
-  const datasetInput = document.getElementById("datasetPathInput") as HTMLInputElement | null;
-  const status = document.getElementById("setDataStatus");
-  const panel = document.getElementById("noNeuroglancerPanel");
-  if (!btn || !datasetInput || !status || !panel) return;
-
-  // Inject an HF repo input above the existing dataset path input.
-  const inputGroup = datasetInput.closest(".no-data-input-group") as HTMLElement | null;
-  if (inputGroup && !document.getElementById("hfRepoInput")) {
-    const hfWrap = document.createElement("div");
-    hfWrap.className = "no-data-input-group";
-    hfWrap.style.marginBottom = "8px";
-    hfWrap.innerHTML =
-      '<input type="text" id="hfRepoInput" class="form-control" placeholder="HF repo (e.g. cellmap/jrc_mus-livers_16nm_to_8nm_mito) — leave blank for demo model" style="flex:1;" />';
-    inputGroup.parentElement?.insertBefore(hfWrap, inputGroup);
-  }
-
-  // Strip the original click handler by cloning, then bind ours.
-  const clone = btn.cloneNode(true) as HTMLButtonElement;
-  btn.parentElement?.replaceChild(clone, btn);
-
-  clone.addEventListener("click", async () => {
-    const zarrUrl = datasetInput.value.trim();
-    const hfRepo = (document.getElementById("hfRepoInput") as HTMLInputElement | null)?.value.trim() ?? "";
-    if (!zarrUrl) {
-      status.textContent = "Please enter a zarr URL.";
-      return;
-    }
-    // Persist inputs + flag a pending resume in case the SW first-install
-    // reload kicks in. After the reload, we auto-click this button.
-    writeLs({ zarrUrl, hfRepo, resumePending: true });
-    clone.disabled = true;
-    clone.textContent = "Activating...";
-    status.style.color = "var(--text-muted)";
-    try {
-      status.textContent = "registering service worker ...";
-      await registerVirtualZarrSW();
-
-      let spec: ModelSpec = DEMO_SPEC;
-      let modelUrl = DEFAULT_MODEL_URL;
-      if (hfRepo) {
-        status.textContent = `loading HF model ${hfRepo} ...`;
-        const hf = await loadHfModel(hfRepo);
-        spec = hf.spec;
-        modelUrl = hf.modelUrl;
-        status.textContent =
-          `HF metadata ok (${hf.metadata.out_channels ?? "?"}c, ` +
-          `voxel ${spec.outputVoxelSize.join(",")} nm, ` +
-          `block ${spec.blockShape.join("x")}). downloading model.onnx (this may take a while) ...`;
-      } else {
-        try { spec = await loadSpec(DEFAULT_SPEC_URL); } catch { /* fall back to DEMO_SPEC */ }
-      }
-
-      const downloadStart = performance.now();
-      const sourceZarrUrl = zarrUrl;
-      const st = await activateVz({ zarrUrl, modelUrl, spec }, (loaded, total) => {
-        const mb = (loaded / 1024 / 1024).toFixed(1);
-        const pct = total ? ((loaded / total) * 100).toFixed(1) : "?";
-        const totalMb = total ? (total / 1024 / 1024).toFixed(0) + " MB" : "size unknown";
-        const elapsedSec = (performance.now() - downloadStart) / 1000;
-        const mbps = elapsedSec > 0.1 ? ((loaded / 1024 / 1024) / elapsedSec).toFixed(1) : "?";
-        status.textContent =
-          `downloading model.onnx: ${mb} / ${totalMb} (${pct}%, ${mbps} MB/s) ` +
-          `— cached in browser memory + Chrome HTTP cache, no file written to disk.`;
-      });
-
-      status.textContent = "mounting Neuroglancer ...";
-      mountNgIntoDashboard(st, spec, sourceZarrUrl);
-
-      // Activation succeeded; clear the resume flag so reloads start fresh.
-      writeLs({ zarrUrl, hfRepo, resumePending: false });
-      status.style.color = "#4ade80";
-      status.textContent = `Active. vol=${st.outShape.join("x")} (vox ${spec.outputVoxelSize.join(",")} nm) channels=${spec.outputChannels}`;
-    } catch (err) {
-      const e = err as Error;
-      status.style.color = "#f87171";
-      status.textContent = "Error: " + e.message;
-      console.error(e);
-      clone.disabled = false;
-      clone.textContent = "Connect";
-    }
-  });
-}
-
-function mountNgIntoDashboard(st: VzState, spec: ModelSpec, sourceZarrUrl: string): void {
-  const panel = document.getElementById("noNeuroglancerPanel");
-  const slot = panel?.parentElement;
-  if (!slot) throw new Error("missing dashboard NG slot (noNeuroglancerPanel parent)");
-
-  slot.innerHTML = '<div id="ng-host" style="width:100%;height:100%;position:relative;background:#000;"></div>';
-
-  const NM = 1e-9;
-  const ovs = spec.outputVoxelSize;
-
-  const rawSource = normalizeForNg(sourceZarrUrl);
-
-  // NG auto-promotes the output-dim scale to match the source's voxel size,
-  // so we declare dims at `ovs` (in meters) and express position + scales
-  // in OUTPUT VOXELS — that way 1 NG unit == 1 voxel and our numbers don't
-  // get reinterpreted under us.
-  mountNg({
-    dimensions: {
-      z: [ovs[0] * NM, "m"],
-      y: [ovs[1] * NM, "m"],
-      x: [ovs[2] * NM, "m"],
-    },
-    position: [st.outShape[0] / 2, st.outShape[1] / 2, st.outShape[2] / 2],
-    crossSectionScale: 1, // 1 voxel per pixel at center
-    projectionScale: Math.max(...st.outShape) * 2,
-    layers: [
-      { type: "image", source: rawSource, name: "raw", visible: true },
-      { type: "image", source: `zarr://${location.origin}/vz/`, name: "inference", visible: true },
-    ],
-    selectedLayer: { visible: true, layer: "inference" },
-    layout: "4panel",
-  });
-}
-
-function normalizeForNg(input: string): string {
-  let s = input.trim();
-  // Strip our own user-facing prefixes that NG also accepts.
-  if (s.startsWith("zarr://") || s.startsWith("zarr2://") || s.startsWith("zarr3://")) return s;
-  if (s.startsWith("s3://") || s.startsWith("gs://")) return `zarr://${s}`;
-  return `zarr://${s}`;
 }

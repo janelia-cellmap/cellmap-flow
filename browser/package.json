@@ -11,9 +11,7 @@
     "start": "npm run build && vite preview --host"
   },
   "dependencies": {
-    "neuroglancer": "^2.41.2",
-    "onnxruntime-web": "^1.18.0",
-    "zarrita": "^0.4.0"
+    "neuroglancer": "^2.41.2"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
