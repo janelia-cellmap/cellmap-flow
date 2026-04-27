@@ -61,6 +61,9 @@
       <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
         Resume Existing Volume
       </button>
+      <button type="button" class="btn btn-secondary" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
+        Load Crops from YAML
+      </button>
     </div>
     <small class="form-text text-muted d-block mt-1">
       Sparse volume across full dataset extent (paint <code>1</code>=background, <code>2</code>=foreground).
@@ -80,34 +83,56 @@
     </small>
   </div>
 
-  <!-- Bulk-load externally annotated crops from a YAML manifest -->
-  <div class="mb-2">
-    <details>
-      <summary class="form-label fw-bold mb-1" style="cursor: pointer;">
-        Load annotated crops from YAML
-      </summary>
-      <div class="mt-2">
-        <textarea
-          class="form-control font-monospace"
-          id="loadCropsYaml"
-          rows="6"
-          placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
-        ></textarea>
-        <div class="d-flex align-items-center gap-2 mt-2">
-          <button type="button" class="btn btn-secondary btn-sm" id="loadCropsBtn">
-            Load Crops
-          </button>
-          <span id="loadCropsStatus" class="text-muted small"></span>
+  <!-- Load Crops from YAML Modal -->
+  <div class="modal fade" id="loadCropsModal" tabindex="-1" aria-labelledby="loadCropsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loadCropsLabel">Load Annotated Crops from YAML</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <small class="form-text text-muted d-block mt-1">
-          Each entry points at an existing zarr array (3D, OME-NGFF or with
-          <code>resolution</code>/<code>offset</code> attrs). Voxel size, ROI offset
-          and shape are auto-derived. Bare strings default to
-          <code>fg_ids=all_nonzero, mode=dense</code>. Crops are tiled to match the
-          painted-volume chunk shape and saved alongside painted chunks.
-        </small>
+        <div class="modal-body">
+          <p class="text-muted small">
+            Bulk-load externally annotated zarr crops as <code>_chunk_*.zarr</code>
+            entries that train alongside painted chunks. Voxel size, ROI offset and
+            shape are auto-read from each zarr's OME-NGFF metadata; the raw read
+            snaps to the closest available scale of the current dataset.
+          </p>
+          <div class="mb-2">
+            <label for="loadCropsYamlPath" class="form-label">YAML file path (optional)</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="loadCropsYamlPath" placeholder="/path/to/manifest.yaml">
+              <button type="button" class="btn btn-outline-secondary" id="loadCropsYamlReadBtn" title="Read the file into the textarea below">
+                Load File
+              </button>
+            </div>
+            <small class="form-text text-muted">
+              Either pick a YAML file here, or paste the manifest below. If both are filled, the textarea wins.
+            </small>
+          </div>
+          <div class="mb-2">
+            <label for="loadCropsYaml" class="form-label">YAML manifest</label>
+            <textarea
+              class="form-control font-monospace"
+              id="loadCropsYaml"
+              rows="10"
+              placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
+            ></textarea>
+            <small class="form-text text-muted">
+              Bare strings default to <code>fg_ids=all_nonzero, mode=dense, bg_to_fg_ratio=1.0</code>.
+              Per-entry overrides: <code>fg_ids</code>, <code>bg_ids</code>,
+              <code>mode</code> (dense|sparse), <code>connected_components</code> (bool),
+              <code>bg_to_fg_ratio</code> (float; <code>0</code> drops all BG-only tiles, <code>null</code> keeps every tile).
+            </small>
+          </div>
+          <div id="loadCropsStatus" class="text-muted small"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="loadCropsSubmitBtn">Load Crops</button>
+        </div>
       </div>
-    </details>
+    </div>
   </div>
 
   <!-- Load Existing Volume Modal -->
@@ -815,23 +840,111 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
-  // Load crops from a YAML manifest
-  const loadCropsBtn = document.getElementById("loadCropsBtn");
-  if (loadCropsBtn) {
-    loadCropsBtn.addEventListener("click", function() {
+  // Load crops from a YAML manifest (modal-driven, mirrors Resume Existing Volume)
+  const openLoadCropsBtn = document.getElementById("openLoadCropsBtn");
+  let loadCropsModal = null;
+  if (openLoadCropsBtn) {
+    openLoadCropsBtn.addEventListener("click", function() {
+      if (!selectedModel) {
+        alert("No model selected");
+        return;
+      }
+      if (!loadCropsModal) {
+        loadCropsModal = new bootstrap.Modal(document.getElementById("loadCropsModal"));
+      }
+      // Restore the last-used path so users don't retype it.
+      try {
+        const saved = localStorage.getItem("loadCropsYamlPath");
+        if (saved) document.getElementById("loadCropsYamlPath").value = saved;
+      } catch (_) {}
+      document.getElementById("loadCropsStatus").textContent = "";
+      loadCropsModal.show();
+    });
+  }
+
+  // "Load File" reads the file server-side and fills the textarea so the user
+  // can preview/edit before submitting.
+  const loadCropsYamlReadBtn = document.getElementById("loadCropsYamlReadBtn");
+  if (loadCropsYamlReadBtn) {
+    loadCropsYamlReadBtn.addEventListener("click", async function() {
+      const path = document.getElementById("loadCropsYamlPath").value.trim();
+      const status = document.getElementById("loadCropsStatus");
+      if (!path) {
+        status.textContent = "Enter a path first.";
+        return;
+      }
+      status.textContent = "Reading...";
+      try {
+        const res = await fetch(`/api/finetune/read-yaml?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById("loadCropsYaml").value = data.text;
+          status.textContent = `Loaded ${data.text.length} chars from ${path}`;
+          try { localStorage.setItem("loadCropsYamlPath", path); } catch (_) {}
+        } else {
+          status.textContent = `Read failed: ${data.error}`;
+        }
+      } catch (err) {
+        status.textContent = `Read failed: ${err}`;
+      }
+    });
+  }
+
+  // Submit: send pasted YAML if present, else send the path (server parses both).
+  const loadCropsSubmitBtn = document.getElementById("loadCropsSubmitBtn");
+  if (loadCropsSubmitBtn) {
+    loadCropsSubmitBtn.addEventListener("click", function() {
       if (!selectedModel) {
         alert("No model selected");
         return;
       }
       const yamlText = document.getElementById("loadCropsYaml").value.trim();
-      if (!yamlText) {
-        alert("Paste a YAML manifest first.");
+      const yamlPath = document.getElementById("loadCropsYamlPath").value.trim();
+      const yamlPayload = yamlText || yamlPath;
+      if (!yamlPayload) {
+        document.getElementById("loadCropsStatus").textContent =
+          "Paste YAML or enter a file path first.";
         return;
       }
+      try { if (yamlPath) localStorage.setItem("loadCropsYamlPath", yamlPath); } catch (_) {}
       const outputPath = document.getElementById("outputPath").value.trim();
       const status = document.getElementById("loadCropsStatus");
-      status.textContent = "Loading...";
-      loadCropsBtn.disabled = true;
+      status.textContent = "Starting...";
+      loadCropsSubmitBtn.disabled = true;
+
+      // Generate a load_id so the server can publish progress under that key
+      // and we can poll it while the POST is in flight.
+      const loadId = (crypto.randomUUID && crypto.randomUUID()) ||
+        (Math.random().toString(36).slice(2) + Date.now());
+
+      let pollHandle = null;
+      const pollProgress = async () => {
+        try {
+          const res = await fetch(`/api/finetune/load-crops-progress?load_id=${encodeURIComponent(loadId)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.success || !data.progress) return;
+          const p = data.progress;
+          let msg;
+          if (p.phase === "starting") {
+            msg = "Starting...";
+          } else if (p.phase === "crop_start") {
+            msg = `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
+          } else if (p.phase === "tile") {
+            const pct = p.tile_total ? ((p.tile_done / p.tile_total) * 100).toFixed(0) : 0;
+            msg = `Crop ${p.crop_index + 1}/${p.n_crops}: ${p.tile_done}/${p.tile_total} tiles (${pct}%) — ${p.current_path}`;
+          } else if (p.phase === "done") {
+            msg = `Finishing... ${p.n_chunks_created || 0} chunks created`;
+          } else {
+            msg = JSON.stringify(p);
+          }
+          status.textContent = msg;
+        } catch (_) {
+          // Poll errors are non-fatal — keep going.
+        }
+      };
+      pollHandle = setInterval(pollProgress, 1000);
+      pollProgress();
 
       fetch("/api/finetune/load-crops", {
         method: "POST",
@@ -839,12 +952,14 @@ document.addEventListener("DOMContentLoaded", function () {
         body: JSON.stringify({
           model_name: selectedModel.name,
           output_path: outputPath,
-          yaml: yamlText,
+          yaml: yamlPayload,
+          load_id: loadId,
         }),
       })
         .then(res => res.json())
         .then(data => {
-          loadCropsBtn.disabled = false;
+          if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+          loadCropsSubmitBtn.disabled = false;
           if (!data.success) {
             status.textContent = `Error: ${data.error || "load failed"}`;
             finetuneLog.value += `✗ Load crops error: ${data.error}\n`;
@@ -862,9 +977,11 @@ document.addEventListener("DOMContentLoaded", function () {
               finetuneLog.value += `  ✗ ${err.path}: ${err.error}\n`;
             }
           }
+          if (loadCropsModal) loadCropsModal.hide();
         })
         .catch(err => {
-          loadCropsBtn.disabled = false;
+          if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+          loadCropsSubmitBtn.disabled = false;
           status.textContent = `Request failed: ${err}`;
           finetuneLog.value += `✗ Load crops request failed: ${err}\n`;
         });

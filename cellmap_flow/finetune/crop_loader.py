@@ -22,6 +22,8 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, List, Literal, Optional, Tuple, Union
 
@@ -49,6 +51,10 @@ class CropEntry(BaseModel):
         - ``mode='dense'`` treats unmatched voxels (incl. 0) as background
         - ``mode='sparse'`` treats unmatched voxels as unannotated
         - ``connected_components=False`` keeps source ids as instance ids
+        - ``bg_to_fg_ratio=1.0`` — for each tile with foreground, keep this many
+          BG-only tiles (uniformly sampled). 0 = drop all BG-only tiles;
+          ``None`` = keep every BG-only tile (the old behavior, can produce
+          thousands of background-only chunks for large dense crops).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -59,6 +65,7 @@ class CropEntry(BaseModel):
     bg_ids: List[int] = Field(default_factory=list)
     mode: Literal["dense", "sparse"] = "dense"
     connected_components: bool = False
+    bg_to_fg_ratio: Optional[float] = 1.0
 
     @field_validator("fg_ids", "bg_ids")
     @classmethod
@@ -265,6 +272,7 @@ def load_crops(
     claimed_input_voxel_size: np.ndarray,
     claimed_output_voxel_size: np.ndarray,
     model_name: str,
+    progress_callback=None,
 ) -> dict:
     """Materialize each crop in ``config`` as ``_chunk_*.zarr`` entries under ``corrections_dir``.
 
@@ -299,7 +307,18 @@ def load_crops(
     created: List[str] = []
     errors: List[dict] = []
 
-    for entry in config.crops:
+    for crop_index, entry in enumerate(config.crops):
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "phase": "crop_start",
+                    "crop_index": crop_index,
+                    "n_crops": len(config.crops),
+                    "current_path": entry.path,
+                    "tile_done": 0,
+                    "tile_total": 0,
+                }
+            )
         try:
             chunk_paths = _ingest_one_crop(
                 entry,
@@ -312,11 +331,37 @@ def load_crops(
                 eff_input_vs=eff_input_vs,
                 eff_output_vs=eff_output_vs,
                 model_name=model_name,
+                progress_callback=lambda done, total, p=entry.path, i=crop_index: (
+                    progress_callback(
+                        {
+                            "phase": "tile",
+                            "crop_index": i,
+                            "n_crops": len(config.crops),
+                            "current_path": p,
+                            "tile_done": done,
+                            "tile_total": total,
+                        }
+                    )
+                    if progress_callback is not None
+                    else None
+                ),
             )
             created.extend(chunk_paths)
         except Exception as e:
             logger.exception(f"Failed to ingest crop {entry.path}")
             errors.append({"path": entry.path, "error": str(e)})
+
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "phase": "done",
+                "crop_index": len(config.crops),
+                "n_crops": len(config.crops),
+                "current_path": "",
+                "tile_done": len(created),
+                "tile_total": len(created),
+            }
+        )
 
     return {"created": created, "errors": errors}
 
@@ -333,6 +378,7 @@ def _ingest_one_crop(
     eff_input_vs: np.ndarray,
     eff_output_vs: np.ndarray,
     model_name: str,
+    progress_callback=None,
 ) -> List[str]:
     from funlib.geometry import Coordinate, Roi
 
@@ -371,25 +417,60 @@ def _ingest_one_crop(
     crop_name = entry.name or _derive_name(entry.path)
     crop_offset_voxels_in_dataset = (src_offset_nm / eff_output_vs).astype(int)
 
-    chunk_paths: List[str] = []
+    # Pre-compute the work list of tiles. Two passes:
+    #   1) Enumerate tiles, classify as FG (contains any value >= 2),
+    #      BG-only (any annotation but no FG), or empty (no annotation;
+    #      only happens in sparse mode).
+    #   2) Keep all FG tiles. Sample BG-only tiles down to a target ratio
+    #      so the model still sees true negatives without the dataset
+    #      exploding to thousands of pure-background chunks.
+    fg_tasks = []
+    bg_tasks = []
     for cz, cy, cx in _iter_tiles(np.array(remapped_padded.shape), output_size):
         z0, y0, x0 = cz * output_size[0], cy * output_size[1], cx * output_size[2]
         z1, y1, x1 = z0 + output_size[0], y0 + output_size[1], x0 + output_size[2]
         ann_tile = remapped_padded[z0:z1, y0:y1, x0:x1]
-
-        # Skip empty tiles (no annotation) — extract_correction_from_chunk
-        # uses the same heuristic so we match its behavior.
         if not np.any(ann_tile):
             continue
+        task = (cz, cy, cx, ann_tile, np.array([z0, y0, x0]))
+        if np.any(ann_tile >= 2):
+            fg_tasks.append(task)
+        else:
+            bg_tasks.append(task)
 
-        # Center of this tile in the dataset (nm)
-        chunk_offset_nm = (
-            src_offset_nm
-            + np.array([z0, y0, x0]) * eff_output_vs
-        )
+    if entry.bg_to_fg_ratio is None:
+        sampled_bg = bg_tasks
+    else:
+        budget = int(round(len(fg_tasks) * float(entry.bg_to_fg_ratio)))
+        budget = min(budget, len(bg_tasks))
+        if budget <= 0:
+            sampled_bg = []
+        else:
+            rng = np.random.default_rng(seed=hash(entry.path) & 0xFFFFFFFF)
+            idx = rng.choice(len(bg_tasks), size=budget, replace=False)
+            sampled_bg = [bg_tasks[i] for i in idx]
+
+    tasks = fg_tasks + sampled_bg
+    total_tiles = sum(
+        1 for _ in _iter_tiles(np.array(remapped_padded.shape), output_size)
+    )
+    logger.info(
+        f"Crop {entry.path}: {len(fg_tasks)} FG tiles + {len(sampled_bg)} BG "
+        f"(of {len(bg_tasks)} available) = {len(tasks)}/{total_tiles} total; "
+        f"loading raw in parallel..."
+    )
+
+    chunk_paths: List[str] = []
+    chunk_paths_lock = None  # threading.Lock — but list.append is atomic in CPython
+    n_workers = min(16, max(4, len(tasks)))
+    t0 = time.time()
+    completed = 0
+    log_every = max(1, len(tasks) // 10)
+
+    def _do_one(task):
+        cz, cy, cx, ann_tile, tile_offset_voxels = task
+        chunk_offset_nm = src_offset_nm + tile_offset_voxels * eff_output_vs
         chunk_center_nm = chunk_offset_nm + (output_size * eff_output_vs) / 2
-
-        # Raw read ROI = input_size voxels centered on the chunk center
         read_shape_nm = input_size * eff_input_vs
         raw_roi = Roi(
             offset=Coordinate(chunk_center_nm - read_shape_nm / 2),
@@ -430,18 +511,48 @@ def _ingest_one_crop(
         z.attrs["source"] = "yaml_crop"
         z.attrs["source_path"] = entry.path
         z.attrs["crop_name"] = crop_name
+        return chunk_zarr_path
 
-        chunk_paths.append(chunk_zarr_path)
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
+        futures = [ex.submit(_do_one, t) for t in tasks]
+        for fut in as_completed(futures):
+            try:
+                chunk_paths.append(fut.result())
+            except Exception:
+                logger.exception(f"Crop {entry.path}: per-tile worker failed")
+                raise
+            completed += 1
+            if progress_callback is not None:
+                progress_callback(completed, len(tasks))
+            if completed % log_every == 0 or completed == len(tasks):
+                elapsed = time.time() - t0
+                rate = completed / max(elapsed, 1e-3)
+                logger.info(
+                    f"Crop {entry.path}: {completed}/{len(tasks)} tiles "
+                    f"({elapsed:.1f}s elapsed, {rate:.1f} tiles/s)"
+                )
 
+    logger.info(
+        f"Crop {entry.path}: finished {len(chunk_paths)} tiles in "
+        f"{time.time() - t0:.1f}s"
+    )
     return chunk_paths
 
 
 def _derive_name(path: str) -> str:
-    """Derive a crop name from a zarr path: parent.zarr/inner -> parent_inner."""
+    """Derive a unique crop name from a zarr path.
+
+    Walks back from the leaf, collecting up to 4 path components (stripping
+    ``.zarr``) and joining with ``_``. Including a few parent dirs avoids
+    collisions when many crops share the same leaf (e.g. ``mitochondria.zarr``
+    under different ``crop15/`` / ``crop16/`` parents).
+    """
     p = Path(path.rstrip("/"))
     parts = []
     for piece in reversed(p.parts):
+        if piece in ("", "/"):
+            continue
         parts.insert(0, piece.replace(".zarr", ""))
-        if piece.endswith(".zarr"):
+        if len(parts) >= 4:
             break
     return "_".join(parts) or "crop"

@@ -27,6 +27,13 @@ def refresh_annotated_regions_layer(corrections_path=None):
             corrections_dir = volume.get("corrections_dir")
             if corrections_dir and corrections_dir not in scan_dirs:
                 scan_dirs.append(corrections_dir)
+        # Also scan corrections dirs from active output sessions so
+        # YAML-loaded crops show up even when no annotation_volume
+        # has been registered for the session.
+        for session_path in (getattr(g, "output_sessions", {}) or {}).values():
+            session_corrections = os.path.join(session_path, "corrections")
+            if session_corrections not in scan_dirs and os.path.isdir(session_corrections):
+                scan_dirs.append(session_corrections)
     if not scan_dirs:
         return 0
 
