@@ -288,6 +288,34 @@ def create_dataloader(
     shuffle: bool = True,
     model_name: Optional[str] = None,
 ) -> torch.utils.data.DataLoader:
+    # If a virtual-sources manifest is present in this corrections dir,
+    # bypass the materialized-chunk dataset entirely and stream patches
+    # directly from the source zarrs. The trainer entry point doesn't need
+    # to know — it still passes the same --corrections directory.
+    from cellmap_flow.finetune.virtual_dataset import (
+        VIRTUAL_MANIFEST_FILENAME,
+        dataset_from_manifest,
+        read_manifest,
+    )
+
+    manifest = read_manifest(corrections_zarr_path)
+    if manifest is not None:
+        logger.info(
+            f"Found virtual sources manifest at "
+            f"{Path(corrections_zarr_path) / VIRTUAL_MANIFEST_FILENAME}; "
+            f"using VirtualPatchDataset."
+        )
+        dataset = dataset_from_manifest(manifest)
+        actual_batch_size = max(1, min(batch_size, len(dataset)))
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=actual_batch_size,
+            shuffle=False,  # virtual dataset already samples randomly
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            multiprocessing_context="spawn" if num_workers > 0 else None,
+        )
     """
     Create a DataLoader for corrections.
 

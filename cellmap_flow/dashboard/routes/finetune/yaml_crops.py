@@ -146,17 +146,62 @@ def load_crops_from_yaml_response(data):
             if load_id:
                 _set_progress(load_id, **snapshot, done=False)
 
-        result = load_crops(
-            crops_config,
-            raw_dataset_path=raw_dataset_path,
-            corrections_dir=corrections_dir,
-            input_size=input_size,
-            output_size=output_size,
-            claimed_input_voxel_size=claimed_input_voxel_size,
-            claimed_output_voxel_size=claimed_output_voxel_size,
-            model_name=model_name,
-            progress_callback=_progress_cb,
-        )
+        # "virtual" mode skips disk materialization entirely. We just write
+        # a manifest into corrections_dir; the trainer's create_dataloader
+        # picks it up and instantiates a VirtualPatchDataset.
+        if crops_config.sampling == "virtual":
+            from cellmap_flow.finetune.virtual_dataset import write_manifest
+            from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
+
+            try:
+                eff_input_vs = list(
+                    get_raw_closest_scale(raw_dataset_path, tuple(claimed_input_voxel_size))
+                    or claimed_input_voxel_size
+                )
+                eff_output_vs = list(
+                    get_raw_closest_scale(raw_dataset_path, tuple(claimed_output_voxel_size))
+                    or claimed_output_voxel_size
+                )
+            except Exception:
+                eff_input_vs = list(claimed_input_voxel_size)
+                eff_output_vs = list(claimed_output_voxel_size)
+
+            manifest = {
+                "kind": "virtual_patch_sources_v1",
+                "raw_dataset_path": raw_dataset_path,
+                "input_size_voxels": [int(v) for v in input_size],
+                "output_size_voxels": [int(v) for v in output_size],
+                "input_voxel_size_nm": [float(v) for v in eff_input_vs],
+                "output_voxel_size_nm": [float(v) for v in eff_output_vs],
+                "patches_per_epoch": crops_config.patches_per_epoch,
+                "jitter_voxels": crops_config.jitter_voxels,
+                "sources": [
+                    {
+                        "path": entry.path,
+                        "fg_ids": entry.fg_ids,
+                        "bg_ids": list(entry.bg_ids),
+                        "mode": entry.mode,
+                        "connected_components": entry.connected_components,
+                        "name": entry.name,
+                    }
+                    for entry in crops_config.crops
+                ],
+            }
+            manifest_path = write_manifest(corrections_dir, manifest)
+            logger.info(f"Wrote virtual sources manifest to {manifest_path}")
+            result = {"created": [manifest_path], "errors": []}
+        else:
+            result = load_crops(
+                crops_config,
+                raw_dataset_path=raw_dataset_path,
+                corrections_dir=corrections_dir,
+                input_size=input_size,
+                output_size=output_size,
+                claimed_input_voxel_size=claimed_input_voxel_size,
+                claimed_output_voxel_size=claimed_output_voxel_size,
+                model_name=model_name,
+                progress_callback=_progress_cb,
+            )
 
         if load_id:
             _set_progress(

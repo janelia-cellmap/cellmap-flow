@@ -123,6 +123,9 @@
               Per-entry overrides: <code>fg_ids</code>, <code>bg_ids</code>,
               <code>mode</code> (dense|sparse), <code>connected_components</code> (bool),
               <code>bg_to_fg_ratio</code> (float; <code>0</code> drops all BG-only tiles, <code>null</code> keeps every tile).
+              Top-level <code>sampling: virtual</code> skips disk
+              materialization and trains directly from random patches centered
+              on annotated voxels; combine with <code>patches_per_epoch</code>.
             </small>
           </div>
           <div id="loadCropsStatus" class="text-muted small"></div>

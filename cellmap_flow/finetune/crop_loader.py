@@ -86,9 +86,26 @@ class CropEntry(BaseModel):
 
 
 class CropsConfig(BaseModel):
+    """Top-level YAML schema.
+
+    The optional ``sampling`` field selects between two ingest modes:
+        - ``"materialize"`` (default): tile each crop into ``_chunk_*.zarr``
+          entries on disk. Trainer reads them via :class:`CorrectionDataset`.
+        - ``"virtual"``: skip disk materialization. Trainer streams random
+          patches directly from the source zarrs via
+          :class:`VirtualPatchDataset`. Useful for big dense crops where
+          tiling would explode disk usage.
+
+    ``patches_per_epoch`` and ``jitter_voxels`` only apply when
+    ``sampling="virtual"``.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     crops: List[CropEntry]
+    sampling: Literal["materialize", "virtual"] = "materialize"
+    patches_per_epoch: int = 500
+    jitter_voxels: Optional[List[int]] = None
 
     @field_validator("crops", mode="before")
     @classmethod
