@@ -27,40 +27,38 @@ def detect_adaptable_layers(
     Automatically detect layers suitable for LoRA adaptation.
 
     Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
-    By default, excludes batch norm, layer norm, and final output layers.
+    By default, only excludes batch/layer-norm style modules. Output/head
+    layers are deliberately INCLUDED so the model can fully adapt its
+    feature→output mapping for cross-domain finetuning. (Previously
+    'final', 'head', 'output' were excluded; that left the output projection
+    frozen, which prevented learning when the base model's predictions on
+    the target dataset were poor.)
 
     Args:
         model: PyTorch model to inspect
         include_patterns: List of regex patterns for layer names to include
                          If None, includes all Conv/Linear layers
         exclude_patterns: List of substrings for layer names to exclude
-                         Default: ['bn', 'norm', 'final', 'head']
+                         Default: ['bn', 'norm']
 
     Returns:
         List of layer names suitable for LoRA adaptation
-
-    Examples:
-        >>> model = my_unet_model()
-        >>> layers = detect_adaptable_layers(model)
-        >>> print(f"Found {len(layers)} adaptable layers")
-        Found 24 adaptable layers
-
-        >>> # Only adapt encoder layers
-        >>> layers = detect_adaptable_layers(
-        ...     model,
-        ...     include_patterns=[r".*encoder.*"]
-        ... )
     """
     import re
 
     if exclude_patterns is None:
-        exclude_patterns = ['bn', 'norm', 'final', 'head', 'output']
+        exclude_patterns = ['bn', 'norm']
 
     adaptable = []
 
     for name, module in model.named_modules():
-        # Check if it's a convolutional or linear layer
-        if not isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)):
+        is_adaptable = isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear))
+
+        # Fallback: detect by parameter shape (e.g. InterpreterModule from torch.export)
+        if not is_adaptable and hasattr(module, 'weight') and isinstance(module.weight, torch.Tensor):
+            is_adaptable = module.weight.ndim >= 2
+
+        if not is_adaptable:
             continue
 
         # Apply include patterns if specified
@@ -80,6 +78,77 @@ def detect_adaptable_layers(
         logger.debug(f"Adaptable layers: {adaptable[:5]}..." if len(adaptable) > 5 else f"Adaptable layers: {adaptable}")
 
     return adaptable
+
+
+def _replace_interpreter_modules(model: nn.Module) -> int:
+    """Replace non-standard leaf modules (e.g. InterpreterModule from torch.export
+    unflatten) with real nn.Conv*/nn.Linear that share the same weight/bias tensors.
+
+    PEFT's dispatch only accepts nn.Conv1d/2d/3d, nn.Linear, etc., so unflattened
+    modules need to be swapped before LoRA wrapping. The FX graph's call_module
+    will invoke whatever module is registered under the name, so the swap doesn't
+    break the forward pass.
+
+    Returns the number of modules replaced.
+    """
+    count = 0
+    for name, module in list(model.named_modules()):
+        if isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)):
+            continue
+        if not hasattr(module, 'weight') or not isinstance(module.weight, torch.Tensor):
+            continue
+
+        w = module.weight
+        b = getattr(module, 'bias', None)
+        if b is not None and not isinstance(b, torch.Tensor):
+            b = None
+
+        if w.ndim == 5:
+            out_c, in_c, kz, ky, kx = w.shape
+            new_mod = nn.Conv3d(in_c, out_c, (kz, ky, kx), padding=0, bias=(b is not None))
+        elif w.ndim == 4:
+            out_c, in_c, ky, kx = w.shape
+            new_mod = nn.Conv2d(in_c, out_c, (ky, kx), padding=0, bias=(b is not None))
+        elif w.ndim == 3:
+            out_c, in_c, k = w.shape
+            new_mod = nn.Conv1d(in_c, out_c, k, padding=0, bias=(b is not None))
+        elif w.ndim == 2:
+            out_f, in_f = w.shape
+            new_mod = nn.Linear(in_f, out_f, bias=(b is not None))
+        else:
+            continue
+
+        new_mod.weight = nn.Parameter(w)
+        if b is not None:
+            new_mod.bias = nn.Parameter(b)
+
+        parts = name.split('.')
+        parent = model
+        for p in parts[:-1]:
+            parent = getattr(parent, p)
+        setattr(parent, parts[-1], new_mod)
+        count += 1
+
+    if count > 0:
+        logger.info(f"Replaced {count} non-standard modules with nn.Conv/Linear for PEFT compatibility")
+    return count
+
+
+class BatchLoopWrapper(nn.Module):
+    """Wraps a model with fixed batch_size=1 (e.g. UnflattenedModule from
+    torch.export without dynamic shapes) so it accepts arbitrary batch sizes
+    by looping over the batch dim.
+    """
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x, *args, **kwargs):
+        if x.shape[0] == 1:
+            return self.model(x, *args, **kwargs)
+        outs = [self.model(x[i:i + 1], *args, **kwargs) for i in range(x.shape[0])]
+        return torch.cat(outs, dim=0)
 
 
 class SequentialWrapper(nn.Module):
@@ -111,7 +180,7 @@ def wrap_model_with_lora(
     lora_alpha: int = 16,
     lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
-    task_type: str = "FEATURE_EXTRACTION",
+    task_type: Optional[str] = None,
 ) -> nn.Module:
     """
     Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
@@ -172,6 +241,10 @@ def wrap_model_with_lora(
         logger.info("Wrapping Sequential model for PEFT compatibility")
         model = SequentialWrapper(model)
 
+    # Replace any non-standard leaf modules (e.g. InterpreterModule) with
+    # real nn.Conv*/Linear so PEFT's dispatch can wrap them.
+    _replace_interpreter_modules(model)
+
     # Auto-detect target modules if not specified
     if target_modules is None:
         target_modules = detect_adaptable_layers(model)
@@ -183,6 +256,8 @@ def wrap_model_with_lora(
         logger.info(f"Auto-detected {len(target_modules)} target modules for LoRA")
 
     # Map task type string to PEFT TaskType enum
+    # None means PEFT uses the base PeftModel with a clean forward() passthrough,
+    # which is correct for custom nn.Module models (not HuggingFace transformers).
     task_type_map = {
         "FEATURE_EXTRACTION": TaskType.FEATURE_EXTRACTION,
         "SEQ_CLS": TaskType.SEQ_CLS,
@@ -190,16 +265,11 @@ def wrap_model_with_lora(
         "CAUSAL_LM": TaskType.CAUSAL_LM,
     }
 
-    if task_type not in task_type_map:
-        logger.warning(
-            f"Unknown task_type '{task_type}', using FEATURE_EXTRACTION. "
-            f"Valid options: {list(task_type_map.keys())}"
-        )
-        task_type = "FEATURE_EXTRACTION"
+    peft_task_type = task_type_map.get(task_type) if task_type else None
 
     # Create LoRA config
     lora_config = LoraConfig(
-        task_type=task_type_map[task_type],
+        task_type=peft_task_type,
         r=lora_r,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,

@@ -1,86 +1,157 @@
-<div class="alert alert-info" role="alert" style="font-size: 0.85rem;">
-  <strong>Finetune:</strong> Import correction crops and submit training jobs to the GPU cluster.
+<div class="alert alert-info" role="alert">
+  <strong>Finetune:</strong> Create annotation crops and submit training jobs to the GPU cluster.
+  <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
 </div>
 
-<!-- Model Selection -->
-<div id="modelSelectionDiv" class="mb-3">
-  <label for="modelSelect" class="form-label">Select Model</label>
-  <div class="d-flex gap-2">
-    <select class="form-select" id="modelSelect">
-      <!-- Populated by JavaScript -->
-    </select>
-    <button type="button" class="btn btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list">
-      &#x21bb;
+<!-- Tabs for Annotation Crops and Training -->
+<ul class="nav nav-tabs mb-3" id="finetuneTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="crops-tab" data-bs-toggle="tab" data-bs-target="#crops" type="button" role="tab">
+      Annotation Crops
     </button>
-  </div>
-</div>
-
-<!-- Model Info Display -->
-<div id="modelInfo" class="mb-3 p-2 border rounded" style="display: none;">
-  <h6>Model Configuration</h6>
-  <div id="modelInfoContent"></div>
-</div>
-
-<!-- Training Data -->
-<div class="mb-3">
-  <label class="form-label">Training Data</label>
-  <div class="d-flex gap-2 align-items-center">
-    <button type="button" class="btn btn-outline-primary" id="openTrainingDataBtn" data-bs-toggle="modal" data-bs-target="#trainingDataModal">
-      Configure Training Data <span class="badge bg-secondary" id="trainingDataCount">0</span>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+      Training
     </button>
-    <small class="text-muted" id="trainingDataStatus">No training data configured</small>
-  </div>
-  <!-- Hidden field storing the resolved YAML path for submission -->
-  <input type="hidden" id="trainingDataYamlPath" value="">
-</div>
+  </li>
+</ul>
 
-<!-- Training Data Manager Modal -->
-<div class="modal fade" id="trainingDataModal" tabindex="-1" aria-labelledby="trainingDataModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="trainingDataModalLabel">Training Data Manager</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <!-- Import/Export toolbar -->
-        <div class="d-flex gap-2 mb-3">
-          <div class="input-group input-group-sm" style="max-width: 500px;">
-            <input type="text" class="form-control" id="yamlImportPath" placeholder="/path/to/data.yaml">
-            <button class="btn btn-outline-secondary" type="button" id="importYamlBtn">Import from YAML</button>
+<div class="tab-content" id="finetuneTabContent">
+  <!-- Annotation Crops Tab -->
+  <div class="tab-pane fade show active" id="crops" role="tabpanel">
+
+<form id="finetuneForm">
+  <!-- Model Selection (conditionally shown) -->
+  <div id="modelSelectionDiv" class="mb-3">
+    <label for="modelSelect" class="form-label">Select Model</label>
+    <div class="d-flex gap-2">
+      <select class="form-select" id="modelSelect">
+        <!-- Populated by JavaScript -->
+      </select>
+      <button type="button" class="btn btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list">
+        &#x21bb;
+      </button>
+    </div>
+    <small class="form-text text-muted">
+      Crop will be sized to model's output inference size
+    </small>
+  </div>
+
+  <!-- Model Info Display -->
+  <div id="modelInfo" class="mb-3 p-2 border rounded" style="display: none;">
+    <h6>Model Configuration</h6>
+    <div id="modelInfoContent"></div>
+  </div>
+
+  <!-- Output Path for Zarr Files -->
+  <div class="mb-3">
+    <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
+    <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
+    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
+  </div>
+
+  <!-- Primary actions: start or resume an annotation volume -->
+  <div class="mb-2">
+    <label class="form-label fw-bold mb-1">Start or resume an annotation volume</label>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary" id="createVolumeBtn">
+        New Volume
+      </button>
+      <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
+        Resume Existing Volume
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">
+      Sparse volume across full dataset extent (paint <code>1</code>=background, <code>2</code>=foreground).
+      Resuming copies the chosen session into a new one, leaving the original intact.
+    </small>
+  </div>
+
+  <!-- Save action -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+      Save Annotations to Disk
+    </button>
+    <small class="form-text text-muted d-block mt-1">
+      Persists in-progress annotations from MinIO to disk. Painted regions are
+      automatically outlined as bounding boxes in the viewer (toggle via the
+      "annotated_regions" layer).
+    </small>
+  </div>
+
+  <!-- Load Existing Volume Modal -->
+  <div class="modal fade" id="loadExistingModal" tabindex="-1" aria-labelledby="loadExistingLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loadExistingLabel">Load Existing Annotation Volume</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            The selected session will be <strong>copied</strong> into a new session directory so your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.
+          </p>
+          <div class="mb-2">
+            <label for="existingBrowseRoot" class="form-label">Search in</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="existingBrowseRoot" placeholder="/path/to/output/directory">
+              <button type="button" class="btn btn-outline-secondary" id="existingBrowseRefreshBtn">Scan</button>
+            </div>
+            <small class="form-text text-muted">Directory containing timestamped sessions. Output Path is used as default.</small>
           </div>
-          <button class="btn btn-sm btn-outline-secondary" id="exportYamlBtn">Export to YAML</button>
-          <button class="btn btn-sm btn-outline-info" id="validateDataBtn">Validate</button>
+          <div class="mb-2">
+            <label for="existingSessionsList" class="form-label">Existing Sessions</label>
+            <select class="form-select" id="existingSessionsList" size="10">
+              <option>Scan a directory above...</option>
+            </select>
+          </div>
+          <div id="existingSessionsEmpty" class="text-muted small" style="display:none;">
+            No existing sessions found under this directory.
+          </div>
         </div>
-
-        <!-- Validation status -->
-        <div id="validationStatus" class="mb-2" style="display: none;"></div>
-
-        <!-- Dataset table -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-          <table class="table table-sm table-bordered" id="trainingDataTable">
-            <thead class="table-light">
-              <tr>
-                <th style="width: 15%;">Dataset Name</th>
-                <th style="width: 35%;">Raw Path</th>
-                <th style="width: 40%;">GT Crops</th>
-                <th style="width: 10%;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="trainingDataBody">
-              <!-- Populated dynamically -->
-            </tbody>
-          </table>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="loadExistingConfirmBtn" disabled>Load Selected</button>
         </div>
-        <button class="btn btn-sm btn-outline-success mt-2" id="addDatasetRowBtn">+ Add Dataset</button>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="applyTrainingDataBtn">Apply</button>
       </div>
     </div>
   </div>
-</div>
+  <!-- Deprecated/advanced: dense crop at view center -->
+  <details class="mt-2">
+    <summary class="text-muted small" style="cursor: pointer;">Advanced (deprecated): dense crop at view center</summary>
+    <div class="mt-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="createCropBtn">
+        Create Annotation Crop
+      </button>
+      <small class="form-text text-muted d-block mt-1">
+        Small dense region at current view center (paint <code>1</code>=foreground). Rarely used.
+      </small>
+    </div>
+  </details>
+
+  <!-- MinIO Status -->
+  <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
+    <h6>MinIO Status</h6>
+    <div id="minioStatusContent"></div>
+  </div>
+
+  <!-- Log Output -->
+  <div class="mt-3">
+    <label class="form-label">Log</label>
+    <textarea
+      id="finetuneLog"
+      class="form-control"
+      rows="8"
+      readonly
+      style="color: var(--text-muted); font-size: 15px; background-color: var(--bg-input); border: 1px solid var(--border);"
+    ></textarea>
+  </div>
+</form>
+</div><!-- End Crops Tab -->
+
+<!-- Training Tab -->
+<div class="tab-pane fade" id="training" role="tabpanel">
 
 <!-- Training Configuration Card -->
 <div class="card mb-3">
@@ -108,6 +179,7 @@
             <option value="4">4 (Fast, lower capacity)</option>
             <option value="8" selected>8 (Balanced) - Recommended</option>
             <option value="16">16 (High capacity)</option>
+            <option value="64">64 (Very high capacity)</option>
           </select>
           <small class="text-muted">Higher rank = more trainable parameters</small>
         </div>
@@ -115,7 +187,7 @@
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
-          <input type="number" id="numEpochs" class="form-control" value="10" min="5" max="50" step="1">
+          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="50" step="1">
           <small class="text-muted">Typical range: 10-20 epochs</small>
         </div>
       </div>
@@ -153,19 +225,6 @@
       </div>
     </div>
 
-    <!-- Channel Selection (only visible for multi-channel models) -->
-    <div class="row" id="channelSelectionRow" style="display: none;">
-      <div class="col-md-6">
-        <div class="mb-3">
-          <label for="selectChannel" class="form-label">Target Channel</label>
-          <select id="selectChannel" class="form-select">
-            <option value="">All channels (train all outputs)</option>
-          </select>
-          <small class="text-muted">For multi-channel models: select which organelle to finetune</small>
-        </div>
-      </div>
-    </div>
-
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
@@ -179,6 +238,25 @@
           </select>
           <small class="text-muted">Margin is recommended for sparse annotations</small>
         </div>
+        <div class="mb-3" id="marginGroup">
+          <label for="marginValue" class="form-label">
+            Margin
+            <span class="badge bg-secondary">margin loss only</span>
+          </label>
+          <input
+            type="number"
+            id="marginValue"
+            class="form-control"
+            value="0.3"
+            min="0"
+            max="0.5"
+            step="0.05"
+          />
+          <small class="text-muted">
+            Smaller = stricter (more learning signal). Predictions outside
+            <code>[margin, 1-margin]</code> get zero gradient.
+          </small>
+        </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
@@ -189,9 +267,9 @@
             <option value="0">0 (Disabled)</option>
             <option value="0.01">0.01</option>
             <option value="0.05">0.05</option>
-            <option value="0.1">0.1</option>
+            <option value="0.1" selected>0.1 (Default)</option>
             <option value="0.2">0.2</option>
-            <option value="0.5" selected>0.5 (Default)</option>
+            <option value="0.5">0.5</option>
             <option value="1.0">1.0</option>
             <option value="2.0">2.0</option>
             <option value="5.0">5.0</option>
@@ -213,6 +291,24 @@
             <option value="all">All voxels</option>
           </select>
           <small class="text-muted">Where to apply distillation loss</small>
+        </div>
+        <div class="mb-3">
+          <label for="labelSmoothing" class="form-label">
+            Label Smoothing
+          </label>
+          <input
+            type="number"
+            id="labelSmoothing"
+            class="form-control"
+            value="0.1"
+            min="0"
+            max="0.5"
+            step="0.01"
+          />
+          <small class="text-muted">
+            Softens hard 0/1 targets to [s/2, 1-s/2]. Default 0.1.
+            Set to 0 for clean annotations where you want sharp 0/1 outputs.
+          </small>
         </div>
       </div>
       <div class="col-md-6">
@@ -266,6 +362,9 @@
       <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
         🔄 Restart Training
       </button>
+      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" title="Exit the training loop after the current epoch. The job stays alive — the inference server starts and you can then restart with updated params.">
+        ⏸ Stop Early
+      </button>
       <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
         ❌ Cancel
       </button>
@@ -275,6 +374,7 @@
     <div class="mb-3">
       <p class="mb-1"><strong>Job ID:</strong> <span id="jobId" class="font-monospace">-</span></p>
       <p class="mb-1"><strong>Model:</strong> <span id="jobModelName">-</span></p>
+      <p class="mb-1"><strong>Output Type:</strong> <span id="jobOutputType" class="badge bg-info">-</span></p>
       <p class="mb-1"><strong>Status:</strong> <span id="jobStatus" class="badge bg-secondary">-</span></p>
       <p class="mb-1"><strong>Progress:</strong> <span id="jobProgress">-</span></p>
     </div>
@@ -312,8 +412,15 @@
     </div>
   </div>
   <div class="card-body">
+    <div class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted">Loss vs Epoch</small>
+        <small id="lossPlotSummary" class="text-muted">No loss data yet</small>
+      </div>
+      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid var(--border); border-radius: var(--radius-sm);"></canvas>
+    </div>
     <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
-              style="font-size: 0.85rem; white-space: pre;">No training job running...
+              style="font-size: 15px; white-space: pre;">No training job running...
     </textarea>
   </div>
 </div>
@@ -321,309 +428,132 @@
 </div><!-- End Tab Content -->
 
 <!-- Restart Training Modal -->
-<div class="modal fade" id="restartTrainingModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Restart Training</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>This will archive current logs and restart training with the same or updated parameters.</p>
-
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" id="useCurrentParams" checked>
-          <label class="form-check-label" for="useCurrentParams">
-            Use current training parameters
-          </label>
-        </div>
-
-        <div id="updateParamsSection" style="display: none;">
-          <h6>Update Parameters</h6>
-          <div class="mb-2">
-            <label class="form-label">LoRA Rank</label>
-            <select id="restartLoraRank" class="form-select">
-              <option value="4">4 (Fast, lower capacity)</option>
-              <option value="8" selected>8 (Balanced)</option>
-              <option value="16">16 (High capacity)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Number of Epochs</label>
-            <input type="number" id="restartNumEpochs" class="form-control" value="10" min="5" max="50">
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Batch Size</label>
-            <select id="restartBatchSize" class="form-select">
-              <option value="1">1</option>
-              <option value="2" selected>2 (Default)</option>
-              <option value="4">4</option>
-              <option value="8">8</option>
-              <option value="16">16</option>
-              <option value="32">32</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Learning Rate</label>
-            <select id="restartLearningRate" class="form-select">
-              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
-              <option value="0.000001">1e-6 (Very Conservative)</option>
-              <option value="0.00001">1e-5 (Conservative)</option>
-              <option value="0.0001" selected>1e-4 (Standard)</option>
-              <option value="0.001">1e-3 (Aggressive)</option>
-              <option value="0.01">1e-2 (Very Aggressive)</option>
-              <option value="0.1">1e-1 (Extremely Aggressive)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Loss Function</label>
-            <select id="restartLossType" class="form-select">
-              <option value="margin" selected>Margin (for scribbles)</option>
-              <option value="mse">MSE</option>
-              <option value="bce">BCE</option>
-              <option value="dice">Dice</option>
-              <option value="combined">Combined (Dice + BCE)</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Distillation Weight</label>
-            <select id="restartDistillationLambda" class="form-select">
-              <option value="0">0 (Disabled)</option>
-              <option value="0.01">0.01</option>
-              <option value="0.05">0.05</option>
-              <option value="0.1">0.1</option>
-              <option value="0.2">0.2</option>
-              <option value="0.5" selected>0.5 (Default)</option>
-              <option value="1.0">1.0</option>
-              <option value="2.0">2.0</option>
-              <option value="5.0">5.0</option>
-              <option value="10.0">10.0</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Distillation Scope</label>
-            <select id="restartDistillationScope" class="form-select">
-              <option value="unlabeled" selected>Unlabeled voxels only</option>
-              <option value="all">All voxels</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="restartBalanceClasses" checked>
-              <label class="form-check-label" for="restartBalanceClasses">
-                Balance fg/bg classes
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirmRestartBtn">Restart</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const modelSelect = document.getElementById("modelSelect");
   const modelSelectionDiv = document.getElementById("modelSelectionDiv");
   const modelInfo = document.getElementById("modelInfo");
   const modelInfoContent = document.getElementById("modelInfoContent");
+  const createCropBtn = document.getElementById("createCropBtn");
+  const finetuneLog = document.getElementById("finetuneLog");
+  const minioStatus = document.getElementById("minioStatus");
+  const minioStatusContent = document.getElementById("minioStatusContent");
+  const outputPathInput = document.getElementById("outputPath");
+  const saveAnnotationsBtn = document.getElementById("saveAnnotationsBtn");
 
   let models = [];
   let selectedModel = null;
 
-  // === Training Data Manager State ===
-  let trainingDatasets = [];  // Array of { name, raw, crops: { cropName: path } }
+  // === Persist all finetune form state to localStorage ===
+  const FINETUNE_STATE_KEY = "finetuneFormState";
 
-  function renderTrainingDataTable() {
-    const tbody = document.getElementById("trainingDataBody");
-    tbody.innerHTML = "";
-    trainingDatasets.forEach((ds, idx) => {
-      const cropEntries = Object.entries(ds.crops || {});
-      const cropHtml = cropEntries.map(([cn, cp]) =>
-        `<div class="d-flex gap-1 mb-1 align-items-center">
-          <input type="text" class="form-control form-control-sm" style="width:120px;" value="${cn}" placeholder="crop name"
-            onchange="updateCropName(${idx}, '${cn}', this.value)">
-          <input type="text" class="form-control form-control-sm" value="${cp}" placeholder="/path/to/crop/zarr"
-            onchange="updateCropPath(${idx}, '${cn}', this.value)">
-          <button class="btn btn-sm btn-outline-danger" onclick="removeCrop(${idx}, '${cn}')" title="Remove crop">&times;</button>
-        </div>`
-      ).join("");
-
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td><input type="text" class="form-control form-control-sm" value="${ds.name}" placeholder="dataset_name"
-            onchange="trainingDatasets[${idx}].name = this.value"></td>
-        <td><input type="text" class="form-control form-control-sm" value="${ds.raw}" placeholder="/path/to/raw/zarr"
-            onchange="trainingDatasets[${idx}].raw = this.value"></td>
-        <td>
-          <div id="crops-${idx}">${cropHtml}</div>
-          <button class="btn btn-sm btn-outline-secondary mt-1" onclick="addCrop(${idx})">+ Add Crop</button>
-        </td>
-        <td><button class="btn btn-sm btn-outline-danger" onclick="removeDataset(${idx})">Delete</button></td>
-      `;
-      tbody.appendChild(row);
-    });
-
-    // Update count badge and status text
-    const totalCrops = trainingDatasets.reduce((sum, ds) => sum + Object.keys(ds.crops || {}).length, 0);
-    document.getElementById("trainingDataCount").textContent = trainingDatasets.length;
-    if (trainingDatasets.length > 0) {
-      document.getElementById("trainingDataStatus").textContent =
-        `${trainingDatasets.length} dataset(s), ${totalCrops} crop(s)`;
-    } else {
-      document.getElementById("trainingDataStatus").textContent = "No training data configured";
-    }
+  function saveFinetuneState() {
+    const state = {
+      outputPath: outputPathInput.value,
+      checkpointPath: document.getElementById("checkpointPath").value,
+      loraRank: document.getElementById("loraRank").value,
+      numEpochs: document.getElementById("numEpochs").value,
+      batchSize: document.getElementById("batchSize").value,
+      learningRate: document.getElementById("learningRate").value,
+      lossType: document.getElementById("lossType").value,
+      marginValue: document.getElementById("marginValue").value,
+      labelSmoothing: document.getElementById("labelSmoothing").value,
+      distillationLambda: document.getElementById("distillationLambda").value,
+      distillationScope: document.getElementById("distillationScope").value,
+      balanceClasses: document.getElementById("balanceClasses").checked,
+      autoServe: document.getElementById("autoServeCheck").checked,
+      gpuQueue: document.getElementById("gpuQueue").value,
+      selectedModelName: modelSelect.value,
+    };
+    localStorage.setItem(FINETUNE_STATE_KEY, JSON.stringify(state));
   }
 
-  // Make these global so inline onclick handlers can access them
-  window.updateCropName = function(dsIdx, oldName, newName) {
-    if (oldName === newName) return;
-    const crops = trainingDatasets[dsIdx].crops;
-    const path = crops[oldName];
-    delete crops[oldName];
-    crops[newName] = path;
-    renderTrainingDataTable();
-  };
+  function restoreFinetuneState() {
+    const raw = localStorage.getItem(FINETUNE_STATE_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
 
-  window.updateCropPath = function(dsIdx, cropName, newPath) {
-    trainingDatasets[dsIdx].crops[cropName] = newPath;
-  };
+  // Show/hide margin field based on selected loss (main training form and
+  // restart modal both have their own loss dropdown + margin input).
+  function _bindMarginVisibility(lossSelectId, marginGroupId) {
+    const lossSel = document.getElementById(lossSelectId);
+    const marginGroup = document.getElementById(marginGroupId);
+    if (!lossSel || !marginGroup) return;
+    const update = () => {
+      marginGroup.style.display = lossSel.value === "margin" ? "" : "none";
+    };
+    lossSel.addEventListener("change", update);
+    update();
+  }
+  _bindMarginVisibility("lossType", "marginGroup");
 
-  window.removeCrop = function(dsIdx, cropName) {
-    delete trainingDatasets[dsIdx].crops[cropName];
-    renderTrainingDataTable();
-  };
-
-  window.addCrop = function(dsIdx) {
-    const cropNum = Object.keys(trainingDatasets[dsIdx].crops).length + 1;
-    trainingDatasets[dsIdx].crops[`crop${cropNum}`] = "";
-    renderTrainingDataTable();
-  };
-
-  window.removeDataset = function(dsIdx) {
-    trainingDatasets.splice(dsIdx, 1);
-    renderTrainingDataTable();
-  };
-
-  // Add Dataset row
-  document.getElementById("addDatasetRowBtn").addEventListener("click", () => {
-    trainingDatasets.push({ name: "", raw: "", crops: {} });
-    renderTrainingDataTable();
-  });
-
-  // Import from YAML
-  document.getElementById("importYamlBtn").addEventListener("click", async () => {
-    const yamlPath = document.getElementById("yamlImportPath").value.trim();
-    if (!yamlPath) {
-      alert("Please enter a YAML file path");
-      return;
-    }
-    try {
-      const resp = await fetch(`/api/finetune/training-data/import?path=${encodeURIComponent(yamlPath)}`);
-      const data = await resp.json();
-      if (!data.success) {
-        alert("Import failed: " + data.error);
-        return;
+  // Attach change listeners to all form elements to auto-save state
+  function attachStateListeners() {
+    const ids = [
+      "outputPath", "checkpointPath", "loraRank", "numEpochs",
+      "batchSize", "learningRate", "lossType", "marginValue", "labelSmoothing",
+      "distillationLambda", "distillationScope",
+      "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
+    ];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("change", saveFinetuneState);
+      // Also save on input for text fields
+      if (el && (el.type === "text" || el.type === "number")) {
+        el.addEventListener("input", saveFinetuneState);
       }
-      trainingDatasets = data.datasets;
-      document.getElementById("trainingDataYamlPath").value = data.source_path;
-      renderTrainingDataTable();
-    } catch (e) {
-      alert("Import error: " + e.message);
-    }
-  });
+    });
+  }
 
-  // Export to YAML
-  document.getElementById("exportYamlBtn").addEventListener("click", async () => {
-    if (trainingDatasets.length === 0) {
-      alert("No datasets to export");
-      return;
-    }
-    const outputPath = prompt("Enter output YAML file path:", "training_data.yaml");
-    if (!outputPath) return;
-    try {
-      const resp = await fetch("/api/finetune/training-data/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: outputPath, datasets: trainingDatasets })
-      });
-      const data = await resp.json();
-      if (data.success) {
-        alert("Exported to: " + data.path);
-        document.getElementById("trainingDataYamlPath").value = data.path;
-      } else {
-        alert("Export failed: " + data.error);
+  // Server-side prefs override port-scoped localStorage so output path
+  // survives dashboard restarts (which use a random port -> new origin).
+  fetch("/api/finetune/user-prefs")
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.success && d.prefs && d.prefs.outputPath && !outputPathInput.value) {
+        outputPathInput.value = d.prefs.outputPath;
       }
-    } catch (e) {
-      alert("Export error: " + e.message);
-    }
-  });
+    })
+    .catch(() => {});
 
-  // Validate paths
-  document.getElementById("validateDataBtn").addEventListener("click", async () => {
-    if (trainingDatasets.length === 0) {
-      alert("No datasets to validate");
-      return;
-    }
-    const statusDiv = document.getElementById("validationStatus");
-    statusDiv.style.display = "block";
-    statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validating...';
-
-    try {
-      const resp = await fetch("/api/finetune/training-data/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ datasets: trainingDatasets })
-      });
-      const data = await resp.json();
-      if (!data.success) {
-        statusDiv.innerHTML = `<div class="alert alert-danger py-1">${data.error}</div>`;
-        return;
+  // Persist outputPath server-side on change so it sticks across restarts.
+  let _outputPathSaveTimer = null;
+  outputPathInput.addEventListener("input", () => {
+    clearTimeout(_outputPathSaveTimer);
+    _outputPathSaveTimer = setTimeout(() => {
+      const val = outputPathInput.value.trim();
+      if (val) {
+        fetch("/api/finetune/user-prefs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ outputPath: val }),
+        }).catch(() => {});
       }
-
-      let html = "";
-      data.results.forEach(r => {
-        const rawIcon = r.raw_valid ? '<span style="color:green;">&#10003;</span>' : '<span style="color:red;">&#10007;</span>';
-        const rawErr = r.raw_error ? ` <small class="text-danger">(${r.raw_error})</small>` : "";
-        html += `<div><strong>${r.name}</strong> - Raw: ${rawIcon}${rawErr}`;
-        const cropEntries = Object.entries(r.crops || {});
-        if (cropEntries.length > 0) {
-          html += "<ul class='mb-1' style='margin-top:2px;'>";
-          cropEntries.forEach(([cn, cv]) => {
-            const icon = cv.valid ? '<span style="color:green;">&#10003;</span>' : '<span style="color:red;">&#10007;</span>';
-            const err = cv.error ? ` <small class="text-danger">(${cv.error})</small>` : "";
-            html += `<li style="font-size:0.85rem;">${cn}: ${icon}${err}</li>`;
-          });
-          html += "</ul>";
-        }
-        html += "</div>";
-      });
-
-      const alertClass = data.all_valid ? "alert-success" : "alert-warning";
-      const summary = data.all_valid ? "All paths valid!" : "Some paths have issues";
-      statusDiv.innerHTML = `<div class="alert ${alertClass} py-2"><strong>${summary}</strong>${html}</div>`;
-    } catch (e) {
-      statusDiv.innerHTML = `<div class="alert alert-danger py-1">Validation error: ${e.message}</div>`;
-    }
+    }, 500);
   });
 
-  // Apply button
-  document.getElementById("applyTrainingDataBtn").addEventListener("click", () => {
-    // If datasets were modified manually (not imported), clear the YAML path
-    // so the submit handler knows to export first
-    if (trainingDatasets.length > 0) {
-      const yamlPath = document.getElementById("trainingDataYamlPath").value;
-      if (!yamlPath) {
-        // Will be exported on submit
-      }
+  // Restore saved state (non-model fields applied immediately)
+  const savedState = restoreFinetuneState();
+  if (savedState) {
+    if (savedState.outputPath) outputPathInput.value = savedState.outputPath;
+    if (savedState.checkpointPath) document.getElementById("checkpointPath").value = savedState.checkpointPath;
+    if (savedState.loraRank) document.getElementById("loraRank").value = savedState.loraRank;
+    if (savedState.numEpochs) document.getElementById("numEpochs").value = savedState.numEpochs;
+    if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
+    if (savedState.learningRate) document.getElementById("learningRate").value = savedState.learningRate;
+    if (savedState.lossType) document.getElementById("lossType").value = savedState.lossType;
+    if (savedState.marginValue) document.getElementById("marginValue").value = savedState.marginValue;
+    if (savedState.labelSmoothing !== undefined && savedState.labelSmoothing !== null) {
+      document.getElementById("labelSmoothing").value = savedState.labelSmoothing;
     }
-    renderTrainingDataTable();  // Update badge count
-    bootstrap.Modal.getInstance(document.getElementById("trainingDataModal")).hide();
-  });
+    if (savedState.distillationLambda) document.getElementById("distillationLambda").value = savedState.distillationLambda;
+    if (savedState.distillationScope) document.getElementById("distillationScope").value = savedState.distillationScope;
+    if (savedState.balanceClasses !== undefined) document.getElementById("balanceClasses").checked = savedState.balanceClasses;
+    if (savedState.autoServe !== undefined) document.getElementById("autoServeCheck").checked = savedState.autoServe;
+    if (savedState.gpuQueue) document.getElementById("gpuQueue").value = savedState.gpuQueue;
+  }
+  attachStateListeners();
 
   // Load models on page load
   loadModels();
@@ -632,6 +562,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const refreshModelsBtn = document.getElementById("refreshModelsBtn");
   if (refreshModelsBtn) {
     refreshModelsBtn.addEventListener("click", function() {
+      finetuneLog.value += "Refreshing model list...\n";
       models = [];
       selectedModel = null;
       modelSelect.innerHTML = "";
@@ -644,14 +575,17 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(res => res.json())
       .then(data => {
         if (data.error) {
-          console.error(`Error loading models: ${data.error}`);
+          finetuneLog.value += `Error: ${data.error}\n`;
+          createCropBtn.disabled = true;
           return;
         }
 
         models = data.models;
 
         if (models.length === 0) {
-          console.warn("No models available for finetuning");
+          finetuneLog.value += "Error: No models available for finetuning\n";
+          finetuneLog.value += "  → Submit a model from the main tab first, then click the refresh button (↻) above\n";
+          createCropBtn.disabled = true;
           return;
         }
 
@@ -669,8 +603,11 @@ document.addEventListener("DOMContentLoaded", function () {
             modelSelect.appendChild(option);
           });
 
-          // Set initial selection
-          if (data.selected_model) {
+          // Set initial selection (prefer saved state, fall back to server)
+          const savedModelName = savedState && savedState.selectedModelName;
+          if (savedModelName && models.find(m => m.name === savedModelName)) {
+            modelSelect.value = savedModelName;
+          } else if (data.selected_model) {
             modelSelect.value = data.selected_model;
           }
 
@@ -686,10 +623,14 @@ document.addEventListener("DOMContentLoaded", function () {
           displayModelInfo(selectedModel);
         }
 
-        console.log(`Loaded ${models.length} model(s)`);
+        // Enable create button if we have models
+        createCropBtn.disabled = false;
+        finetuneLog.value += `Loaded ${models.length} model(s)\n`;
       })
       .catch(err => {
-        console.error(`Error loading models: ${err}`);
+        finetuneLog.value += `Error loading models: ${err}\n`;
+        console.error(err);
+        createCropBtn.disabled = true;
       });
   }
 
@@ -700,46 +641,342 @@ document.addEventListener("DOMContentLoaded", function () {
       Math.round(s / model.output_voxel_size[i])
     );
 
-    const channelInfo = model.channel_names
-      ? `${model.output_channels} (${model.channel_names.join(', ')})`
-      : `${model.output_channels}`;
-
     modelInfoContent.innerHTML = `
       <small>
         <strong>Name:</strong> ${model.name}<br>
         <strong>Output Size (nm):</strong> [${model.write_shape.join(', ')}]<br>
         <strong>Voxel Size (nm):</strong> [${model.output_voxel_size.join(', ')}]<br>
         <strong>Crop Shape (voxels):</strong> [${voxelShape.join(', ')}]<br>
-        <strong>Channels:</strong> ${channelInfo}
+        <strong>Channels:</strong> ${model.output_channels}
       </small>
     `;
     modelInfo.style.display = "block";
-
-    // Update channel selector dropdown
-    const channelSelect = document.getElementById("selectChannel");
-    const channelRow = document.getElementById("channelSelectionRow");
-    channelSelect.innerHTML = '<option value="">All channels (train all outputs)</option>';
-
-    if (model.output_channels > 1 && model.channel_names) {
-      model.channel_names.forEach((name, idx) => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = `${idx}: ${name}`;
-        channelSelect.appendChild(opt);
-      });
-      channelRow.style.display = "";
-    } else if (model.output_channels > 1) {
-      for (let i = 0; i < model.output_channels; i++) {
-        const opt = document.createElement("option");
-        opt.value = String(i);
-        opt.textContent = `Channel ${i}`;
-        channelSelect.appendChild(opt);
-      }
-      channelRow.style.display = "";
-    } else {
-      channelRow.style.display = "none";
-    }
   }
+
+  // Create annotation crop
+  createCropBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createCropBtn.disabled = true;
+    createCropBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    finetuneLog.value += `Creating annotation crop at current view center...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-crop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // Save output path to localStorage for next time
+          saveFinetuneState();
+
+          finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
+          finetuneLog.value += `  Center (nm): [${data.metadata.center_position_nm.map(v => v.toFixed(1)).join(', ')}]\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Raw crop - Offset (voxels): [${data.metadata.raw_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Raw crop - Shape (voxels): [${data.metadata.raw_crop_shape.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Offset (voxels): [${data.metadata.annotation_crop_offset.join(', ')}]\n`;
+          finetuneLog.value += `  Annotation crop - Shape (voxels): [${data.metadata.annotation_crop_shape.join(', ')}]\n`;
+
+          // Update MinIO status
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          // Add to viewer
+          addToViewer(data.crop_id, data.neuroglancer_url);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createCropBtn.disabled = false;
+        createCropBtn.innerHTML = 'Create Annotation Crop';
+      });
+  });
+
+  // Create annotation volume (sparse, full dataset)
+  const createVolumeBtn = document.getElementById("createVolumeBtn");
+  createVolumeBtn.addEventListener("click", function() {
+    if (!selectedModel) {
+      alert("No model selected");
+      return;
+    }
+
+    const outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      alert("Please specify an output path for the zarr files");
+      return;
+    }
+
+    createVolumeBtn.disabled = true;
+    createVolumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    finetuneLog.value += `Creating annotation volume for full dataset...\n`;
+    finetuneLog.value += `Output path: ${outputPath}\n`;
+
+    const payload = {
+      model_name: selectedModel.name,
+      output_path: outputPath
+    };
+
+    fetch("/api/finetune/create-volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          saveFinetuneState();
+          finetuneLog.value += `✓ Created annotation volume: ${data.volume_id}\n`;
+          finetuneLog.value += `  Dataset shape (voxels): [${data.metadata.dataset_shape_voxels.join(', ')}]\n`;
+          finetuneLog.value += `  Chunk size (voxels): [${data.metadata.chunk_size.join(', ')}]\n`;
+          finetuneLog.value += `  Voxel size (nm): [${data.metadata.output_voxel_size.join(', ')}]\n`;
+          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
+          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+          finetuneLog.value += `  Label scheme: paint 1=background, 2=foreground, 0=unannotated\n`;
+
+          minioStatusContent.innerHTML = `
+            <small>
+              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
+              <strong>URL:</strong> ${data.minio_url}
+            </small>
+          `;
+          minioStatus.style.display = "block";
+
+          addToViewer(data.volume_id, data.neuroglancer_url, `sparse_annotation_${data.volume_id}`);
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+        }
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        createVolumeBtn.disabled = false;
+        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+      });
+  });
+
+  // Load Existing Volume modal handling
+  const loadExistingBtn = document.getElementById("loadExistingVolumeBtn");
+  const existingSessionsList = document.getElementById("existingSessionsList");
+  const existingSessionsEmpty = document.getElementById("existingSessionsEmpty");
+  const existingBrowseRoot = document.getElementById("existingBrowseRoot");
+  const existingBrowseRefreshBtn = document.getElementById("existingBrowseRefreshBtn");
+  const loadExistingConfirmBtn = document.getElementById("loadExistingConfirmBtn");
+  let loadExistingModal = null;
+
+  function scanExistingSessions() {
+    const rootPath = existingBrowseRoot.value.trim();
+    if (!rootPath) {
+      existingSessionsList.innerHTML = '<option disabled>Enter a directory above and click Scan</option>';
+      existingSessionsEmpty.style.display = "none";
+      return;
+    }
+    try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
+    existingSessionsList.innerHTML = '<option>Loading...</option>';
+    existingSessionsEmpty.style.display = "none";
+    loadExistingConfirmBtn.disabled = true;
+
+    fetch("/api/finetune/list-existing-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ output_path: rootPath })
+    })
+      .then(res => res.json())
+      .then(data => {
+        existingSessionsList.innerHTML = "";
+        if (!data.success) {
+          existingSessionsList.innerHTML = `<option disabled>Error: ${data.error}</option>`;
+          return;
+        }
+        if (!data.sessions || data.sessions.length === 0) {
+          existingSessionsEmpty.style.display = "block";
+          return;
+        }
+        data.sessions.forEach(s => {
+          const volNames = s.volumes.map(v => v.volume_id).join(", ") || "(no volume)";
+          const opt = document.createElement("option");
+          opt.value = s.session_path;
+          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks — ${volNames}`;
+          opt.disabled = s.volumes.length === 0;
+          existingSessionsList.appendChild(opt);
+        });
+      })
+      .catch(err => {
+        existingSessionsList.innerHTML = `<option disabled>Error: ${err}</option>`;
+      });
+  }
+
+  existingSessionsList.addEventListener("change", () => {
+    loadExistingConfirmBtn.disabled = !existingSessionsList.value;
+  });
+  existingBrowseRefreshBtn.addEventListener("click", scanExistingSessions);
+  existingBrowseRoot.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); scanExistingSessions(); }
+  });
+
+  loadExistingBtn.addEventListener("click", function() {
+    if (!loadExistingModal) {
+      loadExistingModal = new bootstrap.Modal(document.getElementById("loadExistingModal"));
+    }
+    // Seed the root: prefer outputPath field, then last used, then blank
+    const outputPath = document.getElementById("outputPath").value.trim();
+    const saved = (() => { try { return localStorage.getItem("existingBrowseRoot"); } catch (_) { return null; } })();
+    existingBrowseRoot.value = outputPath || saved || "";
+    loadExistingModal.show();
+    if (existingBrowseRoot.value) scanExistingSessions();
+    else {
+      existingSessionsList.innerHTML = '<option disabled>Enter a directory above and click Scan</option>';
+      existingSessionsEmpty.style.display = "none";
+      loadExistingConfirmBtn.disabled = true;
+    }
+  });
+
+  loadExistingConfirmBtn.addEventListener("click", function() {
+    const sessionPath = existingSessionsList.value;
+    // Target output path: use the outputPath field if set, otherwise the
+    // parent of the source session (so we save back into the same root).
+    let outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+      outputPath = existingBrowseRoot.value.trim();
+      if (outputPath) {
+        // Mirror it back into the main field so downstream save/train uses it.
+        document.getElementById("outputPath").value = outputPath;
+      }
+    }
+    if (!sessionPath || !outputPath) return;
+
+    loadExistingConfirmBtn.disabled = true;
+    loadExistingConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+    finetuneLog.value += `Loading existing volume from: ${sessionPath}\n`;
+
+    fetch("/api/finetune/load-existing-volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_session_path: sessionPath,
+        output_path: outputPath,
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        loadExistingConfirmBtn.disabled = false;
+        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        if (!data.success) {
+          finetuneLog.value += `✗ Error: ${data.error}\n`;
+          return;
+        }
+        finetuneLog.value += `✓ Loaded volume ${data.volume_id} into ${data.new_session_path}\n`;
+        finetuneLog.value += `  Copied ${data.copied_count} files. ${data.painted_chunk_count || 0} painted chunks served.\n`;
+        if (data.copied_minio) {
+          finetuneLog.value += `  Migrated MinIO storage from source session.\n`;
+        }
+        finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
+        if (loadExistingModal) loadExistingModal.hide();
+        addToViewer(
+          data.volume_id,
+          data.neuroglancer_url,
+          `sparse_annotation_${data.volume_id}`,
+        );
+      })
+      .catch(err => {
+        loadExistingConfirmBtn.disabled = false;
+        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        finetuneLog.value += `✗ Error: ${err}\n`;
+      });
+  });
+
+  function addToViewer(cropId, neuroglancerUrl, layerName) {
+    finetuneLog.value += `Adding layer to viewer...\n`;
+
+    const payload = {
+      crop_id: cropId,
+      minio_url: neuroglancerUrl
+    };
+    if (layerName) {
+      payload.layer_name = layerName;
+    }
+
+    fetch("/api/finetune/add-to-viewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ Layer added: ${data.layer_name}\n`;
+        } else {
+          finetuneLog.value += `✗ Error adding layer: ${data.error}\n`;
+        }
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+      });
+  }
+
+  // Save annotations to disk
+  saveAnnotationsBtn.addEventListener("click", function() {
+    saveAnnotationsBtn.disabled = true;
+    const originalText = saveAnnotationsBtn.textContent;
+    saveAnnotationsBtn.textContent = "💾 Syncing...";
+    finetuneLog.value += `Syncing all annotations from MinIO to local disk...\n`;
+
+    fetch("/api/finetune/sync-annotations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force: true })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ ${data.message}\n`;
+          if (data.synced_count !== undefined) {
+            finetuneLog.value += `  Synced ${data.synced_count} / ${data.total_crops} crops\n`;
+          }
+        } else {
+          finetuneLog.value += `✗ Error: ${data.error || data.message}\n`;
+        }
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      })
+      .catch(err => {
+        finetuneLog.value += `✗ Error: ${err}\n`;
+        console.error(err);
+        saveAnnotationsBtn.disabled = false;
+        saveAnnotationsBtn.textContent = originalText;
+      });
+  });
 
   // === FINETUNING JOB MANAGEMENT ===
 
@@ -747,6 +984,10 @@ document.addEventListener("DOMContentLoaded", function () {
   let statusPollingInterval = null;
   let streamConnectedOnce = false;
   let liveEpochState = null;
+  let latestJobStatusData = null;
+  let restartEpochResetPending = false;
+  let isServingReady = false;
+  const lossByEpoch = new Map();
 
   // Start Finetuning button
   const startFinetuningBtn = document.getElementById("startFinetuningBtn");
@@ -757,39 +998,17 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      // Get training data path from modal state
-      const correctionsPath = document.getElementById("trainingDataYamlPath").value.trim();
-      if (!correctionsPath && trainingDatasets.length === 0) {
-        alert("Please configure training data first");
+      // Get corrections path from output path field
+      const correctionsPath = document.getElementById("outputPath").value.trim();
+      if (!correctionsPath) {
+        alert("Please specify the output path where annotation crops are saved");
         return;
-      }
-
-      // If we have datasets but no YAML path, export to temp YAML first
-      let finalPath = correctionsPath;
-      if (!finalPath && trainingDatasets.length > 0) {
-        try {
-          const tmpPath = "/tmp/cellmap_flow_training_data_" + Date.now() + ".yaml";
-          const exportResp = await fetch("/api/finetune/training-data/export", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: tmpPath, datasets: trainingDatasets })
-          });
-          const exportResult = await exportResp.json();
-          if (!exportResult.success) {
-            alert("Failed to export training data: " + exportResult.error);
-            return;
-          }
-          finalPath = exportResult.path;
-        } catch (e) {
-          alert("Error exporting training data: " + e.message);
-          return;
-        }
       }
 
       // Get training parameters from form
       const params = {
         model_name: selectedModel.name,
-        corrections_path: finalPath,
+        corrections_path: correctionsPath,
         lora_r: parseInt(document.getElementById("loraRank").value),
         num_epochs: parseInt(document.getElementById("numEpochs").value),
         batch_size: parseInt(document.getElementById("batchSize").value),
@@ -799,19 +1018,20 @@ document.addEventListener("DOMContentLoaded", function () {
         distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
         distillation_scope: document.getElementById("distillationScope").value,
         balance_classes: document.getElementById("balanceClasses").checked,
+        label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
         queue: document.getElementById("gpuQueue").value
       };
+
+      // Forward margin value when using margin loss
+      if (params.loss_type === "margin") {
+        const m = parseFloat(document.getElementById("marginValue").value);
+        if (Number.isFinite(m)) params.margin = m;
+      }
 
       // Add optional checkpoint path override if provided
       const checkpointPath = document.getElementById("checkpointPath").value.trim();
       if (checkpointPath) {
         params.checkpoint_path = checkpointPath;
-      }
-
-      // Add channel selection for single-organelle finetuning
-      const selectChannel = document.getElementById("selectChannel").value;
-      if (selectChannel) {
-        params.select_channel = selectChannel;
       }
 
       // Disable button and show loading
@@ -833,11 +1053,22 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById("trainingStatusCard").style.display = "block";
           document.getElementById("jobId").textContent = result.job_id;
           document.getElementById("jobModelName").textContent = params.model_name;
+          const outputType = result.output_type || "binary";
+          document.getElementById("jobOutputType").textContent = outputType;
+          document.getElementById("jobOutputType").className = "badge " + (outputType === "affinities" ? "bg-warning" : "bg-info");
           document.getElementById("jobStatus").textContent = "SUBMITTED";
           document.getElementById("jobStatus").className = "badge bg-warning";
 
           // Clear logs and start streaming
           document.getElementById("trainingLogs").value = "";
+          latestJobStatusData = null;
+          liveEpochState = null;
+          restartEpochResetPending = false;
+          isServingReady = false;
+          resetProgressBarToWaiting();
+          resetLossPlot();
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          document.getElementById('restartJobBtn').style.display = 'none';
           appendLog("Finetuning job submitted successfully!");
           appendLog(`Job ID: ${result.job_id}`);
           appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
@@ -907,28 +1138,46 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateProgressFromLogLine(line) {
     if (!line) return;
 
+    if (line.includes("RESTARTING_TRAINING")) {
+      restartEpochResetPending = true;
+      isServingReady = false;
+      liveEpochState = null;
+      document.getElementById('inferenceServerStatus').style.display = 'none';
+      document.getElementById("jobProgress").textContent = "Restarting training...";
+      resetProgressBarToWaiting();
+      resetLossPlot();
+      return;
+    }
+
+    // Show restart sub-status updates (e.g. "Loading corrections...", "Preparing trainer...")
+    const restartStatusMatch = line.match(/RESTART_STATUS:\s*(.+)/);
+    if (restartStatusMatch) {
+      document.getElementById("jobProgress").textContent = restartStatusMatch[1].trim();
+      return;
+    }
+
     // Parse "Epoch X/Y" anywhere in the line.
     const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
     if (epochMatch) {
       const current = parseInt(epochMatch[1], 10);
       const total = parseInt(epochMatch[2], 10);
-      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0) {
-        const progressPercent = (current / total) * 100;
-        const progressBar = document.getElementById("trainingProgressBar");
-        progressBar.style.width = progressPercent + "%";
-        progressBar.textContent = `${current}/${total} epochs`;
+      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0 && shouldAcceptEpochProgress(current, total)) {
+        renderEpochProgress(current, total);
         document.getElementById("jobProgress").textContent = `Epoch ${current}/${total}`;
-        liveEpochState = { current, total };
       }
     }
 
-    // Parse "Loss: <value>" if present in the same log line.
-    const lossMatch = line.match(/Loss:\s*([0-9]*\.?[0-9]+)/i);
-    if (lossMatch && liveEpochState) {
-      const lossVal = parseFloat(lossMatch[1]);
-      if (!Number.isNaN(lossVal)) {
+    // Only update progress text and plot from epoch-level summary lines
+    // (e.g. "Epoch 18/20 - Loss: 0.011371"), not per-batch lines.
+    const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
+    if (epochLossMatch) {
+      const epochVal = parseInt(epochLossMatch[1], 10);
+      const totalVal = parseInt(epochLossMatch[2], 10);
+      const lossVal = parseFloat(epochLossMatch[3]);
+      if (!Number.isNaN(epochVal) && !Number.isNaN(lossVal)) {
         document.getElementById("jobProgress").textContent =
-          `Epoch ${liveEpochState.current}/${liveEpochState.total} - Loss: ${lossVal.toFixed(4)}`;
+          `Epoch ${epochVal}/${totalVal} - Loss: ${lossVal.toFixed(4)}`;
+        upsertEpochLoss(epochVal, lossVal);
       }
     }
   }
@@ -936,6 +1185,180 @@ document.addEventListener("DOMContentLoaded", function () {
   function appendLog(message) {
     const logsArea = document.getElementById("trainingLogs");
     logsArea.value += message + "\n";
+  }
+
+  function shouldAcceptEpochProgress(current, total) {
+    if (isServingReady && !restartEpochResetPending) {
+      return false;
+    }
+    if (!liveEpochState) {
+      return true;
+    }
+    if (restartEpochResetPending) {
+      return true;
+    }
+    if (total !== liveEpochState.total) {
+      return true;
+    }
+    if (current < liveEpochState.current) {
+      return false;
+    }
+    return true;
+  }
+
+  function renderEpochProgress(current, total) {
+    const safeTotal = total > 0 ? total : 1;
+    const progressPercent = Math.max(0, Math.min(100, (current / safeTotal) * 100));
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = progressPercent + "%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = `${current}/${safeTotal} epochs`;
+    liveEpochState = { current, total: safeTotal };
+    if (current > 0 || restartEpochResetPending) {
+      restartEpochResetPending = false;
+    }
+  }
+
+  function renderServingReadyProgress() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "100%";
+    progressBar.className = "progress-bar bg-success";
+    progressBar.textContent = "Serving - Ready for inference";
+    isServingReady = true;
+    restartEpochResetPending = false;
+  }
+
+  function resetProgressBarToWaiting() {
+    const progressBar = document.getElementById("trainingProgressBar");
+    progressBar.style.width = "0%";
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.textContent = "0%";
+  }
+
+  function resetLossPlot() {
+    lossByEpoch.clear();
+    renderLossPlot();
+  }
+
+  function upsertEpochLoss(epoch, loss) {
+    if (!Number.isFinite(epoch) || epoch <= 0 || !Number.isFinite(loss)) {
+      return;
+    }
+    lossByEpoch.set(epoch, loss);
+    renderLossPlot();
+  }
+
+  function renderLossPlot() {
+    const canvas = document.getElementById("lossPlotCanvas");
+    const summary = document.getElementById("lossPlotSummary");
+    if (!canvas || !summary) return;
+
+    const width = Math.max(300, Math.floor(canvas.clientWidth || 600));
+    const height = 180;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    // Read CSS design tokens for chart colors
+    const styles = getComputedStyle(document.documentElement);
+    const colorMuted = styles.getPropertyValue("--text-muted").trim() || "#8896a6";
+    const colorBorder = styles.getPropertyValue("--border").trim() || "#1e293b";
+    const colorBorderHover = styles.getPropertyValue("--border-hover").trim() || "#334155";
+    const colorAccent = styles.getPropertyValue("--accent").trim() || "#10b981";
+
+    const points = Array.from(lossByEpoch.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([epoch, loss]) => ({ epoch, loss }));
+
+    if (points.length === 0) {
+      summary.textContent = "No loss data yet";
+      ctx.fillStyle = colorMuted;
+      ctx.font = "12px monospace";
+      ctx.fillText("Waiting for epoch loss...", 10, 20);
+      return;
+    }
+
+    const minLoss = Math.min(...points.map(p => p.loss));
+    const maxLoss = Math.max(...points.map(p => p.loss));
+    const minEpoch = points[0].epoch;
+    const maxEpoch = points[points.length - 1].epoch;
+    const pad = 48;
+    const chartW = Math.max(1, width - pad * 2);
+    const chartH = Math.max(1, height - pad * 2);
+    const lossSpan = Math.max(1e-9, maxLoss - minLoss);
+    const epochSpan = Math.max(1, maxEpoch - minEpoch);
+
+    const xFor = (e) => pad + ((e - minEpoch) / epochSpan) * chartW;
+    const yFor = (l) => pad + (1 - ((l - minLoss) / lossSpan)) * chartH;
+
+    // Axes
+    ctx.strokeStyle = colorBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad, height - pad);
+    ctx.lineTo(width - pad, height - pad);
+    ctx.stroke();
+
+    // Tick marks + labels
+    ctx.fillStyle = colorMuted;
+    ctx.font = "10px monospace";
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = colorBorderHover;
+
+    const xTickCount = Math.min(6, Math.max(2, points.length));
+    for (let i = 0; i < xTickCount; i++) {
+      const t = xTickCount === 1 ? 0 : i / (xTickCount - 1);
+      const epochTick = Math.round(minEpoch + t * epochSpan);
+      const x = xFor(epochTick);
+      ctx.beginPath();
+      ctx.moveTo(x, height - pad);
+      ctx.lineTo(x, height - pad + 4);
+      ctx.stroke();
+      ctx.fillText(String(epochTick), x - 8, height - pad + 14);
+    }
+
+    const yTickCount = 5;
+    for (let i = 0; i < yTickCount; i++) {
+      const t = yTickCount === 1 ? 0 : i / (yTickCount - 1);
+      const lossTick = maxLoss - t * lossSpan;
+      const y = yFor(lossTick);
+      ctx.beginPath();
+      ctx.moveTo(pad - 4, y);
+      ctx.lineTo(pad, y);
+      ctx.stroke();
+      const label = lossTick.toFixed(4);
+      const labelW = ctx.measureText(label).width;
+      ctx.fillText(label, pad - 6 - labelW, y + 3);
+    }
+
+    // Line
+    ctx.strokeStyle = colorAccent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p, idx) => {
+      const x = xFor(p.epoch);
+      const y = yFor(p.loss);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Last point marker
+    const last = points[points.length - 1];
+    const lx = xFor(last.epoch);
+    const ly = yFor(last.loss);
+    ctx.fillStyle = colorAccent;
+    ctx.beginPath();
+    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    summary.textContent = `Epoch ${last.epoch}: ${last.loss.toFixed(6)} (min ${minLoss.toFixed(6)})`;
   }
 
   // Status polling (every 3 seconds)
@@ -954,6 +1377,14 @@ document.addEventListener("DOMContentLoaded", function () {
           console.error("Error getting job status:", data.error);
           return;
         }
+        latestJobStatusData = data;
+
+        // Update output type from job params
+        if (data.params && data.params.output_type) {
+          const ot = data.params.output_type;
+          document.getElementById("jobOutputType").textContent = ot;
+          document.getElementById("jobOutputType").className = "badge " + (ot === "affinities" ? "bg-warning" : "bg-info");
+        }
 
         // Update status display
         const statusBadge = document.getElementById("jobStatus");
@@ -965,20 +1396,22 @@ document.addEventListener("DOMContentLoaded", function () {
         // Surface status transitions even if log stream is temporarily delayed
         if (data.status === "PENDING") {
           document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
+          isServingReady = false;
         } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs) && !liveEpochState) {
           document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
+          isServingReady = false;
         }
 
         // Update progress
-        if (data.current_epoch && data.total_epochs) {
-          const progressPercent = (data.current_epoch / data.total_epochs) * 100;
-          const progressBar = document.getElementById("trainingProgressBar");
-          progressBar.style.width = progressPercent + "%";
-          progressBar.textContent = `${data.current_epoch}/${data.total_epochs} epochs`;
+        if (data.current_epoch && data.total_epochs && shouldAcceptEpochProgress(data.current_epoch, data.total_epochs)) {
+          renderEpochProgress(data.current_epoch, data.total_epochs);
 
           document.getElementById("jobProgress").textContent =
             `Epoch ${data.current_epoch}/${data.total_epochs}` +
             (data.loss ? ` - Loss: ${data.loss.toFixed(4)}` : "");
+          if (Number.isFinite(data.loss)) {
+            upsertEpochLoss(data.current_epoch, data.loss);
+          }
         }
 
         // Show restart button when inference server is ready (model is serving)
@@ -994,13 +1427,17 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById('neuroglancerLayer').textContent = data.finetuned_model_name;
 
           // Update progress bar to show serving state
-          const progressBar = document.getElementById("trainingProgressBar");
-          progressBar.style.width = "100%";
-          progressBar.className = "progress-bar bg-success";
-          progressBar.textContent = "Serving - Ready for inference";
+          renderServingReadyProgress();
+
+          // Training loop has exited (either naturally or via stop-early) and
+          // inference is up — clear any lingering "Stop requested..." state.
+          resetStopEarlyButton();
         }
 
         // Handle terminal states
+        if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "COMPLETED") {
+          resetStopEarlyButton();
+        }
         if (data.status === "FAILED" || data.status === "CANCELLED") {
           clearInterval(statusPollingInterval);
           eventSource?.close();
@@ -1069,77 +1506,224 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Stop Early — graceful, keeps the job alive for Restart.
+  function resetStopEarlyButton() {
+    const btn = document.getElementById("stopEarlyBtn");
+    if (!btn) return;
+    btn.disabled = false;
+    btn.textContent = "⏸ Stop Early";
+  }
+
+  const stopEarlyBtn = document.getElementById("stopEarlyBtn");
+  if (stopEarlyBtn) {
+    stopEarlyBtn.addEventListener("click", async function() {
+      const jobId = document.getElementById("jobId").textContent;
+      if (!jobId || jobId === "-") {
+        alert("No active job to stop.");
+        return;
+      }
+      if (!confirm(
+        "Stop training early after the current epoch?\n\n" +
+        "The job stays alive and the inference server will come up on the " +
+        "partially-trained adapter. You can then click Restart Training to " +
+        "re-run with updated parameters."
+      )) {
+        return;
+      }
+      stopEarlyBtn.disabled = true;
+      stopEarlyBtn.textContent = "⏸ Stop requested...";
+      try {
+        const response = await fetch(`/api/finetune/job/${jobId}/stop-early`, {
+          method: "POST"
+        });
+        const result = await response.json();
+        if (result.success) {
+          appendLog("\n=== STOP EARLY REQUESTED — exiting after current epoch ===\n");
+        } else {
+          alert(`Failed to request stop: ${result.error}`);
+          resetStopEarlyButton();
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+        resetStopEarlyButton();
+      }
+    });
+  }
+
   // (Inference server status is now detected via the regular status polling above)
 
-  // Restart modal event handlers
+  // Restart uses whatever's currently in the main training form as the source
+  // of truth — no separate modal. User edits the form to change params, hits
+  // Restart, confirms.
   const restartJobBtn = document.getElementById('restartJobBtn');
-  const useCurrentParamsCheck = document.getElementById('useCurrentParams');
-  const updateParamsSection = document.getElementById('updateParamsSection');
-  const confirmRestartBtn = document.getElementById('confirmRestartBtn');
-
   if (restartJobBtn) {
-    restartJobBtn.addEventListener('click', () => {
-      const modal = new bootstrap.Modal(document.getElementById('restartTrainingModal'));
-      modal.show();
-    });
-  }
-
-  if (useCurrentParamsCheck) {
-    useCurrentParamsCheck.addEventListener('change', (e) => {
-      updateParamsSection.style.display = e.target.checked ? 'none' : 'block';
-    });
-  }
-
-  if (confirmRestartBtn) {
-    confirmRestartBtn.addEventListener('click', async () => {
-      const useCurrentParams = document.getElementById('useCurrentParams').checked;
-
-      const requestBody = {};
-      if (!useCurrentParams) {
-        requestBody.lora_r = parseInt(document.getElementById('restartLoraRank').value);
-        requestBody.num_epochs = parseInt(document.getElementById('restartNumEpochs').value);
-        requestBody.batch_size = parseInt(document.getElementById('restartBatchSize').value);
-        requestBody.learning_rate = parseFloat(document.getElementById('restartLearningRate').value);
-        requestBody.loss_type = document.getElementById('restartLossType').value;
-        requestBody.distillation_lambda = parseFloat(document.getElementById('restartDistillationLambda').value);
-        requestBody.distillation_scope = document.getElementById('restartDistillationScope').value;
-        requestBody.balance_classes = document.getElementById('restartBalanceClasses').checked;
+    restartJobBtn.addEventListener('click', async () => {
+      const lossType = document.getElementById('lossType').value;
+      const requestBody = {
+        lora_r: parseInt(document.getElementById('loraRank').value),
+        num_epochs: parseInt(document.getElementById('numEpochs').value),
+        batch_size: parseInt(document.getElementById('batchSize').value),
+        learning_rate: parseFloat(document.getElementById('learningRate').value),
+        loss_type: lossType,
+        distillation_lambda: parseFloat(document.getElementById('distillationLambda').value),
+        distillation_scope: document.getElementById('distillationScope').value,
+        balance_classes: document.getElementById('balanceClasses').checked,
+        label_smoothing: parseFloat(document.getElementById('labelSmoothing').value) || 0,
+      };
+      if (lossType === 'margin') {
+        const m = parseFloat(document.getElementById('marginValue').value);
+        if (Number.isFinite(m)) requestBody.margin = m;
       }
+
+      // Build a short summary so user can sanity-check before confirming.
+      const summary =
+        `Restart training with current form values?\n\n` +
+        `  loss:           ${requestBody.loss_type}` +
+        (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
+        `  learning_rate:  ${requestBody.learning_rate}\n` +
+        `  lora_r:         ${requestBody.lora_r}\n` +
+        `  epochs:         ${requestBody.num_epochs}\n` +
+        `  batch_size:     ${requestBody.batch_size}\n` +
+        `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
+        `  label_smoothing:${requestBody.label_smoothing}\n` +
+        `  balance_classes:${requestBody.balance_classes}\n`;
+      if (!confirm(summary)) return;
+
+      const originalBtnText = restartJobBtn.textContent;
+      restartJobBtn.disabled = true;
+      restartJobBtn.textContent = 'Restarting...';
 
       try {
         const jobId = document.getElementById('jobId').textContent;
         const response = await fetch(`/api/finetune/job/${jobId}/restart`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
+          body: JSON.stringify(requestBody),
         });
-
         const data = await response.json();
 
         if (data.success) {
-          // Same job/GPU - just reset the UI for new training
           document.getElementById('trainingLogs').value = '';
           appendLog('Restart request sent - training will restart on same GPU...\n');
+          isServingReady = false;
+          restartEpochResetPending = true;
+          liveEpochState = null;
+          document.getElementById('jobProgress').textContent = 'Restarting training...';
+          document.getElementById('inferenceServerStatus').style.display = 'none';
+          resetStopEarlyButton();
+          resetLossPlot();
 
-          // Reset progress bar
           const progressBar = document.getElementById('trainingProgressBar');
           progressBar.style.width = '0%';
           progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
           progressBar.textContent = '0%';
 
-          // Hide restart button until next training completes
-          document.getElementById('restartJobBtn').style.display = 'none';
-
-          // Close modal
-          bootstrap.Modal.getInstance(document.getElementById('restartTrainingModal')).hide();
+          restartJobBtn.style.display = 'none';
         } else {
           alert('Failed to restart training: ' + data.error);
         }
       } catch (error) {
         console.error('Error restarting training:', error);
         alert('Failed to restart training');
+      } finally {
+        restartJobBtn.disabled = false;
+        restartJobBtn.textContent = originalBtnText;
       }
     });
   }
+
+  // === RESTORE ACTIVE JOB ON PAGE LOAD ===
+
+  async function restoreActiveJob() {
+    try {
+      const response = await fetch('/api/finetune/jobs');
+      const data = await response.json();
+      if (!data.success || !data.jobs || data.jobs.length === 0) return;
+
+      // Find the most recent active job (RUNNING, or COMPLETED/serving)
+      const activeJob = data.jobs.find(j =>
+        j.status === 'RUNNING' ||
+        (j.status === 'COMPLETED' && j.inference_server_ready)
+      );
+      if (!activeJob) return;
+
+      const jobId = activeJob.job_id;
+
+      // Show the training status card
+      document.getElementById('trainingStatusCard').style.display = 'block';
+      document.getElementById('jobId').textContent = jobId;
+      document.getElementById('jobModelName').textContent = activeJob.model_name;
+
+      const outputType = (activeJob.params && activeJob.params.output_type) || 'binary';
+      document.getElementById('jobOutputType').textContent = outputType;
+      document.getElementById('jobOutputType').className = 'badge ' + (outputType === 'affinities' ? 'bg-warning' : 'bg-info');
+
+      // Restore status badge
+      const statusBadge = document.getElementById('jobStatus');
+      statusBadge.textContent = activeJob.status;
+      statusBadge.className = 'badge bg-' + getStatusColor(activeJob.status);
+
+      // Restore progress
+      if (activeJob.current_epoch && activeJob.total_epochs) {
+        renderEpochProgress(activeJob.current_epoch, activeJob.total_epochs);
+        document.getElementById('jobProgress').textContent =
+          `Epoch ${activeJob.current_epoch}/${activeJob.total_epochs}` +
+          (activeJob.loss ? ` - Loss: ${activeJob.loss.toFixed(4)}` : '');
+      }
+
+      // Restore inference server ready state
+      if (activeJob.inference_server_ready) {
+        renderServingReadyProgress();
+        document.getElementById('restartJobBtn').style.display = 'inline-block';
+        if (activeJob.finetuned_model_name) {
+          document.getElementById('inferenceServerStatus').style.display = 'block';
+          document.getElementById('neuroglancerLayer').textContent = activeJob.finetuned_model_name;
+        }
+      }
+
+      // Restore logs and loss plot from the log file
+      try {
+        const logResp = await fetch(`/api/finetune/job/${jobId}/logs`);
+        const logData = await logResp.json();
+        if (logData.success && logData.logs) {
+          document.getElementById('trainingLogs').value = logData.logs;
+          // Parse existing logs for loss data to restore the plot
+          for (const line of logData.logs.split('\n')) {
+            const epochLossMatch = line.match(/Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([0-9]*\.?[0-9]+)/i);
+            if (epochLossMatch) {
+              const epoch = parseInt(epochLossMatch[1], 10);
+              const loss = parseFloat(epochLossMatch[3]);
+              if (Number.isFinite(epoch) && Number.isFinite(loss)) {
+                lossByEpoch.set(epoch, loss);
+              }
+            }
+          }
+          renderLossPlot();
+          // Scroll to bottom
+          const logsArea = document.getElementById('trainingLogs');
+          logsArea.scrollTop = logsArea.scrollHeight;
+        }
+      } catch (e) {
+        console.warn('Could not restore logs:', e);
+      }
+
+      // Store latest status data for restart modal
+      latestJobStatusData = activeJob;
+
+      // Resume polling and streaming if job is still running
+      if (activeJob.status === 'RUNNING') {
+        startLogStreaming(jobId);
+        startStatusPolling(jobId);
+      }
+
+    } catch (e) {
+      console.warn('Could not restore active finetuning job:', e);
+    }
+  }
+
+  restoreActiveJob();
+
+  // Initialize empty loss plot on page load
+  renderLossPlot();
 });
 </script>

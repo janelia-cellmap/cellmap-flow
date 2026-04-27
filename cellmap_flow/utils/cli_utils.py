@@ -25,12 +25,16 @@ def get_all_subclasses(base_class: Type) -> Dict[str, Type]:
     """
     subclasses = {}
     for subclass in base_class.__subclasses__():
-        # Convert class name to CLI-friendly name
-        # e.g., DaCapoModelConfig -> dacapo, CellMapModelConfig -> cellmap-model
-        name = subclass.__name__
-        cli_name = name.replace(base_class.__name__, '').lower()
-        # Handle camelCase to kebab-case
-        cli_name = re.sub('([a-z0-9])([A-Z])', r'\1-\2', cli_name).lower()
+        # Allow classes to define their own CLI name via a class attribute
+        if hasattr(subclass, 'cli_name') and subclass.cli_name:
+            cli_name = subclass.cli_name
+        else:
+            # Convert class name to CLI-friendly name
+            # e.g., DaCapoModelConfig -> dacapo, ScriptModelConfig -> script
+            name = subclass.__name__
+            cli_name = name.replace(base_class.__name__, '').lower()
+            # Handle camelCase to kebab-case
+            cli_name = re.sub('([a-z0-9])([A-Z])', r'\1-\2', cli_name).lower()
         subclasses[cli_name] = subclass
     
     return subclasses

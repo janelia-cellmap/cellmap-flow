@@ -16,7 +16,6 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postpr
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import encode_to_str, ARGS_KEY
-from cellmap_flow.dashboard.state import CUSTOM_CODE_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +140,7 @@ def process():
             # Save custom code to a file with date and time
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"custom_code_{timestamp}.py"
-            filepath = os.path.join(CUSTOM_CODE_FOLDER, filename)
+            filepath = os.path.join(g.CUSTOM_CODE_FOLDER, filename)
 
             with open(filepath, "w") as file:
                 file.write(custom_code)

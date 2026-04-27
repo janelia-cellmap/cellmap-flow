@@ -11,6 +11,7 @@ import sys
 import logging
 import click
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
@@ -41,10 +42,10 @@ def run_multiple(
     g.queue = queue
     g.charge_group = charge_group
 
-    for model in models:
+    def _submit_model(model):
         current_data_path = dataset_path
         if hasattr(model, "scale") and model.scale:
-            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")   
+            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
             current_data_path = os.path.join(dataset_path, model.scale)
 
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
@@ -55,6 +56,19 @@ def run_multiple(
         start_hosts(
             command, job_name=model_name, queue=queue, charge_group=charge_group
         )
+        return model_name
+
+    if models:
+        with ThreadPoolExecutor(max_workers=len(models)) as executor:
+            futures = {executor.submit(_submit_model, model): model for model in models}
+            for future in as_completed(futures):
+                try:
+                    name = future.result()
+                    logger.info(f"Job for {name} is ready")
+                except Exception as e:
+                    model = futures[future]
+                    model_name = getattr(model, "name", None) or type(model).__name__
+                    logger.error(f"Failed to start job for {model_name}: {e}")
 
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
@@ -167,22 +181,27 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
 
+    # Update globals and save to cache
+    g.queue = queue
+    g.charge_group = charge_group
+    g.save_server_config()
+
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
     logger.info(f"Queue: {queue}")
 
     # Build model configuration objects dynamically
+    logger.info("Building model configurations...")
     if config["models"]:
-        logger.info("Building model configurations...")
         g.models_config = build_models(config["models"])
-
-        logger.info(f"Configured {len(g.models_config)} model(s):")
-        for i, model in enumerate(g.models_config, 1):
-            model_name = getattr(model, "name", None) or type(model).__name__
-            logger.info(f"  {i}. {model_name} ({type(model).__name__})")
     else:
         g.models_config = []
-        logger.info("No models configured - opening data viewer only")
+        logger.info("No models configured — starting dashboard for interactive use")
+
+    logger.info(f"Configured {len(g.models_config)} model(s):")
+    for i, model in enumerate(g.models_config, 1):
+        model_name = getattr(model, "name", None) or type(model).__name__
+        logger.info(f"  {i}. {model_name} ({type(model).__name__})")
 
     # Validation mode - exit without running
     if validate_only:
@@ -192,15 +211,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Queue: {queue}")
         return
 
-    if not g.models_config:
-        # No models - just open neuroglancer for data viewing
-        generate_neuroglancer_url(data_path, wrap_raw=wrap_raw)
-        logger.info("Neuroglancer URL generated for data viewing (no models)")
-        while True:
-            pass
-    else:
-        # Run the models
-        run_multiple(g.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw)
+    # Run the models
+    run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
 
 
 if __name__ == "__main__":

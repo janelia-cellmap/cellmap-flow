@@ -27,16 +27,19 @@ def predict(read_roi, write_roi, config, **kwargs):
     if device is None:
         raise ValueError("device must be provided in kwargs")
 
-    use_half_prediction = kwargs.get("use_half_prediction", True)
+    use_half_prediction = kwargs.get("use_half_prediction", False)
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
+        logger.error(f"Predicting with model {type(config.model).__name__} on device {device}")
+        logger.error(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
         raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
-        return config.model.forward(raw_input_torch).cpu().numpy()[0]
-
+        result = config.model.forward(raw_input_torch).cpu().numpy()[0]
+        logger.error(f"Output shape: {result.shape}, dtype: {result.dtype}")
+    return result
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig, use_half_prediction=False):

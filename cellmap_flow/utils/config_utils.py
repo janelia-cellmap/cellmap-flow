@@ -41,32 +41,37 @@ def load_config(path: str) -> Dict[str, Any]:
     with open(path, "r") as f:
         config = yaml.safe_load(f)
 
+    from cellmap_flow.globals import load_server_config_cache, SERVER_CONFIG_DEFAULTS
+
     # Required top-level fields
     if "data_path" not in config:
         logger.error("Missing required field in YAML: data_path")
         sys.exit(1)
-    # If queue is missing, set default
-    if "queue" not in config or not config["queue"]:
-        config["queue"] = DEFAULT_SERVER_QUEUE
 
-    # Models are optional - if not present, flow will open for data viewing only
-    if "models" not in config or not config["models"]:
-        logger.info("No models specified in YAML - will open for data viewing only")
+    # Fall back to cache then defaults for charge_group and queue
+    cached = load_server_config_cache() or {}
+
+    if "charge_group" not in config or not config["charge_group"]:
+        fallback = cached.get("charge_group", SERVER_CONFIG_DEFAULTS.get("charge_group"))
+        if fallback:
+            logger.warning(f"Missing 'charge_group' in YAML, using cached value: {fallback}")
+            config["charge_group"] = fallback
+        else:
+            logger.error("Missing required field in YAML: charge_group (no cache available)")
+            sys.exit(1)
+
+    if "queue" not in config or not config["queue"]:
+        fallback = cached.get("queue", DEFAULT_SERVER_QUEUE)
+        logger.warning(f"Missing 'queue' in YAML, using: {fallback}")
+        config["queue"] = fallback
+
+    # Models field: must be a dict, list, or empty/missing (for dashboard-only mode)
+    if "models" not in config or config["models"] is None:
         config["models"] = {}
-    elif isinstance(config["models"], dict):
-        pass  # valid format
-    elif isinstance(config["models"], list):
-        pass  # valid format (backward compatibility)
-    else:
+
+    if not isinstance(config["models"], (dict, list)):
         logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)
-
-    # charge_group is required only when models are specified
-    if "charge_group" not in config:
-        if config["models"]:
-            logger.error("Missing required field in YAML: charge_group (required when models are specified)")
-            sys.exit(1)
-        config["charge_group"] = None
 
     return config
 
@@ -199,7 +204,7 @@ def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
     YAML format:
     models:
       my_model_1:
-        type: cellmap-model
+        type: cellmap
         checkpoint_path: /path/to/checkpoint
       my_model_2:
         type: dacapo

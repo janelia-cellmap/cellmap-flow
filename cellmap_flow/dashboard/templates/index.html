@@ -16,15 +16,16 @@
       margin: 0;
       padding: 0;
     }
-    
+
     .app-header {
-      background: #0d1117;
-      border-bottom: 1px solid #30363d;
-      padding: 16px 24px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 32px;
+      gap: 24px;
+      flex-shrink: 0;
     }
 
     .app-logo {
@@ -34,44 +35,48 @@
     }
 
     .app-logo img {
-      max-height: 32px;
+      max-height: 26px;
       width: auto;
+      opacity: 0.9;
     }
 
     .app-actions {
       display: flex;
-      gap: 16px;
+      gap: 8px;
       align-items: center;
     }
 
     .action-btn {
       background: transparent;
-      color: #c9d1d9;
-      border: 1px solid #30363d;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 14px;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 15px;
       font-weight: 500;
+      font-family: 'Inter', sans-serif;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all var(--transition);
       white-space: nowrap;
+      text-decoration: none;
     }
 
     .action-btn:hover {
-      background: #161b22;
-      border-color: #8b949e;
-      color: #f0f6fc;
+      background: var(--bg-elevated);
+      border-color: var(--border-hover);
+      color: var(--text-primary);
     }
 
     .action-btn.primary {
-      background: #238636;
-      border-color: #2ea043;
+      background: var(--accent);
+      border-color: var(--accent);
       color: #fff;
     }
 
     .action-btn.primary:hover {
-      background: #2ea043;
-      border-color: #3fb950;
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      color: #fff;
     }
 
     .content {
@@ -83,6 +88,65 @@
 
     .navbar {
       display: none !important;
+    }
+
+    /* No-data panel */
+    .no-data-panel {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-base);
+      flex-direction: column;
+      gap: 12px;
+      padding: 40px;
+    }
+
+    .no-data-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 20px;
+    }
+
+    .no-data-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-align: center;
+    }
+
+    .no-data-desc {
+      font-size: 16px;
+      color: var(--text-secondary);
+      text-align: center;
+      max-width: 400px;
+      line-height: 1.5;
+    }
+
+    .no-data-input-group {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 440px;
+    }
+
+    .no-data-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 15px;
+      transition: color var(--transition);
+    }
+
+    .no-data-link:hover {
+      color: var(--accent-hover);
     }
   </style>
 </head>
@@ -112,17 +176,66 @@
           Your browser does not support iframes.
         </iframe>
       {% else %}
-        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a1a;flex-direction:column;gap:20px;">
-          <div style="font-size:48px;">🔌</div>
-          <div style="font-size:18px;text-align:center;">Neuroglancer Not Available</div>
-          <div style="font-size:14px;color:#888;text-align:center;max-width:400px;">
-            No Neuroglancer URL configured. Please configure a Neuroglancer instance to view datasets.<br><br>
-            You can still use the <a href="/pipeline-builder" style="color:#3b82f6;text-decoration:none;">Pipeline Builder</a> to design your workflow.
+        <div id="noNeuroglancerPanel" class="no-data-panel">
+          <div class="no-data-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <div class="no-data-title">No Viewer Connected</div>
+          <div class="no-data-desc">
+            No Neuroglancer URL configured. Enter a dataset path below to connect the viewer.
+          </div>
+          <div class="no-data-input-group">
+            <input type="text" id="datasetPathInput" class="form-control" placeholder="/path/to/dataset.zarr" style="flex:1;" />
+            <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
+          </div>
+          <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
+          <div>
+            <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
           </div>
         </div>
+        <script>
+          document.getElementById("setDataBtn").addEventListener("click", function () {
+            const datasetPath = document.getElementById("datasetPathInput").value.trim();
+            if (!datasetPath) {
+              document.getElementById("setDataStatus").textContent = "Please enter a dataset path.";
+              return;
+            }
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = "Loading...";
+            document.getElementById("setDataStatus").textContent = "Setting up neuroglancer viewer...";
+
+            fetch("/api/set-data", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ dataset_path: datasetPath }),
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.error) {
+                  document.getElementById("setDataStatus").style.color = "#f87171";
+                  document.getElementById("setDataStatus").textContent = "Error: " + data.error;
+                  btn.disabled = false;
+                  btn.textContent = "Set Data";
+                } else {
+                  document.getElementById("setDataStatus").style.color = "#4ade80";
+                  document.getElementById("setDataStatus").textContent = "Success! Reloading...";
+                  setTimeout(function () { window.location.reload(); }, 1000);
+                }
+              })
+              .catch((err) => {
+                document.getElementById("setDataStatus").style.color = "#f87171";
+                document.getElementById("setDataStatus").textContent = "Error: " + err;
+                btn.disabled = false;
+                btn.textContent = "Set Data";
+              });
+          });
+        </script>
       {% endif %}
     </div>
-    <div class="col-3" id="dashboard-column" style="width:350px;flex-shrink:0;border-left:1px solid #333;overflow-y:auto;overflow-x:hidden;height:100%;">
+    <div class="col-3" id="dashboard-column" style="width:340px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;overflow-x:hidden;height:100%;background:var(--bg-base);">
       {% include "_dashboard.html" %}
     </div>
 
@@ -197,6 +310,78 @@
       });
     });
   </script>
+
+  {% if not server_config_cached %}
+  <!-- Server Config Setup Modal -->
+  <div class="modal fade" id="serverConfigModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bg-dark text-light">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Server Configuration</h5>
+        </div>
+        <div class="modal-body">
+          <p style="color: #aaa;">No server configuration found. Please set your server parameters to continue.</p>
+          <div class="mb-2">
+            <label class="form-label" for="modal_queue">Queue</label>
+            <input type="text" class="form-control form-control-sm" id="modal_queue" value="gpu_h100" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="modal_charge_group">Charge Group</label>
+            <input type="text" class="form-control form-control-sm" id="modal_charge_group" value="" placeholder="e.g. cellmap" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="modal_nb_cores_worker">Cores per Worker</label>
+            <input type="number" class="form-control form-control-sm" id="modal_nb_cores_worker" value="12" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="modal_nb_workers">Number of Workers</label>
+            <input type="number" class="form-control form-control-sm" id="modal_nb_workers" value="14" />
+          </div>
+          <div id="modalConfigStatus" style="font-size: 0.85rem;"></div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-primary" id="modalSaveConfigBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      var modal = new bootstrap.Modal(document.getElementById("serverConfigModal"));
+      modal.show();
+
+      document.getElementById("modalSaveConfigBtn").addEventListener("click", function () {
+        const payload = {
+          queue: document.getElementById("modal_queue").value,
+          charge_group: document.getElementById("modal_charge_group").value,
+          nb_cores_worker: document.getElementById("modal_nb_cores_worker").value,
+          nb_workers: document.getElementById("modal_nb_workers").value,
+        };
+        const statusEl = document.getElementById("modalConfigStatus");
+        fetch("/api/server-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              statusEl.style.color = "#4ade80";
+              statusEl.textContent = "Saved!";
+              setTimeout(function () { modal.hide(); }, 500);
+            } else {
+              statusEl.style.color = "#f87171";
+              statusEl.textContent = "Error saving config.";
+            }
+          })
+          .catch((err) => {
+            statusEl.style.color = "#f87171";
+            statusEl.textContent = "Error: " + err;
+          });
+      });
+    });
+  </script>
+  {% endif %}
 
 </body>
 

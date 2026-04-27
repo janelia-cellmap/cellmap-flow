@@ -134,6 +134,9 @@ Available Model Types
    * - ``cellmap``
      - CellMapModelConfig
      - ``config_folder`` (required)
+   * - ``huggingface``
+     - HuggingFaceModelConfig
+     - ``repo`` (required), ``revision`` (optional). See :doc:`huggingface`.
 
 Common optional parameters: ``name``, ``scale``.
 

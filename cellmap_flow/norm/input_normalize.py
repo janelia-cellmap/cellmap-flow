@@ -59,6 +59,15 @@ class InputNormalizer(SerializableInterface):
     pass
 
 
+class ChannelSelector(InputNormalizer):
+    def __init__(self, channel=0):
+        self.channel = int(channel)
+
+    def _process(self, data) -> np.ndarray:
+        # No-op: channel selection is applied at the TensorStore level
+        return data
+
+
 class Dilate(InputNormalizer):
     def __init__(self, size=1):
         self.size = int(size)

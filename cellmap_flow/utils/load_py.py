@@ -93,6 +93,7 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
 
             # Convert the modified AST back to source code
             code = ast.unparse(tree)
+
             exec(code, config_namespace)
         # Extract the config object from the namespace
         config = Config(**config_namespace)

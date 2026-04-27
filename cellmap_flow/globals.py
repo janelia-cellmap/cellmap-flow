@@ -2,14 +2,44 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
+import queue
 import yaml
+import logging
 import threading
 import numpy as np
+from collections import deque
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
+
+SERVER_CONFIG_DEFAULTS = {
+    "queue": "gpu_h100",
+    "charge_group": "",
+    "nb_cores_master": 4,
+    "nb_cores_worker": 12,
+    "nb_workers": 14,
+}
+
+SERVER_CONFIG_KEYS = list(SERVER_CONFIG_DEFAULTS.keys())
+
+
+def load_server_config_cache() -> Optional[Dict[str, Any]]:
+    """Load server config from cache file. Returns None if not found."""
+    if os.path.exists(SERVER_CONFIG_PATH):
+        with open(SERVER_CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f) or {}
+    return None
+
+
+def save_server_config_cache(config: Dict[str, Any]) -> None:
+    """Save server config to cache file."""
+    os.makedirs(os.path.dirname(SERVER_CONFIG_PATH), exist_ok=True)
+    with open(SERVER_CONFIG_PATH, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
 
 # input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
 # postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
@@ -48,6 +78,19 @@ class Flow:
     pipeline_postprocessors: List[Any]
     shaders: dict
     shader_controls: dict
+    _server_config_cached: bool
+
+    # Dashboard state (moved from cellmap_flow.dashboard.state)
+    log_buffer: deque
+    log_clients: list
+    NEUROGLANCER_URL: Optional[str]
+    INFERENCE_SERVER: Optional[Any]
+    CUSTOM_CODE_FOLDER: str
+    bbx_generator_state: dict
+    finetune_job_manager: Any
+    minio_state: dict
+    annotation_volumes: dict
+    output_sessions: dict
 
     def __new__(cls):
         if cls._instance is None:
@@ -70,11 +113,21 @@ class Flow:
             with open(models_path, "r") as f:
                 cls._instance.model_catalog = yaml.safe_load(f)
 
-            cls._instance.queue = "gpu_h100"
-            cls._instance.charge_group = "cellmap"
-            cls._instance.nb_cores_master = 4
-            cls._instance.nb_cores_worker = 12
-            cls._instance.nb_workers = 14
+            # Load server config from cache or use defaults
+            cached = load_server_config_cache()
+            if cached:
+                cls._instance.queue = cached.get("queue", SERVER_CONFIG_DEFAULTS["queue"])
+                cls._instance.charge_group = cached.get("charge_group", SERVER_CONFIG_DEFAULTS["charge_group"])
+                cls._instance.nb_cores_master = cached.get("nb_cores_master", SERVER_CONFIG_DEFAULTS["nb_cores_master"])
+                cls._instance.nb_cores_worker = cached.get("nb_cores_worker", SERVER_CONFIG_DEFAULTS["nb_cores_worker"])
+                cls._instance.nb_workers = cached.get("nb_workers", SERVER_CONFIG_DEFAULTS["nb_workers"])
+            else:
+                cls._instance.queue = SERVER_CONFIG_DEFAULTS["queue"]
+                cls._instance.charge_group = SERVER_CONFIG_DEFAULTS["charge_group"]
+                cls._instance.nb_cores_master = SERVER_CONFIG_DEFAULTS["nb_cores_master"]
+                cls._instance.nb_cores_worker = SERVER_CONFIG_DEFAULTS["nb_cores_worker"]
+                cls._instance.nb_workers = SERVER_CONFIG_DEFAULTS["nb_workers"]
+            cls._instance._server_config_cached = cached is not None
             cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
             cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
@@ -91,7 +144,54 @@ class Flow:
             cls._instance.shaders = {}
             # ShaderControls state: key = layer name, value = shaderControls dict
             cls._instance.shader_controls = {}
+
+            # Dashboard state (moved from cellmap_flow.dashboard.state)
+            cls._instance.log_buffer = deque(maxlen=1000)
+            cls._instance.log_clients = []
+            cls._instance.NEUROGLANCER_URL = None
+            cls._instance.INFERENCE_SERVER = None
+            cls._instance.CUSTOM_CODE_FOLDER = os.path.expanduser(
+                os.environ.get(
+                    "CUSTOM_CODE_FOLDER",
+                    "~/Desktop/cellmap/cellmap-flow/example/example_norm",
+                )
+            )
+            cls._instance.bbx_generator_state = {
+                "dataset_path": None,
+                "num_boxes": 0,
+                "bounding_boxes": [],
+                "viewer": None,
+                "viewer_process": None,
+                "viewer_url": None,
+                "viewer_state": None,
+            }
+            cls._instance.minio_state = {
+                "process": None,
+                "port": None,
+                "ip": None,
+                "bucket": "annotations",
+                "minio_root": None,
+                "output_base": None,
+                "last_sync": {},
+                "chunk_sync_state": {},
+                "sync_thread": None,
+            }
+            cls._instance.annotation_volumes = {}
+            cls._instance.output_sessions = {}
+            cls._instance._finetune_job_manager = None
+
         return cls._instance
+
+    @property
+    def finetune_job_manager(self):
+        if self._finetune_job_manager is None:
+            from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+            self._finetune_job_manager = FinetuneJobManager()
+        return self._finetune_job_manager
+
+    @finetune_job_manager.setter
+    def finetune_job_manager(self, value):
+        self._finetune_job_manager = value
 
     def to_dict(self):
         return self.__dict__.items()
@@ -101,6 +201,12 @@ class Flow:
 
     def __str__(self):
         return f"Flow({self.__dict__})"
+
+    def save_server_config(self):
+        """Save current server config attributes to cache."""
+        config = {k: getattr(self, k) for k in SERVER_CONFIG_KEYS}
+        save_server_config_cache(config)
+        self._server_config_cached = True
 
     def get_output_dtype(self, model_output_dtype):
 
@@ -187,3 +293,24 @@ class Flow:
 
 
 g = Flow()
+
+
+# Custom handler to capture logs into Flow singleton
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = self.format(record)
+        g.log_buffer.append(log_entry)
+        # Send to all connected clients
+        for client_queue in g.log_clients:
+            try:
+                client_queue.put_nowait(log_entry)
+            except queue.Full:
+                pass
+
+
+def get_blockwise_tasks_dir():
+    tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
+        "~/.cellmap_flow/blockwise_tasks"
+    )
+    os.makedirs(tasks_dir, exist_ok=True)
+    return tasks_dir
