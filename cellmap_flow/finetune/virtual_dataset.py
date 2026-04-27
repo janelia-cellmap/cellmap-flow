@@ -1,50 +1,45 @@
 """
 On-the-fly random-patch dataset for finetuning.
 
-The dashboard's painted-volume / YAML-crop pipelines historically materialize
-fixed-size annotation tiles to disk as ``_chunk_*.zarr`` entries. That works
-but explodes disk usage on large dense crops (e.g. 600**3 → thousands of
-chunks even after BG-only tile sub-sampling) and re-tiles whenever the user
-wants to change patch shape, sampling ratio, etc.
-
-This module is the lazy alternative. It holds **references** to source
-annotation zarrs, builds a flat index of every foreground voxel once at
-construction time, and at training time samples one annotated voxel per
-``__getitem__`` call, reads a raw + annotation patch around it, and returns
-them. No tiles on disk, every epoch sees fresh patch positions, and adding /
-removing source crops is a manifest edit.
+Architecture
+------------
+There is exactly one source of truth per session: an
+``annotation_volume.zarr`` (sparse, full-dataset extent, OME-NGFF) that
+holds **every** annotation — painted scribbles plus any imported YAML
+crops, all merged at their physical offsets. This dataset reads patches
+straight out of that single volume zarr; no per-tile materialization, no
+parallel source list to keep in sync.
 
 Sampling rule
 -------------
-"One sampler, one rule": every patch is centered on a uniformly-chosen
-foreground voxel with a small random jitter. With ``mask_unannotated=True``
-in the trainer, the patch's unannotated voxels (sparse mode) or out-of-ROI
-voxels (near a dense crop's edge) are masked out and contribute zero gradient,
-so we don't need to guarantee 100% coverage of the patch with annotation.
+"One sampler, one rule": every ``__getitem__`` picks a random foreground
+voxel from a flat index built once at construction time, jitters the patch
+center, and reads a raw + annotation patch around it. With
+``mask_unannotated=True`` in the trainer, voxels that fall outside
+annotated regions are masked out and contribute no gradient — so we don't
+need to guarantee 100% coverage of the patch with annotation.
 
-This deliberately omits more elaborate strategies (per-component
-stratification, FG/BG mixing weights, per-source weights). Add them only if
-the simple rule proves insufficient.
+Index construction reads only **populated** chunks of the sparse zarr
+(walks ``annotation/s0/`` for files matching ``z.y.x``). For an empty
+volume that's an empty index; for a fully painted region it's the FG
+voxels of those chunks.
 
-Design notes for reviewers
---------------------------
-- Each source's full annotation array is read **once** at construction time
-  to build the FG-voxel index. Memory cost is roughly the size of the
-  annotation arrays, freed after indexing. Raw is **never** read at init —
-  only the small patch we sample at ``__getitem__`` time.
-- The class is process-fork-safe in the sense that workers re-open zarr
-  handles lazily (we don't hold open tensorstore handles across pickling).
-  See ``_open_raw`` and ``_get_annotation_array``.
-- ``len(dataset)`` is set to ``patches_per_epoch``; it has no relationship
-  to the number of source crops or to disk content. The trainer treats this
-  as the epoch length.
+Reviewer notes
+--------------
+- Workers each rebuild the FG index on spawn (cheap — only populated
+  chunks are read). We don't pickle any open zarr/tensorstore handles.
+- ``len(self)`` is ``patches_per_epoch``; it has no relationship to the
+  number of populated chunks. The trainer treats this as the epoch length.
+- The dataset returns ``(raw, annotation)`` tensors with shape
+  ``(1, Z, Y, X)`` matching :class:`CorrectionDataset`'s contract.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from dataclasses import dataclass, field
+import re
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -52,65 +47,36 @@ import torch
 import zarr
 from torch.utils.data import Dataset
 
-from cellmap_flow.finetune.crop_loader import (
-    CropEntry,
-    _open_array,
-    _read_voxel_size_and_offset,
-    remap_labels,
-)
-
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class SourceSpec:
-    """Per-source configuration: how to interpret the annotation values."""
-
-    path: str
-    fg_ids: Optional[List[int]] = None
-    bg_ids: List[int] = field(default_factory=list)
-    mode: str = "dense"
-    connected_components: bool = False
-    name: Optional[str] = None
-
-    @classmethod
-    def from_crop_entry(cls, entry: CropEntry) -> "SourceSpec":
-        return cls(
-            path=entry.path,
-            fg_ids=entry.fg_ids,
-            bg_ids=list(entry.bg_ids),
-            mode=entry.mode,
-            connected_components=entry.connected_components,
-            name=entry.name,
-        )
+_CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class VirtualPatchDataset(Dataset):
-    """Yield random raw+annotation patches anchored on annotated voxels.
+    """Yield random raw+annotation patches anchored on FG voxels in a volume zarr.
 
     Args:
-        sources: list of :class:`SourceSpec` describing each annotation zarr.
-        raw_dataset_path: path to the raw EM zarr the sources are aligned to.
+        volume_zarr_path: path to the session's ``annotation_volume.zarr``.
+        raw_dataset_path: path to the raw EM zarr the volume is aligned to.
         input_size_voxels: shape (Z, Y, X) of the raw patch returned per
-            sample, in voxels at ``input_voxel_size``.
-        output_size_voxels: shape (Z, Y, X) of the annotation patch returned
-            per sample, in voxels at ``output_voxel_size``.
-        input_voxel_size_nm: voxel size for raw patches; should match the
-            scale snapped from the raw dataset.
-        output_voxel_size_nm: voxel size for annotation patches; should match
-            the scale snapped from the raw dataset.
-        patches_per_epoch: ``len(self)``. Controls how many random patches
-            comprise one epoch. Defaults to 500.
+            sample, in voxels at ``input_voxel_size_nm``.
+        output_size_voxels: shape (Z, Y, X) of the annotation patch, in
+            voxels at ``output_voxel_size_nm``.
+        input_voxel_size_nm: voxel size for raw patches (the dataset's
+            closest scale to the model's claimed input voxel size).
+        output_voxel_size_nm: voxel size for annotation patches.
+        patches_per_epoch: ``len(self)``; controls how many random patches
+            comprise one epoch.
         jitter_voxels: half-range of the random offset applied to the patch
-            center, in **annotation voxels**. ``None`` -> ``output_size//4``,
-            which keeps the anchor FG voxel comfortably inside the patch.
-        seed: RNG seed for reproducibility (per-worker offset added in
-            ``__init__`` of dataloader workers).
+            center, in **annotation voxels**. Defaults to
+            ``output_size_voxels // 4``.
+        seed: RNG seed; per-worker offset added so multi-worker dataloaders
+            sample distinct streams.
     """
 
     def __init__(
         self,
-        sources: List[SourceSpec],
+        volume_zarr_path: str,
         raw_dataset_path: str,
         input_size_voxels: Tuple[int, int, int],
         output_size_voxels: Tuple[int, int, int],
@@ -120,10 +86,7 @@ class VirtualPatchDataset(Dataset):
         jitter_voxels: Optional[Tuple[int, int, int]] = None,
         seed: int = 0,
     ):
-        if not sources:
-            raise ValueError("VirtualPatchDataset requires at least one source")
-
-        self.sources = sources
+        self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
         self.input_size = np.array(input_size_voxels, dtype=int)
         self.output_size = np.array(output_size_voxels, dtype=int)
@@ -137,72 +100,73 @@ class VirtualPatchDataset(Dataset):
         )
         self.seed = int(seed)
 
-        # Per-source bookkeeping. ``_per_source`` parallels ``self.sources``.
-        # Each entry holds the source's voxel-size, nm offset, remapped
-        # annotation array (so we don't re-read it every __getitem__), and
-        # the list of FG voxel coordinates (in annotation voxels).
-        self._per_source: List[dict] = []
-        self._fg_index: Optional[np.ndarray] = None  # (N, 4): src_idx, z, y, x
+        self.dataset_offset_nm: np.ndarray = np.zeros(3)
+        self.volume_shape_voxels: np.ndarray = np.zeros(3, dtype=int)
+        self._fg_index: Optional[np.ndarray] = None  # (N, 3): z, y, x in volume voxels
+        self._volume_arr = None  # opened lazily after worker fork
+        self._raw_idi = None     # opened lazily after worker fork
 
         self._build_index()
-
-        # Worker-local cached IDIs for raw reads. Keyed only after the worker
-        # forks/spawns; never serialized.
-        self._raw_idi = None
 
     # ------------------------------------------------------------------
     # Index construction
     # ------------------------------------------------------------------
 
     def _build_index(self) -> None:
+        """Walk the volume's populated chunks and build a flat FG-voxel index.
+
+        We use the on-disk file layout (zarr v2 stores one file per chunk
+        named ``z.y.x``) to enumerate just the chunks that have been
+        written. Empty regions of the sparse volume produce no files and
+        cost us nothing.
+        """
+        s0_path = os.path.join(self.volume_zarr_path, "annotation", "s0")
+        if not os.path.isdir(s0_path):
+            raise ValueError(
+                f"Volume zarr at {self.volume_zarr_path} has no annotation/s0/ "
+                "directory; was it created?"
+            )
+
+        # Pull volume-level metadata once so we can map voxel coords to nm.
+        with open(os.path.join(self.volume_zarr_path, ".zattrs")) as f:
+            root_attrs = json.load(f)
+        self.dataset_offset_nm = np.array(
+            root_attrs.get("dataset_offset_nm", [0, 0, 0]), dtype=float
+        )
+
+        arr = zarr.open(s0_path, mode="r")
+        self.volume_shape_voxels = np.array(arr.shape, dtype=int)
+        chunk_shape = np.array(arr.chunks, dtype=int)
+
+        chunk_keys = [
+            name for name in os.listdir(s0_path)
+            if _CHUNK_KEY_RE.match(name)
+        ]
+        if not chunk_keys:
+            raise ValueError(
+                f"Volume zarr at {self.volume_zarr_path} has no populated chunks. "
+                "Paint annotations or import crops first."
+            )
+
         rows: List[np.ndarray] = []
-        for src_idx, spec in enumerate(self.sources):
-            sub, voxel_size_nm, offset_nm = _read_voxel_size_and_offset(spec.path)
-            arr = _open_array(spec.path, sub)
-            data = arr[:]
-            if data.ndim != 3:
-                raise ValueError(
-                    f"Source {spec.path}: expected 3D (z, y, x), got shape {data.shape}"
-                )
-
-            remapped = remap_labels(
-                data,
-                fg_ids=spec.fg_ids,
-                bg_ids=spec.bg_ids,
-                mode=spec.mode,
-                connected_components=spec.connected_components,
-            )
-
-            fg_coords = np.argwhere(remapped >= 2).astype(np.int64)
-            if fg_coords.size == 0:
-                logger.warning(
-                    f"Source {spec.path}: no foreground voxels after remap; "
-                    "this source will never be sampled."
-                )
-
-            self._per_source.append(
-                {
-                    "voxel_size_nm": voxel_size_nm,
-                    "offset_nm": offset_nm,
-                    "remapped": remapped,
-                    "shape": np.array(remapped.shape, dtype=int),
-                    "n_fg": int(fg_coords.shape[0]),
-                }
-            )
-
-            if fg_coords.shape[0] > 0:
-                src_col = np.full((fg_coords.shape[0], 1), src_idx, dtype=np.int64)
-                rows.append(np.concatenate([src_col, fg_coords], axis=1))
+        for key in chunk_keys:
+            cz, cy, cx = (int(s) for s in key.split("."))
+            chunk_origin = np.array([cz, cy, cx], dtype=int) * chunk_shape
+            chunk_data = arr.blocks[cz, cy, cx]
+            fg_local = np.argwhere(chunk_data >= 2).astype(np.int64)
+            if fg_local.size:
+                rows.append(fg_local + chunk_origin)
 
         if not rows:
             raise ValueError(
-                "No foreground voxels found across any source. "
-                "Check fg_ids and that the source zarrs contain nonzero labels."
+                f"Volume zarr at {self.volume_zarr_path} has populated chunks "
+                "but no foreground voxels (>=2). Did you only paint background?"
             )
+
         self._fg_index = np.concatenate(rows, axis=0)
         logger.info(
             f"VirtualPatchDataset: built FG index with {self._fg_index.shape[0]} "
-            f"voxels across {len(self.sources)} source(s); "
+            f"voxels from {len(chunk_keys)} populated chunk(s) of {self.volume_zarr_path}; "
             f"patches_per_epoch={self.patches_per_epoch}, jitter={self.jitter.tolist()}"
         )
 
@@ -214,33 +178,24 @@ class VirtualPatchDataset(Dataset):
         return self.patches_per_epoch
 
     def __getitem__(self, _idx: int):
-        # Each worker gets a deterministic but distinct stream so that two
-        # workers don't pull the same anchors. ``_idx`` itself is not used
-        # because the conceptual mapping idx -> patch is meaningless here.
         rng = self._worker_rng()
-        anchor = self._fg_index[rng.integers(0, self._fg_index.shape[0])]
-        src_idx = int(anchor[0])
-        anchor_zyx = anchor[1:4].astype(np.float64)
+        anchor_zyx = self._fg_index[
+            rng.integers(0, self._fg_index.shape[0])
+        ].astype(np.float64)
 
-        # Jitter the patch center. Annotation patch is centered at the
-        # jittered anchor; raw patch is centered on the same physical point
-        # but covers a larger physical region (input_size > output_size for
-        # this U-Net family because of context).
         jitter_offset = rng.integers(
             low=-self.jitter, high=self.jitter + 1, size=3
         ).astype(np.float64)
         ann_center_voxels = anchor_zyx + jitter_offset
 
-        # Convert to physical (nm) coordinates for the raw read.
-        per = self._per_source[src_idx]
-        voxel_size_nm = per["voxel_size_nm"]
-        ann_offset_nm = per["offset_nm"]
-        ann_center_nm = ann_offset_nm + ann_center_voxels * voxel_size_nm
+        # Convert annotation-space voxel center to physical (nm) for the raw read.
+        ann_center_nm = (
+            self.dataset_offset_nm + ann_center_voxels * self.output_voxel_size
+        )
 
-        ann_patch = self._read_annotation_patch(src_idx, ann_center_voxels)
+        ann_patch = self._read_annotation_patch(ann_center_voxels)
         raw_patch = self._read_raw_patch(ann_center_nm)
 
-        # Same channel/dtype convention as CorrectionDataset.
         raw_t = torch.from_numpy(raw_patch.astype(np.float32)[np.newaxis, ...])
         ann_t = torch.from_numpy(ann_patch.astype(np.float32)[np.newaxis, ...])
         return raw_t, ann_t
@@ -249,36 +204,36 @@ class VirtualPatchDataset(Dataset):
     # Patch reads
     # ------------------------------------------------------------------
 
-    def _read_annotation_patch(
-        self, src_idx: int, center_voxels: np.ndarray
-    ) -> np.ndarray:
-        """Crop a patch from the (already-remapped) annotation array.
+    def _open_volume(self):
+        if self._volume_arr is None:
+            self._volume_arr = zarr.open(
+                os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
+            )
+        return self._volume_arr
 
-        Out-of-bounds voxels are filled with 0 (= unannotated -> masked out
-        by the trainer's loss when ``mask_unannotated=True``).
+    def _read_annotation_patch(self, center_voxels: np.ndarray) -> np.ndarray:
+        """Crop a patch from the volume's annotation array.
+
+        Out-of-bounds voxels are filled with 0 (= unannotated → masked
+        out by the trainer's loss when ``mask_unannotated=True``).
         """
-        per = self._per_source[src_idx]
-        full = per["remapped"]
-        shape = per["shape"]
         out_size = self.output_size
-
-        # Patch bounds in voxel coordinates of the source array.
         lo = (center_voxels - out_size / 2).astype(int)
         hi = lo + out_size
 
-        # Clamp to the valid region of the annotation array; pad the rest.
         clip_lo = np.maximum(lo, 0)
-        clip_hi = np.minimum(hi, shape)
+        clip_hi = np.minimum(hi, self.volume_shape_voxels)
         valid = np.all(clip_hi > clip_lo)
 
-        patch = np.zeros(out_size, dtype=full.dtype)
+        patch = np.zeros(out_size, dtype=np.uint8)
         if valid:
+            arr = self._open_volume()
             src_slices = tuple(slice(int(c), int(d)) for c, d in zip(clip_lo, clip_hi))
             dst_slices = tuple(
                 slice(int(c - l), int(d - l))
                 for c, d, l in zip(clip_lo, clip_hi, lo)
             )
-            patch[dst_slices] = full[src_slices]
+            patch[dst_slices] = arr[src_slices]
         return patch
 
     def _read_raw_patch(self, center_nm: np.ndarray) -> np.ndarray:
@@ -303,7 +258,6 @@ class VirtualPatchDataset(Dataset):
     # ------------------------------------------------------------------
 
     def _worker_rng(self) -> np.random.Generator:
-        """Per-worker RNG so multi-worker dataloaders don't sample identically."""
         worker_info = torch.utils.data.get_worker_info()
         worker_id = 0 if worker_info is None else worker_info.id
         return np.random.default_rng(self.seed + worker_id * 1_000_003)
@@ -317,15 +271,7 @@ VIRTUAL_MANIFEST_FILENAME = "_virtual_sources.json"
 
 
 def write_manifest(corrections_dir: str, manifest: dict) -> str:
-    """Persist a manifest that ``create_dataloader`` will pick up.
-
-    Storing it as a sentinel file inside ``corrections_dir`` keeps the change
-    surface small: the existing trainer entry point still receives
-    ``--corrections <dir>`` and switches dataset class based on whether this
-    file exists. Returns the manifest path.
-    """
-    import json
-
+    """Persist a manifest sentinel that ``create_dataloader`` looks for."""
     os.makedirs(corrections_dir, exist_ok=True)
     path = os.path.join(corrections_dir, VIRTUAL_MANIFEST_FILENAME)
     with open(path, "w") as f:
@@ -335,8 +281,6 @@ def write_manifest(corrections_dir: str, manifest: dict) -> str:
 
 def read_manifest(corrections_dir: str) -> Optional[dict]:
     """Return the manifest if present, else ``None``."""
-    import json
-
     path = os.path.join(corrections_dir, VIRTUAL_MANIFEST_FILENAME)
     if not os.path.exists(path):
         return None
@@ -345,10 +289,19 @@ def read_manifest(corrections_dir: str) -> Optional[dict]:
 
 
 def dataset_from_manifest(manifest: dict) -> VirtualPatchDataset:
-    """Instantiate a :class:`VirtualPatchDataset` from a manifest dict."""
-    sources = [SourceSpec(**src) for src in manifest["sources"]]
+    """Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
+
+    Recognized manifest kinds:
+      - ``volume_zarr_v1`` (current): trainer reads the session's
+        annotation_volume.zarr directly. Field ``volume_zarr_path``.
+    """
+    kind = manifest.get("kind")
+    if kind != "volume_zarr_v1":
+        raise ValueError(
+            f"Unsupported manifest kind: {kind!r}. Expected 'volume_zarr_v1'."
+        )
     return VirtualPatchDataset(
-        sources=sources,
+        volume_zarr_path=manifest["volume_zarr_path"],
         raw_dataset_path=manifest["raw_dataset_path"],
         input_size_voxels=tuple(manifest["input_size_voxels"]),
         output_size_voxels=tuple(manifest["output_size_voxels"]),

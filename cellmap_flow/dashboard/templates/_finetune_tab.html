@@ -119,13 +119,12 @@
               placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
             ></textarea>
             <small class="form-text text-muted">
-              Bare strings default to <code>fg_ids=all_nonzero, mode=dense, bg_to_fg_ratio=1.0</code>.
+              Bare strings default to <code>fg_ids=all_nonzero, mode=dense</code>.
               Per-entry overrides: <code>fg_ids</code>, <code>bg_ids</code>,
-              <code>mode</code> (dense|sparse), <code>connected_components</code> (bool),
-              <code>bg_to_fg_ratio</code> (float; <code>0</code> drops all BG-only tiles, <code>null</code> keeps every tile).
-              Top-level <code>sampling: virtual</code> skips disk
-              materialization and trains directly from random patches centered
-              on annotated voxels; combine with <code>patches_per_epoch</code>.
+              <code>mode</code> (dense|sparse), <code>connected_components</code> (bool).
+              Top-level: <code>patches_per_epoch</code>, <code>jitter_voxels</code>.
+              Imported crops are written into the session's annotation volume
+              and trained on via FG-anchored random patches.
             </small>
           </div>
           <div id="loadCropsStatus" class="text-muted small"></div>
