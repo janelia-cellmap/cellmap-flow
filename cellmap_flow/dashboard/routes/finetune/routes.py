@@ -27,6 +27,9 @@ from cellmap_flow.dashboard.routes.finetune.training import (
 from cellmap_flow.dashboard.routes.finetune.viewer import (
     add_finetuned_layer_to_viewer_response,
 )
+from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
+    load_crops_from_yaml_response,
+)
 
 finetune_bp = Blueprint("finetune", __name__)
 
@@ -49,6 +52,11 @@ def create_annotation_crop():
 @finetune_bp.route("/api/finetune/create-volume", methods=["POST"])
 def create_annotation_volume():
     return create_annotation_volume_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/load-crops", methods=["POST"])
+def load_crops_from_yaml():
+    return load_crops_from_yaml_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/user-prefs", methods=["GET"])

@@ -80,6 +80,36 @@
     </small>
   </div>
 
+  <!-- Bulk-load externally annotated crops from a YAML manifest -->
+  <div class="mb-2">
+    <details>
+      <summary class="form-label fw-bold mb-1" style="cursor: pointer;">
+        Load annotated crops from YAML
+      </summary>
+      <div class="mt-2">
+        <textarea
+          class="form-control font-monospace"
+          id="loadCropsYaml"
+          rows="6"
+          placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
+        ></textarea>
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <button type="button" class="btn btn-secondary btn-sm" id="loadCropsBtn">
+            Load Crops
+          </button>
+          <span id="loadCropsStatus" class="text-muted small"></span>
+        </div>
+        <small class="form-text text-muted d-block mt-1">
+          Each entry points at an existing zarr array (3D, OME-NGFF or with
+          <code>resolution</code>/<code>offset</code> attrs). Voxel size, ROI offset
+          and shape are auto-derived. Bare strings default to
+          <code>fg_ids=all_nonzero, mode=dense</code>. Crops are tiled to match the
+          painted-volume chunk shape and saved alongside painted chunks.
+        </small>
+      </div>
+    </details>
+  </div>
+
   <!-- Load Existing Volume Modal -->
   <div class="modal fade" id="loadExistingModal" tabindex="-1" aria-labelledby="loadExistingLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -784,6 +814,62 @@ document.addEventListener("DOMContentLoaded", function () {
         createVolumeBtn.innerHTML = 'Create Annotation Volume';
       });
   });
+
+  // Load crops from a YAML manifest
+  const loadCropsBtn = document.getElementById("loadCropsBtn");
+  if (loadCropsBtn) {
+    loadCropsBtn.addEventListener("click", function() {
+      if (!selectedModel) {
+        alert("No model selected");
+        return;
+      }
+      const yamlText = document.getElementById("loadCropsYaml").value.trim();
+      if (!yamlText) {
+        alert("Paste a YAML manifest first.");
+        return;
+      }
+      const outputPath = document.getElementById("outputPath").value.trim();
+      const status = document.getElementById("loadCropsStatus");
+      status.textContent = "Loading...";
+      loadCropsBtn.disabled = true;
+
+      fetch("/api/finetune/load-crops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_name: selectedModel.name,
+          output_path: outputPath,
+          yaml: yamlText,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          loadCropsBtn.disabled = false;
+          if (!data.success) {
+            status.textContent = `Error: ${data.error || "load failed"}`;
+            finetuneLog.value += `✗ Load crops error: ${data.error}\n`;
+            if (data.details) {
+              finetuneLog.value += `  details: ${JSON.stringify(data.details)}\n`;
+            }
+            return;
+          }
+          status.textContent =
+            `Created ${data.n_chunks_created} chunk(s) from ${data.n_crops_requested} crop(s); ${data.n_errors} error(s).`;
+          finetuneLog.value +=
+            `✓ Loaded ${data.n_crops_requested} crop(s); ${data.n_chunks_created} chunk zarrs created, ${data.n_errors} error(s)\n`;
+          if (data.errors && data.errors.length) {
+            for (const err of data.errors) {
+              finetuneLog.value += `  ✗ ${err.path}: ${err.error}\n`;
+            }
+          }
+        })
+        .catch(err => {
+          loadCropsBtn.disabled = false;
+          status.textContent = `Request failed: ${err}`;
+          finetuneLog.value += `✗ Load crops request failed: ${err}\n`;
+        });
+    });
+  }
 
   // Load Existing Volume modal handling
   const loadExistingBtn = document.getElementById("loadExistingVolumeBtn");
