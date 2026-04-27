@@ -1,4 +1,7 @@
 my_yamls/
+browser/
+.codex
+.vite/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
