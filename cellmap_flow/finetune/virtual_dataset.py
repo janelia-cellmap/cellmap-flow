@@ -105,6 +105,11 @@ class VirtualPatchDataset(Dataset):
         self._fg_index: Optional[np.ndarray] = None  # (N, 3): z, y, x in volume voxels
         self._volume_arr = None  # opened lazily after worker fork
         self._raw_idi = None     # opened lazily after worker fork
+        # Cached per-worker RNG. None until first __getitem__ (after fork/spawn).
+        # Without this cache, every __getitem__ would reseed and re-pick the
+        # very first integer of the same stream — producing the same patch
+        # forever and silently breaking training.
+        self._cached_rng: Optional[np.random.Generator] = None
 
         self._build_index()
 
@@ -258,9 +263,17 @@ class VirtualPatchDataset(Dataset):
     # ------------------------------------------------------------------
 
     def _worker_rng(self) -> np.random.Generator:
-        worker_info = torch.utils.data.get_worker_info()
-        worker_id = 0 if worker_info is None else worker_info.id
-        return np.random.default_rng(self.seed + worker_id * 1_000_003)
+        # Cache the Generator on self so consecutive __getitem__ calls draw
+        # from the *advancing* state of the same RNG. Reseeding every call
+        # made every patch identical (the first integer pulled from a freshly
+        # seeded generator is deterministic).
+        if self._cached_rng is None:
+            worker_info = torch.utils.data.get_worker_info()
+            worker_id = 0 if worker_info is None else worker_info.id
+            self._cached_rng = np.random.default_rng(
+                self.seed + worker_id * 1_000_003
+            )
+        return self._cached_rng
 
 
 # ---------------------------------------------------------------------------
