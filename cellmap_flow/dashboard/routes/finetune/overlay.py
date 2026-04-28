@@ -42,27 +42,68 @@ def refresh_annotated_regions_layer(corrections_path=None):
         if not os.path.isdir(corrections_dir):
             continue
         for entry in sorted(os.listdir(corrections_dir)):
-            if "_chunk_" not in entry or not entry.endswith(".zarr"):
-                continue
-            zattrs_file = os.path.join(corrections_dir, entry, ".zattrs")
-            if not os.path.exists(zattrs_file):
-                continue
-            try:
-                with open(zattrs_file) as f:
-                    meta = json.load(f)
-                roi = meta.get("roi", {})
-                offset_vox = roi.get("annotation_offset")
-                shape_vox = roi.get("annotation_shape")
-                voxel = meta.get("annotation_voxel_size")
-                if not (offset_vox and shape_vox and voxel):
+            # Per-painted-chunk small boxes (the existing behavior).
+            if "_chunk_" in entry and entry.endswith(".zarr"):
+                zattrs_file = os.path.join(corrections_dir, entry, ".zattrs")
+                if not os.path.exists(zattrs_file):
                     continue
+                try:
+                    with open(zattrs_file) as f:
+                        meta = json.load(f)
+                    roi = meta.get("roi", {})
+                    offset_vox = roi.get("annotation_offset")
+                    shape_vox = roi.get("annotation_shape")
+                    voxel = meta.get("annotation_voxel_size")
+                    if not (offset_vox and shape_vox and voxel):
+                        continue
+                    voxel_arr = np.array(voxel, dtype=np.float64)
+                    lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
+                    hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
+                    boxes.append({"label": entry, "lo": lo.tolist(), "hi": hi.tolist()})
+                except Exception as e:
+                    logger.warning(f"Could not read chunk metadata for {entry}: {e}")
+                continue
 
-                voxel_arr = np.array(voxel, dtype=np.float64)
-                lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
-                hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
-                boxes.append({"chunk": entry, "lo": lo.tolist(), "hi": hi.tolist()})
-            except Exception as e:
-                logger.warning(f"Could not read chunk metadata for {entry}: {e}")
+            # Per-imported-YAML-crop large boxes (one per crop, read from the
+            # annotation_volume.zarr's root attrs that the YAML loader writes).
+            if entry.endswith(".zarr"):
+                vol_attrs_file = os.path.join(corrections_dir, entry, ".zattrs")
+                if not os.path.exists(vol_attrs_file):
+                    continue
+                try:
+                    with open(vol_attrs_file) as f:
+                        vol_meta = json.load(f)
+                    if vol_meta.get("type") != "annotation_volume":
+                        continue
+                    imported = vol_meta.get("imported_crops") or []
+                    if not imported:
+                        continue
+                    voxel = vol_meta.get("output_voxel_size")
+                    dataset_offset = vol_meta.get("dataset_offset_nm", [0, 0, 0])
+                    if not voxel:
+                        continue
+                    voxel_arr = np.array(voxel, dtype=np.float64)
+                    dataset_offset_arr = np.array(dataset_offset, dtype=np.float64)
+                    for crop in imported:
+                        offset_vox = crop.get("annotation_offset_voxels")
+                        shape_vox = crop.get("annotation_shape_voxels")
+                        if not (offset_vox and shape_vox):
+                            continue
+                        lo = (
+                            dataset_offset_arr
+                            + np.array(offset_vox, dtype=np.float64) * voxel_arr
+                        )
+                        hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
+                        label = crop.get("name") or os.path.basename(
+                            crop.get("path", "imported_crop").rstrip("/")
+                        )
+                        boxes.append(
+                            {"label": f"yaml_crop:{label}", "lo": lo.tolist(), "hi": hi.tolist()}
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not read annotation_volume metadata for {entry}: {e}"
+                    )
 
     layer_name = "annotated_regions"
     if not boxes:
@@ -88,7 +129,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
             point_a=box["lo"],
             point_b=box["hi"],
             id=str(index),
-            description=box["chunk"],
+            description=box["label"],
         )
         for index, box in enumerate(boxes)
     ]
@@ -103,6 +144,11 @@ def refresh_annotated_regions_layer(corrections_path=None):
                 ),
                 annotations=annotations,
             )
+            # Force-visible in case a prior toggle archived the layer.
+            try:
+                s.layers[layer_name].visible = True
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"Could not update annotated_regions layer: {e}")
         return 0

@@ -80,10 +80,22 @@ def submit_finetuning_response(data):
                 }
             ), 400
 
-        try:
-            sync_all_annotations_from_minio(force=False)
-        except Exception as e:
-            logger.warning(f"Error syncing annotations before training: {e}")
+        # Pre-training sync: only needed by the legacy CorrectionDataset path,
+        # which reads per-chunk _chunk_*.zarr extracts. The new VirtualPatchDataset
+        # reads the annotation_volume.zarr directly, so when a manifest is present
+        # the sync is wasted work and can hang submit for many minutes when the
+        # volume contains imported YAML data.
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        if read_manifest(str(actual_corrections_path)) is None:
+            try:
+                sync_all_annotations_from_minio(force=False)
+            except Exception as e:
+                logger.warning(f"Error syncing annotations before training: {e}")
+        else:
+            logger.info(
+                "Virtual sources manifest present; skipping pre-training MinIO sync."
+            )
 
         loss_type = data.get("loss_type", "mse")
         distillation_lambda = data.get("distillation_lambda", 0.0)
@@ -339,16 +351,37 @@ def get_inference_server_status_response(job_id):
 def restart_finetuning_job_response(job_id, data):
     try:
         restart_t0 = time.perf_counter()
-        try:
-            sync_t0 = time.perf_counter()
-            synced = sync_all_annotations_from_minio(force=False)
-            sync_elapsed = time.perf_counter() - sync_t0
+
+        # Pre-sync is only needed by the legacy CorrectionDataset path. With
+        # a virtual-sources manifest the trainer reads the volume zarr
+        # directly, so the sync would just download chunks the trainer never
+        # touches — and on big sessions can hang Restart for minutes.
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
+        job_record = jobs.get(job_id)
+        corrections_dir = (
+            str(getattr(job_record, "corrections_path", "") or "")
+            if job_record is not None
+            else ""
+        )
+
+        if corrections_dir and read_manifest(corrections_dir) is not None:
             logger.info(
-                f"Restart pre-sync complete for job {job_id}: synced={synced}, "
-                f"elapsed={sync_elapsed:.2f}s"
+                f"Virtual sources manifest present for job {job_id}; "
+                "skipping pre-restart MinIO sync."
             )
-        except Exception as e:
-            logger.warning(f"Error syncing annotations before restart: {e}")
+        else:
+            try:
+                sync_t0 = time.perf_counter()
+                synced = sync_all_annotations_from_minio(force=False)
+                sync_elapsed = time.perf_counter() - sync_t0
+                logger.info(
+                    f"Restart pre-sync complete for job {job_id}: synced={synced}, "
+                    f"elapsed={sync_elapsed:.2f}s"
+                )
+            except Exception as e:
+                logger.warning(f"Error syncing annotations before restart: {e}")
 
         job = g.finetune_job_manager.restart_finetuning_job(
             job_id=job_id,

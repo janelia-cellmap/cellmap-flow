@@ -79,9 +79,10 @@ class CropEntry(BaseModel):
 class CropsConfig(BaseModel):
     """Top-level YAML schema.
 
-    ``patches_per_epoch`` and ``jitter_voxels`` are passed through to the
-    :class:`VirtualPatchDataset` manifest the loader writes; they govern
-    epoch length and patch-center jitter in voxels respectively.
+    ``patches_per_epoch``, ``jitter_voxels``, and ``seed`` are passed through
+    to the :class:`VirtualPatchDataset` manifest the loader writes — they
+    govern epoch length, patch-center jitter (in voxels), and the per-worker
+    RNG base seed for reproducible patch sampling across runs.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -89,6 +90,7 @@ class CropsConfig(BaseModel):
     crops: List[CropEntry]
     patches_per_epoch: int = 500
     jitter_voxels: Optional[List[int]] = None
+    seed: int = 0
 
     @field_validator("crops", mode="before")
     @classmethod

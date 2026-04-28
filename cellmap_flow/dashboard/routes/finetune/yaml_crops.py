@@ -21,6 +21,7 @@ import os
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import numpy as np
@@ -245,26 +246,58 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
             "OME-NGFF translation against the dataset offset."
         )
 
-    # Write tile-by-tile so we can stream progress updates and never hold a
-    # second copy of the whole crop in memory beyond what zarr buffers.
-    chunk = arr.chunks
-    nz = int(np.ceil(sz / chunk[0]))
-    ny = int(np.ceil(sy / chunk[1]))
-    nx = int(np.ceil(sx / chunk[2]))
-    total_tiles = nz * ny * nx
+    # Slice the crop into Z-aligned slabs and write them in parallel. Slabs
+    # are aligned to the underlying zarr chunk size so two slabs never
+    # touch the same chunk, making concurrent writes safe (zarr's chunk
+    # writes are per-chunk-file, no shared mutable state).
+    #
+    # Slab count tracks the LSF slot allocation so we always fully use what
+    # bsub gave us — capped by the number of chunk-aligned slabs we can
+    # actually produce.
+    from cellmap_flow.dashboard.finetune_utils import _get_sync_worker_count
+
+    chunk_z = max(int(arr.chunks[0]), 1)
+    max_chunk_slabs = int(np.ceil(sz / chunk_z))
+    n_slabs = max(1, min(_get_sync_worker_count(), max_chunk_slabs))
+    slab_size = int(np.ceil(sz / n_slabs / chunk_z) * chunk_z)
+    slabs = []
+    for s in range(n_slabs):
+        a = s * slab_size
+        b = min((s + 1) * slab_size, sz)
+        if a < b:
+            slabs.append((a, b))
+    n_slabs = len(slabs)
+
+    def _write_one(slab):
+        a, b = slab
+        arr[z0 + a : z0 + b, y0 : y0 + sy, x0 : x0 + sx] = remapped[a:b, :, :]
+
     written = 0
-    for cz in range(nz):
-        for cy in range(ny):
-            for cx in range(nx):
-                a, b = cz * chunk[0], min((cz + 1) * chunk[0], sz)
-                c, d = cy * chunk[1], min((cy + 1) * chunk[1], sy)
-                e, f = cx * chunk[2], min((cx + 1) * chunk[2], sx)
-                arr[z0 + a : z0 + b, y0 + c : y0 + d, x0 + e : x0 + f] = remapped[
-                    a:b, c:d, e:f
-                ]
-                written += 1
-                if progress_callback is not None:
-                    progress_callback(written, total_tiles)
+    n_workers = max(1, n_slabs)
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
+        futures = [ex.submit(_write_one, s) for s in slabs]
+        for fut in as_completed(futures):
+            fut.result()  # surface any per-slab exception
+            written += 1
+            if progress_callback is not None:
+                progress_callback(written, n_slabs)
+
+    # Record this import in the volume's root attrs so the bounding-box
+    # overlay can surface it as a single yellow box per crop (vs. the
+    # per-chunk small boxes from painted scribbles).
+    vol_root = zarr.open(volume_meta["zarr_path"], mode="r+")
+    imported = list(vol_root.attrs.get("imported_crops", []))
+    imported.append(
+        {
+            "path": entry.path,
+            "name": entry.name,
+            "annotation_offset_voxels": [int(z0), int(y0), int(x0)],
+            "annotation_shape_voxels": [int(sz), int(sy), int(sx)],
+            "n_fg_voxels": int(n_fg),
+        }
+    )
+    vol_root.attrs["imported_crops"] = imported
+
     return n_fg
 
 
@@ -379,6 +412,19 @@ def load_crops_from_yaml_response(data):
                 logger.exception(f"Failed to import crop {entry.path}")
                 errors.append({"path": entry.path, "error": str(e)})
 
+        # The MinIO bucket was mirrored once at volume-create time, when the
+        # zarr held only metadata. Re-mirror now that chunk data is written
+        # so neuroglancer can read the imported annotations from the
+        # editable layer.
+        try:
+            ensure_minio_serving(
+                volume_meta["zarr_path"],
+                volume_id,
+                output_base_dir=corrections_dir,
+            )
+        except Exception as e:
+            logger.warning(f"MinIO re-mirror failed for {volume_id}: {e}")
+
         # Manifest: trainer reads from this single volume zarr.
         manifest = {
             "kind": "volume_zarr_v1",
@@ -390,6 +436,7 @@ def load_crops_from_yaml_response(data):
             "output_voxel_size_nm": list(volume_meta["output_voxel_size"]),
             "patches_per_epoch": crops_config.patches_per_epoch,
             "jitter_voxels": crops_config.jitter_voxels,
+            "seed": crops_config.seed,
         }
         write_manifest(corrections_dir, manifest)
 

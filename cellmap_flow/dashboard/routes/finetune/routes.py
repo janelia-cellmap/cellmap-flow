@@ -13,6 +13,9 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     set_user_prefs_response,
     sync_annotations_manually_response,
 )
+from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
+    get_resume_progress_response,
+)
 from cellmap_flow.dashboard.routes.finetune.training import (
     cancel_job_response,
     get_job_logs_response,
@@ -89,6 +92,11 @@ def list_existing_sessions():
 @finetune_bp.route("/api/finetune/load-existing-volume", methods=["POST"])
 def load_existing_volume():
     return load_existing_volume_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/load-existing-volume-progress", methods=["GET"])
+def load_existing_volume_progress():
+    return get_resume_progress_response(request.args.get("load_id"))
 
 
 @finetune_bp.route("/api/finetune/add-to-viewer", methods=["POST"])

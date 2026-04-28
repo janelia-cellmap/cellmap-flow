@@ -166,6 +166,7 @@
           <div id="existingSessionsEmpty" class="text-muted small" style="display:none;">
             No existing sessions found under this directory.
           </div>
+          <div id="loadExistingStatus" class="text-muted small mt-2"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -934,7 +935,7 @@ document.addEventListener("DOMContentLoaded", function () {
             msg = `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
           } else if (p.phase === "tile") {
             const pct = p.tile_total ? ((p.tile_done / p.tile_total) * 100).toFixed(0) : 0;
-            msg = `Crop ${p.crop_index + 1}/${p.n_crops}: ${p.tile_done}/${p.tile_total} tiles (${pct}%) — ${p.current_path}`;
+            msg = `Crop ${p.crop_index + 1}/${p.n_crops}: writing slab ${p.tile_done}/${p.tile_total} (${pct}%) — ${p.current_path}`;
           } else if (p.phase === "done") {
             msg = `Finishing... ${p.n_chunks_created || 0} chunks created`;
           } else {
@@ -1074,15 +1075,58 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!outputPath) {
       outputPath = existingBrowseRoot.value.trim();
       if (outputPath) {
-        // Mirror it back into the main field so downstream save/train uses it.
         document.getElementById("outputPath").value = outputPath;
       }
     }
     if (!sessionPath || !outputPath) return;
 
+    const status = document.getElementById("loadExistingStatus");
     loadExistingConfirmBtn.disabled = true;
-    loadExistingConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+    loadExistingConfirmBtn.innerHTML =
+      '<span class="spinner-border spinner-border-sm"></span> Loading...';
     finetuneLog.value += `Loading existing volume from: ${sessionPath}\n`;
+    status.textContent = "Starting...";
+
+    // Generate a load_id for live progress polling.
+    const loadId = (crypto.randomUUID && crypto.randomUUID()) ||
+      (Math.random().toString(36).slice(2) + Date.now());
+
+    let pollHandle = null;
+    const pollProgress = async () => {
+      try {
+        const res = await fetch(
+          `/api/finetune/load-existing-volume-progress?load_id=${encodeURIComponent(loadId)}`
+        );
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!payload.success || !payload.progress) return;
+        const p = payload.progress;
+        let msg;
+        if (p.phase === "starting") {
+          msg = "Starting...";
+        } else if (p.phase === "copying") {
+          const filePart = p.files_total
+            ? ` — ${p.files_done}/${p.files_total} files`
+            : "";
+          msg = `Copying ${p.parent_done + 1}/${p.parent_total}: ${p.current}${filePart}`;
+        } else if (p.phase === "copying_minio") {
+          msg = `Copying MinIO storage (${p.files_done || 0}/${p.files_total || "?"} files)`;
+        } else if (p.phase === "mirroring_minio") {
+          msg = `Mirroring volume to MinIO (${p.current})`;
+        } else if (p.phase === "done") {
+          msg = `Finalizing... ${p.copied_count || 0} entries copied`;
+        } else if (p.phase === "error") {
+          msg = `Error: ${p.error || "load failed"}`;
+        } else {
+          msg = JSON.stringify(p);
+        }
+        status.textContent = msg;
+      } catch (_) {
+        // poll errors are non-fatal
+      }
+    };
+    pollHandle = setInterval(pollProgress, 1000);
+    pollProgress();
 
     fetch("/api/finetune/load-existing-volume", {
       method: "POST",
@@ -1090,16 +1134,21 @@ document.addEventListener("DOMContentLoaded", function () {
       body: JSON.stringify({
         source_session_path: sessionPath,
         output_path: outputPath,
+        load_id: loadId,
       })
     })
       .then(res => res.json())
       .then(data => {
+        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
         loadExistingConfirmBtn.disabled = false;
         loadExistingConfirmBtn.innerHTML = 'Load Selected';
         if (!data.success) {
+          status.textContent = `Error: ${data.error}`;
           finetuneLog.value += `✗ Error: ${data.error}\n`;
           return;
         }
+        status.textContent =
+          `Loaded volume ${data.volume_id} (${data.copied_count} entries, ${data.painted_chunk_count || 0} painted chunks).`;
         finetuneLog.value += `✓ Loaded volume ${data.volume_id} into ${data.new_session_path}\n`;
         finetuneLog.value += `  Copied ${data.copied_count} files. ${data.painted_chunk_count || 0} painted chunks served.\n`;
         if (data.copied_minio) {
@@ -1114,8 +1163,10 @@ document.addEventListener("DOMContentLoaded", function () {
         );
       })
       .catch(err => {
+        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
         loadExistingConfirmBtn.disabled = false;
         loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        status.textContent = `Request failed: ${err}`;
         finetuneLog.value += `✗ Error: ${err}\n`;
       });
   });
@@ -1239,9 +1290,18 @@ document.addEventListener("DOMContentLoaded", function () {
         params.checkpoint_path = checkpointPath;
       }
 
-      // Disable button and show loading
+      // Disable button and show loading. The submit endpoint may run a
+      // pre-submit MinIO sync (legacy CorrectionDataset path); if that
+      // takes a while, switch the spinner label to make it obvious that
+      // the dashboard is doing real work, not stuck.
       startFinetuningBtn.disabled = true;
-      startFinetuningBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+      startFinetuningBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+      const slowLabelTimer = setTimeout(() => {
+        startFinetuningBtn.innerHTML =
+          '<span class="spinner-border spinner-border-sm"></span> ' +
+          'Syncing annotations from MinIO before submit (this can take several minutes)...';
+      }, 3000);
 
       try {
         // Submit job
@@ -1300,6 +1360,7 @@ document.addEventListener("DOMContentLoaded", function () {
         appendLog(`✗ Error: ${error.message}\n`);
       } finally {
         // Re-enable button
+        clearTimeout(slowLabelTimer);
         startFinetuningBtn.disabled = false;
         startFinetuningBtn.innerHTML = '🚀 Start Finetuning';
       }
