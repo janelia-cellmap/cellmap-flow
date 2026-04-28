@@ -171,10 +171,29 @@ class MinMaxNormalizer(InputNormalizer):
 class LambdaNormalizer(InputNormalizer):
     def __init__(self, expression: str):
         self.expression = expression
-        self._lambda = eval(f"lambda x: {expression}")
+        # ``_lambda`` is a Python ``lambda`` and not picklable, which breaks
+        # multiprocessing workers (e.g. PyTorch DataLoader with spawn). Don't
+        # store it on the instance; build it lazily in ``_process`` so it
+        # lives only in the worker that needs it. ``__getstate__``/
+        # ``__setstate__`` further guarantee any older pickled instances
+        # don't try to round-trip the lambda.
+
+    def _get_lambda(self):
+        if not hasattr(self, "_lambda") or self._lambda is None:
+            self._lambda = eval(f"lambda x: {self.expression}")
+        return self._lambda
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_lambda", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lambda = None  # rebuilt lazily on first call
 
     def _process(self, data) -> np.ndarray:
-        return self._lambda(data.astype(np.float32))
+        return self._get_lambda()(data.astype(np.float32))
 
     @property
     def dtype(self):

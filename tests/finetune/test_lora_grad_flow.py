@@ -154,6 +154,25 @@ def test_lora_wrap_grad_flow_with_batch_loop_wrapper():
     _assert_lora_b_grads_nonzero(peft)
 
 
+def test_lambda_normalizer_is_picklable():
+    """LambdaNormalizer used to store an eval()'d ``lambda`` on the
+    instance. PyTorch DataLoader workers spawned via ``multiprocessing_context
+    ='spawn'`` pickle the dataset (and therefore the normalizers) before
+    starting -- lambdas can't be pickled, which crashed training before any
+    batches ran. Regression test: a normalizer must round-trip through
+    pickle and still produce the right output."""
+    import pickle
+    import numpy as np
+
+    from cellmap_flow.norm.input_normalize import LambdaNormalizer
+
+    n = LambdaNormalizer("x*2-1")
+    pickled = pickle.dumps(n)
+    n2 = pickle.loads(pickled)
+    out = n2._process(np.array([0.5, 1.0]))
+    assert out[0] == 0.0 and out[1] == 1.0, f"unexpected: {out}"
+
+
 def test_virtual_patch_dataset_applies_input_norm():
     """Regression test for the train/inference normalization mismatch bug.
 
