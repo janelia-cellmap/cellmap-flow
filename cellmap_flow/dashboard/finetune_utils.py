@@ -627,10 +627,19 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
     Returns:
         (changed_keys, removed_keys, remote_chunk_state)
     """
+    listing_failed = False
     try:
         chunk_files = s3.ls(s0_path)
     except FileNotFoundError:
         chunk_files = []
+        listing_failed = True
+    except Exception as e:
+        # Any other s3 error -> treat as transient. Returning an empty list
+        # would otherwise be misinterpreted as "remote has no chunks" and
+        # delete every local chunk we already had.
+        logger.warning(f"_diff_and_sync_chunks: s3.ls({s0_path}) failed: {e}; "
+                       "treating as transient, skipping sync this cycle.")
+        return [], [], dict(known_chunk_state)
 
     remote_chunk_state = {}
     for chunk_file in chunk_files:
@@ -648,6 +657,20 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
     else:
         changed_keys = [k for k, v in remote_chunk_state.items() if known_chunk_state.get(k) != v]
     removed_keys = [k for k in known_chunk_state if k not in remote_chunk_state]
+
+    # Safety: if remote returned empty but we previously knew about chunks,
+    # treat it as a MinIO blip and refuse to delete -- otherwise a single bad
+    # listing wipes the entire on-disk volume zarr (observed: VirtualPatchDataset
+    # built FG index from 3456 disk chunks at trainer start, then a subsequent
+    # background sync deleted them all and training silently produced loss=0).
+    if (listing_failed or not remote_chunk_state) and known_chunk_state:
+        if removed_keys:
+            logger.warning(
+                f"_diff_and_sync_chunks: remote listing for {s0_path} returned "
+                f"empty but {len(known_chunk_state)} chunks were previously known. "
+                "Refusing to delete on-disk chunks (probable MinIO transient)."
+            )
+        return [], [], dict(known_chunk_state)
 
     if not changed_keys and not removed_keys:
         return [], [], remote_chunk_state
