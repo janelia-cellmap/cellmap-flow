@@ -11,6 +11,7 @@ keeping the base model frozen.
 """
 
 import logging
+import os
 from typing import List, Optional, Union
 import torch
 import torch.nn as nn
@@ -27,19 +28,24 @@ def detect_adaptable_layers(
     Automatically detect layers suitable for LoRA adaptation.
 
     Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
-    By default, only excludes batch/layer-norm style modules. Output/head
-    layers are deliberately INCLUDED so the model can fully adapt its
-    feature→output mapping for cross-domain finetuning. (Previously
-    'final', 'head', 'output' were excluded; that left the output projection
-    frozen, which prevented learning when the base model's predictions on
-    the target dataset were poor.)
+
+    Default policy keeps the prediction head (``final`` / ``head`` / ``output``
+    layers) FROZEN. Wrapping the head with LoRA gives the model enough
+    capacity to fully replace the feature->prediction mapping; on small
+    training sets that lets it collapse to "predict near zero everywhere" or
+    otherwise degrade base behavior far from the supervision. Pre-2026-04-21
+    behavior left the head frozen and tended to give safer, more conservative
+    finetuning. Set ``CELLMAP_FLOW_LORA_INCLUDE_HEAD=1`` to opt back in to
+    wrapping head/output/final layers as well.
 
     Args:
         model: PyTorch model to inspect
         include_patterns: List of regex patterns for layer names to include
                          If None, includes all Conv/Linear layers
         exclude_patterns: List of substrings for layer names to exclude
-                         Default: ['bn', 'norm']
+                         Default: ``['bn', 'norm', 'final', 'head', 'output']``
+                         (or ``['bn', 'norm']`` with
+                         ``CELLMAP_FLOW_LORA_INCLUDE_HEAD=1``).
 
     Returns:
         List of layer names suitable for LoRA adaptation
@@ -47,7 +53,10 @@ def detect_adaptable_layers(
     import re
 
     if exclude_patterns is None:
-        exclude_patterns = ['bn', 'norm']
+        if os.environ.get("CELLMAP_FLOW_LORA_INCLUDE_HEAD") in ("1", "true", "True"):
+            exclude_patterns = ['bn', 'norm']
+        else:
+            exclude_patterns = ['bn', 'norm', 'final', 'head', 'output']
 
     adaptable = []
 
