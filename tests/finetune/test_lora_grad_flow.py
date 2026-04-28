@@ -154,6 +154,87 @@ def test_lora_wrap_grad_flow_with_batch_loop_wrapper():
     _assert_lora_b_grads_nonzero(peft)
 
 
+def test_virtual_patch_dataset_applies_input_norm():
+    """Regression test for the train/inference normalization mismatch bug.
+
+    The dashboard's inference path normalizes raw via ``g.input_norms``
+    before feeding the model. The trainer is a separate LSF process where
+    ``g.input_norms`` is empty -- so without an explicit per-dataset
+    normalizer, the trainer trained the model on raw uint8 [0, 255] while
+    inference fed it [-1, 1]. The trained model was nonsense at inference
+    time. Asserts that VirtualPatchDataset, given an ``input_norm_config``
+    matching the dashboard's typical config, returns raw patches in the
+    expected normalized range -- not raw uint8.
+    """
+    import numpy as np
+    import zarr
+    import tempfile
+    import os
+
+    from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
+
+    tmp = tempfile.mkdtemp()
+    raw_path = os.path.join(tmp, "raw.zarr")
+    g = zarr.open_group(raw_path, mode="w")
+    g.create_dataset("s0", shape=(32, 32, 32), dtype="uint8", chunks=(16, 16, 16))
+    g["s0"][:] = np.full((32, 32, 32), 128, dtype=np.uint8)  # constant
+    g.attrs["multiscales"] = [{
+        "version": "0.4",
+        "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
+        "datasets": [{"path": "s0", "coordinateTransformations": [
+            {"type": "scale", "scale": [16.0, 16.0, 16.0]},
+            {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+        ]}],
+    }]
+
+    vol_path = os.path.join(tmp, "vol.zarr")
+    v = zarr.open_group(vol_path, mode="w")
+    v.create_group("annotation").create_dataset(
+        "s0", shape=(32, 32, 32), chunks=(16, 16, 16), dtype="uint8", fill_value=0
+    )
+    arr = v["annotation"]["s0"][:]
+    arr[4:28, 4:28, 4:28] = 2
+    v["annotation"]["s0"][:] = arr
+    v.attrs["dataset_offset_nm"] = [0.0, 0.0, 0.0]
+    v["annotation"].attrs["multiscales"] = g.attrs["multiscales"]
+
+    common = dict(
+        volume_zarr_path=vol_path,
+        raw_dataset_path=raw_path,
+        input_size_voxels=(8, 8, 8),
+        output_size_voxels=(4, 4, 4),
+        input_voxel_size_nm=(16, 16, 16),
+        output_voxel_size_nm=(16, 16, 16),
+        patches_per_epoch=4,
+        seed=0,
+    )
+
+    # Without input_norm: raw is returned as native uint8 ~128.
+    raw_unnormalized, _ = VirtualPatchDataset(input_norm_config=None, **common)[0]
+    assert (
+        110 < float(raw_unnormalized.min()) < 140
+    ), (
+        "Without input_norm, raw should pass through ~uint8 (~128); got "
+        f"range [{raw_unnormalized.min()}, {raw_unnormalized.max()}]"
+    )
+
+    # With the dashboard's typical input_norm, raw should land in [-1, 1].
+    # 128 / 255 * 2 - 1 = 0.0039.
+    raw_normalized, _ = VirtualPatchDataset(
+        input_norm_config={
+            "MinMaxNormalizer": {"min_value": 0, "max_value": 255, "invert": False},
+            "LambdaNormalizer": {"expression": "x*2-1"},
+        },
+        **common,
+    )[0]
+    rmin = float(raw_normalized.min())
+    rmax = float(raw_normalized.max())
+    assert -0.05 < rmin < 0.05 and -0.05 < rmax < 0.05, (
+        "With input_norm, raw should be normalized to [-1, 1] range "
+        f"(expect ~0.004); got [{rmin}, {rmax}]"
+    )
+
+
 def test_virtual_patch_dataset_rng_advances():
     """Regression test for a bug where ``VirtualPatchDataset._worker_rng``
     reseeded on every ``__getitem__`` call -- making every patch identical

@@ -312,12 +312,31 @@ def _generate_model_files(args, model_config, timestamp):
         logger.warning("Could not extract data_path from corrections, using serve_data_path")
         data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
 
+    # Bake the training-time input_norm into the generated yaml so the
+    # served finetuned model gets queried with the same normalization the
+    # adapter was trained on. Without this, training-vs-inference scale
+    # mismatch silently destroys finetuning quality.
+    json_data = None
+    try:
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        manifest = read_manifest(str(corrections_path)) or {}
+        train_input_norm = manifest.get("input_norm")
+        if train_input_norm:
+            json_data = {"input_norm": train_input_norm, "postprocess": {}}
+    except Exception as _e:
+        logger.warning(
+            f"Could not load training input_norm from manifest: {_e}. "
+            "Generated finetuned yaml will lack normalization metadata."
+        )
+
     yaml_path = generate_finetuned_model_yaml(
         lora_adapter_path=str(output_dir_path / "lora_adapter"),
         base_model_dict=model_config.to_dict(),
         model_name=finetuned_model_name,
         output_path=models_dir / f"{finetuned_model_name}.yaml",
         data_path=data_path,
+        json_data=json_data,
     )
     logger.info(f"Generated YAML: {yaml_path}")
 
@@ -793,6 +812,30 @@ def main():
             model_name=args.model_name,
         )
         logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
+
+        # Snapshot the active input_norm into metadata.json so any saved
+        # checkpoint in this iteration is reproducible -- you can read
+        # metadata.json next to the .pth and know exactly which
+        # normalization was applied to the training data.
+        try:
+            from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+            manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
+            if manifest_norm is not None and args.output_dir:
+                metadata_file = Path(args.output_dir) / "metadata.json"
+                if metadata_file.exists():
+                    import json as json_mod
+                    with open(metadata_file) as f:
+                        md = json_mod.load(f)
+                    md.setdefault("params", {})["input_norm"] = manifest_norm
+                    with open(metadata_file, "w") as f:
+                        json_mod.dump(md, f, indent=2)
+                    logger.info(
+                        f"Snapshot input_norm into {metadata_file} "
+                        f"(keys: {list(manifest_norm.keys())})"
+                    )
+        except Exception as _e:
+            logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
 
         # Build target transform (re-built each iteration to pick up restart params)
         select_channel = args.select_channel

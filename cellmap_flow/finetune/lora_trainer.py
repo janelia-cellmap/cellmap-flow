@@ -599,10 +599,11 @@ class LoRAFinetuner:
         epoch_distill_loss = 0.0
         num_batches = len(self.dataloader)
 
-        # Gradient-flow diagnostic: pick one trainable LoRA param and watch
-        # its gradient + value across the epoch. If the loss is constant, this
-        # exposes whether (a) backward never reaches LoRA (grad ~ 0), or
-        # (b) backward fires but the optimizer step doesn't move the param.
+        # Gradient-flow diagnostic: watch one LoRA-B param across the epoch
+        # AND, at end of epoch, count how many trainable params received any
+        # gradient at all. Together they answer:
+        #   - is backward reaching LoRA at all? (per-param mean|grad|)
+        #   - if yes for some, which ones? (zero-grad count + sample names)
         diag_param_name = None
         diag_param = None
         for name, param in self.model.named_parameters():
@@ -615,6 +616,10 @@ class LoRAFinetuner:
         )
         diag_grad_abs_sum = 0.0
         diag_grad_count = 0
+
+        # Track zero-grad status across all trainable params for the LAST
+        # batch of the epoch (cumulative grad before zero_grad fires).
+        diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
         for batch_idx, (raw, target) in enumerate(self.dataloader):
             # Move to device
@@ -719,10 +724,19 @@ class LoRAFinetuner:
             self.scaler.scale(loss).backward()
 
             # Diagnostic: capture grad on the watched LoRA param BEFORE the
-            # optimizer step (zero_grad clears it).
+            # optimizer step (zero_grad clears it). Also note which trainable
+            # params have ever seen a nonzero gradient this epoch so we can
+            # report the dead ones at the end.
             if diag_param is not None and diag_param.grad is not None:
                 diag_grad_abs_sum += diag_param.grad.detach().abs().mean().item()
                 diag_grad_count += 1
+            for name, p in self.model.named_parameters():
+                if not p.requires_grad:
+                    continue
+                if diag_param_grad_seen_nonzero.get(name, False):
+                    continue
+                if p.grad is not None and p.grad.detach().abs().sum().item() > 0:
+                    diag_param_grad_seen_nonzero[name] = True
 
             # Update weights after accumulation
             if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
@@ -769,9 +783,8 @@ class LoRAFinetuner:
             self.optimizer.zero_grad()
             self.global_step += 1
 
-        # Diagnostic summary: was gradient flowing into the LoRA path, and did
-        # the optimizer step actually move the param? Read alongside the loss
-        # curve to triage flatlined-loss cases.
+        # Diagnostic summary: per-watched-param grad/delta + counts of
+        # trainable params that received any nonzero gradient this epoch.
         if diag_param is not None and hasattr(self, "_log_message"):
             mean_grad = (
                 diag_grad_abs_sum / diag_grad_count if diag_grad_count else 0.0
@@ -785,6 +798,22 @@ class LoRAFinetuner:
                 f"  [diag] {diag_param_name}: "
                 f"mean|grad|={mean_grad:.3e} (over {diag_grad_count} batches), "
                 f"mean|param_delta|={param_delta:.3e} this epoch"
+            )
+
+        if hasattr(self, "_log_message"):
+            n_trainable = sum(
+                1 for _, p in self.model.named_parameters() if p.requires_grad
+            )
+            n_live = sum(1 for v in diag_param_grad_seen_nonzero.values() if v)
+            n_dead = n_trainable - n_live
+            dead_names = [
+                name for name, p in self.model.named_parameters()
+                if p.requires_grad and not diag_param_grad_seen_nonzero.get(name)
+            ]
+            self._log_message(
+                f"  [diag] gradient flow: {n_live}/{n_trainable} trainable "
+                f"params got nonzero grad; {n_dead} are dead. "
+                f"First 5 dead: {dead_names[:5]}"
             )
 
         return epoch_loss / num_batches

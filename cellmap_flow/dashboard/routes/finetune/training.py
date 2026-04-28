@@ -85,14 +85,29 @@ def submit_finetuning_response(data):
         # reads the annotation_volume.zarr directly, so when a manifest is present
         # the sync is wasted work and can hang submit for many minutes when the
         # volume contains imported YAML data.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.virtual_dataset import read_manifest, write_manifest
 
-        if read_manifest(str(actual_corrections_path)) is None:
+        existing_manifest = read_manifest(str(actual_corrections_path))
+        if existing_manifest is None:
             try:
                 sync_all_annotations_from_minio(force=False)
             except Exception as e:
                 logger.warning(f"Error syncing annotations before training: {e}")
         else:
+            # Refresh the manifest's input_norm with the dashboard's current
+            # value so the trainer applies the same normalization the user
+            # currently sees at inference. Lets users tweak normalization in
+            # the UI and re-Submit without rebuilding the session.
+            current_norm = getattr(g, "input_norm_config", None) or {}
+            if current_norm and existing_manifest.get("input_norm") != current_norm:
+                logger.info(
+                    "Refreshing manifest input_norm before submit "
+                    "(was: %s, now: %s)",
+                    list((existing_manifest.get("input_norm") or {}).keys()),
+                    list(current_norm.keys()),
+                )
+            existing_manifest["input_norm"] = current_norm
+            write_manifest(str(actual_corrections_path), existing_manifest)
             logger.info(
                 "Virtual sources manifest present; skipping pre-training MinIO sync."
             )
@@ -356,7 +371,7 @@ def restart_finetuning_job_response(job_id, data):
         # a virtual-sources manifest the trainer reads the volume zarr
         # directly, so the sync would just download chunks the trainer never
         # touches — and on big sessions can hang Restart for minutes.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.virtual_dataset import read_manifest, write_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
         job_record = jobs.get(job_id)
@@ -366,7 +381,23 @@ def restart_finetuning_job_response(job_id, data):
             else ""
         )
 
-        if corrections_dir and read_manifest(corrections_dir) is not None:
+        existing_manifest = (
+            read_manifest(corrections_dir) if corrections_dir else None
+        )
+        if existing_manifest is not None:
+            # Refresh manifest input_norm so the next training cycle obeys
+            # whatever the user currently has set in the dashboard. Same UX
+            # as bumping LR / lora_r and clicking Restart.
+            current_norm = getattr(g, "input_norm_config", None) or {}
+            if current_norm and existing_manifest.get("input_norm") != current_norm:
+                logger.info(
+                    "Refreshing manifest input_norm before restart "
+                    "(was: %s, now: %s)",
+                    list((existing_manifest.get("input_norm") or {}).keys()),
+                    list(current_norm.keys()),
+                )
+            existing_manifest["input_norm"] = current_norm
+            write_manifest(corrections_dir, existing_manifest)
             logger.info(
                 f"Virtual sources manifest present for job {job_id}; "
                 "skipping pre-restart MinIO sync."

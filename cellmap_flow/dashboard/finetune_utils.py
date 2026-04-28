@@ -254,6 +254,7 @@ def create_annotation_volume_zarr(
     input_voxel_size,
     claimed_output_voxel_size=None,
     claimed_input_voxel_size=None,
+    input_norm_config=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -354,6 +355,12 @@ def create_annotation_volume_zarr(
                 if hasattr(claimed_input_voxel_size, "tolist")
                 else list(claimed_input_voxel_size)
             )
+        # Snapshot of the dashboard's input_norm at volume-creation time.
+        # Used as the baseline for Resume Existing (the new session inherits
+        # this normalization). Stored as the raw YAML-style dict so it round-
+        # trips via json.load / yaml.safe_load without any extra parsing.
+        if input_norm_config is not None:
+            root.attrs["input_norm"] = input_norm_config
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(
@@ -972,7 +979,19 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
             f"Synced {len(changed_chunk_keys)} changed chunks for volume {volume_id}"
         )
 
-        # Extract corrections for changed chunks
+        # Extract corrections for changed chunks. Skip entirely when a
+        # virtual-sources manifest is present: the trainer reads the volume
+        # zarr directly via VirtualPatchDataset and never touches per-chunk
+        # extracts, so this loop just slowly fills disk with thousands of
+        # 178**3 raw cubes that nothing reads. (See
+        # cellmap_flow/finetune/virtual_dataset.py for the manifest format.)
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        corrections_dir = volume_meta.get("corrections_dir") or os.path.dirname(
+            local_zarr_path
+        )
+        manifest = read_manifest(corrections_dir) if corrections_dir else None
+
         extracted_chunks = volume_meta.get("extracted_chunks", set())
         changed_chunk_indices = [
             tuple(map(int, k.split(".")))
@@ -980,20 +999,26 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
         ]
         created_any = False
 
-        for chunk_idx in changed_chunk_indices:
-            try:
-                created = extract_correction_from_chunk(
-                    volume_id, chunk_idx, volume_meta
-                )
-                if created:
-                    extracted_chunks.add(chunk_idx)
-                    created_any = True
-                else:
-                    extracted_chunks.discard(chunk_idx)
-            except Exception as e:
-                logger.error(f"Error extracting correction for chunk {chunk_idx}: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+        if manifest is not None:
+            logger.debug(
+                f"Volume {volume_id}: skipping per-chunk extract (manifest present); "
+                f"{len(changed_chunk_indices)} changed chunks ignored."
+            )
+        else:
+            for chunk_idx in changed_chunk_indices:
+                try:
+                    created = extract_correction_from_chunk(
+                        volume_id, chunk_idx, volume_meta
+                    )
+                    if created:
+                        extracted_chunks.add(chunk_idx)
+                        created_any = True
+                    else:
+                        extracted_chunks.discard(chunk_idx)
+                except Exception as e:
+                    logger.error(f"Error extracting correction for chunk {chunk_idx}: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
 
         # Update tracked state
         volume_meta["extracted_chunks"] = extracted_chunks

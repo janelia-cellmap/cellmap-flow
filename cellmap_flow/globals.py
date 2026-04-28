@@ -100,7 +100,13 @@ class Flow:
             cls._instance.servers = []
             cls._instance.raw = None
             cls._instance.input_norms = input_norms
+            # Raw JSON-serializable form of the dashboard's input_norm config.
+            # Populated by /api/run from the request payload; used by the
+            # finetune submit/restart flow so the trainer process applies the
+            # same normalization the dashboard uses at inference.
+            cls._instance.input_norm_config = {}
             cls._instance.postprocess = postprocess
+            cls._instance.postprocess_config = {}
             cls._instance.viewer = None
             cls._instance.dataset_path = None
             cls._instance.model_catalog = {}

@@ -85,6 +85,7 @@ class VirtualPatchDataset(Dataset):
         patches_per_epoch: int = 500,
         jitter_voxels: Optional[Tuple[int, int, int]] = None,
         seed: int = 0,
+        input_norm_config: Optional[dict] = None,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
@@ -99,6 +100,34 @@ class VirtualPatchDataset(Dataset):
             else (self.output_size // 4)
         )
         self.seed = int(seed)
+
+        # Input normalization to apply to every raw patch the dataset emits.
+        # The dashboard's inference path normalizes raw via ``g.input_norms``
+        # before feeding the model; the trainer (a separate LSF process)
+        # has an empty ``g.input_norms``, so without this the trainer would
+        # train on raw uint8 while inference sees normalized [-1, 1].
+        # ``input_norm_config`` is the JSON-serializable dict from the YAML
+        # (e.g. {"MinMaxNormalizer": {...}, "LambdaNormalizer": {...}}).
+        self.input_norm_config: dict = dict(input_norm_config or {})
+        self._input_normalizers = self._build_input_normalizers(self.input_norm_config)
+        if not self._input_normalizers and self.input_norm_config:
+            logger.warning(
+                "input_norm_config provided but produced no normalizers; "
+                "raw patches will be returned unnormalized."
+            )
+        if self._input_normalizers:
+            logger.info(
+                f"VirtualPatchDataset: applying {len(self._input_normalizers)} "
+                f"input normalizer(s) per patch: "
+                f"{[type(n).__name__ for n in self._input_normalizers]}"
+            )
+        else:
+            logger.warning(
+                "VirtualPatchDataset: no input normalizers configured. "
+                "Raw patches will be returned in their native dtype/range. "
+                "If inference normalizes to [-1, 1] (typical), the trained "
+                "model will see different inputs at train vs inference time."
+            )
 
         self.dataset_offset_nm: np.ndarray = np.zeros(3)
         self.volume_shape_voxels: np.ndarray = np.zeros(3, dtype=int)
@@ -242,13 +271,23 @@ class VirtualPatchDataset(Dataset):
         return patch
 
     def _read_raw_patch(self, center_nm: np.ndarray) -> np.ndarray:
-        """Read an ``input_size`` patch from the raw dataset, centered at ``center_nm``."""
+        """Read an ``input_size`` patch from the raw dataset, centered at ``center_nm``.
+
+        The raw read uses ``normalize=False`` because the trainer process's
+        global ``g.input_norms`` is empty -- the dashboard's normalization
+        config doesn't propagate across the LSF process boundary. We apply
+        the dashboard's normalizers explicitly here from
+        ``self._input_normalizers``, which is built from the manifest at
+        construction time.
+        """
         from cellmap_flow.image_data_interface import ImageDataInterface
         from funlib.geometry import Coordinate, Roi
 
         if self._raw_idi is None:
             self._raw_idi = ImageDataInterface(
-                self.raw_dataset_path, voxel_size=self.input_voxel_size
+                self.raw_dataset_path,
+                voxel_size=self.input_voxel_size,
+                normalize=False,
             )
         idi = self._raw_idi
         read_shape_nm = self.input_size * self.input_voxel_size
@@ -256,7 +295,30 @@ class VirtualPatchDataset(Dataset):
             offset=Coordinate(center_nm - read_shape_nm / 2),
             shape=Coordinate(read_shape_nm),
         )
-        return idi.to_ndarray_ts(roi)
+        patch = idi.to_ndarray_ts(roi)
+
+        # Apply the dashboard's normalizers locally (no global state).
+        # Each normalizer is callable and returns an ndarray; the chain
+        # mirrors what apply_norms() does inside the dashboard process.
+        for norm in self._input_normalizers:
+            patch = norm(patch)
+        return patch
+
+    @staticmethod
+    def _build_input_normalizers(input_norm_config: dict) -> list:
+        """Materialize the dict-form ``input_norm`` config into normalizer objects."""
+        if not input_norm_config:
+            return []
+        try:
+            from cellmap_flow.norm.input_normalize import get_normalizations
+
+            return get_normalizations(input_norm_config)
+        except Exception as e:
+            logger.error(
+                f"Failed to build input normalizers from config "
+                f"{input_norm_config!r}: {e}. Patches will be unnormalized."
+            )
+            return []
 
     # ------------------------------------------------------------------
     # RNG plumbing
@@ -323,4 +385,5 @@ def dataset_from_manifest(manifest: dict) -> VirtualPatchDataset:
         patches_per_epoch=manifest.get("patches_per_epoch", 500),
         jitter_voxels=tuple(manifest["jitter_voxels"]) if manifest.get("jitter_voxels") else None,
         seed=manifest.get("seed", 0),
+        input_norm_config=manifest.get("input_norm") or None,
     )

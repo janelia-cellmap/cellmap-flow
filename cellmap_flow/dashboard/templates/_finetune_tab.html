@@ -420,7 +420,7 @@
       <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
         🔄 Restart Training
       </button>
-      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" title="Exit the training loop after the current epoch. The job stays alive — the inference server starts and you can then restart with updated params.">
+      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">
         ⏸ Stop Early
       </button>
       <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
@@ -1686,6 +1686,16 @@ document.addEventListener("DOMContentLoaded", function () {
           restartBtn.style.display = "inline-block";
         }
 
+        // Stop Early is only meaningful while a training loop is actively
+        // running. Enable on RUNNING + no inference server yet; disable
+        // otherwise. Skip the toggle while the user has explicitly requested
+        // a stop (the click handler set its own disabled+label).
+        const stopEarlyBtnPoll = document.getElementById("stopEarlyBtn");
+        if (stopEarlyBtnPoll && stopEarlyBtnPoll.textContent.indexOf("requested") === -1) {
+          const trainingActive = data.status === "RUNNING" && !data.inference_server_ready;
+          stopEarlyBtnPoll.disabled = !trainingActive;
+        }
+
         // Handle inference server becoming ready (training iteration complete)
         if (data.inference_server_ready && data.finetuned_model_name) {
           // Update inference server status display
@@ -1773,11 +1783,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Stop Early — graceful, keeps the job alive for Restart.
+  // Reset clears the "requested" label, then leaves the button DISABLED.
+  // The status-polling loop re-enables it when training is actually running.
   function resetStopEarlyButton() {
     const btn = document.getElementById("stopEarlyBtn");
     if (!btn) return;
-    btn.disabled = false;
     btn.textContent = "⏸ Stop Early";
+    btn.disabled = true;
   }
 
   const stopEarlyBtn = document.getElementById("stopEarlyBtn");

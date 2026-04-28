@@ -106,7 +106,15 @@ def process():
         del data["custom_code"]
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     g.input_norms = get_normalizations(data["input_norm"])
+    # Keep the raw, JSON-serializable input_norm dict around so downstream
+    # components (finetune submit/restart, manifest, generated yaml) can
+    # propagate the same normalization to the trainer process. Without this
+    # the trainer reads raw uint8 from /nrs while inference normalizes to
+    # the model's expected range -> trained model never sees inference-scale
+    # inputs.
+    g.input_norm_config = data.get("input_norm", {}) or {}
     g.postprocess = get_postprocessors(data["postprocess"])
+    g.postprocess_config = data.get("postprocess", {}) or {}
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()

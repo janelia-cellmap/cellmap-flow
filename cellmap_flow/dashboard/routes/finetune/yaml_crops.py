@@ -149,6 +149,9 @@ def _create_session_annotation_volume(
         input_voxel_size=eff_input_vs,
         claimed_output_voxel_size=claimed_output_voxel_size,
         claimed_input_voxel_size=claimed_input_voxel_size,
+        # Snapshot whatever input_norm the dashboard is currently using so
+        # the trainer can reproduce inference-side normalization.
+        input_norm_config=getattr(g, "input_norm_config", None),
     )
     if not success:
         raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
@@ -425,7 +428,13 @@ def load_crops_from_yaml_response(data):
         except Exception as e:
             logger.warning(f"MinIO re-mirror failed for {volume_id}: {e}")
 
-        # Manifest: trainer reads from this single volume zarr.
+        # Manifest: trainer reads from this single volume zarr. The
+        # ``input_norm`` block carries the dashboard's current normalization
+        # so VirtualPatchDataset (running in the LSF trainer process where
+        # g.input_norms is empty) can apply the same normalization the
+        # dashboard does at inference time. Without this the trainer feeds
+        # the model raw uint8 while inference feeds it [-1, 1] -- the
+        # trained adapter is then nonsense at inference time.
         manifest = {
             "kind": "volume_zarr_v1",
             "volume_zarr_path": volume_meta["zarr_path"],
@@ -437,6 +446,7 @@ def load_crops_from_yaml_response(data):
             "patches_per_epoch": crops_config.patches_per_epoch,
             "jitter_voxels": crops_config.jitter_voxels,
             "seed": crops_config.seed,
+            "input_norm": getattr(g, "input_norm_config", None) or {},
         }
         write_manifest(corrections_dir, manifest)
 
