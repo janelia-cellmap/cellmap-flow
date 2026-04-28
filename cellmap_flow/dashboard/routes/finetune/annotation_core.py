@@ -20,7 +20,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     viewer_position_and_scales,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.globals import g
+from cellmap_flow.globals import current_input_norm_config, g
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +255,7 @@ def create_annotation_volume_response(data):
             input_voxel_size=effective_input_voxel_size,
             claimed_output_voxel_size=claimed_output_voxel_size,
             claimed_input_voxel_size=claimed_input_voxel_size,
-            input_norm_config=getattr(g, "input_norm_config", None),
+            input_norm_config=current_input_norm_config(),
         )
         if not success:
             return jsonify({"success": False, "error": zarr_info}), 500

@@ -71,7 +71,7 @@ from cellmap_flow.finetune.crop_loader import (
     remap_labels,
 )
 from cellmap_flow.finetune.virtual_dataset import write_manifest
-from cellmap_flow.globals import g
+from cellmap_flow.globals import current_input_norm_config, g
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ def _create_session_annotation_volume(
         claimed_input_voxel_size=claimed_input_voxel_size,
         # Snapshot whatever input_norm the dashboard is currently using so
         # the trainer can reproduce inference-side normalization.
-        input_norm_config=getattr(g, "input_norm_config", None),
+        input_norm_config=current_input_norm_config(),
     )
     if not success:
         raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
@@ -446,7 +446,7 @@ def load_crops_from_yaml_response(data):
             "patches_per_epoch": crops_config.patches_per_epoch,
             "jitter_voxels": crops_config.jitter_voxels,
             "seed": crops_config.seed,
-            "input_norm": getattr(g, "input_norm_config", None) or {},
+            "input_norm": current_input_norm_config(),
         }
         write_manifest(corrections_dir, manifest)
 

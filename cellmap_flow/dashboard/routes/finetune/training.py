@@ -98,7 +98,8 @@ def submit_finetuning_response(data):
             # value so the trainer applies the same normalization the user
             # currently sees at inference. Lets users tweak normalization in
             # the UI and re-Submit without rebuilding the session.
-            current_norm = getattr(g, "input_norm_config", None) or {}
+            from cellmap_flow.globals import current_input_norm_config
+            current_norm = current_input_norm_config()
             if current_norm and existing_manifest.get("input_norm") != current_norm:
                 logger.info(
                     "Refreshing manifest input_norm before submit "
@@ -388,7 +389,8 @@ def restart_finetuning_job_response(job_id, data):
             # Refresh manifest input_norm so the next training cycle obeys
             # whatever the user currently has set in the dashboard. Same UX
             # as bumping LR / lora_r and clicking Restart.
-            current_norm = getattr(g, "input_norm_config", None) or {}
+            from cellmap_flow.globals import current_input_norm_config
+            current_norm = current_input_norm_config()
             if current_norm and existing_manifest.get("input_norm") != current_norm:
                 logger.info(
                     "Refreshing manifest input_norm before restart "

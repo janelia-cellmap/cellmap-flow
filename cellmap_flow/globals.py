@@ -104,6 +104,12 @@ class Flow:
             # Populated by /api/run from the request payload; used by the
             # finetune submit/restart flow so the trainer process applies the
             # same normalization the dashboard uses at inference.
+            #
+            # NOTE: prefer ``current_input_norm_config()`` over reading this
+            # directly. Some startup paths (e.g. yaml_cli.py at server boot)
+            # populate ``input_norms`` from a YAML's ``json_data.input_norm``
+            # but never touch ``input_norm_config``. The helper falls back to
+            # reconstructing the dict from the live normalizer instances.
             cls._instance.input_norm_config = {}
             cls._instance.postprocess = postprocess
             cls._instance.postprocess_config = {}
@@ -312,6 +318,31 @@ class LogHandler(logging.Handler):
                 client_queue.put_nowait(log_entry)
             except queue.Full:
                 pass
+
+
+def current_input_norm_config() -> dict:
+    """Return the dashboard's current input_norm as a JSON-serializable dict.
+
+    Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
+    dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
+    The fallback matters because some startup paths (yaml_cli) populate
+    ``g.input_norms`` from the YAML at server boot but never touch
+    ``input_norm_config`` -- if the user submits training without first
+    hitting /api/run, the manifest would otherwise be written empty.
+    """
+    cfg = getattr(g, "input_norm_config", None) or {}
+    if cfg:
+        return cfg
+    norms = getattr(g, "input_norms", None) or []
+    derived = {}
+    for n in norms:
+        try:
+            d = n.to_dict()
+            name = d.pop("name", type(n).__name__)
+            derived[name] = d
+        except Exception:
+            continue
+    return derived
 
 
 def get_blockwise_tasks_dir():

@@ -272,6 +272,10 @@ def apply_pipeline():
         }
         logger.warning(f"\nNormalizers config dict: {input_norms_config}")
         g.input_norms = get_normalizations(input_norms_config)
+        # Mirror the JSON-serializable form so finetune submit/restart can
+        # propagate it to the trainer process (where g.input_norms can't be
+        # easily reconstructed across the LSF process boundary).
+        g.input_norm_config = input_norms_config or {}
 
         # Apply postprocessors
         postprocs_config = {
@@ -279,6 +283,7 @@ def apply_pipeline():
         }
         logger.warning(f"Postprocessors config dict: {postprocs_config}")
         g.postprocess = get_postprocessors(postprocs_config)
+        g.postprocess_config = postprocs_config or {}
 
         # Save complete pipeline visual state to globals
         g.pipeline_inputs = data.get("inputs", [])
