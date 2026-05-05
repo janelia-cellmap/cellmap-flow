@@ -203,9 +203,13 @@ def _ensure_editable_layer(volume_id, minio_url):
 def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
     """Read a YAML crop's annotation, remap, and write it into volume[s0] at the
     crop's physical offset. Returns the number of FG voxels written."""
+    t0 = time.time()
     sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
+    t_meta = time.time() - t0
+    t1 = time.time()
     src_arr = _open_array(entry.path, sub)
     src_data = src_arr[:]
+    t_read = time.time() - t1
     if src_data.ndim != 3:
         raise ValueError(
             f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}"
@@ -219,6 +223,7 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
             "without resampling — caller should ensure scale compatibility."
         )
 
+    t2 = time.time()
     remapped = remap_labels(
         src_data,
         fg_ids=entry.fg_ids,
@@ -226,7 +231,15 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         mode=entry.mode,
         connected_components=entry.connected_components,
     )
+    t_remap = time.time() - t2
+    t3 = time.time()
     n_fg = int(np.count_nonzero(remapped >= 2))
+    t_count = time.time() - t3
+    logger.info(
+        f"Crop {entry.path} prep: meta={t_meta:.2f}s read={t_read:.2f}s "
+        f"({src_data.nbytes/1e6:.1f} MB, dtype={src_data.dtype}, shape={src_data.shape}) "
+        f"remap={t_remap:.2f}s count_fg={t_count:.2f}s"
+    )
 
     dataset_offset_nm = np.array(volume_meta["dataset_offset_nm"], dtype=float)
     write_voxel_offset = (
@@ -275,6 +288,7 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         a, b = slab
         arr[z0 + a : z0 + b, y0 : y0 + sy, x0 : x0 + sx] = remapped[a:b, :, :]
 
+    t4 = time.time()
     written = 0
     n_workers = max(1, n_slabs)
     with ThreadPoolExecutor(max_workers=n_workers) as ex:
@@ -284,6 +298,11 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
             written += 1
             if progress_callback is not None:
                 progress_callback(written, n_slabs)
+    t_write = time.time() - t4
+    logger.info(
+        f"Crop {entry.path} write: {n_slabs} slabs, {n_workers} workers, "
+        f"{t_write:.2f}s total wall"
+    )
 
     # Record this import in the volume's root attrs so the bounding-box
     # overlay can surface it as a single yellow box per crop (vs. the
@@ -443,10 +462,16 @@ def load_crops_from_yaml_response(data):
             "output_size_voxels": list(volume_meta["output_size"]),
             "input_voxel_size_nm": list(volume_meta["input_voxel_size"]),
             "output_voxel_size_nm": list(volume_meta["output_voxel_size"]),
+            # patches_per_epoch=None tells VirtualPatchDataset to default to
+            # "one patch per populated chunk" (full coverage). Explicit ints
+            # in the YAML pass through verbatim.
             "patches_per_epoch": crops_config.patches_per_epoch,
             "jitter_voxels": crops_config.jitter_voxels,
             "seed": crops_config.seed,
             "input_norm": current_input_norm_config(),
+            # None → auto-balance dense vs sparse pools (50/50 when both
+            # exist, else use the surviving pool).
+            "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
         }
         write_manifest(corrections_dir, manifest)
 

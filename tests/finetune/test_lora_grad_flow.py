@@ -308,3 +308,188 @@ def test_virtual_patch_dataset_rng_advances():
         "All draws produced identical raw patches; the per-worker RNG is "
         "being re-seeded on every __getitem__ instead of advancing."
     )
+
+
+def test_virtual_patch_dataset_stratified_sampling():
+    """Regression test for two-pool stratified sampling. Without it, a
+    session with a 600^3 imported crop (~40M FG voxels) and a small
+    painted scribble (~hundreds of voxels) would draw 99.99% of patches
+    from the dense crop and effectively ignore the scribble. Stratified
+    sampling with default ratio=0.5 must give the sparse pool a real
+    share of the patches.
+    """
+    import numpy as np
+    import zarr
+    import tempfile
+    import os
+
+    from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
+
+    tmp = tempfile.mkdtemp()
+    raw_path = os.path.join(tmp, "raw.zarr")
+    g = zarr.open_group(raw_path, mode="w")
+    g.create_dataset("s0", shape=(64, 64, 64), dtype="uint8", chunks=(16, 16, 16))
+    g["s0"][:] = np.full((64, 64, 64), 128, dtype=np.uint8)
+    g.attrs["multiscales"] = [{
+        "version": "0.4",
+        "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
+        "datasets": [{"path": "s0", "coordinateTransformations": [
+            {"type": "scale", "scale": [16.0, 16.0, 16.0]},
+            {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+        ]}],
+    }]
+
+    # Volume zarr: simulate one big imported crop (large dense FG region)
+    # plus a tiny painted scribble outside its bbox.
+    vol_path = os.path.join(tmp, "vol.zarr")
+    v = zarr.open_group(vol_path, mode="w")
+    v.create_group("annotation").create_dataset(
+        "s0", shape=(64, 64, 64), chunks=(16, 16, 16), dtype="uint8", fill_value=0
+    )
+    arr = v["annotation"]["s0"][:]
+    # Dense imported crop: 32^3 region (~32K FG voxels)
+    arr[0:32, 0:32, 0:32] = 2
+    # Sparse scribble: 2^3 region outside the imported crop (~8 FG voxels)
+    arr[40:42, 40:42, 40:42] = 2
+    v["annotation"]["s0"][:] = arr
+    v.attrs["dataset_offset_nm"] = [0.0, 0.0, 0.0]
+    v.attrs["imported_crops"] = [
+        {
+            "path": "/fake/crop.zarr",
+            "name": None,
+            "annotation_offset_voxels": [0, 0, 0],
+            "annotation_shape_voxels": [32, 32, 32],
+            "n_fg_voxels": 32 ** 3,
+        }
+    ]
+    v["annotation"].attrs["multiscales"] = g.attrs["multiscales"]
+
+    common = dict(
+        volume_zarr_path=vol_path,
+        raw_dataset_path=raw_path,
+        input_size_voxels=(8, 8, 8),
+        output_size_voxels=(4, 4, 4),
+        input_voxel_size_nm=(16, 16, 16),
+        output_voxel_size_nm=(16, 16, 16),
+        seed=0,
+    )
+
+    # Default (auto): both pools exist → ratio resolves to 0.5. Roughly
+    # half the patch anchors should land in the sparse region.
+    ds = VirtualPatchDataset(**common, patches_per_epoch=200)
+    assert abs(ds._effective_dense_ratio - 0.5) < 1e-9
+    sparse_hits = 0
+    dense_hits = 0
+    for _ in range(200):
+        rng = ds._worker_rng()
+        use_dense = (
+            ds._effective_dense_ratio >= 1.0
+            or (ds._effective_dense_ratio > 0.0 and rng.random() < ds._effective_dense_ratio)
+        )
+        pool = ds._fg_index_dense if use_dense else ds._fg_index_sparse
+        anchor = pool[rng.integers(0, pool.shape[0])]
+        # Voxel in [40, 42)^3 came from the sparse scribble; rest from dense.
+        if (anchor >= 40).all() and (anchor < 42).all():
+            sparse_hits += 1
+        else:
+            dense_hits += 1
+    # With ratio=0.5 over 200 draws we expect ~100 sparse hits. Allow a
+    # wide band so the test isn't flaky; the failure mode we're guarding
+    # against (no stratification) would give 0-1 sparse hits.
+    assert sparse_hits > 50, (
+        f"Stratified sampling gave only {sparse_hits}/200 sparse hits; "
+        "expected ~100. Two-pool sampling is not active."
+    )
+    assert dense_hits > 50, (
+        f"Stratified sampling gave only {dense_hits}/200 dense hits; "
+        "expected ~100."
+    )
+
+    # Auto-degrade: explicit ratio=0.5 but only one pool populated.
+    # Build a volume with NO imported_crops → all FG goes to sparse pool;
+    # ratio should clamp to 0.0 so we don't try to sample an empty dense.
+    vol_no_crops = os.path.join(tmp, "vol_no_crops.zarr")
+    v2 = zarr.open_group(vol_no_crops, mode="w")
+    v2.create_group("annotation").create_dataset(
+        "s0", shape=(32, 32, 32), chunks=(16, 16, 16), dtype="uint8", fill_value=0
+    )
+    a2 = v2["annotation"]["s0"][:]
+    a2[8:24, 8:24, 8:24] = 2
+    v2["annotation"]["s0"][:] = a2
+    v2.attrs["dataset_offset_nm"] = [0.0, 0.0, 0.0]
+    v2["annotation"].attrs["multiscales"] = g.attrs["multiscales"]
+    ds2 = VirtualPatchDataset(
+        volume_zarr_path=vol_no_crops,
+        raw_dataset_path=raw_path,
+        input_size_voxels=(8, 8, 8),
+        output_size_voxels=(4, 4, 4),
+        input_voxel_size_nm=(16, 16, 16),
+        output_voxel_size_nm=(16, 16, 16),
+        patches_per_epoch=4,
+        dense_to_sparse_ratio=0.5,  # explicit, but should clamp
+        seed=0,
+    )
+    assert ds2._effective_dense_ratio == 0.0, (
+        "With no imported_crops the dense pool is empty; ratio should "
+        f"clamp to 0.0, got {ds2._effective_dense_ratio}"
+    )
+    assert ds2._fg_index_dense.shape[0] == 0
+    assert ds2._fg_index_sparse.shape[0] > 0
+
+
+def test_virtual_patch_dataset_default_patches_per_epoch():
+    """Regression test: ``patches_per_epoch=None`` (the new default) means
+    "cover every populated chunk roughly once per epoch" -- the dataset
+    substitutes the populated-chunk count at index build time.
+    """
+    import numpy as np
+    import zarr
+    import tempfile
+    import os
+
+    from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
+
+    tmp = tempfile.mkdtemp()
+    raw_path = os.path.join(tmp, "raw.zarr")
+    g = zarr.open_group(raw_path, mode="w")
+    g.create_dataset("s0", shape=(48, 48, 48), dtype="uint8", chunks=(16, 16, 16))
+    g["s0"][:] = np.full((48, 48, 48), 128, dtype=np.uint8)
+    g.attrs["multiscales"] = [{
+        "version": "0.4",
+        "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
+        "datasets": [{"path": "s0", "coordinateTransformations": [
+            {"type": "scale", "scale": [16.0, 16.0, 16.0]},
+            {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+        ]}],
+    }]
+
+    vol_path = os.path.join(tmp, "vol.zarr")
+    v = zarr.open_group(vol_path, mode="w")
+    # 48/16 = 3 chunks per dim → 27 total chunks, but we'll only populate 3.
+    v.create_group("annotation").create_dataset(
+        "s0", shape=(48, 48, 48), chunks=(16, 16, 16), dtype="uint8", fill_value=0
+    )
+    arr = v["annotation"]["s0"][:]
+    # Three populated chunks (each chunk gets at least one FG voxel).
+    arr[1, 1, 1] = 2
+    arr[17, 17, 17] = 2
+    arr[33, 33, 33] = 2
+    v["annotation"]["s0"][:] = arr
+    v.attrs["dataset_offset_nm"] = [0.0, 0.0, 0.0]
+    v["annotation"].attrs["multiscales"] = g.attrs["multiscales"]
+
+    ds = VirtualPatchDataset(
+        volume_zarr_path=vol_path,
+        raw_dataset_path=raw_path,
+        input_size_voxels=(8, 8, 8),
+        output_size_voxels=(4, 4, 4),
+        input_voxel_size_nm=(16, 16, 16),
+        output_voxel_size_nm=(16, 16, 16),
+        patches_per_epoch=None,  # default → use populated chunk count
+        seed=0,
+    )
+    assert ds.patches_per_epoch == 3, (
+        f"Default patches_per_epoch should equal populated-chunk count "
+        f"(3), got {ds.patches_per_epoch}"
+    )
+    assert len(ds) == 3

@@ -12,12 +12,24 @@ parallel source list to keep in sync.
 
 Sampling rule
 -------------
-"One sampler, one rule": every ``__getitem__`` picks a random foreground
-voxel from a flat index built once at construction time, jitters the patch
-center, and reads a raw + annotation patch around it. With
-``mask_unannotated=True`` in the trainer, voxels that fall outside
-annotated regions are masked out and contribute no gradient — so we don't
-need to guarantee 100% coverage of the patch with annotation.
+Two-pool stratified sampling. FG voxels are partitioned by membership in
+the volume's ``imported_crops`` bbox list (recorded in the volume zattrs
+when YAML crops are imported):
+  - **dense pool**: voxels inside any imported_crops bbox (abundant GT)
+  - **sparse pool**: voxels outside all bboxes (painted scribbles, by
+    construction always sparse and informative — the user paints there
+    because the base model failed)
+
+Each ``__getitem__`` picks a pool by ``dense_to_sparse_ratio`` (default
+0.5/0.5 when both pools exist; auto-degrades to 1.0 when only one
+exists), samples a random FG voxel from that pool, jitters the patch
+center, and reads raw + annotation patches around it.
+
+Without stratification, voxel-uniform sampling buries scribbles: a
+typical session has ~40M dense voxels vs ~10K painted, so 999/1000
+patches would be dense and the corrections you painted barely move the
+gradient. Stratification guarantees scribbles get a defined share of
+each epoch regardless of voxel count.
 
 Index construction reads only **populated** chunks of the sparse zarr
 (walks ``annotation/s0/`` for files matching ``z.y.x``). For an empty
@@ -52,6 +64,24 @@ logger = logging.getLogger(__name__)
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
+def _voxels_inside_any_bbox(
+    voxels: np.ndarray, bbox_offsets: np.ndarray, bbox_ends: np.ndarray
+) -> np.ndarray:
+    """Return a boolean mask: ``True`` where ``voxels[i]`` lies inside any
+    ``[bbox_offsets[j], bbox_ends[j])`` half-open box.
+
+    voxels: (N, 3) int. bbox_offsets, bbox_ends: (M, 3) int. Vectorized
+    over both: builds an (N, M) inside-test matrix and reduces along M.
+    For typical M ~ 1-10 the temporary stays small.
+    """
+    if voxels.shape[0] == 0 or bbox_offsets.shape[0] == 0:
+        return np.zeros(voxels.shape[0], dtype=bool)
+    # (N, M, 3) broadcast: voxels[:, None, :] vs bbox_offsets[None, :, :]
+    ge = np.all(voxels[:, None, :] >= bbox_offsets[None, :, :], axis=-1)
+    lt = np.all(voxels[:, None, :] < bbox_ends[None, :, :], axis=-1)
+    return np.any(ge & lt, axis=-1)
+
+
 class VirtualPatchDataset(Dataset):
     """Yield random raw+annotation patches anchored on FG voxels in a volume zarr.
 
@@ -66,12 +96,18 @@ class VirtualPatchDataset(Dataset):
             closest scale to the model's claimed input voxel size).
         output_voxel_size_nm: voxel size for annotation patches.
         patches_per_epoch: ``len(self)``; controls how many random patches
-            comprise one epoch.
+            comprise one epoch. ``None`` (the default) means "auto:
+            substitute the total populated-chunk count" — every populated
+            chunk gets ~one patch per epoch on average.
         jitter_voxels: half-range of the random offset applied to the patch
             center, in **annotation voxels**. Defaults to
             ``output_size_voxels // 4``.
         seed: RNG seed; per-worker offset added so multi-worker dataloaders
             sample distinct streams.
+        dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
+            the dense pool (FG voxels inside any imported_crops bbox).
+            ``None`` (default) means auto: 0.5 if both pools have voxels,
+            else 1.0 (use the non-empty pool exclusively).
     """
 
     def __init__(
@@ -82,10 +118,11 @@ class VirtualPatchDataset(Dataset):
         output_size_voxels: Tuple[int, int, int],
         input_voxel_size_nm: Tuple[float, float, float],
         output_voxel_size_nm: Tuple[float, float, float],
-        patches_per_epoch: int = 500,
+        patches_per_epoch: Optional[int] = None,
         jitter_voxels: Optional[Tuple[int, int, int]] = None,
         seed: int = 0,
         input_norm_config: Optional[dict] = None,
+        dense_to_sparse_ratio: Optional[float] = None,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
@@ -93,13 +130,23 @@ class VirtualPatchDataset(Dataset):
         self.output_size = np.array(output_size_voxels, dtype=int)
         self.input_voxel_size = np.array(input_voxel_size_nm, dtype=float)
         self.output_voxel_size = np.array(output_voxel_size_nm, dtype=float)
-        self.patches_per_epoch = int(patches_per_epoch)
+        # Resolved to an int by _build_index() once the populated-chunk
+        # count is known (when patches_per_epoch was passed as None).
+        self.patches_per_epoch: Optional[int] = (
+            int(patches_per_epoch) if patches_per_epoch is not None else None
+        )
         self.jitter = (
             np.array(jitter_voxels, dtype=int)
             if jitter_voxels is not None
             else (self.output_size // 4)
         )
         self.seed = int(seed)
+        self.dense_to_sparse_ratio = (
+            float(dense_to_sparse_ratio)
+            if dense_to_sparse_ratio is not None
+            else None
+        )
+        self._effective_dense_ratio: float = 0.0  # set in _build_index
 
         # Input normalization to apply to every raw patch the dataset emits.
         # The dashboard's inference path normalizes raw via ``g.input_norms``
@@ -131,7 +178,11 @@ class VirtualPatchDataset(Dataset):
 
         self.dataset_offset_nm: np.ndarray = np.zeros(3)
         self.volume_shape_voxels: np.ndarray = np.zeros(3, dtype=int)
-        self._fg_index: Optional[np.ndarray] = None  # (N, 3): z, y, x in volume voxels
+        # Two-pool stratified sampling: dense FG voxels live inside any
+        # imported_crops bbox; sparse FG voxels are everywhere else
+        # (painted scribbles, by construction). Either may be empty.
+        self._fg_index_dense: Optional[np.ndarray] = None
+        self._fg_index_sparse: Optional[np.ndarray] = None
         self._volume_arr = None  # opened lazily after worker fork
         self._raw_idi = None     # opened lazily after worker fork
         # Cached per-worker RNG. None until first __getitem__ (after fork/spawn).
@@ -147,12 +198,13 @@ class VirtualPatchDataset(Dataset):
     # ------------------------------------------------------------------
 
     def _build_index(self) -> None:
-        """Walk the volume's populated chunks and build a flat FG-voxel index.
+        """Walk the volume's populated chunks and build dense + sparse FG indices.
 
         We use the on-disk file layout (zarr v2 stores one file per chunk
         named ``z.y.x``) to enumerate just the chunks that have been
         written. Empty regions of the sparse volume produce no files and
-        cost us nothing.
+        cost us nothing. FG voxels are then partitioned by membership in
+        the volume's ``imported_crops`` bbox list.
         """
         s0_path = os.path.join(self.volume_zarr_path, "annotation", "s0")
         if not os.path.isdir(s0_path):
@@ -161,12 +213,28 @@ class VirtualPatchDataset(Dataset):
                 "directory; was it created?"
             )
 
-        # Pull volume-level metadata once so we can map voxel coords to nm.
+        # Pull volume-level metadata once so we can map voxel coords to nm
+        # and classify FG voxels as dense (inside an imported crop) or
+        # sparse (outside).
         with open(os.path.join(self.volume_zarr_path, ".zattrs")) as f:
             root_attrs = json.load(f)
         self.dataset_offset_nm = np.array(
             root_attrs.get("dataset_offset_nm", [0, 0, 0]), dtype=float
         )
+        imported = root_attrs.get("imported_crops", []) or []
+        # Bbox list as two stacked (M, 3) arrays for vectorized membership
+        # tests below. Empty when no YAML crops were imported.
+        if imported:
+            bbox_offsets = np.array(
+                [c["annotation_offset_voxels"] for c in imported], dtype=np.int64
+            )
+            bbox_shapes = np.array(
+                [c["annotation_shape_voxels"] for c in imported], dtype=np.int64
+            )
+            bbox_ends = bbox_offsets + bbox_shapes
+        else:
+            bbox_offsets = np.zeros((0, 3), dtype=np.int64)
+            bbox_ends = np.zeros((0, 3), dtype=np.int64)
 
         arr = zarr.open(s0_path, mode="r")
         self.volume_shape_voxels = np.array(arr.shape, dtype=int)
@@ -182,26 +250,84 @@ class VirtualPatchDataset(Dataset):
                 "Paint annotations or import crops first."
             )
 
-        rows: List[np.ndarray] = []
+        dense_rows: List[np.ndarray] = []
+        sparse_rows: List[np.ndarray] = []
+        n_fg_chunks = 0  # chunks that actually contributed FG voxels
         for key in chunk_keys:
             cz, cy, cx = (int(s) for s in key.split("."))
-            chunk_origin = np.array([cz, cy, cx], dtype=int) * chunk_shape
+            chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
             chunk_data = arr.blocks[cz, cy, cx]
             fg_local = np.argwhere(chunk_data >= 2).astype(np.int64)
-            if fg_local.size:
-                rows.append(fg_local + chunk_origin)
+            if not fg_local.size:
+                # On-disk file exists (zarr writes fill chunks during slab
+                # writes) but contributes no FG; skip and don't count it.
+                continue
+            n_fg_chunks += 1
+            fg_global = fg_local + chunk_origin
+            if bbox_offsets.shape[0] == 0:
+                # No imported crops → everything is sparse (painted).
+                sparse_rows.append(fg_global)
+                continue
+            in_dense = _voxels_inside_any_bbox(fg_global, bbox_offsets, bbox_ends)
+            if in_dense.any():
+                dense_rows.append(fg_global[in_dense])
+            if (~in_dense).any():
+                sparse_rows.append(fg_global[~in_dense])
 
-        if not rows:
+        self._fg_index_dense = (
+            np.concatenate(dense_rows, axis=0) if dense_rows else np.zeros((0, 3), dtype=np.int64)
+        )
+        self._fg_index_sparse = (
+            np.concatenate(sparse_rows, axis=0) if sparse_rows else np.zeros((0, 3), dtype=np.int64)
+        )
+        n_dense = int(self._fg_index_dense.shape[0])
+        n_sparse = int(self._fg_index_sparse.shape[0])
+
+        if n_dense == 0 and n_sparse == 0:
             raise ValueError(
                 f"Volume zarr at {self.volume_zarr_path} has populated chunks "
                 "but no foreground voxels (>=2). Did you only paint background?"
             )
 
-        self._fg_index = np.concatenate(rows, axis=0)
+        # Resolve dense ratio: explicit value wins, else auto-balance to
+        # 0.5 when both pools have voxels, else fall back to whichever
+        # pool is non-empty so we still draw patches.
+        if self.dense_to_sparse_ratio is None:
+            if n_dense > 0 and n_sparse > 0:
+                self._effective_dense_ratio = 0.5
+            elif n_dense > 0:
+                self._effective_dense_ratio = 1.0
+            else:
+                self._effective_dense_ratio = 0.0
+        else:
+            ratio = max(0.0, min(1.0, self.dense_to_sparse_ratio))
+            # Clamp away from a pool that's empty so __getitem__ never
+            # tries to sample from an empty index.
+            if n_dense == 0:
+                self._effective_dense_ratio = 0.0
+            elif n_sparse == 0:
+                self._effective_dense_ratio = 1.0
+            else:
+                self._effective_dense_ratio = ratio
+
+        # Default patches_per_epoch = number of FG-bearing chunks: each
+        # such chunk gets ~1 patch per epoch on average. Cheap "auto cover
+        # everything" mode the user can override via YAML or UI. We count
+        # FG-bearing chunks (not all chunk files) because zarr writes
+        # empty fill chunks during slab writes -- those don't represent
+        # annotation work and shouldn't inflate epoch length.
+        if self.patches_per_epoch is None:
+            self.patches_per_epoch = max(1, n_fg_chunks)
+
         logger.info(
-            f"VirtualPatchDataset: built FG index with {self._fg_index.shape[0]} "
-            f"voxels from {len(chunk_keys)} populated chunk(s) of {self.volume_zarr_path}; "
-            f"patches_per_epoch={self.patches_per_epoch}, jitter={self.jitter.tolist()}"
+            f"VirtualPatchDataset: built FG index with {n_dense + n_sparse} voxels "
+            f"(dense={n_dense}, sparse={n_sparse}) from {n_fg_chunks} FG-bearing "
+            f"chunk(s) ({len(chunk_keys)} chunk files on disk) of "
+            f"{self.volume_zarr_path}; "
+            f"patches_per_epoch={self.patches_per_epoch}, "
+            f"dense_ratio={self._effective_dense_ratio:.3f} "
+            f"({'auto' if self.dense_to_sparse_ratio is None else 'explicit'}), "
+            f"jitter={self.jitter.tolist()}"
         )
 
     # ------------------------------------------------------------------
@@ -209,13 +335,19 @@ class VirtualPatchDataset(Dataset):
     # ------------------------------------------------------------------
 
     def __len__(self) -> int:
-        return self.patches_per_epoch
+        # Resolved by _build_index() in __init__.
+        return int(self.patches_per_epoch or 0)
 
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()
-        anchor_zyx = self._fg_index[
-            rng.integers(0, self._fg_index.shape[0])
-        ].astype(np.float64)
+        # Pick a pool by the resolved dense ratio. Both indices may exist;
+        # _build_index guarantees we never end up with the chosen pool empty.
+        use_dense = (
+            self._effective_dense_ratio >= 1.0
+            or (self._effective_dense_ratio > 0.0 and rng.random() < self._effective_dense_ratio)
+        )
+        pool = self._fg_index_dense if use_dense else self._fg_index_sparse
+        anchor_zyx = pool[rng.integers(0, pool.shape[0])].astype(np.float64)
 
         jitter_offset = rng.integers(
             low=-self.jitter, high=self.jitter + 1, size=3
@@ -382,8 +514,10 @@ def dataset_from_manifest(manifest: dict) -> VirtualPatchDataset:
         output_size_voxels=tuple(manifest["output_size_voxels"]),
         input_voxel_size_nm=tuple(manifest["input_voxel_size_nm"]),
         output_voxel_size_nm=tuple(manifest["output_voxel_size_nm"]),
-        patches_per_epoch=manifest.get("patches_per_epoch", 500),
+        # None defaults to "cover all populated chunks" inside the dataset.
+        patches_per_epoch=manifest.get("patches_per_epoch"),
         jitter_voxels=tuple(manifest["jitter_voxels"]) if manifest.get("jitter_voxels") else None,
         seed=manifest.get("seed", 0),
         input_norm_config=manifest.get("input_norm") or None,
+        dense_to_sparse_ratio=manifest.get("dense_to_sparse_ratio"),
     )

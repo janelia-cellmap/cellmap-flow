@@ -83,14 +83,25 @@ class CropsConfig(BaseModel):
     to the :class:`VirtualPatchDataset` manifest the loader writes — they
     govern epoch length, patch-center jitter (in voxels), and the per-worker
     RNG base seed for reproducible patch sampling across runs.
+
+    ``patches_per_epoch=None`` (the default) means "cover every populated
+    chunk roughly once per epoch" — the dataset substitutes the total
+    populated-chunk count at index build time. Override with an explicit
+    int to cap the epoch length.
+
+    ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
+    50/50 split between dense imported crops and sparse painted scribbles
+    when both pools exist; degrades to 1.0 (all from the surviving pool)
+    when only one pool has FG voxels.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     crops: List[CropEntry]
-    patches_per_epoch: int = 500
+    patches_per_epoch: Optional[int] = None
     jitter_voxels: Optional[List[int]] = None
     seed: int = 0
+    dense_to_sparse_ratio: Optional[float] = None
 
     @field_validator("crops", mode="before")
     @classmethod
@@ -203,40 +214,97 @@ def remap_labels(
     Returns ``uint8``. If the number of distinct instances would overflow
     ``uint8``, all FG voxels collapse to id=2 and a warning is emitted.
     """
-    out = np.zeros_like(source, dtype=np.uint32)
-    bg_list = list(bg_ids)
-    bg_mask = (
-        np.isin(source, bg_list) if bg_list else np.zeros_like(source, dtype=bool)
-    )
+    bg_set = {int(v) for v in bg_ids}
+
+    if connected_components:
+        return _remap_with_cc(source, fg_ids, bg_set, mode)
+
+    # Fast path: build a lookup table over source's value range and apply it
+    # as a single fancy-index pass. ~10-100x faster than the previous
+    # per-class boolean-mask loop on 600^3 arrays.
+    try:
+        import fastremap
+
+        unique_vals = fastremap.unique(source)
+    except Exception:
+        unique_vals = np.unique(source)
 
     if fg_ids is None:
-        fg_classes = sorted(int(v) for v in np.unique(source) if v != 0)
+        fg_classes = [int(v) for v in unique_vals if int(v) != 0 and int(v) not in bg_set]
     else:
-        fg_classes = list(fg_ids)
+        # Preserve caller order for deterministic instance ids.
+        fg_classes = [int(v) for v in fg_ids]
 
+    src_max = int(unique_vals.max()) if len(unique_vals) else 0
+    # Sanity cap: a 32-bit max would blow memory. Real label crops top out in
+    # the thousands; bail to the slow per-class path if someone hands us a
+    # pathological array.
+    if src_max > 8_000_000:
+        return _remap_per_class(source, fg_classes, bg_set, mode)
+
+    default = 1 if mode == "dense" else 0
+    # uint32 so we can hold instance ids before the uint8 clamp warning fires.
+    lookup = np.full(src_max + 1, default, dtype=np.uint32)
+    if mode != "dense":
+        # sparse: source==0 stays 0 (unannotated)
+        lookup[0] = 0
+    else:
+        lookup[0] = 1
+    for bg in bg_set:
+        if 0 <= bg <= src_max:
+            lookup[bg] = 1
+    next_instance_id = 2
+    for cls in fg_classes:
+        if 0 <= cls <= src_max:
+            lookup[cls] = next_instance_id
+        next_instance_id += 1
+
+    out = lookup[source]
+
+    if next_instance_id > 256:
+        logger.warning(
+            f"Crop produced {next_instance_id - 2} instances; collapsing to single FG class "
+            "to fit uint8. Affinities between distinct blobs may be inaccurate."
+        )
+        np.minimum(out, 2, out=out, where=(out >= 2))
+
+    return out.astype(np.uint8)
+
+
+def _remap_with_cc(source, fg_ids, bg_set, mode):
+    """Connected-components path: per-class CC labeling, retained for the
+    rare ``connected_components=True`` case. Slower than the lookup-table
+    fast path but produces distinct instance ids per blob."""
+    from scipy.ndimage import label as cc_label
+
+    if fg_ids is None:
+        try:
+            import fastremap
+
+            unique_vals = fastremap.unique(source)
+        except Exception:
+            unique_vals = np.unique(source)
+        fg_classes = [int(v) for v in unique_vals if int(v) != 0 and int(v) not in bg_set]
+    else:
+        fg_classes = [int(v) for v in fg_ids]
+
+    out = np.zeros(source.shape, dtype=np.uint32)
     next_instance_id = 2
     for cls in fg_classes:
         cls_mask = source == cls
         if not cls_mask.any():
             continue
-        if connected_components:
-            from scipy.ndimage import label as cc_label
-
-            labeled, n = cc_label(cls_mask)
-            for i in range(1, n + 1):
-                out[labeled == i] = next_instance_id
-                next_instance_id += 1
-        else:
-            out[cls_mask] = next_instance_id
+        labeled, n = cc_label(cls_mask)
+        for i in range(1, n + 1):
+            out[labeled == i] = next_instance_id
             next_instance_id += 1
 
     fg_set = out >= 2
-    out[bg_mask & ~fg_set] = 1
-
+    if bg_set:
+        bg_mask = np.isin(source, list(bg_set))
+        out[bg_mask & ~fg_set] = 1
     if mode == "dense":
-        unmatched = (out == 0) & ~fg_set
-        out[unmatched] = 1
-    # sparse: leave as 0 (unannotated)
+        out[(out == 0) & ~fg_set] = 1
 
     if next_instance_id > 256:
         logger.warning(
@@ -244,5 +312,28 @@ def remap_labels(
             "to fit uint8. Affinities between distinct blobs may be inaccurate."
         )
         out[out >= 2] = 2
+    return out.astype(np.uint8)
 
+
+def _remap_per_class(source, fg_classes, bg_set, mode):
+    """Fallback for pathologically-large source IDs: original per-class loop."""
+    out = np.zeros(source.shape, dtype=np.uint32)
+    next_instance_id = 2
+    for cls in fg_classes:
+        cls_mask = source == cls
+        if cls_mask.any():
+            out[cls_mask] = next_instance_id
+        next_instance_id += 1
+    fg_set = out >= 2
+    if bg_set:
+        bg_mask = np.isin(source, list(bg_set))
+        out[bg_mask & ~fg_set] = 1
+    if mode == "dense":
+        out[(out == 0) & ~fg_set] = 1
+    if next_instance_id > 256:
+        logger.warning(
+            f"Crop produced {next_instance_id - 2} instances; collapsing to single FG class "
+            "to fit uint8. Affinities between distinct blobs may be inaccurate."
+        )
+        out[out >= 2] = 2
     return out.astype(np.uint8)

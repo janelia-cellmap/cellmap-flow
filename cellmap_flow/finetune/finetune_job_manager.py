@@ -737,31 +737,34 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
-        # Look for patterns like "Epoch 5/10" and "Loss: 0.1234"
+        # Pair epoch and loss from the per-epoch summary line
+        # ("Epoch X/Y - Loss: Z") so the loss is guaranteed to belong to the
+        # epoch reported alongside it. A previous version scanned epoch and
+        # loss with independent regexes; per-batch lines ("Batch X/N - Loss: Z")
+        # then bumped latest_loss inside epoch N+1 while current_epoch was
+        # still pinned to epoch N's summary, so the dashboard plot pinned
+        # epoch N's running batch loss onto epoch N-1.
+        summary_pattern = r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)"
+        summary_matches = re.findall(summary_pattern, log_content, re.IGNORECASE)
+        if summary_matches:
+            cur, total, loss = summary_matches[-1]
+            finetune_job.current_epoch = int(cur)
+            finetune_job.total_epochs = int(total)
+            try:
+                finetune_job.latest_loss = float(loss)
+            except ValueError:
+                pass
+            return
 
-        # Match: Epoch X/Y
+        # No epoch summary yet (still in epoch 1's batches): fall back to
+        # bare "Epoch X/Y" so the progress bar can advance, but leave
+        # latest_loss alone -- per-batch losses are not epoch summaries.
         epoch_pattern = r"Epoch\s+(\d+)/(\d+)"
         epoch_matches = re.findall(epoch_pattern, log_content, re.IGNORECASE)
         if epoch_matches:
-            last_match = epoch_matches[-1]
-            finetune_job.current_epoch = int(last_match[0])
-            finetune_job.total_epochs = int(last_match[1])
-
-        # Match: Loss: X.XXXX (various formats)
-        loss_patterns = [
-            r"Loss:\s+([\d.]+)",
-            r"loss:\s+([\d.]+)",
-            r"avg_loss:\s+([\d.]+)",
-        ]
-
-        for pattern in loss_patterns:
-            loss_matches = re.findall(pattern, log_content, re.IGNORECASE)
-            if loss_matches:
-                try:
-                    finetune_job.latest_loss = float(loss_matches[-1])
-                    break
-                except ValueError:
-                    pass
+            cur, total = epoch_matches[-1]
+            finetune_job.current_epoch = int(cur)
+            finetune_job.total_epochs = int(total)
 
     def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
         """
