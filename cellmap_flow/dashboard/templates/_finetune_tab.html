@@ -286,6 +286,29 @@
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
+          <label for="patchesPerEpoch" class="form-label">
+            Patches per Epoch
+            <span class="badge bg-secondary">YAML override</span>
+          </label>
+          <input
+            type="number"
+            id="patchesPerEpoch"
+            class="form-control"
+            min="0"
+            step="1"
+            placeholder="YAML/default"
+          />
+          <small class="text-muted">
+            Blank keeps the manifest value. 0 uses auto. A positive value
+            caps random samples per epoch.
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
           <label for="lossType" class="form-label">Loss Function</label>
           <select id="lossType" class="form-select">
             <option value="margin" selected>Margin (for scribbles)</option>
@@ -512,6 +535,7 @@ document.addEventListener("DOMContentLoaded", function () {
       loraRank: document.getElementById("loraRank").value,
       numEpochs: document.getElementById("numEpochs").value,
       batchSize: document.getElementById("batchSize").value,
+      patchesPerEpoch: document.getElementById("patchesPerEpoch").value,
       learningRate: document.getElementById("learningRate").value,
       lossType: document.getElementById("lossType").value,
       marginValue: document.getElementById("marginValue").value,
@@ -546,11 +570,23 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   _bindMarginVisibility("lossType", "marginGroup");
 
+  function readPatchesPerEpochOverride() {
+    const el = document.getElementById("patchesPerEpoch");
+    if (!el) return undefined;
+    const raw = el.value.trim();
+    if (!raw) return undefined;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error("Patches per epoch must be blank or a non-negative integer.");
+    }
+    return value;
+  }
+
   // Attach change listeners to all form elements to auto-save state
   function attachStateListeners() {
     const ids = [
       "outputPath", "checkpointPath", "loraRank", "numEpochs",
-      "batchSize", "learningRate", "lossType", "marginValue", "labelSmoothing",
+      "batchSize", "patchesPerEpoch", "learningRate", "lossType", "marginValue", "labelSmoothing",
       "distillationLambda", "distillationScope",
       "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
     ];
@@ -599,6 +635,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.loraRank) document.getElementById("loraRank").value = savedState.loraRank;
     if (savedState.numEpochs) document.getElementById("numEpochs").value = savedState.numEpochs;
     if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
+    if (savedState.patchesPerEpoch !== undefined && savedState.patchesPerEpoch !== null) {
+      document.getElementById("patchesPerEpoch").value = savedState.patchesPerEpoch;
+    }
     if (savedState.learningRate) document.getElementById("learningRate").value = savedState.learningRate;
     if (savedState.lossType) document.getElementById("lossType").value = savedState.lossType;
     if (savedState.marginValue) document.getElementById("marginValue").value = savedState.marginValue;
@@ -1261,6 +1300,14 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
+      let patchesPerEpochOverride;
+      try {
+        patchesPerEpochOverride = readPatchesPerEpochOverride();
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+
       // Get training parameters from form
       const params = {
         model_name: selectedModel.name,
@@ -1277,6 +1324,9 @@ document.addEventListener("DOMContentLoaded", function () {
         label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
         queue: document.getElementById("gpuQueue").value
       };
+      if (patchesPerEpochOverride !== undefined) {
+        params.patches_per_epoch = patchesPerEpochOverride;
+      }
 
       // Forward margin value when using margin loss
       if (params.loss_type === "margin") {
@@ -1837,6 +1887,13 @@ document.addEventListener("DOMContentLoaded", function () {
   if (restartJobBtn) {
     restartJobBtn.addEventListener('click', async () => {
       const lossType = document.getElementById('lossType').value;
+      let patchesPerEpochOverride;
+      try {
+        patchesPerEpochOverride = readPatchesPerEpochOverride();
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
       const requestBody = {
         lora_r: parseInt(document.getElementById('loraRank').value),
         num_epochs: parseInt(document.getElementById('numEpochs').value),
@@ -1848,6 +1905,9 @@ document.addEventListener("DOMContentLoaded", function () {
         balance_classes: document.getElementById('balanceClasses').checked,
         label_smoothing: parseFloat(document.getElementById('labelSmoothing').value) || 0,
       };
+      if (patchesPerEpochOverride !== undefined) {
+        requestBody.patches_per_epoch = patchesPerEpochOverride;
+      }
       if (lossType === 'margin') {
         const m = parseFloat(document.getElementById('marginValue').value);
         if (Number.isFinite(m)) requestBody.margin = m;
@@ -1862,6 +1922,7 @@ document.addEventListener("DOMContentLoaded", function () {
         `  lora_r:         ${requestBody.lora_r}\n` +
         `  epochs:         ${requestBody.num_epochs}\n` +
         `  batch_size:     ${requestBody.batch_size}\n` +
+        `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
         `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
         `  label_smoothing:${requestBody.label_smoothing}\n` +
         `  balance_classes:${requestBody.balance_classes}\n`;

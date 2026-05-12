@@ -23,6 +23,57 @@ from cellmap_flow.globals import g
 logger = logging.getLogger(__name__)
 
 
+def _parse_patches_per_epoch_override(data):
+    """Return ``(provided, value)`` for the optional virtual-dataset override.
+
+    ``0`` means "auto" (manifest ``None``); blank/missing means leave the
+    existing manifest value untouched.
+    """
+    if "patches_per_epoch" not in data:
+        return False, None
+    raw = data.get("patches_per_epoch")
+    if raw is None or raw == "":
+        return False, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError("patches_per_epoch must be a non-negative integer")
+    if value < 0:
+        raise ValueError("patches_per_epoch must be a non-negative integer")
+    return True, (None if value == 0 else value)
+
+
+def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
+    """Apply dashboard-owned training-time settings to a virtual manifest."""
+    from cellmap_flow.finetune.virtual_dataset import write_manifest
+    from cellmap_flow.globals import current_input_norm_config
+
+    current_norm = current_input_norm_config()
+    if current_norm and manifest.get("input_norm") != current_norm:
+        logger.info(
+            "Refreshing manifest input_norm before %s "
+            "(was: %s, now: %s)",
+            context,
+            list((manifest.get("input_norm") or {}).keys()),
+            list(current_norm.keys()),
+        )
+    manifest["input_norm"] = current_norm
+
+    override_given, patches_per_epoch = _parse_patches_per_epoch_override(data)
+    if override_given:
+        old_value = manifest.get("patches_per_epoch")
+        manifest["patches_per_epoch"] = patches_per_epoch
+        logger.info(
+            "Applying patches_per_epoch override before %s: %s -> %s",
+            context,
+            old_value,
+            "auto" if patches_per_epoch is None else patches_per_epoch,
+        )
+
+    write_manifest(str(corrections_dir), manifest)
+    return override_given, patches_per_epoch
+
+
 def list_finetuning_jobs_response():
     try:
         return jsonify({"success": True, "jobs": g.finetune_job_manager.list_jobs()})
@@ -85,7 +136,7 @@ def submit_finetuning_response(data):
         # reads the annotation_volume.zarr directly, so when a manifest is present
         # the sync is wasted work and can hang submit for many minutes when the
         # volume contains imported YAML data.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest, write_manifest
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
         if existing_manifest is None:
@@ -94,21 +145,9 @@ def submit_finetuning_response(data):
             except Exception as e:
                 logger.warning(f"Error syncing annotations before training: {e}")
         else:
-            # Refresh the manifest's input_norm with the dashboard's current
-            # value so the trainer applies the same normalization the user
-            # currently sees at inference. Lets users tweak normalization in
-            # the UI and re-Submit without rebuilding the session.
-            from cellmap_flow.globals import current_input_norm_config
-            current_norm = current_input_norm_config()
-            if current_norm and existing_manifest.get("input_norm") != current_norm:
-                logger.info(
-                    "Refreshing manifest input_norm before submit "
-                    "(was: %s, now: %s)",
-                    list((existing_manifest.get("input_norm") or {}).keys()),
-                    list(current_norm.keys()),
-                )
-            existing_manifest["input_norm"] = current_norm
-            write_manifest(str(actual_corrections_path), existing_manifest)
+            _refresh_virtual_manifest_for_training(
+                actual_corrections_path, existing_manifest, data, "submit"
+            )
             logger.info(
                 "Virtual sources manifest present; skipping pre-training MinIO sync."
             )
@@ -197,7 +236,7 @@ def stream_job_logs_response(job_id):
                 ["bpeek", str(lsf_job_id)],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=2,
             )
         except Exception as e:
             logger.debug(f"bpeek call failed for job {lsf_job_id}: {e}")
@@ -223,36 +262,60 @@ def stream_job_logs_response(job_id):
         if finetune_job.lsf_job and hasattr(finetune_job.lsf_job, "job_id"):
             lsf_job_id = finetune_job.lsf_job.job_id
 
+        # Prefer the tee'd log file once it exists. LSF bpeek can buffer output
+        # and then release several batch lines at once, which makes the
+        # dashboard look stuck even while training is moving.
         use_bpeek = lsf_job_id is not None
         last_bpeek_line_count = 0
         last_bpeek_poll = 0.0
-        bpeek_poll_interval_s = 0.25
+        bpeek_poll_interval_s = 1.0
+        streamed_bpeek = False
+        file_seen = finetune_job.log_file.exists()
+        last_position = 0
 
-        if use_bpeek:
+        if file_seen:
+            try:
+                with open(finetune_job.log_file, "r") as f:
+                    content = f.read()
+                    last_position = f.tell()
+                block = sse_data_block(list(iter_visible_lines(content)))
+                if block:
+                    yield block
+            except Exception as e:
+                logger.error(f"Error reading log file: {e}")
+                file_seen = False
+        elif use_bpeek:
             initial = read_bpeek_content(lsf_job_id)
             if initial is None:
                 use_bpeek = False
             else:
                 last_bpeek_line_count = len(initial.splitlines())
+                streamed_bpeek = bool(initial)
                 block = sse_data_block(list(iter_visible_lines(initial)))
                 if block:
                     yield block
 
-        if not use_bpeek and finetune_job.log_file.exists():
-            try:
-                with open(finetune_job.log_file, "r") as f:
-                    block = sse_data_block(list(iter_visible_lines(f.read())))
-                if block:
-                    yield block
-            except Exception as e:
-                logger.error(f"Error reading log file: {e}")
-
-        last_position = finetune_job.log_file.stat().st_size if finetune_job.log_file.exists() else 0
-
         while finetune_job.status.value in ["PENDING", "RUNNING"]:
             try:
                 now = time.perf_counter()
-                if use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
+
+                if finetune_job.log_file.exists():
+                    if not file_seen:
+                        file_seen = True
+                        last_position = (
+                            finetune_job.log_file.stat().st_size
+                            if streamed_bpeek
+                            else 0
+                        )
+                    with open(finetune_job.log_file, "r") as f:
+                        f.seek(last_position)
+                        new_content = f.read()
+                        last_position = f.tell()
+                    if new_content:
+                        block = sse_data_block(list(iter_visible_lines(new_content)))
+                        if block:
+                            yield block
+                elif use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
                     last_bpeek_poll = now
                     content = read_bpeek_content(lsf_job_id)
                     if content is None:
@@ -262,19 +325,10 @@ def stream_job_logs_response(job_id):
                         delta_lines = current_lines if len(current_lines) < last_bpeek_line_count else current_lines[last_bpeek_line_count:]
                         last_bpeek_line_count = len(current_lines)
                         if delta_lines:
+                            streamed_bpeek = True
                             block = sse_data_block(list(iter_visible_lines("\n".join(delta_lines))))
                             if block:
                                 yield block
-
-                if not use_bpeek and finetune_job.log_file.exists():
-                    with open(finetune_job.log_file, "r") as f:
-                        f.seek(last_position)
-                        new_content = f.read()
-                        last_position = f.tell()
-                    if new_content:
-                        block = sse_data_block(list(iter_visible_lines(new_content)))
-                        if block:
-                            yield block
 
                 if now - last_heartbeat >= heartbeat_interval_s:
                     yield ": ping\n\n"
@@ -372,7 +426,7 @@ def restart_finetuning_job_response(job_id, data):
         # a virtual-sources manifest the trainer reads the volume zarr
         # directly, so the sync would just download chunks the trainer never
         # touches — and on big sessions can hang Restart for minutes.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest, write_manifest
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
         job_record = jobs.get(job_id)
@@ -386,20 +440,9 @@ def restart_finetuning_job_response(job_id, data):
             read_manifest(corrections_dir) if corrections_dir else None
         )
         if existing_manifest is not None:
-            # Refresh manifest input_norm so the next training cycle obeys
-            # whatever the user currently has set in the dashboard. Same UX
-            # as bumping LR / lora_r and clicking Restart.
-            from cellmap_flow.globals import current_input_norm_config
-            current_norm = current_input_norm_config()
-            if current_norm and existing_manifest.get("input_norm") != current_norm:
-                logger.info(
-                    "Refreshing manifest input_norm before restart "
-                    "(was: %s, now: %s)",
-                    list((existing_manifest.get("input_norm") or {}).keys()),
-                    list(current_norm.keys()),
-                )
-            existing_manifest["input_norm"] = current_norm
-            write_manifest(corrections_dir, existing_manifest)
+            _refresh_virtual_manifest_for_training(
+                corrections_dir, existing_manifest, data, "restart"
+            )
             logger.info(
                 f"Virtual sources manifest present for job {job_id}; "
                 "skipping pre-restart MinIO sync."
