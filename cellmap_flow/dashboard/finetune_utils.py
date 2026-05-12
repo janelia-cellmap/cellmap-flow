@@ -622,21 +622,31 @@ def _sync_zarr_group_metadata(s3, src_path, dst_path):
 
 
 def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=False):
-    """Diff remote vs known chunk state and sync changed chunks to local disk.
+    """Diff remote vs known chunk state and pull changed chunks to local disk.
+
+    Local disk is the source of truth — YAML imports are written locally
+    first and only later mirrored to MinIO; painted scribbles flow MinIO
+    → local through this function. We never delete on-disk chunks based
+    on remote state: an "absent" chunk on MinIO is almost always a
+    transient (paginated listing truncated, in-flight `mc mirror`,
+    server restart, network blip), not a real user erase. Painting BG
+    over a chunk in neuroglancer rewrites the chunk file, it does not
+    remove it. Treating remote-missing as "user erased it" once cost a
+    full session of training (3456 chunks wiped from disk after one bad
+    listing, FG index emptied, loss silently went to 0).
 
     Returns:
-        (changed_keys, removed_keys, remote_chunk_state)
+        (changed_keys, removed_keys=[], remote_chunk_state)
+        ``removed_keys`` is always empty; the slot is preserved so
+        callers' tuple-unpacking keeps working.
     """
-    listing_failed = False
     try:
         chunk_files = s3.ls(s0_path)
     except FileNotFoundError:
-        chunk_files = []
-        listing_failed = True
+        # Remote bucket has no annotation/s0 yet (just created) — keep
+        # whatever we have locally and try again next cycle.
+        return [], [], dict(known_chunk_state)
     except Exception as e:
-        # Any other s3 error -> treat as transient. Returning an empty list
-        # would otherwise be misinterpreted as "remote has no chunks" and
-        # delete every local chunk we already had.
         logger.warning(f"_diff_and_sync_chunks: s3.ls({s0_path}) failed: {e}; "
                        "treating as transient, skipping sync this cycle.")
         return [], [], dict(known_chunk_state)
@@ -656,41 +666,18 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
         changed_keys = list(remote_chunk_state.keys())
     else:
         changed_keys = [k for k, v in remote_chunk_state.items() if known_chunk_state.get(k) != v]
-    removed_keys = [k for k in known_chunk_state if k not in remote_chunk_state]
 
-    # Safety: if remote returned empty but we previously knew about chunks,
-    # treat it as a MinIO blip and refuse to delete -- otherwise a single bad
-    # listing wipes the entire on-disk volume zarr (observed: VirtualPatchDataset
-    # built FG index from 3456 disk chunks at trainer start, then a subsequent
-    # background sync deleted them all and training silently produced loss=0).
-    if (listing_failed or not remote_chunk_state) and known_chunk_state:
-        if removed_keys:
-            logger.warning(
-                f"_diff_and_sync_chunks: remote listing for {s0_path} returned "
-                f"empty but {len(known_chunk_state)} chunks were previously known. "
-                "Refusing to delete on-disk chunks (probable MinIO transient)."
-            )
-        return [], [], dict(known_chunk_state)
-
-    if not changed_keys and not removed_keys:
+    if not changed_keys:
         return [], [], remote_chunk_state
 
-    # Copy changed chunks
+    # Copy changed chunks. We never delete: known_chunk_state may shrink
+    # if remote drops keys, but the on-disk file stays.
     dst_s0_path = Path(dst_s0_path)
     dst_s0_path.mkdir(parents=True, exist_ok=True)
     copy_pairs = [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed_keys]
     _copy_chunks_parallel(s3, copy_pairs)
 
-    # Remove stale local chunks
-    for k in removed_keys:
-        local_chunk = dst_s0_path / k
-        try:
-            if local_chunk.exists():
-                local_chunk.unlink()
-        except Exception as e:
-            logger.debug(f"Error removing stale chunk {k}: {e}")
-
-    return changed_keys, removed_keys, remote_chunk_state
+    return changed_keys, [], remote_chunk_state
 
 
 # ---------------------------------------------------------------------------
