@@ -374,6 +374,68 @@ class LoRAFinetuner:
         torch.cuda.empty_cache()
         return True
 
+    def _model_cache_targets(self):
+        """Return model objects that may survive LoRA unwrap/rewrap cycles."""
+        targets = []
+        seen = set()
+        stack = [self.model]
+        while stack:
+            obj = stack.pop(0)
+            if obj is None or id(obj) in seen:
+                continue
+            seen.add(id(obj))
+            targets.append(obj)
+            for attr in ("base_model", "model", "module"):
+                child = getattr(obj, attr, None)
+                if child is not None and id(child) not in seen:
+                    stack.append(child)
+        return targets
+
+    def _sigmoid_cache_key(self):
+        if self.select_channel is not None:
+            return ("channel", self.select_channel)
+        return ("all", None)
+
+    def _get_cached_model_has_sigmoid(self) -> Optional[bool]:
+        key = self._sigmoid_cache_key()
+        for target in self._model_cache_targets():
+            cache = getattr(target, "_cellmap_flow_model_has_sigmoid_cache", None)
+            if isinstance(cache, dict) and key in cache:
+                return bool(cache[key])
+        return None
+
+    def _cache_model_has_sigmoid(self, value: bool):
+        key = self._sigmoid_cache_key()
+        for target in self._model_cache_targets():
+            try:
+                cache = getattr(
+                    target, "_cellmap_flow_model_has_sigmoid_cache", None
+                )
+                if not isinstance(cache, dict):
+                    cache = {}
+                    setattr(target, "_cellmap_flow_model_has_sigmoid_cache", cache)
+                cache[key] = bool(value)
+            except Exception:
+                pass
+
+    def _apply_probability_output_mode(self, log_message):
+        """Configure losses for models that already emit probabilities."""
+        if self._use_bce:
+            log_message(
+                "Switching BCEWithLogitsLoss to BCELoss to avoid double-sigmoid"
+            )
+            self.criterion = nn.BCELoss(reduction='none')
+        if hasattr(self.criterion, 'bce_loss'):
+            self.criterion.bce_loss = nn.BCELoss(reduction='none')
+        # Tell DiceLoss/MarginLoss to skip their sigmoid
+        if hasattr(self.criterion, 'apply_sigmoid'):
+            self.criterion.apply_sigmoid = False
+        if (
+            hasattr(self.criterion, 'dice_loss')
+            and hasattr(self.criterion.dice_loss, 'apply_sigmoid')
+        ):
+            self.criterion.dice_loss.apply_sigmoid = False
+
     def train(self) -> Dict[str, Any]:
         """
         Run the training loop.
@@ -415,6 +477,7 @@ class LoRAFinetuner:
         if self.use_mixed_precision:
             try:
                 probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = probe_raw[:1]
                 probe_raw = probe_raw.to(self.device)
                 with torch.no_grad(), autocast('cuda', enabled=True):
                     probe_out = self.model(probe_raw)
@@ -435,29 +498,47 @@ class LoRAFinetuner:
         # even with extreme inputs, the model has sigmoid baked in.
         # In that case, switch BCEWithLogitsLoss to BCELoss to avoid double-sigmoid,
         # and tell DiceLoss/MarginLoss to skip their sigmoid.
-        try:
-            probe_raw, _ = next(iter(self.dataloader))
-            probe_extreme = torch.randn_like(probe_raw) * 100
-            probe_extreme = probe_extreme.to(self.device)
-            with torch.no_grad():
-                probe_out = self.model(probe_extreme)
-            model_has_sigmoid = probe_out.min() >= 0 and probe_out.max() <= 1
+        cached_model_has_sigmoid = self._get_cached_model_has_sigmoid()
+        if cached_model_has_sigmoid is not None:
+            model_has_sigmoid = cached_model_has_sigmoid
             if model_has_sigmoid:
-                log_message("Detected built-in sigmoid in model output")
-                if self._use_bce:
-                    log_message("Switching BCEWithLogitsLoss to BCELoss to avoid double-sigmoid")
-                    self.criterion = nn.BCELoss(reduction='none')
-                if hasattr(self.criterion, 'bce_loss'):
-                    self.criterion.bce_loss = nn.BCELoss(reduction='none')
-                # Tell DiceLoss/MarginLoss to skip their sigmoid
-                if hasattr(self.criterion, 'apply_sigmoid'):
-                    self.criterion.apply_sigmoid = False
-                if hasattr(self.criterion, 'dice_loss') and hasattr(self.criterion.dice_loss, 'apply_sigmoid'):
-                    self.criterion.dice_loss.apply_sigmoid = False
-            del probe_extreme, probe_out
-            torch.cuda.empty_cache()
-        except Exception as e:
-            log_message(f"WARNING: Sigmoid probe failed ({e}) — assuming raw logits output.")
+                log_message("Using cached built-in sigmoid detection")
+                self._apply_probability_output_mode(log_message)
+        else:
+            try:
+                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = probe_raw[:1]
+                probe_extreme = torch.randn(
+                    probe_raw.shape,
+                    dtype=probe_raw.dtype,
+                    device=self.device,
+                ) * 100
+                with torch.no_grad(), autocast(
+                    'cuda', enabled=self.use_mixed_precision
+                ):
+                    probe_out = self.model(probe_extreme)
+                    if self.select_channel is not None:
+                        probe_out = probe_out[
+                            :,
+                            self.select_channel : self.select_channel + 1,
+                            :,
+                            :,
+                            :,
+                        ]
+                model_has_sigmoid = bool(
+                    ((probe_out.min() >= 0) & (probe_out.max() <= 1)).item()
+                )
+                self._cache_model_has_sigmoid(model_has_sigmoid)
+                if model_has_sigmoid:
+                    log_message("Detected built-in sigmoid in model output")
+                    self._apply_probability_output_mode(log_message)
+                del probe_extreme, probe_out
+                torch.cuda.empty_cache()
+            except Exception as e:
+                log_message(
+                    f"WARNING: Sigmoid probe failed ({e}) — assuming raw logits output."
+                )
+                torch.cuda.empty_cache()
 
         stop_signal_path = self.output_dir / "stop_signal.json"
         # Make sure no stale signal from a previous run lingers.
@@ -481,6 +562,7 @@ class LoRAFinetuner:
                 except Exception:
                     pass
                 break
+            log_message(f"Starting epoch {epoch+1} of {self.num_epochs}...")
             # Mitigation loop: keep applying mitigations (halve batch, then
             # disable distillation) and retrying until the epoch succeeds or
             # there's nothing left to try. A single try/except wasn't enough —
@@ -558,6 +640,7 @@ class LoRAFinetuner:
             # Save checkpoint if best
             if epoch_loss < self.best_loss:
                 self.best_loss = epoch_loss
+                self._log_message("  Saving best checkpoint...")
                 self.save_checkpoint(is_best=True)
                 self._log_message(f"  → Saved best checkpoint")
 
