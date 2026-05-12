@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 import neuroglancer
 import numpy as np
@@ -13,6 +14,33 @@ from cellmap_flow.dashboard.finetune_utils import (
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
+
+_CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def _chunk_outside_all_bboxes(
+    chunk_lo_voxels: np.ndarray,
+    chunk_hi_voxels: np.ndarray,
+    bbox_offsets: np.ndarray,
+    bbox_ends: np.ndarray,
+) -> bool:
+    """Return True if the chunk is NOT fully contained in any
+    ``imported_crops`` bbox -- i.e. it represents painted-scribble
+    work that the per-import yellow boxes don't already cover.
+
+    YAML imports write chunk-aligned slabs, so imported chunks land
+    fully inside an import bbox; painted-only chunks land fully outside.
+    A mixed chunk (rare; user paints over an import edge) reads as
+    "outside" by this rule, which is what we want -- it has painted
+    work the existing yellow box may not visually cue.
+    """
+    if bbox_offsets.shape[0] == 0:
+        return True
+    fully_inside = np.all(
+        (chunk_lo_voxels >= bbox_offsets) & (chunk_hi_voxels <= bbox_ends),
+        axis=1,
+    )
+    return not bool(fully_inside.any())
 
 
 def refresh_annotated_regions_layer(corrections_path=None):
@@ -65,7 +93,9 @@ def refresh_annotated_regions_layer(corrections_path=None):
                 continue
 
             # Per-imported-YAML-crop large boxes (one per crop, read from the
-            # annotation_volume.zarr's root attrs that the YAML loader writes).
+            # annotation_volume.zarr's root attrs that the YAML loader writes)
+            # plus per-painted-chunk small boxes for any populated chunk that
+            # isn't already covered by an import bbox.
             if entry.endswith(".zarr"):
                 vol_attrs_file = os.path.join(corrections_dir, entry, ".zattrs")
                 if not os.path.exists(vol_attrs_file):
@@ -75,30 +105,91 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         vol_meta = json.load(f)
                     if vol_meta.get("type") != "annotation_volume":
                         continue
-                    imported = vol_meta.get("imported_crops") or []
-                    if not imported:
-                        continue
                     voxel = vol_meta.get("output_voxel_size")
                     dataset_offset = vol_meta.get("dataset_offset_nm", [0, 0, 0])
                     if not voxel:
                         continue
                     voxel_arr = np.array(voxel, dtype=np.float64)
                     dataset_offset_arr = np.array(dataset_offset, dtype=np.float64)
+
+                    # Pass 1: yellow boxes for each imported crop.
+                    imported = vol_meta.get("imported_crops") or []
+                    bbox_off_list = []
+                    bbox_end_list = []
                     for crop in imported:
                         offset_vox = crop.get("annotation_offset_voxels")
                         shape_vox = crop.get("annotation_shape_voxels")
                         if not (offset_vox and shape_vox):
                             continue
+                        offset_arr = np.array(offset_vox, dtype=np.int64)
+                        shape_arr = np.array(shape_vox, dtype=np.int64)
+                        bbox_off_list.append(offset_arr)
+                        bbox_end_list.append(offset_arr + shape_arr)
                         lo = (
                             dataset_offset_arr
-                            + np.array(offset_vox, dtype=np.float64) * voxel_arr
+                            + offset_arr.astype(np.float64) * voxel_arr
                         )
-                        hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
+                        hi = lo + shape_arr.astype(np.float64) * voxel_arr
                         label = crop.get("name") or os.path.basename(
                             crop.get("path", "imported_crop").rstrip("/")
                         )
                         boxes.append(
                             {"label": f"yaml_crop:{label}", "lo": lo.tolist(), "hi": hi.tolist()}
+                        )
+                    bbox_offsets = (
+                        np.stack(bbox_off_list, axis=0)
+                        if bbox_off_list
+                        else np.zeros((0, 3), dtype=np.int64)
+                    )
+                    bbox_ends = (
+                        np.stack(bbox_end_list, axis=0)
+                        if bbox_end_list
+                        else np.zeros((0, 3), dtype=np.int64)
+                    )
+
+                    # Pass 2: small boxes for painted-only chunks. Walk the
+                    # volume zarr's annotation/s0/ chunk files and emit a box
+                    # per chunk that isn't fully contained in any import bbox.
+                    # Cheap: just lists chunk file names and compares spatial
+                    # bbox to import bboxes -- never reads chunk contents.
+                    chunk_size = vol_meta.get("chunk_size")
+                    if not chunk_size:
+                        continue
+                    chunk_size_arr = np.array(chunk_size, dtype=np.int64)
+                    s0_path = os.path.join(corrections_dir, entry, "annotation", "s0")
+                    if not os.path.isdir(s0_path):
+                        continue
+                    crop_label = (
+                        os.path.basename(crop.get("path", "")).rstrip("/")
+                        if imported
+                        else "painted"
+                    )
+                    for chunk_name in os.listdir(s0_path):
+                        if not _CHUNK_KEY_RE.match(chunk_name):
+                            continue
+                        cz, cy, cx = (int(s) for s in chunk_name.split("."))
+                        chunk_lo_vox = (
+                            np.array([cz, cy, cx], dtype=np.int64) * chunk_size_arr
+                        )
+                        chunk_hi_vox = chunk_lo_vox + chunk_size_arr
+                        if not _chunk_outside_all_bboxes(
+                            chunk_lo_vox, chunk_hi_vox, bbox_offsets, bbox_ends
+                        ):
+                            continue
+                        lo = (
+                            dataset_offset_arr
+                            + chunk_lo_vox.astype(np.float64) * voxel_arr
+                        )
+                        hi = (
+                            dataset_offset_arr
+                            + chunk_hi_vox.astype(np.float64) * voxel_arr
+                        )
+                        boxes.append(
+                            {
+                                "label": f"painted:{chunk_name}",
+                                "lo": lo.tolist(),
+                                "hi": hi.tolist(),
+                            }
                         )
                 except Exception as e:
                     logger.warning(
