@@ -2,7 +2,7 @@
 // messages to the per-tab handler. The handler is set by activateVz() in
 // vz-handler.ts; until then, /vz/* returns 503.
 
-import { handleVzRequest } from "./vz-handler";
+import { cancelVzRequest, handleVzRequest } from "./vz-handler";
 
 export async function registerVirtualZarrSW(): Promise<ServiceWorkerRegistration> {
   if (!("serviceWorker" in navigator)) {
@@ -37,11 +37,17 @@ export async function registerVirtualZarrSW(): Promise<ServiceWorkerRegistration
 
   navigator.serviceWorker.addEventListener("message", async (event) => {
     const data = event.data;
-    if (!data || data.type !== "vz-request") return;
+    if (!data) return;
+    if (data.type === "vz-cancel") {
+      cancelVzRequest(String(data.id ?? ""));
+      return;
+    }
+    if (data.type !== "vz-request") return;
     const port = event.ports[0];
     if (!port) return;
+    const id = String(data.id ?? "");
     try {
-      const res = await handleVzRequest(String(data.path ?? ""));
+      const res = await handleVzRequest(String(data.path ?? ""), id);
       port.postMessage(res, res.body instanceof ArrayBuffer ? [res.body] : []);
     } catch (err) {
       const e = err as Error;

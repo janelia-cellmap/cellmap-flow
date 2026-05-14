@@ -80,28 +80,68 @@ const MAX_CONCURRENT_INFERENCES = 2;
 // the main thread starves.
 const MAX_PENDING_INFERENCES = 16;
 let inflight = 0;
-const waiters: Array<() => void> = [];
+interface Waiter {
+  resolve: () => void;
+  done: boolean;
+}
+const waiters: Waiter[] = [];
 
 class QueueFullError extends Error {
   constructor() { super("vz: inference queue full"); }
 }
 
-async function acquireSlot(): Promise<() => void> {
+class CancelledError extends Error {
+  constructor() { super("vz: request cancelled"); }
+}
+
+// Per-request AbortControllers. The SW posts a `vz-cancel` message when NG
+// aborts the underlying fetch; cancelVzRequest() aborts the controller,
+// causing in-flight zarr fetches, the wait-queue, and post-inference work
+// to short-circuit so the slot frees up for the next chunk NG cares about.
+const activeRequests = new Map<string, AbortController>();
+
+export function cancelVzRequest(id: string): void {
+  if (!id) return;
+  const ac = activeRequests.get(id);
+  if (!ac) return;
+  activeRequests.delete(id);
+  ac.abort();
+}
+
+async function acquireSlot(signal: AbortSignal): Promise<() => void> {
+  if (signal.aborted) throw new CancelledError();
   if (inflight >= MAX_CONCURRENT_INFERENCES) {
     if (waiters.length >= MAX_PENDING_INFERENCES) {
       throw new QueueFullError();
     }
-    // Wait. When our resolver fires, the slot has been pre-credited to us
-    // by the releaser, so we don't increment again here.
-    await new Promise<void>((resolve) => waiters.push(resolve));
+    const waiter: Waiter = { resolve: () => {}, done: false };
+    const acquired = await new Promise<boolean>((promiseResolve) => {
+      waiter.resolve = () => {
+        if (waiter.done) return;
+        waiter.done = true;
+        promiseResolve(true);
+      };
+      const onAbort = () => {
+        if (waiter.done) return; // already received pre-credited slot
+        waiter.done = true;
+        const idx = waiters.indexOf(waiter);
+        if (idx >= 0) waiters.splice(idx, 1);
+        promiseResolve(false);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      waiters.push(waiter);
+    });
+    if (!acquired) throw new CancelledError();
+    // Slot pre-credited by the releaser.
   } else {
     inflight++;
   }
   return () => {
+    // Cancelled waiters have already removed themselves; shift() naturally
+    // skips them.
     const next = waiters.shift();
     if (next) {
-      // Hand the slot to the next waiter; inflight stays the same.
-      next();
+      next.resolve();
     } else {
       inflight--;
     }
@@ -424,7 +464,24 @@ async function probeSourceSpatial(arrayBase: string): Promise<SourceSpatial> {
   }
 }
 
-export async function handleVzRequest(path: string): Promise<VzResponse> {
+export async function handleVzRequest(path: string, id: string): Promise<VzResponse> {
+  const ac = new AbortController();
+  if (id) activeRequests.set(id, ac);
+  try {
+    return await doHandleVzRequest(path, ac.signal);
+  } catch (e) {
+    if (e instanceof CancelledError) {
+      // NG already abandoned the fetch; the SW won't deliver this response,
+      // but we still need to resolve the channel promise on the SW side.
+      return text(499, "client disconnected");
+    }
+    throw e;
+  } finally {
+    if (id) activeRequests.delete(id);
+  }
+}
+
+async function doHandleVzRequest(path: string, signal: AbortSignal): Promise<VzResponse> {
   if (!state) return text(503, "vz not activated yet");
   const { spatialShape, modelHW } = state;
   const [Hm, Wm] = modelHW;
@@ -500,7 +557,7 @@ export async function handleVzRequest(path: string): Promise<VzResponse> {
 
   let buf: ArrayBuffer;
   try {
-    buf = await computeChunkBytes(cz, cy, cx);
+    buf = await computeChunkBytes(cz, cy, cx, signal);
   } catch (e) {
     if (e instanceof QueueFullError) {
       // NG retries 503s naturally as in-flight requests complete.
@@ -516,7 +573,12 @@ export async function handleVzRequest(path: string): Promise<VzResponse> {
   return chunkOk(buf);
 }
 
-async function computeChunkBytes(cz: number, cy: number, cx: number): Promise<ArrayBuffer> {
+async function computeChunkBytes(
+  cz: number,
+  cy: number,
+  cx: number,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> {
   if (!state) throw new Error("vz: not activated");
   const { bmz, raw, spatialShape, modelHW, normalizers, postprocessors, outputChannels } = state;
   const [Hm, Wm] = modelHW;
@@ -531,6 +593,8 @@ async function computeChunkBytes(cz: number, cy: number, cx: number): Promise<Ar
     return zeros(outputChannels * planeSize).buffer;
   }
 
+  if (signal.aborted) throw new CancelledError();
+
   // Build a zarrita selection for the trailing 2D slice; zero-pad leading dims.
   const ndim = raw.shape.length;
   const sel: (number | zarr.Slice)[] = [];
@@ -540,6 +604,7 @@ async function computeChunkBytes(cz: number, cy: number, cx: number): Promise<Ar
   while (sel.length < ndim) sel.unshift(0);
 
   const inner = await zarr.get(raw, sel);
+  if (signal.aborted) throw new CancelledError();
   const innerF = toFloat32(inner.data as TypedArray);
 
   // Build a Hm × Wm input, zero-padded on right/bottom edges.
@@ -565,14 +630,18 @@ async function computeChunkBytes(cz: number, cy: number, cx: number): Promise<Ar
   // RDF-declared preprocessing — for hiding-blowfish this is min-max per-sample.
   modelInput = minMax(modelInput);
 
-  // 2) Inference.
-  const slot = await acquireSlot();
+  // 2) Inference. acquireSlot() honors `signal` so cancelled requests drop
+  //    out of the wait queue immediately instead of consuming an inference
+  //    slot they no longer need.
+  const slot = await acquireSlot(signal);
   let out: Float32Array;
   try {
+    if (signal.aborted) throw new CancelledError();
     out = await runOnTensor(bmz, modelInput, bmz.manifest.shape_in);
   } finally {
     slot();
   }
+  if (signal.aborted) throw new CancelledError();
 
   // 3) Run user-checked postprocessors. out is (B=1, C_model, Hm, Wm) flat
   //    = C_model planes of size planeSize. Postprocessors may reduce C.
