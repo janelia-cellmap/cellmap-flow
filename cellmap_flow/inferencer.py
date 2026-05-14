@@ -1,4 +1,5 @@
 # %%
+import threading
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -8,6 +9,16 @@ from cellmap_flow.globals import g
 
 
 logger = logging.getLogger(__name__)
+
+# Serialize model forward passes across the threaded Flask server. The
+# Flask dev server runs each request in its own thread (`threaded=True`
+# by default since Flask 1.0), so without this lock NG's parallel chunk
+# fetches run concurrent forwards through the same GPU. On a workstation
+# GPU there's headroom for that; on a constrained GPU (Colab T4, 16 GB)
+# any model that needs >7 GB per forward will OOM under concurrency.
+# Acquiring an uncontended lock is ~µs so this has no measurable cost on
+# fat GPUs that don't need it.
+_INFERENCE_LOCK = threading.Lock()
 
 
 def apply_postprocess(data, **kwargs):
@@ -89,13 +100,16 @@ class Inferencer:
         self.model_config.config.model.eval()
 
     def process_chunk(self, idi, roi):
-        # check if process_chunk is in self.config
-        if getattr(self.model_config.config, "process_chunk", None) and callable(
-            self.model_config.config.process_chunk
-        ):
-            result = self.model_config.config.process_chunk(idi, roi)
-        else:
-            result = self.process_chunk_basic(idi, roi)
+        # Hold the GPU for exactly one chunk at a time; see _INFERENCE_LOCK
+        # docstring above for rationale.
+        with _INFERENCE_LOCK:
+            # check if process_chunk is in self.config
+            if getattr(self.model_config.config, "process_chunk", None) and callable(
+                self.model_config.config.process_chunk
+            ):
+                result = self.model_config.config.process_chunk(idi, roi)
+            else:
+                result = self.process_chunk_basic(idi, roi)
 
         postprocessed = apply_postprocess(
             result,
