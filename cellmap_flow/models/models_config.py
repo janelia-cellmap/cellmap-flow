@@ -714,12 +714,20 @@ class CellMapModelConfig(ModelConfig):
         config.channels_names = metadata.channels_names
         config.channels = metadata.channels_names  # alias for compatibility
 
-        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
-        config.inference_input_shape = Coordinate(metadata.inference_input_shape)* config.input_voxel_size
-        config.inference_output_shape = Coordinate(metadata.inference_output_shape)* config.output_voxel_size
-        
-        config.block_shape = [*metadata.output_shape, metadata.out_channels]
+        # Some models declare input_shape with leading batch+channel dims
+        # (e.g. [1, 1, 178, 178, 178]) while voxel_size and the spatial code
+        # downstream all assume the trailing N spatial dims. Trim explicitly.
+        nd = int(metadata.spatial_dims) or 3
+        def _spatial(s):
+            s = list(s)
+            return s[-nd:] if len(s) > nd else s
+
+        config.read_shape = Coordinate(_spatial(metadata.input_shape)) * config.input_voxel_size
+        config.write_shape = Coordinate(_spatial(metadata.output_shape)) * config.output_voxel_size
+        config.inference_input_shape = Coordinate(_spatial(metadata.inference_input_shape)) * config.input_voxel_size
+        config.inference_output_shape = Coordinate(_spatial(metadata.inference_output_shape)) * config.output_voxel_size
+
+        config.block_shape = [*_spatial(metadata.output_shape), metadata.out_channels]
 
         config.model = self.cellmap_model.ts_model
         config.model.to(_get_device())
