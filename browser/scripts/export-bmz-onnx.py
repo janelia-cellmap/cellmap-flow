@@ -20,10 +20,23 @@ import sys
 import urllib.request
 from pathlib import Path
 
-import numpy as np
-import onnx
-import onnxruntime as ort
-import torch
+# Skip cleanly if the in-browser-inference deps aren't installed. The
+# server-backed flow (HF Space / Colab + cellmap_flow_server) doesn't need
+# the browser-side ONNX export, so the npm build shouldn't fail just
+# because torch/onnx aren't available in this env.
+try:
+    import numpy as np
+    import onnx
+    import onnxruntime as ort
+    import torch
+except ImportError as e:
+    print(
+        f"[export-bmz-onnx] skipping: missing optional dep ({e.name}). "
+        "Install `torch onnx onnxruntime` to export BMZ models for the "
+        "in-browser inference path.",
+        file=sys.stderr,
+    )
+    sys.exit(0)
 
 HERE = Path(__file__).resolve().parent
 OUT_ROOT = HERE.parent / "public" / "bmz"
