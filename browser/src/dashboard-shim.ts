@@ -459,6 +459,26 @@ function interceptApiFetches(): void {
         return new Response(JSON.stringify({ error: (err as Error).message }), { status: 502, headers: { "content-type": "application/json" } });
       }
     }
+    // Pipeline-config endpoints from the dashboard's own Submit-All buttons.
+    // The browser flow reads the pipeline UI directly at Connect time via
+    // window.gather{InputNorm,PostProcess}Data, so these submits don't have
+    // anything to do — but they exist in the dashboard's inline JS and POST
+    // to /api/*. Return a success no-op so users don't see error toasts.
+    const STUBBED_ENDPOINTS = [
+      "/api/process",
+      "/api/models",
+      "/api/set-data",
+      "/api/server-config",
+    ];
+    if (STUBBED_ENDPOINTS.includes(u.pathname)) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          note: "browser-only mode: pipeline + dataset are applied at Connect time, no separate submit needed.",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
     return new Response(
       JSON.stringify({ error: `${u.pathname} is not implemented in the browser-only mode` }),
       { status: 501, headers: { "content-type": "application/json" } },
