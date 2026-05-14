@@ -22,7 +22,57 @@ inference happens on whatever backend the user pastes into the
 Frontend hosting is free and stateless; backend hosting is whatever you
 pick.
 
-## Cloudflare Pages (recommended)
+## HuggingFace Spaces (Static SDK) — recommended
+
+Best fit because:
+- No per-file size limit (the 116 MB `hiding-blowfish` ONNX would be
+  blocked by Cloudflare Pages' 25 MB free-tier limit and exceeds GitHub
+  Pages' 100 MB limit).
+- Respects the `_headers` file we need for COOP/COEP / WebGPU.
+- Free, no credit card.
+- Same org as your model weights — natural discovery surface.
+
+### One-time setup
+
+1. On `huggingface.co` → **New Space** → name it (e.g.
+   `cellmap-flow-demo`), choose **Static** SDK, set to Public.
+2. Locally:
+   ```bash
+   pip install -U huggingface_hub
+   huggingface-cli login   # paste a write token from huggingface.co/settings/tokens
+   ```
+
+### Deploy
+
+```bash
+cd browser
+npm run build
+huggingface-cli upload <your-username>/cellmap-flow-demo \
+    dist/ . \
+    --repo-type=space \
+    --commit-message "deploy $(date -Iseconds)"
+```
+
+(`huggingface_hub` auto-handles LFS for the 111 MB ONNX file.)
+
+After ~1 min the Space URL `https://huggingface.co/spaces/<you>/cellmap-flow-demo`
+serves the dashboard at `…/dashboard.html`.
+
+### Re-deploying
+
+Re-run the `huggingface-cli upload …` command after `npm run build`. The
+CLI computes diffs and only re-uploads changed files.
+
+### Embedding the backend URL
+
+Same `?backend=…&dataset=…&model=…&raw=…` query params work on the HF
+Spaces URL, e.g.
+
+```
+https://huggingface.co/spaces/<you>/cellmap-flow-demo/dashboard.html?model=hiding-blowfish&dataset=s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8
+```
+
+## Cloudflare Pages
 
 Cloudflare Pages free tier: unlimited bandwidth, unlimited requests, 500
 builds/month, free SSL, free custom domains. Perfect fit.
