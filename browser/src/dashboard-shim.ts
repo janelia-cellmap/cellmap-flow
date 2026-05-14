@@ -313,21 +313,34 @@ function rewireConnectPanel(): void {
 
       replaceNgPanel();
       const NM = 1e-9;
-      const sourceUrl = `zarr://${serverUrl}/${datasetPath}/`;
+      const inferenceUrl = `zarr://${serverUrl}/${datasetPath}/`;
+      // Optional ?raw=<https-zarr-url> query param lets a hosted demo
+      // link include the source EM alongside the inference layer. Plain
+      // form is just an http(s) URL; we wrap it in zarr:// for NG.
+      const qp = new URLSearchParams(window.location.search);
+      const rawZarr = (qp.get("raw") ?? "").trim();
+      const layers: Array<Record<string, unknown>> = [];
+      if (rawZarr) {
+        const rawSource = rawZarr.startsWith("zarr://")
+          ? rawZarr
+          : `zarr://${rawZarr.replace(/\/$/, "")}/`;
+        layers.push({ type: "image", source: rawSource, name: "raw", visible: true });
+      }
+      layers.push({ type: "image", source: inferenceUrl, name: "inference", visible: true });
       mountNg({
         dimensions: {
           z: [voxelSizeNm * NM, "m"],
           y: [voxelSizeNm * NM, "m"],
           x: [voxelSizeNm * NM, "m"],
         },
-        layers: [
-          { type: "image", source: sourceUrl, name: "inference", visible: true },
-        ],
+        layers,
         selectedLayer: { visible: true, layer: "inference" },
         layout: "4panel",
       });
       status.style.color = "#4ade80";
-      status.textContent = `Open. Source: ${sourceUrl}`;
+      status.textContent = rawZarr
+        ? `Open. Raw: ${rawZarr}, Inference: ${inferenceUrl}`
+        : `Open. Source: ${inferenceUrl}`;
     } catch (err) {
       const e = err as Error;
       status.style.color = "#f87171";

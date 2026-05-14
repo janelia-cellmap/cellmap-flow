@@ -99,6 +99,7 @@ Supported query params:
 | `server`   | alias for `backend`                                                                              |
 | `dataset`  | dataset slug for server-backed; full zarr URL for in-browser BMZ                                 |
 | `data`     | alias for `dataset`                                                                              |
+| `raw`      | http(s) source zarr URL — mounts as a "raw" image layer alongside inference                     |
 | `model`    | in-browser BMZ model id (e.g. `hiding-blowfish`); auto-switches to BMZ mode                      |
 | `hf`       | display-only HF model repo                                                                       |
 
