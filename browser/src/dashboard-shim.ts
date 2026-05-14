@@ -352,6 +352,10 @@ function rewireConnectPanel(): void {
   });
 }
 
+// Track the active BMZ in-browser activation so Submit-All POSTs to
+// /api/process can re-apply the pipeline locally (no backend exists).
+let activeBmz: { modelId: string; zarrUrl: string } | null = null;
+
 async function openBmzPath(
   bmzModelId: string,
   btn: HTMLButtonElement,
@@ -395,12 +399,12 @@ async function openBmzPath(
       angstrom: 1e-10, picometer: 1e-12,
     };
     const m = toMeters[act.unit] ?? 1e-9;
-    const widestXY = Math.max(act.halfExtentWorld[1], act.halfExtentWorld[2]);
+    // Don't set crossSectionScale / projectionScale — let NG pick its
+    // own defaults based on the layer bbox. Forcing a value here zoomed
+    // way in past the data scale.
     mountNg({
       dimensions: { z: [m, "m"], y: [m, "m"], x: [m, "m"] },
       position: act.centerWorld,
-      crossSectionScale: (widestXY / 256) * m,
-      projectionScale: widestXY * 4 * m,
       layers: [
         { type: "image", source: act.sourceLayerUrl, name: "source", visible: true },
         { type: "image", source: act.vzUrl, name: bmzModelId, visible: true },
@@ -408,6 +412,7 @@ async function openBmzPath(
       selectedLayer: { visible: true, layer: bmzModelId },
       layout: "xy",
     });
+    activeBmz = { modelId: bmzModelId, zarrUrl };
     status.style.color = "#4ade80";
     status.textContent =
       `resolved → ${zarrUrl}${pickedLine}\nstreaming ${bmzModelId} ` +
@@ -420,6 +425,20 @@ async function openBmzPath(
     btn.disabled = false;
     btn.textContent = "Open in NG";
   }
+}
+
+// Re-apply the dashboard's current Input/Postprocess pipeline to an
+// already-active in-browser BMZ session. Clears the chunk cache so NG
+// re-fetches with the new pipeline (user may need to nudge the view).
+async function reapplyBmzPipeline(): Promise<void> {
+  if (!activeBmz) return;
+  const pipeline = gatherPipeline();
+  await activateVz({
+    modelId: activeBmz.modelId,
+    zarrUrl: activeBmz.zarrUrl,
+    normalizers: pipeline.normalizers,
+    postprocessors: pipeline.postprocessors,
+  });
 }
 
 function replaceNgPanel(): void {
@@ -465,9 +484,30 @@ function interceptApiFetches(): void {
     // minimal /api/process endpoint. Subsequent chunk requests honor the
     // updated g.input_norms / g.postprocess globals.
     if (u.pathname === "/api/process" && init?.method?.toUpperCase() === "POST") {
-      // The serverUrlInput element is removed when Connect replaces the
-      // "No Viewer Connected" panel with NG. Fall back to the last value
-      // we persisted (set during Connect) or the ?backend= URL param.
+      // BMZ in-browser mode: there's no backend; re-apply the pipeline
+      // to the local vz handler so subsequent chunk fetches use the new
+      // normalizers / postprocessors. NG cache may keep stale tiles —
+      // a small pan/zoom triggers re-fetch.
+      if (activeBmz) {
+        try {
+          await reapplyBmzPipeline();
+          return new Response(
+            JSON.stringify({
+              success: true,
+              note: "in-browser BMZ: pipeline re-applied; pan/zoom NG slightly to trigger re-fetch.",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        } catch (err) {
+          return new Response(
+            JSON.stringify({ error: `reapply pipeline: ${(err as Error).message}` }),
+            { status: 500, headers: { "content-type": "application/json" } },
+          );
+        }
+      }
+      // Server-backed mode: forward to the configured inference URL.
+      // Fall back to localStorage / ?backend= since serverUrlInput is
+      // removed once Connect swaps the panel for the NG host.
       const serverInput = document.getElementById("serverUrlInput") as HTMLInputElement | null;
       const fromInput = (serverInput?.value ?? "").trim();
       const fromLs = readLs().serverUrl;
