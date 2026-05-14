@@ -1,7 +1,7 @@
 import inspect
 from typing import Any
 
-from types import ModuleType
+from types import ModuleType, MethodType, FunctionType
 
 DEFAULT_AXES_NAMES = ["x", "y", "z"]
 
@@ -16,16 +16,14 @@ class Config:
         for k, v in vars(self).items():
             if any(x in k for x in ["kwargs", "__"]) or isinstance(v, ModuleType):
                 continue
-            if ["model","checkpoint"].__contains__(k):
+            if ["model", "checkpoint"].__contains__(k):
                 elms.append(f"{k}")
                 continue
-            # if isinstance(v, np.ndarray):
-            #     elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
-            # elif inspect.ismodule(v):
-            #     elms.append(f"{k}: <module '{v.__name__}'>\n")
-            # elif k=="checkpoint" or k=="model":
-            #     elms.append(f"{k}\n")
-            # else:
+            # Bound methods / functions whose repr includes `self` would
+            # trigger Config.__str__ recursively. Just print the name.
+            if isinstance(v, (MethodType, FunctionType)) or callable(getattr(v, "__func__", None)):
+                elms.append(f"{k}: <{type(v).__name__}>")
+                continue
             elms.append(f"{k}: {v}")
         newline = '\n'
         return f"{type(self).__name__}({newline.join(elms)})"

@@ -72,6 +72,16 @@ class ModelConfig:
             return
 
         model = config.model
+        # BMZ models hold a `bioimageio.spec.ModelDescr` here, not a torch
+        # module; we can't run a forward through it directly, and shapes
+        # come from the RDF rather than introspection. Skip validation.
+        if not isinstance(model, torch.nn.Module):
+            logger.info(
+                f"Skipping model shape validation for {self.__class__.__name__}: "
+                f"config.model is {type(model).__name__}, not a torch.nn.Module."
+            )
+            return
+
         input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
         declared_output_size = np.array(config.write_shape) // np.array(
             config.output_voxel_size
@@ -406,12 +416,19 @@ class BioModelConfig(ModelConfig):
     ):
         super().__init__()
         self.model_name = model_name
+        # CLI passes voxel_size as a string (e.g. "8,8,8"); auto-parse so
+        # the Coordinate() call downstream works on the iterable.
+        if isinstance(voxel_size, str):
+            voxel_size = tuple(
+                int(part.strip()) for part in voxel_size.replace(" ", ",").split(",")
+                if part.strip()
+            )
         self.voxel_size = voxel_size
         self.name = name
         self.scale = scale
         self.voxels_to_process = None
         if edge_length_to_process:
-            self.voxels_to_process = edge_length_to_process**3
+            self.voxels_to_process = int(edge_length_to_process) ** 3
 
     @property
     def command(self):
@@ -431,6 +448,9 @@ class BioModelConfig(ModelConfig):
             config.input_slicer,
             is_2d_with_batch,
         ) = self.load_input_information(config.model)
+        # Remember on config so process_chunk_bioimage can reverse the
+        # internal b→z remap when handing the tensor to bioimageio.predict.
+        config.is_2d_with_batch = is_2d_with_batch
 
         (
             config.output_names,
@@ -471,7 +491,7 @@ class BioModelConfig(ModelConfig):
         if len(input_sample.members) > 1:
             raise ValueError("Only one input tensor is supported")
 
-        input_name, input_axes, input_dims, is_2d_with_batch = self.get_and_dims(
+        input_name, input_axes, input_dims, is_2d_with_batch = self.get_axes_and_dims(
             input_sample
         )
         input_spatial_dims = self.get_spatial_dims(input_axes, input_dims)
@@ -621,8 +641,15 @@ def process_chunk_bioimage(self, idi: ImageDataInterface, input_roi: Roi):
 
     input_image = idi.to_ndarray_ts(input_roi.grow(self.context, self.context))
     input_image = input_image[self.input_slicer].astype(np.float32)
+    # cellmap-flow internally rewrote `batch → z` for 2D-with-batch models
+    # (see get_axes_and_dims) so its 3D read pipeline could feed them. The
+    # bioimageio adapter, however, expects the model's own axes — so swap
+    # 'z' back to 'batch' here before handing the tensor over.
+    predict_axes = self.input_axes
+    if getattr(self, "is_2d_with_batch", False):
+        predict_axes = ["batch" if a == "z" else a for a in self.input_axes]
     input_sample = Sample(
-        members={self.input_name: Tensor.from_numpy(input_image, dims=self.input_axes)},
+        members={self.input_name: Tensor.from_numpy(input_image, dims=predict_axes)},
         stat={},
         id="sample",
     )
