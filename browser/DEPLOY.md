@@ -129,7 +129,7 @@ shareable link is:
 
 ```
 https://<your-pages-url>/dashboard.html
-  ?backend=https://<your-space>.hf.space
+  ?backend=https://<your-space>.static.hf.space
   &dataset=<dataset-slug>
 ```
 
