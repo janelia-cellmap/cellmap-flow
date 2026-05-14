@@ -101,6 +101,14 @@ class ModelConfig:
                 model.train()
 
             actual_output = np.array(out.shape[1:])  # drop batch dim
+            # Free the activation cache from the dummy forward. On a tight
+            # GPU (Colab T4 / 16 GB) the validator can hold ~5–6 GB in
+            # PyTorch's reserved-but-unallocated bucket, which the first
+            # real inference can't reach. Returning it to the allocator
+            # avoids per-request OOM later.
+            del dummy, out
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
             # Determine actual spatial shape (skip channel dim if present)
             if len(actual_output) == 4:
                 actual_channels = actual_output[0]
