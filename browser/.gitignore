@@ -2,8 +2,10 @@ node_modules/
 dist/
 *.log
 .vite/
-# Generated assets (rebuild via scripts/export_demo_onnx.py and
+# Generated assets (rebuild via scripts/export-bmz-onnx.py and
 # scripts/render-dashboard.py). Tracked outputs would rot quickly.
 public/demo-model.onnx
+public/bmz/
+.bmz-cache/
 dashboard.html
 pipeline_builder.html

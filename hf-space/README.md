@@ -16,7 +16,10 @@ Space's URL; chunks are computed here on demand.
 
 ## Configure
 
-In **Settings → Variables and secrets**, set:
+In **Settings → Variables and secrets**, set the variables for your chosen
+model type.
+
+### Mode A — cellmap HF model (default)
 
 | Variable           | Example                                                                                  |
 | ------------------ | ---------------------------------------------------------------------------------------- |
@@ -24,7 +27,24 @@ In **Settings → Variables and secrets**, set:
 | `CELLMAP_HF_NAME`  | `mito` (optional, defaults to the last segment of the repo)                              |
 | `CELLMAP_DATASET`  | `s3://janelia-cosem-datasets/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8/`  |
 
-Restart the Space.
+`CELLMAP_MODEL_TYPE` defaults to `huggingface`, so it can be omitted.
+
+### Mode B — BioImage Model Zoo model
+
+| Variable             | Example                                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `CELLMAP_MODEL_TYPE` | `bioimage`                                                                                                |
+| `CELLMAP_BMZ_MODEL`  | `hiding-blowfish` (any [BMZ](https://bioimage.io/) id)                                                    |
+| `CELLMAP_VOXEL_SIZE` | `8,8,8` (nm/voxel, comma-separated `z,y,x`)                                                               |
+| `CELLMAP_BMZ_NAME`   | `mito` (optional, defaults to the BMZ id)                                                                 |
+| `CELLMAP_DATASET`    | `s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8/s1`                       |
+
+`bioimage` mode runs the BMZ model via cellmap-flow's `BioModelConfig`,
+which loads the model with `bioimageio.core` and applies the RDF-declared
+preprocessing. Pick `CELLMAP_VOXEL_SIZE` to match the model's training
+resolution (e.g. 8 nm for `hiding-blowfish`).
+
+Restart the Space after changing variables.
 
 ## Endpoints
 
@@ -55,4 +75,6 @@ Space does it.
 ## Forking for a different model
 
 Each Space hosts one model + one dataset. To serve a different combo, fork
-this Space and change `CELLMAP_HF_REPO` / `CELLMAP_DATASET`.
+this Space and change the env vars (cellmap-HF: `CELLMAP_HF_REPO`,
+`CELLMAP_DATASET`; BMZ: `CELLMAP_BMZ_MODEL`, `CELLMAP_VOXEL_SIZE`,
+`CELLMAP_DATASET`).

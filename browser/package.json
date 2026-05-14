@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "render-dashboard": "python ../browser/scripts/render-dashboard.py || python3 ../browser/scripts/render-dashboard.py",
-    "dev": "npm run render-dashboard && vite --host",
-    "build": "npm run render-dashboard && vite build",
+    "export-bmz": "python ../browser/scripts/export-bmz-onnx.py || python3 ../browser/scripts/export-bmz-onnx.py",
+    "dev": "npm run render-dashboard && npm run export-bmz && vite --host",
+    "build": "npm run render-dashboard && npm run export-bmz && vite build",
     "preview": "vite preview --host",
     "start": "npm run build && vite preview --host"
   },
   "dependencies": {
-    "neuroglancer": "^2.41.2"
+    "neuroglancer": "^2.41.2",
+    "onnxruntime-web": "^1.20.0",
+    "zarrita": "^0.5.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

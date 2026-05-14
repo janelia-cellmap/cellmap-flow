@@ -1,13 +1,20 @@
 # cellmap-flow inference backend, deployable as a Hugging Face Space
 # (Docker SDK).
 #
-# Hosts one cellmap-flow virtual-zarr server, parameterized by env vars:
-#   CELLMAP_HF_REPO     — HF repo to load (e.g. cellmap/jrc_mus-livers_16nm_to_8nm_mito)
-#   CELLMAP_HF_NAME     — display name (defaults to last segment of repo)
-#   CELLMAP_DATASET     — input zarr URL (e.g. s3://janelia-cosem-datasets/.../*.zarr/recon-1/em/fibsem-uint8)
+# Hosts one cellmap-flow virtual-zarr server. Mode is selected by
+# CELLMAP_MODEL_TYPE; see entrypoint.sh for the required env vars.
 #
-# To use a different model + dataset, fork the Space and change the secrets
-# in HF Settings -> Variables and secrets.
+# Quick examples (set in HF Settings → Variables and secrets):
+#
+#   # cellmap HF model (default)
+#   CELLMAP_HF_REPO=cellmap/jrc_mus-livers_16nm_to_8nm_mito
+#   CELLMAP_DATASET=s3://janelia-cosem-datasets/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8/
+#
+#   # BioImage Model Zoo model
+#   CELLMAP_MODEL_TYPE=bioimage
+#   CELLMAP_BMZ_MODEL=hiding-blowfish
+#   CELLMAP_VOXEL_SIZE=8,8,8
+#   CELLMAP_DATASET=s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8/s1
 
 FROM python:3.11-slim
 
@@ -31,10 +38,12 @@ WORKDIR /app
 # pin a recent stable. Cellmap-flow uses torch for HF model loading.
 RUN pip install --no-cache-dir --user --index-url https://download.pytorch.org/whl/cpu torch
 
-# cellmap-flow itself plus huggingface_hub. Install from PyPI; the dashboard
-# templates aren't needed because we serve the virtual-zarr only.
+# cellmap-flow with the BMZ extra (pulls bioimageio.core + xarray) so the
+# `cellmap_flow_server bioimage` subcommand works in addition to the
+# `huggingface` subcommand. The dashboard templates aren't strictly needed
+# (we serve the virtual-zarr only) but they come with the install.
 RUN pip install --no-cache-dir --user \
-    cellmap-flow \
+    "cellmap-flow[bioimageio]" \
     huggingface_hub \
     s3fs
 
