@@ -459,13 +459,35 @@ function interceptApiFetches(): void {
         return new Response(JSON.stringify({ error: (err as Error).message }), { status: 502, headers: { "content-type": "application/json" } });
       }
     }
-    // Pipeline-config endpoints from the dashboard's own Submit-All buttons.
-    // The browser flow reads the pipeline UI directly at Connect time via
-    // window.gather{InputNorm,PostProcess}Data, so these submits don't have
-    // anything to do — but they exist in the dashboard's inline JS and POST
-    // to /api/*. Return a success no-op so users don't see error toasts.
+    // /api/process — pipeline configuration. Forward to the configured
+    // inference-server URL so the cellmap-flow server (Colab / HF Space /
+    // workstation) can apply the new normalizers + postprocessors via its
+    // minimal /api/process endpoint. Subsequent chunk requests honor the
+    // updated g.input_norms / g.postprocess globals.
+    if (u.pathname === "/api/process" && init?.method?.toUpperCase() === "POST") {
+      const serverInput = document.getElementById("serverUrlInput") as HTMLInputElement | null;
+      const serverUrl = (serverInput?.value ?? "").trim().replace(/\/$/, "");
+      if (!serverUrl) {
+        return new Response(
+          JSON.stringify({ error: "no inference server URL configured" }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      try {
+        const r = await orig(`${serverUrl}/api/process`, init);
+        return r;
+      } catch (err) {
+        return new Response(
+          JSON.stringify({ error: `forwarding to ${serverUrl}/api/process failed: ${(err as Error).message}` }),
+          { status: 502, headers: { "content-type": "application/json" } },
+        );
+      }
+    }
+    // The remaining dashboard config endpoints (models / set-data /
+    // server-config) don't have a cellmap-flow-server equivalent — the
+    // browser flow handles those at Connect time. Return a success no-op
+    // so the dashboard's inline JS doesn't toast errors.
     const STUBBED_ENDPOINTS = [
-      "/api/process",
       "/api/models",
       "/api/set-data",
       "/api/server-config",
@@ -474,7 +496,7 @@ function interceptApiFetches(): void {
       return new Response(
         JSON.stringify({
           success: true,
-          note: "browser-only mode: pipeline + dataset are applied at Connect time, no separate submit needed.",
+          note: "browser-only mode: dataset is applied at Connect time, no separate submit needed.",
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );

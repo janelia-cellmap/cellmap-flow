@@ -100,6 +100,33 @@ class CellMapFlowServer:
         def home():
             return redirect("/apidocs/")
 
+        # Minimal pipeline-config endpoint: the browser dashboard's
+        # "Submit All" buttons POST the checked normalizers + post-
+        # processors here, and we apply them to g so subsequent chunk
+        # requests honor them. The full dashboard's /api/process also
+        # touches neuroglancer-viewer state that doesn't apply when
+        # running just the inference server (e.g. Colab / HF Space), so
+        # this is the minimal inference-relevant subset.
+        @self.app.route("/api/process", methods=["POST"])
+        def api_process():
+            from flask import request, jsonify
+            from cellmap_flow.norm.input_normalize import get_normalizations
+            from cellmap_flow.post.postprocessors import get_postprocessors
+            data = request.get_json() or {}
+            input_norm = data.get("input_norm") or []
+            postprocess = data.get("postprocess") or []
+            try:
+                g.input_norms = get_normalizations(input_norm)
+                g.postprocess = get_postprocessors(postprocess)
+            except Exception as e:
+                logger.exception("apply pipeline failed")
+                return jsonify({"error": str(e)}), 400
+            return jsonify({
+                "success": True,
+                "input_norms": [type(n).__name__ for n in g.input_norms],
+                "postprocess": [type(p).__name__ for p in g.postprocess],
+            })
+
         @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
             self.refresh_dataset(dataset)
