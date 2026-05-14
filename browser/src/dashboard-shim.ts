@@ -465,11 +465,19 @@ function interceptApiFetches(): void {
     // minimal /api/process endpoint. Subsequent chunk requests honor the
     // updated g.input_norms / g.postprocess globals.
     if (u.pathname === "/api/process" && init?.method?.toUpperCase() === "POST") {
+      // The serverUrlInput element is removed when Connect replaces the
+      // "No Viewer Connected" panel with NG. Fall back to the last value
+      // we persisted (set during Connect) or the ?backend= URL param.
       const serverInput = document.getElementById("serverUrlInput") as HTMLInputElement | null;
-      const serverUrl = (serverInput?.value ?? "").trim().replace(/\/$/, "");
+      const fromInput = (serverInput?.value ?? "").trim();
+      const fromLs = readLs().serverUrl;
+      const fromQp = new URLSearchParams(window.location.search).get("backend")
+        ?? new URLSearchParams(window.location.search).get("server")
+        ?? "";
+      const serverUrl = (fromInput || fromLs || fromQp).trim().replace(/\/$/, "");
       if (!serverUrl) {
         return new Response(
-          JSON.stringify({ error: "no inference server URL configured" }),
+          JSON.stringify({ error: "no inference server URL configured (form, localStorage, or ?backend=)" }),
           { status: 400, headers: { "content-type": "application/json" } },
         );
       }
