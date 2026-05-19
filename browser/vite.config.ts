@@ -10,46 +10,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // CSS/JS/images via that prefix.
 const dashboardStaticDir = path.resolve(here, "..", "cellmap_flow", "dashboard", "static");
 
-// onnxruntime-web ships its wasm + jsep .mjs files in node_modules. ORT
-// loads them at runtime from `env.wasm.wasmPaths`, so we mirror them at
-// /ort/ for both dev (middleware) and build (emit).
-const ortDistDir = path.resolve(here, "node_modules", "onnxruntime-web", "dist");
-
-function ortStatic(): Plugin {
-  return {
-    name: "onnxruntime-web-static",
-    configureServer(server) {
-      server.middlewares.use("/ort", (req, res, next) => {
-        if (!req.url) return next();
-        const rel = decodeURIComponent(req.url.split("?")[0].replace(/^\/+/, ""));
-        const p = path.join(ortDistDir, rel);
-        if (!p.startsWith(ortDistDir) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) {
-          return next();
-        }
-        const ext = path.extname(p);
-        const types: Record<string, string> = {
-          ".wasm": "application/wasm",
-          ".mjs": "application/javascript",
-          ".js": "application/javascript",
-        };
-        res.setHeader("Content-Type", types[ext] ?? "application/octet-stream");
-        fs.createReadStream(p).pipe(res);
-      });
-    },
-    generateBundle() {
-      if (!fs.existsSync(ortDistDir)) return;
-      for (const name of fs.readdirSync(ortDistDir)) {
-        if (!/\.(wasm|mjs)$/.test(name)) continue;
-        this.emitFile({
-          type: "asset",
-          fileName: `ort/${name}`,
-          source: fs.readFileSync(path.join(ortDistDir, name)),
-        });
-      }
-    },
-  };
-}
-
 function dashboardStatic(): Plugin {
   return {
     name: "cellmap-flow-dashboard-static",
@@ -119,10 +79,6 @@ const NG_CONDITIONS = [
 
 export default defineConfig({
   server: {
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "credentialless",
-    },
     watch: {
       ignored: ["**/node_modules/**", "**/.vite/**", "**/dist/**", "**/public/**"],
       usePolling: true,
@@ -135,11 +91,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: path.resolve(here, "index.html"),
         dashboard: path.resolve(here, "dashboard.html"),
         pipeline_builder: path.resolve(here, "pipeline_builder.html"),
       },
     },
   },
-  plugins: [dashboardStatic(), ortStatic()],
+  plugins: [dashboardStatic()],
 });
