@@ -78,6 +78,10 @@ def run_multiple(
         # predictions appear in NG once ready (~60-90s) without blocking
         # dashboard startup. Patch a3d1cd9: job.host uses localhost (not
         # get_public_ip) so the SSH-tunneled browser can reach the URL.
+        # Phase 8 amendment: job.host is proxy-aware. bootstrap_dashboard.sh
+        # exports CMFLOW_PROXY_MODE; under spine, browser reaches the
+        # subprocess via spine's nginx /inf-{port}/ forward instead of
+        # localhost.
         from cellmap_flow.utils.web_utils import get_free_port
         server_port = get_free_port()
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
@@ -89,8 +93,14 @@ def run_multiple(
             command, job_name=model_name, queue=queue, charge_group=charge_group,
             wait_for_host=False,
         )
-        # Set the host immediately since we assigned the port
-        job.host = f"http://localhost:{server_port}"
+        proxy_mode = os.environ.get("CMFLOW_PROXY_MODE", "direct-ssh")
+        if proxy_mode == "spine":
+            spine_url = os.environ.get(
+                "CMFLOW_SPINE_URL", "https://spine.med.uvm.edu"
+            ).rstrip("/")
+            job.host = f"{spine_url}/inf-{server_port}"
+        else:
+            job.host = f"http://localhost:{server_port}"
         logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
         return model_name
 
