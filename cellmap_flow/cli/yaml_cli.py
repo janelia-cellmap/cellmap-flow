@@ -70,14 +70,28 @@ def run_multiple(
             logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
             current_data_path = os.path.join(dataset_path, model.scale)
 
-        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
+        # Pre-assign a port so we know the host URL immediately (no waiting).
+        # Patch b8c22bf: instead of waiting up to 120s for the subprocess to
+        # print its address, get_free_port() picks an unused port and we pass
+        # -p {port}. wait_for_host=False short-circuits the parent's
+        # output-monitoring loop; the model loads in the background and
+        # predictions appear in NG once ready (~60-90s) without blocking
+        # dashboard startup. Patch a3d1cd9: job.host uses localhost (not
+        # get_public_ip) so the SSH-tunneled browser can reach the URL.
+        from cellmap_flow.utils.web_utils import get_free_port
+        server_port = get_free_port()
+        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
         model_name = getattr(model, "name", None) or type(model).__name__
 
         logger.info(f"Submitting job for model: {model_name}")
         logger.warning(f"Executing command: {command}")
-        start_hosts(
-            command, job_name=model_name, queue=queue, charge_group=charge_group
+        job = start_hosts(
+            command, job_name=model_name, queue=queue, charge_group=charge_group,
+            wait_for_host=False,
         )
+        # Set the host immediately since we assigned the port
+        job.host = f"http://localhost:{server_port}"
+        logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
         return model_name
 
     if models:
