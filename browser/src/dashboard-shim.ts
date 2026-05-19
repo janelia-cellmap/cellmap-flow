@@ -365,9 +365,25 @@ function rewireConnectPanel(): void {
 
       const layers: Array<Record<string, unknown>> = [];
       if (rawZarr) {
-        const rawSource = rawZarr.startsWith("zarr://")
-          ? rawZarr
-          : `zarr://${rawZarr.replace(/\/$/, "")}/`;
+        // Build NG source URL from whatever the user supplied:
+        //   precomputed://gs://...  → as-is (NG-precomputed format)
+        //   precomputed://https://... → as-is
+        //   gs://.../*.zarr/... → zarr://gs://...
+        //   s3://.../*.zarr/... → already handled by zarr:// in NG
+        //   zarr://...            → as-is
+        //   http(s)://.../*.zarr/... → zarr://...
+        //   default (e.g. a .zarr path)            → zarr://...
+        let rawSource: string;
+        if (rawZarr.startsWith("precomputed://") || rawZarr.startsWith("zarr://") || rawZarr.startsWith("n5://")) {
+          rawSource = rawZarr.replace(/\/$/, "");
+        } else if (rawZarr.includes(".zarr") || rawZarr.includes(".n5")) {
+          rawSource = `zarr://${rawZarr.replace(/\/$/, "")}/`;
+        } else {
+          // No explicit format and no .zarr/.n5 in path — probably a
+          // precomputed dataset. Try precomputed:// (NG will 404 if wrong
+          // and the user can fix the URL).
+          rawSource = `precomputed://${rawZarr.replace(/\/$/, "")}`;
+        }
         layers.push({
           type: "image",
           name: "raw",
