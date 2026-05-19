@@ -126,7 +126,7 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
         # tab reloads (unlike runtime overrides from the JS console).
         s.concurrent_downloads = 32
 
-        g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
+        g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw, min_scale=getattr(g, "min_scale", 1))
         s.layers["data"] = g.raw
         colors = [
             "red",

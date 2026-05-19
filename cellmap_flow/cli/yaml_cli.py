@@ -202,6 +202,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     charge_group = config["charge_group"]
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
+    # Global `min_scale` skips pyramid levels below sN on the EM data layer
+    # (part of 815344e perf: s0 opt-out). Default 1 = skip s0 (6 nm at full
+    # resolution), per existing YAML conventions. Per-layer min_scale in
+    # extra_layers entries is independent (defaults to 0 = include s0).
+    g.min_scale = config.get("min_scale", 1)
 
     # Update globals and save to cache
     g.queue = queue
