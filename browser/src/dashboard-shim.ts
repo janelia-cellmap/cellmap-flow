@@ -329,19 +329,58 @@ function rewireConnectPanel(): void {
       // form is just an http(s) URL; we wrap it in zarr:// for NG.
       const qp = new URLSearchParams(window.location.search);
       const rawZarr = (qp.get("raw") ?? "").trim();
+      // Optional ?voxelSize=Z,Y,X (in nm) override. When set, force the
+      // raw layer's input dimensions to this size so it appears in the
+      // same pseudo-isotropic NG world coords as the inference server's
+      // output (which already lies about voxel size via --voxel-size on
+      // the cellmap_flow_server side). Without this, NG honors the raw
+      // zarr's actual scale (e.g. 5.24 × 4 × 4 nm) and the two layers
+      // misalign by a factor of (actual/lied) per axis.
+      const voxelSizeOverride = (qp.get("voxelSize") ?? "").trim();
+      let vz = voxelSizeNm, vy = voxelSizeNm, vx = voxelSizeNm;
+      if (voxelSizeOverride) {
+        const parts = voxelSizeOverride.split(",").map((s) => parseFloat(s.trim()));
+        if (parts.length === 3 && parts.every((p) => Number.isFinite(p) && p > 0)) {
+          [vz, vy, vx] = parts;
+        }
+      }
       const layers: Array<Record<string, unknown>> = [];
       if (rawZarr) {
         const rawSource = rawZarr.startsWith("zarr://")
           ? rawZarr
           : `zarr://${rawZarr.replace(/\/$/, "")}/`;
-        layers.push({ type: "image", source: rawSource, name: "raw", visible: true });
+        const rawLayer: Record<string, unknown> = { type: "image", name: "raw", visible: true };
+        if (voxelSizeOverride) {
+          // Override the raw zarr's reported dims with our forced
+          // voxel size so it shares the same NG world-coord system as
+          // the inference layer. Without inputDimensions NG would read
+          // the actual zarr metadata and the layers would misalign.
+          rawLayer.source = {
+            url: rawSource,
+            transform: {
+              outputDimensions: {
+                z: [vz * NM, "m"],
+                y: [vy * NM, "m"],
+                x: [vx * NM, "m"],
+              },
+              inputDimensions: {
+                z: [vz * NM, "m"],
+                y: [vy * NM, "m"],
+                x: [vx * NM, "m"],
+              },
+            },
+          };
+        } else {
+          rawLayer.source = rawSource;
+        }
+        layers.push(rawLayer);
       }
       layers.push({ type: "image", source: inferenceUrl, name: "inference", visible: true });
       mountNg({
         dimensions: {
-          z: [voxelSizeNm * NM, "m"],
-          y: [voxelSizeNm * NM, "m"],
-          x: [voxelSizeNm * NM, "m"],
+          z: [vz * NM, "m"],
+          y: [vy * NM, "m"],
+          x: [vx * NM, "m"],
         },
         layers,
         selectedLayer: { visible: true, layer: "inference" },
