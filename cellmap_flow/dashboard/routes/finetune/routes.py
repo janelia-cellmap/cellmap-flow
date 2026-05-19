@@ -34,6 +34,10 @@ from cellmap_flow.dashboard.routes.finetune.training import (
 )
 from cellmap_flow.dashboard.routes.finetune.viewer import (
     add_finetuned_layer_to_viewer_response,
+    add_image_layer_to_viewer_response,
+    add_segmentation_layer_to_viewer_response,
+    remove_layer_from_viewer_response,
+    rename_layer_in_viewer_response,
 )
 from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
     get_load_crops_progress_response,
@@ -172,6 +176,26 @@ def sync_instance_correction():
 @finetune_bp.route("/api/viewer/cc3d-relabel-annotation", methods=["POST"])
 def cc3d_relabel_annotation():
     return cc3d_relabel_annotation_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/add-image-layer", methods=["POST"])
+def add_image_layer_to_viewer():
+    return add_image_layer_to_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/add-segmentation-layer", methods=["POST"])
+def add_segmentation_layer_to_viewer():
+    return add_segmentation_layer_to_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/remove-layer", methods=["POST"])
+def remove_layer_from_viewer():
+    return remove_layer_from_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/rename-layer", methods=["POST"])
+def rename_layer_in_viewer():
+    return rename_layer_in_viewer_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
