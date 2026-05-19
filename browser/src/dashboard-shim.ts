@@ -383,7 +383,44 @@ function rewireConnectPanel(): void {
       // its finest level's xy, NG aligns them in world coords because
       // their physical extents are derived consistently.
       layers.push({ type: "image", source: inferenceUrl, name: "inference", visible: true });
-      mountNg({
+
+      // Try to center the view on the inference dataset. We need:
+      //   shape    from /<model>/s0/.zarray            (voxels)
+      //   voxelNm  from /<model>/.zattrs (OME-NGFF)    (nm per voxel)
+      // NG `position` is in output-dim units, NOT inference voxels, so
+      // the center is shape × voxelNm / (2 × outputDimNm). Forgetting the
+      // voxelNm/outputDim factor was an earlier bug that landed you at
+      // 1/4 of the extent when cellmap-flow's voxel size and our world
+      // unit differed (e.g. inference at 8nm, NG world at 4nm).
+      let position: number[] | null = null;
+      try {
+        const [arrRes, attrsRes] = await Promise.all([
+          fetch(`${serverUrl}/${datasetPath}/s0/.zarray`),
+          fetch(`${serverUrl}/${datasetPath}/.zattrs`),
+        ]);
+        if (arrRes.ok && attrsRes.ok) {
+          const arr = await arrRes.json() as { shape: number[] };
+          const attrs = await attrsRes.json() as {
+            multiscales?: Array<{
+              datasets?: Array<{ coordinateTransformations?: Array<{ type: string; scale?: number[] }> }>;
+            }>;
+          };
+          const s = arr.shape.slice(0, 3);  // [z, y, x] in voxels
+          const xform = attrs.multiscales?.[0]?.datasets?.[0]?.coordinateTransformations?.find(t => t.type === "scale");
+          // Scale array may have trailing channel; take leading 3.
+          const infVoxNm = xform?.scale?.slice(0, 3) ?? [vz, vy, vx];
+          const outNm = [vz, vy, vx];
+          if (s.length === 3 && infVoxNm.length === 3) {
+            position = [
+              s[0] * infVoxNm[0] / (2 * outNm[0]),
+              s[1] * infVoxNm[1] / (2 * outNm[1]),
+              s[2] * infVoxNm[2] / (2 * outNm[2]),
+            ];
+          }
+        }
+      } catch { /* fall through to default position 0,0,0 */ }
+
+      const ngState: Record<string, unknown> = {
         dimensions: {
           z: [vz * NM, "m"],
           y: [vy * NM, "m"],
@@ -392,7 +429,18 @@ function rewireConnectPanel(): void {
         layers,
         selectedLayer: { visible: true, layer: "inference" },
         layout: "4panel",
-      });
+      };
+      if (position) ngState.position = position;
+      const viewer = mountNg(ngState);
+
+      // Stash for /api/process Submit-All handler so it can bump the
+      // inference layer URL (cache-bust) after the server applies new
+      // normalizers / postprocessors.
+      activeServerBacked = {
+        viewer: viewer as unknown as { state: unknown; [k: string]: unknown },
+        inferenceBaseUrl: inferenceUrl,
+        isoTransform,
+      };
       status.style.color = "#4ade80";
       status.textContent = rawZarr
         ? `Open. Raw: ${rawZarr}, Inference: ${inferenceUrl}`
@@ -411,6 +459,16 @@ function rewireConnectPanel(): void {
 // Track the active BMZ in-browser activation so Submit-All POSTs to
 // /api/process can re-apply the pipeline locally (no backend exists).
 let activeBmz: { modelId: string; zarrUrl: string } | null = null;
+
+// Track the active server-backed activation so Submit-All can refresh
+// the inference layer (NG won't re-fetch chunks unless the layer's
+// source URL changes, but cellmap_flow_server returns 200/success on
+// /api/process without bumping the URL).
+let activeServerBacked: {
+  viewer: { state: unknown; [k: string]: unknown };  // structural — NG viewer
+  inferenceBaseUrl: string;
+  isoTransform: Record<string, unknown> | null;
+} | null = null;
 
 async function openBmzPath(
   bmzModelId: string,
@@ -579,6 +637,26 @@ function interceptApiFetches(): void {
       }
       try {
         const r = await orig(`${serverUrl}/api/process`, init);
+        // If submit succeeded, bump the inference layer URL with a
+        // cache-busting query so NG re-fetches chunks under the new
+        // server-side g.input_norms / g.postprocess. cellmap_flow_server
+        // ignores unknown query params, but NG sees a new URL and
+        // invalidates its tile cache.
+        if (r.ok && activeServerBacked) {
+          try {
+            const v = activeServerBacked.viewer as { state: { layers: Array<{ name: string; source: unknown }>; toJSON: () => unknown }; setState?: (s: unknown) => void };
+            const versioned = `${activeServerBacked.inferenceBaseUrl}?v=${Date.now()}`;
+            const layersList = v.state.layers;
+            const idx = layersList.findIndex((l) => l.name === "inference");
+            if (idx >= 0) {
+              layersList[idx].source = activeServerBacked.isoTransform
+                ? { url: versioned, transform: activeServerBacked.isoTransform }
+                : versioned;
+            }
+          } catch (e) {
+            console.warn("[shim] could not refresh inference layer:", e);
+          }
+        }
         return r;
       } catch (err) {
         return new Response(
