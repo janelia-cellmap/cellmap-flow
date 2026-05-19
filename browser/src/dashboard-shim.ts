@@ -181,11 +181,31 @@ function rewireConnectPanel(): void {
             : rawSource,
         });
       }
+      // Default shader: discard sub-threshold values. Two reasons:
+      //   - NG renders unfetched chunks using the zarr's fill_value
+      //     (cellmap_flow_server hard-codes 0), so without this
+      //     pending tiles appear as opaque black until they load,
+      //     which on a slow tunnel looks like "model output zero
+      //     forever" to the user.
+      //   - For mito segmentation users actually want to see *where*
+      //     detections are, not opaque black for "no detection".
+      // The shader controls let the user adjust the threshold (or
+      // remove the discard) interactively from the Rendering tab.
+      const inferenceShader = [
+        '#uicontrol invlerp normalized(range=[0, 1], window=[0, 1])',
+        '#uicontrol float threshold slider(min=0, max=1, default=0.001)',
+        'void main() {',
+        '  float v = normalized();',
+        '  if (v < threshold) discard;',
+        '  emitGrayscale(v);',
+        '}',
+      ].join('\n');
       layers.push({
         type: "image",
         source: inferenceUrl,
         name: "inference",
         visible: true,
+        shader: inferenceShader,
       });
 
       // Center the view on the inference dataset. We need the inference
