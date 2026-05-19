@@ -385,20 +385,30 @@ function interceptApiFetches(): void {
         // and per-config isolation come for free.
         if (r.ok && activeServerBacked) {
           try {
+            // NG's viewer state isn't a plain JS object — go through
+            // toJSON() / restoreState() to mutate it safely.
             const v = activeServerBacked.viewer as {
-              state: { layers: Array<{ name: string; source: unknown }> };
+              state: { toJSON: () => Record<string, unknown>; restoreState: (s: unknown) => void };
+            };
+            const stateJson = v.state.toJSON() as {
+              layers?: Array<{ name?: string; source?: unknown; [k: string]: unknown }>;
+              [k: string]: unknown;
             };
             const newUrl = buildInferenceUrl(
               activeServerBacked.serverUrl,
               activeServerBacked.datasetPath,
               encodeArgs(),
             );
-            const layersList = v.state.layers;
+            const layersList = stateJson.layers ?? [];
             const idx = layersList.findIndex((l) => l.name === "inference");
             if (idx >= 0) {
               layersList[idx].source = activeServerBacked.isoTransform
                 ? { url: newUrl, transform: activeServerBacked.isoTransform }
                 : newUrl;
+              v.state.restoreState(stateJson);
+              console.log("[shim] inference layer URL refreshed:", newUrl);
+            } else {
+              console.warn("[shim] no inference layer found in state to refresh");
             }
           } catch (e) {
             console.warn("[shim] could not refresh inference layer:", e);
