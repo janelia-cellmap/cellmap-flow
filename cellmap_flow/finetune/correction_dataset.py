@@ -80,17 +80,33 @@ class CorrectionDataset(Dataset):
         z = zarr.open_group(path_str, mode="r")
 
         for correction_id in z.keys():
-            corr_group = z[correction_id]
+            # Defensive open: zarr's __contains__ and __getitem__ can disagree
+            # on a child key during a concurrent write. The dashboard's
+            # `periodic_sync_annotations()` thread writes chunks while the
+            # trainer is starting up; the writer's create_correction_zarr
+            # builds .zgroup files in non-atomic order, so the child listing
+            # transiently contains "raw" before the subgroup's full
+            # `.zgroup` is in place. Catch the KeyError, skip, and the
+            # next training restart will pick up the chunk after the sync
+            # thread finishes the write.
+            try:
+                corr_group = z[correction_id]
 
-            # Check if correction has required data
-            # Support both 'mask' (from test scripts) and 'annotation' (from dashboard)
-            has_raw = "raw" in corr_group
-            has_mask = "mask" in corr_group
-            has_annotation = "annotation" in corr_group
+                # Check if correction has required data
+                # Support both 'mask' (from test scripts) and 'annotation' (from dashboard)
+                has_raw = "raw" in corr_group
+                has_mask = "mask" in corr_group
+                has_annotation = "annotation" in corr_group
 
-            has_raw_s0 = has_raw and "s0" in corr_group["raw"]
-            has_mask_s0 = has_mask and "s0" in corr_group["mask"]
-            has_annotation_s0 = has_annotation and "s0" in corr_group["annotation"]
+                has_raw_s0 = has_raw and "s0" in corr_group["raw"]
+                has_mask_s0 = has_mask and "s0" in corr_group["mask"]
+                has_annotation_s0 = has_annotation and "s0" in corr_group["annotation"]
+            except KeyError as e:
+                logger.warning(
+                    f"Skipping {correction_id}: KeyError accessing zarr children "
+                    f"(likely concurrent write by periodic_sync_annotations): {e}"
+                )
+                continue
 
             if not has_raw_s0 or not (has_mask_s0 or has_annotation_s0):
                 logger.warning(
@@ -146,24 +162,42 @@ class CorrectionDataset(Dataset):
             - raw: (1, Z, Y, X) float32 tensor
             - target: (1, Z, Y, X) float32 tensor, values in [0, 1]
         """
-        correction = self.corrections[idx]
-
         # Load data using ImageDataInterface for consistent data loading
         from cellmap_flow.image_data_interface import ImageDataInterface
 
-        try:
-            raw = ImageDataInterface(
-                correction["raw_path"], normalize=False
-            ).to_ndarray_ts()
-            mask = ImageDataInterface(
-                correction["mask_path"], normalize=False
-            ).to_ndarray_ts()
-        except Exception as e:
-            raise FileNotFoundError(
-                f"Failed loading correction '{correction.get('id', idx)}' "
-                f"raw_path='{correction.get('raw_path')}' "
-                f"mask_path='{correction.get('mask_path')}': {e}"
-            ) from e
+        # Skip-and-fall-forward on transient read errors. The dashboard's
+        # extract_correction_from_chunk thread can race with this read when
+        # the user is actively painting: a chunk dir may exist (so the
+        # startup scan registered it) but raw/s0 inside isn't fully
+        # written yet. Without this, a single race kills the whole training
+        # job. Bound the retry chain so a permanently-broken chunk can't
+        # spin forever.
+        max_attempts = max(8, len(self.corrections) // 100)
+        for attempt in range(max_attempts):
+            correction = self.corrections[(idx + attempt) % len(self.corrections)]
+            try:
+                raw = ImageDataInterface(
+                    correction["raw_path"], normalize=False
+                ).to_ndarray_ts()
+                mask = ImageDataInterface(
+                    correction["mask_path"], normalize=False
+                ).to_ndarray_ts()
+                if attempt > 0:
+                    logger.warning(
+                        f"correction_dataset: skipped {attempt} chunk(s) starting "
+                        f"at idx={idx} due to transient read errors (likely "
+                        f"concurrent-write race with dashboard extract); landed on "
+                        f"'{correction.get('id', (idx + attempt) % len(self.corrections))}'"
+                    )
+                break
+            except Exception as e:
+                if attempt == max_attempts - 1:
+                    raise FileNotFoundError(
+                        f"Failed loading correction '{correction.get('id', idx)}' "
+                        f"after {max_attempts} attempts. Last error: "
+                        f"raw_path='{correction.get('raw_path')}' "
+                        f"mask_path='{correction.get('mask_path')}': {e}"
+                    ) from e
 
         # Convert to float
         raw = raw.astype(np.float32)
@@ -238,7 +272,7 @@ class CorrectionDataset(Dataset):
         Augmentations:
         - Random flips on Z/Y/X axes (50% each)
         - Random 90° rotations in XY plane (0°, 90°, 180°, 270°)
-        - Random intensity scaling for raw (×0.8 to ×1.2)
+        - Symmetric gamma intensity augmentation (range-preserving)
         - Random Gaussian noise for raw (σ=0.01)
 
         Args:
@@ -267,14 +301,21 @@ class CorrectionDataset(Dataset):
             raw = np.rot90(raw, k=k, axes=(1, 2)).copy()
             mask = np.rot90(mask, k=k, axes=(1, 2)).copy()
 
-        # Intensity augmentation for raw only
-        # Random scaling (×0.8 to ×1.2)
-        scale = np.random.uniform(0.8, 1.2)
-        raw = np.clip(raw * scale, 0, 1)
+        # Symmetric gamma augmentation: sign(raw) * |raw|^gamma.
+        # Preserves the full COSEM [-1, +1] convention (the format produced
+        # by the create-volume route and used at inference via LambdaNormalizer
+        # x/255*2-1). Equivalent to plain `raw ** gamma` when input is in
+        # [0, 1] (sign=+1), so [0, 1] use cases are unaffected.
+        # Was: `np.clip(raw * scale, 0, 1)` — destroyed the negative
+        # (electron-dense) half of the COSEM data, including any painted-fg
+        # voxels for dark structures (KD fibers at COSEM≈-0.6, basal bodies,
+        # mitochondrial cristae, etc.).
+        gamma = np.random.uniform(0.8, 1.25)
+        raw = (np.sign(raw) * (np.abs(raw) ** gamma)).astype(np.float32)
 
-        # Random Gaussian noise (σ=0.01)
+        # Random Gaussian noise (σ=0.01); no clip — preserve COSEM range
         noise = np.random.normal(0, 0.01, raw.shape).astype(np.float32)
-        raw = np.clip(raw + noise, 0, 1)
+        raw = raw + noise
 
         return raw, mask
 
@@ -287,6 +328,7 @@ def create_dataloader(
     num_workers: int = 4,
     shuffle: bool = True,
     model_name: Optional[str] = None,
+    oversample_weight: float = 1.0,
 ) -> torch.utils.data.DataLoader:
     # If a virtual-sources manifest is present in this corrections dir,
     # bypass the materialized-chunk dataset entirely and stream patches
@@ -359,10 +401,35 @@ def create_dataloader(
             f"(only {len(dataset)} samples available)"
         )
 
+    # Optional: oversample chunks whose attrs carry a non-empty
+    # `contains_false_merge_labels` list. Used for Run 13+ to upweight
+    # cataloged false-merge geometries (see reference_false_merges_schema).
+    sampler = None
+    use_shuffle = shuffle
+    if oversample_weight != 1.0:
+        weights = []
+        n_tagged = 0
+        for corr in dataset.corrections:
+            tags = corr["metadata"].get("contains_false_merge_labels", [])
+            if tags:
+                weights.append(float(oversample_weight))
+                n_tagged += 1
+            else:
+                weights.append(1.0)
+        sampler = torch.utils.data.WeightedRandomSampler(
+            weights, num_samples=len(dataset), replacement=True,
+        )
+        use_shuffle = False  # mutually exclusive with sampler
+        logger.info(
+            f"WeightedRandomSampler: {n_tagged}/{len(dataset)} tagged chunks "
+            f"upweighted {oversample_weight}x"
+        )
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=actual_batch_size,
-        shuffle=shuffle,
+        shuffle=use_shuffle,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,  # Faster GPU transfer
         persistent_workers=num_workers > 0,  # Keep workers alive between epochs

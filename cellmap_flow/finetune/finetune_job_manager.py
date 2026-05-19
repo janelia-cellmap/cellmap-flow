@@ -299,7 +299,14 @@ class FinetuneJobManager:
             command_parts += ["--offsets", str(offsets)]
 
         command = " ".join(shlex.quote(part) for part in command_parts)
-        return f"stdbuf -oL {command} 2>&1 | tee {shlex.quote(str(log_file))}"
+        # Don't pipe through `tee` — under the LocalProcessJob fallback that
+        # runs on VACC (no bsub), the parent's stdout=PIPE on `tee` shares
+        # the same 64 KB pipe-buffer deadlock as direct PIPE on the cli
+        # command. Log redirection is now done by `run_locally(log_file=...)`
+        # in cellmap_flow.utils.bsub_utils, which opens the file in the
+        # subprocess and feeds child stdout/stderr to it directly. LSF
+        # callers consume stdout via `bpeek` against the job, not via tee.
+        return command
 
     def _build_submission_metadata(
         self,
@@ -598,7 +605,8 @@ class FinetuneJobManager:
             try:
                 lsf_job = run_locally(
                     command=cli_command,
-                    name=job_name
+                    name=job_name,
+                    log_file=log_file,
                 )
                 self.logger.info(f"Started local finetuning job (PID: {lsf_job.process.pid})")
             except Exception as e:
