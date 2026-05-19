@@ -185,6 +185,26 @@ void main() {{
             if shader_controls:
                 layer_kwargs["shaderControls"] = shader_controls
             s.layers[model] = neuroglancer.ImageLayer(**layer_kwargs)
+
+        # Add extra startup layers (pre-built in yaml_cli from extra_layers
+        # config). Entries are (layer, shader, blend) tuples; apply non-None
+        # overrides to the layer object before adding it to the viewer.
+        for lname, item in getattr(g, "_extra_startup_layers", {}).items():
+            if isinstance(item, tuple):
+                llayer, lshader, lblend = item
+                # SegmentationLayer has no shader attribute — skip any
+                # shader override for segmentation entries (they render via
+                # NG's built-in categorical palette instead).
+                is_seg = isinstance(llayer, neuroglancer.SegmentationLayer)
+                if lshader and not is_seg:
+                    llayer.shader = lshader
+                if lblend:
+                    llayer.blend = lblend
+            else:
+                # Backward compat: older _extra_startup_layers entries
+                # were bare layers.
+                llayer = item
+            s.layers[lname] = llayer
     # show(viewer)
     viewer_url = str(g.viewer)
     # When accessed via SSH tunnel, the compute node hostname is not resolvable

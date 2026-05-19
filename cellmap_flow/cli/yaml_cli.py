@@ -211,6 +211,51 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Queue: {queue}")
         return
 
+    # Pre-build additional zarr layers (loaded at startup alongside EM).
+    # Each entry stored as (layer, shader, blend) so generate_neuroglancer_url
+    # can apply the YAML shader + blend mode on the live viewer; without this
+    # the layer falls back to get_raw_layer's hardcoded white [-1,1] shader.
+    extra_layers = config.get("extra_layers", [])
+    if extra_layers:
+        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+        g._extra_startup_layers = {}
+        for layer_cfg in extra_layers:
+            lpath = layer_cfg["path"]
+            lname = layer_cfg["name"]
+            lshader = layer_cfg.get("shader")
+            lblend = layer_cfg.get("blend")
+            # layer_type: "image" (default) or "segmentation". When
+            # segmentation, get_raw_layer returns a SegmentationLayer and
+            # NG renders categorical IDs with its built-in palette.
+            ltype = layer_cfg.get("layer_type", "image")
+            is_seg = ltype == "segmentation"
+            # Per-layer min_scale: defaults to 0 (full pyramid including s0).
+            # The global `min_scale` in the yaml was historically intended
+            # for the EM data layer only — applying it to extra_layers
+            # stripped s0 from segmentation layers, making small instances
+            # under-render even at max zoom.
+            lmin_scale = int(layer_cfg.get("min_scale", 0))
+            # Per-layer disable_meshes (segmentation only): suppress NG's
+            # auto-mesh subsource so segment-pick gestures don't trigger
+            # marching-cubes mesh generation. Defaults to False — current
+            # behavior is unchanged unless explicitly opted-in.
+            ldisable_meshes = bool(layer_cfg.get("disable_meshes", False))
+            logger.info(
+                f"Pre-loading extra zarr layer: {lname} -> {lpath} "
+                f"(type={ltype}, min_scale={lmin_scale}, "
+                f"disable_meshes={ldisable_meshes})"
+            )
+            try:
+                layer = get_raw_layer(
+                    lpath, normalize=False, segmentation=is_seg,
+                    min_scale=lmin_scale,
+                    disable_meshes=ldisable_meshes,
+                )
+                g._extra_startup_layers[lname] = (layer, lshader, lblend)
+            except Exception as e:
+                import traceback
+                logger.error(f"Failed to load extra layer {lname}: {e}\n{traceback.format_exc()}")
+
     # Run the models
     run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
 
