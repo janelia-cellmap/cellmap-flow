@@ -100,21 +100,19 @@ def get_raw_layer(
 
     if is_multiscale:
         try:
-            if _is_remote_path(dataset_path):
-                grp = _open_zarr(dataset_path, mode="r")
-                multiscales = grp.attrs.get("multiscales", None)
-                if multiscales:
-                    scales = [d["path"] for d in multiscales[0]["datasets"]]
-                else:
-                    scales = sorted(
-                        [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
-                        key=lambda x: int(x[1:]),
-                    )
+            # Prefer OME-NGFF multiscales metadata when present (it gives us
+            # exact dataset paths, which need not match an s0/s1 pattern —
+            # e.g. v3 zarrs typically use 0/1/2). Falls back to filtering
+            # group child names. Works uniformly for v2 + v3, local + remote.
+            grp = _open_zarr(dataset_path, mode="r")
+            multiscales = grp.attrs.get("multiscales", None)
+            if multiscales:
+                scales = [d["path"] for d in multiscales[0]["datasets"]]
             else:
-                scales = [
-                    f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-                ]
-                scales.sort(key=lambda x: int(x[1:]))
+                scales = sorted(
+                    [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
+                    key=lambda x: int(x[1:]),
+                )
             if min_scale > 0:
                 scales = [s for s in scales if int(s[1:]) >= min_scale]
             for scale in scales:

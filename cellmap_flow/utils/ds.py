@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -176,13 +176,203 @@ def _is_remote_path(path: str) -> bool:
     return path.startswith("http://") or path.startswith("https://")
 
 
+# --- Zarr v3 read support -------------------------------------------------
+#
+# cellmap-flow's metadata-introspection path historically used zarr-python 2,
+# which only understands the v2 spec (.zarray, .zgroup, .zattrs). v3 stores
+# carry a single zarr.json per node and zarr-python 2 fails to read them.
+#
+# We can't install zarr-python 3 in this environment because funlib.persistence
+# pins zarr<3 (its block-scheduling layer hasn't been ported). Instead, the
+# helpers below introduce a thin read-only proxy that parses zarr.json
+# directly. Data reads still go through tensorstore (which supports v3 +
+# sharding natively); only the metadata path needed work.
+
+
+def _zarr_format(path: str) -> Optional[int]:
+    """Return ``2``, ``3``, or ``None`` based on which zarr-spec files exist
+    at ``path``.
+
+    Prefers a valid v3 ``zarr.json`` (with ``zarr_format=3``) over v2
+    markers when both are present. zarr-python 2's ``zarr.open(path)``
+    defaults to mode ``"a"``, which silently writes a stray ``.zgroup``
+    against a v3 store; honoring the explicit v3 metadata is the friendlier
+    semantics.
+
+    Remote (http/https) paths are reported as v2 unconditionally — current
+    callers don't have any remote v3 stores, and adding remote v3 detection
+    would require an extra fetch we don't need yet.
+    """
+    if _is_remote_path(path):
+        return 2
+    path = _normalize_path(path)
+    if not os.path.isdir(path):
+        return None
+    zj = os.path.join(path, "zarr.json")
+    if os.path.exists(zj):
+        try:
+            with open(zj) as f:
+                meta = json.load(f)
+            if meta.get("zarr_format") == 3:
+                return 3
+        except (OSError, json.JSONDecodeError):
+            pass
+    if (
+        os.path.exists(os.path.join(path, ".zarray"))
+        or os.path.exists(os.path.join(path, ".zgroup"))
+    ):
+        return 2
+    return None
+
+
+class ZarrV3Node:
+    """Read-only metadata proxy over a single v3 ``zarr.json``.
+
+    Duck-types the subset of zarr-python 2's Group/Array interface that
+    cellmap-flow's read paths actually use: ``attrs``, ``shape``, ``chunks``,
+    ``dtype``, ``keys()``, ``__getitem__``, ``path``. Data access still goes
+    through tensorstore via :func:`open_ds_tensorstore` — this proxy is
+    metadata-only.
+
+    For sharded arrays, ``chunks`` returns the *inner* chunk shape (the
+    compression/IO unit), not the outer shard shape. The outer shard shape
+    is available via :attr:`shard_shape` when needed.
+    """
+
+    def __init__(self, path: str):
+        path = _normalize_path(path)
+        zj = os.path.join(path, "zarr.json")
+        if not os.path.exists(zj):
+            raise FileNotFoundError(f"No zarr.json at {path}")
+        with open(zj) as f:
+            self._meta = json.load(f)
+        if self._meta.get("zarr_format") != 3:
+            raise ValueError(
+                f"{zj} is not zarr_format=3 (got {self._meta.get('zarr_format')!r})"
+            )
+        self.path = path
+
+    @property
+    def is_group(self) -> bool:
+        return self._meta.get("node_type") == "group"
+
+    @property
+    def attrs(self) -> dict:
+        return self._meta.get("attributes", {})
+
+    @property
+    def shape(self) -> tuple:
+        if self.is_group:
+            raise AttributeError(f"{self.path} is a v3 group; has no shape")
+        return tuple(self._meta["shape"])
+
+    @property
+    def chunks(self) -> tuple:
+        """Inner chunk shape (compression/IO unit).
+
+        For sharded arrays, returns the codec's inner chunk_shape, NOT the
+        outer chunk_grid shape (which is the shard size). For unsharded
+        arrays, returns the chunk_grid shape directly.
+        """
+        if self.is_group:
+            raise AttributeError(f"{self.path} is a v3 group; has no chunks")
+        for codec in self._meta.get("codecs", []):
+            if codec.get("name") == "sharding_indexed":
+                return tuple(codec["configuration"]["chunk_shape"])
+        return tuple(self._meta["chunk_grid"]["configuration"]["chunk_shape"])
+
+    @property
+    def shard_shape(self) -> Optional[tuple]:
+        """Outer shard shape for sharded arrays; ``None`` for unsharded."""
+        if self.is_group:
+            return None
+        for codec in self._meta.get("codecs", []):
+            if codec.get("name") == "sharding_indexed":
+                return tuple(self._meta["chunk_grid"]["configuration"]["chunk_shape"])
+        return None
+
+    @property
+    def dtype(self):
+        return np.dtype(self._meta["data_type"])
+
+    @property
+    def name(self) -> str:
+        return os.path.basename(os.path.normpath(self.path))
+
+    def keys(self):
+        """List child node names (groups only).
+
+        A child is a subdirectory containing a ``zarr.json``. Hidden entries
+        and non-zarr subdirs are skipped.
+        """
+        if not self.is_group:
+            raise AttributeError(f"{self.path} is a v3 array; has no keys()")
+        out = []
+        try:
+            entries = sorted(os.listdir(self.path))
+        except OSError:
+            return out
+        for entry in entries:
+            child = os.path.join(self.path, entry)
+            if os.path.isdir(child) and os.path.exists(
+                os.path.join(child, "zarr.json")
+            ):
+                out.append(entry)
+        return out
+
+    def __getitem__(self, key: str) -> "ZarrV3Node":
+        child_path = os.path.join(self.path, key)
+        if not os.path.exists(os.path.join(child_path, "zarr.json")):
+            raise KeyError(key)
+        return ZarrV3Node(child_path)
+
+    def __repr__(self) -> str:
+        kind = "group" if self.is_group else "array"
+        return f"<ZarrV3Node {kind} at {self.path}>"
+
+
+def _is_zarr_group(node) -> bool:
+    """Structural check accepting either a zarr-python 2 Group or a
+    :class:`ZarrV3Node` group. Use in place of
+    ``isinstance(node, zarr.hierarchy.Group)``."""
+    if isinstance(node, ZarrV3Node):
+        return node.is_group
+    return isinstance(node, zarr.hierarchy.Group)
+
+
+def _is_zarr_root(node) -> bool:
+    """Structural check for the top of a zarr store.
+
+    For v2, the root is signalled by an empty path within the store.
+    For v3, the root is when the proxy's parent directory is not itself a
+    v3 container.
+    """
+    if isinstance(node, ZarrV3Node):
+        parent = os.path.dirname(os.path.normpath(node.path))
+        return _zarr_format(parent) != 3
+    return node.path == ""
+
+
 def _open_zarr(path, mode="r"):
-    """Open a zarr dataset, handling HTTP/HTTPS URLs via fsspec."""
+    """Open a zarr v2 or v3 dataset.
+
+    Local paths dispatch on which spec marker is present:
+    - ``.zarray`` / ``.zgroup`` → zarr-python 2
+    - ``zarr.json`` (v3) → :class:`ZarrV3Node` (read-only proxy)
+
+    Remote (http/https) paths always go through zarr-python 2 + fsspec.
+    """
     path = _normalize_path(path)
     if _is_remote_path(path):
         import fsspec
 
         return zarr.open(fsspec.get_mapper(path), mode=mode)
+    if _zarr_format(path) == 3:
+        if mode != "r":
+            raise NotImplementedError(
+                f"v3 zarr writes via _open_zarr not supported (path={path}, mode={mode!r})"
+            )
+        return ZarrV3Node(path)
     return zarr.open(path, mode=mode)
 
 
@@ -196,7 +386,8 @@ def _join_path(base, *parts):
 def _is_zarr_container(path: str) -> bool:
     """Check if a local path is a zarr container by looking for zarr metadata files.
 
-    Works for zarr directories that don't have a .zarr extension.
+    Works for zarr directories that don't have a .zarr extension. Detects
+    both v2 (``.zarray`` / ``.zgroup`` / ``.zattrs``) and v3 (``zarr.json``).
     """
     if _is_remote_path(path):
         return False
@@ -204,6 +395,7 @@ def _is_zarr_container(path: str) -> bool:
         os.path.exists(os.path.join(path, ".zgroup"))
         or os.path.exists(os.path.join(path, ".zarray"))
         or os.path.exists(os.path.join(path, ".zattrs"))
+        or os.path.exists(os.path.join(path, "zarr.json"))
     )
 
 
@@ -301,21 +493,36 @@ class LazyNormalization:
 
 
 def _detect_filetype(dataset_path: str) -> str:
-    """Detect whether a dataset path is zarr or n5."""
-    if ".zarr" in dataset_path or ".n5" in dataset_path:
-        return (
-            "zarr"
-            if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
-            else "n5"
-        )
-    # No extension — check filesystem for zarr metadata
+    """Detect the tensorstore driver: ``zarr`` (v2), ``zarr3``, or ``n5``.
+
+    For local paths, inspects the filesystem so v2 and v3 (which share the
+    ``.zarr`` extension) can be distinguished. Falls back to extension
+    parsing for remote paths and for local paths that don't yet exist.
+    """
+    # n5 detection via extension (existing behavior; no v3 equivalent)
+    if ".n5" in dataset_path:
+        if ".zarr" not in dataset_path or dataset_path.rfind(".n5") > dataset_path.rfind(".zarr"):
+            return "n5"
+
+    if _is_remote_path(dataset_path):
+        return "zarr"  # remote v3 not supported yet — current callers don't have any
+
+    # Filesystem detection at the given path
     normalized = os.path.normpath(dataset_path)
+    fmt = _zarr_format(normalized)
+    if fmt == 3:
+        return "zarr3"
+    if fmt == 2:
+        return "zarr"
+
+    # Walk up looking for any zarr marker (handles paths like .zarr/0/sub)
     path = normalized
     while path and path != os.path.dirname(path):
         if _is_zarr_container(path):
-            return "zarr"
+            f = _zarr_format(path)
+            return "zarr3" if f == 3 else "zarr"
         path = os.path.dirname(path)
-    # Default to zarr
+
     return "zarr"
 
 
@@ -588,15 +795,23 @@ def access_parent(node):
 
 
     Args:
-        node (zarr.core.Array or zarr.hierarchy.Group): _description_
+        node: zarr-python 2 ``zarr.core.Array`` / ``zarr.hierarchy.Group``
+              OR v3 :class:`ZarrV3Node`
 
     Raises:
         RuntimeError: returned if the node array is in the parent group,
         or the group itself is the root group
 
     Returns:
-        zarr.hierarchy.Group : parent group that contains input group/array
+        Parent group containing input group/array (same type as input)
     """
+    if isinstance(node, ZarrV3Node):
+        parent_path = os.path.dirname(os.path.normpath(node.path))
+        if _zarr_format(parent_path) != 3:
+            raise RuntimeError(
+                f"{node.name} is at the root of the {node.path} v3 store."
+            )
+        return ZarrV3Node(parent_path)
 
     path = get_url(node)
 
@@ -613,17 +828,17 @@ def check_for_multiscale(group):
     """check if multiscale attribute exists in the input group and for any parent level group
 
     Args:
-        group (zarr.hierarchy.Group): group to check
+        group: zarr-python 2 ``zarr.hierarchy.Group`` or v3 :class:`ZarrV3Node`
 
     Returns:
-        tuple({}, zarr.hierarchy.Group): (multiscales attribute body, zarr group where multiscales was found)
+        tuple({}, group): (multiscales attribute body, zarr group where multiscales was found)
     """
     multiscales = group.attrs.get("multiscales", None)
 
     if multiscales:
         return (multiscales, group)
 
-    if group.path == "":
+    if _is_zarr_root(group):
         return (multiscales, group)
 
     return check_for_multiscale(access_parent(group))
@@ -992,6 +1207,136 @@ def get_ds_info(path: str, mode: str = "r"):
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
         return voxel_size, chunk_shape, shape, roi, axes_names, "precomputed"
+
+    # v3 branch — local zarr_format=3 (sharded or not).
+    # Detected by presence of zarr.json at the given path. v3's OME-NGFF
+    # multiscales metadata lives in the group's zarr.json "attributes" field,
+    # using the same coordinateTransformations schema as v2 .zattrs.
+    if (
+        not _is_remote_path(path)
+        and _zarr_format(_normalize_path(path)) == 3
+    ):
+        ds = _open_zarr(path, mode="r")  # ZarrV3Node
+
+        # Group root: navigate into the first scale via multiscales metadata,
+        # or fall back to the first child array.
+        if _is_zarr_group(ds):
+            multiscales = ds.attrs.get("multiscales", None)
+            if multiscales:
+                ms = multiscales[0]
+                first_dataset = ms["datasets"][0]
+                ds = ds[first_dataset["path"]]
+
+                axes = ms.get("axes", [])
+                spatial_indices = [
+                    i for i, a in enumerate(axes) if a.get("type") == "space"
+                ]
+                if not spatial_indices:
+                    spatial_indices = list(range(len(ds.shape)))
+                axes_names = (
+                    [axes[i]["name"] for i in spatial_indices]
+                    if axes
+                    else ["z", "y", "x"]
+                )
+
+                scale_transform = first_dataset["coordinateTransformations"][0][
+                    "scale"
+                ]
+                voxel_size = Coordinate(
+                    scale_transform[i] for i in spatial_indices
+                )
+                translation = next(
+                    (
+                        t["translation"]
+                        for t in first_dataset["coordinateTransformations"]
+                        if t["type"] == "translation"
+                    ),
+                    [0.0] * len(scale_transform),
+                )
+                offset = Coordinate(translation[i] for i in spatial_indices)
+                shape = Coordinate(ds.shape[i] for i in spatial_indices)
+                chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
+                roi = Roi(offset, voxel_size * shape)
+                return voxel_size, chunk_shape, shape, roi, axes_names, "zarr3"
+
+            # Group without multiscales — pick first child array
+            for key in ds.keys():
+                child = ds[key]
+                if not _is_zarr_group(child):
+                    ds = child
+                    break
+
+        # Array path: try the parent group's multiscales (OME-NGFF pattern)
+        parent_path = os.path.dirname(os.path.normpath(_normalize_path(path)))
+        if _zarr_format(parent_path) == 3:
+            try:
+                parent = ZarrV3Node(parent_path)
+                if _is_zarr_group(parent):
+                    multiscales = parent.attrs.get("multiscales", None)
+                    if multiscales:
+                        ms = multiscales[0]
+                        axes = ms.get("axes", [])
+                        spatial_indices = [
+                            i for i, a in enumerate(axes) if a.get("type") == "space"
+                        ]
+                        if not spatial_indices:
+                            spatial_indices = list(range(len(ds.shape)))
+
+                        sub_path = os.path.basename(
+                            os.path.normpath(_normalize_path(path))
+                        )
+                        dataset_entry = next(
+                            (d for d in ms["datasets"] if d["path"] == sub_path),
+                            ms["datasets"][0],
+                        )
+                        scale_transform = dataset_entry[
+                            "coordinateTransformations"
+                        ][0]["scale"]
+                        voxel_size = Coordinate(
+                            scale_transform[i] for i in spatial_indices
+                        )
+                        translation = next(
+                            (
+                                t["translation"]
+                                for t in dataset_entry["coordinateTransformations"]
+                                if t["type"] == "translation"
+                            ),
+                            [0.0] * len(scale_transform),
+                        )
+                        offset = Coordinate(
+                            translation[i] for i in spatial_indices
+                        )
+                        axes_names = (
+                            [axes[i]["name"] for i in spatial_indices]
+                            if axes
+                            else ["z", "y", "x"]
+                        )
+                        shape = Coordinate(ds.shape[i] for i in spatial_indices)
+                        chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
+                        roi = Roi(offset, voxel_size * shape)
+                        return (
+                            voxel_size,
+                            chunk_shape,
+                            shape,
+                            roi,
+                            axes_names,
+                            "zarr3",
+                        )
+            except Exception as e:
+                logger.warning(
+                    "failed to read v3 parent multiscale metadata for %s: %s"
+                    % (path, e)
+                )
+
+        # Fallback: no multiscales context — defaults
+        dims = min(3, len(ds.shape))
+        voxel_size = Coordinate((1,) * dims)
+        offset = Coordinate((0,) * dims)
+        shape = Coordinate(ds.shape[-dims:])
+        chunk_shape = tuple(ds.chunks[-dims:])
+        axes_names = ["z", "y", "x"][:dims]
+        roi = Roi(offset, voxel_size * shape)
+        return voxel_size, chunk_shape, shape, roi, axes_names, "zarr3"
 
     if _is_remote_path(path):
         ds = _open_zarr(path, mode="r")
