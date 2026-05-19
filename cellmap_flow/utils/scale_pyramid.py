@@ -130,7 +130,12 @@ def get_raw_layer(
                             units="nm",
                             scales=image.voxel_size,
                         ),
-                        voxel_offset=image.offset,
+                        # Patch 30: convert nm offset -> voxel units (NG kwarg
+                        # expects voxels; ImageDataInterface returns nm).
+                        voxel_offset=[
+                            int(o // v)
+                            for o, v in zip(image.offset, image.voxel_size)
+                        ],
                     )
                 )
 
@@ -163,7 +168,10 @@ def get_raw_layer(
                 units="nm",
                 scales=image.voxel_size,
             ),
-            voxel_offset=image.offset,
+            # Patch 30: convert nm offset -> voxel units.
+            voxel_offset=[
+                int(o // v) for o, v in zip(image.offset, image.voxel_size)
+            ],
         )
         if segmentation:
             seg_layer = neuroglancer.SegmentationLayer(

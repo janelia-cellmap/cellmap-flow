@@ -63,7 +63,16 @@ def list_cls_to_dict(ll):
             elms.pop("name")
         except KeyError:
             raise ValueError(f"Normalizer {name} does not have a name key. {elms}")
-        elms = {k: str(v) for k, v in elms.items()}
+        # 81b88b4 part 2: List attrs (e.g. ChannelSelection.channels=[5]) must
+        # serialize as comma-joined strings, not str(list)='[5]', so the
+        # deserializer's int(channel) parse on each comma-split token works
+        # on URL round-trip via the add-finetuned-layer path. Different code
+        # path from stringify_list_values_for_template (used by Submit-All
+        # template render); both are needed.
+        elms = {
+            k: (",".join(str(x) for x in v) if isinstance(v, (list, tuple)) else str(v))
+            for k, v in elms.items()
+        }
         norms[name] = elms
 
     return norms
