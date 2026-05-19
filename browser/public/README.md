@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: green
 sdk: static
 pinned: false
-short_description: cellmap-flow dashboard + Neuroglancer for inspecting model outputs
+short_description: cellmap-flow dashboard + Neuroglancer
 ---
 
 # cellmap-flow (browser)
