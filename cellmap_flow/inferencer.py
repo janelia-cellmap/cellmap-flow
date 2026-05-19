@@ -10,15 +10,25 @@ from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
-# Serialize model forward passes across the threaded Flask server. The
-# Flask dev server runs each request in its own thread (`threaded=True`
-# by default since Flask 1.0), so without this lock NG's parallel chunk
-# fetches run concurrent forwards through the same GPU. On a workstation
-# GPU there's headroom for that; on a constrained GPU (Colab T4, 16 GB)
-# any model that needs >7 GB per forward will OOM under concurrency.
-# Acquiring an uncontended lock is ~µs so this has no measurable cost on
-# fat GPUs that don't need it.
-_INFERENCE_LOCK = threading.Lock()
+# Bound how many model forward passes can be in flight at once across
+# the threaded Flask server. Flask runs each request in its own thread
+# (`threaded=True` by default since Flask 1.0), so without bounding,
+# NG's parallel chunk fetches run concurrent forwards through the same
+# GPU — fine on workstation GPUs, but on a constrained GPU (Colab T4,
+# 16 GB) a heavy 3D model can OOM if too many forwards overlap.
+#
+# Default is 1 (full serialization, prod-safe for big 3D models).
+# Override via env CELLMAP_FLOW_INFERENCE_CONCURRENCY=N to allow N
+# concurrent forwards — useful for small models (BMZ 2D, hiding-blowfish
+# at ~50 MB) where serializing kills throughput because NG fans out 6+
+# chunk requests in parallel and they all funnel through one lane.
+#
+# A semaphore behaves identically to a Lock when N=1, so this is a
+# no-op for users who don't touch the env var.
+import os as _os
+_INFERENCE_CONCURRENCY = max(1, int(_os.environ.get("CELLMAP_FLOW_INFERENCE_CONCURRENCY", "1")))
+_INFERENCE_LOCK = threading.Semaphore(_INFERENCE_CONCURRENCY)
+logger.info(f"Inference concurrency: {_INFERENCE_CONCURRENCY}")
 
 
 def apply_postprocess(data, **kwargs):
