@@ -160,7 +160,7 @@ def create_correction_zarr(
             shape=tuple(raw_crop_shape),
             chunks=(64, 64, 64),
             dtype=raw_dtype,
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            compressor=None,  # neuroglancer browser reader cannot decode blosc
             fill_value=0,
         )
         add_ome_ngff_metadata(raw_group, "raw", raw_voxel_size, raw_offset)
@@ -172,7 +172,7 @@ def create_correction_zarr(
             shape=tuple(annotation_crop_shape),
             chunks=(64, 64, 64),
             dtype="uint8",
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            compressor=None,  # neuroglancer browser reader cannot decode blosc
             fill_value=0,
         )
         add_ome_ngff_metadata(
@@ -187,9 +187,7 @@ def create_correction_zarr(
                 shape=tuple(annotation_crop_shape),
                 chunks=(64, 64, 64),
                 dtype="uint8",
-                compressor=zarr.Blosc(
-                    cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE
-                ),
+                compressor=None,  # neuroglancer browser reader cannot decode blosc
                 fill_value=0,
             )
             add_ome_ngff_metadata(
@@ -285,7 +283,7 @@ def create_annotation_volume_zarr(
             shape=tuple(dataset_shape_voxels),
             chunks=tuple(chunk_size),
             dtype="uint8",
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+            compressor=None,  # neuroglancer browser reader cannot decode blosc
             fill_value=0,
         )
 
@@ -446,20 +444,16 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_nam
 
         logger.info(f"MinIO started (PID: {minio_proc.pid})")
 
-        # Configure mc client
-        subprocess.run(
-            [
-                "mc",
-                "alias",
-                "set",
-                "myserver",
-                f"http://{ip}:{port}",
-                "minio",
-                "minio123",
-            ],
-            check=True,
-            capture_output=True,
-        )
+        # Configure mc client (retry — MinIO may not accept connections
+        # immediately after the port is bound)
+        mc_cmd = ["mc", "alias", "set", "myserver", f"http://{ip}:{port}", "minio", "minio123"]
+        for attempt in range(5):
+            result = subprocess.run(mc_cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                break
+            time.sleep(1)
+        else:
+            raise subprocess.CalledProcessError(result.returncode, mc_cmd, result.stdout, result.stderr)
 
         # Create bucket if needed
         result = subprocess.run(
@@ -499,8 +493,9 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_nam
 
     logger.info(f"Uploaded {zarr_name} to MinIO")
 
+    # Use localhost for SSH tunnel compatibility (browser can't reach compute node IPs)
     minio_url = (
-        f"http://{minio_state['ip']}:{minio_state['port']}"
+        f"http://localhost:{minio_state['port']}"
         f"/{minio_state['bucket']}/{zarr_name}"
     )
     return minio_url

@@ -298,7 +298,10 @@ class CellMapFlowServer:
         return (
             encoded,
             HTTPStatus.OK,
-            {"Content-Type": "application/octet-stream"},
+            {
+                "Content-Type": "application/octet-stream",
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
         )
 
     def _reorder_to_zarr_axes(self, data: np.ndarray) -> np.ndarray:

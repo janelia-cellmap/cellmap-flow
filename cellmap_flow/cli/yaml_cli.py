@@ -27,6 +27,28 @@ from cellmap_flow.models.models_config import ModelConfig
 logger = logging.getLogger(__name__)
 
 
+def _patch_neuroglancer_cache_control() -> None:
+    # Chunk URLs are content-addressed by viewer/volume token, so within a
+    # session the body for a given URL cannot change. Adding `immutable` lets
+    # the browser serve repeats from disk cache with no revalidation
+    # round-trip. Patch 34 (d446769).
+    import neuroglancer.server
+
+    if getattr(neuroglancer.server.SubvolumeHandler, "_cmf_cache_control_patched", False):
+        return
+    _orig_get = neuroglancer.server.SubvolumeHandler.get
+
+    async def _patched_get(self, *args, **kwargs):
+        self.set_header("Cache-Control", "public, max-age=31536000, immutable")
+        return await _orig_get(self, *args, **kwargs)
+
+    neuroglancer.server.SubvolumeHandler.get = _patched_get
+    neuroglancer.server.SubvolumeHandler._cmf_cache_control_patched = True
+
+
+_patch_neuroglancer_cache_control()
+
+
 def run_multiple(
     models: List[ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
 ) -> None:
