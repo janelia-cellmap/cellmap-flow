@@ -324,18 +324,15 @@ function rewireConnectPanel(): void {
       replaceNgPanel();
       const NM = 1e-9;
       const inferenceUrl = `zarr://${serverUrl}/${datasetPath}/`;
-      // Optional ?raw=<https-zarr-url> query param lets a hosted demo
-      // link include the source EM alongside the inference layer. Plain
-      // form is just an http(s) URL; we wrap it in zarr:// for NG.
+      // Optional ?raw=<https-zarr-url> query param.
       const qp = new URLSearchParams(window.location.search);
       const rawZarr = (qp.get("raw") ?? "").trim();
-      // Optional ?voxelSize=Z,Y,X (in nm) override. When set, force the
-      // raw layer's input dimensions to this size so it appears in the
-      // same pseudo-isotropic NG world coords as the inference server's
-      // output (which already lies about voxel size via --voxel-size on
-      // the cellmap_flow_server side). Without this, NG honors the raw
-      // zarr's actual scale (e.g. 5.24 × 4 × 4 nm) and the two layers
-      // misalign by a factor of (actual/lied) per axis.
+      // Optional ?voxelSize=Z,Y,X (in nm). When set we LIE — declare both
+      // the raw layer and the NG output dims to be this voxel size, so the
+      // raw layer and the inference layer (which already lies via cellmap_flow_server
+      // --voxel-size) share the same pseudo-isotropic NG world coords.
+      // Without this, raw uses the zarr's actual anisotropic scale (e.g.
+      // 5.24×4×4 nm for jrc_hela-2 s0) and the two layers float ~2× apart.
       const voxelSizeOverride = (qp.get("voxelSize") ?? "").trim();
       let vz = voxelSizeNm, vy = voxelSizeNm, vx = voxelSizeNm;
       if (voxelSizeOverride) {
@@ -344,37 +341,47 @@ function rewireConnectPanel(): void {
           [vz, vy, vx] = parts;
         }
       }
+      // Per-layer transform that forces both raw + inference layers to
+      // claim the same (vz, vy, vx) voxel size, regardless of what their
+      // zarr metadata reports. Identity matrix → each source voxel maps
+      // 1:1 to one (vz, vy, vx) output voxel.
+      const isoTransform = voxelSizeOverride ? {
+        outputDimensions: {
+          z: [vz * NM, "m"],
+          y: [vy * NM, "m"],
+          x: [vx * NM, "m"],
+        },
+        inputDimensions: {
+          z: [vz * NM, "m"],
+          y: [vy * NM, "m"],
+          x: [vx * NM, "m"],
+        },
+        matrix: [
+          [1, 0, 0, 0],
+          [0, 1, 0, 0],
+          [0, 0, 1, 0],
+        ],
+      } : null;
+
       const layers: Array<Record<string, unknown>> = [];
       if (rawZarr) {
         const rawSource = rawZarr.startsWith("zarr://")
           ? rawZarr
           : `zarr://${rawZarr.replace(/\/$/, "")}/`;
-        const rawLayer: Record<string, unknown> = { type: "image", name: "raw", visible: true };
-        if (voxelSizeOverride) {
-          // Override the raw zarr's reported dims with our forced
-          // voxel size so it shares the same NG world-coord system as
-          // the inference layer. Without inputDimensions NG would read
-          // the actual zarr metadata and the layers would misalign.
-          rawLayer.source = {
-            url: rawSource,
-            transform: {
-              outputDimensions: {
-                z: [vz * NM, "m"],
-                y: [vy * NM, "m"],
-                x: [vx * NM, "m"],
-              },
-              inputDimensions: {
-                z: [vz * NM, "m"],
-                y: [vy * NM, "m"],
-                x: [vx * NM, "m"],
-              },
-            },
-          };
-        } else {
-          rawLayer.source = rawSource;
-        }
-        layers.push(rawLayer);
+        layers.push({
+          type: "image",
+          name: "raw",
+          visible: true,
+          source: isoTransform
+            ? { url: rawSource, transform: isoTransform }
+            : rawSource,
+        });
       }
+      // Inference layer keeps its own zarr-reported scale (cellmap-flow's
+      // --voxel-size, typically 8×8×8). NG places it in world coords
+      // using that scale. If the raw layer's lie (vz, vy, vx) matches
+      // its finest level's xy, NG aligns them in world coords because
+      // their physical extents are derived consistently.
       layers.push({ type: "image", source: inferenceUrl, name: "inference", visible: true });
       mountNg({
         dimensions: {
