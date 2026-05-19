@@ -220,3 +220,41 @@ def get_lsf_job_id(finetune_job):
         if hasattr(finetune_job.lsf_job, "process"):
             return f"PID:{finetune_job.lsf_job.process.pid}"
     return None
+
+
+def rewrite_minio_url_for_proxy(minio_url, request):
+    """Rewrite a localhost MinIO URL to a reverse-proxy-routable URL when
+    the dashboard is being accessed via a reverse proxy (e.g. spine
+    HTTPS). No-op for direct localhost access.
+
+    Mirrors the X-Forwarded-Host pattern in
+    `cellmap_flow.dashboard.routes.index_page.index()`. Without this,
+    the dashboard's reload-volume / create-annotation-volume / CIC
+    routes hand the client an `http://localhost:<port>/<bucket>/...`
+    URL that the browser can't reach when the page itself was loaded
+    via spine HTTPS — mixed-content blocking on the chunk fetches.
+
+    Spine's nginx exposes a `/minio/` route (location-prefix-stripped
+    via `proxy_pass http://127.0.0.1:<MINIO_PORT>/`), so the
+    spine-routable form is `<proto>://<forwarded_host>/minio<path>`
+    where `<path>` is the original URL's path component (e.g.
+    `/annotations/vol-X.zarr`).
+
+    Args:
+        minio_url: URL returned by `ensure_minio_serving`,
+            e.g. ``"http://localhost:9002/annotations/vol-X.zarr"``.
+        request: the Flask request object (for headers).
+
+    Returns:
+        The rewritten URL when the request looks reverse-proxied; the
+        original URL otherwise.
+    """
+    forwarded_host = request.headers.get("X-Forwarded-Host") or request.host
+    if not forwarded_host or forwarded_host.startswith(("localhost", "127.")):
+        return minio_url
+    from urllib.parse import urlparse
+    parsed = urlparse(minio_url)
+    if not parsed.netloc or parsed.netloc == forwarded_host:
+        return minio_url
+    proto = request.headers.get("X-Forwarded-Proto", "https")
+    return f"{proto}://{forwarded_host}/minio{parsed.path}"

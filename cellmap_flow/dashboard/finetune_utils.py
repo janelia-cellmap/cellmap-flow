@@ -379,7 +379,7 @@ def create_annotation_volume_zarr(
 # MinIO management
 # ---------------------------------------------------------------------------
 
-def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
+def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_name=None):
     """
     Ensure MinIO is running and upload zarr file.
 
@@ -387,6 +387,15 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
         zarr_path: Path to zarr file to upload
         crop_id: Unique identifier for the crop
         output_base_dir: Base output directory (MinIO will use output_base_dir/.minio)
+        mc_target_name: Optional override for the MinIO bucket object name.
+            Defaults to `basename(zarr_path)` (the historical behavior).
+            When provided, `mc mirror` is invoked with this as the target
+            directory name instead, producing a MinIO URL like
+            `http://.../bucket/<mc_target_name>/...` regardless of the
+            source filename on disk. Used by the multi-ROI workflow
+            (Patch 44) to keep a stable bucket name across sessions even
+            when the source is a dated snapshot like
+            `roi3_20260414_144600.zarr`.
 
     Returns:
         MinIO URL for the zarr file
@@ -471,8 +480,11 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
         # Start periodic sync thread
         start_periodic_sync()
 
-    # Upload zarr file
-    zarr_name = Path(zarr_path).name
+    # Upload zarr file. When mc_target_name is provided, it overrides the
+    # source basename as the MinIO bucket object key — used by the multi-ROI
+    # workflow to keep a stable "roi3_annotation.zarr" bucket name even when
+    # the on-disk source is a dated snapshot like "roi3_20260414_144600.zarr".
+    zarr_name = mc_target_name or Path(zarr_path).name
     target = f"myserver/{minio_state['bucket']}/{zarr_name}"
 
     logger.info(f"Uploading {zarr_name} to MinIO")
@@ -1084,4 +1096,464 @@ def start_periodic_sync():
         thread.start()
         minio_state["sync_thread"] = thread
         logger.info("Started periodic annotation sync thread")
+
+
+
+# ---------------------------------------------------------------------------
+# Instance-correction helpers (Phase 2 port from vacc-compat finetune_utils.py)
+# ---------------------------------------------------------------------------
+
+def create_instance_annotation_volume_from_seg(
+    output_zarr_path,
+    instance_zarr_path,
+    dataset_path,
+    model_name,
+    input_size,
+    input_voxel_size,
+    dilation_radius_voxels=5,
+    chunk_size=None,
+    annotation_dtype="uint16",
+):
+    """Seed a paintable annotation volume from an existing instance zarr.
+
+    Produces a writable annotation zarr (uint16/uint32) in cellmap-flow's
+    `target_transforms.AffinityTargetTransform` label scheme:
+      0 = unannotated (ignored in loss)
+      1 = background (confident — the dilation shell around each instance)
+      2+ = instance IDs (one distinct label per mitochondrion)
+
+    The annotation volume's shape/offset/resolution match the input instance
+    zarr, so NG renders it at the same physical location as the source.
+
+    Args:
+        output_zarr_path: Where to write the new annotation zarr.
+        instance_zarr_path: Path to the uint32 instance zarr produced by
+            `run_postprocess_on_subvolume.py` (must have per-scale `.zattrs`
+            with `resolution` and `offset`, and an `s0` scale).
+        dataset_path: Raw EM zarr path (for `extract_correction_from_chunk`
+            to pull raw context later during training-data extraction).
+        model_name: Model identifier (e.g. "mito_aff_trichocyst").
+        input_size: Model's read_shape as 3-vector (e.g. [178, 178, 178]).
+        input_voxel_size: Model's input voxel size in nm (e.g. [16, 16, 16]).
+        dilation_radius_voxels: Number of voxels to dilate each instance by
+            to form the background shell. 5 @ 16nm output = 80 nm shell.
+        chunk_size: Annotation chunks z,y,x. Defaults to the model write_shape
+            (56 for mito_aff), which matches the training-data convention.
+        annotation_dtype: "uint16" (up to 65534 instances, enough for our
+            ROIs which have 1192–2610) or "uint32" for larger workloads.
+
+    Returns:
+        (success: bool, zarr_path_or_error: str)
+    """
+    from scipy.ndimage import binary_dilation
+
+    if chunk_size is None:
+        chunk_size = [56, 56, 56]
+
+    # Read source metadata from the instance zarr's s0 .zattrs (same path the
+    # dashboard's extra_layers loader uses via get_raw_layer).
+    try:
+        src_s0 = zarr.open(os.path.join(instance_zarr_path, "s0"), mode="r")
+    except Exception as e:
+        return False, f"Failed to open instance zarr s0: {e}"
+    src_attrs = dict(src_s0.attrs)
+    try:
+        source_offset_nm = [float(v) for v in src_attrs["offset"]]
+        source_voxel_size = [float(v) for v in src_attrs["resolution"]]
+    except KeyError as e:
+        return False, f"instance zarr s0 missing attr: {e}"
+    source_shape = tuple(src_s0.shape)
+    logger.info(
+        f"Seeding annotation volume from {instance_zarr_path}: "
+        f"shape={source_shape}, offset_nm={source_offset_nm}, "
+        f"voxel_nm={source_voxel_size}, dilation_r={dilation_radius_voxels} vox"
+    )
+
+    # Load the instance array fully (ROI-sized, fits in memory — ~300 MB uint32).
+    instances = src_s0[:].astype(np.uint32)
+    n_source_instances = int(instances.max())
+    if n_source_instances + 1 > np.iinfo(np.dtype(annotation_dtype)).max:
+        return False, (
+            f"instance count {n_source_instances} + shell label 1 exceeds "
+            f"{annotation_dtype} max {np.iinfo(np.dtype(annotation_dtype)).max}; "
+            "use annotation_dtype='uint32'"
+        )
+
+    fg_mask = instances > 0
+    # Dilation shell: grow each instance by R voxels and subtract the original.
+    # iterate a face-connected 3D structuring element R times for a ball-ish shell.
+    logger.info(
+        f"Computing dilation shell (radius={dilation_radius_voxels} voxels)..."
+    )
+    dilated = binary_dilation(
+        fg_mask, iterations=int(dilation_radius_voxels)
+    )
+    shell_mask = dilated & (~fg_mask)
+
+    # Build annotation: shell=1, instance voxels=(id+1) to reserve label 1 for
+    # background. Unannotated stays 0. Everything done in the target dtype.
+    annotation = np.zeros(source_shape, dtype=annotation_dtype)
+    annotation[shell_mask] = 1
+    annotation[fg_mask] = (instances[fg_mask] + 1).astype(annotation_dtype)
+
+    n_shell = int(shell_mask.sum())
+    n_fg = int(fg_mask.sum())
+    logger.info(
+        f"annotation labels: {n_fg} fg voxels ({n_source_instances} instances), "
+        f"{n_shell} shell (bg) voxels, "
+        f"{int((annotation == 0).sum())} unannotated"
+    )
+
+    # Create the zarr skeleton via the existing helper.
+    success, info = create_annotation_volume_zarr(
+        zarr_path=output_zarr_path,
+        dataset_shape_voxels=list(source_shape),
+        output_voxel_size=list(source_voxel_size),
+        dataset_offset_nm=list(source_offset_nm),
+        chunk_size=list(chunk_size),
+        dataset_path=dataset_path,
+        model_name=model_name,
+        input_size=list(input_size),
+        input_voxel_size=list(input_voxel_size),
+        annotation_dtype=annotation_dtype,
+        annotation_type="instance_annotation_volume",
+    )
+    if not success:
+        return False, info
+
+    # Write the seeded annotation into annotation/s0.
+    try:
+        root = zarr.open(output_zarr_path, mode="r+")
+        root["annotation/s0"][:] = annotation
+        # Record the seed source + parameters so we can re-seed later
+        # without losing track of what this zarr was made from.
+        root.attrs["seed_source_instance_zarr"] = str(instance_zarr_path)
+        root.attrs["seed_dilation_radius_voxels"] = int(dilation_radius_voxels)
+        root.attrs["seed_n_instances"] = n_source_instances
+    except Exception as e:
+        return False, f"Failed to write seeded annotation: {e}"
+
+    # Explicitly drop the large intermediate arrays before returning to the
+    # Flask request handler — Python's refcount GC should free them at the
+    # function's frame pop anyway, but under a tight SLURM cgroup (e.g.
+    # --mem=128G shared with the dashboard + base inference + LoRA serves)
+    # we want to minimize overlap with any subsequent in-request allocations.
+    import gc
+    del instances, fg_mask, dilated, shell_mask, annotation
+    gc.collect()
+
+    return True, output_zarr_path
+
+
+
+def minio_backing_store_populated(output_dir, zarr_name):
+    """Return True if MinIO's on-disk backing store already has a non-empty
+    s0 directory for this instance-correction zarr.
+
+    This is the clobber-guard check used by `create_instance_correction` to
+    refuse re-seeding a zarr whose MinIO state may contain unpulled user
+    edits. We check the filesystem rather than query MinIO because this
+    decision is made *before* `ensure_minio_serving` runs, so the MinIO
+    server may not yet be up.
+
+    The layout is determined by `ensure_minio_serving`'s `MINIO_ROOT =
+    <output_dir>/.minio`, MinIO's bucket name (`annotations`), and the
+    zarr's object path (`<zarr_name>/annotation/s0`). If that directory
+    exists and contains any entries, the backing store is considered
+    populated and re-seeding should be refused.
+    """
+    s0_backing = (
+        Path(output_dir) / ".minio" / "annotations" / zarr_name / "annotation" / "s0"
+    )
+    if not s0_backing.exists():
+        return False
+    try:
+        return any(s0_backing.iterdir())
+    except Exception:
+        return False
+
+
+
+def sync_instance_correction_from_minio(zarr_path, dst_path=None):
+    """Force-snapshot the MinIO state of a paintable instance-correction zarr
+    to a local destination path.
+
+    Unlike `sync_annotation_volume_from_minio`, this does NOT trigger any
+    `extract_correction_from_chunk` side effects — it is a plain write-through
+    snapshot. Its purpose is to produce a durable on-disk copy of the
+    MinIO-backed paintable layer so that:
+      - Run 12 training-data extraction can read `annotation/s0` from a
+        user-visible path without going through MinIO;
+      - a dated snapshot can be produced at any time for rollback / audit;
+      - the dashboard can safely be restarted (re-POSTing
+        `create-instance-correction` would otherwise trigger
+        `ensure_minio_serving`'s initial `mc mirror local->MinIO` and
+        clobber the user's brush edits with the stale seed).
+
+    Args:
+        zarr_path: Absolute path to the user-visible instance-correction
+            zarr (e.g. `.../instance_corrections/roi3_annotation.zarr`).
+            Used to derive the MinIO bucket key from its basename
+            (`<bucket>/<basename(zarr_path)>/annotation`). The file itself
+            is not opened — only the name is read.
+        dst_path: Absolute path to write the snapshot to. Defaults to
+            `zarr_path` (in-place pull-back into the user-visible zarr).
+            Prefer a fresh dated path (e.g.
+            `.../roi3_annotation_FINAL_session14_<ts>.zarr`) to avoid any
+            hardlink / aliasing hazards with provenance snapshots — a
+            plain in-place sync overwrites chunk files in the existing
+            inodes, and if those inodes are hardlinked to another path
+            (e.g. the bootstrap-via-`cp -rl` seed path), the "other" path
+            is corrupted as a side effect. Using a distinct `dst_path`
+            sidesteps this entirely.
+
+    Returns:
+        (success: bool, info_or_error: dict or str). On success, info is
+        {"zarr_path", "dst_path", "chunks_synced", "chunks_removed"}.
+    """
+    if not minio_state["ip"] or not minio_state["port"]:
+        return False, "MinIO not running"
+
+    if dst_path is None:
+        dst_path = zarr_path
+
+    try:
+        zarr_name = os.path.basename(os.path.normpath(zarr_path))
+        s3 = _make_s3_filesystem()
+        bucket = minio_state["bucket"]
+        src_root = f"{bucket}/{zarr_name}"
+
+        if not s3.exists(f"{src_root}/annotation/s0"):
+            return False, (
+                f"no MinIO bucket entry at {src_root}/annotation/s0 "
+                "(was create-instance-correction ever POSTed for this zarr?)"
+            )
+
+        # Use `zarr.copy_store` for a complete byte-for-byte copy from
+        # MinIO to the local destination. Copies every key under the
+        # bucket root verbatim: top-level `.zattrs` + `.zgroup`,
+        # `annotation/.zattrs` + `.zgroup`, `annotation/s0/.zarray`
+        # (which preserves the Patch 39 `compressor=None` setting —
+        # critical, because the raw chunks in MinIO are uncompressed
+        # bytes and opening them with the wrong compressor in .zarray
+        # produces a blosc decompression error), `annotation/s0/.zattrs`,
+        # and every chunk file.
+        #
+        # Why not `_sync_zarr_group_metadata` + `_diff_and_sync_chunks`
+        # (the pre-Patch-46 approach)? Because that pair was written for
+        # the legacy crop-based annotation_volume workflow, where the
+        # destination was always pre-created by a session setup step and
+        # its `.zarray` already had the correct compressor. For fresh
+        # destinations (e.g. save_roi.sh writing a timestamped snapshot),
+        # `_sync_zarr_group_metadata` would call `create_dataset` without
+        # specifying a compressor, so zarr's default (Blosc) would be
+        # written into the new `.zarray` — and subsequent reads would
+        # blosc-decode the raw bytes and fail. Also, that pair only
+        # syncs the `annotation/` subgroup, not the top-level zarr group
+        # metadata, so the new snapshot lacks a `.zgroup` marker at the
+        # root and `zarr.open(path)` doesn't recognize it as a group.
+        #
+        # `zarr.copy_store` copies every key under the source store and
+        # is semantically a deep byte-for-byte clone. Slower than the
+        # parallel chunk-diff path, but correct.
+        src_store = s3fs.S3Map(root=src_root, s3=s3, check=False)
+        os.makedirs(dst_path, exist_ok=True)
+        dst_store = zarr.DirectoryStore(str(dst_path))
+        n_copied, n_skipped, n_bytes = zarr.copy_store(
+            src_store, dst_store, if_exists="replace"
+        )
+
+        logger.info(
+            f"Synced instance correction {zarr_name} from MinIO -> "
+            f"{dst_path}: {n_copied} keys copied "
+            f"({n_skipped} skipped, {n_bytes} bytes)"
+        )
+
+        return True, {
+            "zarr_path": str(zarr_path),
+            "dst_path": str(dst_path),
+            "keys_copied": int(n_copied),
+            "keys_skipped": int(n_skipped),
+            "bytes_copied": int(n_bytes),
+        }
+
+    except Exception as e:
+        logger.error(f"Error syncing instance correction {zarr_path} -> {dst_path}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False, str(e)
+
+
+
+def cc3d_relabel_instance_correction(zarr_path, target_label, snapshot_dir=None):
+    """Split a single label in a paintable instance-correction zarr by
+    running 26-connectivity cc3d on its voxel mask and reassigning all
+    components except the largest to fresh unused instance IDs.
+
+    Typical workflow: the user erases a thin bridge between two fused
+    mitochondria in NG's brush tool (still sharing `target_label`), then
+    POSTs this route with that label. cc3d finds the now-separated
+    components; we keep the largest as `target_label` and reassign the
+    smaller components to `max(existing) + 1 ...`. A hard reload of the
+    NG tab shows the split colors. Validated end-to-end on ROI3 in
+    Session 13 — productionizes `scripts/oneshot_cc3d_split_roi3.py`.
+
+    Reads and writes the MinIO-backed zarr in place (MinIO is the source
+    of truth for in-progress brush edits; the user-visible `zarr_path` is
+    only used to derive the bucket object name and to place the rollback
+    snapshot next to). Before writing, snapshots the current MinIO state
+    to a local DirectoryStore for rollback safety.
+
+    Args:
+        zarr_path: Absolute path to the user-visible instance-correction
+            zarr. Its basename is used as the MinIO object key.
+        target_label: The instance ID to split (must be >= 2, since 0 is
+            unannotated and 1 is background in the AffinityTargetTransform
+            scheme).
+        snapshot_dir: Where to drop the pre-split rollback snapshot.
+            Defaults to `<parent_of_zarr_path>/snapshots/`.
+
+    Returns:
+        (success: bool, info_or_error: dict or str). On success, info is
+        {"zarr_path", "target_label", "n_components", "kept_voxels",
+         "splits": [{"new_label", "voxels"}, ...], "snapshot_path"}.
+    """
+    if not minio_state["ip"] or not minio_state["port"]:
+        return False, "MinIO not running"
+
+    try:
+        import cc3d  # connected-components-3d
+    except ImportError as e:
+        return False, f"cc3d not installed in the dashboard env: {e}"
+
+    if int(target_label) < 2:
+        return False, (
+            f"target_label must be >= 2 (got {target_label}); "
+            "label 0 is unannotated and label 1 is background"
+        )
+
+    try:
+        zarr_name = os.path.basename(os.path.normpath(zarr_path))
+        s3 = _make_s3_filesystem()
+        bucket = minio_state["bucket"]
+        src_root = f"{bucket}/{zarr_name}"
+        if not s3.exists(f"{src_root}/annotation/s0"):
+            return False, (
+                f"no MinIO bucket entry at {src_root}/annotation/s0 "
+                "(was create-instance-correction ever POSTed for this zarr?)"
+            )
+
+        # Open the MinIO-backed zarr r+. S3Map with check=False skips the
+        # initial bucket-probe round trip.
+        store = s3fs.S3Map(root=src_root, s3=s3, check=False)
+        root = zarr.open(store, mode="r+")
+        ann = root["annotation/s0"]
+        logger.info(
+            f"[cc3d-relabel] opened {src_root}: shape={ann.shape} "
+            f"dtype={ann.dtype} chunks={ann.chunks}"
+        )
+
+        # Snapshot to a local DirectoryStore before any writes so the user
+        # has a guaranteed rollback point even if cc3d or the writeback
+        # misbehaves. `zarr.copy_store` streams chunks one at a time without
+        # materializing the full volume twice in memory.
+        if snapshot_dir is None:
+            snapshot_dir = os.path.join(
+                os.path.dirname(os.path.normpath(zarr_path)), "snapshots"
+            )
+        os.makedirs(snapshot_dir, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        snap_basename = zarr_name.replace(".zarr", "") + f"_snapshot_{ts}.zarr"
+        snapshot_path = os.path.join(snapshot_dir, snap_basename)
+        logger.info(f"[cc3d-relabel] snapshotting to {snapshot_path}")
+        local_store = zarr.DirectoryStore(snapshot_path)
+        zarr.copy_store(store, local_store, if_exists="replace")
+
+        # Load the full annotation into memory — fits comfortably at ROI
+        # scale (~600 MB uint16) and avoids per-chunk GET churn during the
+        # cc3d + reassignment passes.
+        logger.info("[cc3d-relabel] loading full annotation/s0 into memory")
+        arr = ann[:]
+
+        mask = arr == int(target_label)
+        n_target_voxels = int(mask.sum())
+        if n_target_voxels == 0:
+            return False, f"no voxels match label {target_label}"
+        logger.info(
+            f"[cc3d-relabel] target mask: {n_target_voxels} voxels labeled "
+            f"{target_label}"
+        )
+
+        labeled, n_comp = cc3d.connected_components(
+            mask, connectivity=26, return_N=True
+        )
+        logger.info(f"[cc3d-relabel] cc3d found {n_comp} connected components")
+
+        if n_comp == 1:
+            logger.info(
+                "[cc3d-relabel] only one connected component — nothing to "
+                "split. (Erase may not have fully cut the bridge, or the "
+                "label was already single-component.)"
+            )
+            # No writeback: the snapshot is still useful as a backup, but
+            # nothing on MinIO changed.
+            return True, {
+                "zarr_path": str(zarr_path),
+                "target_label": int(target_label),
+                "n_components": int(n_comp),
+                "kept_voxels": n_target_voxels,
+                "splits": [],
+                "snapshot_path": snapshot_path,
+                "note": "single component, no split performed",
+            }
+
+        # Pick the largest component as the one to keep under target_label,
+        # reassign every other component to fresh unused IDs. cc3d labels
+        # background as 0 and foreground components as 1..n_comp.
+        stats = cc3d.statistics(labeled)
+        sizes = stats["voxel_counts"]
+        fg_sizes = sorted(
+            ((i + 1, int(sizes[i + 1])) for i in range(n_comp)),
+            key=lambda x: -x[1],
+        )
+        biggest_comp, kept_voxels = fg_sizes[0]
+        logger.info(
+            f"[cc3d-relabel] keeping component {biggest_comp} "
+            f"({kept_voxels} voxels) as label {target_label}"
+        )
+
+        existing_max = int(arr.max())
+        next_id = existing_max + 1
+        splits = []
+        for comp_i, sz in fg_sizes[1:]:
+            new_id = next_id
+            next_id += 1
+            arr[labeled == comp_i] = new_id
+            splits.append({"new_label": int(new_id), "voxels": int(sz)})
+            logger.info(
+                f"[cc3d-relabel]   component {comp_i}: {sz} voxels "
+                f"-> new label {new_id}"
+            )
+
+        # Write the full array back; zarr's S3 backend breaks this into
+        # per-chunk PUTs. Every chunk is PUT (not just changed ones) —
+        # acceptable at ROI scale, the prototype measured ~15 s for 900 MB.
+        logger.info("[cc3d-relabel] writing back to MinIO")
+        ann[:] = arr
+
+        return True, {
+            "zarr_path": str(zarr_path),
+            "target_label": int(target_label),
+            "n_components": int(n_comp),
+            "kept_voxels": int(kept_voxels),
+            "splits": splits,
+            "snapshot_path": snapshot_path,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in cc3d_relabel_instance_correction: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False, str(e)
+
 
