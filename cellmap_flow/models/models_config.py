@@ -443,11 +443,31 @@ class BioModelConfig(ModelConfig):
         return f"bioimage --model-name {self.model_name}"
 
     def _get_config(self):
-        from bioimageio.core import load_description
+        from bioimageio.core import load_description, create_prediction_pipeline
         from types import MethodType
 
         config = Config()
         config.model = load_description(self.model_name)
+
+        # Construct a prediction pipeline on CUDA if available. The default
+        # path (bioimageio.core.predict()) builds a fresh pipeline per call
+        # and doesn't expose a device kwarg — it ends up on CPU silently.
+        # By building the pipeline ourselves with explicit devices=, we
+        # guarantee inference runs on GPU when CUDA is available.
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        try:
+            config.prediction_pipeline = create_prediction_pipeline(
+                bioimageio_model=config.model,
+                devices=[device],
+            )
+            logger.info(f"BMZ prediction pipeline built on device: {device}")
+        except Exception as e:
+            logger.warning(
+                f"Could not build BMZ prediction pipeline on {device} "
+                f"({e.__class__.__name__}: {e}); falling back to bioimageio.predict() "
+                "which will default to CPU."
+            )
+            config.prediction_pipeline = None
 
         (
             config.input_name,
@@ -661,11 +681,19 @@ def process_chunk_bioimage(self, idi: ImageDataInterface, input_roi: Roi):
         stat={},
         id="sample",
     )
-    output = predict(
-        model=self.model,
-        inputs=input_sample,
-        skip_preprocessing=bool(input_sample.stat),
-    )
+    if getattr(self, "prediction_pipeline", None) is not None:
+        # GPU-bound pipeline pre-built in _get_config with devices=["cuda"].
+        # predict_sample_without_blocking returns the sample synchronously
+        # (the "without_blocking" refers to the tile dispatcher, not async).
+        output = self.prediction_pipeline.predict_sample_without_blocking(input_sample)
+    else:
+        # Fallback: legacy code path. CPU-bound because bioimageio.core.predict()
+        # builds a fresh pipeline without device hint.
+        output = predict(
+            model=self.model,
+            inputs=input_sample,
+            skip_preprocessing=bool(input_sample.stat),
+        )
     output, _ = self.format_output_bioimage(output)
     return output
 
