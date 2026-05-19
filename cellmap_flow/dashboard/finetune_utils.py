@@ -558,9 +558,15 @@ def _copy_chunks_parallel(s3, copy_pairs):
     Args:
         s3: s3fs filesystem instance
         copy_pairs: list of (src_chunk_path, dst_chunk_path_str)
+
+    Returns:
+        set of src_chunk_path values that successfully copied. The caller
+        must use this to filter the saved chunk_sync_state — chunks that
+        FAILED to copy must NOT be marked as known, or they will be
+        permanently locked out of subsequent non-force diff syncs.
     """
     if not copy_pairs:
-        return
+        return set()
 
     available_workers = _get_sync_worker_count()
     workers = max(1, min(len(copy_pairs), available_workers))
@@ -570,17 +576,38 @@ def _copy_chunks_parallel(s3, copy_pairs):
         s3.get(src_chunk_path, dst_chunk_path)
         return src_chunk_path
 
+    successful = set()
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(_copy_one, pair) for pair in copy_pairs]
-        for fut in as_completed(futures):
+        future_to_pair = {executor.submit(_copy_one, pair): pair for pair in copy_pairs}
+        for fut in as_completed(future_to_pair):
+            pair = future_to_pair[fut]
             try:
-                fut.result()
+                successful.add(fut.result())
             except Exception as e:
-                logger.debug(f"Error syncing chunk in parallel copy: {e}")
+                logger.warning(
+                    f"Error syncing chunk in parallel copy ({pair[0]}): {e}"
+                )
+    return successful
 
 
 def _make_s3_filesystem():
-    """Create an s3fs filesystem pointed at the local MinIO instance."""
+    """Create an s3fs filesystem pointed at the local MinIO instance.
+
+    Uses skip_instance_cache=True to defeat fsspec's default
+    instance-caching behavior (`s3fs.S3FileSystem(...) is s3fs.S3FileSystem(...)`
+    returns True for identical kwargs). Without this, every caller of
+    this factory shares a single S3FileSystem object with a single
+    dircache — a partial s3.ls result poisons subsequent s3.exists()
+    calls and causes the partial-ls-unlink bug (validated 2026-05-10:
+    chunks vanished post-Save in both spine and direct-ssh modes; a
+    "fresh" verify_s3 was actually the same poisoned instance, and
+    Patch D's smoking-gun warning never fired despite the bug
+    triggering).
+
+    Cost of skip_instance_cache=True: a few microseconds of S3FileSystem
+    object construction per call. Cheap relative to the remote calls
+    each instance subsequently makes.
+    """
     return s3fs.S3FileSystem(
         anon=False,
         key="minio",
@@ -589,6 +616,7 @@ def _make_s3_filesystem():
             "endpoint_url": f"http://{minio_state['ip']}:{minio_state['port']}",
             "region_name": "us-east-1",
         },
+        skip_instance_cache=True,
     )
 
 
@@ -673,18 +701,98 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
         changed_keys = list(remote_chunk_state.keys())
     else:
         changed_keys = [k for k, v in remote_chunk_state.items() if known_chunk_state.get(k) != v]
+    removed_keys = [k for k in known_chunk_state if k not in remote_chunk_state]
 
-    if not changed_keys:
+    if not changed_keys and not removed_keys:
         return [], [], remote_chunk_state
 
-    # Copy changed chunks. We never delete: known_chunk_state may shrink
-    # if remote drops keys, but the on-disk file stays.
+    # Copy changed chunks
     dst_s0_path = Path(dst_s0_path)
     dst_s0_path.mkdir(parents=True, exist_ok=True)
     copy_pairs = [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed_keys]
-    _copy_chunks_parallel(s3, copy_pairs)
+    successful_src = _copy_chunks_parallel(s3, copy_pairs)
 
-    return changed_keys, [], remote_chunk_state
+    # Drop FAILED chunks from remote_chunk_state so they are not recorded
+    # in known_chunk_state — otherwise the next non-force diff would see
+    # `known_chunk_state.get(k) == v` and exclude them, locking them out
+    # of every subsequent periodic sync. The only recovery in that lockout
+    # state is force=True, which is operationally untenable for the
+    # background periodic-sync thread.
+    src_to_key = {f"{s0_path}/{k}": k for k in changed_keys}
+    successful_keys = {src_to_key[s] for s in successful_src if s in src_to_key}
+    failed_keys = [k for k in changed_keys if k not in successful_keys]
+    if failed_keys:
+        logger.warning(
+            f"_diff_and_sync_chunks: {len(failed_keys)} of "
+            f"{len(changed_keys)} chunk copies failed; will retry on next "
+            f"sync. failed={failed_keys[:5]}{' ...' if len(failed_keys) > 5 else ''}"
+        )
+    for k in failed_keys:
+        remote_chunk_state.pop(k, None)
+
+    # Remove stale local chunks — but VERIFY each removal against MinIO
+    # using a FRESH s3fs instance, to guard against partial-listing bugs
+    # in s3.ls. Without verification, a partial s3.ls would unlink chunks
+    # from disk that are really still on MinIO, and subsequent syncs would
+    # see them as "removed already" and never re-copy — user paint
+    # vanishes from disk despite a green "Save" success.
+    #
+    # CRITICAL: the verification MUST use a fresh s3fs instance, not the
+    # `s3` parameter that just did the partial s3.ls. s3fs maintains an
+    # internal listing cache PER INSTANCE that records both positive
+    # presences and negative absences; if s3.ls returned partial, the
+    # same instance's `s3.exists()` reports False for the missing keys
+    # (cached from the partial list). A fresh instance has its own
+    # (empty) cache and performs a real HEAD against MinIO.
+    #
+    # Bounded cost: O(removed_keys) HEADs + 1 fresh s3fs construction.
+    # removed_keys is typically empty, so usually no-op.
+    confirmed_removed_keys = []
+    spurious_removed_keys = []
+    if removed_keys:
+        verify_s3 = _make_s3_filesystem()
+        for k in removed_keys:
+            src_chunk_path = f"{s0_path}/{k}"
+            try:
+                still_on_minio = verify_s3.exists(src_chunk_path)
+            except Exception as e:
+                logger.warning(
+                    f"_diff_and_sync_chunks: s3.exists check failed for {k}; "
+                    f"skipping unlink to be safe: {e}"
+                )
+                spurious_removed_keys.append(k)
+                continue
+            if still_on_minio:
+                spurious_removed_keys.append(k)
+                continue
+            confirmed_removed_keys.append(k)
+            local_chunk = dst_s0_path / k
+            try:
+                if local_chunk.exists():
+                    local_chunk.unlink()
+            except Exception as e:
+                logger.debug(f"Error removing stale chunk {k}: {e}")
+
+    if spurious_removed_keys:
+        logger.warning(
+            f"_diff_and_sync_chunks: skipped unlink for "
+            f"{len(spurious_removed_keys)}/{len(removed_keys)} keys whose "
+            f"s3.exists confirmed they are still on MinIO (partial-ls bug "
+            f"suppressed). spurious={spurious_removed_keys[:5]}"
+            f"{' ...' if len(spurious_removed_keys) > 5 else ''}"
+        )
+        # Re-add spurious keys back to remote_chunk_state with their
+        # known LM so the caller's `volume_meta["chunk_sync_state"] =
+        # remote_chunk_state` doesn't drop them and trigger them as
+        # "new" (and re-copy) on next sync. They were never really removed.
+        for k in spurious_removed_keys:
+            remote_chunk_state[k] = known_chunk_state[k]
+
+    # Mutate removed_keys in-place so the return value reflects what was
+    # ACTUALLY unlinked (callers use this for downstream bookkeeping).
+    removed_keys[:] = confirmed_removed_keys
+
+    return changed_keys, removed_keys, remote_chunk_state
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +866,7 @@ def sync_all_annotations_from_minio(force: bool = True):
         logger.info("MinIO not initialized, skipping annotation sync")
         return -1
 
-    logger.info(f"Syncing all annotations from MinIO (force={force})...")
+    logger.debug(f"Syncing all annotations from MinIO (force={force})...")
     s3 = _make_s3_filesystem()
     zarrs = s3.ls(minio_state["bucket"])
     zarr_ids = [Path(c).name.replace(".zarr", "") for c in zarrs if c.endswith(".zarr")]
@@ -777,7 +885,7 @@ def sync_all_annotations_from_minio(force: bool = True):
             pass
         if sync_annotation_from_minio(zid, force=force):
             synced += 1
-    logger.info(f"Synced {synced}/{len(zarr_ids)} annotations")
+    logger.debug(f"Synced {synced}/{len(zarr_ids)} annotations")
     return synced
 
 
@@ -866,6 +974,38 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
     # Skip if all zeros (unannotated or erased)
     if not np.any(annotation_data):
         return False
+
+    # Idempotency short-circuit: if an existing extract zarr's annotation/s0
+    # byte-matches the source labels for this chunk, the raw EM source
+    # hasn't changed (raw zarr is treated as immutable), so re-running this
+    # function would produce a byte-equivalent output — pure wasted CPU +
+    # GPFS I/O. The check costs ~175 KiB read per chunk vs. the ~13 MB
+    # raw-EM read + scipy resample + zarr write that follows, so on miss
+    # the cost is negligible relative to the work it gates.
+    #
+    # Most common trigger of needless re-extract: dashboard process
+    # restart wipes the in-memory `chunk_sync_state` for the volume, so
+    # the next _diff_and_sync_chunks marks every existing chunk as
+    # "changed" relative to the empty known-state, even though all
+    # existing extracts on disk are already up to date.
+    correction_id = f"{volume_id}_chunk_{cz}_{cy}_{cx}"
+    correction_zarr_path = os.path.join(corrections_dir, f"{correction_id}.zarr")
+    if os.path.isdir(correction_zarr_path):
+        try:
+            existing = zarr.open(correction_zarr_path, mode="r")
+            existing_ann = existing["annotation/s0"][:]
+            if (existing_ann.shape == annotation_data.shape
+                    and np.array_equal(existing_ann, annotation_data)):
+                logger.debug(
+                    f"Idempotent skip for chunk ({cz},{cy},{cx}): "
+                    f"existing extract already up to date"
+                )
+                return True
+        except Exception as e:
+            logger.warning(
+                f"Idempotency check failed for chunk ({cz},{cy},{cx}); "
+                f"will re-extract: {e}"
+            )
 
     # Compute physical position of this chunk's center
     chunk_offset_nm = dataset_offset_nm + np.array(
@@ -965,7 +1105,7 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
         volume_meta = _get_volume_metadata(volume_id, local_zarr_path)
 
         if volume_meta is None:
-            logger.warning(f"No metadata for volume {volume_id}, skipping")
+            logger.debug(f"No metadata for volume {volume_id}, skipping")
             return False
 
         s3 = _make_s3_filesystem()

@@ -30,6 +30,21 @@ log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(mess
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
+# Make INFO messages from cellmap_flow.dashboard.* submodules visible in the
+# dashboard log file. Without this, logger.info() calls in submodules (e.g.
+# finetune_utils) are filtered out — the default root level is WARNING and
+# only app's module-local logger had INFO explicitly set. Attach a stream
+# handler at the namespace level and stop propagation to avoid duplicate
+# emission via Python's last-resort WARNING handler.
+_cflow_dashboard_logger = logging.getLogger("cellmap_flow.dashboard")
+_cflow_dashboard_logger.setLevel(logging.INFO)
+_cflow_dashboard_stream_handler = logging.StreamHandler()
+_cflow_dashboard_stream_handler.setFormatter(
+    logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+)
+_cflow_dashboard_logger.addHandler(_cflow_dashboard_stream_handler)
+_cflow_dashboard_logger.propagate = False
+
 # Register all blueprints
 app.register_blueprint(logging_bp)
 app.register_blueprint(index_bp)

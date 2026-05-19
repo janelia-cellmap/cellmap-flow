@@ -69,6 +69,28 @@ def list_cls_to_dict(ll):
     return norms
 
 
+def stringify_list_values_for_template(d):
+    """Coerce list/tuple values in `d` to comma-joined strings; pass everything
+    else through unchanged.
+
+    Companion to list_cls_to_dict above, applied at the dashboard's
+    template-rendering boundary (cellmap_flow/dashboard/routes/index_page.py).
+    Without this, a postprocessor like ChannelSelection with `channels=[5]`
+    renders into the HTML input as `value="[5]"` (Jinja calls str(list)),
+    which the frontend's gatherPostProcessData echoes back to /api/process,
+    which then fails to parse `int("[5]")` on round-trip.
+
+    Mirrors the comma-join half of list_cls_to_dict (lists -> "5,6,7"),
+    but does NOT str()-coerce non-list scalars — Jinja will str() them
+    naturally during template rendering, and pre-stringifying loses
+    fidelity for callers that want the raw value (e.g. floats keeping
+    Python repr instead of "0.0")."""
+    return {
+        k: (",".join(str(x) for x in v) if isinstance(v, (list, tuple)) else v)
+        for k, v in d.items()
+    }
+
+
 def kill_n_remove_from_neuroglancer(jobs, s):
     for job in jobs:
         if job.model_name in s.layers:
