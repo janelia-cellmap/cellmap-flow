@@ -107,7 +107,13 @@ function rewireConnectPanel(): void {
     try {
       replaceNgPanel();
       const NM = 1e-9;
-      const inferenceUrl = `zarr://${serverUrl}/${datasetPath}/`;
+      // The inference URL encodes the dashboard's current
+      // input-normalizer + postprocessor pipeline in the path between
+      // two __CFLOW_ARGS__ delimiters. cellmap_flow_server parses that
+      // per-request, so each unique config produces a unique URL → NG
+      // re-fetches under the new pipeline naturally on Submit All. No
+      // global server state needed.
+      const inferenceUrl = buildInferenceUrl(serverUrl, datasetPath, encodeArgs());
       const qp = new URLSearchParams(window.location.search);
       const rawZarr = (qp.get("raw") ?? "").trim();
 
@@ -233,7 +239,8 @@ function rewireConnectPanel(): void {
 
       activeServerBacked = {
         viewer: viewer as unknown as { state: unknown; [k: string]: unknown },
-        inferenceBaseUrl: inferenceUrl,
+        serverUrl,
+        datasetPath,
         isoTransform,
       };
 
@@ -258,9 +265,70 @@ function rewireConnectPanel(): void {
 // /api/process without bumping the URL).
 let activeServerBacked: {
   viewer: { state: unknown; [k: string]: unknown };
-  inferenceBaseUrl: string;
+  serverUrl: string;
+  datasetPath: string;
   isoTransform: Record<string, unknown> | null;
 } | null = null;
+
+// Mirrors cellmap_flow.utils.web_utils.ARGS_KEY — the delimiter
+// cellmap_flow_server's URL parser uses to extract a per-request
+// normalizer/postprocessor config from the dataset path component.
+const CFLOW_ARGS_KEY = "__CFLOW_ARGS__";
+
+interface FormItem {
+  name?: string;
+  [k: string]: unknown;
+}
+
+// Read the dashboard's checked normalizers + postprocessors from the
+// rendered forms. The dashboard JS exposes gatherInputNormData /
+// gatherPostProcessData on window when those forms exist. Returns
+// either the base64-encoded args string ready for the URL, or "" if
+// nothing is configured.
+function encodeArgs(): string {
+  const w = window as unknown as {
+    gatherInputNormData?: () => FormItem[];
+    gatherPostProcessData?: () => FormItem[];
+  };
+  const norms = w.gatherInputNormData ? w.gatherInputNormData() : [];
+  const posts = w.gatherPostProcessData ? w.gatherPostProcessData() : [];
+  if (norms.length === 0 && posts.length === 0) return "";
+
+  // Mirror cellmap_flow.utils.web_utils.list_cls_to_dict shape:
+  // [{name, ...params}] → {name: {param: str(value)}}
+  const toDictOfDicts = (arr: FormItem[]): Record<string, Record<string, string>> => {
+    const out: Record<string, Record<string, string>> = {};
+    for (const item of arr) {
+      const name = item.name;
+      if (!name) continue;
+      const params: Record<string, string> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (k === "name") continue;
+        params[k] = String(v);
+      }
+      out[String(name)] = params;
+    }
+    return out;
+  };
+  const args = {
+    input_norm: toDictOfDicts(norms),
+    postprocess: toDictOfDicts(posts),
+  };
+  const json = JSON.stringify(args);
+  // URL-safe base64, padding stripped — exactly what
+  // cellmap_flow.utils.web_utils.encode_to_str produces.
+  const b64 = btoa(json)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return b64;
+}
+
+function buildInferenceUrl(serverUrl: string, modelName: string, encoded: string): string {
+  return encoded
+    ? `zarr://${serverUrl}/${modelName}${CFLOW_ARGS_KEY}${encoded}${CFLOW_ARGS_KEY}/`
+    : `zarr://${serverUrl}/${modelName}/`;
+}
 
 function replaceNgPanel(): void {
   // Swap the dashboard's "no neuroglancer URL configured" panel for an
@@ -309,23 +377,28 @@ function interceptApiFetches(): void {
       }
       try {
         const r = await orig(`${serverUrl}/api/process`, init);
-        // If submit succeeded, bump the inference layer URL with a
-        // cache-busting query so NG re-fetches under the new
-        // server-side g.input_norms / g.postprocess. Unknown query
-        // params are ignored by cellmap_flow_server, so chunk paths
-        // still resolve correctly.
+        // On success, rebuild the inference layer URL with the new
+        // pipeline encoded between __CFLOW_ARGS__ delimiters. NG sees
+        // a different URL → re-fetches all chunks → cellmap_flow_server
+        // parses the args per-request and applies them. Each unique
+        // pipeline config produces a unique URL, so cache invalidation
+        // and per-config isolation come for free.
         if (r.ok && activeServerBacked) {
           try {
             const v = activeServerBacked.viewer as {
               state: { layers: Array<{ name: string; source: unknown }> };
             };
-            const versioned = `${activeServerBacked.inferenceBaseUrl}?v=${Date.now()}`;
+            const newUrl = buildInferenceUrl(
+              activeServerBacked.serverUrl,
+              activeServerBacked.datasetPath,
+              encodeArgs(),
+            );
             const layersList = v.state.layers;
             const idx = layersList.findIndex((l) => l.name === "inference");
             if (idx >= 0) {
               layersList[idx].source = activeServerBacked.isoTransform
-                ? { url: versioned, transform: activeServerBacked.isoTransform }
-                : versioned;
+                ? { url: newUrl, transform: activeServerBacked.isoTransform }
+                : newUrl;
             }
           } catch (e) {
             console.warn("[shim] could not refresh inference layer:", e);
