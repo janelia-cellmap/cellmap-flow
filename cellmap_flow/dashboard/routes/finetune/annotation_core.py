@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import zarr
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import (
     create_annotation_volume_zarr,
@@ -16,6 +16,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     find_model_config,
     load_user_prefs,
+    rewrite_minio_url_for_proxy,
     save_user_prefs,
     viewer_position_and_scales,
 )
@@ -170,6 +171,7 @@ def create_annotation_crop_response(data):
         raw_zarr["raw/s0"][:] = idi.to_ndarray_ts(roi)
 
         minio_url = ensure_minio_serving(zarr_path, crop_id, output_base_dir=corrections_dir)
+        minio_url = rewrite_minio_url_for_proxy(minio_url, request)
         return jsonify(
             {
                 "success": True,
@@ -261,6 +263,7 @@ def create_annotation_volume_response(data):
             return jsonify({"success": False, "error": zarr_info}), 500
 
         minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
+        minio_url = rewrite_minio_url_for_proxy(minio_url, request)
         _register_annotation_volume(
             volume_id,
             zarr_path=zarr_path,

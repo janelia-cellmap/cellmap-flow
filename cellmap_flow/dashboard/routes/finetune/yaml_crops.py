@@ -26,7 +26,7 @@ from datetime import datetime
 
 import numpy as np
 import zarr
-from flask import jsonify
+from flask import jsonify, request
 from pydantic import ValidationError
 
 # Module-level progress tracker, keyed by load_id supplied by the client.
@@ -62,7 +62,10 @@ from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
     _register_annotation_volume,
 )
-from cellmap_flow.dashboard.routes.finetune.common import ensure_corrections_storage
+from cellmap_flow.dashboard.routes.finetune.common import (
+    ensure_corrections_storage,
+    rewrite_minio_url_for_proxy,
+)
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.finetune.crop_loader import (
     _open_array,
@@ -157,6 +160,7 @@ def _create_session_annotation_volume(
         raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
 
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
+    minio_url = rewrite_minio_url_for_proxy(minio_url, request)
     _register_annotation_volume(
         volume_id,
         zarr_path=zarr_path,
