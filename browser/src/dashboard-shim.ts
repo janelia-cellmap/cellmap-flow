@@ -174,8 +174,18 @@ function restoreLastInputs(): void {
   if (server) server.value = qpBackend || s.serverUrl || server.value;
   if (hf) hf.value = qpHfRepo || s.hfRepo || hf.value;
 
-  // BMZ override beats everything else if ?model= names a BMZ id.
-  if (qpModel) {
+  // Backend + BMZ are mutually exclusive — server-backed inference vs
+  // in-browser WebGPU. ?backend= explicitly opts into server-backed,
+  // so clear any stale BMZ selection from localStorage so users who
+  // previously played with the WebGPU demo aren't accidentally
+  // sticky-stuck in BMZ mode.
+  if (qpBackend) {
+    writeLs({ bmzModelId: "" });
+    document
+      .querySelectorAll<HTMLInputElement>("[id^='bmz_']")
+      .forEach((cb) => { cb.checked = false; });
+  } else if (qpModel) {
+    // BMZ override beats everything else if ?model= names a BMZ id.
     const cb = document.getElementById(`bmz_${qpModel}`) as HTMLInputElement | null;
     if (cb) {
       cb.checked = true;
