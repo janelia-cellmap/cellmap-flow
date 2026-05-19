@@ -22,6 +22,7 @@ def add_finetuned_layer_to_viewer_response(data):
         server_url = data.get("server_url")
         model_name = data.get("model_name")
         model_script_path = data.get("model_script_path")
+        custom_shader = data.get("shader")
         if not server_url or not model_name:
             return jsonify({"success": False, "error": "Missing server_url or model_name"}), 400
 
@@ -97,11 +98,18 @@ def add_finetuned_layer_to_viewer_response(data):
             except Exception as e:
                 logger.warning(f"Could not compute override scales for finetuned '{model_name}': {e}")
 
+            default_shader = """#uicontrol invlerp normalized(range=[0, 0.5])
+#uicontrol vec3 color color(default="red")
+void main() {
+  float v = normalized();
+  if (v <= 0.0)
+    emitRGB(color * v);
+//    emitTransparent();
+  else emitRGB(color * v);
+}"""
             s.layers[model_name] = neuroglancer.ImageLayer(
                 source=build_prediction_source(server_url, model_name, st_data, override_scales),
-                shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-                    #uicontrol vec3 color color(default="red");
-                    void main(){emitRGB(color * normalized());}""",
+                shader=custom_shader if custom_shader else default_shader,
             )
 
         return jsonify(

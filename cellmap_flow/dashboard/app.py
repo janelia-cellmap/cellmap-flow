@@ -42,11 +42,10 @@ app.register_blueprint(finetune_bp)
 app.register_blueprint(review_bp)
 
 
-def create_and_run_app(neuroglancer_url=None, inference_servers=None):
+def create_and_run_app(neuroglancer_url=None, inference_servers=None, port=0):
     g.NEUROGLANCER_URL = neuroglancer_url
     g.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
-    port = 0
     logger.warning(f"Host name: {hostname}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
