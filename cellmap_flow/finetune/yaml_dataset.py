@@ -115,6 +115,13 @@ class YamlCropDataset(Dataset):
             If None and samples_per_crop is None, auto-computes from crop volumes.
         augment: Whether to apply 3D augmentation
         normalize: Whether to normalize raw data
+        foreground_bias: Probability in [0, 1] that a sample is centered on a
+            foreground voxel instead of a uniform-random position. 0.0 = pure
+            uniform sampling (old behavior). Useful when foreground is sparse
+            (e.g. mitochondria) and uniform sampling rarely hits it.
+        foreground_stride: Stride used to subsample voxels when building the
+            foreground index. Smaller = denser candidate set but more memory
+            and slower init. Default: output_shape // 4.
     """
 
     def __init__(
@@ -126,11 +133,19 @@ class YamlCropDataset(Dataset):
         samples_per_epoch: Optional[int] = None,
         augment: bool = True,
         normalize: bool = True,
+        foreground_bias: float = 0.0,
+        foreground_stride: Optional[int] = None,
     ):
         self.input_shape = np.array(input_shape)
         self.output_shape = np.array(output_shape)
         self.augment = augment
         self.normalize = normalize
+        self.foreground_bias = float(foreground_bias)
+        self.foreground_stride = (
+            int(foreground_stride)
+            if foreground_stride is not None
+            else max(1, int(min(self.output_shape) // 4))
+        )
 
         # Load YAML config
         with open(yaml_path, "r") as f:
@@ -144,6 +159,10 @@ class YamlCropDataset(Dataset):
             raise ValueError(f"No valid crops found in {yaml_path}")
 
         logger.info(f"Loaded {len(self.crops)} crops from {yaml_path}")
+
+        # Pre-compute foreground voxel positions per crop if biased sampling is on
+        if self.foreground_bias > 0:
+            self._build_foreground_index()
 
         # Build sample index
         self._build_sample_index(samples_per_crop, samples_per_epoch)
@@ -209,6 +228,29 @@ class YamlCropDataset(Dataset):
 
                 except Exception as e:
                     logger.error(f"  Crop {crop_name}: error loading {crop_path}: {e}")
+
+    def _build_foreground_index(self):
+        """
+        For each crop, scan a strided subset of voxels and record positions
+        where the (binarized) target is foreground. These positions are used
+        as patch centers when foreground_bias > 0.
+
+        Subsampling keeps init memory bounded: a typical 1024^3 crop with
+        stride 32 yields at most 32768 candidate voxels per crop.
+        """
+        s = self.foreground_stride
+        for crop_info in self.crops:
+            crop_array = crop_info["crop_array"]
+            # Strided read; rely on zarr to fetch only the needed chunks.
+            sub = np.array(crop_array[::s, ::s, ::s])
+            fg = np.argwhere(sub > 0).astype(np.int64)
+            if fg.size > 0:
+                fg = fg * s  # back to full-resolution voxel coordinates
+            crop_info["fg_positions"] = fg
+            logger.info(
+                f"  Crop {crop_info['crop_name']}: "
+                f"{len(fg)} foreground positions (stride={s})"
+            )
 
     def _build_sample_index(
         self,
@@ -277,11 +319,26 @@ class YamlCropDataset(Dataset):
         oz, oy, ox = self.output_shape
         iz, iy, ix = self.input_shape
 
-        # 1. Random position within crop for the output (target) patch
+        # 1. Pick the output (target) patch start position.
+        # With probability foreground_bias, center on a known foreground voxel;
+        # otherwise sample uniformly within the crop.
         max_start = crop_shape - self.output_shape
-        tz = np.random.randint(0, max(1, max_start[0] + 1))
-        ty = np.random.randint(0, max(1, max_start[1] + 1))
-        tx = np.random.randint(0, max(1, max_start[2] + 1))
+        fg_positions = crop_info.get("fg_positions")
+        use_fg = (
+            self.foreground_bias > 0
+            and fg_positions is not None
+            and len(fg_positions) > 0
+            and np.random.rand() < self.foreground_bias
+        )
+        if use_fg:
+            center = fg_positions[np.random.randint(0, len(fg_positions))]
+            start = center - self.output_shape // 2
+            start = np.clip(start, 0, np.maximum(0, max_start))
+            tz, ty, tx = int(start[0]), int(start[1]), int(start[2])
+        else:
+            tz = np.random.randint(0, max(1, max_start[0] + 1))
+            ty = np.random.randint(0, max(1, max_start[1] + 1))
+            tx = np.random.randint(0, max(1, max_start[2] + 1))
 
         # 2. Read target patch from crop
         target = crop_array[tz:tz + oz, ty:ty + oy, tx:tx + ox]
@@ -358,6 +415,8 @@ def create_yaml_dataloader(
     num_workers: int = 4,
     shuffle: bool = True,
     normalize: bool = True,
+    foreground_bias: float = 0.0,
+    foreground_stride: Optional[int] = None,
 ) -> torch.utils.data.DataLoader:
     """
     Create a DataLoader from a YAML crop config.
@@ -373,6 +432,10 @@ def create_yaml_dataloader(
         num_workers: DataLoader workers
         shuffle: Whether to shuffle
         normalize: Whether to normalize raw
+        foreground_bias: Probability in [0, 1] of biasing each sample toward a
+            foreground voxel (default 0.0 = pure uniform sampling)
+        foreground_stride: Stride for the foreground voxel scan (default
+            min(output_shape) // 4)
 
     Returns:
         DataLoader instance
@@ -385,6 +448,8 @@ def create_yaml_dataloader(
         samples_per_epoch=samples_per_epoch,
         augment=augment,
         normalize=normalize,
+        foreground_bias=foreground_bias,
+        foreground_stride=foreground_stride,
     )
 
     actual_batch_size = min(batch_size, len(dataset)) if len(dataset) > 0 else batch_size

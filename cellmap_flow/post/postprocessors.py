@@ -28,6 +28,8 @@ class PostProcessor(SerializableInterface):
 
 class SigmoidPostprocessor(PostProcessor):
     """Apply sigmoid activation to convert logits to probabilities."""
+    def __init__(self):
+        pass
 
     def _process(self, data):
         return 1.0 / (1.0 + np.exp(-data.astype(np.float32)))

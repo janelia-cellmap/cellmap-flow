@@ -554,6 +554,14 @@ def main():
         action="store_true",
         help="Disable data augmentation"
     )
+    parser.add_argument(
+        "--foreground-bias",
+        type=float,
+        default=0.0,
+        help="Probability in [0, 1] that a sample is centered on a foreground "
+             "voxel (for --data-yaml). 0.0 = pure uniform, 0.5 = half biased "
+             "toward foreground. Useful for sparse classes like mitochondria."
+    )
 
     # Training arguments
     parser.add_argument(
@@ -828,6 +836,7 @@ def main():
                 num_workers=args.num_workers,
                 shuffle=True,
                 normalize=True,
+                foreground_bias=args.foreground_bias,
             )
             logger.info(f"YAML DataLoader created: {len(dataloader.dataset)} samples")
         else:

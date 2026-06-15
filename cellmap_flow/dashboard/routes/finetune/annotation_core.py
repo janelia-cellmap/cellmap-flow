@@ -54,17 +54,17 @@ def get_finetune_models_response():
         models = []
         for model_config in getattr(g, "models_config", []) or []:
             try:
-                config = model_config.config
+                info = model_config.lightweight_info()
                 models.append(
                     {
                         "name": model_config.name,
-                        "write_shape": list(config.write_shape),
-                        "output_voxel_size": list(config.output_voxel_size),
-                        "output_channels": config.output_channels,
+                        "write_shape": info["write_shape"],
+                        "output_voxel_size": info["output_voxel_size"],
+                        "output_channels": info["output_channels"],
                     }
                 )
             except Exception as e:
-                logger.warning(f"Could not extract config for {model_config.name}: {e}")
+                logger.warning(f"Could not extract info for {model_config.name}: {e}")
 
         if not models and hasattr(g, "jobs") and g.jobs:
             logger.warning("No models in g.models_config, checking running jobs")
@@ -122,12 +122,12 @@ def create_annotation_crop_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
-        read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
-        input_voxel_size = np.array(config.input_voxel_size)
-        output_voxel_size = np.array(config.output_voxel_size)
-        output_channels = config.output_channels
+        info = model_config.lightweight_info()
+        read_shape = np.array(info["read_shape"])
+        write_shape = np.array(info["write_shape"])
+        input_voxel_size = np.array(info["input_voxel_size"])
+        output_voxel_size = np.array(info["output_voxel_size"])
+        output_channels = info["output_channels"]
 
         if viewer_scales_nm is not None:
             view_center_nm = view_center * np.array(viewer_scales_nm)
@@ -207,11 +207,11 @@ def create_annotation_volume_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
-        read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
-        claimed_input_voxel_size = np.array(config.input_voxel_size)
-        claimed_output_voxel_size = np.array(config.output_voxel_size)
+        info = model_config.lightweight_info()
+        read_shape = np.array(info["read_shape"])
+        write_shape = np.array(info["write_shape"])
+        claimed_input_voxel_size = np.array(info["input_voxel_size"])
+        claimed_output_voxel_size = np.array(info["output_voxel_size"])
         output_size = (write_shape / claimed_output_voxel_size).astype(int)
         input_size = (read_shape / claimed_input_voxel_size).astype(int)
 

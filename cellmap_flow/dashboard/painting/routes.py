@@ -112,15 +112,13 @@ def create_annotation_crop():
                 404,
             )
 
-        # Get model parameters
-        config = model_config.config
-        read_shape = np.array(config.read_shape)  # Physical size in nm for raw data
-        write_shape = np.array(config.write_shape)  # Physical size in nm for prediction
-        input_voxel_size = np.array(config.input_voxel_size)  # nm per voxel for input
-        output_voxel_size = np.array(
-            config.output_voxel_size
-        )  # nm per voxel for output
-        output_channels = config.output_channels
+        # Get model parameters (lightweight — avoids loading weights/GPU into dashboard)
+        info = model_config.lightweight_info()
+        read_shape = np.array(info["read_shape"])
+        write_shape = np.array(info["write_shape"])
+        input_voxel_size = np.array(info["input_voxel_size"])
+        output_voxel_size = np.array(info["output_voxel_size"])
+        output_channels = info["output_channels"]
 
         # Convert view center to nm using viewer scales
         if viewer_scales_nm is not None:
@@ -317,12 +315,12 @@ def create_annotation_volume():
                 404,
             )
 
-        # Get model parameters
-        config = model_config.config
-        read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
-        input_voxel_size = np.array(config.input_voxel_size)
-        output_voxel_size = np.array(config.output_voxel_size)
+        # Get model parameters (lightweight — avoids loading weights/GPU into dashboard)
+        info = model_config.lightweight_info()
+        read_shape = np.array(info["read_shape"])
+        write_shape = np.array(info["write_shape"])
+        input_voxel_size = np.array(info["input_voxel_size"])
+        output_voxel_size = np.array(info["output_voxel_size"])
 
         # Compute output_size and input_size in voxels
         output_size = (write_shape / output_voxel_size).astype(int)

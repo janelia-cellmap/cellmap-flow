@@ -89,6 +89,7 @@ class ImageDataInterface:
             self.output_voxel_size,
             self.axes_names,
             self.custom_fill_value,
+            apply_input_norms=self.normalize,
         )
         # logger.warning(f"Read data with shape {res.shape} from dataset {self.path} with ROI {roi} and output voxel size {self.output_voxel_size}")
         return res

@@ -26,26 +26,19 @@ def get_finetune_models():
         if hasattr(g, "models_config") and g.models_config:
             for model_config in g.models_config:
                 try:
-                    config = model_config.config
-                    # Get channel names from various possible attributes
-                    channel_names = None
-                    for attr in ["channels", "channels_names", "class_names"]:
-                        val = getattr(config, attr, None) or getattr(model_config, attr, None)
-                        if val:
-                            channel_names = list(val)
-                            break
+                    info = model_config.lightweight_info()
                     models.append(
                         {
                             "name": model_config.name,
-                            "write_shape": list(config.write_shape),
-                            "output_voxel_size": list(config.output_voxel_size),
-                            "output_channels": config.output_channels,
-                            "channel_names": channel_names,
+                            "write_shape": info["write_shape"],
+                            "output_voxel_size": info["output_voxel_size"],
+                            "output_channels": info["output_channels"],
+                            "channel_names": info["channel_names"],
                         }
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Could not extract config for {model_config.name}: {e}"
+                        f"Could not extract info for {model_config.name}: {e}"
                     )
 
         # If no models found in g.models_config, try to get from running jobs
