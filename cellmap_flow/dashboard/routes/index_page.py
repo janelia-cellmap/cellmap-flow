@@ -8,7 +8,6 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.globals import g
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-import cellmap_flow.dashboard.state as state
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +76,12 @@ def set_data():
             )
             s.layers["data"] = get_raw_layer(dataset_path)
 
-        state.NEUROGLANCER_URL = str(viewer)
-        logger.warning(f"Neuroglancer viewer set up: {state.NEUROGLANCER_URL}")
+        g.NEUROGLANCER_URL = str(viewer)
+        logger.warning(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
 
         return jsonify({
             "success": True,
-            "neuroglancer_url": state.NEUROGLANCER_URL,
+            "neuroglancer_url": g.NEUROGLANCER_URL,
         })
     except Exception as e:
         logger.error(f"Error setting data: {str(e)}")

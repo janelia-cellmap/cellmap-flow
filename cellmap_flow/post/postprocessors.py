@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 class PostProcessor(SerializableInterface):
     """Base class for post-processing methods."""
 
+    def __init__(self):
+        # Explicit empty __init__ so the GUI doesn't introspect *args/**kwargs
+        # for subclasses that don't define their own signature.
+        pass
+
     @property
     def is_segmentation(self):
         return None
