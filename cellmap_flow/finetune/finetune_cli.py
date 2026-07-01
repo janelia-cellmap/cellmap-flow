@@ -122,7 +122,8 @@ def _start_inference_server_background(
     # Clear GPU cache from training
     cleanup_t0 = time.perf_counter()
     logger.info("Clearing GPU cache...")
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     gc.collect()
     cleanup_elapsed = time.perf_counter() - cleanup_t0
 
@@ -905,7 +906,8 @@ def main():
                         )
 
                     lora_model.train()
-                    torch.cuda.empty_cache()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     gc.collect()
                     logger.info("Restarting training with fresh LoRA weights...")
                     print("RESTARTING_TRAINING", flush=True)
@@ -982,7 +984,8 @@ def main():
                     )
 
                 lora_model.train()
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 gc.collect()
                 logger.info("Restarting training with fresh LoRA weights...")
                 print("RESTARTING_TRAINING", flush=True)

@@ -358,6 +358,8 @@ class FinetuneJobManager:
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,
                 "output_type": output_type,
+                "queue": queue,
+                "charge_group": charge_group,
             },
             "queue": queue,
             "charge_group": charge_group,
@@ -465,11 +467,12 @@ class FinetuneJobManager:
         else:
             output_base = Path(output_base)
 
-        # Create timestamped run directory inside finetuning subdirectory
+        # Create timestamped run directory under output_base/runs/ (output_base
+        # already encodes the "finetuning" segment — see default above).
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         model_basename = model_config.name.replace("/", "_").replace(" ", "_")
         run_dir_name = f"{model_basename}_{timestamp}"
-        output_dir = output_base / "finetuning" / "runs" / run_dir_name
+        output_dir = output_base / "runs" / run_dir_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         log_file = output_dir / "training_log.txt"

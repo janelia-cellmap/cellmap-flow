@@ -238,6 +238,8 @@ class LoRAFinetuner:
         self.num_epochs = num_epochs
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.use_mixed_precision = use_mixed_precision
+        # NOTE: self.use_mixed_precision is overridden below if device is CPU,
+        # since CUDA AMP utilities can't run on CPU.
         self.select_channel = select_channel
         self.mask_unannotated = mask_unannotated
         self.label_smoothing = label_smoothing
@@ -254,6 +256,16 @@ class LoRAFinetuner:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = torch.device(device)
+
+        # CUDA AMP utilities (autocast('cuda'), GradScaler('cuda')) error or
+        # behave unexpectedly when training on CPU. Force-disable mixed
+        # precision unless we're actually on a CUDA device.
+        if self.device.type != "cuda" and self.use_mixed_precision:
+            logger.warning(
+                f"Disabling mixed precision: device={self.device.type} is not CUDA."
+            )
+            self.use_mixed_precision = False
+            use_mixed_precision = False
 
         logger.info(f"Using device: {self.device}")
 
@@ -328,7 +340,8 @@ class LoRAFinetuner:
         """Disable mixed precision training."""
         self.use_mixed_precision = False
         self.scaler = GradScaler('cuda', enabled=False)
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def _reset_training_state(self):
         """Reset LoRA weights, optimizer, and training counters for a fresh start."""
