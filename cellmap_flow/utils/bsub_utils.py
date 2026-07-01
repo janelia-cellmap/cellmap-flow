@@ -8,6 +8,7 @@ Supports:
 """
 
 import subprocess
+import shlex
 import logging
 import sys
 import signal
@@ -465,10 +466,14 @@ def run_locally(command: str, name: str) -> LocalJob:
     """
     logger.info(f"Running locally: {command}")
 
+    # Use shlex.split + shell=False to avoid shell-injection on user-controlled
+    # command strings. Callers must not rely on shell features (pipes, &&, env
+    # expansion) — pass a plain argv-style command.
+    args = shlex.split(command) if isinstance(command, str) else list(command)
+
     try:
         process = subprocess.Popen(
-            command,
-            shell=True,
+            args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True

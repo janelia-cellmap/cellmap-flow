@@ -1,4 +1,5 @@
 import logging
+import os
 import socket
 from http import HTTPStatus
 import numpy as np
@@ -105,6 +106,15 @@ class CellMapFlowServer:
         def control_restart():
             if self.restart_callback is None:
                 return jsonify({"success": False, "error": "Restart control not enabled"}), HTTPStatus.NOT_IMPLEMENTED
+            # Token gate: when CFLOW_RESTART_TOKEN is set in the server's env,
+            # require the caller to present a matching X-Restart-Token header.
+            # The dashboard sets this when spawning the inference server; other
+            # callers on the same network are rejected with 401.
+            expected_token = os.environ.get("CFLOW_RESTART_TOKEN")
+            if expected_token:
+                provided = request.headers.get("X-Restart-Token", "")
+                if provided != expected_token:
+                    return jsonify({"success": False, "error": "unauthorized"}), HTTPStatus.UNAUTHORIZED
             try:
                 payload = request.get_json(silent=True) or {}
                 accepted = self.restart_callback(payload)

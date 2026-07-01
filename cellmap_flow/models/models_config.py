@@ -358,7 +358,18 @@ class FlyModelConfig(ModelConfig):
         if checkpoint_path.endswith(".ts"):
             model_backbone = torch.jit.load(checkpoint_path, map_location=device)
         elif checkpoint_path.endswith("model.pt"):
-            # Load full model directly (for trusted fly_organelles models)
+            # Load full model directly (for trusted fly_organelles models).
+            # torch.load(weights_only=False) unpickles arbitrary objects, which
+            # is a code-exec sink if the checkpoint comes from an untrusted
+            # location. Require the operator to opt-in explicitly.
+            import os
+            trusted = os.environ.get("CELLMAP_FLOW_ALLOW_PICKLE", "").lower() in ("1", "true", "yes")
+            if not trusted:
+                raise ValueError(
+                    f"Refusing to torch.load (weights_only=False) checkpoint {checkpoint_path}. "
+                    "This unpickles arbitrary objects. If the checkpoint is from a trusted "
+                    "source, set CELLMAP_FLOW_ALLOW_PICKLE=1 in the environment."
+                )
             model = torch.load(checkpoint_path, weights_only=False, map_location=device)
             model.to(device)
             model.eval()

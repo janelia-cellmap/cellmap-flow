@@ -8,6 +8,7 @@ This module provides:
 
 import json
 import logging
+import os
 import shlex
 import re
 import sys
@@ -1397,7 +1398,12 @@ class FinetuneJobManager:
         if job.inference_server_url:
             try:
                 control_url = job.inference_server_url.rstrip("/") + "/__control__/restart"
-                response = requests.post(control_url, json=signal_data, timeout=5)
+                # Forward the restart token if the spawner injected one into our env.
+                headers = {}
+                restart_token = os.environ.get("CFLOW_RESTART_TOKEN")
+                if restart_token:
+                    headers["X-Restart-Token"] = restart_token
+                response = requests.post(control_url, json=signal_data, headers=headers, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 if not data.get("success", False):
