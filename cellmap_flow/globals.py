@@ -187,6 +187,12 @@ class Flow:
                 "last_sync": {},
                 "chunk_sync_state": {},
                 "sync_thread": None,
+                # Revision-bumped proxy plumbing (ai-annotate-enabled volumes only) —
+                # lets the server invalidate an already-open neuroglancer layer's
+                # cached chunks after writing a mask outside the browser.
+                "annotation_revisions": {},
+                "annotation_layers": {},
+                "annotation_proxy_host": {},
             }
             cls._instance.annotation_volumes = {}
             cls._instance.output_sessions = {}

@@ -255,6 +255,9 @@ def create_annotation_volume_zarr(
     claimed_output_voxel_size=None,
     claimed_input_voxel_size=None,
     input_norm_config=None,
+    ai_annotate_enabled=False,
+    ai_annotate_label_name=None,
+    ai_annotate_gemini_model=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -361,6 +364,11 @@ def create_annotation_volume_zarr(
         # trips via json.load / yaml.safe_load without any extra parsing.
         if input_norm_config is not None:
             root.attrs["input_norm"] = input_norm_config
+        root.attrs["ai_annotate_enabled"] = bool(ai_annotate_enabled)
+        if ai_annotate_label_name is not None:
+            root.attrs["ai_annotate_label_name"] = ai_annotate_label_name
+        if ai_annotate_gemini_model is not None:
+            root.attrs["ai_annotate_gemini_model"] = ai_annotate_gemini_model
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(
@@ -807,6 +815,9 @@ def _get_volume_metadata(volume_id, zarr_path=None):
             "dataset_path": attrs.get("dataset_path", ""),
             "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
             "corrections_dir": str(Path(zarr_path).parent),
+            "ai_annotate_enabled": attrs.get("ai_annotate_enabled", False),
+            "ai_annotate_label_name": attrs.get("ai_annotate_label_name"),
+            "ai_annotate_gemini_model": attrs.get("ai_annotate_gemini_model"),
             "extracted_chunks": set(),
             "chunk_sync_state": {},
         }

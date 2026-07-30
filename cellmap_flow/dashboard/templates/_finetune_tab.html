@@ -71,6 +71,25 @@
     </small>
   </div>
 
+  <!-- AI-assisted annotation (new volumes only) -->
+  <div class="mb-2 p-2 border rounded">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="aiAnnotateEnabledCheck">
+      <label class="form-check-label fw-bold" for="aiAnnotateEnabledCheck">
+        AI-assisted annotation (Gemini)
+      </label>
+    </div>
+    <div id="aiAnnotateOptions" style="display: none;" class="mt-1">
+      <input type="text" class="form-control form-control-sm" id="aiAnnotateLabelName"
+        placeholder="Label name (e.g. mitochondria)">
+      <small class="form-text text-muted d-block mt-1">
+        Place a point in the <code>ai_annotate_point</code> layer and press
+        <strong>Shift+G</strong> to send a crop around it to Gemini for a first-pass mask.
+        You'll review and accept/reject before anything is written.
+      </small>
+    </div>
+  </div>
+
   <!-- Save action -->
   <div class="mb-2">
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
@@ -175,6 +194,30 @@
       </div>
     </div>
   </div>
+  <!-- AI-annotate Review Modal -->
+  <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aiAnnotateReviewLabel">Review AI-Generated Annotation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            Left to right: original EM crop, Gemini's recolored output, mask overlay.
+            Nothing is written to the annotation volume until you click Accept.
+          </p>
+          <img id="aiAnnotatePreviewImg" class="img-fluid border rounded" alt="AI-annotate preview">
+          <div id="aiAnnotateReviewStatus" class="text-muted small mt-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-danger" id="aiAnnotateRejectBtn">Reject</button>
+          <button type="button" class="btn btn-success" id="aiAnnotateAcceptBtn">Accept</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Deprecated/advanced: dense crop at view center -->
   <details class="mt-2">
     <summary class="text-muted small" style="cursor: pointer;">Advanced (deprecated): dense crop at view center</summary>
@@ -837,9 +880,12 @@ document.addEventListener("DOMContentLoaded", function () {
     finetuneLog.value += `Creating annotation volume for full dataset...\n`;
     finetuneLog.value += `Output path: ${outputPath}\n`;
 
+    const aiAnnotateEnabled = document.getElementById("aiAnnotateEnabledCheck").checked;
     const payload = {
       model_name: selectedModel.name,
-      output_path: outputPath
+      output_path: outputPath,
+      ai_annotate_enabled: aiAnnotateEnabled,
+      ai_annotate_label_name: document.getElementById("aiAnnotateLabelName").value.trim() || null,
     };
 
     fetch("/api/finetune/create-volume", {
@@ -868,6 +914,10 @@ document.addEventListener("DOMContentLoaded", function () {
           minioStatus.style.display = "block";
 
           addToViewer(data.volume_id, data.neuroglancer_url, `sparse_annotation_${data.volume_id}`);
+          if (aiAnnotateEnabled) {
+            finetuneLog.value += `  AI-assisted annotation enabled: place a point in "ai_annotate_point" and press Shift+G\n`;
+            startAiAnnotatePolling(data.volume_id);
+          }
         } else {
           finetuneLog.value += `✗ Error: ${data.error}\n`;
         }
@@ -1200,6 +1250,10 @@ document.addEventListener("DOMContentLoaded", function () {
           data.neuroglancer_url,
           `sparse_annotation_${data.volume_id}`,
         );
+        if (data.metadata && data.metadata.ai_annotate_enabled) {
+          finetuneLog.value += `  AI-assisted annotation enabled: place a point in "ai_annotate_point" and press Shift+G\n`;
+          startAiAnnotatePolling(data.volume_id);
+        }
       })
       .catch(err => {
         if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
@@ -1239,6 +1293,88 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error(err);
       });
   }
+
+  // AI-assisted annotation: show/hide the label-name input, and poll for
+  // Gemini results once an ai-annotate-enabled volume exists so the review
+  // modal pops up as soon as a staged mask is ready.
+  const aiAnnotateEnabledCheck = document.getElementById("aiAnnotateEnabledCheck");
+  const aiAnnotateOptions = document.getElementById("aiAnnotateOptions");
+  aiAnnotateEnabledCheck.addEventListener("change", function() {
+    aiAnnotateOptions.style.display = aiAnnotateEnabledCheck.checked ? "block" : "none";
+  });
+
+  let aiAnnotateReviewModal = null;
+  let aiAnnotatePollHandle = null;
+  let aiAnnotatePendingVolumeId = null;
+
+  function startAiAnnotatePolling(volumeId) {
+    if (aiAnnotatePollHandle) clearInterval(aiAnnotatePollHandle);
+    aiAnnotatePollHandle = setInterval(() => pollAiAnnotateStatus(volumeId), 2000);
+  }
+
+  async function pollAiAnnotateStatus(volumeId) {
+    try {
+      const res = await fetch(`/api/finetune/ai-annotate/status?volume_id=${encodeURIComponent(volumeId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success) return;
+      if (data.status === "ready" && aiAnnotatePendingVolumeId !== volumeId) {
+        aiAnnotatePendingVolumeId = volumeId;
+        document.getElementById("aiAnnotatePreviewImg").src = `data:image/png;base64,${data.preview_png_base64}`;
+        document.getElementById("aiAnnotateReviewStatus").textContent = "";
+        if (!aiAnnotateReviewModal) {
+          aiAnnotateReviewModal = new bootstrap.Modal(document.getElementById("aiAnnotateReviewModal"));
+        }
+        aiAnnotateReviewModal.show();
+      } else if (data.status === "failed") {
+        finetuneLog.value += `✗ AI-annotate failed: ${data.error}\n`;
+      }
+    } catch (_) {
+      // Poll errors are non-fatal — keep going.
+    }
+  }
+
+  document.getElementById("aiAnnotateAcceptBtn").addEventListener("click", function() {
+    if (!aiAnnotatePendingVolumeId) return;
+    const status = document.getElementById("aiAnnotateReviewStatus");
+    status.textContent = "Writing...";
+    fetch("/api/finetune/ai-annotate/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volume_id: aiAnnotatePendingVolumeId })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          finetuneLog.value += `✓ AI-annotate mask accepted for ${aiAnnotatePendingVolumeId}\n`;
+        } else {
+          finetuneLog.value += `✗ AI-annotate accept failed: ${data.error}\n`;
+        }
+        aiAnnotatePendingVolumeId = null;
+        if (aiAnnotateReviewModal) aiAnnotateReviewModal.hide();
+      })
+      .catch(err => {
+        status.textContent = `Failed: ${err}`;
+      });
+  });
+
+  document.getElementById("aiAnnotateRejectBtn").addEventListener("click", function() {
+    if (!aiAnnotatePendingVolumeId) return;
+    fetch("/api/finetune/ai-annotate/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volume_id: aiAnnotatePendingVolumeId })
+    })
+      .then(res => res.json())
+      .then(data => {
+        finetuneLog.value += `AI-annotate result rejected for ${aiAnnotatePendingVolumeId}\n`;
+        aiAnnotatePendingVolumeId = null;
+        if (aiAnnotateReviewModal) aiAnnotateReviewModal.hide();
+      })
+      .catch(err => {
+        console.error(err);
+      });
+  });
 
   // Save annotations to disk
   saveAnnotationsBtn.addEventListener("click", function() {

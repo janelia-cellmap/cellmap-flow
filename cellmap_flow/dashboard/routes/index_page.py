@@ -76,6 +76,15 @@ def set_data():
             )
             s.layers["data"] = get_raw_layer(dataset_path)
 
+        try:
+            from cellmap_flow.dashboard.routes.finetune.ai_annotate import (
+                register_ai_annotate_keybinding,
+            )
+
+            register_ai_annotate_keybinding(viewer)
+        except Exception as e:
+            logger.warning(f"Could not register AI-annotate keybinding: {e}")
+
         g.NEUROGLANCER_URL = str(viewer)
         logger.warning(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
 

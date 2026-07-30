@@ -2,12 +2,18 @@ import json
 import logging
 import os
 import re
+from pathlib import PurePosixPath
 
 import neuroglancer
 import numpy as np
-from flask import jsonify
+import requests
+import s3fs
+import zarr
+from flask import Response, jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import (
+    _get_volume_metadata,
+    _make_s3_filesystem,
     sync_all_annotations_from_minio,
     sync_annotation_from_minio,
 )
@@ -247,6 +253,24 @@ def refresh_annotated_regions_layer(corrections_path=None):
     return len(boxes)
 
 
+def _annotation_proxy_url(
+    volume_id: str,
+    revision: int,
+    object_path: str = "annotation",
+    host_url: str | None = None,
+) -> str:
+    """Build a versioned annotation proxy URL for Neuroglancer source identity.
+
+    Ported from sam-backend-support's finetune_routes.py.
+    """
+    base = host_url.rstrip("/") if host_url else ""
+    suffix = object_path.lstrip("/") if object_path else ""
+    path = f"/api/finetune/minio-proxy/{volume_id}/v/{int(revision)}"
+    if suffix:
+        path = f"{path}/{suffix}"
+    return f"{base}{path}"
+
+
 def add_crop_to_viewer_response(data):
     try:
         crop_id = data.get("crop_id")
@@ -254,18 +278,202 @@ def add_crop_to_viewer_response(data):
         if not hasattr(g, "viewer") or g.viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
 
+        # Only route ai-annotate-enabled volumes through the revision-bumped
+        # proxy (needed so _invalidate_annotation_layer has something to
+        # refresh after a server-side write). Every other volume keeps the
+        # existing direct-MinIO-URL behavior unchanged, to avoid regressing
+        # the working manual-paint-only path.
+        volume_meta = _get_volume_metadata(crop_id) if crop_id else None
+        use_proxy = bool(volume_meta and volume_meta.get("ai_annotate_enabled"))
+
+        if use_proxy:
+            revisions = g.minio_state.setdefault("annotation_revisions", {})
+            revision = int(revisions.get(crop_id, 0))
+            proxy_host = request.host_url.rstrip("/")
+            g.minio_state.setdefault("annotation_proxy_host", {})[crop_id] = proxy_host
+            source_url = _annotation_proxy_url(crop_id, revision, "annotation", host_url=proxy_host)
+        else:
+            source_url = minio_url
+
+        layer_name = data.get("layer_name", f"annotation_{crop_id}")
+        source_config = {
+            "url": f"s3+{source_url}",
+            "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
+        }
+
         with g.viewer.txn() as s:
-            layer_name = data.get("layer_name", f"annotation_{crop_id}")
-            source_config = {
-                "url": f"s3+{minio_url}",
-                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
-            }
             s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
+
+        if use_proxy:
+            tracked_layers = set(g.minio_state.setdefault("annotation_layers", {}).get(crop_id, []))
+            tracked_layers.add(layer_name)
+            g.minio_state["annotation_layers"][crop_id] = sorted(tracked_layers)
+
+        if volume_meta and volume_meta.get("ai_annotate_enabled"):
+            try:
+                from cellmap_flow.dashboard.routes.finetune.ai_annotate import (
+                    ensure_ai_annotate_point_layer,
+                )
+
+                ensure_ai_annotate_point_layer(g.viewer)
+            except Exception as e:
+                logger.warning(f"Could not ensure AI-annotate point layer for volume {crop_id}: {e}")
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:
         logger.error(f"Error adding layer to viewer: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+def _invalidate_annotation_layer(volume_id: str):
+    """Bump source revision and refresh tracked annotation layers in viewer.
+
+    Ported from sam-backend-support's sam_annotator.py. Needed because a
+    server-side zarr write (unlike browser-side painting) doesn't otherwise
+    cause an already-open Neuroglancer viewer to refetch the changed chunks.
+    """
+    minio_state = g.minio_state
+    revisions = minio_state.setdefault("annotation_revisions", {})
+    new_revision = int(revisions.get(volume_id, 0)) + 1
+    revisions[volume_id] = new_revision
+
+    layer_names = list(minio_state.setdefault("annotation_layers", {}).get(volume_id, []))
+    if not layer_names or not hasattr(g, "viewer") or g.viewer is None:
+        logger.info(
+            f"Annotation written for {volume_id}; revision={new_revision} "
+            "(no tracked viewer layer to refresh)"
+        )
+        return
+
+    proxy_host = minio_state.setdefault("annotation_proxy_host", {}).get(volume_id, "")
+    if not proxy_host:
+        logger.warning(
+            f"Annotation written for {volume_id}; revision={new_revision} "
+            "but no proxy host was recorded for this layer. Re-add the layer once."
+        )
+        return
+
+    proxy_url = _annotation_proxy_url(volume_id, new_revision, "annotation", host_url=proxy_host)
+    source_config = {
+        "url": f"s3+{proxy_url}",
+        "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
+    }
+
+    refreshed = 0
+    with g.viewer.txn() as s:
+        alive_layers = []
+        for layer_name in layer_names:
+            if layer_name not in s.layers:
+                continue
+            layer = s.layers[layer_name]
+            try:
+                layer.source = source_config
+                s.layers[layer_name] = layer
+            except Exception:
+                s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
+            alive_layers.append(layer_name)
+            refreshed += 1
+    minio_state["annotation_layers"][volume_id] = alive_layers
+
+    logger.info(
+        f"Annotation written for {volume_id}; bumped to revision={new_revision}, "
+        f"refreshed_layers={refreshed}"
+    )
+
+
+def proxy_minio_annotation_response(volume_id, revision, object_path):
+    """Proxy annotation traffic to MinIO while using revision in URL as cache key.
+
+    Ported from sam-backend-support's finetune_routes.py.
+    """
+    del revision  # Used only for cache busting in the client-visible URL.
+
+    minio_state = g.minio_state
+    if not minio_state.get("ip") or not minio_state.get("port"):
+        return jsonify({"success": False, "error": "MinIO not initialized"}), 503
+
+    normalized = object_path.lstrip("/")
+    if normalized:
+        parts = PurePosixPath(normalized).parts
+        if ".." in parts:
+            return jsonify({"success": False, "error": "Invalid path"}), 400
+
+    minio_target = f"http://{minio_state['ip']}:{minio_state['port']}/{minio_state['bucket']}/{volume_id}.zarr"
+    if normalized:
+        minio_target = f"{minio_target}/{normalized}"
+
+    fwd_headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+
+    try:
+        upstream = requests.request(
+            method=request.method,
+            url=minio_target,
+            params=request.args,
+            headers=fwd_headers,
+            data=request.get_data(),
+            allow_redirects=False,
+            timeout=120,
+        )
+    except Exception as e:
+        logger.error(f"MinIO proxy error for {minio_target}: {e}")
+        return jsonify({"success": False, "error": f"Proxy failed: {e}"}), 502
+
+    excluded = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    }
+    resp_headers = [(k, v) for k, v in upstream.headers.items() if k.lower() not in excluded]
+    return Response(upstream.content, status=upstream.status_code, headers=resp_headers)
+
+
+def write_ai_mask_to_minio(
+    volume_id: str,
+    chunk_indices: tuple[int, int, int],
+    z_row_index: int,
+    mask_2d: np.ndarray,
+    label_id: int = 2,
+    background_label_id: int = 1,
+):
+    """Paint one reviewed z-row of one chunk into the annotation volume in MinIO.
+
+    Adapted from sam-backend-support's _write_mask_to_minio, but narrower:
+    writes only within the specific reviewed z-row, only where mask_2d>0
+    (foreground) vs. elsewhere in that row (background) -- every other
+    z-row/voxel in the chunk is left untouched, so any pre-existing sparse
+    annotation elsewhere in the chunk survives.
+    """
+    volume_meta = _get_volume_metadata(volume_id)
+    if volume_meta is None:
+        raise ValueError(f"Unknown volume_id: {volume_id}")
+
+    chunk_size = np.array(volume_meta["output_size"])
+    cz, cy, cx = (int(v) for v in chunk_indices)
+    z0 = cz * int(chunk_size[0])
+    y0, y1 = cy * int(chunk_size[1]), (cy + 1) * int(chunk_size[1])
+    x0, x1 = cx * int(chunk_size[2]), (cx + 1) * int(chunk_size[2])
+    z = z0 + int(z_row_index)
+
+    bucket = g.minio_state["bucket"]
+    zarr_name = f"{volume_id}.zarr"
+
+    s3 = _make_s3_filesystem()
+    store = s3fs.S3Map(root=f"{bucket}/{zarr_name}/annotation", s3=s3)
+    arr = zarr.open(store, mode="r+")["s0"]
+
+    row = arr[z, y0:y1, x0:x1]
+    row[:] = np.where(mask_2d > 0, label_id, background_label_id).astype(row.dtype)
+    arr[z, y0:y1, x0:x1] = row
+
+    logger.info(
+        f"Painted AI-annotate mask for {zarr_name} at chunk {chunk_indices}, z-row {z_row_index} "
+        f"({int(np.sum(mask_2d > 0))} foreground voxels)"
+    )
 
 
 def sync_annotations_manually_response(data):

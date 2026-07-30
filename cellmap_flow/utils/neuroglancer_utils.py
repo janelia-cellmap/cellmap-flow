@@ -18,6 +18,23 @@ logger = logging.getLogger(__name__)
 neuroglancer.set_server_bind_address("0.0.0.0")
 
 
+def _register_ai_annotate_keybinding_safe(viewer):
+    """Register the AI-annotate keybinding on a freshly created viewer.
+
+    Registered unconditionally at viewer creation; the action handler itself
+    gates on whether an AI-annotate-enabled annotation volume exists, so
+    this is a no-op keypress everywhere except the finetune dashboard.
+    """
+    try:
+        from cellmap_flow.dashboard.routes.finetune.ai_annotate import (
+            register_ai_annotate_keybinding,
+        )
+
+        register_ai_annotate_keybinding(viewer)
+    except Exception as e:
+        logger.warning(f"Could not register AI-annotate keybinding: {e}")
+
+
 def get_raw_closest_scale(dataset_path, target_resolution):
     """Return the raw multiscale scale (as a tuple of nm) closest to the
     model's target resolution, or None if it can't be determined."""
@@ -70,6 +87,7 @@ def build_prediction_source(host, model, st_data, override_scales):
 def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     g.viewer = neuroglancer.Viewer()
     g.dataset_path = dataset_path
+    _register_ai_annotate_keybinding_safe(g.viewer)
     st_data = get_norms_post_args(g.input_norms, g.postprocess)
 
     # Map model name -> ModelConfig for voxel-size lookups

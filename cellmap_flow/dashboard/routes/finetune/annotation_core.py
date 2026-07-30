@@ -49,6 +49,32 @@ def _register_annotation_volume(volume_id, **volume_data):
     }
 
 
+def compute_context_crop_rois(center_nm, config):
+    """Center a model's read/write FOVs on a point in nm, in voxel space.
+
+    Returns (raw_crop_shape_voxels, annotation_crop_shape_voxels,
+    raw_crop_offset_voxels, annotation_crop_offset_voxels), all int arrays.
+    Shared by the manual "create crop at view center" flow and the
+    AI-annotate "crop around the clicked point" flow.
+    """
+    read_shape = np.array(config.read_shape)
+    write_shape = np.array(config.write_shape)
+    input_voxel_size = np.array(config.input_voxel_size)
+    output_voxel_size = np.array(config.output_voxel_size)
+
+    raw_crop_shape_voxels = (read_shape / input_voxel_size).astype(int)
+    annotation_crop_shape_voxels = (write_shape / output_voxel_size).astype(int)
+    raw_crop_offset_voxels = ((center_nm - read_shape / 2) / input_voxel_size).astype(int)
+    annotation_crop_offset_voxels = ((center_nm - write_shape / 2) / output_voxel_size).astype(int)
+
+    return (
+        raw_crop_shape_voxels,
+        annotation_crop_shape_voxels,
+        raw_crop_offset_voxels,
+        annotation_crop_offset_voxels,
+    )
+
+
 def get_finetune_models_response():
     try:
         models = []
@@ -124,7 +150,6 @@ def create_annotation_crop_response(data):
 
         config = model_config.config
         read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
         input_voxel_size = np.array(config.input_voxel_size)
         output_voxel_size = np.array(config.output_voxel_size)
         output_channels = config.output_channels
@@ -135,10 +160,12 @@ def create_annotation_crop_response(data):
             view_center_nm = view_center
             logger.warning("No viewer scales provided, assuming view center is already in nm")
 
-        raw_crop_shape_voxels = (read_shape / input_voxel_size).astype(int)
-        annotation_crop_shape_voxels = (write_shape / output_voxel_size).astype(int)
-        raw_crop_offset_voxels = ((view_center_nm - read_shape / 2) / input_voxel_size).astype(int)
-        annotation_crop_offset_voxels = ((view_center_nm - write_shape / 2) / output_voxel_size).astype(int)
+        (
+            raw_crop_shape_voxels,
+            annotation_crop_shape_voxels,
+            raw_crop_offset_voxels,
+            annotation_crop_offset_voxels,
+        ) = compute_context_crop_rois(view_center_nm, config)
 
         crop_id = f"{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         _, corrections_dir = ensure_corrections_storage(output_path)
@@ -202,6 +229,9 @@ def create_annotation_volume_response(data):
 
         model_name = data.get("model_name")
         output_path = data.get("output_path")
+        ai_annotate_enabled = bool(data.get("ai_annotate_enabled", False))
+        ai_annotate_label_name = data.get("ai_annotate_label_name")
+        ai_annotate_gemini_model = data.get("ai_annotate_gemini_model")
 
         model_config, error_response = _get_selected_model_config(model_name)
         if error_response is not None:
@@ -256,6 +286,9 @@ def create_annotation_volume_response(data):
             claimed_output_voxel_size=claimed_output_voxel_size,
             claimed_input_voxel_size=claimed_input_voxel_size,
             input_norm_config=current_input_norm_config(),
+            ai_annotate_enabled=ai_annotate_enabled,
+            ai_annotate_label_name=ai_annotate_label_name,
+            ai_annotate_gemini_model=ai_annotate_gemini_model,
         )
         if not success:
             return jsonify({"success": False, "error": zarr_info}), 500
@@ -274,6 +307,9 @@ def create_annotation_volume_response(data):
             dataset_path=dataset_path,
             dataset_offset_nm=dataset_offset_nm.tolist(),
             corrections_dir=corrections_dir,
+            ai_annotate_enabled=ai_annotate_enabled,
+            ai_annotate_label_name=ai_annotate_label_name,
+            ai_annotate_gemini_model=ai_annotate_gemini_model,
         )
         refresh_annotated_regions_layer()
 

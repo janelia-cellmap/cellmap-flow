@@ -1,5 +1,10 @@
 from flask import Blueprint, request
 
+from cellmap_flow.dashboard.routes.finetune.ai_annotate import (
+    accept_ai_annotate_response,
+    get_ai_annotate_status_response,
+    reject_ai_annotate_response,
+)
 from cellmap_flow.dashboard.routes.finetune.annotation import (
     add_crop_to_viewer_response,
     create_annotation_crop_response,
@@ -13,6 +18,7 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     set_user_prefs_response,
     sync_annotations_manually_response,
 )
+from cellmap_flow.dashboard.routes.finetune.overlay import proxy_minio_annotation_response
 from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
     get_resume_progress_response,
 )
@@ -157,6 +163,34 @@ def add_finetuned_layer_to_viewer():
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
 def restart_finetuning_job(job_id):
     return restart_finetuning_job_response(job_id, request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/ai-annotate/status", methods=["GET"])
+def get_ai_annotate_status():
+    return get_ai_annotate_status_response(request.args.get("volume_id"))
+
+
+@finetune_bp.route("/api/finetune/ai-annotate/accept", methods=["POST"])
+def accept_ai_annotate():
+    return accept_ai_annotate_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/ai-annotate/reject", methods=["POST"])
+def reject_ai_annotate():
+    return reject_ai_annotate_response(request.get_json() or {})
+
+
+@finetune_bp.route(
+    "/api/finetune/minio-proxy/<volume_id>/v/<int:revision>/",
+    defaults={"object_path": ""},
+    methods=["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"],
+)
+@finetune_bp.route(
+    "/api/finetune/minio-proxy/<volume_id>/v/<int:revision>/<path:object_path>",
+    methods=["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"],
+)
+def proxy_minio_annotation(volume_id, revision, object_path):
+    return proxy_minio_annotation_response(volume_id, revision, object_path)
 
 
 __all__ = ["finetune_bp", "refresh_annotated_regions_layer"]

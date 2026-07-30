@@ -77,6 +77,8 @@ finetune = [
     "transformers>=4.35.0",  # Required by peft
     "accelerate>=0.20.0",    # Training utilities
     "requests",              # Used by finetune_job_manager for restart-control HTTP calls
+    "google-genai",          # Vertex AI Gemini client for AI-assisted annotation
+    "Pillow",                # Image I/O for the Gemini recolor call (pulled in transitively via scikit-image, made explicit here)
     # MinIO server and client are required for annotations but not available on PyPI.
     # Install via conda-forge: mamba install minio-server minio-client -c conda-forge
     # Neuroglancer with voxel annotation support is required but not yet on PyPI.

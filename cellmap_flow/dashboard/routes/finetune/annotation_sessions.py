@@ -320,6 +320,9 @@ def load_existing_volume_response(data):
             dataset_path=volume_meta.get("dataset_path"),
             dataset_offset_nm=volume_meta.get("dataset_offset_nm"),
             corrections_dir=new_corrections,
+            ai_annotate_enabled=volume_meta.get("ai_annotate_enabled", False),
+            ai_annotate_label_name=volume_meta.get("ai_annotate_label_name"),
+            ai_annotate_gemini_model=volume_meta.get("ai_annotate_gemini_model"),
         )
         refresh_annotated_regions_layer()
 
