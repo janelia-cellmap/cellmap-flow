@@ -435,12 +435,29 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         raise RuntimeError(
             f"Remote URL must contain .zarr or .n5 in the path: {dataset_path}"
         )
-    # Prefer .zgroup (container root) over .zarray (leaf dataset).
+    # Prefer group roots over leaf arrays while walking upward. Detect both
+    # zarr v2 (.zgroup/.zarray) and v3 (zarr.json).
     path = os.path.normpath(dataset_path)
     parts = []
-    fallback = None  # track first .zarray-only match as fallback
+    fallback = None  # track first array-only match as fallback
     while path and path != os.path.dirname(path):
         if os.path.isdir(path):
+            zarr_json = os.path.join(path, "zarr.json")
+            if os.path.exists(zarr_json):
+                try:
+                    with open(zarr_json) as f:
+                        meta = json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    meta = {}
+                if meta.get("zarr_format") == 3:
+                    if meta.get("node_type") == "group":
+                        dataset = "/".join(reversed(parts))
+                        if scale is not None:
+                            dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
+                        return path, dataset
+                    if fallback is None:
+                        fallback = (path, list(parts))
+
             if os.path.exists(os.path.join(path, ".zgroup")):
                 dataset = "/".join(reversed(parts))
                 if scale is not None:

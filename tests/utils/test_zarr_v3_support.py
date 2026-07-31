@@ -32,6 +32,7 @@ from cellmap_flow.utils.ds import (
     check_for_multiscale,
     find_closest_scale,
     get_ds_info,
+    split_dataset_path,
 )
 
 
@@ -438,3 +439,38 @@ def test_image_data_interface_v3_sharded_byte_equal_to_v2(v3_sharded, tmp_path):
     idi = ImageDataInterface(str(v3_sharded))
     assert idi.ts.spec().to_json()["driver"] == "zarr3"
     assert tuple(idi.shape) == v3_arr.shape
+
+
+# --- split_dataset_path + Neuroglancer reference dimensions ---------------
+
+
+def test_split_dataset_path_extensionless_v3_group(tmp_path):
+    p = tmp_path / "v3_noext"
+    _write_v3_group(p)
+    _write_v3_array(p / "0", shape=(16, 16, 16), chunks=(8, 8, 8))
+
+    container, dataset = split_dataset_path(str(p))
+
+    assert container == str(p)
+    assert dataset == ""
+
+
+def test_split_dataset_path_extensionless_v3_child_array(tmp_path):
+    p = tmp_path / "v3_noext"
+    _write_v3_group(p)
+    _write_v3_array(p / "1", shape=(16, 16, 16), chunks=(8, 8, 8))
+
+    container, dataset = split_dataset_path(str(p / "1"))
+
+    assert container == str(p)
+    assert dataset == "1"
+
+
+def test_read_data_reference_scale_uses_v3_numeric_multiscales(v3_multiscale):
+    from cellmap_flow.utils.neuroglancer_utils import _read_data_reference_scale
+
+    dims = _read_data_reference_scale(str(v3_multiscale))
+
+    assert list(dims.names) == ["z", "y", "x"]
+    assert [str(unit) for unit in dims.units] == ["m", "m", "m"]
+    assert [float(scale) for scale in dims.scales] == [8e-9, 8e-9, 8e-9]

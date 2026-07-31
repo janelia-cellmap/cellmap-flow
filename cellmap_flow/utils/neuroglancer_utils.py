@@ -2,9 +2,14 @@ import neuroglancer
 import itertools
 import logging
 
-from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.utils.ds import find_closest_scale, get_scale_info, _open_zarr
+from cellmap_flow.utils.ds import (
+    _is_zarr_group,
+    _join_path,
+    _open_zarr,
+    find_closest_scale,
+    get_scale_info,
+)
 from cellmap_flow.globals import g
 
 from cellmap_flow.utils.web_utils import (
@@ -19,26 +24,35 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 
 
 def _read_data_reference_scale(dataset_path):
-    # Read the data layer's smallest-scale CoordinateSpace from disk so the
+    # Read the data layer's first multiscale CoordinateSpace from disk so the
     # caller can pin viewer.state.dimensions before any layers are added.
     # Returns None for non-zarr-multiscale sources (precomputed, single arrays).
-    # Patch 36 (1c5d4cb): without this pin, the JS NG client derives global
-    # dimensions from layer metadata in a way that depends on layer add
-    # order, source type, and which extra_layers are loaded — silently lands
-    # on the wrong scale when a precomputed extra_layer at a different voxel
-    # size is included.
-    import os
     if dataset_path.startswith("precomputed://"):
         return None
     try:
         from cellmap_flow.image_data_interface import ImageDataInterface
-        scales = sorted(
-            [f for f in os.listdir(dataset_path) if f.startswith("s") and f[1:].isdigit()],
-            key=lambda x: int(x[1:]),
-        )
-        if not scales:
+
+        grp = _open_zarr(dataset_path, mode="r")
+        if not _is_zarr_group(grp):
             return None
-        ref = ImageDataInterface(os.path.join(dataset_path, scales[0]), normalize=False)
+
+        multiscales = grp.attrs.get("multiscales", None)
+        if multiscales and multiscales[0].get("datasets"):
+            scale_path = multiscales[0]["datasets"][0].get("path")
+        else:
+            scales = sorted(
+                [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
+                key=lambda x: int(x[1:]),
+            )
+            if not scales:
+                return None
+            scale_path = scales[0]
+
+        if scale_path in (None, "", "."):
+            ref_path = dataset_path
+        else:
+            ref_path = _join_path(dataset_path, scale_path)
+        ref = ImageDataInterface(ref_path, normalize=False)
         return neuroglancer.CoordinateSpace(
             names=list(ref.axes_names), units="nm", scales=list(ref.voxel_size),
         )
@@ -215,6 +229,8 @@ void main() {{
         viewer_url = viewer_url.replace(hostname, "localhost")
         logger.info(f"Replaced {hostname} with localhost in viewer URL (SSH tunnel mode)")
     print("viewer", viewer_url)
+    from cellmap_flow.dashboard.app import create_and_run_app
+
     url = create_and_run_app(neuroglancer_url=viewer_url, port=5000)
     show(url)
     return url
