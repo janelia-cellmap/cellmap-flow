@@ -5,6 +5,7 @@ import os
 import inspect
 from typing import Dict, Any, List
 from huggingface_hub import list_models, hf_hub_download
+from cellmap_flow.utils.import_utils import get_missing_dependencies, MissingDependencyError
 from cellmap_flow.models.models_config import (
     ScriptModelConfig,
     DaCapoModelConfig,
@@ -127,11 +128,14 @@ def get_all_model_configs() -> Dict[str, Dict[str, Any]]:
             else:
                 param_info['input_type'] = 'text'
         
+        missing_packages = get_missing_dependencies(getattr(cls, 'REQUIRED_PACKAGES', []))
         registry[class_name] = {
             'display_name': display_name,
             'description': f'Create a {display_name} model configuration',
             'parameters': params,
             'class_name': class_name,
+            'available': len(missing_packages) == 0,
+            'missing_packages': missing_packages,
         }
     
     return registry
@@ -214,6 +218,9 @@ def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
     
     try:
         return cls(**parsed_params)
+    except MissingDependencyError:
+        # Let this propagate as-is so callers can read `.missing_packages`.
+        raise
     except Exception as e:
         raise ValueError(f"Failed to instantiate {class_name}: {str(e)}")
 

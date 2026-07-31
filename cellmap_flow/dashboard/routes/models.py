@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 
 from cellmap_flow.globals import g, SERVER_CONFIG_KEYS
 from cellmap_flow.models.run import update_run_models
+from cellmap_flow.utils.import_utils import MissingDependencyError
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,9 @@ def create_model_config():
             'model_name': model_config.name,
             'config_dict': model_config.to_dict()
         })
+    except MissingDependencyError as e:
+        logger.warning(f"Missing dependency creating model config: {e}")
+        return jsonify({'error': str(e), 'missing_packages': e.missing_packages}), 400
     except Exception as e:
         logger.error(f"Error creating model config: {str(e)}")
         return jsonify({'error': str(e)}), 400

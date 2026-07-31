@@ -14,6 +14,7 @@ from cellmap_flow.dashboard.routes.pipeline import pipeline_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
+from cellmap_flow.dashboard.routes.dependencies import dependencies_bp
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ app.register_blueprint(pipeline_bp)
 app.register_blueprint(blockwise_bp)
 app.register_blueprint(bbx_bp)
 app.register_blueprint(finetune_bp)
+app.register_blueprint(dependencies_bp)
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

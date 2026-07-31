@@ -2,16 +2,32 @@ import logging
 import numpy as np
 import inspect
 import ast
-import neuroglancer
-import pymorton
 import threading
 from scipy.ndimage import label
-import mwatershed as mws
 from scipy.ndimage import measurements
-import fastremap
-from funlib.math import cantor_number
-import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
+from cellmap_flow.utils.import_utils import check_dependencies, get_missing_dependencies
+
+try:
+    import neuroglancer
+except ImportError:
+    neuroglancer = None
+try:
+    import pymorton
+except ImportError:
+    pymorton = None
+try:
+    import mwatershed as mws
+except ImportError:
+    mws = None
+try:
+    import fastremap
+except ImportError:
+    fastremap = None
+try:
+    import fastmorph
+except ImportError:
+    fastmorph = None
 
 postprocessing_lock = threading.Lock()
 
@@ -20,6 +36,17 @@ logger = logging.getLogger(__name__)
 
 class PostProcessor(SerializableInterface):
     """Base class for post-processing methods."""
+
+    # Import names (as passed to `check_dependencies`) a subclass needs beyond
+    # numpy/scipy. Overridden per subclass; used to gate instantiation and to
+    # report availability to the frontend via `get_postprocessors_list()`.
+    REQUIRED_PACKAGES: list[str] = []
+
+    def __new__(cls, *args, **kwargs):
+        # Checked in __new__ (not __init__) since subclasses don't call
+        # super().__init__() and this must gate construction regardless.
+        check_dependencies(cls.REQUIRED_PACKAGES)
+        return super().__new__(cls)
 
     def __init__(self):
         # Explicit empty __init__ so the GUI doesn't introspect *args/**kwargs
@@ -106,6 +133,8 @@ class LabelPostprocessor(PostProcessor):
 
 
 class MortonSegmentationRelabeling(PostProcessor):
+    REQUIRED_PACKAGES = ["pymorton"]
+
     def __init__(self, channel: int = 0):
         use_exact = "True"
         self.channel = int(channel)
@@ -145,6 +174,8 @@ class MortonSegmentationRelabeling(PostProcessor):
 
 
 class AffinityPostprocessor(PostProcessor):
+    REQUIRED_PACKAGES = ["mwatershed", "fastremap", "pymorton"]
+
     def __init__(
         self,
         bias: float = 0.0,
@@ -229,6 +260,8 @@ class AffinityPostprocessor(PostProcessor):
 
 class SimpleBlockwiseMerger(PostProcessor):
     # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
+    REQUIRED_PACKAGES = ["neuroglancer", "fastmorph"]
+
     def __init__(
         self,
         channel: int = 0,
@@ -361,11 +394,14 @@ def get_postprocessors_list() -> list[dict]:
             if default_val is inspect._empty:
                 default_val = ""
             params[param_name] = default_val
+        missing_packages = get_missing_dependencies(post_cls.REQUIRED_PACKAGES)
         postprocessors.append(
             {
                 "class_name": post_cls.__name__,
                 "name": post_name,
                 "params": params,
+                "available": len(missing_packages) == 0,
+                "missing_packages": missing_packages,
             }
         )
     return postprocessors
