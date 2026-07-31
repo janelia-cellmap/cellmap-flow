@@ -218,6 +218,19 @@
             opacity: 0.8;
         }
 
+        .library-item-unavailable {
+            cursor: pointer;
+            opacity: 0.6;
+            border-color: #d9822b;
+            border-style: dashed;
+        }
+
+        .library-item-unavailable:hover {
+            background: rgba(217, 130, 43, 0.15);
+            border-color: #d9822b;
+            color: inherit;
+        }
+
         /* Canvas */
         .canvas {
             flex: 1;

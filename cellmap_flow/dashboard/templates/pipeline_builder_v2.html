@@ -236,8 +236,27 @@
         </div>
     </div>
 
+    <!-- Missing Dependency Modal -->
+    <div id="dependency-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 480px;">
+            <div class="modal-header">
+                <h2>⚠ Missing Dependency</h2>
+                <button class="modal-close-btn" onclick="closeDependencyModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p id="dependency-modal-message"></p>
+                <pre id="dependency-modal-log" style="display: none; max-height: 200px; overflow: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeDependencyModal()">Cancel</button>
+                <button class="action-btn" style="background: var(--accent-green); color: white;"
+                        onclick="installMissingDependencies()" id="dependency-install-btn">⬇ Install</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Overlay -->
-    <div id="modal-overlay" class="modal-overlay" style="display: none;" 
+    <div id="modal-overlay" class="modal-overlay" style="display: none;"
          onclick="if(event.target === this) closeOutputChannelsModal()"></div>
 
     <script>
@@ -593,13 +612,20 @@
             const postContainer = document.getElementById('postprocessors-items');
             postsArray.forEach(item => {
                 const name = typeof item === 'string' ? item : item.name;
+                const isAvailable = typeof item === 'string' ? true : item.available !== false;
                 const elem = document.createElement('div');
-                elem.className = 'library-item';
-                elem.textContent = name;
-                elem.draggable = true;
+                elem.className = isAvailable ? 'library-item' : 'library-item library-item-unavailable';
+                elem.textContent = isAvailable ? name : `⚠ ${name}`;
                 elem.dataset.type = 'postprocessor';
                 elem.dataset.name = name;
-                elem.addEventListener('dragstart', handleDragStart);
+                if (isAvailable) {
+                    elem.draggable = true;
+                    elem.addEventListener('dragstart', handleDragStart);
+                } else {
+                    elem.draggable = false;
+                    elem.title = `Missing: ${(item.missing_packages || []).join(', ')} — click to install`;
+                    elem.addEventListener('click', () => showDependencyModal(item.missing_packages || []));
+                }
                 postContainer.appendChild(elem);
             });
 
@@ -1355,6 +1381,58 @@
             }
         }
 
+        // ===== DEPENDENCY INSTALL =====
+        let pendingMissingPackages = [];
+
+        function showDependencyModal(missingPackages) {
+            pendingMissingPackages = missingPackages || [];
+            document.getElementById('dependency-modal-message').textContent = pendingMissingPackages.length
+                ? `This option requires the following package(s), which aren't installed on the server: ${pendingMissingPackages.join(', ')}.`
+                : 'This option has an unresolved dependency issue.';
+            const logEl = document.getElementById('dependency-modal-log');
+            logEl.style.display = 'none';
+            logEl.textContent = '';
+            const btn = document.getElementById('dependency-install-btn');
+            btn.disabled = false;
+            btn.textContent = '⬇ Install';
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('dependency-modal').style.display = 'block';
+        }
+
+        function closeDependencyModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('dependency-modal').style.display = 'none';
+        }
+
+        async function installMissingDependencies() {
+            const btn = document.getElementById('dependency-install-btn');
+            const logEl = document.getElementById('dependency-modal-log');
+            btn.disabled = true;
+            btn.textContent = 'Installing...';
+            try {
+                const response = await fetch('/api/dependencies/install', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ packages: pendingMissingPackages })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    btn.textContent = '✓ Installed — reloading...';
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = '⬇ Install';
+                    logEl.style.display = 'block';
+                    logEl.textContent = result.error || result.log || 'Install failed.';
+                }
+            } catch (error) {
+                btn.disabled = false;
+                btn.textContent = '⬇ Install';
+                logEl.style.display = 'block';
+                logEl.textContent = String(error);
+            }
+        }
+
         // ===== MODEL CONFIG CREATION =====
         let availableModelConfigTypes = {};
 
@@ -1389,7 +1467,8 @@
             Object.entries(availableModelConfigTypes).forEach(([className, config]) => {
                 const option = document.createElement('option');
                 option.value = className;
-                option.textContent = `${config.display_name} - ${config.description}`;
+                const label = `${config.display_name} - ${config.description}`;
+                option.textContent = config.available === false ? `⚠ ${label} (requires install)` : label;
                 select.appendChild(option);
             });
         }
@@ -1397,15 +1476,29 @@
         function updateModelConfigForm(className) {
             const container = document.getElementById('model-config-form-container');
             const formDiv = document.getElementById('model-config-form');
-            
+
             if (!className) {
                 container.style.display = 'none';
                 return;
             }
-            
+
             const config = availableModelConfigTypes[className];
             formDiv.innerHTML = '';
-            
+
+            if (config.available === false) {
+                const banner = document.createElement('div');
+                banner.style.cssText = 'margin-bottom: 16px; padding: 10px; border: 1px solid #d9822b; border-radius: 4px; background: rgba(217, 130, 43, 0.1); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+                const text = document.createElement('span');
+                text.innerHTML = `<strong>⚠ Missing dependency:</strong> ${(config.missing_packages || []).join(', ')}`;
+                const installBtn = document.createElement('button');
+                installBtn.className = 'action-btn';
+                installBtn.textContent = '⬇ Install';
+                installBtn.onclick = () => showDependencyModal(config.missing_packages || []);
+                banner.appendChild(text);
+                banner.appendChild(installBtn);
+                formDiv.appendChild(banner);
+            }
+
             // Group parameters into required and optional
             const required = Object.entries(config.parameters).filter(([_, info]) => info.required);
             const optional = Object.entries(config.parameters).filter(([_, info]) => !info.required);
@@ -1513,10 +1606,14 @@
                 
                 if (!response.ok) {
                     const error = await response.json();
-                    alert(`Error: ${error.error}`);
+                    if (error.missing_packages && error.missing_packages.length) {
+                        showDependencyModal(error.missing_packages);
+                    } else {
+                        alert(`Error: ${error.error}`);
+                    }
                     return;
                 }
-                
+
                 const result = await response.json();
                 console.log('Model config created:', result);
                 
@@ -2110,6 +2207,10 @@
                 const result = await response.json();
                 if (!response.ok) {
                     console.error('Pipeline sync error:', result.error || 'Unknown error');
+                    const alreadyOpen = document.getElementById('dependency-modal').style.display === 'block';
+                    if (!alreadyOpen && result.missing_packages && result.missing_packages.length) {
+                        showDependencyModal(result.missing_packages);
+                    }
                 }
             } catch (err) {
                 console.error('Pipeline sync failed:', err.message);

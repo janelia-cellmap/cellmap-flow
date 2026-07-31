@@ -13,6 +13,7 @@ from cellmap_flow.norm.input_normalize import (
     get_normalizations,
 )
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
+from cellmap_flow.utils.import_utils import MissingDependencyError
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import encode_to_str, ARGS_KEY
@@ -331,6 +332,9 @@ def apply_pipeline():
             "postprocessors_applied": len(g.postprocess),
         })
 
+    except MissingDependencyError as e:
+        logger.warning(f"Missing dependency applying pipeline: {e}")
+        return jsonify({"error": str(e), "missing_packages": e.missing_packages}), 400
     except Exception as e:
         logger.error(f"Error applying pipeline: {e}")
         return jsonify({"error": str(e)}), 500

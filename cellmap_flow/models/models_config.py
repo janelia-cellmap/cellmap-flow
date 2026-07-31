@@ -8,6 +8,7 @@ from funlib.geometry import Roi, Coordinate
 import numpy as np
 import torch
 from cellmap_flow.utils.serialize_config import Config
+from cellmap_flow.utils.import_utils import check_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,11 @@ def _get_device():
 
 
 class ModelConfig:
+    # Import names (as passed to `check_dependencies`) a subclass needs beyond
+    # this module's hard dependencies. Overridden per subclass; used to report
+    # availability to the frontend via `get_all_model_configs()`.
+    REQUIRED_PACKAGES: list = []
+
     def __init__(self):
         self._config = None
 
@@ -241,9 +247,11 @@ class ScriptModelConfig(ModelConfig):
 class DaCapoModelConfig(ModelConfig):
 
     cli_name = "dacapo"
+    REQUIRED_PACKAGES = ["dacapo"]
 
     def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()
+        check_dependencies(self.REQUIRED_PACKAGES)
         self.run_name = run_name
         self.iteration = iteration
         self.name = name
@@ -433,6 +441,7 @@ class FlyModelConfig(ModelConfig):
 class BioModelConfig(ModelConfig):
 
     cli_name = "bioimage"
+    REQUIRED_PACKAGES = ["bioimageio.core"]
 
     def __init__(
         self,
@@ -443,6 +452,7 @@ class BioModelConfig(ModelConfig):
         scale=None,
     ):
         super().__init__()
+        check_dependencies(self.REQUIRED_PACKAGES)
         self.model_name = model_name
         self.voxel_size = voxel_size
         self.name = name
