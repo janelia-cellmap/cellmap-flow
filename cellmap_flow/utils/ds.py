@@ -319,6 +319,48 @@ def _detect_filetype(dataset_path: str) -> str:
     return "zarr"
 
 
+def _clean_zarr_compressor(dataset_path: str):
+    """Return .zarray metadata with unsupported compressor fields removed.
+
+    Tensorstore is strict about compressor metadata and rejects extra fields
+    added by newer numcodecs versions, such as ``checksum``.
+    """
+    zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
+    if not os.path.isfile(zarray_path):
+        return None
+    try:
+        with open(zarray_path) as f:
+            meta = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    compressor = meta.get("compressor")
+    if not isinstance(compressor, dict):
+        return None
+
+    known_fields = {
+        "zstd": {"id", "level"},
+        "zlib": {"id", "level"},
+        "gzip": {"id", "level"},
+        "bz2": {"id", "level"},
+        "blosc": {"id", "cname", "clevel", "shuffle", "blocksize"},
+    }
+    allowed = known_fields.get(compressor.get("id", ""))
+    if allowed is None:
+        return None
+
+    extra_keys = set(compressor.keys()) - allowed
+    if not extra_keys:
+        return None
+
+    logger.info(
+        "Stripping unsupported compressor fields %s for tensorstore compatibility",
+        extra_keys,
+    )
+    meta["compressor"] = {k: v for k, v in compressor.items() if k in allowed}
+    return meta
+
+
 def open_ds_tensorstore(
     dataset_path: str, mode="r", concurrency_limit=None, normalize=True
 ):
@@ -371,6 +413,17 @@ def open_ds_tensorstore(
             "path": os.path.normpath(dataset_path),
         }
 
+    assume_metadata = False
+    if (
+        filetype == "zarr"
+        and isinstance(kvstore, dict)
+        and kvstore.get("driver") == "file"
+    ):
+        cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
+        if cleaned_metadata is not None:
+            extra_args["metadata"] = cleaned_metadata
+            assume_metadata = True
+
     if concurrency_limit:
         spec = {
             "driver": filetype,
@@ -384,10 +437,11 @@ def open_ds_tensorstore(
     else:
         spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
 
+    open_kwargs = {"open": True, "assume_metadata": True} if assume_metadata else {}
     if mode == "r":
-        dataset_future = ts.open(spec, read=True, write=False)
+        dataset_future = ts.open(spec, read=True, write=False, **open_kwargs)
     else:
-        dataset_future = ts.open(spec, read=False, write=True)
+        dataset_future = ts.open(spec, read=False, write=True, **open_kwargs)
 
     try:
         ts_dataset = dataset_future.result()
@@ -405,17 +459,20 @@ def open_ds_tensorstore(
             # Some zarr files have extra fields (e.g. "checksum") in the
             # compressor metadata that tensorstore doesn't recognize.
             # Fix by providing the metadata explicitly without the extra fields.
-            import json
-            zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
-            with open(zarray_path) as f:
-                zarray = json.load(f)
-            if "compressor" in zarray and isinstance(zarray["compressor"], dict):
-                zarray["compressor"].pop("checksum", None)
-            spec["metadata"] = zarray
+            cleaned_metadata = None
+            if isinstance(kvstore, dict) and kvstore.get("driver") == "file":
+                cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
+            if cleaned_metadata is None:
+                raise
+            spec["metadata"] = cleaned_metadata
             if mode == "r":
-                dataset_future = ts.open(spec, read=True, write=False, assume_metadata=True)
+                dataset_future = ts.open(
+                    spec, read=True, write=False, assume_metadata=True
+                )
             else:
-                dataset_future = ts.open(spec, read=False, write=True, assume_metadata=True)
+                dataset_future = ts.open(
+                    spec, read=False, write=True, assume_metadata=True
+                )
             ts_dataset = dataset_future.result()
         else:
             raise
