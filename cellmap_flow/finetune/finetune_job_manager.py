@@ -597,7 +597,8 @@ class FinetuneJobManager:
                     charge_group=charge_group,
                     job_name=job_name,
                     num_gpus=1,
-                    num_cpus=4
+                    num_cpus=4,
+                    log_file=log_file,
                 )
                 self.logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
             except Exception as e:

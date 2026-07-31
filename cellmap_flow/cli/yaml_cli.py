@@ -10,6 +10,7 @@ import os
 import sys
 import logging
 import click
+from pathlib import Path
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -76,22 +77,25 @@ def run_multiple(
         # -p {port}. wait_for_host=False short-circuits the parent's
         # output-monitoring loop; the model loads in the background and
         # predictions appear in NG once ready (~60-90s) without blocking
-        # dashboard startup. Patch a3d1cd9: job.host uses localhost (not
-        # get_public_ip) so the SSH-tunneled browser can reach the URL.
-        # Phase 8 amendment: job.host is proxy-aware. bootstrap_dashboard.sh
-        # exports CMFLOW_PROXY_MODE; under spine, browser reaches the
-        # subprocess via spine's nginx /inf-{port}/ forward instead of
-        # localhost.
-        from cellmap_flow.utils.web_utils import get_free_port
+        # dashboard startup. Phase 8 amendment: job.host is proxy-aware.
+        # bootstrap_dashboard.sh exports CMFLOW_PROXY_MODE; under spine,
+        # browser reaches the subprocess via spine's nginx /inf-{port}/
+        # forward. Otherwise job.host uses the node's address (matches what
+        # server.py itself binds to), same as the pre-pre-assignment behavior.
+        from cellmap_flow.utils.web_utils import get_free_port, get_public_ip
         server_port = get_free_port()
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
         model_name = getattr(model, "name", None) or type(model).__name__
+
+        log_dir = Path("daisy_logs")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{model_name}.log"
 
         logger.info(f"Submitting job for model: {model_name}")
         logger.warning(f"Executing command: {command}")
         job = start_hosts(
             command, job_name=model_name, queue=queue, charge_group=charge_group,
-            wait_for_host=False,
+            wait_for_host=False, log_file=log_file,
         )
         proxy_mode = os.environ.get("CMFLOW_PROXY_MODE", "direct-ssh")
         if proxy_mode == "spine":
@@ -100,7 +104,7 @@ def run_multiple(
             ).rstrip("/")
             job.host = f"{spine_url}/inf-{server_port}"
         else:
-            job.host = f"http://localhost:{server_port}"
+            job.host = f"http://{get_public_ip()}:{server_port}"
         logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
         return model_name
 

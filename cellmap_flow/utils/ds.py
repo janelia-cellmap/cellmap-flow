@@ -1339,6 +1339,11 @@ def get_ds_info(path: str, mode: str = "r"):
                 if not _is_zarr_group(child):
                     ds = child
                     break
+            else:
+                raise ValueError(
+                    f"zarr v3 group at {path!r} has no 'multiscales' metadata "
+                    "and no child array to fall back to"
+                )
 
         # Array path: try the parent group's multiscales (OME-NGFF pattern)
         parent_path = os.path.dirname(os.path.normpath(_normalize_path(path)))

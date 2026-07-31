@@ -399,10 +399,11 @@ def submit_bsub_job(
     job_name: str = "my_job",
     num_gpus: int = 1,
     num_cpus: int = 4,
+    log_file: Optional[str] = None,
 ) -> LSFJob:
     """
     Submit a job to LSF cluster using bsub.
-    
+
     Args:
         command: Shell command to execute
         queue: LSF queue name
@@ -410,18 +411,23 @@ def submit_bsub_job(
         job_name: Name for the job
         num_gpus: Number of GPUs to request
         num_cpus: Number of CPUs to request
-        
+        log_file: Optional path to redirect the job's stdout/stderr to via
+            bsub's `-o`/`-e`. Without this, LSF discards the job's output.
+
     Returns:
         LSFJob object for the submitted job
-        
+
     Raises:
         subprocess.CalledProcessError: If job submission fails
     """
     bsub_command = ["bsub", "-J", job_name]
-    
+
     if charge_group:
         bsub_command += ["-P", charge_group]
-    
+
+    if log_file:
+        bsub_command += ["-o", str(log_file), "-e", str(log_file)]
+
     bsub_command += [
         "-q", queue,
         "-gpu", f"num={num_gpus}",
@@ -514,10 +520,11 @@ def start_hosts(
     job_name: str = "example_job",
     use_https: bool = False,
     wait_for_host: bool = True,
+    log_file: Optional[str] = None,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
-    
+
     Args:
         command: Command to execute
         queue: LSF queue name (for bsub)
@@ -525,20 +532,24 @@ def start_hosts(
         job_name: Name for the job
         use_https: Whether to use HTTPS (adds cert/key flags)
         wait_for_host: Whether to wait for host information before returning
-        
+        log_file: Optional path to redirect the job's stdout/stderr to.
+            Passed through to `submit_bsub_job`/`run_locally` so the local
+            fallback doesn't fall back to PIPE (which deadlocks once
+            `wait_for_host=False` skips draining it).
+
     Returns:
         Job object (LSFJob or LocalJob) with job information
     """
     # Update global settings
     g.queue = queue
     g.charge_group = charge_group
-    
+
     # Add HTTPS flags if needed
     if use_https:
         command = f"{command} --certfile=host.cert --keyfile=host.key"
-    
+
     job: Job
-    
+
     if is_bsub_available():
         logger.info("Using bsub for job submission")
         try:
@@ -546,26 +557,27 @@ def start_hosts(
                 command,
                 queue,
                 charge_group,
-                job_name=f"{job_name}"
+                job_name=f"{job_name}",
+                log_file=log_file,
             )
-            
+
             if wait_for_host:
                 job.wait_for_host()
-            
+
             g.jobs.append(job)
             return job
-            
+
         except Exception as e:
             logger.error(f"Failed to submit bsub job: {e}")
             logger.info("Falling back to local execution")
     else:
         logger.info("bsub not available, running locally")
-    
+
     # Local execution (either by choice or as fallback)
-    job = run_locally(command, job_name)
-    
+    job = run_locally(command, job_name, log_file=log_file)
+
     if wait_for_host:
         job.wait_for_host()
-    
+
     g.jobs.append(job)
     return job
