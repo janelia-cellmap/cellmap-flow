@@ -3,7 +3,6 @@ import numpy as np
 import inspect
 import ast
 import neuroglancer
-import pymorton
 import threading
 from scipy.ndimage import label
 import mwatershed as mws
@@ -16,6 +15,17 @@ from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize
 postprocessing_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
+
+
+def _morton_interleave(*chunk_corner):
+    try:
+        import pymorton
+    except ImportError as e:
+        raise ImportError(
+            "pymorton is required for Morton-based segmentation relabeling. "
+            "Install it with `pip install pymorton` or `pip install cellmap-flow[postprocess]`."
+        ) from e
+    return pymorton.interleave(*chunk_corner)
 
 
 class PostProcessor(SerializableInterface):
@@ -116,7 +126,7 @@ class MortonSegmentationRelabeling(PostProcessor):
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
         #        if self.use_exact:
-        morton_order_number = pymorton.interleave(*chunk_corner)
+        morton_order_number = _morton_interleave(*chunk_corner)
         unique_increment = chunk_num_voxels * morton_order_number
         if not self.use_exact:
             mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
@@ -192,7 +202,7 @@ class AffinityPostprocessor(PostProcessor):
 
         fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
         fastremap.renumber(segmentation, in_place=True)
-        unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
+        unique_increment = chunk_num_voxels * _morton_interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256
             # https://chatgpt.com/c/67c5db69-a3cc-8001-8be5-21d00cef0a8f
