@@ -60,6 +60,22 @@
           Finetune
         </button>
       </li>
+
+      <!-- Review Tab -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="review-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#review"
+          type="button"
+          role="tab"
+          aria-controls="review"
+          aria-selected="false"
+        >
+          Review
+        </button>
+      </li>
     </ul>
 
     <!-- Tab Contents -->
@@ -97,6 +113,16 @@
         aria-labelledby="finetune-tab"
       >
         {% include "_finetune_tab.html" %}
+      </div>
+
+      <!-- Review Tab Content -->
+      <div
+        class="tab-pane fade p-3"
+        id="review"
+        role="tabpanel"
+        aria-labelledby="review-tab"
+      >
+        {% include "_review_tab.html" %}
       </div>
     </div>
   </div>

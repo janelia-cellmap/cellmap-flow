@@ -27,6 +27,28 @@ from cellmap_flow.models.models_config import ModelConfig
 logger = logging.getLogger(__name__)
 
 
+def _patch_neuroglancer_cache_control() -> None:
+    # Chunk URLs are content-addressed by viewer/volume token, so within a
+    # session the body for a given URL cannot change. Adding `immutable` lets
+    # the browser serve repeats from disk cache with no revalidation
+    # round-trip. Patch 34 (d446769).
+    import neuroglancer.server
+
+    if getattr(neuroglancer.server.SubvolumeHandler, "_cmf_cache_control_patched", False):
+        return
+    _orig_get = neuroglancer.server.SubvolumeHandler.get
+
+    async def _patched_get(self, *args, **kwargs):
+        self.set_header("Cache-Control", "public, max-age=31536000, immutable")
+        return await _orig_get(self, *args, **kwargs)
+
+    neuroglancer.server.SubvolumeHandler.get = _patched_get
+    neuroglancer.server.SubvolumeHandler._cmf_cache_control_patched = True
+
+
+_patch_neuroglancer_cache_control()
+
+
 def run_multiple(
     models: List[ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
 ) -> None:
@@ -48,14 +70,38 @@ def run_multiple(
             logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
             current_data_path = os.path.join(dataset_path, model.scale)
 
-        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
+        # Pre-assign a port so we know the host URL immediately (no waiting).
+        # Patch b8c22bf: instead of waiting up to 120s for the subprocess to
+        # print its address, get_free_port() picks an unused port and we pass
+        # -p {port}. wait_for_host=False short-circuits the parent's
+        # output-monitoring loop; the model loads in the background and
+        # predictions appear in NG once ready (~60-90s) without blocking
+        # dashboard startup. Patch a3d1cd9: job.host uses localhost (not
+        # get_public_ip) so the SSH-tunneled browser can reach the URL.
+        # Phase 8 amendment: job.host is proxy-aware. bootstrap_dashboard.sh
+        # exports CMFLOW_PROXY_MODE; under spine, browser reaches the
+        # subprocess via spine's nginx /inf-{port}/ forward instead of
+        # localhost.
+        from cellmap_flow.utils.web_utils import get_free_port
+        server_port = get_free_port()
+        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
         model_name = getattr(model, "name", None) or type(model).__name__
 
         logger.info(f"Submitting job for model: {model_name}")
         logger.warning(f"Executing command: {command}")
-        start_hosts(
-            command, job_name=model_name, queue=queue, charge_group=charge_group
+        job = start_hosts(
+            command, job_name=model_name, queue=queue, charge_group=charge_group,
+            wait_for_host=False,
         )
+        proxy_mode = os.environ.get("CMFLOW_PROXY_MODE", "direct-ssh")
+        if proxy_mode == "spine":
+            spine_url = os.environ.get(
+                "CMFLOW_SPINE_URL", "https://spine.med.uvm.edu"
+            ).rstrip("/")
+            job.host = f"{spine_url}/inf-{server_port}"
+        else:
+            job.host = f"http://localhost:{server_port}"
+        logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
         return model_name
 
     if models:
@@ -180,6 +226,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     charge_group = config["charge_group"]
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
+    # Global `min_scale` skips pyramid levels below sN on the EM data layer
+    # (part of 815344e perf: s0 opt-out). Default 1 = skip s0 (6 nm at full
+    # resolution), per existing YAML conventions. Per-layer min_scale in
+    # extra_layers entries is independent (defaults to 0 = include s0).
+    g.min_scale = config.get("min_scale", 1)
 
     # Update globals and save to cache
     g.queue = queue
@@ -210,6 +261,51 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Data path: {data_path}")
         click.echo(f"  - Queue: {queue}")
         return
+
+    # Pre-build additional zarr layers (loaded at startup alongside EM).
+    # Each entry stored as (layer, shader, blend) so generate_neuroglancer_url
+    # can apply the YAML shader + blend mode on the live viewer; without this
+    # the layer falls back to get_raw_layer's hardcoded white [-1,1] shader.
+    extra_layers = config.get("extra_layers", [])
+    if extra_layers:
+        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+        g._extra_startup_layers = {}
+        for layer_cfg in extra_layers:
+            lpath = layer_cfg["path"]
+            lname = layer_cfg["name"]
+            lshader = layer_cfg.get("shader")
+            lblend = layer_cfg.get("blend")
+            # layer_type: "image" (default) or "segmentation". When
+            # segmentation, get_raw_layer returns a SegmentationLayer and
+            # NG renders categorical IDs with its built-in palette.
+            ltype = layer_cfg.get("layer_type", "image")
+            is_seg = ltype == "segmentation"
+            # Per-layer min_scale: defaults to 0 (full pyramid including s0).
+            # The global `min_scale` in the yaml was historically intended
+            # for the EM data layer only — applying it to extra_layers
+            # stripped s0 from segmentation layers, making small instances
+            # under-render even at max zoom.
+            lmin_scale = int(layer_cfg.get("min_scale", 0))
+            # Per-layer disable_meshes (segmentation only): suppress NG's
+            # auto-mesh subsource so segment-pick gestures don't trigger
+            # marching-cubes mesh generation. Defaults to False — current
+            # behavior is unchanged unless explicitly opted-in.
+            ldisable_meshes = bool(layer_cfg.get("disable_meshes", False))
+            logger.info(
+                f"Pre-loading extra zarr layer: {lname} -> {lpath} "
+                f"(type={ltype}, min_scale={lmin_scale}, "
+                f"disable_meshes={ldisable_meshes})"
+            )
+            try:
+                layer = get_raw_layer(
+                    lpath, normalize=False, segmentation=is_seg,
+                    min_scale=lmin_scale,
+                    disable_meshes=ldisable_meshes,
+                )
+                g._extra_startup_layers[lname] = (layer, lshader, lblend)
+            except Exception as e:
+                import traceback
+                logger.error(f"Failed to load extra layer {lname}: {e}\n{traceback.format_exc()}")
 
     # Run the models
     run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)

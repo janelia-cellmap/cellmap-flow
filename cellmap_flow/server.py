@@ -190,10 +190,21 @@ class CellMapFlowServer:
     def _top_level_attributes_impl(self, dataset):
         max_scale = 0
         datasets = []
+        # Patch 45 (2026-05-21): emit each served voxel's TRUE nm-per-voxel,
+        # derived from the actual source extent and the served voxel count,
+        # not the user-requested output_voxel_size. When the requested
+        # input_voxel_size doesn't exist natively in the source pyramid
+        # (e.g. requested 8nm on a 6/12/24nm zarr), ImageDataInterface
+        # silently maps to the closest available scale (here s0=6nm) but
+        # leaves self.output_voxel_size at the requested value. Emitting
+        # the requested value as the NGFF scale then causes a render
+        # mis-scale (8/6 = 4/3 larger than the EM the LoRA was actually
+        # read from). Using roi.shape / vol_shape recovers the truth.
+        roi_shape_nm = self.idi_raw.roi.shape
         for s in range(max_scale + 1):
             scale_factor = 2**s
             scale_values = [
-                float(self.output_voxel_size[i] * scale_factor)
+                float(roi_shape_nm[i] / self.vol_shape[i] * scale_factor)
                 for i in range(len(self.output_voxel_size))
             ]
             translation_values = [0.0] * len(self.output_voxel_size)
@@ -308,7 +319,10 @@ class CellMapFlowServer:
         return (
             encoded,
             HTTPStatus.OK,
-            {"Content-Type": "application/octet-stream"},
+            {
+                "Content-Type": "application/octet-stream",
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
         )
 
     def _reorder_to_zarr_axes(self, data: np.ndarray) -> np.ndarray:
