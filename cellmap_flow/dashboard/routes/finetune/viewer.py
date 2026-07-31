@@ -143,14 +143,13 @@ def add_segmentation_layer_to_viewer_response(data):
     """Register a static segmentation zarr on the running NG viewer.
 
     Mirrors yaml_cli's extra_layers loading for layer_type='segmentation'.
-    Required: path, name. Optional: blend, disable_meshes, min_scale.
+    Required: path, name. Optional: blend, disable_meshes.
     """
     try:
         path = data.get("path")
         name = data.get("name")
         blend = data.get("blend")
         disable_meshes = bool(data.get("disable_meshes", False))
-        min_scale = int(data.get("min_scale", 0))
 
         if not path or not name:
             return (
@@ -164,7 +163,6 @@ def add_segmentation_layer_to_viewer_response(data):
             path,
             normalize=False,
             segmentation=True,
-            min_scale=min_scale,
             disable_meshes=disable_meshes,
         )
         if blend:
@@ -178,7 +176,7 @@ def add_segmentation_layer_to_viewer_response(data):
 
         logger.info(
             f"Added segmentation layer: {name} -> {path} "
-            f"(min_scale={min_scale}, disable_meshes={disable_meshes})"
+            f"(disable_meshes={disable_meshes})"
         )
         return jsonify(
             {
@@ -199,14 +197,13 @@ def add_image_layer_to_viewer_response(data):
     """Register a static image zarr on the running NG viewer.
 
     Mirrors yaml_cli's extra_layers loading for layer_type='image'.
-    Required: path, name. Optional: shader, blend, min_scale.
+    Required: path, name. Optional: shader, blend.
     """
     try:
         path = data.get("path")
         name = data.get("name")
         shader = data.get("shader")
         blend = data.get("blend")
-        min_scale = int(data.get("min_scale", 0))
 
         if not path or not name:
             return (
@@ -220,7 +217,6 @@ def add_image_layer_to_viewer_response(data):
             path,
             normalize=False,
             segmentation=False,
-            min_scale=min_scale,
         )
         if shader:
             layer.shader = shader
@@ -233,9 +229,7 @@ def add_image_layer_to_viewer_response(data):
                 del s.layers[name]
             s.layers[name] = layer
 
-        logger.info(
-            f"Added image layer: {name} -> {path} (min_scale={min_scale})"
-        )
+        logger.info(f"Added image layer: {name} -> {path}")
         return jsonify(
             {
                 "success": True,

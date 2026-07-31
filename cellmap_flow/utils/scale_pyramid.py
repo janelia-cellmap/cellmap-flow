@@ -26,7 +26,6 @@ def get_raw_layer(
     normalize=True,
     wrap_raw=True,
     segmentation=False,
-    min_scale=0,
     disable_meshes=False,
 ):
     """Load a local/remote zarr/n5/precomputed volume as a neuroglancer layer.
@@ -43,10 +42,6 @@ def get_raw_layer(
     memory-tight node, where a single mesh request can OOM the
     dashboard process.
 
-    `min_scale=N` (multiscale only): skip pyramid levels below `sN`
-    (e.g. min_scale=2 drops s0/s1, keeps s2+). Useful when the highest
-    resolution levels would saturate dashboard memory before the user
-    has zoomed in.
     """
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
@@ -113,8 +108,6 @@ def get_raw_layer(
                     [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
                     key=lambda x: int(x[1:]),
                 )
-            if min_scale > 0:
-                scales = [s for s in scales if int(s[1:]) >= min_scale]
             for scale in scales:
                 image = ImageDataInterface(
                     _join_path(dataset_path, scale), normalize=normalize

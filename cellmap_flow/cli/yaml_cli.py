@@ -226,12 +226,6 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     charge_group = config["charge_group"]
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
-    # Global `min_scale` skips pyramid levels below sN on the EM data layer
-    # (part of 815344e perf: s0 opt-out). Default 1 = skip s0 (6 nm at full
-    # resolution), per existing YAML conventions. Per-layer min_scale in
-    # extra_layers entries is independent (defaults to 0 = include s0).
-    g.min_scale = config.get("min_scale", 1)
-
     # Update globals and save to cache
     g.queue = queue
     g.charge_group = charge_group
@@ -280,12 +274,6 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
             # NG renders categorical IDs with its built-in palette.
             ltype = layer_cfg.get("layer_type", "image")
             is_seg = ltype == "segmentation"
-            # Per-layer min_scale: defaults to 0 (full pyramid including s0).
-            # The global `min_scale` in the yaml was historically intended
-            # for the EM data layer only — applying it to extra_layers
-            # stripped s0 from segmentation layers, making small instances
-            # under-render even at max zoom.
-            lmin_scale = int(layer_cfg.get("min_scale", 0))
             # Per-layer disable_meshes (segmentation only): suppress NG's
             # auto-mesh subsource so segment-pick gestures don't trigger
             # marching-cubes mesh generation. Defaults to False — current
@@ -293,13 +281,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
             ldisable_meshes = bool(layer_cfg.get("disable_meshes", False))
             logger.info(
                 f"Pre-loading extra zarr layer: {lname} -> {lpath} "
-                f"(type={ltype}, min_scale={lmin_scale}, "
-                f"disable_meshes={ldisable_meshes})"
+                f"(type={ltype}, disable_meshes={ldisable_meshes})"
             )
             try:
                 layer = get_raw_layer(
                     lpath, normalize=False, segmentation=is_seg,
-                    min_scale=lmin_scale,
                     disable_meshes=ldisable_meshes,
                 )
                 g._extra_startup_layers[lname] = (layer, lshader, lblend)
