@@ -12,6 +12,7 @@ from cellmap_flow.models.models_config import (
     BioModelConfig,
     CellMapModelConfig,
     HuggingFaceModelConfig,
+    FinetuneModelConfig,
 )
 
 
@@ -23,7 +24,7 @@ MODEL_CONFIG_CLASSES = {
     'BioModelConfig': BioModelConfig,
     'CellMapModelConfig': CellMapModelConfig,
     'HuggingFaceModelConfig': HuggingFaceModelConfig,
-
+    'FinetuneModelConfig': FinetuneModelConfig,
 }
 
 HUGGING_FACE_ORGS_NAME = "cellmap"
@@ -119,6 +120,8 @@ def get_all_model_configs() -> Dict[str, Dict[str, Any]]:
                 param_info['input_type'] = 'file'
             elif 'channels' in param_name.lower() or 'voxel_size' in param_name.lower():
                 param_info['input_type'] = 'textarea'  # for multi-line JSON
+            elif param_info.get('type') in ('dict',):
+                param_info['input_type'] = 'textarea'  # for JSON dicts
             elif param_name in ('input_size', 'output_size', 'edge_length_to_process', 'iteration'):
                 param_info['input_type'] = 'number'
             else:
@@ -186,6 +189,12 @@ def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
                 if annotation.__origin__ == tuple:
                     value = tuple(value)
             
+            # Handle dict types (e.g., base_model JSON)
+            elif annotation == dict:
+                if isinstance(value, str):
+                    import json
+                    value = json.loads(value)
+
             # Handle numeric types
             elif annotation in (int, float):
                 value = annotation(value)

@@ -9,14 +9,22 @@ import os
 import zarr
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.ds import check_for_multiscale, get_ds_info
+from cellmap_flow.utils.ds import (
+    _is_remote_path,
+    _is_zarr_container,
+    _join_path,
+    _open_zarr,
+    check_for_multiscale,
+    get_ds_info,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+    dataset_path = dataset_path.replace("\\ ", " ")
+    original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
-
     # if multiscale dataset
     if is_precomputed:
         # precomputed format handles scales internally via tensorstore
@@ -29,14 +37,14 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
         is_multiscale = True
     else:
         try:
-            is_multiscale = check_for_multiscale(zarr.open(dataset_path, mode="r"))[0]
+            is_multiscale = check_for_multiscale(_open_zarr(dataset_path, mode="r"))[0]
         except Exception as e:
             logger.error(e)
             is_multiscale = False
 
     if is_precomputed:
         filetype = "precomputed"
-    elif ".zarr" in dataset_path:
+    elif ".zarr" in dataset_path or _is_zarr_container(dataset_path):
         filetype = "zarr"
     elif ".n5" in dataset_path:
         filetype = "n5"
@@ -58,13 +66,24 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_multiscale:
         try:
-            scales = [
-                f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-            ]
-            scales.sort(key=lambda x: int(x[1:]))
+            if _is_remote_path(dataset_path):
+                grp = _open_zarr(dataset_path, mode="r")
+                multiscales = grp.attrs.get("multiscales", None)
+                if multiscales:
+                    scales = [d["path"] for d in multiscales[0]["datasets"]]
+                else:
+                    scales = sorted(
+                        [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
+                        key=lambda x: int(x[1:]),
+                    )
+            else:
+                scales = [
+                    f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
+                ]
+                scales.sort(key=lambda x: int(x[1:]))
             for scale in scales:
                 image = ImageDataInterface(
-                    f"{os.path.join(dataset_path, scale)}", normalize=normalize
+                    _join_path(dataset_path, scale), normalize=normalize
                 )
                 # Use axes from the actual dataset - neuroglancer will use them as-is
                 layers.append(
@@ -87,7 +106,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             is_multiscale = False
 
     if not is_multiscale:
-        image = ImageDataInterface(dataset_path)
+        image = ImageDataInterface(original_dataset_path)
         return neuroglancer.ImageLayer(
             source=neuroglancer.LocalVolume(
                 data=image.ts,

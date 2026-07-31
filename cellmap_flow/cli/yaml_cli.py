@@ -58,16 +58,17 @@ def run_multiple(
         )
         return model_name
 
-    with ThreadPoolExecutor(max_workers=len(models)) as executor:
-        futures = {executor.submit(_submit_model, model): model for model in models}
-        for future in as_completed(futures):
-            try:
-                name = future.result()
-                logger.info(f"Job for {name} is ready")
-            except Exception as e:
-                model = futures[future]
-                model_name = getattr(model, "name", None) or type(model).__name__
-                logger.error(f"Failed to start job for {model_name}: {e}")
+    if models:
+        with ThreadPoolExecutor(max_workers=len(models)) as executor:
+            futures = {executor.submit(_submit_model, model): model for model in models}
+            for future in as_completed(futures):
+                try:
+                    name = future.result()
+                    logger.info(f"Job for {name} is ready")
+                except Exception as e:
+                    model = futures[future]
+                    model_name = getattr(model, "name", None) or type(model).__name__
+                    logger.error(f"Failed to start job for {model_name}: {e}")
 
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
@@ -191,7 +192,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
 
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
-    g.models_config = build_models(config["models"])
+    if config["models"]:
+        g.models_config = build_models(config["models"])
+    else:
+        g.models_config = []
+        logger.info("No models configured — starting dashboard for interactive use")
 
     logger.info(f"Configured {len(g.models_config)} model(s):")
     for i, model in enumerate(g.models_config, 1):

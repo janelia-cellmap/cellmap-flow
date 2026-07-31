@@ -42,12 +42,20 @@ def analyze_script(filepath):
             # If function is a direct name (e.g., `eval()`)
             if isinstance(node.func, ast.Name) and node.func.id in DISALLOWED_FUNCTIONS:
                 issues.append(f"Disallowed function call detected: {node.func.id}")
-            # If function is an attribute call (e.g., `os.system()`)
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in DISALLOWED_FUNCTIONS
-            ):
-                issues.append(f"Disallowed function call detected: {node.func.attr}")
+            # If function is an attribute call on a known-unsafe root
+            # (e.g., `builtins.eval()` / `__builtins__.eval()`). Method calls
+            # on user objects like `model.eval()` remain allowed.
+            elif isinstance(node.func, ast.Attribute):
+                base = node.func.value
+                if (
+                    node.func.attr in DISALLOWED_FUNCTIONS
+                    and isinstance(base, ast.Name)
+                    and base.id in {"builtins", "__builtins__"}
+                ):
+                    issues.append(
+                        "Disallowed function call detected via attribute access: "
+                        f"{base.id}.{node.func.attr}"
+                    )
 
     # Return whether the script is safe (no issues found) and the list of issues
     is_safe = len(issues) == 0
@@ -96,6 +104,7 @@ def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", Fals
 
             # Convert the modified AST back to source code
             code = ast.unparse(tree)
+
             exec(code, config_namespace)
         # Extract the config object from the namespace
         config = Config(**config_namespace)
