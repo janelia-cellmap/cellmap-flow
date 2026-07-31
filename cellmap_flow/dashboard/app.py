@@ -14,6 +14,7 @@ from cellmap_flow.dashboard.routes.pipeline import pipeline_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
+from cellmap_flow.dashboard.routes.review_routes import review_bp
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,21 @@ log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(mess
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
+# Make INFO messages from cellmap_flow.dashboard.* submodules visible in the
+# dashboard log file. Without this, logger.info() calls in submodules (e.g.
+# finetune_utils) are filtered out — the default root level is WARNING and
+# only app's module-local logger had INFO explicitly set. Attach a stream
+# handler at the namespace level and stop propagation to avoid duplicate
+# emission via Python's last-resort WARNING handler.
+_cflow_dashboard_logger = logging.getLogger("cellmap_flow.dashboard")
+_cflow_dashboard_logger.setLevel(logging.INFO)
+_cflow_dashboard_stream_handler = logging.StreamHandler()
+_cflow_dashboard_stream_handler.setFormatter(
+    logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+)
+_cflow_dashboard_logger.addHandler(_cflow_dashboard_stream_handler)
+_cflow_dashboard_logger.propagate = False
+
 # Register all blueprints
 app.register_blueprint(logging_bp)
 app.register_blueprint(index_bp)
@@ -38,13 +54,13 @@ app.register_blueprint(pipeline_bp)
 app.register_blueprint(blockwise_bp)
 app.register_blueprint(bbx_bp)
 app.register_blueprint(finetune_bp)
+app.register_blueprint(review_bp)
 
 
-def create_and_run_app(neuroglancer_url=None, inference_servers=None):
+def create_and_run_app(neuroglancer_url=None, inference_servers=None, port=0):
     g.NEUROGLANCER_URL = neuroglancer_url
     g.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
-    port = 0
     logger.warning(f"Host name: {hostname}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 

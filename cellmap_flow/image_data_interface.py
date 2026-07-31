@@ -1,5 +1,6 @@
 import zarr
 from cellmap_flow.utils.ds import (
+    _is_zarr_group,
     _join_path,
     _open_zarr,
     find_closest_scale,
@@ -28,7 +29,7 @@ class ImageDataInterface:
         if not dataset_path.startswith("precomputed://"):
             try:
                 ds = _open_zarr(dataset_path, mode="r")
-                if isinstance(ds, zarr.hierarchy.Group):
+                if _is_zarr_group(ds):
                     scale, _, _ = find_closest_scale(dataset_path, voxel_size)
                     logger.info(f"found scale {scale} for voxel size {voxel_size}")
                     dataset_path = _join_path(dataset_path, scale)

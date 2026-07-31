@@ -7,6 +7,7 @@ Supports:
 - Extensible to cloud providers and other cluster types
 """
 
+import os
 import subprocess
 import shlex
 import logging
@@ -88,7 +89,8 @@ class LocalJob(Job):
     def __init__(self, process: subprocess.Popen, model_name: Optional[str] = None):
         super().__init__(model_name)
         self.process = process
-    
+        self.job_id = f"local-{process.pid}" if process is not None else "local"
+
     def kill(self) -> None:
         """Terminate the local process."""
         if self.process is None or self.process.poll() is not None:
@@ -122,12 +124,12 @@ class LocalJob(Job):
         else:
             return JobStatus.FAILED
     
-    def wait_for_host(self, timeout: int = 180) -> Optional[str]:
+    def wait_for_host(self, timeout: int = 120) -> Optional[str]:
         """
         Monitor process output for host information.
 
         Args:
-            timeout: Maximum time to wait in seconds (default 180s for model loading)
+            timeout: Maximum time to wait in seconds (default 120s — model loading via pt2 can take >60s)
 
         Returns:
             Host URL if found, None otherwise
@@ -166,6 +168,7 @@ class LocalJob(Job):
             # Check if process died
             if self.process.poll() is not None:
                 logger.error(f"Process exited prematurely with code {self.process.returncode}")
+                logger.error(f"Process output so far: {output}")
                 self.status = JobStatus.FAILED
                 break
             
@@ -453,14 +456,18 @@ def submit_bsub_job(
         raise
 
 
-def run_locally(command: str, name: str) -> LocalJob:
+def run_locally(command: str, name: str, log_file=None) -> LocalJob:
     """
     Run command locally as a subprocess (fallback when bsub unavailable).
-    
+
     Args:
         command: Shell command to execute
         name: Job name for tracking
-        
+        log_file: Optional path to a log file. When provided, stdout and
+            stderr are redirected to this file instead of to pipes. This
+            avoids a deadlock where child processes (e.g. DataLoader workers)
+            fill the 64 KB pipe buffer while the parent is blocked elsewhere.
+
     Returns:
         LocalJob object with process information
     """
@@ -472,12 +479,25 @@ def run_locally(command: str, name: str) -> LocalJob:
     args = shlex.split(command) if isinstance(command, str) else list(command)
 
     try:
-        process = subprocess.Popen(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
+        if log_file is not None:
+            log_fh = open(log_file, "a")
+            process = subprocess.Popen(
+                args,
+                stdout=log_fh,
+                stderr=log_fh,
+                env=env,
+            )
+        else:
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
 
         local_job = LocalJob(process=process, model_name=name)
         return local_job

@@ -16,6 +16,11 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
 from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
     get_resume_progress_response,
 )
+from cellmap_flow.dashboard.routes.finetune.instance_correction import (
+    cc3d_relabel_annotation_response,
+    create_instance_correction_response,
+    sync_instance_correction_response,
+)
 from cellmap_flow.dashboard.routes.finetune.training import (
     cancel_job_response,
     get_job_logs_response,
@@ -29,6 +34,10 @@ from cellmap_flow.dashboard.routes.finetune.training import (
 )
 from cellmap_flow.dashboard.routes.finetune.viewer import (
     add_finetuned_layer_to_viewer_response,
+    add_image_layer_to_viewer_response,
+    add_segmentation_layer_to_viewer_response,
+    remove_layer_from_viewer_response,
+    rename_layer_in_viewer_response,
 )
 from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
     get_load_crops_progress_response,
@@ -152,6 +161,41 @@ def get_inference_server_status(job_id):
 @finetune_bp.route("/api/viewer/add-finetuned-layer", methods=["POST"])
 def add_finetuned_layer_to_viewer():
     return add_finetuned_layer_to_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/create-instance-correction", methods=["POST"])
+def create_instance_correction():
+    return create_instance_correction_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/sync-instance-correction", methods=["POST"])
+def sync_instance_correction():
+    return sync_instance_correction_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/cc3d-relabel-annotation", methods=["POST"])
+def cc3d_relabel_annotation():
+    return cc3d_relabel_annotation_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/add-image-layer", methods=["POST"])
+def add_image_layer_to_viewer():
+    return add_image_layer_to_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/add-segmentation-layer", methods=["POST"])
+def add_segmentation_layer_to_viewer():
+    return add_segmentation_layer_to_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/remove-layer", methods=["POST"])
+def remove_layer_from_viewer():
+    return remove_layer_from_viewer_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/rename-layer", methods=["POST"])
+def rename_layer_in_viewer():
+    return rename_layer_in_viewer_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])

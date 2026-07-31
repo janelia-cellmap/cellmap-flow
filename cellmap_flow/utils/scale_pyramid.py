@@ -21,7 +21,28 @@ from cellmap_flow.utils.ds import (
 logger = logging.getLogger(__name__)
 
 
-def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+def get_raw_layer(
+    dataset_path,
+    normalize=True,
+    wrap_raw=True,
+    segmentation=False,
+    disable_meshes=False,
+):
+    """Load a local/remote zarr/n5/precomputed volume as a neuroglancer layer.
+
+    When `segmentation=True`, wraps the resulting ScalePyramid (or single
+    LocalVolume) in a `neuroglancer.SegmentationLayer` instead of the
+    default `ImageLayer`. Used by the `layer_type: segmentation` path in
+    YAML extra_layers and the /api/viewer/add-segmentation-layer route.
+
+    `disable_meshes=True` (segmentation only): turns OFF the meshes
+    subsource on the layer's data source, so NG won't attempt on-the-fly
+    marching-cubes mesh generation when segments are picked. Required
+    when the catalog spans a whole-cell-scale label volume on a
+    memory-tight node, where a single mesh request can OOM the
+    dashboard process.
+
+    """
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
@@ -57,6 +78,14 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             source = dataset_path
         else:
             source = f"{filetype}://{dataset_path}"
+        if segmentation:
+            if disable_meshes:
+                return neuroglancer.SegmentationLayer(
+                    source=neuroglancer.LayerDataSource(
+                        url=source, subsources={"meshes": False},
+                    ),
+                )
+            return neuroglancer.SegmentationLayer(source=source)
         return neuroglancer.ImageLayer(
             source=source,
             shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
@@ -66,21 +95,19 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_multiscale:
         try:
-            if _is_remote_path(dataset_path):
-                grp = _open_zarr(dataset_path, mode="r")
-                multiscales = grp.attrs.get("multiscales", None)
-                if multiscales:
-                    scales = [d["path"] for d in multiscales[0]["datasets"]]
-                else:
-                    scales = sorted(
-                        [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
-                        key=lambda x: int(x[1:]),
-                    )
+            # Prefer OME-NGFF multiscales metadata when present (it gives us
+            # exact dataset paths, which need not match an s0/s1 pattern —
+            # e.g. v3 zarrs typically use 0/1/2). Falls back to filtering
+            # group child names. Works uniformly for v2 + v3, local + remote.
+            grp = _open_zarr(dataset_path, mode="r")
+            multiscales = grp.attrs.get("multiscales", None)
+            if multiscales:
+                scales = [d["path"] for d in multiscales[0]["datasets"]]
             else:
-                scales = [
-                    f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-                ]
-                scales.sort(key=lambda x: int(x[1:]))
+                scales = sorted(
+                    [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
+                    key=lambda x: int(x[1:]),
+                )
             for scale in scales:
                 image = ImageDataInterface(
                     _join_path(dataset_path, scale), normalize=normalize
@@ -94,10 +121,28 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                             units="nm",
                             scales=image.voxel_size,
                         ),
-                        voxel_offset=image.offset,
+                        # Patch 30: convert nm offset -> voxel units (NG kwarg
+                        # expects voxels; ImageDataInterface returns nm).
+                        voxel_offset=[
+                            int(o // v)
+                            for o, v in zip(image.offset, image.voxel_size)
+                        ],
                     )
                 )
 
+            if segmentation:
+                seg_layer = neuroglancer.SegmentationLayer(
+                    dict(type=neuroglancer.LocalVolume,
+                         source=ScalePyramid(layers)),
+                )
+                if disable_meshes:
+                    # Post-construction tweak: passing subsources via the
+                    # dict-positional form was silently dropped in the
+                    # LayerDataSource coercion path. Setting on the
+                    # already-built source[0] makes it survive to the
+                    # browser-side state JSON.
+                    seg_layer.source[0].subsources = {"meshes": False}
+                return seg_layer
             return neuroglancer.ImageLayer(
                 dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers))
             )
@@ -107,16 +152,27 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if not is_multiscale:
         image = ImageDataInterface(original_dataset_path)
-        return neuroglancer.ImageLayer(
-            source=neuroglancer.LocalVolume(
-                data=image.ts,
-                dimensions=neuroglancer.CoordinateSpace(
-                    names=image.axes_names,
-                    units="nm",
-                    scales=image.voxel_size,
-                ),
-                voxel_offset=image.offset,
+        local_volume = neuroglancer.LocalVolume(
+            data=image.ts,
+            dimensions=neuroglancer.CoordinateSpace(
+                names=image.axes_names,
+                units="nm",
+                scales=image.voxel_size,
             ),
+            # Patch 30: convert nm offset -> voxel units.
+            voxel_offset=[
+                int(o // v) for o, v in zip(image.offset, image.voxel_size)
+            ],
+        )
+        if segmentation:
+            seg_layer = neuroglancer.SegmentationLayer(
+                dict(type=neuroglancer.LocalVolume, source=local_volume),
+            )
+            if disable_meshes:
+                seg_layer.source[0].subsources = {"meshes": False}
+            return seg_layer
+        return neuroglancer.ImageLayer(
+            source=local_volume,
             shader="""#uicontrol invlerp normalized(range=[-1, 1], window=[-1, 1]);
     #uicontrol vec3 color color(default="white");
     void main(){{emitRGB(color * normalized());}}""",

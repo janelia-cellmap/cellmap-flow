@@ -1,0 +1,463 @@
+<div class="alert alert-info" role="alert">
+  <strong>Review:</strong> Query the instance-review SQLite and record
+  bless/edit verdicts. Server navigates neuroglancer to each instance.
+</div>
+
+<!-- Session setup -->
+<div class="card mb-3">
+  <div class="card-header">Session</div>
+  <div class="card-body">
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewDbPath">review.sqlite path</label>
+      <input type="text" class="form-control form-control-sm" id="reviewDbPath"
+             placeholder="/.../review.sqlite">
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewReviewer">reviewer</label>
+      <input type="text" class="form-control form-control-sm" id="reviewReviewer">
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewSegLayer">segmentation layer (optional)</label>
+      <input type="text" class="form-control form-control-sm" id="reviewSegLayer"
+             placeholder="e.g. roi3_run11_instances_b050">
+    </div>
+    <button class="btn btn-sm btn-primary w-100" id="reviewOpenBtn">Open</button>
+    <div id="reviewSessionStatus" class="small text-muted mt-2"></div>
+  </div>
+</div>
+
+<!-- Queue + controls -->
+<div class="card mb-3">
+  <div class="card-header">Queue</div>
+  <div class="card-body">
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewOrder">order</label>
+      <select class="form-select form-select-sm" id="reviewOrder">
+        <option value="fm" selected>fm (false-merge candidates)</option>
+        <option value="smallest">smallest</option>
+        <option value="random">random</option>
+        <option value="em_bright">em_bright (trichocyst candidates)</option>
+        <option value="keep_lt65k">keep_lt65k (Tier-B: sub-65k kept-interior)</option>
+        <option value="keep_ge65k">keep_ge65k (Tier-B: ≥65k kept-interior)</option>
+        <option value="drop">drop (Tier-B: interior dropped by filter)</option>
+      </select>
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewMinVox">min_vox</label>
+      <input type="number" class="form-control form-control-sm" id="reviewMinVox"
+             value="100" min="0">
+    </div>
+
+    <div class="d-grid gap-1 mt-3">
+      <div class="small text-muted mb-1">
+        Hover the cursor over a segment in NG and press <kbd>t</kbd> to pick
+        it. The current instance updates automatically — no Select click.
+      </div>
+      <div class="btn-group" role="group">
+        <button class="btn btn-sm btn-primary" id="reviewNextBtn">Next</button>
+      </div>
+      <div class="btn-group" role="group">
+        <button class="btn btn-sm btn-success" id="reviewBlessBtn" disabled
+                title="Correct detection; keep as-is">Bless</button>
+        <button class="btn btn-sm btn-warning" id="reviewEditBtn" disabled
+                title="Partially correct; record edit notes">Edit</button>
+        <button class="btn btn-sm btn-danger" id="reviewEraseBtn" disabled
+                title="False positive; paint with background for training">Erase</button>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" id="reviewUndoBtn" disabled
+              title="Clear the last verdict on currently-shown instance">
+        Undo
+      </button>
+      <div class="form-check form-check-inline ms-3">
+        <input class="form-check-input" type="checkbox" id="reviewAutoAdvanceChk" checked>
+        <label class="form-check-label small" for="reviewAutoAdvanceChk"
+               title="When checked, Bless/Edit/Erase advance to the next instance. When unchecked, stay at the current location.">
+          Auto-advance
+        </label>
+      </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <label class="form-label mb-0 small" for="reviewGotoId">Go to ID</label>
+      <input type="number" class="form-control form-control-sm" id="reviewGotoId"
+             style="max-width: 120px" placeholder="instance id" min="1">
+      <button class="btn btn-sm btn-outline-primary" id="reviewGotoBtn"
+              title="Server-pushes the centroid of the named instance into NG (bypasses cursor-state-read path)">Go</button>
+    </div>
+
+    <!-- Current instance -->
+    <div id="reviewCurrentBlock" class="border rounded p-2 small mt-3" style="display: none;">
+      <div class="mb-1"><strong>Current instance: </strong><span id="reviewCurrentId"></span></div>
+      <dl class="row mb-0 small">
+        <dt class="col-5">state</dt><dd class="col-7" id="reviewCurrentState"></dd>
+        <dt class="col-5">entry</dt><dd class="col-7" id="reviewCurrentEntryMethod"></dd>
+        <dt class="col-5">rank</dt><dd class="col-7" id="reviewCurrentRank"></dd>
+        <dt class="col-5">vox</dt><dd class="col-7" id="reviewCurrentVox"></dd>
+        <dt class="col-5">em_mean</dt><dd class="col-7" id="reviewCurrentEmMean"></dd>
+        <dt class="col-5">sphericity</dt><dd class="col-7" id="reviewCurrentSphericity"></dd>
+        <dt class="col-5">fm_score</dt><dd class="col-7" id="reviewCurrentFmScore"></dd>
+        <dt class="col-5">centroid (nm)</dt><dd class="col-7 font-monospace" id="reviewCurrentCentroid"></dd>
+        <dt class="col-5">bbox (vox)</dt><dd class="col-7 font-monospace" id="reviewCurrentBbox"></dd>
+      </dl>
+    </div>
+    <div id="reviewNoneBlock" class="text-muted mt-3" style="display: none;">
+      No more unreviewed instances matching the current filter.
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="reviewEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Record edit verdict</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="reviewEditDetails">edit_details (JSON, optional)</label>
+        <textarea class="form-control font-monospace" id="reviewEditDetails" rows="6"
+                  placeholder='{"split_into": 2, "notes": "over-merged by fragment filter"}'></textarea>
+        <div class="small text-muted mt-1">
+          Free-form JSON stored in the ledger. Phase 3 will populate this from
+          voxel-annotation tools; for now any valid JSON object is accepted.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="reviewEditSaveBtn">Record edit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="card">
+  <div class="card-header">Progress</div>
+  <div class="card-body">
+    <div id="reviewProgressSummary" class="small text-muted">
+      (open a review db to see progress)
+    </div>
+    <div class="progress mt-2" style="height: 18px;">
+      <div id="reviewProgressBarBlessed"
+           class="progress-bar bg-success" role="progressbar" style="width: 0%;">0</div>
+      <div id="reviewProgressBarEdited"
+           class="progress-bar bg-warning" role="progressbar" style="width: 0%;">0</div>
+      <div id="reviewProgressBarErased"
+           class="progress-bar bg-danger" role="progressbar" style="width: 0%;">0</div>
+    </div>
+    <div class="small mt-1">
+      <span class="text-muted">blessed / edited / erased / unreviewed:</span>
+      <span id="reviewProgressCounts" class="font-monospace"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const $ = (id) => document.getElementById(id);
+  let currentInstance = null;
+  let currentInstanceMethod = null;  // 'next' | 'select_at' | 'show' | 'pick'
+  let pollTimer = null;
+  let pickStream = null;
+  let lastPickSeq = 0;
+
+  function setControlsEnabled(hasInstance) {
+    $("reviewBlessBtn").disabled = !hasInstance;
+    $("reviewEditBtn").disabled = !hasInstance;
+    $("reviewEraseBtn").disabled = !hasInstance;
+    $("reviewUndoBtn").disabled = !hasInstance;
+  }
+
+  function showInstance(inst) {
+    currentInstance = inst;
+    $("reviewNoneBlock").style.display = "none";
+    $("reviewCurrentBlock").style.display = "";
+    $("reviewCurrentId").textContent = `id=${inst.id}`;
+    $("reviewCurrentState").textContent = inst.review_state || "unreviewed";
+    $("reviewCurrentEntryMethod").textContent =
+      currentInstanceMethod || (inst.entry_method || "—");
+    $("reviewCurrentRank").textContent =
+      (inst.rank !== undefined && inst.rank !== null) ? inst.rank : "—";
+    $("reviewCurrentVox").textContent = inst.vox.toLocaleString();
+    if (inst.em_mean != null) {
+      $("reviewCurrentEmMean").textContent = Number(inst.em_mean).toFixed(1);
+    } else {
+      $("reviewCurrentEmMean").textContent = "…";
+      fetch(`/api/review/show/${inst.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (j && j.em_mean != null &&
+              currentInstance && currentInstance.id === j.id) {
+            currentInstance.em_mean = j.em_mean;
+            $("reviewCurrentEmMean").textContent = Number(j.em_mean).toFixed(1);
+          } else if (currentInstance && currentInstance.id === inst.id) {
+            $("reviewCurrentEmMean").textContent = "—";
+          }
+        })
+        .catch(() => { $("reviewCurrentEmMean").textContent = "—"; });
+    }
+    $("reviewCurrentSphericity").textContent = inst.sphericity.toFixed(3);
+    $("reviewCurrentFmScore").textContent =
+      inst.fm_score != null ? Number(inst.fm_score).toExponential(3) : "-";
+    $("reviewCurrentCentroid").textContent =
+      `z=${inst.cz_nm.toFixed(0)}\ny=${inst.cy_nm.toFixed(0)}\nx=${inst.cx_nm.toFixed(0)}`;
+    $("reviewCurrentCentroid").style.whiteSpace = "pre-line";
+    $("reviewCurrentBbox").textContent =
+      `z=[${inst.bz0}, ${inst.bz1})\ny=[${inst.by0}, ${inst.by1})\nx=[${inst.bx0}, ${inst.bx1})`;
+    $("reviewCurrentBbox").style.whiteSpace = "pre-line";
+    setControlsEnabled(true);
+  }
+
+  function showNone() {
+    currentInstance = null;
+    currentInstanceMethod = null;
+    $("reviewCurrentBlock").style.display = "none";
+    $("reviewNoneBlock").style.display = "";
+    setControlsEnabled(false);
+  }
+
+  async function refreshProgress() {
+    try {
+      const r = await fetch("/api/review/progress");
+      if (!r.ok) {
+        $("reviewProgressSummary").textContent =
+          "(no review db open — open one above)";
+        return;
+      }
+      const p = await r.json();
+      const bs = p.by_state || {};
+      const total = p.total || 0;
+      const blessed = bs.blessed || 0;
+      const edited = bs.edited || 0;
+      const erased = bs.erased || 0;
+      const unreviewed = bs.unreviewed || (total - blessed - edited - erased);
+      const pctB = total ? (100 * blessed / total) : 0;
+      const pctE = total ? (100 * edited / total) : 0;
+      const pctX = total ? (100 * erased / total) : 0;
+      $("reviewProgressBarBlessed").style.width = pctB + "%";
+      $("reviewProgressBarBlessed").textContent = blessed;
+      $("reviewProgressBarEdited").style.width = pctE + "%";
+      $("reviewProgressBarEdited").textContent = edited;
+      $("reviewProgressBarErased").style.width = pctX + "%";
+      $("reviewProgressBarErased").textContent = erased;
+      $("reviewProgressCounts").textContent =
+        `${blessed} / ${edited} / ${erased} / ${unreviewed} (of ${total})`;
+      const q = p.queues || {};
+      const qSummary = Object.entries(q).map(
+        ([k, v]) => `${k}: ${v.reviewed}/${v.total}`
+      ).join(", ");
+      $("reviewProgressSummary").textContent =
+        `queues — ${qSummary}`;
+      // Hide queue dropdown options whose ranking column is missing from
+      // this catalog's instances table. /api/review/progress already
+      // enumerates only the queues that exist; everything else stays out
+      // of view so the user can't pick a queue that 400s.
+      const sel = $("reviewOrder");
+      let firstVisibleQueue = null;
+      for (const opt of sel.options) {
+        const has = Object.prototype.hasOwnProperty.call(q, opt.value);
+        opt.hidden = !has;
+        opt.disabled = !has;
+        if (has && firstVisibleQueue === null) firstVisibleQueue = opt.value;
+      }
+      // If the currently-selected queue was hidden, pick the first
+      // available one so the UI doesn't silently sit on a disabled value.
+      if (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].hidden
+          && firstVisibleQueue !== null) {
+        sel.value = firstVisibleQueue;
+      }
+    } catch (e) {
+      $("reviewProgressSummary").textContent = "progress error: " + e;
+    }
+  }
+
+  $("reviewOpenBtn").addEventListener("click", async () => {
+    const body = {
+      db_path: $("reviewDbPath").value.trim(),
+      reviewer: $("reviewReviewer").value.trim() || null,
+      segmentation_layer: $("reviewSegLayer").value.trim() || null,
+    };
+    if (!body.db_path) { alert("db path is required"); return; }
+    try {
+      const r = await fetch("/api/review/open", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        $("reviewSessionStatus").textContent = "open failed: " + (j.error || r.status);
+        $("reviewSessionStatus").className = "small text-danger mt-2";
+        return;
+      }
+      const segInfo = j.segmentation_layer
+        ? `, highlight=${j.segmentation_layer}`
+        : "";
+      $("reviewSessionStatus").innerHTML =
+        `<strong>opened</strong><br>`
+        + `${j.n_instances} instances<br>`
+        + `reviewer: ${j.reviewer}${segInfo}`;
+      $("reviewSessionStatus").className = "small text-success mt-2";
+      refreshProgress();
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(refreshProgress, 5000);
+      lastPickSeq = 0;
+      startPickStream();
+    } catch (e) {
+      $("reviewSessionStatus").textContent = "open error: " + e;
+      $("reviewSessionStatus").className = "small text-danger mt-2";
+    }
+  });
+
+  // Subscribe to /api/review/pick_stream — Server-Sent Events one-way push
+  // from Flask. The action handler (Tornado side, NG-Python) sets a
+  // threading.Event when 't' lands; the SSE generator emits one event per
+  // new pick. Single long-lived HTTP connection — does not re-acquire a
+  // browser HTTP/1.1 slot per update, so it doesn't compete with NG chunk
+  // fetches over the SSH tunnel. Replaces the prior 700ms polling loop,
+  // which was queuing 14s mean response time under chunk load.
+  function startPickStream() {
+    if (pickStream) { try { pickStream.close(); } catch (e) {} }
+    pickStream = new EventSource("/api/review/pick_stream");
+    pickStream.onmessage = (ev) => {
+      try {
+        const j = JSON.parse(ev.data);
+        if (j && j.seq !== undefined && j.seq !== lastPickSeq && j.pick) {
+          lastPickSeq = j.seq;
+          currentInstanceMethod = "pick";
+          showInstance(j.pick);
+        }
+      } catch (e) { /* ignore malformed events */ }
+    };
+    pickStream.onerror = () => {
+      // EventSource auto-reconnects after a small back-off; nothing to do
+      // unless we want to surface a status. Keep silent.
+    };
+  }
+
+  async function gotoInstanceId() {
+    const idStr = $("reviewGotoId").value.trim();
+    if (!idStr) return;
+    const id = parseInt(idStr, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      alert("Go to ID: please enter a positive integer");
+      return;
+    }
+    try {
+      const r = await fetch(`/api/review/show/${id}`);
+      const j = await r.json();
+      if (!r.ok) { alert("go-to failed: " + (j.error || r.status)); return; }
+      currentInstanceMethod = "show";
+      showInstance(j);
+    } catch (e) { alert("go-to error: " + e); }
+  }
+  $("reviewGotoBtn").addEventListener("click", gotoInstanceId);
+  $("reviewGotoId").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); gotoInstanceId(); }
+  });
+
+  $("reviewNextBtn").addEventListener("click", async () => {
+    const order = $("reviewOrder").value;
+    const minVox = $("reviewMinVox").value;
+    // skip_rank = rank of currently-shown instance; ensures Next advances
+    // past what's already on screen even when not verdicted.
+    const skipRank = (currentInstance && currentInstance.rank !== undefined)
+      ? currentInstance.rank : null;
+    const url = `/api/review/next?order=${encodeURIComponent(order)}`
+              + (minVox ? `&min_vox=${encodeURIComponent(minVox)}` : "")
+              + (skipRank != null ? `&skip_rank=${encodeURIComponent(skipRank)}` : "");
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      if (!r.ok) { alert("next failed: " + (j.error || r.status)); return; }
+      if (j.done) { showNone(); return; }
+      currentInstanceMethod = "next";
+      showInstance(j);
+    } catch (e) { alert("next error: " + e); }
+  });
+
+  async function postVerdict(verdict, editDetails) {
+    if (!currentInstance) return;
+    const body = {id: currentInstance.id, verdict};
+    if (editDetails != null) body.edit_details = editDetails;
+    if (currentInstanceMethod != null) body.entry_method = currentInstanceMethod;
+    try {
+      const r = await fetch("/api/review/verdict", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) { alert("verdict failed: " + (j.error || r.status)); return; }
+      refreshProgress();
+      if ($("reviewAutoAdvanceChk").checked) {
+        $("reviewNextBtn").click();  // auto-advance
+      } else if (currentInstance) {
+        // Stay at current instance; reflect new verdict in UI
+        currentInstance.review_state = verdict;
+        $("reviewCurrentState").textContent = verdict;
+      }
+    } catch (e) { alert("verdict error: " + e); }
+  }
+
+  $("reviewBlessBtn").addEventListener("click", () => postVerdict("blessed", null));
+
+  $("reviewEraseBtn").addEventListener("click", () => {
+    if (!currentInstance) return;
+    postVerdict("erased", null);
+  });
+
+  $("reviewEditBtn").addEventListener("click", () => {
+    $("reviewEditDetails").value = "";
+    new bootstrap.Modal($("reviewEditModal")).show();
+  });
+
+  $("reviewEditSaveBtn").addEventListener("click", () => {
+    const raw = $("reviewEditDetails").value.trim();
+    let parsed = null;
+    if (raw) {
+      try { parsed = JSON.parse(raw); }
+      catch (e) { alert("edit_details must be valid JSON: " + e); return; }
+      if (typeof parsed !== "object" || Array.isArray(parsed)) {
+        alert("edit_details must be a JSON object (not array or primitive)"); return;
+      }
+    }
+    bootstrap.Modal.getInstance($("reviewEditModal")).hide();
+    postVerdict("edited", parsed);
+  });
+
+  $("reviewUndoBtn").addEventListener("click", async () => {
+    if (!currentInstance) return;
+    try {
+      const r = await fetch("/api/review/undo", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({id: currentInstance.id}),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) { alert("undo failed: " + (j.error || r.status)); return; }
+      refreshProgress();
+    } catch (e) { alert("undo error: " + e); }
+  });
+
+  // On tab activation, refresh status + progress if a db is already open
+  document.addEventListener("shown.bs.tab", (e) => {
+    if (e.target && e.target.id === "review-tab") {
+      fetch("/api/review/status").then(r => r.json()).then(s => {
+        if (s.db_path) {
+          $("reviewDbPath").value = s.db_path;
+          $("reviewReviewer").value = s.reviewer || "";
+          $("reviewSegLayer").value = s.segmentation_layer || "";
+          $("reviewSessionStatus").textContent =
+            `open (viewer=${s.viewer_attached ? "attached" : "none"})`;
+          $("reviewSessionStatus").className = "small text-success mt-2";
+          refreshProgress();
+          if (!pollTimer) pollTimer = setInterval(refreshProgress, 5000);
+          if (!pickStream) startPickStream();
+        }
+      }).catch(() => {});
+    }
+  });
+})();
+</script>

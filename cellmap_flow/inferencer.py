@@ -1,4 +1,7 @@
 # %%
+import os
+import threading
+
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -8,6 +11,16 @@ from cellmap_flow.globals import g
 
 
 logger = logging.getLogger(__name__)
+
+# Server-side concurrency cap for predict(). Bounds simultaneous GPU forwards
+# regardless of client behavior — orphaned forwards (e.g. XHR.abort'd by NG
+# after a pan) keep their slot until predict() returns, so new arrivals queue
+# at acquire() rather than stacking activations into the OOM cliff. Default 24
+# leaves margin below the measured ~32-64 OOM cliff (notes/260510_lora_oom_session_report.md);
+# tune via CELLMAP_FLOW_MAX_INFLIGHT.
+_PREDICT_SEMAPHORE = threading.Semaphore(
+    int(os.environ.get("CELLMAP_FLOW_MAX_INFLIGHT", "24"))
+)
 
 
 def apply_postprocess(data, **kwargs):
@@ -29,17 +42,18 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     use_half_prediction = kwargs.get("use_half_prediction", False)
 
-    raw_input = idi.to_ndarray_ts(read_roi)
-    raw_input = np.expand_dims(raw_input, (0, 1))
+    with _PREDICT_SEMAPHORE:
+        raw_input = idi.to_ndarray_ts(read_roi)
+        raw_input = np.expand_dims(raw_input, (0, 1))
 
-    with torch.no_grad():
-        raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
-        logger.error(f"Predicting with model {type(config.model).__name__} on device {device}")
-        logger.error(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
-        raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
-        result = config.model.forward(raw_input_torch).cpu().numpy()[0]
-        logger.error(f"Output shape: {result.shape}, dtype: {result.dtype}")
-    return result
+        with torch.no_grad():
+            raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
+            logger.error(f"Predicting with model {type(config.model).__name__} on device {device}")
+            logger.error(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
+            raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
+            result = config.model.forward(raw_input_torch).cpu().numpy()[0]
+            logger.error(f"Output shape: {result.shape}, dtype: {result.dtype}")
+        return result
 
 class Inferencer:
     def __init__(self, model_config: ModelConfig, use_half_prediction=False):
