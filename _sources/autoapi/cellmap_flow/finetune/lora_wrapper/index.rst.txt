@@ -1,0 +1,231 @@
+cellmap_flow.finetune.lora_wrapper
+==================================
+
+.. py:module:: cellmap_flow.finetune.lora_wrapper
+
+.. autoapi-nested-parse::
+
+   Generic LoRA wrapper for PyTorch models.
+
+   This module provides automatic detection of adaptable layers and wraps
+   PyTorch models with LoRA (Low-Rank Adaptation) adapters using the
+   HuggingFace PEFT library.
+
+   LoRA enables efficient finetuning by training only a small number of
+   additional parameters (typically 1-2% of the original model) while
+   keeping the base model frozen.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.lora_wrapper.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.lora_wrapper.BatchLoopWrapper
+   cellmap_flow.finetune.lora_wrapper.SequentialWrapper
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.lora_wrapper.detect_adaptable_layers
+   cellmap_flow.finetune.lora_wrapper.wrap_model_with_lora
+   cellmap_flow.finetune.lora_wrapper.print_lora_parameters
+   cellmap_flow.finetune.lora_wrapper.load_lora_adapter
+   cellmap_flow.finetune.lora_wrapper.save_lora_adapter
+   cellmap_flow.finetune.lora_wrapper.merge_lora_into_base
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> List[str]
+
+   Automatically detect layers suitable for LoRA adaptation.
+
+   Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
+   By default, only excludes batch/layer-norm style modules. Output/head
+   layers are deliberately INCLUDED so the model can fully adapt its
+   feature→output mapping for cross-domain finetuning. (Previously
+   'final', 'head', 'output' were excluded; that left the output projection
+   frozen, which prevented learning when the base model's predictions on
+   the target dataset were poor.)
+
+   :param model: PyTorch model to inspect
+   :param include_patterns: List of regex patterns for layer names to include
+                            If None, includes all Conv/Linear layers
+   :param exclude_patterns: List of substrings for layer names to exclude
+                            Default: ['bn', 'norm']
+
+   :returns: List of layer names suitable for LoRA adaptation
+
+
+.. py:class:: BatchLoopWrapper(model: torch.nn.Module)
+
+
+
+   Wraps a model with fixed batch_size=1 (e.g. UnflattenedModule from
+   torch.export without dynamic shapes) so it accepts arbitrary batch sizes
+   by looping over the batch dim.
+
+
+   .. py:attribute:: model
+
+
+   .. py:method:: forward(x, *args, **kwargs)
+
+
+.. py:class:: SequentialWrapper(model: torch.nn.Module)
+
+
+
+   Wrapper for Sequential models to make them compatible with PEFT.
+
+   PEFT expects models to accept **kwargs, but Sequential only accepts
+   positional args. This wrapper provides that interface.
+
+
+   .. py:attribute:: model
+
+
+   .. py:method:: forward(x=None, input_ids=None, **kwargs)
+
+
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 8, lora_alpha: int = 16, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+
+   Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
+
+   This creates a PEFT model with LoRA adapters on specified layers.
+   The base model is frozen, and only LoRA parameters are trainable.
+
+   :param model: PyTorch model to wrap (e.g., UNet, CNN)
+   :param target_modules: List of layer names to adapt. If None, auto-detects.
+   :param lora_r: LoRA rank (number of low-rank dimensions)
+                  Higher = more capacity, more parameters
+                  Typical values: 4-32, default 8
+   :param lora_alpha: LoRA alpha (scaling factor)
+                      Controls strength of LoRA updates
+                      Typical: 2*r, default 16
+   :param lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
+   :param modules_to_save: Additional modules to make trainable (e.g., final layer)
+   :param task_type: PEFT task type. Options:
+                     - "FEATURE_EXTRACTION" (default, for general models)
+                     - "SEQ_CLS" (sequence classification)
+                     - "TOKEN_CLS" (token classification)
+                     - "CAUSAL_LM" (causal language modeling)
+
+   :returns: PEFT model with LoRA adapters
+
+   :raises ImportError: If peft library is not installed
+   :raises ValueError: If no adaptable layers found
+
+   .. rubric:: Examples
+
+   >>> # Auto-detect and wrap all Conv/Linear layers
+   >>> lora_model = wrap_model_with_lora(model, lora_r=8)
+
+   >>> # Wrap specific layers with custom config
+   >>> lora_model = wrap_model_with_lora(
+   ...     model,
+   ...     target_modules=["encoder.conv1", "encoder.conv2"],
+   ...     lora_r=16,
+   ...     lora_alpha=32,
+   ...     modules_to_save=["final_conv"]
+   ... )
+
+   >>> # Check trainable parameters
+   >>> print_lora_parameters(lora_model)
+
+
+.. py:function:: print_lora_parameters(model: torch.nn.Module)
+
+   Print statistics about trainable and total parameters in a LoRA model.
+
+   :param model: PEFT model with LoRA adapters
+
+   .. rubric:: Examples
+
+   >>> lora_model = wrap_model_with_lora(model)
+   >>> print_lora_parameters(lora_model)
+   Trainable params: 294,912 (1.2% of total)
+   Total params: 24,567,890
+
+
+.. py:function:: load_lora_adapter(model: torch.nn.Module, adapter_path: str, is_trainable: bool = False) -> torch.nn.Module
+
+   Load a pretrained LoRA adapter into a base model.
+
+   :param model: Base PyTorch model (without LoRA)
+   :param adapter_path: Path to saved LoRA adapter directory
+   :param is_trainable: If True, adapter parameters are trainable (for continued training)
+                        If False, adapter parameters are frozen (for inference)
+
+   :returns: PEFT model with loaded adapter
+
+   .. rubric:: Examples
+
+   >>> # Load adapter for inference
+   >>> model = load_lora_adapter(
+   ...     base_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter"
+   ... )
+
+   >>> # Load adapter for continued training
+   >>> model = load_lora_adapter(
+   ...     base_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter",
+   ...     is_trainable=True
+   ... )
+
+
+.. py:function:: save_lora_adapter(model: torch.nn.Module, output_path: str)
+
+   Save only the LoRA adapter parameters (not the full model).
+
+   This saves only the trained LoRA weights (~5-20 MB) rather than
+   the entire model (~200-500 MB).
+
+   :param model: PEFT model with LoRA adapters
+   :param output_path: Directory to save adapter
+
+   .. rubric:: Examples
+
+   >>> save_lora_adapter(
+   ...     lora_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter"
+   ... )
+
+
+.. py:function:: merge_lora_into_base(model: torch.nn.Module) -> torch.nn.Module
+
+   Merge LoRA weights back into the base model.
+
+   This creates a standalone model with LoRA weights merged in,
+   removing the need for PEFT at inference time.
+
+   Warning: This increases model size back to the full model size.
+   Only use if you need a standalone model without PEFT dependency.
+
+   :param model: PEFT model with LoRA adapters
+
+   :returns: Base model with merged weights
+
+   .. rubric:: Examples
+
+   >>> merged_model = merge_lora_into_base(lora_model)
+   >>> torch.save(merged_model.state_dict(), "merged_model.pt")
+
+

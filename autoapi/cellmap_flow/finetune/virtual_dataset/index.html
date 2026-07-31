@@ -1,0 +1,368 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.virtual_dataset &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.globals" href="../../globals/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.target_transforms" href="../target_transforms/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.virtual_dataset</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/virtual_dataset/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.virtual_dataset">
+<span id="cellmap-flow-finetune-virtual-dataset"></span><h1>cellmap_flow.finetune.virtual_dataset<a class="headerlink" href="#module-cellmap_flow.finetune.virtual_dataset" title="Link to this heading"></a></h1>
+<p>On-the-fly random-patch dataset for finetuning.</p>
+<section id="architecture">
+<h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h2>
+<p>There is exactly one source of truth per session: an
+<code class="docutils literal notranslate"><span class="pre">annotation_volume.zarr</span></code> (sparse, full-dataset extent, OME-NGFF) that
+holds <strong>every</strong> annotation — painted scribbles plus any imported YAML
+crops, all merged at their physical offsets. This dataset reads patches
+straight out of that single volume zarr; no per-tile materialization, no
+parallel source list to keep in sync.</p>
+</section>
+<section id="sampling-rule">
+<h2>Sampling rule<a class="headerlink" href="#sampling-rule" title="Link to this heading"></a></h2>
+<p>Two-pool stratified sampling. FG voxels are partitioned by membership in
+the volume’s <code class="docutils literal notranslate"><span class="pre">imported_crops</span></code> bbox list (recorded in the volume zattrs
+when YAML crops are imported):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>dense pool</strong>: voxels inside any imported_crops bbox (abundant GT)</p></li>
+<li><p><strong>sparse pool</strong>: voxels outside all bboxes (painted scribbles, by
+construction always sparse and informative — the user paints there
+because the base model failed)</p></li>
+</ul>
+</div></blockquote>
+<p>Each <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code> picks a pool by <code class="docutils literal notranslate"><span class="pre">dense_to_sparse_ratio</span></code> (default
+0.5/0.5 when both pools exist; auto-degrades to 1.0 when only one
+exists), samples a random FG voxel from that pool, jitters the patch
+center, and reads raw + annotation patches around it.</p>
+<p>Without stratification, voxel-uniform sampling buries scribbles: a
+typical session has ~40M dense voxels vs ~10K painted, so 999/1000
+patches would be dense and the corrections you painted barely move the
+gradient. Stratification guarantees scribbles get a defined share of
+each epoch regardless of voxel count.</p>
+<p>Index construction reads only <strong>populated</strong> chunks of the sparse zarr
+(walks <code class="docutils literal notranslate"><span class="pre">annotation/s0/</span></code> for files matching <code class="docutils literal notranslate"><span class="pre">z.y.x</span></code>). For an empty
+volume that’s an empty index; for a fully painted region it’s the FG
+voxels of those chunks.</p>
+</section>
+<section id="reviewer-notes">
+<h2>Reviewer notes<a class="headerlink" href="#reviewer-notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Workers each rebuild the FG index on spawn (cheap — only populated
+chunks are read). We don’t pickle any open zarr/tensorstore handles.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">len(self)</span></code> is <code class="docutils literal notranslate"><span class="pre">patches_per_epoch</span></code>; it has no relationship to the
+number of populated chunks. The trainer treats this as the epoch length.</p></li>
+<li><p>The dataset returns <code class="docutils literal notranslate"><span class="pre">(raw,</span> <span class="pre">annotation)</span></code> tensors with shape
+<code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">Z,</span> <span class="pre">Y,</span> <span class="pre">X)</span></code> matching <code class="xref py py-class docutils literal notranslate"><span class="pre">CorrectionDataset</span></code>’s contract.</p></li>
+</ul>
+</section>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.logger" title="cellmap_flow.finetune.virtual_dataset.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME" title="cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIRTUAL_MANIFEST_FILENAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset" title="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code></a></p></td>
+<td><p>Yield random raw+annotation patches anchored on FG voxels in a volume zarr.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.write_manifest" title="cellmap_flow.finetune.virtual_dataset.write_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_manifest</span></code></a>(→ str)</p></td>
+<td><p>Persist a manifest sentinel that <code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> looks for.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.read_manifest" title="cellmap_flow.finetune.virtual_dataset.read_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_manifest</span></code></a>(→ Optional[dict])</p></td>
+<td><p>Return the manifest if present, else <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.dataset_from_manifest" title="cellmap_flow.finetune.virtual_dataset.dataset_from_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dataset_from_manifest</span></code></a>(→ VirtualPatchDataset)</p></td>
+<td><p>Instantiate a <a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset" title="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code></a> from a manifest dict.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">VirtualPatchDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size_nm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size_nm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patches_per_epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jitter_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_to_sparse_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset" title="Link to this definition"></a></dt>
+<dd><p>Yield random raw+annotation patches anchored on FG voxels in a volume zarr.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>volume_zarr_path</strong> – path to the session’s <code class="docutils literal notranslate"><span class="pre">annotation_volume.zarr</span></code>.</p></li>
+<li><p><strong>raw_dataset_path</strong> – path to the raw EM zarr the volume is aligned to.</p></li>
+<li><p><strong>input_size_voxels</strong> – shape (Z, Y, X) of the raw patch returned per
+sample, in voxels at <code class="docutils literal notranslate"><span class="pre">input_voxel_size_nm</span></code>.</p></li>
+<li><p><strong>output_size_voxels</strong> – shape (Z, Y, X) of the annotation patch, in
+voxels at <code class="docutils literal notranslate"><span class="pre">output_voxel_size_nm</span></code>.</p></li>
+<li><p><strong>input_voxel_size_nm</strong> – voxel size for raw patches (the dataset’s
+closest scale to the model’s claimed input voxel size).</p></li>
+<li><p><strong>output_voxel_size_nm</strong> – voxel size for annotation patches.</p></li>
+<li><p><strong>patches_per_epoch</strong> – <code class="docutils literal notranslate"><span class="pre">len(self)</span></code>; controls how many random patches
+comprise one epoch. <code class="docutils literal notranslate"><span class="pre">None</span></code> (the default) means “auto:
+substitute the total populated-chunk count” — every populated
+chunk gets ~one patch per epoch on average.</p></li>
+<li><p><strong>jitter_voxels</strong> – half-range of the random offset applied to the patch
+center, in <strong>annotation voxels</strong>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">output_size_voxels</span> <span class="pre">//</span> <span class="pre">4</span></code>.</p></li>
+<li><p><strong>seed</strong> – RNG seed; per-worker offset added so multi-worker dataloaders
+sample distinct streams.</p></li>
+<li><p><strong>dense_to_sparse_ratio</strong> – fraction in [0, 1] of patches drawn from
+the dense pool (FG voxels inside any imported_crops bbox).
+<code class="docutils literal notranslate"><span class="pre">None</span></code> (default) means auto: 0.5 if both pools have voxels,
+else 1.0 (use the non-empty pool exclusively).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.volume_zarr_path">
+<span class="sig-name descname"><span class="pre">volume_zarr_path</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.volume_zarr_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.raw_dataset_path">
+<span class="sig-name descname"><span class="pre">raw_dataset_path</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.raw_dataset_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_size">
+<span class="sig-name descname"><span class="pre">input_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.output_size">
+<span class="sig-name descname"><span class="pre">output_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.output_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.patches_per_epoch">
+<span class="sig-name descname"><span class="pre">patches_per_epoch</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.patches_per_epoch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.jitter">
+<span class="sig-name descname"><span class="pre">jitter</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.jitter" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.seed" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.dense_to_sparse_ratio">
+<span class="sig-name descname"><span class="pre">dense_to_sparse_ratio</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.dense_to_sparse_ratio" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_norm_config">
+<span class="sig-name descname"><span class="pre">input_norm_config</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.input_norm_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.dataset_offset_nm">
+<span class="sig-name descname"><span class="pre">dataset_offset_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.dataset_offset_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.volume_shape_voxels">
+<span class="sig-name descname"><span class="pre">volume_shape_voxels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset.volume_shape_voxels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">VIRTUAL_MANIFEST_FILENAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'_virtual_sources.json'</span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.write_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">write_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">manifest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.write_manifest" title="Link to this definition"></a></dt>
+<dd><p>Persist a manifest sentinel that <code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> looks for.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.read_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">read_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.read_manifest" title="Link to this definition"></a></dt>
+<dd><p>Return the manifest if present, else <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.virtual_dataset.dataset_from_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.virtual_dataset.</span></span><span class="sig-name descname"><span class="pre">dataset_from_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">manifest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset" title="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset"><span class="pre">VirtualPatchDataset</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.virtual_dataset.dataset_from_manifest" title="Link to this definition"></a></dt>
+<dd><p>Instantiate a <a class="reference internal" href="#cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset" title="cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code></a> from a manifest dict.</p>
+<dl class="simple">
+<dt>Recognized manifest kinds:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">volume_zarr_v1</span></code> (current): trainer reads the session’s
+annotation_volume.zarr directly. Field <code class="docutils literal notranslate"><span class="pre">volume_zarr_path</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../target_transforms/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.target_transforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../globals/index.html" class="btn btn-neutral float-right" title="cellmap_flow.globals" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

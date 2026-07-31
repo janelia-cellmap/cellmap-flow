@@ -1,0 +1,69 @@
+cellmap_flow.dashboard.routes.finetune.common
+=============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.common
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.common.logger
+   cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE
+   cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS
+   cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.common.find_model_config
+   cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales
+   cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage
+   cellmap_flow.dashboard.routes.finetune.common.load_user_prefs
+   cellmap_flow.dashboard.routes.finetune.common.save_user_prefs
+   cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session
+   cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations
+   cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type
+   cellmap_flow.dashboard.routes.finetune.common.build_restart_params
+   cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: USER_PREFS_FILE
+
+.. py:data:: LOG_FILTER_PATTERNS
+   :value: ['^\\s+base_model\\.\\S+\\.lora_', '^INFO:werkzeug:', '^Array metadata \\(scale=', '^Host...
+
+
+.. py:data:: RESTART_PASSTHROUGH_KEYS
+   :value: ['lora_r', 'lora_alpha', 'num_epochs', 'batch_size', 'learning_rate', 'loss_type',...
+
+
+.. py:function:: find_model_config(model_name)
+
+.. py:function:: viewer_position_and_scales()
+
+.. py:function:: ensure_corrections_storage(output_path)
+
+.. py:function:: load_user_prefs()
+
+.. py:function:: save_user_prefs(prefs)
+
+.. py:function:: resolve_finetune_session(corrections_path_str)
+
+.. py:function:: detect_sparse_annotations(corrections_path)
+
+.. py:function:: autodetect_output_type(model_config, output_type, offsets)
+
+.. py:function:: build_restart_params(data)
+
+.. py:function:: get_lsf_job_id(finetune_job)
+

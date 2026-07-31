@@ -20,6 +20,7 @@ Classes
 .. autoapisummary::
 
    cellmap_flow.post.postprocessors.PostProcessor
+   cellmap_flow.post.postprocessors.SigmoidPostprocessor
    cellmap_flow.post.postprocessors.DefaultPostprocessor
    cellmap_flow.post.postprocessors.ThresholdPostprocessor
    cellmap_flow.post.postprocessors.LabelPostprocessor
@@ -54,6 +55,16 @@ Module Contents
 
 
    .. py:property:: is_segmentation
+
+
+.. py:class:: SigmoidPostprocessor
+
+
+
+   Apply sigmoid activation to convert logits to probabilities.
+
+
+   .. py:property:: dtype
 
 
 .. py:class:: DefaultPostprocessor(clip_min: float = -1.0, clip_max: float = 1.0, bias: float = 1.0, multiplier: float = 127.5)

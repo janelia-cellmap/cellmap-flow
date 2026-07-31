@@ -1,0 +1,70 @@
+cellmap_flow.dashboard.routes.finetune.yaml_crops
+=================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.yaml_crops
+
+.. autoapi-nested-parse::
+
+   Endpoint for bulk-loading externally annotated crops via a YAML manifest.
+
+   Design
+   ------
+   A YAML manifest is conceptually a different way to **seed an annotation
+   volume**, alongside "New Volume" (empty) and "Resume Existing Volume"
+   (copy a prior session). Importing crops writes them straight into the
+   session's ``annotation_volume.zarr`` at their correct physical offsets, so
+   the result is identical in shape to a painted volume — one editable layer
+   in neuroglancer, served via MinIO, picked up by the existing periodic-sync
+   machinery, and consumed by training via :class:`VirtualPatchDataset`.
+
+   Painted scribbles + imported GT crops therefore share one source of truth
+   (the volume zarr). The user can paint over imports to fix GT errors or to
+   add corrections in regions the GT doesn't cover. The trainer sees the
+   union by construction.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.load_crops_from_yaml_response
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.get_load_crops_progress_response
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.read_yaml_file_response
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: load_crops_from_yaml_response(data)
+
+   Import crops from a YAML manifest into the session's annotation_volume.
+
+   Request JSON:
+       - ``model_name``: required
+       - ``output_path``: optional, base path for the session corrections dir
+       - ``yaml``: required, YAML text (or path to a YAML file)
+       - ``load_id``: optional UUID for live progress polling
+
+
+.. py:function:: get_load_crops_progress_response(load_id)
+
+   Return current progress for an in-flight ``/api/finetune/load-crops`` call.
+
+
+.. py:function:: read_yaml_file_response(path)
+
+   Return the contents of a YAML file so the dashboard can preview/edit it.
+
+

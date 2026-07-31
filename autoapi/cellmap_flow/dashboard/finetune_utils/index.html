@@ -1,0 +1,420 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.finetune_utils &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes" href="../routes/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.bbx_generator" href="../bbx_generator/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.finetune_utils</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/dashboard/finetune_utils/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.finetune_utils">
+<span id="cellmap-flow-dashboard-finetune-utils"></span><h1>cellmap_flow.dashboard.finetune_utils<a class="headerlink" href="#module-cellmap_flow.dashboard.finetune_utils" title="Link to this heading"></a></h1>
+<p>Helper functions for finetuning annotation workflows.</p>
+<p>Handles MinIO server management, annotation zarr creation, and
+periodic synchronization of annotations between MinIO and local disk.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.minio_state" title="cellmap_flow.dashboard.finetune_utils.minio_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">minio_state</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.annotation_volumes" title="cellmap_flow.dashboard.finetune_utils.annotation_volumes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">annotation_volumes</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.output_sessions" title="cellmap_flow.dashboard.finetune_utils.output_sessions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">output_sessions</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.logger" title="cellmap_flow.dashboard.finetune_utils.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.get_or_create_session_path" title="cellmap_flow.dashboard.finetune_utils.get_or_create_session_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_or_create_session_path</span></code></a>(→ str)</p></td>
+<td><p>Get or create a timestamped session directory for the given base output path.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.get_local_ip" title="cellmap_flow.dashboard.finetune_utils.get_local_ip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_local_ip</span></code></a>()</p></td>
+<td><p>Get the local IP address for MinIO server.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.find_available_port" title="cellmap_flow.dashboard.finetune_utils.find_available_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_available_port</span></code></a>([start_port])</p></td>
+<td><p>Find an available port pair for MinIO server (API on port, console on port+1).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.create_correction_zarr" title="cellmap_flow.dashboard.finetune_utils.create_correction_zarr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_correction_zarr</span></code></a>(zarr_path, raw_crop_shape, ...)</p></td>
+<td><p>Create a correction zarr with OME-NGFF v0.4 metadata.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.create_annotation_volume_zarr" title="cellmap_flow.dashboard.finetune_utils.create_annotation_volume_zarr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_annotation_volume_zarr</span></code></a>(zarr_path, ...[, ...])</p></td>
+<td><p>Create a sparse annotation volume zarr covering the full dataset extent.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.ensure_minio_serving" title="cellmap_flow.dashboard.finetune_utils.ensure_minio_serving"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_minio_serving</span></code></a>(zarr_path, crop_id[, output_base_dir])</p></td>
+<td><p>Ensure MinIO is running and upload zarr file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.sync_annotation_from_minio" title="cellmap_flow.dashboard.finetune_utils.sync_annotation_from_minio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotation_from_minio</span></code></a>(crop_id[, force])</p></td>
+<td><p>Sync a single annotation crop from MinIO to local filesystem.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio" title="cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_all_annotations_from_minio</span></code></a>([force])</p></td>
+<td><p>Sync all annotations from MinIO to local disk.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.extract_correction_from_chunk" title="cellmap_flow.dashboard.finetune_utils.extract_correction_from_chunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extract_correction_from_chunk</span></code></a>(volume_id, ...)</p></td>
+<td><p>Extract a correction entry from a single annotated chunk in a sparse volume.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio" title="cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotation_volume_from_minio</span></code></a>(volume_id[, force])</p></td>
+<td><p>Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.periodic_sync_annotations" title="cellmap_flow.dashboard.finetune_utils.periodic_sync_annotations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">periodic_sync_annotations</span></code></a>()</p></td>
+<td><p>Background thread function to periodically sync annotations from MinIO.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.finetune_utils.start_periodic_sync" title="cellmap_flow.dashboard.finetune_utils.start_periodic_sync"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_periodic_sync</span></code></a>()</p></td>
+<td><p>Start the periodic annotation sync thread if not already running.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.minio_state">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">minio_state</span></span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.minio_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.annotation_volumes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">annotation_volumes</span></span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.annotation_volumes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.output_sessions">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">output_sessions</span></span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.output_sessions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.get_or_create_session_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">get_or_create_session_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.get_or_create_session_path" title="Link to this definition"></a></dt>
+<dd><p>Get or create a timestamped session directory for the given base output path.</p>
+<p>If a session already exists for this base path, reuse it.
+Otherwise, create a new timestamped subdirectory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base_output_path</strong> – Base output directory (e.g., “output/to/here”)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Timestamped session path (e.g., “output/to/here/20260213_123456”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.get_local_ip">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">get_local_ip</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.get_local_ip" title="Link to this definition"></a></dt>
+<dd><p>Get the local IP address for MinIO server.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.find_available_port">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">find_available_port</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">9000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.find_available_port" title="Link to this definition"></a></dt>
+<dd><p>Find an available port pair for MinIO server (API on port, console on port+1).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.create_correction_zarr">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">create_correction_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_crop_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_offset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_crop_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_offset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'uint8'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.create_correction_zarr" title="Link to this definition"></a></dt>
+<dd><p>Create a correction zarr with OME-NGFF v0.4 metadata.</p>
+<dl class="simple">
+<dt>Structure:</dt><dd><dl class="simple">
+<dt>crop_id.zarr/</dt><dd><p>raw/s0/          (uint8, shape=raw_crop_shape)
+annotation/s0/   (uint8, shape=annotation_crop_shape)
+mask/s0/         (optional, uint8, shape=annotation_crop_shape)
+.zattrs          (metadata)</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool, info: str)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>(success</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.create_annotation_volume_zarr">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">create_annotation_volume_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_shape_voxels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_offset_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claimed_output_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claimed_input_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.create_annotation_volume_zarr" title="Link to this definition"></a></dt>
+<dd><p>Create a sparse annotation volume zarr covering the full dataset extent.</p>
+<p>The volume has chunk_size = model output_size so each chunk maps to one
+training sample. Only metadata files are created (no chunk data), so the
+zarr is tiny regardless of dataset size.</p>
+<p>Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>output_voxel_size</strong> – the EFFECTIVE voxel sizes used
+for the actual grid alignment (typically the dataset’s closest
+available scale to the model’s claimed voxel size).</p></li>
+<li><p><strong>input_voxel_size</strong> – the EFFECTIVE voxel sizes used
+for the actual grid alignment (typically the dataset’s closest
+available scale to the model’s claimed voxel size).</p></li>
+<li><p><strong>claimed_output_voxel_size</strong> – optional —
+the model’s originally-declared voxel sizes, recorded for
+provenance.</p></li>
+<li><p><strong>claimed_input_voxel_size</strong> – optional —
+the model’s originally-declared voxel sizes, recorded for
+provenance.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool, info: str)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(success</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.ensure_minio_serving">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">ensure_minio_serving</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crop_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_base_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.ensure_minio_serving" title="Link to this definition"></a></dt>
+<dd><p>Ensure MinIO is running and upload zarr file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>zarr_path</strong> – Path to zarr file to upload</p></li>
+<li><p><strong>crop_id</strong> – Unique identifier for the crop</p></li>
+<li><p><strong>output_base_dir</strong> – Base output directory (MinIO will use output_base_dir/.minio)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>MinIO URL for the zarr file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.sync_annotation_from_minio">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">sync_annotation_from_minio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.sync_annotation_from_minio" title="Link to this definition"></a></dt>
+<dd><p>Sync a single annotation crop from MinIO to local filesystem.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>crop_id</strong> – Crop ID to sync</p></li>
+<li><p><strong>force</strong> – Force sync even if not modified</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if synced successfully</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">sync_all_annotations_from_minio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio" title="Link to this definition"></a></dt>
+<dd><p>Sync all annotations from MinIO to local disk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number of annotations synced, or -1 if MinIO is not initialized.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.extract_correction_from_chunk">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">extract_correction_from_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_metadata</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.extract_correction_from_chunk" title="Link to this definition"></a></dt>
+<dd><p>Extract a correction entry from a single annotated chunk in a sparse volume.</p>
+<p>Reads the annotation chunk, extracts raw data with context padding, and
+creates a standard correction zarr entry compatible with CorrectionDataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>volume_id</strong> – Volume identifier</p></li>
+<li><p><strong>chunk_indices</strong> – Tuple (cz, cy, cx) of chunk indices</p></li>
+<li><p><strong>volume_metadata</strong> – Volume metadata dict</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if correction was created (chunk had annotations)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">sync_annotation_volume_from_minio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio" title="Link to this definition"></a></dt>
+<dd><p>Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.</p>
+<p>Steps:
+1. Sync the full annotation zarr from MinIO to local disk
+2. List chunk files in MinIO to find annotated chunks
+3. For each new annotated chunk, extract raw data and create correction entry</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if any corrections were created</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.periodic_sync_annotations">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">periodic_sync_annotations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.periodic_sync_annotations" title="Link to this definition"></a></dt>
+<dd><p>Background thread function to periodically sync annotations from MinIO.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.finetune_utils.start_periodic_sync">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.finetune_utils.</span></span><span class="sig-name descname"><span class="pre">start_periodic_sync</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.finetune_utils.start_periodic_sync" title="Link to this definition"></a></dt>
+<dd><p>Start the periodic annotation sync thread if not already running.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../bbx_generator/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.bbx_generator" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../routes/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

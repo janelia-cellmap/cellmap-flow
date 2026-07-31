@@ -9,6 +9,7 @@ Attributes
 
 .. autoapisummary::
 
+   cellmap_flow.dashboard.routes.bbx_generator.bbx_generator_state
    cellmap_flow.dashboard.routes.bbx_generator.logger
    cellmap_flow.dashboard.routes.bbx_generator.bbx_bp
 
@@ -25,6 +26,8 @@ Functions
 
 Module Contents
 ---------------
+
+.. py:data:: bbx_generator_state
 
 .. py:data:: logger
 

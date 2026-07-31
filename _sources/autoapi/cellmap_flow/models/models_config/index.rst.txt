@@ -23,6 +23,7 @@ Classes
    cellmap_flow.models.models_config.FlyModelConfig
    cellmap_flow.models.models_config.BioModelConfig
    cellmap_flow.models.models_config.CellMapModelConfig
+   cellmap_flow.models.models_config.FinetuneModelConfig
    cellmap_flow.models.models_config.HuggingFaceModelConfig
 
 
@@ -298,6 +299,55 @@ Module Contents
    .. py:method:: to_dict()
 
       Export configuration for use with build_model_from_entry.
+
+
+
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str, base_model: dict, name: str = None, scale=None)
+
+
+
+   Configuration class for a LoRA-finetuned model.
+
+   Wraps any base ModelConfig with a LoRA adapter applied on top.
+   The base model is loaded via its own ModelConfig, then the adapter
+   is applied using PEFT.
+
+
+   .. py:attribute:: cli_name
+      :value: 'finetune'
+
+
+
+   .. py:attribute:: lora_adapter_path
+
+
+   .. py:attribute:: base_model_dict
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: base_model_config
+
+      Lazily build the base ModelConfig from the stored dict.
+
+
+   .. py:property:: command
+
+
+   .. py:method:: to_dict()
+
+      Export configuration for use with build_model_from_entry.
+
+      Surfaces key base model fields at the top level so the pipeline
+      builder UI can display them alongside the finetune-specific fields.
 
 
 

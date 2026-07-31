@@ -1,0 +1,308 @@
+cellmap_flow.finetune.finetune_job_manager
+==========================================
+
+.. py:module:: cellmap_flow.finetune.finetune_job_manager
+
+.. autoapi-nested-parse::
+
+   Job manager for orchestrating finetuning jobs on LSF cluster.
+
+   This module provides:
+   - FinetuneJob: Track metadata and status of a single finetuning job
+   - FinetuneJobManager: Orchestrate job lifecycle from submission to completion
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_job_manager.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_job_manager.JobStatus
+   cellmap_flow.finetune.finetune_job_manager.FinetuneJob
+   cellmap_flow.finetune.finetune_job_manager.FinetuneJobManager
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: JobStatus(*args, **kwds)
+
+
+
+   Status of a finetuning job.
+
+
+   .. py:attribute:: PENDING
+      :value: 'PENDING'
+
+
+
+   .. py:attribute:: RUNNING
+      :value: 'RUNNING'
+
+
+
+   .. py:attribute:: COMPLETED
+      :value: 'COMPLETED'
+
+
+
+   .. py:attribute:: FAILED
+      :value: 'FAILED'
+
+
+
+   .. py:attribute:: CANCELLED
+      :value: 'CANCELLED'
+
+
+
+.. py:class:: FinetuneJob
+
+   Track a finetuning job with metadata, status, and training progress.
+
+   Manages lifecycle from submission through completion, including inference
+   server state and restart chain linkage.
+
+
+   .. py:attribute:: job_id
+      :type:  str
+
+
+   .. py:attribute:: lsf_job
+      :type:  Optional[cellmap_flow.utils.bsub_utils.LSFJob]
+
+
+   .. py:attribute:: model_name
+      :type:  str
+
+
+   .. py:attribute:: output_dir
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: params
+      :type:  Dict[str, Any]
+
+
+   .. py:attribute:: status
+      :type:  JobStatus
+
+
+   .. py:attribute:: created_at
+      :type:  datetime.datetime
+
+
+   .. py:attribute:: log_file
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: finetuned_model_name
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: model_script_path
+      :type:  Optional[pathlib.Path]
+      :value: None
+
+
+
+   .. py:attribute:: model_yaml_path
+      :type:  Optional[pathlib.Path]
+      :value: None
+
+
+
+   .. py:attribute:: current_epoch
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: total_epochs
+      :type:  int
+      :value: 10
+
+
+
+   .. py:attribute:: latest_loss
+      :type:  Optional[float]
+      :value: None
+
+
+
+   .. py:attribute:: inference_server_url
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: inference_server_ready
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: previous_job_id
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: next_job_id
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:method:: to_dict() -> Dict[str, Any]
+
+      Convert to dictionary for JSON serialization.
+
+
+
+.. py:class:: FinetuneJobManager
+
+   Orchestrate finetuning jobs from submission to completion.
+
+   Manages the full lifecycle:
+   1. Validation and job submission to LSF
+   2. Background monitoring of training progress
+   3. Post-training model registration
+   4. Job cancellation and cleanup
+
+
+   .. py:attribute:: jobs
+      :type:  Dict[str, FinetuneJob]
+
+
+   .. py:attribute:: logger
+
+
+   .. py:method:: submit_finetuning_job(model_config, corrections_path: pathlib.Path, lora_r: int = 8, num_epochs: int = 10, batch_size: int = 2, learning_rate: float = 0.0001, output_base: Optional[pathlib.Path] = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', checkpoint_path_override: Optional[pathlib.Path] = None, auto_serve: bool = True, mask_unannotated: bool = False, loss_type: str = 'combined', label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_scope: str = 'unlabeled', margin: float = 0.3, balance_classes: bool = False, output_type: str = 'binary', select_channel: Optional[int] = None, offsets: Optional[str] = None) -> FinetuneJob
+
+      Submit finetuning job to LSF cluster.
+
+      :param model_config: Model configuration object (FlyModelConfig, etc.)
+      :param corrections_path: Path to corrections.zarr directory
+      :param lora_r: LoRA rank (default: 8)
+      :param num_epochs: Number of training epochs (default: 10)
+      :param batch_size: Training batch size (default: 2)
+      :param learning_rate: Learning rate (default: 1e-4)
+      :param output_base: Base directory for outputs (default: output/finetuning)
+      :param queue: LSF queue name (default: gpu_h100)
+      :param charge_group: LSF charge group (default: cellmap)
+      :param checkpoint_path_override: Optional path to override checkpoint detection (default: None)
+      :param auto_serve: Automatically start inference server after training (default: True)
+
+      :returns: FinetuneJob object tracking the submitted job
+
+      :raises ValueError: If validation fails
+      :raises RuntimeError: If job submission fails
+
+
+
+   .. py:method:: monitor_job(finetune_job: FinetuneJob)
+
+      Background thread for job monitoring.
+
+      Polls LSF status and tails log file to track training progress.
+      Triggers completion when job finishes.
+
+      :param finetune_job: The FinetuneJob to monitor
+
+
+
+   .. py:method:: complete_job(finetune_job: FinetuneJob)
+
+      Post-training actions after job completes successfully.
+
+      1. Verify adapter files exist
+      2. Generate model script and YAML
+      3. Register in g.models_config
+      4. Update job status and metadata
+
+      :param finetune_job: The completed job
+
+      :raises RuntimeError: If adapter files missing or registration fails
+
+
+
+   .. py:method:: cancel_job(job_id: str) -> bool
+
+      Cancel a running job.
+
+      :param job_id: Job ID to cancel
+
+      :returns: True if successfully cancelled, False otherwise
+
+
+
+   .. py:method:: get_job_status(job_id: str) -> Optional[Dict[str, Any]]
+
+      Get detailed status of a specific job.
+
+      :param job_id: Job ID to query
+
+      :returns: Dictionary with job status details, or None if not found
+
+
+
+   .. py:method:: list_jobs() -> List[Dict[str, Any]]
+
+      Get list of all jobs with their status.
+
+      :returns: List of job status dictionaries
+
+
+
+   .. py:method:: get_job_logs(job_id: str) -> Optional[str]
+
+      Get full log content for a job.
+
+      :param job_id: Job ID
+
+      :returns: Log file content as string, or None if not found
+
+
+
+   .. py:method:: get_job(job_id: str) -> Optional[FinetuneJob]
+
+      Get a FinetuneJob object by ID.
+
+      :param job_id: Job ID to retrieve
+
+      :returns: FinetuneJob object, or None if not found
+
+
+
+   .. py:method:: restart_finetuning_job(job_id: str, updated_params: Optional[Dict[str, Any]] = None) -> FinetuneJob
+
+      Restart training on the same GPU via control endpoint.
+
+      Primary path sends an HTTP restart request to the running
+      inference server in the same process as the training loop.
+      Falls back to file signal if control endpoint is unavailable.
+
+      :param job_id: ID of job to restart
+      :param updated_params: Dict of updated training parameters
+
+      :returns: Same FinetuneJob object (updated in-place)
+
+      :raises ValueError: If job not found or not in a restartable state
+
+
+

@@ -1,0 +1,186 @@
+cellmap_flow.dashboard.finetune_utils
+=====================================
+
+.. py:module:: cellmap_flow.dashboard.finetune_utils
+
+.. autoapi-nested-parse::
+
+   Helper functions for finetuning annotation workflows.
+
+   Handles MinIO server management, annotation zarr creation, and
+   periodic synchronization of annotations between MinIO and local disk.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_utils.minio_state
+   cellmap_flow.dashboard.finetune_utils.annotation_volumes
+   cellmap_flow.dashboard.finetune_utils.output_sessions
+   cellmap_flow.dashboard.finetune_utils.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_utils.get_or_create_session_path
+   cellmap_flow.dashboard.finetune_utils.get_local_ip
+   cellmap_flow.dashboard.finetune_utils.find_available_port
+   cellmap_flow.dashboard.finetune_utils.create_correction_zarr
+   cellmap_flow.dashboard.finetune_utils.create_annotation_volume_zarr
+   cellmap_flow.dashboard.finetune_utils.ensure_minio_serving
+   cellmap_flow.dashboard.finetune_utils.sync_annotation_from_minio
+   cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio
+   cellmap_flow.dashboard.finetune_utils.extract_correction_from_chunk
+   cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio
+   cellmap_flow.dashboard.finetune_utils.periodic_sync_annotations
+   cellmap_flow.dashboard.finetune_utils.start_periodic_sync
+
+
+Module Contents
+---------------
+
+.. py:data:: minio_state
+
+.. py:data:: annotation_volumes
+
+.. py:data:: output_sessions
+
+.. py:data:: logger
+
+.. py:function:: get_or_create_session_path(base_output_path: str) -> str
+
+   Get or create a timestamped session directory for the given base output path.
+
+   If a session already exists for this base path, reuse it.
+   Otherwise, create a new timestamped subdirectory.
+
+   :param base_output_path: Base output directory (e.g., "output/to/here")
+
+   :returns: Timestamped session path (e.g., "output/to/here/20260213_123456")
+
+
+.. py:function:: get_local_ip()
+
+   Get the local IP address for MinIO server.
+
+
+.. py:function:: find_available_port(start_port=9000)
+
+   Find an available port pair for MinIO server (API on port, console on port+1).
+
+
+.. py:function:: create_correction_zarr(zarr_path, raw_crop_shape, raw_voxel_size, raw_offset, annotation_crop_shape, annotation_voxel_size, annotation_offset, dataset_path, model_name, output_channels, raw_dtype='uint8', create_mask=False)
+
+   Create a correction zarr with OME-NGFF v0.4 metadata.
+
+   Structure:
+       crop_id.zarr/
+           raw/s0/          (uint8, shape=raw_crop_shape)
+           annotation/s0/   (uint8, shape=annotation_crop_shape)
+           mask/s0/         (optional, uint8, shape=annotation_crop_shape)
+           .zattrs          (metadata)
+
+   :returns: bool, info: str)
+   :rtype: (success
+
+
+.. py:function:: create_annotation_volume_zarr(zarr_path, dataset_shape_voxels, output_voxel_size, dataset_offset_nm, chunk_size, dataset_path, model_name, input_size, input_voxel_size, claimed_output_voxel_size=None, claimed_input_voxel_size=None, input_norm_config=None)
+
+   Create a sparse annotation volume zarr covering the full dataset extent.
+
+   The volume has chunk_size = model output_size so each chunk maps to one
+   training sample. Only metadata files are created (no chunk data), so the
+   zarr is tiny regardless of dataset size.
+
+   Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.
+
+   :param output_voxel_size: the EFFECTIVE voxel sizes used
+                             for the actual grid alignment (typically the dataset's closest
+                             available scale to the model's claimed voxel size).
+   :param input_voxel_size: the EFFECTIVE voxel sizes used
+                            for the actual grid alignment (typically the dataset's closest
+                            available scale to the model's claimed voxel size).
+   :param claimed_output_voxel_size: optional —
+                                     the model's originally-declared voxel sizes, recorded for
+                                     provenance.
+   :param claimed_input_voxel_size: optional —
+                                    the model's originally-declared voxel sizes, recorded for
+                                    provenance.
+
+   :returns: bool, info: str)
+   :rtype: (success
+
+
+.. py:function:: ensure_minio_serving(zarr_path, crop_id, output_base_dir=None)
+
+   Ensure MinIO is running and upload zarr file.
+
+   :param zarr_path: Path to zarr file to upload
+   :param crop_id: Unique identifier for the crop
+   :param output_base_dir: Base output directory (MinIO will use output_base_dir/.minio)
+
+   :returns: MinIO URL for the zarr file
+
+
+.. py:function:: sync_annotation_from_minio(crop_id, force=False)
+
+   Sync a single annotation crop from MinIO to local filesystem.
+
+   :param crop_id: Crop ID to sync
+   :param force: Force sync even if not modified
+
+   :returns: True if synced successfully
+   :rtype: bool
+
+
+.. py:function:: sync_all_annotations_from_minio(force: bool = True)
+
+   Sync all annotations from MinIO to local disk.
+
+   :returns: Number of annotations synced, or -1 if MinIO is not initialized.
+
+
+.. py:function:: extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata)
+
+   Extract a correction entry from a single annotated chunk in a sparse volume.
+
+   Reads the annotation chunk, extracts raw data with context padding, and
+   creates a standard correction zarr entry compatible with CorrectionDataset.
+
+   :param volume_id: Volume identifier
+   :param chunk_indices: Tuple (cz, cy, cx) of chunk indices
+   :param volume_metadata: Volume metadata dict
+
+   :returns: True if correction was created (chunk had annotations)
+   :rtype: bool
+
+
+.. py:function:: sync_annotation_volume_from_minio(volume_id, force=False)
+
+   Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.
+
+   Steps:
+   1. Sync the full annotation zarr from MinIO to local disk
+   2. List chunk files in MinIO to find annotated chunks
+   3. For each new annotated chunk, extract raw data and create correction entry
+
+   :returns: True if any corrections were created
+   :rtype: bool
+
+
+.. py:function:: periodic_sync_annotations()
+
+   Background thread function to periodically sync annotations from MinIO.
+
+
+.. py:function:: start_periodic_sync()
+
+   Start the periodic annotation sync thread if not already running.
+
+

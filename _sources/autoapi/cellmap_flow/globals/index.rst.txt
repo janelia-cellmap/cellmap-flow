@@ -25,6 +25,7 @@ Classes
 .. autoapisummary::
 
    cellmap_flow.globals.Flow
+   cellmap_flow.globals.LogHandler
 
 
 Functions
@@ -34,6 +35,8 @@ Functions
 
    cellmap_flow.globals.load_server_config_cache
    cellmap_flow.globals.save_server_config_cache
+   cellmap_flow.globals.current_input_norm_config
+   cellmap_flow.globals.get_blockwise_tasks_dir
 
 
 Module Contents
@@ -173,6 +176,45 @@ Module Contents
       :type:  dict
 
 
+   .. py:attribute:: log_buffer
+      :type:  collections.deque
+
+
+   .. py:attribute:: log_clients
+      :type:  list
+
+
+   .. py:attribute:: NEUROGLANCER_URL
+      :type:  Optional[str]
+
+
+   .. py:attribute:: INFERENCE_SERVER
+      :type:  Optional[Any]
+
+
+   .. py:attribute:: CUSTOM_CODE_FOLDER
+      :type:  str
+
+
+   .. py:attribute:: bbx_generator_state
+      :type:  dict
+
+
+   .. py:property:: finetune_job_manager
+
+
+   .. py:attribute:: minio_state
+      :type:  dict
+
+
+   .. py:attribute:: annotation_volumes
+      :type:  dict
+
+
+   .. py:attribute:: output_sessions
+      :type:  dict
+
+
    .. py:method:: to_dict()
 
 
@@ -201,4 +243,39 @@ Module Contents
 
 
 .. py:data:: g
+
+.. py:class:: LogHandler(level=NOTSET)
+
+
+
+   Handler instances dispatch logging events to specific destinations.
+
+   The base handler class. Acts as a placeholder which defines the Handler
+   interface. Handlers can optionally use Formatter instances to format
+   records as desired. By default, no formatter is specified; in this case,
+   the 'raw' message as determined by record.message is logged.
+
+
+   .. py:method:: emit(record)
+
+      Do whatever it takes to actually log the specified logging record.
+
+      This version is intended to be implemented by subclasses and so
+      raises a NotImplementedError.
+
+
+
+.. py:function:: current_input_norm_config() -> dict
+
+   Return the dashboard's current input_norm as a JSON-serializable dict.
+
+   Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
+   dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
+   The fallback matters because some startup paths (yaml_cli) populate
+   ``g.input_norms`` from the YAML at server boot but never touch
+   ``input_norm_config`` -- if the user submits training without first
+   hitting /api/run, the manifest would otherwise be written empty.
+
+
+.. py:function:: get_blockwise_tasks_dir()
 

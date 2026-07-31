@@ -1,0 +1,90 @@
+cellmap_flow.finetune.target_transforms
+=======================================
+
+.. py:module:: cellmap_flow.finetune.target_transforms
+
+.. autoapi-nested-parse::
+
+   Target transforms for converting user annotations to training targets.
+
+   Each transform takes a raw annotation tensor (B, 1, Z, Y, X) with values:
+     0 = unannotated (ignored in loss)
+     1 = background
+     2 = first foreground object
+     3 = second foreground object, etc.
+
+   And produces:
+     target: (B, C, Z, Y, X) — training target matching model output channels
+     mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.TargetTransform
+   cellmap_flow.finetune.target_transforms.BinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.BroadcastBinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.AffinityTargetTransform
+
+
+Module Contents
+---------------
+
+.. py:class:: TargetTransform
+
+   Base class for target transforms.
+
+
+.. py:class:: BinaryTargetTransform
+
+
+
+   Standard binary segmentation transform (current default behavior).
+
+   Produces single-channel binary target: bg=0, fg=1.
+   Mask marks annotated regions.
+
+
+.. py:class:: BroadcastBinaryTargetTransform(num_channels: int)
+
+
+
+   Binary target broadcast to N channels.
+
+   All output channels receive the same fg/bg target.
+   Useful for treating multi-channel models (affinities, distances)
+   as simple binary segmentation.
+
+
+   .. py:attribute:: num_channels
+
+
+.. py:class:: AffinityTargetTransform(offsets: List[List[int]], num_channels: int = None)
+
+
+
+   Compute affinity targets from instance labels.
+
+   For each offset, affinity is:
+     1 if both voxels belong to the same foreground object (same label > 1)
+     0 if different objects, or either is background
+
+   The loss mask requires both voxels in each pair to be annotated (label > 0),
+   producing a per-channel mask since each offset shifts differently.
+
+   :param offsets: List of [dz, dy, dx] offset tuples defining neighbor relationships.
+   :param num_channels: Total number of model output channels. If greater than
+                        len(offsets), extra channels (e.g. LSDs) are masked out
+                        (mask=0) so they receive no gradient. If None, defaults
+                        to len(offsets).
+
+
+   .. py:attribute:: offsets
+
+
+   .. py:attribute:: num_channels
+
+

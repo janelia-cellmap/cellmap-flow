@@ -62,6 +62,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
@@ -121,6 +122,12 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.get_raw_closest_scale" title="cellmap_flow.utils.neuroglancer_utils.get_raw_closest_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_raw_closest_scale</span></code></a>(dataset_path, target_resolution)</p></td>
+<td><p>Return the raw multiscale scale (as a tuple of nm) closest to the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.build_prediction_source" title="cellmap_flow.utils.neuroglancer_utils.build_prediction_source"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_prediction_source</span></code></a>(host, model, st_data, ...)</p></td>
+<td><p>Build a source spec for the prediction zarr that overrides the</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url" title="cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_neuroglancer_url</span></code></a>(dataset_path[, wrap_raw])</p></td>
 <td><p></p></td>
 </tr>
@@ -136,6 +143,23 @@
 <dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.get_raw_closest_scale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">get_raw_closest_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.get_raw_closest_scale" title="Link to this definition"></a></dt>
+<dd><p>Return the raw multiscale scale (as a tuple of nm) closest to the
+model’s target resolution, or None if it can’t be determined.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.build_prediction_source">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.neuroglancer_utils.</span></span><span class="sig-name descname"><span class="pre">build_prediction_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">st_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override_scales</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.neuroglancer_utils.build_prediction_source" title="Link to this definition"></a></dt>
+<dd><p>Build a source spec for the prediction zarr that overrides the
+source dimensions’ scales so the layer overlays the raw at its native
+resolution (e.g. claim a 16nm model output is actually at 12nm).</p>
+<p>The prediction zarr is 4D (z, y, x, c). We override the spatial scales
+and leave the channel dim as a unitless dimension.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url">

@@ -1,0 +1,473 @@
+cellmap_flow.finetune
+=====================
+
+.. py:module:: cellmap_flow.finetune
+
+.. autoapi-nested-parse::
+
+   Human-in-the-loop finetuning for CellMap-Flow models.
+
+   This package provides lightweight LoRA-based finetuning for pre-trained models
+   using user corrections as training data.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/finetune/correction_dataset/index
+   /autoapi/cellmap_flow/finetune/crop_loader/index
+   /autoapi/cellmap_flow/finetune/finetune_cli/index
+   /autoapi/cellmap_flow/finetune/finetune_job_manager/index
+   /autoapi/cellmap_flow/finetune/finetuned_model_templates/index
+   /autoapi/cellmap_flow/finetune/lora_trainer/index
+   /autoapi/cellmap_flow/finetune/lora_wrapper/index
+   /autoapi/cellmap_flow/finetune/target_transforms/index
+   /autoapi/cellmap_flow/finetune/virtual_dataset/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.CorrectionDataset
+   cellmap_flow.finetune.LoRAFinetuner
+   cellmap_flow.finetune.DiceLoss
+   cellmap_flow.finetune.CombinedLoss
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.detect_adaptable_layers
+   cellmap_flow.finetune.wrap_model_with_lora
+   cellmap_flow.finetune.print_lora_parameters
+   cellmap_flow.finetune.load_lora_adapter
+   cellmap_flow.finetune.save_lora_adapter
+   cellmap_flow.finetune.create_dataloader
+
+
+Package Contents
+----------------
+
+.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> List[str]
+
+   Automatically detect layers suitable for LoRA adaptation.
+
+   Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
+   By default, only excludes batch/layer-norm style modules. Output/head
+   layers are deliberately INCLUDED so the model can fully adapt its
+   feature→output mapping for cross-domain finetuning. (Previously
+   'final', 'head', 'output' were excluded; that left the output projection
+   frozen, which prevented learning when the base model's predictions on
+   the target dataset were poor.)
+
+   :param model: PyTorch model to inspect
+   :param include_patterns: List of regex patterns for layer names to include
+                            If None, includes all Conv/Linear layers
+   :param exclude_patterns: List of substrings for layer names to exclude
+                            Default: ['bn', 'norm']
+
+   :returns: List of layer names suitable for LoRA adaptation
+
+
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 8, lora_alpha: int = 16, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+
+   Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
+
+   This creates a PEFT model with LoRA adapters on specified layers.
+   The base model is frozen, and only LoRA parameters are trainable.
+
+   :param model: PyTorch model to wrap (e.g., UNet, CNN)
+   :param target_modules: List of layer names to adapt. If None, auto-detects.
+   :param lora_r: LoRA rank (number of low-rank dimensions)
+                  Higher = more capacity, more parameters
+                  Typical values: 4-32, default 8
+   :param lora_alpha: LoRA alpha (scaling factor)
+                      Controls strength of LoRA updates
+                      Typical: 2*r, default 16
+   :param lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
+   :param modules_to_save: Additional modules to make trainable (e.g., final layer)
+   :param task_type: PEFT task type. Options:
+                     - "FEATURE_EXTRACTION" (default, for general models)
+                     - "SEQ_CLS" (sequence classification)
+                     - "TOKEN_CLS" (token classification)
+                     - "CAUSAL_LM" (causal language modeling)
+
+   :returns: PEFT model with LoRA adapters
+
+   :raises ImportError: If peft library is not installed
+   :raises ValueError: If no adaptable layers found
+
+   .. rubric:: Examples
+
+   >>> # Auto-detect and wrap all Conv/Linear layers
+   >>> lora_model = wrap_model_with_lora(model, lora_r=8)
+
+   >>> # Wrap specific layers with custom config
+   >>> lora_model = wrap_model_with_lora(
+   ...     model,
+   ...     target_modules=["encoder.conv1", "encoder.conv2"],
+   ...     lora_r=16,
+   ...     lora_alpha=32,
+   ...     modules_to_save=["final_conv"]
+   ... )
+
+   >>> # Check trainable parameters
+   >>> print_lora_parameters(lora_model)
+
+
+.. py:function:: print_lora_parameters(model: torch.nn.Module)
+
+   Print statistics about trainable and total parameters in a LoRA model.
+
+   :param model: PEFT model with LoRA adapters
+
+   .. rubric:: Examples
+
+   >>> lora_model = wrap_model_with_lora(model)
+   >>> print_lora_parameters(lora_model)
+   Trainable params: 294,912 (1.2% of total)
+   Total params: 24,567,890
+
+
+.. py:function:: load_lora_adapter(model: torch.nn.Module, adapter_path: str, is_trainable: bool = False) -> torch.nn.Module
+
+   Load a pretrained LoRA adapter into a base model.
+
+   :param model: Base PyTorch model (without LoRA)
+   :param adapter_path: Path to saved LoRA adapter directory
+   :param is_trainable: If True, adapter parameters are trainable (for continued training)
+                        If False, adapter parameters are frozen (for inference)
+
+   :returns: PEFT model with loaded adapter
+
+   .. rubric:: Examples
+
+   >>> # Load adapter for inference
+   >>> model = load_lora_adapter(
+   ...     base_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter"
+   ... )
+
+   >>> # Load adapter for continued training
+   >>> model = load_lora_adapter(
+   ...     base_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter",
+   ...     is_trainable=True
+   ... )
+
+
+.. py:function:: save_lora_adapter(model: torch.nn.Module, output_path: str)
+
+   Save only the LoRA adapter parameters (not the full model).
+
+   This saves only the trained LoRA weights (~5-20 MB) rather than
+   the entire model (~200-500 MB).
+
+   :param model: PEFT model with LoRA adapters
+   :param output_path: Directory to save adapter
+
+   .. rubric:: Examples
+
+   >>> save_lora_adapter(
+   ...     lora_model,
+   ...     "models/fly_organelles/v1.1.0/lora_adapter"
+   ... )
+
+
+.. py:class:: CorrectionDataset(corrections_zarr_path: str, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, model_name: Optional[str] = None)
+
+
+
+   PyTorch Dataset for user corrections stored in Zarr format.
+
+   Loads raw EM data and corrected masks from corrections.zarr/, with
+   optional 3D augmentation.
+
+   :param corrections_zarr_path: Path to corrections.zarr directory
+   :param patch_shape: Shape of patches to extract (Z, Y, X)
+                       If None, uses full correction size
+   :param augment: Whether to apply 3D augmentation
+   :param model_name: If specified, only load corrections for this model
+
+   .. rubric:: Examples
+
+   >>> dataset = CorrectionDataset(
+   ...     "test_corrections.zarr",
+   ...     patch_shape=(64, 64, 64),
+   ...     augment=True
+   ... )
+   >>> print(f"Dataset size: {len(dataset)}")
+   >>> raw, target = dataset[0]
+   >>> print(f"Raw shape: {raw.shape}, Target shape: {target.shape}")
+
+
+   .. py:attribute:: corrections_path
+
+
+   .. py:attribute:: patch_shape
+      :value: None
+
+
+
+   .. py:attribute:: augment
+      :value: True
+
+
+
+   .. py:attribute:: model_name
+      :value: None
+
+
+
+   .. py:attribute:: corrections
+      :value: []
+
+
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, num_workers: int = 4, shuffle: bool = True, model_name: Optional[str] = None) -> torch.utils.data.DataLoader
+
+.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None)
+
+   Trainer for finetuning models with LoRA adapters.
+
+   Features:
+   - Mixed precision (FP16) training for memory efficiency
+   - Gradient accumulation to simulate larger batch sizes
+   - Checkpointing with best model tracking
+   - Progress logging
+   - Partial annotation support (mask unannotated regions)
+
+   :param model: PEFT model with LoRA adapters
+   :param dataloader: DataLoader for training data
+   :param output_dir: Directory to save checkpoints and logs
+   :param learning_rate: Learning rate (default: 1e-4)
+   :param num_epochs: Number of training epochs (default: 10)
+   :param gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
+   :param use_mixed_precision: Enable FP16 training (default: True)
+   :param loss_type: Loss function ("dice", "bce", or "combined")
+   :param device: Training device ("cuda" or "cpu", auto-detected if None)
+   :param select_channel: Optional channel index to select from multi-channel output (default: None)
+   :param mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
+                            Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
+                            This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
+                            Ignored if target_transform is provided.
+   :param target_transform: Optional TargetTransform instance that converts raw annotations
+                            to (target, mask) pairs. Overrides mask_unannotated when provided.
+                            See cellmap_flow.finetune.target_transforms.
+
+   .. rubric:: Examples
+
+   >>> lora_model = wrap_model_with_lora(model)
+   >>> dataloader = create_dataloader("corrections.zarr")
+   >>> trainer = LoRAFinetuner(
+   ...     lora_model,
+   ...     dataloader,
+   ...     output_dir="output/fly_organelles_v1.1"
+   ... )
+   >>> trainer.train()
+   >>> trainer.save_adapter()
+
+
+   .. py:attribute:: model
+
+
+   .. py:attribute:: dataloader
+
+
+   .. py:attribute:: output_dir
+
+
+   .. py:attribute:: num_epochs
+      :value: 10
+
+
+
+   .. py:attribute:: gradient_accumulation_steps
+      :value: 1
+
+
+
+   .. py:attribute:: use_mixed_precision
+      :value: True
+
+
+
+   .. py:attribute:: select_channel
+      :value: None
+
+
+
+   .. py:attribute:: mask_unannotated
+      :value: True
+
+
+
+   .. py:attribute:: label_smoothing
+      :value: 0.0
+
+
+
+   .. py:attribute:: distillation_lambda
+      :value: 0.0
+
+
+
+   .. py:attribute:: distillation_all_voxels
+      :value: False
+
+
+
+   .. py:attribute:: balance_classes
+      :value: False
+
+
+
+   .. py:attribute:: target_transform
+      :value: None
+
+
+
+   .. py:attribute:: optimizer
+
+
+   .. py:attribute:: scaler
+
+
+   .. py:attribute:: current_epoch
+      :value: 0
+
+
+
+   .. py:attribute:: global_step
+      :value: 0
+
+
+
+   .. py:attribute:: best_loss
+
+
+   .. py:attribute:: training_stats
+      :value: []
+
+
+
+   .. py:method:: train() -> Dict[str, Any]
+
+      Run the training loop.
+
+      :returns:
+
+                - final_loss: Final epoch loss
+                - best_loss: Best loss achieved
+                - total_epochs: Number of epochs trained
+                - total_steps: Total training steps
+      :rtype: Training statistics dictionary with
+
+
+
+   .. py:method:: save_checkpoint(is_best: bool = False)
+
+      Save training checkpoint.
+
+      :param is_best: If True, saves as "best_model.pth"
+
+
+
+   .. py:method:: save_adapter(adapter_path: Optional[str] = None)
+
+      Save only the LoRA adapter (not the full model).
+
+      Automatically loads the best checkpoint weights before saving
+      so the exported adapter reflects the best training epoch.
+
+      :param adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter
+
+
+
+   .. py:method:: load_checkpoint(checkpoint_path: str)
+
+      Load training checkpoint to resume training.
+
+      :param checkpoint_path: Path to checkpoint file
+
+
+
+.. py:class:: DiceLoss(smooth: float = 1.0)
+
+
+
+   Dice Loss for segmentation tasks.
+
+   Dice loss is effective for imbalanced datasets where the target class
+   may be sparse (e.g., mitochondria in EM images).
+
+   Formula: 1 - (2 * |X ∩ Y| + smooth) / (|X| + |Y| + smooth)
+
+
+   .. py:attribute:: smooth
+      :value: 1.0
+
+
+
+   .. py:attribute:: apply_sigmoid
+      :value: True
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Compute Dice loss.
+
+      :param pred: Predictions (B, C, Z, Y, X) - raw logits or probabilities
+      :param target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
+      :param mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
+
+      :returns: Dice loss value (scalar)
+
+
+
+.. py:class:: CombinedLoss(dice_weight: float = 0.5, bce_weight: float = 0.5)
+
+
+
+   Combined Dice + BCE loss for better convergence.
+
+   Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).
+
+
+   .. py:attribute:: dice_loss
+
+
+   .. py:attribute:: bce_loss
+
+
+   .. py:attribute:: dice_weight
+      :value: 0.5
+
+
+
+   .. py:attribute:: bce_weight
+      :value: 0.5
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Compute combined loss.
+
+      :param pred: Predictions (B, C, Z, Y, X) - raw logits
+      :param target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
+      :param mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
+
+      :returns: Combined loss value (scalar)
+
+
+

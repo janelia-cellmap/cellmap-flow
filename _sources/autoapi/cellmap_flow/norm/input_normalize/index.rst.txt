@@ -19,6 +19,7 @@ Classes
 
    cellmap_flow.norm.input_normalize.SerializableInterface
    cellmap_flow.norm.input_normalize.InputNormalizer
+   cellmap_flow.norm.input_normalize.ChannelSelector
    cellmap_flow.norm.input_normalize.Dilate
    cellmap_flow.norm.input_normalize.EuclideanDistance
    cellmap_flow.norm.input_normalize.MinMaxNormalizer
@@ -58,6 +59,15 @@ Module Contents
 
 
 .. py:class:: InputNormalizer
+
+
+
+.. py:class:: ChannelSelector(channel=0)
+
+
+
+   .. py:attribute:: channel
+      :value: 0
 
 
 

@@ -1,0 +1,56 @@
+cellmap_flow.finetune.finetuned_model_templates
+===============================================
+
+.. py:module:: cellmap_flow.finetune.finetuned_model_templates
+
+.. autoapi-nested-parse::
+
+   Templates for generating finetuned model YAML configurations.
+
+   This module provides functions to auto-generate the YAML config for serving
+   finetuned models using FinetuneModelConfig (type: finetune).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetuned_model_templates.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetuned_model_templates.generate_finetuned_model_yaml
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str, base_model_dict: dict, model_name: str, output_path: pathlib.Path, data_path: str, queue: str = 'gpu_h100', charge_group: str = 'cellmap', json_data: dict = None, scale: str = 's0') -> pathlib.Path
+
+   Generate .yaml configuration for serving a finetuned model.
+
+   The generated YAML uses type: finetune, which delegates to
+   FinetuneModelConfig. This loads the base model via its own
+   ModelConfig, applies the LoRA adapter, and serves the result.
+
+   :param lora_adapter_path: Path to the saved LoRA adapter directory
+   :param base_model_dict: Dict describing the base model (from model_config.to_dict())
+   :param model_name: Name of the finetuned model
+   :param output_path: Where to write the .yaml file
+   :param data_path: Path to actual dataset (REQUIRED - no placeholders)
+   :param queue: LSF queue name
+   :param charge_group: LSF charge group
+   :param json_data: Optional dict with input_norm and postprocess from base model
+   :param scale: Scale level (e.g., "s0", "s1") from base model
+
+   :returns: Path to the generated YAML file
+
+

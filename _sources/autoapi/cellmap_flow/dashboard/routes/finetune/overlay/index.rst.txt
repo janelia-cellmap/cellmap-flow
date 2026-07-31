@@ -1,0 +1,35 @@
+cellmap_flow.dashboard.routes.finetune.overlay
+==============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.overlay
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.overlay.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer
+   cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response
+   cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+.. py:function:: add_crop_to_viewer_response(data)
+
+.. py:function:: sync_annotations_manually_response(data)
+

@@ -12,7 +12,7 @@ Submodules
 
    /autoapi/cellmap_flow/dashboard/app/index
    /autoapi/cellmap_flow/dashboard/bbx_generator/index
+   /autoapi/cellmap_flow/dashboard/finetune_utils/index
    /autoapi/cellmap_flow/dashboard/routes/index
-   /autoapi/cellmap_flow/dashboard/state/index
 
 

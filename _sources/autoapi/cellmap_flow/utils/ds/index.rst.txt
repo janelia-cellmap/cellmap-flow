@@ -234,7 +234,7 @@ Module Contents
    dataset has attributes ``resolution`` and ``offset``, those will be
    used to determine the meta-information of the returned array.
 
-   :param filename: The name of the container "file" (which is a directory for Zarr and
+   :param filename: The name of the container "file" (which is a directory for zarr and
                     N5).
    :param ds_name: The name of the dataset to open.
 

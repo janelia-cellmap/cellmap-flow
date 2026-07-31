@@ -25,7 +25,7 @@
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
     <link rel="next" title="cellmap_flow.image_data_interface" href="../image_data_interface/index.html" />
-    <link rel="prev" title="cellmap_flow.dashboard.state" href="../dashboard/state/index.html" /> 
+    <link rel="prev" title="cellmap_flow.finetune.virtual_dataset" href="../finetune/virtual_dataset/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -62,6 +62,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../cli/index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4 current"><a class="current reference internal" href="#">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../inferencer/index.html">cellmap_flow.inferencer</a></li>
@@ -144,6 +145,9 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.Flow" title="cellmap_flow.globals.Flow"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Flow</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.LogHandler" title="cellmap_flow.globals.LogHandler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogHandler</span></code></a></p></td>
+<td><p>Handler instances dispatch logging events to specific destinations.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -156,6 +160,12 @@
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.save_server_config_cache" title="cellmap_flow.globals.save_server_config_cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_server_config_cache</span></code></a>(→ None)</p></td>
 <td><p>Save server config to cache file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.current_input_norm_config" title="cellmap_flow.globals.current_input_norm_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_input_norm_config</span></code></a>(→ dict)</p></td>
+<td><p>Return the dashboard's current input_norm as a JSON-serializable dict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.get_blockwise_tasks_dir" title="cellmap_flow.globals.get_blockwise_tasks_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_blockwise_tasks_dir</span></code></a>()</p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>
@@ -337,6 +347,56 @@
 <span class="sig-name descname"><span class="pre">shader_controls</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.shader_controls" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.log_buffer">
+<span class="sig-name descname"><span class="pre">log_buffer</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">collections.deque</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.log_buffer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.log_clients">
+<span class="sig-name descname"><span class="pre">log_clients</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.log_clients" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.NEUROGLANCER_URL">
+<span class="sig-name descname"><span class="pre">NEUROGLANCER_URL</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.NEUROGLANCER_URL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.INFERENCE_SERVER">
+<span class="sig-name descname"><span class="pre">INFERENCE_SERVER</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.INFERENCE_SERVER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.CUSTOM_CODE_FOLDER">
+<span class="sig-name descname"><span class="pre">CUSTOM_CODE_FOLDER</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.CUSTOM_CODE_FOLDER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.bbx_generator_state">
+<span class="sig-name descname"><span class="pre">bbx_generator_state</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.bbx_generator_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.finetune_job_manager">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finetune_job_manager</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.finetune_job_manager" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.minio_state">
+<span class="sig-name descname"><span class="pre">minio_state</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.minio_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.annotation_volumes">
+<span class="sig-name descname"><span class="pre">annotation_volumes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.annotation_volumes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.globals.Flow.output_sessions">
+<span class="sig-name descname"><span class="pre">output_sessions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.globals.Flow.output_sessions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.globals.Flow.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.Flow.to_dict" title="Link to this definition"></a></dt>
@@ -375,6 +435,41 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">g</span></span><a class="headerlink" href="#cellmap_flow.globals.g" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.globals.LogHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">LogHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">NOTSET</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.LogHandler" title="Link to this definition"></a></dt>
+<dd><p>Handler instances dispatch logging events to specific destinations.</p>
+<p>The base handler class. Acts as a placeholder which defines the Handler
+interface. Handlers can optionally use Formatter instances to format
+records as desired. By default, no formatter is specified; in this case,
+the ‘raw’ message as determined by record.message is logged.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.globals.LogHandler.emit">
+<span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.LogHandler.emit" title="Link to this definition"></a></dt>
+<dd><p>Do whatever it takes to actually log the specified logging record.</p>
+<p>This version is intended to be implemented by subclasses and so
+raises a NotImplementedError.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.globals.current_input_norm_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">current_input_norm_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.globals.current_input_norm_config" title="Link to this definition"></a></dt>
+<dd><p>Return the dashboard’s current input_norm as a JSON-serializable dict.</p>
+<p>Reads <code class="docutils literal notranslate"><span class="pre">g.input_norm_config</span></code> if populated; otherwise reconstructs the
+dict from the live <code class="docutils literal notranslate"><span class="pre">g.input_norms</span></code> instances via their <code class="docutils literal notranslate"><span class="pre">.to_dict()</span></code>.
+The fallback matters because some startup paths (yaml_cli) populate
+<code class="docutils literal notranslate"><span class="pre">g.input_norms</span></code> from the YAML at server boot but never touch
+<code class="docutils literal notranslate"><span class="pre">input_norm_config</span></code> – if the user submits training without first
+hitting /api/run, the manifest would otherwise be written empty.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.globals.get_blockwise_tasks_dir">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">get_blockwise_tasks_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.globals.get_blockwise_tasks_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 </section>
 </section>
 
@@ -382,7 +477,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../dashboard/state/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.state" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../finetune/virtual_dataset/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.virtual_dataset" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../image_data_interface/index.html" class="btn btn-neutral float-right" title="cellmap_flow.image_data_interface" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

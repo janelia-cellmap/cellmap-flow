@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.crop_loader &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.finetune_cli" href="../finetune_cli/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.correction_dataset" href="../correction_dataset/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.crop_loader</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/crop_loader/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.crop_loader">
+<span id="cellmap-flow-finetune-crop-loader"></span><h1>cellmap_flow.finetune.crop_loader<a class="headerlink" href="#module-cellmap_flow.finetune.crop_loader" title="Link to this heading"></a></h1>
+<p>YAML manifest schema and helpers for importing externally annotated crops.</p>
+<p>Each manifest entry points at a 3D zarr (typically OME-NGFF) of instance
+labels or class IDs. The dashboard’s YAML loader (see
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow.dashboard.routes.finetune.yaml_crops</span></code>) reads these crops,
+remaps their values into the trainer’s
+<code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">=</span> <span class="pre">unannotated,</span> <span class="pre">1</span> <span class="pre">=</span> <span class="pre">background,</span> <span class="pre">&gt;=2</span> <span class="pre">=</span> <span class="pre">foreground</span> <span class="pre">instance</span></code> convention,
+and writes them into the session’s annotation_volume.zarr at the crops’
+physical offsets.</p>
+<dl class="simple">
+<dt>This module owns:</dt><dd><ul class="simple">
+<li><p>The pydantic schema (<a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropEntry" title="cellmap_flow.finetune.crop_loader.CropEntry"><code class="xref py py-class docutils literal notranslate"><span class="pre">CropEntry</span></code></a>, <a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropsConfig" title="cellmap_flow.finetune.crop_loader.CropsConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">CropsConfig</span></code></a>).</p></li>
+<li><p>The label remap function (<a class="reference internal" href="#cellmap_flow.finetune.crop_loader.remap_labels" title="cellmap_flow.finetune.crop_loader.remap_labels"><code class="xref py py-func docutils literal notranslate"><span class="pre">remap_labels()</span></code></a>).</p></li>
+<li><p>Small zarr-attrs helpers used by the loader to derive a crop’s voxel
+size, offset, and the array sub-path inside an OME-NGFF group.</p></li>
+</ul>
+</dd>
+</dl>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.logger" title="cellmap_flow.finetune.crop_loader.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropEntry" title="cellmap_flow.finetune.crop_loader.CropEntry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CropEntry</span></code></a></p></td>
+<td><p>One annotation crop to import.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropsConfig" title="cellmap_flow.finetune.crop_loader.CropsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CropsConfig</span></code></a></p></td>
+<td><p>Top-level YAML schema.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.parse_crops_yaml" title="cellmap_flow.finetune.crop_loader.parse_crops_yaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_crops_yaml</span></code></a>(→ CropsConfig)</p></td>
+<td><p>Parse a YAML string OR the path to a YAML file into a validated config.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.remap_labels" title="cellmap_flow.finetune.crop_loader.remap_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remap_labels</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>Map source label values to <code class="docutils literal notranslate"><span class="pre">0=unannotated,</span> <span class="pre">1=BG,</span> <span class="pre">&gt;=2=FG</span> <span class="pre">instance</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.crop_loader.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.crop_loader.</span></span><span class="sig-name descname"><span class="pre">CropEntry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry" title="Link to this definition"></a></dt>
+<dd><p>One annotation crop to import.</p>
+<dl class="simple">
+<dt>Fields other than <code class="docutils literal notranslate"><span class="pre">path</span></code> are optional with sensible defaults:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">fg_ids=None</span></code> means “every nonzero source value is foreground”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bg_ids=[]</span></code> means “no explicit BG ids, see mode for what 0 means”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mode='dense'</span></code> treats unmatched voxels (incl. 0) as background</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mode='sparse'</span></code> treats unmatched voxels as unannotated</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">connected_components=False</span></code> keeps source ids as instance ids;
+set True with a single-id <code class="docutils literal notranslate"><span class="pre">fg_ids</span></code> to split same-id blobs into
+per-instance ids for affinity-style training.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.path">
+<span class="sig-name descname"><span class="pre">path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.fg_ids">
+<span class="sig-name descname"><span class="pre">fg_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.fg_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.bg_ids">
+<span class="sig-name descname"><span class="pre">bg_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.bg_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.mode">
+<span class="sig-name descname"><span class="pre">mode</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'dense'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'sparse'</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dense'</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropEntry.connected_components">
+<span class="sig-name descname"><span class="pre">connected_components</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropEntry.connected_components" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.crop_loader.</span></span><span class="sig-name descname"><span class="pre">CropsConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig" title="Link to this definition"></a></dt>
+<dd><p>Top-level YAML schema.</p>
+<p><code class="docutils literal notranslate"><span class="pre">patches_per_epoch</span></code>, <code class="docutils literal notranslate"><span class="pre">jitter_voxels</span></code>, and <code class="docutils literal notranslate"><span class="pre">seed</span></code> are passed through
+to the <code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code> manifest the loader writes — they
+govern epoch length, patch-center jitter (in voxels), and the per-worker
+RNG base seed for reproducible patch sampling across runs.</p>
+<p><code class="docutils literal notranslate"><span class="pre">patches_per_epoch=None</span></code> (the default) means “cover every populated
+chunk roughly once per epoch” — the dataset substitutes the total
+populated-chunk count at index build time. Override with an explicit
+int to cap the epoch length.</p>
+<p><code class="docutils literal notranslate"><span class="pre">dense_to_sparse_ratio=None</span></code> (the default) means “auto-balance”:
+50/50 split between dense imported crops and sparse painted scribbles
+when both pools exist; degrades to 1.0 (all from the surviving pool)
+when only one pool has FG voxels.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.crops">
+<span class="sig-name descname"><span class="pre">crops</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropEntry" title="cellmap_flow.finetune.crop_loader.CropEntry"><span class="pre">CropEntry</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.crops" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.patches_per_epoch">
+<span class="sig-name descname"><span class="pre">patches_per_epoch</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.patches_per_epoch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.jitter_voxels">
+<span class="sig-name descname"><span class="pre">jitter_voxels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.jitter_voxels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.seed" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.CropsConfig.dense_to_sparse_ratio">
+<span class="sig-name descname"><span class="pre">dense_to_sparse_ratio</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.CropsConfig.dense_to_sparse_ratio" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.parse_crops_yaml">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.crop_loader.</span></span><span class="sig-name descname"><span class="pre">parse_crops_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_text_or_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.crop_loader.CropsConfig" title="cellmap_flow.finetune.crop_loader.CropsConfig"><span class="pre">CropsConfig</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.parse_crops_yaml" title="Link to this definition"></a></dt>
+<dd><p>Parse a YAML string OR the path to a YAML file into a validated config.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.crop_loader.remap_labels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.crop_loader.</span></span><span class="sig-name descname"><span class="pre">remap_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fg_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bg_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'dense'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'sparse'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connected_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.crop_loader.remap_labels" title="Link to this definition"></a></dt>
+<dd><p>Map source label values to <code class="docutils literal notranslate"><span class="pre">0=unannotated,</span> <span class="pre">1=BG,</span> <span class="pre">&gt;=2=FG</span> <span class="pre">instance</span></code>.</p>
+<dl class="simple">
+<dt>Mapping rules:</dt><dd><ul class="simple">
+<li><p>source value in <code class="docutils literal notranslate"><span class="pre">fg_ids</span></code> (or any nonzero if <code class="docutils literal notranslate"><span class="pre">fg_ids</span> <span class="pre">is</span> <span class="pre">None</span></code>)
+becomes a unique instance id &gt;=2. If <code class="docutils literal notranslate"><span class="pre">connected_components</span></code> is True,
+each connected blob within an fg_id class gets its own instance.
+Otherwise, source ids map to consecutive 2,3,… in order.</p></li>
+<li><p>source value in <code class="docutils literal notranslate"><span class="pre">bg_ids</span></code> -&gt; 1 (background).</p></li>
+<li><p>everything else -&gt; 1 if <code class="docutils literal notranslate"><span class="pre">mode='dense'</span></code>, else 0 (unannotated).</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">uint8</span></code>. If the number of distinct instances would overflow
+<code class="docutils literal notranslate"><span class="pre">uint8</span></code>, all FG voxels collapse to id=2 and a warning is emitted.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../correction_dataset/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.correction_dataset" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../finetune_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.finetune_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

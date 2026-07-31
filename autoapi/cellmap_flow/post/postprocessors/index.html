@@ -62,6 +62,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
@@ -130,28 +131,31 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.PostProcessor" title="cellmap_flow.post.postprocessors.PostProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PostProcessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="cellmap_flow.post.postprocessors.DefaultPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DefaultPostprocessor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.SigmoidPostprocessor" title="cellmap_flow.post.postprocessors.SigmoidPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SigmoidPostprocessor</span></code></a></p></td>
+<td><p>Apply sigmoid activation to convert logits to probabilities.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.DefaultPostprocessor" title="cellmap_flow.post.postprocessors.DefaultPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DefaultPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="cellmap_flow.post.postprocessors.ThresholdPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThresholdPostprocessor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ThresholdPostprocessor" title="cellmap_flow.post.postprocessors.ThresholdPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThresholdPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="cellmap_flow.post.postprocessors.LabelPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="cellmap_flow.post.postprocessors.LabelPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="cellmap_flow.post.postprocessors.AffinityPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AffinityPostprocessor</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="cellmap_flow.post.postprocessors.AffinityPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AffinityPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleBlockwiseMerger</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleBlockwiseMerger</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="cellmap_flow.post.postprocessors.ChannelSelection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="cellmap_flow.post.postprocessors.ChannelSelection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="cellmap_flow.post.postprocessors.LambdaPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="cellmap_flow.post.postprocessors.LambdaPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
 </tbody>
@@ -189,6 +193,17 @@
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.is_segmentation">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SigmoidPostprocessor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">SigmoidPostprocessor</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SigmoidPostprocessor" title="Link to this definition"></a></dt>
+<dd><p>Apply sigmoid activation to convert logits to probabilities.</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.SigmoidPostprocessor.dtype">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.SigmoidPostprocessor.dtype" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>

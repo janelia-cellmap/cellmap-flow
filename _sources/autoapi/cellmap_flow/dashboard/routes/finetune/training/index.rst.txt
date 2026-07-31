@@ -1,0 +1,53 @@
+cellmap_flow.dashboard.routes.finetune.training
+===============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.training
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.training.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.training.list_finetuning_jobs_response
+   cellmap_flow.dashboard.routes.finetune.training.get_job_status_response
+   cellmap_flow.dashboard.routes.finetune.training.get_job_logs_response
+   cellmap_flow.dashboard.routes.finetune.training.submit_finetuning_response
+   cellmap_flow.dashboard.routes.finetune.training.stream_job_logs_response
+   cellmap_flow.dashboard.routes.finetune.training.cancel_job_response
+   cellmap_flow.dashboard.routes.finetune.training.stop_training_early_response
+   cellmap_flow.dashboard.routes.finetune.training.get_inference_server_status_response
+   cellmap_flow.dashboard.routes.finetune.training.restart_finetuning_job_response
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: list_finetuning_jobs_response()
+
+.. py:function:: get_job_status_response(job_id)
+
+.. py:function:: get_job_logs_response(job_id)
+
+.. py:function:: submit_finetuning_response(data)
+
+.. py:function:: stream_job_logs_response(job_id)
+
+.. py:function:: cancel_job_response(job_id)
+
+.. py:function:: stop_training_early_response(job_id)
+
+.. py:function:: get_inference_server_status_response(job_id)
+
+.. py:function:: restart_finetuning_job_response(job_id, data)
+

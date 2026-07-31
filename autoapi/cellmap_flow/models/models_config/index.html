@@ -62,6 +62,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
@@ -139,7 +140,10 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="cellmap_flow.models.models_config.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a CellmapModel.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="cellmap_flow.models.models_config.HuggingFaceModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HuggingFaceModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="cellmap_flow.models.models_config.FinetuneModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code></a></p></td>
+<td><p>Configuration class for a LoRA-finetuned model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="cellmap_flow.models.models_config.HuggingFaceModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HuggingFaceModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a Hugging Face model.</p></td>
 </tr>
 </tbody>
@@ -482,6 +486,59 @@ for raw bioimageio model axes.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.to_dict" title="Link to this definition"></a></dt>
 <dd><p>Export configuration for use with build_model_from_entry.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">FinetuneModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lora_adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="Link to this definition"></a></dt>
+<dd><p>Configuration class for a LoRA-finetuned model.</p>
+<p>Wraps any base ModelConfig with a LoRA adapter applied on top.
+The base model is loaded via its own ModelConfig, then the adapter
+is applied using PEFT.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'finetune'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.lora_adapter_path">
+<span class="sig-name descname"><span class="pre">lora_adapter_path</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.lora_adapter_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.base_model_dict">
+<span class="sig-name descname"><span class="pre">base_model_dict</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.base_model_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.base_model_config">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">base_model_config</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.base_model_config" title="Link to this definition"></a></dt>
+<dd><p>Lazily build the base ModelConfig from the stored dict.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.command">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.command" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Export configuration for use with build_model_from_entry.</p>
+<p>Surfaces key base model fields at the top level so the pipeline
+builder UI can display them alongside the finetune-specific fields.</p>
 </dd></dl>
 
 </dd></dl>

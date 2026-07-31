@@ -1,0 +1,49 @@
+cellmap_flow.dashboard.routes.finetune.annotation
+=================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.annotation
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation.create_annotation_crop_response
+   cellmap_flow.dashboard.routes.finetune.annotation.create_annotation_volume_response
+   cellmap_flow.dashboard.routes.finetune.annotation.get_finetune_models_response
+   cellmap_flow.dashboard.routes.finetune.annotation.get_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.annotation.get_view_center_response
+   cellmap_flow.dashboard.routes.finetune.annotation.set_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.annotation.list_existing_sessions_response
+   cellmap_flow.dashboard.routes.finetune.annotation.load_existing_volume_response
+   cellmap_flow.dashboard.routes.finetune.annotation.add_crop_to_viewer_response
+   cellmap_flow.dashboard.routes.finetune.annotation.refresh_annotated_regions_layer
+   cellmap_flow.dashboard.routes.finetune.annotation.sync_annotations_manually_response
+
+
+Module Contents
+---------------
+
+.. py:function:: create_annotation_crop_response(data)
+
+.. py:function:: create_annotation_volume_response(data)
+
+.. py:function:: get_finetune_models_response()
+
+.. py:function:: get_user_prefs_response()
+
+.. py:function:: get_view_center_response()
+
+.. py:function:: set_user_prefs_response(data)
+
+.. py:function:: list_existing_sessions_response(data)
+
+.. py:function:: load_existing_volume_response(data)
+
+.. py:function:: add_crop_to_viewer_response(data)
+
+.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+.. py:function:: sync_annotations_manually_response(data)
+

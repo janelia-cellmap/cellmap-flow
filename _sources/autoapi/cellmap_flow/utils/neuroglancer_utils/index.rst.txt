@@ -17,6 +17,8 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.utils.neuroglancer_utils.get_raw_closest_scale
+   cellmap_flow.utils.neuroglancer_utils.build_prediction_source
    cellmap_flow.utils.neuroglancer_utils.generate_neuroglancer_url
    cellmap_flow.utils.neuroglancer_utils.show
 
@@ -25,6 +27,22 @@ Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:function:: get_raw_closest_scale(dataset_path, target_resolution)
+
+   Return the raw multiscale scale (as a tuple of nm) closest to the
+   model's target resolution, or None if it can't be determined.
+
+
+.. py:function:: build_prediction_source(host, model, st_data, override_scales)
+
+   Build a source spec for the prediction zarr that overrides the
+   source dimensions' scales so the layer overlays the raw at its native
+   resolution (e.g. claim a 16nm model output is actually at 12nm).
+
+   The prediction zarr is 4D (z, y, x, c). We override the spatial scales
+   and leave the channel dim as a unitless dimension.
+
 
 .. py:function:: generate_neuroglancer_url(dataset_path, wrap_raw=True)
 

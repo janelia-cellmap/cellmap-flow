@@ -1,0 +1,185 @@
+cellmap_flow.finetune.virtual_dataset
+=====================================
+
+.. py:module:: cellmap_flow.finetune.virtual_dataset
+
+.. autoapi-nested-parse::
+
+   On-the-fly random-patch dataset for finetuning.
+
+   Architecture
+   ------------
+   There is exactly one source of truth per session: an
+   ``annotation_volume.zarr`` (sparse, full-dataset extent, OME-NGFF) that
+   holds **every** annotation — painted scribbles plus any imported YAML
+   crops, all merged at their physical offsets. This dataset reads patches
+   straight out of that single volume zarr; no per-tile materialization, no
+   parallel source list to keep in sync.
+
+   Sampling rule
+   -------------
+   Two-pool stratified sampling. FG voxels are partitioned by membership in
+   the volume's ``imported_crops`` bbox list (recorded in the volume zattrs
+   when YAML crops are imported):
+     - **dense pool**: voxels inside any imported_crops bbox (abundant GT)
+     - **sparse pool**: voxels outside all bboxes (painted scribbles, by
+       construction always sparse and informative — the user paints there
+       because the base model failed)
+
+   Each ``__getitem__`` picks a pool by ``dense_to_sparse_ratio`` (default
+   0.5/0.5 when both pools exist; auto-degrades to 1.0 when only one
+   exists), samples a random FG voxel from that pool, jitters the patch
+   center, and reads raw + annotation patches around it.
+
+   Without stratification, voxel-uniform sampling buries scribbles: a
+   typical session has ~40M dense voxels vs ~10K painted, so 999/1000
+   patches would be dense and the corrections you painted barely move the
+   gradient. Stratification guarantees scribbles get a defined share of
+   each epoch regardless of voxel count.
+
+   Index construction reads only **populated** chunks of the sparse zarr
+   (walks ``annotation/s0/`` for files matching ``z.y.x``). For an empty
+   volume that's an empty index; for a fully painted region it's the FG
+   voxels of those chunks.
+
+   Reviewer notes
+   --------------
+   - Workers each rebuild the FG index on spawn (cheap — only populated
+     chunks are read). We don't pickle any open zarr/tensorstore handles.
+   - ``len(self)`` is ``patches_per_epoch``; it has no relationship to the
+     number of populated chunks. The trainer treats this as the epoch length.
+   - The dataset returns ``(raw, annotation)`` tensors with shape
+     ``(1, Z, Y, X)`` matching :class:`CorrectionDataset`'s contract.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.virtual_dataset.logger
+   cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.virtual_dataset.VirtualPatchDataset
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.virtual_dataset.write_manifest
+   cellmap_flow.finetune.virtual_dataset.read_manifest
+   cellmap_flow.finetune.virtual_dataset.dataset_from_manifest
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None)
+
+
+
+   Yield random raw+annotation patches anchored on FG voxels in a volume zarr.
+
+   :param volume_zarr_path: path to the session's ``annotation_volume.zarr``.
+   :param raw_dataset_path: path to the raw EM zarr the volume is aligned to.
+   :param input_size_voxels: shape (Z, Y, X) of the raw patch returned per
+                             sample, in voxels at ``input_voxel_size_nm``.
+   :param output_size_voxels: shape (Z, Y, X) of the annotation patch, in
+                              voxels at ``output_voxel_size_nm``.
+   :param input_voxel_size_nm: voxel size for raw patches (the dataset's
+                               closest scale to the model's claimed input voxel size).
+   :param output_voxel_size_nm: voxel size for annotation patches.
+   :param patches_per_epoch: ``len(self)``; controls how many random patches
+                             comprise one epoch. ``None`` (the default) means "auto:
+                             substitute the total populated-chunk count" — every populated
+                             chunk gets ~one patch per epoch on average.
+   :param jitter_voxels: half-range of the random offset applied to the patch
+                         center, in **annotation voxels**. Defaults to
+                         ``output_size_voxels // 4``.
+   :param seed: RNG seed; per-worker offset added so multi-worker dataloaders
+                sample distinct streams.
+   :param dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
+                                 the dense pool (FG voxels inside any imported_crops bbox).
+                                 ``None`` (default) means auto: 0.5 if both pools have voxels,
+                                 else 1.0 (use the non-empty pool exclusively).
+
+
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: raw_dataset_path
+
+
+   .. py:attribute:: input_size
+
+
+   .. py:attribute:: output_size
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  Optional[int]
+
+
+   .. py:attribute:: jitter
+
+
+   .. py:attribute:: seed
+      :value: 0
+
+
+
+   .. py:attribute:: dense_to_sparse_ratio
+
+
+   .. py:attribute:: input_norm_config
+      :type:  dict
+
+
+   .. py:attribute:: dataset_offset_nm
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: volume_shape_voxels
+      :type:  numpy.ndarray
+
+
+.. py:data:: VIRTUAL_MANIFEST_FILENAME
+   :value: '_virtual_sources.json'
+
+
+.. py:function:: write_manifest(corrections_dir: str, manifest: dict) -> str
+
+   Persist a manifest sentinel that ``create_dataloader`` looks for.
+
+
+.. py:function:: read_manifest(corrections_dir: str) -> Optional[dict]
+
+   Return the manifest if present, else ``None``.
+
+
+.. py:function:: dataset_from_manifest(manifest: dict) -> VirtualPatchDataset
+
+   Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
+
+   Recognized manifest kinds:
+     - ``volume_zarr_v1`` (current): trainer reads the session's
+       annotation_volume.zarr directly. Field ``volume_zarr_path``.
+
+

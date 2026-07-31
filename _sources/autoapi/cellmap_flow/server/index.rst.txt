@@ -25,7 +25,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: CellMapFlowServer(dataset_name: str, model_config: cellmap_flow.models.models_config.ModelConfig)
+.. py:class:: CellMapFlowServer(dataset_name: str, model_config: cellmap_flow.models.models_config.ModelConfig, restart_callback=None)
 
    Flask application hosting a "virtual Zarr" for Neuroglancer.
    All routes are defined via Flask decorators for convenience.
@@ -50,6 +50,11 @@ Module Contents
 
 
    .. py:attribute:: inferencer
+
+
+   .. py:attribute:: restart_callback
+      :value: None
+
 
 
    .. py:attribute:: idi_raw

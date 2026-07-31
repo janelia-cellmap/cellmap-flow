@@ -1,0 +1,47 @@
+cellmap_flow.dashboard.routes.finetune
+======================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_core/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_sessions/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/common/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/routes/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/service/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/training/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/viewer/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/yaml_crops/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.finetune_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer
+
+
+Package Contents
+----------------
+
+.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+.. py:data:: finetune_bp
+

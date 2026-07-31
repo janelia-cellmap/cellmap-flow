@@ -1,0 +1,79 @@
+cellmap_flow.dashboard.routes.finetune.service
+==============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.service
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.service.add_crop_to_viewer_response
+   cellmap_flow.dashboard.routes.finetune.service.create_annotation_crop_response
+   cellmap_flow.dashboard.routes.finetune.service.create_annotation_volume_response
+   cellmap_flow.dashboard.routes.finetune.service.get_finetune_models_response
+   cellmap_flow.dashboard.routes.finetune.service.get_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.service.get_view_center_response
+   cellmap_flow.dashboard.routes.finetune.service.list_existing_sessions_response
+   cellmap_flow.dashboard.routes.finetune.service.load_existing_volume_response
+   cellmap_flow.dashboard.routes.finetune.service.refresh_annotated_regions_layer
+   cellmap_flow.dashboard.routes.finetune.service.set_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.service.sync_annotations_manually_response
+   cellmap_flow.dashboard.routes.finetune.service.cancel_job_response
+   cellmap_flow.dashboard.routes.finetune.service.get_job_logs_response
+   cellmap_flow.dashboard.routes.finetune.service.get_job_status_response
+   cellmap_flow.dashboard.routes.finetune.service.get_inference_server_status_response
+   cellmap_flow.dashboard.routes.finetune.service.list_finetuning_jobs_response
+   cellmap_flow.dashboard.routes.finetune.service.restart_finetuning_job_response
+   cellmap_flow.dashboard.routes.finetune.service.stop_training_early_response
+   cellmap_flow.dashboard.routes.finetune.service.stream_job_logs_response
+   cellmap_flow.dashboard.routes.finetune.service.submit_finetuning_response
+   cellmap_flow.dashboard.routes.finetune.service.add_finetuned_layer_to_viewer_response
+
+
+Module Contents
+---------------
+
+.. py:function:: add_crop_to_viewer_response(data)
+
+.. py:function:: create_annotation_crop_response(data)
+
+.. py:function:: create_annotation_volume_response(data)
+
+.. py:function:: get_finetune_models_response()
+
+.. py:function:: get_user_prefs_response()
+
+.. py:function:: get_view_center_response()
+
+.. py:function:: list_existing_sessions_response(data)
+
+.. py:function:: load_existing_volume_response(data)
+
+.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+.. py:function:: set_user_prefs_response(data)
+
+.. py:function:: sync_annotations_manually_response(data)
+
+.. py:function:: cancel_job_response(job_id)
+
+.. py:function:: get_job_logs_response(job_id)
+
+.. py:function:: get_job_status_response(job_id)
+
+.. py:function:: get_inference_server_status_response(job_id)
+
+.. py:function:: list_finetuning_jobs_response()
+
+.. py:function:: restart_finetuning_job_response(job_id, data)
+
+.. py:function:: stop_training_early_response(job_id)
+
+.. py:function:: stream_job_logs_response(job_id)
+
+.. py:function:: submit_finetuning_response(data)
+
+.. py:function:: add_finetuned_layer_to_viewer_response(data)
+

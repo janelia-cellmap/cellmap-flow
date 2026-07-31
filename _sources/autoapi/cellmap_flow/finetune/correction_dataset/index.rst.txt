@@ -1,0 +1,95 @@
+cellmap_flow.finetune.correction_dataset
+========================================
+
+.. py:module:: cellmap_flow.finetune.correction_dataset
+
+.. autoapi-nested-parse::
+
+   PyTorch Dataset for loading user corrections.
+
+   This module provides a Dataset class that loads 3D EM data and correction
+   masks from Zarr files for training LoRA adapters.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.correction_dataset.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.correction_dataset.CorrectionDataset
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.correction_dataset.create_dataloader
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: CorrectionDataset(corrections_zarr_path: str, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, model_name: Optional[str] = None)
+
+
+
+   PyTorch Dataset for user corrections stored in Zarr format.
+
+   Loads raw EM data and corrected masks from corrections.zarr/, with
+   optional 3D augmentation.
+
+   :param corrections_zarr_path: Path to corrections.zarr directory
+   :param patch_shape: Shape of patches to extract (Z, Y, X)
+                       If None, uses full correction size
+   :param augment: Whether to apply 3D augmentation
+   :param model_name: If specified, only load corrections for this model
+
+   .. rubric:: Examples
+
+   >>> dataset = CorrectionDataset(
+   ...     "test_corrections.zarr",
+   ...     patch_shape=(64, 64, 64),
+   ...     augment=True
+   ... )
+   >>> print(f"Dataset size: {len(dataset)}")
+   >>> raw, target = dataset[0]
+   >>> print(f"Raw shape: {raw.shape}, Target shape: {target.shape}")
+
+
+   .. py:attribute:: corrections_path
+
+
+   .. py:attribute:: patch_shape
+      :value: None
+
+
+
+   .. py:attribute:: augment
+      :value: True
+
+
+
+   .. py:attribute:: model_name
+      :value: None
+
+
+
+   .. py:attribute:: corrections
+      :value: []
+
+
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, num_workers: int = 4, shuffle: bool = True, model_name: Optional[str] = None) -> torch.utils.data.DataLoader
+

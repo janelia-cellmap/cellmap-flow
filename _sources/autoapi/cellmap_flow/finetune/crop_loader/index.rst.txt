@@ -1,0 +1,187 @@
+cellmap_flow.finetune.crop_loader
+=================================
+
+.. py:module:: cellmap_flow.finetune.crop_loader
+
+.. autoapi-nested-parse::
+
+   YAML manifest schema and helpers for importing externally annotated crops.
+
+   Each manifest entry points at a 3D zarr (typically OME-NGFF) of instance
+   labels or class IDs. The dashboard's YAML loader (see
+   ``cellmap_flow.dashboard.routes.finetune.yaml_crops``) reads these crops,
+   remaps their values into the trainer's
+   ``0 = unannotated, 1 = background, >=2 = foreground instance`` convention,
+   and writes them into the session's annotation_volume.zarr at the crops'
+   physical offsets.
+
+   This module owns:
+       - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
+       - The label remap function (:func:`remap_labels`).
+       - Small zarr-attrs helpers used by the loader to derive a crop's voxel
+         size, offset, and the array sub-path inside an OME-NGFF group.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.CropEntry
+   cellmap_flow.finetune.crop_loader.CropsConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.parse_crops_yaml
+   cellmap_flow.finetune.crop_loader.remap_labels
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: CropEntry(/, **data: Any)
+
+
+
+   One annotation crop to import.
+
+   Fields other than ``path`` are optional with sensible defaults:
+       - ``fg_ids=None`` means "every nonzero source value is foreground"
+       - ``bg_ids=[]`` means "no explicit BG ids, see mode for what 0 means"
+       - ``mode='dense'`` treats unmatched voxels (incl. 0) as background
+       - ``mode='sparse'`` treats unmatched voxels as unannotated
+       - ``connected_components=False`` keeps source ids as instance ids;
+         set True with a single-id ``fg_ids`` to split same-id blobs into
+         per-instance ids for affinity-style training.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: fg_ids
+      :type:  Optional[List[int]]
+      :value: None
+
+
+
+   .. py:attribute:: bg_ids
+      :type:  List[int]
+      :value: None
+
+
+
+   .. py:attribute:: mode
+      :type:  Literal['dense', 'sparse']
+      :value: 'dense'
+
+
+
+   .. py:attribute:: connected_components
+      :type:  bool
+      :value: False
+
+
+
+.. py:class:: CropsConfig(/, **data: Any)
+
+
+
+   Top-level YAML schema.
+
+   ``patches_per_epoch``, ``jitter_voxels``, and ``seed`` are passed through
+   to the :class:`VirtualPatchDataset` manifest the loader writes — they
+   govern epoch length, patch-center jitter (in voxels), and the per-worker
+   RNG base seed for reproducible patch sampling across runs.
+
+   ``patches_per_epoch=None`` (the default) means "cover every populated
+   chunk roughly once per epoch" — the dataset substitutes the total
+   populated-chunk count at index build time. Override with an explicit
+   int to cap the epoch length.
+
+   ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
+   50/50 split between dense imported crops and sparse painted scribbles
+   when both pools exist; degrades to 1.0 (all from the surviving pool)
+   when only one pool has FG voxels.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: crops
+      :type:  List[CropEntry]
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  Optional[int]
+      :value: None
+
+
+
+   .. py:attribute:: jitter_voxels
+      :type:  Optional[List[int]]
+      :value: None
+
+
+
+   .. py:attribute:: seed
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: dense_to_sparse_ratio
+      :type:  Optional[float]
+      :value: None
+
+
+
+.. py:function:: parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig
+
+   Parse a YAML string OR the path to a YAML file into a validated config.
+
+
+.. py:function:: remap_labels(source: numpy.ndarray, fg_ids: Optional[Iterable[int]], bg_ids: Iterable[int], mode: Literal['dense', 'sparse'], connected_components: bool) -> numpy.ndarray
+
+   Map source label values to ``0=unannotated, 1=BG, >=2=FG instance``.
+
+   Mapping rules:
+       - source value in ``fg_ids`` (or any nonzero if ``fg_ids is None``)
+         becomes a unique instance id >=2. If ``connected_components`` is True,
+         each connected blob within an fg_id class gets its own instance.
+         Otherwise, source ids map to consecutive 2,3,... in order.
+       - source value in ``bg_ids`` -> 1 (background).
+       - everything else -> 1 if ``mode='dense'``, else 0 (unannotated).
+
+   Returns ``uint8``. If the number of distinct instances would overflow
+   ``uint8``, all FG voxels collapse to id=2 and a warning is emitted.
+
+

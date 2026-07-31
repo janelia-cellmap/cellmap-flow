@@ -1,0 +1,29 @@
+cellmap_flow.dashboard.routes.finetune.routes
+=============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.routes
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.routes.finetune_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.routes.refresh_annotated_regions_layer
+
+
+Module Contents
+---------------
+
+.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+.. py:data:: finetune_bp
+

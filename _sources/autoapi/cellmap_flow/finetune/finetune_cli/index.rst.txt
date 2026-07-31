@@ -1,0 +1,62 @@
+cellmap_flow.finetune.finetune_cli
+==================================
+
+.. py:module:: cellmap_flow.finetune.finetune_cli
+
+.. autoapi-nested-parse::
+
+   Command-line interface for LoRA finetuning.
+
+   Usage:
+       python -m cellmap_flow.finetune.finetune_cli         --model-checkpoint /path/to/checkpoint         --corrections corrections.zarr         --output-dir output/fly_organelles_v1.1
+
+       # With custom settings
+       python -m cellmap_flow.finetune.finetune_cli         --model-checkpoint /path/to/checkpoint         --corrections corrections.zarr         --output-dir output/fly_organelles_v1.1         --lora-r 16         --batch-size 4         --num-epochs 20         --learning-rate 2e-4
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_cli.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_cli.RestartController
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_cli.build_arg_parser
+   cellmap_flow.finetune.finetune_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: RestartController
+
+   In-memory restart control shared between training loop and server endpoint.
+
+
+   .. py:method:: request_restart(payload: Optional[dict]) -> bool
+
+
+   .. py:method:: get_if_triggered() -> Optional[dict]
+
+
+.. py:function:: build_arg_parser()
+
+.. py:function:: main()
+

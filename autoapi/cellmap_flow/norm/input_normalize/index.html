@@ -62,6 +62,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
@@ -127,19 +128,22 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.InputNormalizer" title="cellmap_flow.norm.input_normalize.InputNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InputNormalizer</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.Dilate" title="cellmap_flow.norm.input_normalize.Dilate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Dilate</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.ChannelSelector" title="cellmap_flow.norm.input_normalize.ChannelSelector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelector</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.EuclideanDistance" title="cellmap_flow.norm.input_normalize.EuclideanDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EuclideanDistance</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.Dilate" title="cellmap_flow.norm.input_normalize.Dilate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Dilate</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.MinMaxNormalizer" title="cellmap_flow.norm.input_normalize.MinMaxNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MinMaxNormalizer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.EuclideanDistance" title="cellmap_flow.norm.input_normalize.EuclideanDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EuclideanDistance</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.LambdaNormalizer" title="cellmap_flow.norm.input_normalize.LambdaNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaNormalizer</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.MinMaxNormalizer" title="cellmap_flow.norm.input_normalize.MinMaxNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MinMaxNormalizer</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.ZScoreNormalizer" title="cellmap_flow.norm.input_normalize.ZScoreNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZScoreNormalizer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.LambdaNormalizer" title="cellmap_flow.norm.input_normalize.LambdaNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaNormalizer</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.input_normalize.ZScoreNormalizer" title="cellmap_flow.norm.input_normalize.ZScoreNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZScoreNormalizer</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -197,6 +201,16 @@
 <dt class="sig sig-object py" id="cellmap_flow.norm.input_normalize.InputNormalizer">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.input_normalize.</span></span><span class="sig-name descname"><span class="pre">InputNormalizer</span></span><a class="headerlink" href="#cellmap_flow.norm.input_normalize.InputNormalizer" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.norm.input_normalize.ChannelSelector">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.input_normalize.</span></span><span class="sig-name descname"><span class="pre">ChannelSelector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.norm.input_normalize.ChannelSelector" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.norm.input_normalize.ChannelSelector.channel">
+<span class="sig-name descname"><span class="pre">channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.norm.input_normalize.ChannelSelector.channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.norm.input_normalize.Dilate">

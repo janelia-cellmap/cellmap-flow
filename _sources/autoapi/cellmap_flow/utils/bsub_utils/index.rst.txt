@@ -185,11 +185,11 @@ Module Contents
 
 
 
-   .. py:method:: wait_for_host(timeout: int = 60) -> Optional[str]
+   .. py:method:: wait_for_host(timeout: int = 180) -> Optional[str]
 
       Monitor process output for host information.
 
-      :param timeout: Maximum time to wait in seconds
+      :param timeout: Maximum time to wait in seconds (default 180s for model loading)
 
       :returns: Host URL if found, None otherwise
 

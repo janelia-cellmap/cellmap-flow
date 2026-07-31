@@ -13,6 +13,7 @@ Submodules
    /autoapi/cellmap_flow/blockwise/index
    /autoapi/cellmap_flow/cli/index
    /autoapi/cellmap_flow/dashboard/index
+   /autoapi/cellmap_flow/finetune/index
    /autoapi/cellmap_flow/globals/index
    /autoapi/cellmap_flow/image_data_interface/index
    /autoapi/cellmap_flow/inferencer/index

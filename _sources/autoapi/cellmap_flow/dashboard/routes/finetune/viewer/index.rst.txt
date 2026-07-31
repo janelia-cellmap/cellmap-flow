@@ -1,0 +1,29 @@
+cellmap_flow.dashboard.routes.finetune.viewer
+=============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.viewer
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.viewer.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.viewer.add_finetuned_layer_to_viewer_response
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: add_finetuned_layer_to_viewer_response(data)
+

@@ -1,0 +1,44 @@
+cellmap_flow.dashboard.routes.finetune.annotation_core
+======================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.annotation_core
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_core.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_finetune_models_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_view_center_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_crop_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_volume_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.set_user_prefs_response
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: get_finetune_models_response()
+
+.. py:function:: get_view_center_response()
+
+.. py:function:: create_annotation_crop_response(data)
+
+.. py:function:: create_annotation_volume_response(data)
+
+.. py:function:: get_user_prefs_response()
+
+.. py:function:: set_user_prefs_response(data)
+
