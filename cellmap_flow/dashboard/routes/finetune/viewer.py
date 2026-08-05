@@ -87,7 +87,7 @@ def add_finetuned_layer_to_viewer_response(data):
                 if not output_voxel_size:
                     for mc in getattr(g, "models_config", []) or []:
                         if mc.name == model_name:
-                            output_voxel_size = tuple(mc.config.output_voxel_size)
+                            output_voxel_size = tuple(mc.lightweight_info()["output_voxel_size"])
                             break
                 dataset_path = getattr(g, "dataset_path", None)
                 if output_voxel_size and dataset_path:

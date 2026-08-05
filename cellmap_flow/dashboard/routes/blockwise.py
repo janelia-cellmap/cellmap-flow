@@ -97,6 +97,12 @@ def generate_blockwise_task():
             "models": []
         }
 
+        # Add mask_path from INPUT node if set
+        mask_path = input_node.get("params", {}).get("mask_path", "")
+        if mask_path:
+            task_yaml["mask_path"] = mask_path
+            logger.info(f"Adding mask_path to YAML: {mask_path}")
+
         # Add bounding_boxes from INPUT node if they exist
         bounding_boxes = input_node.get("params", {}).get("bounding_boxes", [])
         if bounding_boxes and isinstance(bounding_boxes, list) and len(bounding_boxes) > 0:
@@ -202,7 +208,8 @@ def generate_blockwise_task():
 
         # Save to file
         yaml_filename = f"{task_name}.yaml"
-        tasks_dir = get_blockwise_tasks_dir()
+        tasks_dir = blockwise_config["params"].get("blockwise_tasks_dir") or get_blockwise_tasks_dir()
+        os.makedirs(tasks_dir, exist_ok=True)
         yaml_path = os.path.join(tasks_dir, yaml_filename)
 
         # Check if we need to generate multiple YAMLs (one per bbox with separate output paths)

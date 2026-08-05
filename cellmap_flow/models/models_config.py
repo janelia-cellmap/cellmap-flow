@@ -2,7 +2,6 @@ import logging
 import warnings
 import copy
 
-from cellmap_models.model_export.cellmap_model import CellmapModel, get_huggingface_model
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
@@ -45,6 +44,33 @@ class ModelConfig:
             self._validate_config()
         return self._config
 
+    def lightweight_info(self) -> dict:
+        """Return UI-display + crop-geometry fields without loading model weights.
+
+        Why: dashboard endpoints (model dropdown, annotation crop/volume
+        creation in finetune + painting) must not pull torch weights / HF
+        snapshots into the dashboard process — that competes with worker
+        GPUs and blocks the Flask thread. Subclasses that can answer from
+        metadata.json (CellMap, HuggingFace, Finetune) or from constructor
+        args (Fly) override this; the default falls back to .config which
+        IS the slow path.
+        """
+        cfg = self.config
+        channel_names = None
+        for attr in ("channels", "channels_names", "class_names"):
+            val = getattr(cfg, attr, None) or getattr(self, attr, None)
+            if val:
+                channel_names = list(val)
+                break
+        return {
+            "read_shape": list(cfg.read_shape),
+            "write_shape": list(cfg.write_shape),
+            "input_voxel_size": list(cfg.input_voxel_size),
+            "output_voxel_size": list(cfg.output_voxel_size),
+            "output_channels": cfg.output_channels,
+            "channel_names": channel_names,
+        }
+
     def _validate_config(self):
         """Ensure config has required attributes and shapes are consistent."""
         required = [
@@ -80,6 +106,12 @@ class ModelConfig:
 
         try:
             device = next(model.parameters()).device
+            if device.type == "cpu" and not torch.cuda.is_available():
+                logger.info(
+                    "Skipping forward-pass shape validation on CPU "
+                    "(too slow); will validate on first GPU worker block."
+                )
+                return
             dummy = torch.zeros(
                 (1, 1, *[int(s) for s in input_size]), device=device
             )
@@ -226,6 +258,19 @@ class ScriptModelConfig(ModelConfig):
             config.block_shape = np.array(
                 tuple(config.output_size) + (config.output_channels,)
             )
+
+        # Ensure a `channels` list exists: downstream consumers (e.g. the
+        # blockwise processor) index outputs by channel name. Scripts may
+        # declare channel names directly; otherwise fall back to string
+        # indices derived from output_channels.
+        if not hasattr(config, "channels") or not config.channels:
+            named = getattr(config, "channels_names", None) or getattr(
+                config, "class_names", None
+            )
+            if named:
+                config.channels = list(named)
+            else:
+                config.channels = [str(i) for i in range(int(config.output_channels))]
         return config
 
     def to_dict(self):
@@ -428,6 +473,24 @@ class FlyModelConfig(ModelConfig):
         if self.scale is not None:
             result["scale"] = self.scale
         return result
+
+    def lightweight_info(self) -> dict:
+        # All shape info is in __init__ params; no need to touch the checkpoint.
+        # Mirror _get_config(): both read_shape and write_shape use
+        # input_voxel_size (existing behavior; coincides with output_voxel_size
+        # in the common case).
+        input_voxel_size = list(self.input_voxel_size)
+        output_voxel_size = list(self.output_voxel_size)
+        read_shape = [int(s * v) for s, v in zip(self.input_size, self.input_voxel_size)]
+        write_shape = [int(s * v) for s, v in zip(self.output_size, self.input_voxel_size)]
+        return {
+            "read_shape": read_shape,
+            "write_shape": write_shape,
+            "input_voxel_size": input_voxel_size,
+            "output_voxel_size": output_voxel_size,
+            "output_channels": len(self.channels),
+            "channel_names": list(self.channels) if self.channels else None,
+        }
 
 
 class BioModelConfig(ModelConfig):
@@ -697,6 +760,7 @@ class CellMapModelConfig(ModelConfig):
 
     def __init__(self, folder_path, name=None, scale=None):
         super().__init__()
+        from cellmap_models.model_export.cellmap_model import CellmapModel
         self.cellmap_model = CellmapModel(folder_path=folder_path)
         if name is None:
             # folder name 
@@ -749,6 +813,23 @@ class CellMapModelConfig(ModelConfig):
             result["scale"] = self.scale
         return result
 
+    def lightweight_info(self) -> dict:
+        metadata = self.cellmap_model.metadata
+        input_voxel_size = list(metadata.input_voxel_size or [])
+        output_voxel_size = list(metadata.output_voxel_size or [])
+        input_shape = list(metadata.input_shape or [])
+        output_shape = list(metadata.output_shape or [])
+        read_shape = [int(s * v) for s, v in zip(input_shape, input_voxel_size)]
+        write_shape = [int(s * v) for s, v in zip(output_shape, output_voxel_size)]
+        return {
+            "read_shape": read_shape,
+            "write_shape": write_shape,
+            "input_voxel_size": input_voxel_size,
+            "output_voxel_size": output_voxel_size,
+            "output_channels": metadata.out_channels,
+            "channel_names": list(metadata.channels_names) if metadata.channels_names else None,
+        }
+
 class FinetuneModelConfig(ModelConfig):
     """Configuration class for a LoRA-finetuned model.
 
@@ -771,11 +852,23 @@ class FinetuneModelConfig(ModelConfig):
             lora_adapter_path: Path to the saved LoRA adapter directory.
             base_model: Dict describing the base model (same format as a YAML
                 model entry, e.g. {"type": "fly", "checkpoint_path": "...", ...}).
+                For CLI/server transport, accepts a base64-encoded JSON string
+                (no shell-special chars) or a plain JSON string.
             name: Display name for this model.
             scale: Optional scale override.
         """
         super().__init__()
         self.lora_adapter_path = lora_adapter_path
+        if isinstance(base_model, str):
+            import base64
+            import json
+            try:
+                # Try base64 first (the form emitted by .command)
+                decoded = base64.b64decode(base_model, validate=True).decode("utf-8")
+                base_model = json.loads(decoded)
+            except (ValueError, json.JSONDecodeError):
+                # Fall back to plain JSON for direct CLI use
+                base_model = json.loads(base_model)
         self.base_model_dict = base_model
         self.name = name
         self.scale = scale
@@ -795,7 +888,18 @@ class FinetuneModelConfig(ModelConfig):
 
     @property
     def command(self):
-        return f"finetune --lora-adapter-path {self.lora_adapter_path}"
+        import base64
+        import json
+        # base64 encoding avoids shell-quoting issues when the command is
+        # passed through bsub / `bash -c` layers (no quotes, braces, or
+        # whitespace inside the encoded blob).
+        base_model_b64 = base64.b64encode(
+            json.dumps(self.base_model_dict).encode("utf-8")
+        ).decode("ascii")
+        return (
+            f"finetune --lora-adapter-path {self.lora_adapter_path} "
+            f"--base-model {base_model_b64}"
+        )
 
     def _get_config(self):
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
@@ -812,11 +916,13 @@ class FinetuneModelConfig(ModelConfig):
             base_type = self.base_model_dict.get("type", "")
             cellmap_model = None
             if base_type == "huggingface":
+                from cellmap_models.model_export.cellmap_model import get_huggingface_model
                 repo = self.base_model_dict.get("repo")
                 revision = self.base_model_dict.get("revision")
                 if repo:
                     cellmap_model = get_huggingface_model(repo, revision)
             elif base_type == "cellmap":
+                from cellmap_models.model_export.cellmap_model import CellmapModel
                 folder_path = self.base_model_dict.get("folder_path")
                 if folder_path:
                     cellmap_model = CellmapModel(folder_path=folder_path)
@@ -884,6 +990,11 @@ class FinetuneModelConfig(ModelConfig):
 
         return result
 
+    def lightweight_info(self) -> dict:
+        # LoRA-finetuned models inherit shape/voxel info from the base model;
+        # delegate so we don't load the base or the adapter into the dashboard.
+        return self.base_model_config.lightweight_info()
+
 
 class HuggingFaceModelConfig(ModelConfig):
     """Configuration class for a Hugging Face model."""
@@ -923,6 +1034,7 @@ class HuggingFaceModelConfig(ModelConfig):
         return cmd
 
     def _get_config(self) -> Config:
+        from cellmap_models.model_export.cellmap_model import get_huggingface_model
         cellmap_model = get_huggingface_model(self.repo, self.revision)
         config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
         return config
@@ -951,3 +1063,21 @@ class HuggingFaceModelConfig(ModelConfig):
                     result[key] = metadata[key]
 
         return result
+
+    def lightweight_info(self) -> dict:
+        metadata = self._load_metadata() or {}
+        input_voxel_size = list(metadata.get("input_voxel_size") or [])
+        output_voxel_size = list(metadata.get("output_voxel_size") or [])
+        input_shape = list(metadata.get("input_shape") or [])
+        output_shape = list(metadata.get("output_shape") or [])
+        read_shape = [int(s * v) for s, v in zip(input_shape, input_voxel_size)]
+        write_shape = [int(s * v) for s, v in zip(output_shape, output_voxel_size)]
+        channels_names = metadata.get("channels_names")
+        return {
+            "read_shape": read_shape,
+            "write_shape": write_shape,
+            "input_voxel_size": input_voxel_size,
+            "output_voxel_size": output_voxel_size,
+            "output_channels": metadata.get("out_channels"),
+            "channel_names": list(channels_names) if channels_names else None,
+        }

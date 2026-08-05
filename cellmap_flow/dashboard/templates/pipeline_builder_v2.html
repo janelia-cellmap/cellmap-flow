@@ -157,6 +157,17 @@
                         Loading Neuroglancer viewer...
                     </div>
                 </div>
+                <div id="bbx-manual-add" style="padding: 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-right: 8px;">➕ Add bbox by coordinates:</div>
+                    <input id="bbx-input-x1" type="number" step="any" placeholder="x1" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <input id="bbx-input-y1" type="number" step="any" placeholder="y1" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <input id="bbx-input-z1" type="number" step="any" placeholder="z1" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <span style="color: var(--text-secondary); font-size: 11px;">→</span>
+                    <input id="bbx-input-x2" type="number" step="any" placeholder="x2" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <input id="bbx-input-y2" type="number" step="any" placeholder="y2" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <input id="bbx-input-z2" type="number" step="any" placeholder="z2" style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    <button class="action-btn" style="background: var(--accent-blue); color: white; padding: 4px 12px; font-size: 12px;" onclick="addBBoxFromInputs()">Add</button>
+                </div>
                 <div id="bbx-existing-boxes" style="padding: 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); max-height: 120px; overflow-y: auto; display: none;">
                     <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">📦 Existing Bounding Boxes (you can delete them in Neuroglancer):</div>
                     <div id="bbx-boxes-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
@@ -1101,6 +1112,34 @@
             }
         }
 
+        async function addBBoxFromInputs() {
+            const ids = ['bbx-input-x1', 'bbx-input-y1', 'bbx-input-z1',
+                         'bbx-input-x2', 'bbx-input-y2', 'bbx-input-z2'];
+            const vals = ids.map(id => document.getElementById(id).value.trim());
+            if (vals.some(v => v === '' || isNaN(Number(v)))) {
+                showMessage('Please fill in all 6 coordinates with numeric values', 'error');
+                return;
+            }
+            const [x1, y1, z1, x2, y2, z2] = vals.map(Number);
+
+            try {
+                const response = await fetch('/api/bbx-generator/add-bbox', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x1, y1, z1, x2, y2, z2 })
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    showMessage('Error: ' + (result.error || 'Failed to add bbox'), 'error');
+                    return;
+                }
+                showMessage('✓ Bounding box added to bboxes layer', 'success');
+                ids.forEach(id => { document.getElementById(id).value = ''; });
+            } catch (err) {
+                showMessage('Failed to add bbox: ' + err.message, 'error');
+            }
+        }
+
         function triggerBBXFileUpload(inputNodeId) {
             const fileInput = document.getElementById(`bbx-file-input-${inputNodeId}`);
             fileInput.click();
@@ -1682,6 +1721,21 @@
                         </div>
                     `;
                     
+                    // Add mask path field for INPUT nodes
+                    if (node.type === 'input') {
+                        const maskPath = node.params?.mask_path || '';
+                        const displayMaskPath = maskPath.replace(/"/g, '&quot;');
+                        inputContent += `
+                            <div class="param-group" style="margin-top: 8px;">
+                                <label class="param-label">Mask Path (optional)</label>
+                                <input type="text" class="param-input" data-key="mask_path" data-type="text"
+                                       placeholder="Skip blocks where mask is empty"
+                                       value="${displayMaskPath}"
+                                       oninput="handleParamChange(this, '${node.id}', '${node.type}')">
+                            </div>
+                        `;
+                    }
+
                     // Add bounding boxes configuration for INPUT nodes
                     if (node.type === 'input') {
                         const bboxes = node.params?.bounding_boxes || [];
@@ -2130,6 +2184,10 @@
                         const datasetPath = n.params?.dataset_path || APP_CONFIG.datasetPath || '';
                         if (datasetPath) {
                             yaml += `    dataset_path: ${datasetPath}\n`;
+                        }
+                        const maskPath = n.params?.mask_path || '';
+                        if (maskPath) {
+                            yaml += `    mask_path: ${maskPath}\n`;
                         }
                     }
                     // Add bounding boxes if they exist
@@ -2596,10 +2654,11 @@
                             }
                         }
 
-                        // For inputs/outputs, preserve dataset_path
-                        if ((currentSection === 'inputs' || currentSection === 'outputs') && key === 'dataset_path') {
+                        // For inputs/outputs, preserve dataset_path and mask_path in params
+                        if ((currentSection === 'inputs' || currentSection === 'outputs') &&
+                            (key === 'dataset_path' || key === 'mask_path')) {
                             if (!currentItem.params) currentItem.params = {};
-                            currentItem.params.dataset_path = currentItem[key];
+                            currentItem.params[key] = currentItem[key];
                         }
 
                         // For models section, also build the config object for use with build_model_from_entry

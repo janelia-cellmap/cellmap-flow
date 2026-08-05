@@ -1,0 +1,966 @@
+#!/usr/bin/env python
+"""
+Command-line interface for LoRA finetuning.
+
+Usage:
+    python -m cellmap_flow.finetune.cli \
+        --model-checkpoint /path/to/checkpoint \
+        --corrections corrections.zarr \
+        --output-dir output/fly_organelles_v1.1
+
+    # With custom settings
+    python -m cellmap_flow.finetune.cli \
+        --model-checkpoint /path/to/checkpoint \
+        --corrections corrections.zarr \
+        --output-dir output/fly_organelles_v1.1 \
+        --lora-r 16 \
+        --batch-size 4 \
+        --num-epochs 20 \
+        --learning-rate 2e-4
+"""
+
+import argparse
+import gc
+import json
+import logging
+import os
+import socket
+import sys
+import threading
+import time
+from contextlib import closing
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import torch
+import torch.nn as nn
+
+from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, ModelConfig
+from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
+from cellmap_flow.finetune.dataset import create_dataloader
+from cellmap_flow.finetune.yaml_dataset import create_yaml_dataloader
+from cellmap_flow.finetune.trainer import LoRAFinetuner
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+
+
+class RestartController:
+    """In-memory restart control shared between training loop and server endpoint."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._pending = None
+
+    def request_restart(self, payload: Optional[dict]) -> bool:
+        signal_data = {
+            "restart": True,
+            "timestamp": datetime.now().isoformat(),
+            "params": {},
+        }
+        if isinstance(payload, dict):
+            if "timestamp" in payload and payload["timestamp"]:
+                signal_data["timestamp"] = payload["timestamp"]
+            if isinstance(payload.get("params"), dict):
+                signal_data["params"] = payload["params"]
+
+        with self._lock:
+            self._pending = signal_data
+            self._event.set()
+        return True
+
+    def get_if_triggered(self) -> Optional[dict]:
+        if not self._event.is_set():
+            return None
+        with self._lock:
+            signal_data = self._pending
+            self._pending = None
+            self._event.clear()
+        return signal_data
+
+
+def _wait_for_port_ready(host: str, port: int, timeout_s: float = 30.0, interval_s: float = 0.1) -> bool:
+    """Wait until a TCP port is accepting connections."""
+    deadline = time.perf_counter() + timeout_s
+    while time.perf_counter() < deadline:
+        try:
+            with closing(socket.create_connection((host, port), timeout=0.5)):
+                return True
+        except OSError:
+            time.sleep(interval_s)
+    return False
+
+
+def _start_inference_server_background(
+    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None
+):
+    """
+    Start inference server in a background daemon thread.
+
+    The server shares the same model object, so retraining updates weights
+    automatically without needing to restart the server.
+
+    Args:
+        args: Command-line arguments
+        model_config: Base model configuration
+        trained_model: The trained LoRA model
+
+    Returns:
+        (thread, port) tuple
+    """
+    logger.info("=" * 60)
+    logger.info("Starting inference server with finetuned model...")
+    logger.info("=" * 60)
+
+    startup_t0 = time.perf_counter()
+
+    # Clear GPU cache from training
+    cleanup_t0 = time.perf_counter()
+    logger.info("Clearing GPU cache...")
+    torch.cuda.empty_cache()
+    gc.collect()
+    cleanup_elapsed = time.perf_counter() - cleanup_t0
+
+    # Validate serve data path
+    if not args.serve_data_path:
+        raise ValueError("--serve-data-path is required when --auto-serve is enabled")
+
+    if not Path(args.serve_data_path).exists():
+        raise ValueError(f"Data path not found: {args.serve_data_path}")
+
+    # Use the already-trained model
+    logger.info("Using trained LoRA model for inference...")
+
+    from cellmap_flow.models.models_config import _get_device
+    device = _get_device()
+    trained_model.eval()
+    logger.info(f"Model set to eval mode on {device}")
+
+    # Replace the model in the config with our finetuned version
+    model_config.config.model = trained_model
+
+    # Start server
+    from cellmap_flow.server import CellMapFlowServer
+    from cellmap_flow.utils.web_utils import get_free_port
+
+    setup_t0 = time.perf_counter()
+    logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
+    restart_callback = restart_controller.request_restart if restart_controller is not None else None
+    server = CellMapFlowServer(args.serve_data_path, model_config, restart_callback=restart_callback)
+
+    # Get port
+    port = args.serve_port if args.serve_port != 0 else get_free_port()
+
+    # Start in daemon thread (server.run() prints CELLMAP_FLOW_SERVER_IP marker automatically)
+    server_thread = threading.Thread(
+        target=server.run,
+        kwargs={'port': port, 'debug': False},
+        daemon=True
+    )
+    server_thread.start()
+    setup_elapsed = time.perf_counter() - setup_t0
+
+    wait_t0 = time.perf_counter()
+    server_ready = _wait_for_port_ready("127.0.0.1", port)
+    wait_elapsed = time.perf_counter() - wait_t0
+
+    host_url = f"http://{socket.gethostname()}:{port}"
+    total_elapsed = time.perf_counter() - startup_t0
+    logger.info("=" * 60)
+    if server_ready:
+        logger.info(f"Inference server port is ready on 127.0.0.1:{port}")
+    else:
+        logger.warning(f"Inference server did not become ready within timeout on 127.0.0.1:{port}")
+    logger.info(f"Inference server running at {host_url}")
+    logger.info(
+        f"Startup timings (s): cleanup={cleanup_elapsed:.2f}, setup={setup_elapsed:.2f}, "
+        f"wait_for_bind={wait_elapsed:.2f}, total={total_elapsed:.2f}"
+    )
+    logger.info("Server is running in background. Watching for restart signals...")
+    logger.info("=" * 60)
+
+    return server_thread, port
+
+
+def _wait_for_restart_signal(
+    signal_file: Optional[Path],
+    check_interval: float = 1.0,
+    restart_controller: Optional[RestartController] = None,
+):
+    """
+    Watch for a restart signal file. Blocks until signal appears.
+
+    Prefers in-memory restart events from the control endpoint, and
+    falls back to a signal file for backward compatibility.
+
+    Args:
+        signal_file: Optional path to watch for legacy signal file
+        check_interval: Seconds between checks
+
+    Returns:
+        Dict with restart parameters, or None if signal file is malformed
+    """
+    logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
+    wait_started_perf = time.perf_counter()
+    wait_started_epoch = time.time()
+    wait_started_dt = datetime.now().isoformat()
+    host = socket.gethostname()
+    poll_count = 0
+    last_diag_emit_perf = wait_started_perf
+    diag_emit_interval_s = 10.0
+    logger.info(
+        f"Restart signal watcher context: host={host}, pid={os.getpid()}, "
+        f"check_interval={check_interval:.2f}s, wait_started={wait_started_dt}"
+    )
+
+    while True:
+        poll_count += 1
+        now_perf = time.perf_counter()
+        now_epoch = time.time()
+        now_dt = datetime.now().isoformat()
+
+        if now_perf - last_diag_emit_perf >= diag_emit_interval_s:
+            loop_wait_s = now_perf - wait_started_perf
+            logger.info(
+                f"Restart watcher still waiting: elapsed={loop_wait_s:.2f}s "
+                f"polls={poll_count} now={now_dt}"
+            )
+            print(
+                f"RESTART_WATCHER_WAITING: elapsed={loop_wait_s:.2f}s polls={poll_count}",
+                flush=True,
+            )
+            last_diag_emit_perf = now_perf
+
+        if restart_controller is not None:
+            in_memory_signal = restart_controller.get_if_triggered()
+            if in_memory_signal is not None:
+                logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
+                signal_ts = in_memory_signal.get("timestamp")
+                if signal_ts:
+                    try:
+                        queued_at = datetime.fromisoformat(signal_ts)
+                        wait_s = (datetime.now() - queued_at).total_seconds()
+                        logger.info(
+                            f"Restart signal pickup latency: {wait_s:.2f}s "
+                            f"(dashboard timestamp -> worker now)"
+                        )
+                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
+                        print(
+                            f"RESTART_SIGNAL_DIAGNOSTICS: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
+                            f"source=http_control",
+                            flush=True,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
+                return in_memory_signal
+
+        if signal_file and signal_file.exists():
+            try:
+                stat = signal_file.stat()
+                mtime_latency_s = now_epoch - stat.st_mtime
+                logger.info(
+                    f"Restart signal file observed: mtime={datetime.fromtimestamp(stat.st_mtime).isoformat()} "
+                    f"mtime_to_detect={mtime_latency_s:.2f}s size={stat.st_size}B"
+                )
+                print(f"RESTART_SIGNAL_MTIME_TO_DETECT: {mtime_latency_s:.2f}s", flush=True)
+                with open(signal_file) as f:
+                    signal_data = json.load(f)
+                signal_file.unlink()  # Remove signal file
+                logger.info(f"Restart signal received: {signal_data}")
+                signal_ts = signal_data.get("timestamp")
+                if signal_ts:
+                    try:
+                        queued_at = datetime.fromisoformat(signal_ts)
+                        wait_s = (datetime.now() - queued_at).total_seconds()
+                        logger.info(
+                            f"Restart signal pickup latency: {wait_s:.2f}s "
+                            f"(dashboard timestamp -> worker now)"
+                        )
+                        logger.info(
+                            f"Restart signal diagnostics: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s, "
+                            f"mtime_to_detect={mtime_latency_s:.2f}s, "
+                            f"wait_started_epoch_to_mtime={stat.st_mtime - wait_started_epoch:.2f}s"
+                        )
+                        print(f"RESTART_SIGNAL_PICKUP_LATENCY: {wait_s:.2f}s", flush=True)
+                        print(
+                            f"RESTART_SIGNAL_DIAGNOSTICS: "
+                            f"watch_elapsed={now_perf - wait_started_perf:.2f}s "
+                            f"mtime_to_detect={mtime_latency_s:.2f}s",
+                            flush=True,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Could not parse restart timestamp '{signal_ts}': {e}")
+                return signal_data
+            except Exception as e:
+                logger.error(f"Error reading restart signal: {e}")
+                # Remove malformed signal file
+                try:
+                    signal_file.unlink()
+                except OSError:
+                    pass
+                return None
+        time.sleep(check_interval)
+
+
+def _apply_restart_params(args, signal_data: dict):
+    """
+    Update args with parameters from restart signal.
+
+    Args:
+        args: argparse Namespace to update
+        signal_data: Dict from restart signal file
+    """
+    params = signal_data.get("params", {})
+    for key, value in params.items():
+        if hasattr(args, key) and value is not None:
+            old_value = getattr(args, key)
+            setattr(args, key, value)
+            if old_value != value:
+                logger.info(f"Updated {key}: {old_value} -> {value}")
+
+
+def _generate_model_files(args, model_config, timestamp):
+    """
+    Generate model script and YAML files after training.
+
+    Args:
+        args: Command-line arguments
+        model_config: Model configuration
+        timestamp: Timestamp string for naming
+
+    Returns:
+        (finetuned_model_name, script_path, yaml_path) tuple
+    """
+    from cellmap_flow.finetune.model_templates import (
+        generate_finetuned_model_script,
+        generate_finetuned_model_yaml
+    )
+
+    model_basename = model_config.name
+    finetuned_model_name = f"{model_basename}_finetuned_{timestamp}"
+
+    # Create models directory in output
+    output_dir_path = Path(args.output_dir)
+    session_path = output_dir_path.parent.parent.parent
+    models_dir = session_path / "models"
+    models_dir.mkdir(exist_ok=True, parents=True)
+
+    logger.info(f"Generating model files for {finetuned_model_name}...")
+
+    # Generate script
+    script_path = generate_finetuned_model_script(
+        base_checkpoint=args.model_checkpoint if args.model_checkpoint else None,
+        lora_adapter_path=str(output_dir_path / "lora_adapter"),
+        model_name=finetuned_model_name,
+        channels=args.channels,
+        input_voxel_size=tuple(args.input_voxel_size),
+        output_voxel_size=tuple(args.output_voxel_size),
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        num_epochs=args.num_epochs,
+        learning_rate=args.learning_rate,
+        output_path=models_dir / f"{finetuned_model_name}.py",
+        base_script_path=args.model_script if hasattr(args, 'model_script') and args.model_script else None
+    )
+    logger.info(f"Generated script: {script_path}")
+
+    # Extract data path
+    data_path = None
+    if args.corrections:
+        corrections_path = Path(args.corrections)
+        zarr_dirs = list(corrections_path.glob("*.zarr"))
+        if zarr_dirs:
+            zattrs_file = zarr_dirs[0] / ".zattrs"
+            if zattrs_file.exists():
+                with open(zattrs_file) as f:
+                    metadata = json.load(f)
+                    data_path = metadata.get("dataset_path")
+
+    if not data_path:
+        if args.serve_data_path:
+            logger.warning("Could not extract data_path from corrections, using serve_data_path")
+            data_path = args.serve_data_path
+        elif args.data_yaml:
+            # For YAML datasets, use the YAML path as a reference
+            import yaml as _yaml
+            with open(args.data_yaml) as f:
+                yaml_cfg = _yaml.safe_load(f)
+            # Use the raw path of the first dataset
+            datasets = yaml_cfg.get("datasets", {})
+            for ds in datasets.values():
+                if "raw" in ds:
+                    # Get the zarr root (everything before the scale level)
+                    raw_path = ds["raw"]
+                    # Strip scale suffix like /s0 or /s1
+                    parts = raw_path.rsplit("/", 2)
+                    if len(parts) >= 3 and parts[-2] in ("em", "fibsem-uint8", "fibsem-uint16"):
+                        data_path = "/".join(parts[:-1])
+                    else:
+                        # Go up to the .zarr root
+                        zarr_idx = raw_path.find(".zarr")
+                        if zarr_idx >= 0:
+                            data_path = raw_path[:zarr_idx + 5]
+                        else:
+                            data_path = raw_path
+                    break
+        if not data_path:
+            data_path = "/path/to/data.zarr"
+            logger.warning(f"Could not determine data_path, using placeholder: {data_path}")
+
+    yaml_path = generate_finetuned_model_yaml(
+        script_path=script_path,
+        model_name=finetuned_model_name,
+        resolution=args.output_voxel_size[0],
+        output_path=models_dir / f"{finetuned_model_name}.yaml",
+        data_path=data_path
+    )
+    logger.info(f"Generated YAML: {yaml_path}")
+
+    return finetuned_model_name, script_path, yaml_path
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Finetune CellMap-Flow models with LoRA using user corrections"
+    )
+
+    # Model arguments
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        default="fly",
+        choices=["fly", "dacapo"],
+        help="Model type (fly or dacapo)"
+    )
+    parser.add_argument(
+        "--model-checkpoint",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to model checkpoint (optional - can train from scratch)"
+    )
+    parser.add_argument(
+        "--model-script",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to model script (alternative to checkpoint)"
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default=None,
+        help="Model name (for filtering corrections)"
+    )
+    parser.add_argument(
+        "--channels",
+        type=str,
+        nargs="+",
+        default=["mito"],
+        help="Model output channels"
+    )
+    parser.add_argument(
+        "--input-voxel-size",
+        type=int,
+        nargs=3,
+        default=[16, 16, 16],
+        help="Input voxel size (Z Y X)"
+    )
+    parser.add_argument(
+        "--output-voxel-size",
+        type=int,
+        nargs=3,
+        default=[16, 16, 16],
+        help="Output voxel size (Z Y X)"
+    )
+
+    # LoRA arguments
+    parser.add_argument(
+        "--lora-r",
+        type=int,
+        default=8,
+        help="LoRA rank (default: 8)"
+    )
+    parser.add_argument(
+        "--lora-alpha",
+        type=int,
+        default=16,
+        help="LoRA alpha scaling (default: 16)"
+    )
+    parser.add_argument(
+        "--lora-dropout",
+        type=float,
+        default=0.1,
+        help="LoRA dropout (default: 0.1)"
+    )
+
+    # Data arguments
+    parser.add_argument(
+        "--corrections",
+        type=str,
+        default=None,
+        help="Path to corrections.zarr directory"
+    )
+    parser.add_argument(
+        "--data-yaml",
+        type=str,
+        default=None,
+        help="Path to YAML data config file (alternative to --corrections)"
+    )
+    parser.add_argument(
+        "--input-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Model input shape in voxels (Z Y X). Required with --data-yaml"
+    )
+    parser.add_argument(
+        "--output-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Model output shape in voxels (Z Y X). Required with --data-yaml"
+    )
+    parser.add_argument(
+        "--samples-per-crop",
+        type=int,
+        default=None,
+        help="Fixed number of random samples per crop per epoch (for --data-yaml)"
+    )
+    parser.add_argument(
+        "--samples-per-epoch",
+        type=int,
+        default=None,
+        help="Total samples per epoch, distributed proportionally across crops (for --data-yaml)"
+    )
+    parser.add_argument(
+        "--patch-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Patch shape for training (Z Y X). Default: None (use full corrections)"
+    )
+    parser.add_argument(
+        "--no-augment",
+        action="store_true",
+        help="Disable data augmentation"
+    )
+    parser.add_argument(
+        "--foreground-bias",
+        type=float,
+        default=0.0,
+        help="Probability in [0, 1] that a sample is centered on a foreground "
+             "voxel (for --data-yaml). 0.0 = pure uniform, 0.5 = half biased "
+             "toward foreground. Useful for sparse classes like mitochondria."
+    )
+
+    # Training arguments
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=True,
+        help="Output directory for checkpoints and adapter"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=2,
+        help="Batch size (default: 2)"
+    )
+    parser.add_argument(
+        "--num-epochs",
+        type=int,
+        default=10,
+        help="Number of training epochs (default: 10)"
+    )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=1e-4,
+        help="Learning rate (default: 1e-4)"
+    )
+    parser.add_argument(
+        "--gradient-accumulation-steps",
+        type=int,
+        default=1,
+        help="Gradient accumulation steps (default: 1)"
+    )
+    parser.add_argument(
+        "--loss-type",
+        type=str,
+        default="combined",
+        choices=["dice", "bce", "combined", "mse", "margin"],
+        help="Loss function (default: combined)"
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        type=float,
+        default=0.0,
+        help="Label smoothing factor (e.g., 0.1 maps targets from 0/1 to 0.05/0.95). "
+             "Helps preserve gradual distance-like outputs. (default: 0.0)"
+    )
+    parser.add_argument(
+        "--distillation-lambda",
+        type=float,
+        default=0.0,
+        help="Teacher distillation weight. Keeps model close to base on unlabeled voxels. "
+             "0.0=disabled, try 0.5-1.0 for sparse scribbles. (default: 0.0)"
+    )
+    parser.add_argument(
+        "--distillation-all-voxels",
+        action="store_true",
+        help="Apply distillation loss on all voxels instead of only unlabeled voxels. (default: unlabeled only)"
+    )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=0.3,
+        help="Margin threshold for margin loss. "
+             "Foreground must exceed 1-margin, background must stay below margin. (default: 0.3)"
+    )
+    parser.add_argument(
+        "--balance-classes",
+        action="store_true",
+        help="Balance fg/bg loss contribution so each class is weighted equally, "
+             "regardless of scribble voxel counts. Helps prevent foreground overprediction. (default: off)"
+    )
+    parser.add_argument(
+        "--select-channel",
+        type=str,
+        default=None,
+        help="Select a single output channel for finetuning from a multi-channel model. "
+             "Can be a channel name (e.g., 'mito') or a 0-based index (e.g., '2'). "
+             "The model output is sliced to this channel before computing loss against the single-channel target."
+    )
+    parser.add_argument(
+        "--no-mixed-precision",
+        action="store_true",
+        help="Disable mixed precision (FP16) training"
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="DataLoader num_workers (default: 4)"
+    )
+
+    # Resuming
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to checkpoint to resume from"
+    )
+
+    # Auto-serve arguments
+    parser.add_argument(
+        "--auto-serve",
+        action="store_true",
+        help="Automatically start inference server after training completes"
+    )
+    parser.add_argument(
+        "--serve-data-path",
+        type=str,
+        default=None,
+        help="Dataset path for inference server (required if --auto-serve is used)"
+    )
+    parser.add_argument(
+        "--serve-port",
+        type=int,
+        default=0,
+        help="Port for inference server (0 for auto-assignment)"
+    )
+    parser.add_argument(
+        "--mask-unannotated",
+        action="store_true",
+        help="Enable masked loss for sparse annotations (0=ignore, 1=bg, 2+=fg)"
+    )
+
+    args = parser.parse_args()
+
+    # Validate: require either --corrections or --data-yaml
+    if not args.corrections and not args.data_yaml:
+        parser.error("Either --corrections or --data-yaml is required")
+    if args.corrections and args.data_yaml:
+        parser.error("Cannot use both --corrections and --data-yaml")
+    if args.data_yaml and not args.input_shape:
+        parser.error("--input-shape is required when using --data-yaml")
+    if args.data_yaml and not args.output_shape:
+        parser.error("--output-shape is required when using --data-yaml")
+
+    use_yaml_data = args.data_yaml is not None
+
+    # Debug: Print all arguments
+    print(f"\n{'=' * 60}")
+    print(f"DEBUG: All parsed arguments:")
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
+    print(f"{'=' * 60}\n")
+    logger.info(f"DEBUG: All parsed arguments: {vars(args)}")
+
+    # Print configuration
+    logger.info("=" * 60)
+    logger.info("LoRA Finetuning Configuration")
+    logger.info("=" * 60)
+    logger.info(f"Model type: {args.model_type}")
+    logger.info(f"Model checkpoint: {args.model_checkpoint}")
+    if use_yaml_data:
+        logger.info(f"Data YAML: {args.data_yaml}")
+        logger.info(f"Input shape: {args.input_shape}")
+        logger.info(f"Output shape: {args.output_shape}")
+    else:
+        logger.info(f"Corrections: {args.corrections}")
+    logger.info(f"Output directory: {args.output_dir}")
+    logger.info(f"LoRA rank: {args.lora_r}")
+    logger.info(f"Batch size: {args.batch_size}")
+    logger.info(f"Epochs: {args.num_epochs}")
+    logger.info(f"Learning rate: {args.learning_rate}")
+    logger.info("")
+
+    # === Load model (once) ===
+    logger.info("Loading model...")
+
+    if args.model_script:
+        from cellmap_flow.models.models_config import ScriptModelConfig
+        logger.info(f"Using script-based model: {args.model_script}")
+        model_config = ScriptModelConfig(
+            script_path=args.model_script,
+            name=args.model_name or "script_model"
+        )
+    elif args.model_type == "fly":
+        if not args.model_checkpoint:
+            raise ValueError(
+                "For fly models, either --model-checkpoint or --model-script must be provided"
+            )
+        model_config = FlyModelConfig(
+            checkpoint_path=args.model_checkpoint,
+            channels=args.channels,
+            input_voxel_size=tuple(args.input_voxel_size),
+            output_voxel_size=tuple(args.output_voxel_size),
+            name=args.model_name,
+        )
+    elif args.model_type == "dacapo":
+        if not args.model_checkpoint:
+            raise ValueError("For dacapo models, --model-checkpoint is required")
+        checkpoint_path = Path(args.model_checkpoint)
+        iteration = int(checkpoint_path.stem.split('_')[-1])
+        run_name = checkpoint_path.parent.name
+
+        model_config = DaCapoModelConfig(
+            run_name=run_name,
+            iteration=iteration,
+        )
+    else:
+        raise ValueError(f"Unknown model type: {args.model_type}")
+
+    base_model = model_config.config.model
+    logger.info(f"Model loaded: {type(base_model).__name__}")
+
+    # Resolve --select-channel to an integer index
+    select_channel = None
+    num_output_channels = model_config.config.output_channels
+    if args.select_channel is not None:
+        # Try as integer index first
+        try:
+            idx = int(args.select_channel)
+            if idx < 0 or idx >= num_output_channels:
+                raise ValueError(
+                    f"Channel index {idx} out of range [0, {num_output_channels - 1}]"
+                )
+            select_channel = idx
+        except ValueError as e:
+            if "out of range" in str(e):
+                raise
+            # Try as channel name
+            channel_names = [c.lower() for c in (args.channels or [])]
+            target = args.select_channel.lower()
+            if target in channel_names:
+                select_channel = channel_names.index(target)
+            else:
+                raise ValueError(
+                    f"Unknown channel '{args.select_channel}'. "
+                    f"Available channels: {args.channels}. "
+                    f"Or use a 0-based index (0-{num_output_channels - 1})."
+                )
+        logger.info(
+            f"Model outputs {num_output_channels} channel(s), "
+            f"selected channel {select_channel} ('{args.select_channel}') for finetuning"
+        )
+    else:
+        logger.info(f"Model outputs {num_output_channels} channel(s), training all channels")
+
+    # === Wrap with LoRA (once - same object is reused across restarts) ===
+    logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
+    lora_model = wrap_model_with_lora(
+        base_model,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+    )
+
+    # === Training loop (supports restart via signal file) ===
+    server_started = False
+    restart_controller = RestartController()
+    iteration = 0
+
+    while True:
+        iteration += 1
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if iteration > 1:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(f"Training Iteration {iteration}")
+            logger.info("=" * 60)
+
+        # Create dataloader (re-created each iteration to pick up new annotations)
+        if use_yaml_data:
+            logger.info(f"Loading YAML dataset from {args.data_yaml}...")
+            dataloader = create_yaml_dataloader(
+                yaml_path=args.data_yaml,
+                input_shape=tuple(args.input_shape),
+                output_shape=tuple(args.output_shape),
+                batch_size=args.batch_size,
+                samples_per_crop=args.samples_per_crop,
+                samples_per_epoch=args.samples_per_epoch,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                normalize=True,
+                foreground_bias=args.foreground_bias,
+            )
+            logger.info(f"YAML DataLoader created: {len(dataloader.dataset)} samples")
+        else:
+            logger.info(f"Loading corrections from {args.corrections}...")
+            dataloader = create_dataloader(
+                args.corrections,
+                batch_size=args.batch_size,
+                patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                model_name=args.model_name,
+                normalize=False,
+            )
+            logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
+
+        # Create trainer (re-created each iteration for fresh optimizer/scheduler)
+        logger.info("Creating trainer...")
+        trainer = LoRAFinetuner(
+            lora_model,
+            dataloader,
+            output_dir=args.output_dir,
+            learning_rate=args.learning_rate,
+            num_epochs=args.num_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            use_mixed_precision=not args.no_mixed_precision,
+            loss_type=args.loss_type,
+            select_channel=select_channel,
+            mask_unannotated=args.mask_unannotated,
+            label_smoothing=args.label_smoothing,
+            distillation_lambda=args.distillation_lambda,
+            distillation_all_voxels=args.distillation_all_voxels,
+            margin=args.margin,
+            balance_classes=args.balance_classes,
+        )
+
+        # Resume from checkpoint if specified (first iteration only)
+        if args.resume and iteration == 1:
+            logger.info(f"Resuming from checkpoint: {args.resume}")
+            trainer.load_checkpoint(args.resume)
+
+        # Train
+        try:
+            stats = trainer.train()
+
+            # Save final adapter
+            logger.info("\nSaving LoRA adapter...")
+            trainer.save_adapter()
+
+            logger.info("\n" + "=" * 60)
+            logger.info("Finetuning Complete!")
+            logger.info(f"Best loss: {stats['best_loss']:.6f}")
+            logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            logger.info("=" * 60)
+
+            # Generate model files
+            finetuned_model_name, script_path, yaml_path = _generate_model_files(
+                args, model_config, timestamp
+            )
+
+            # Print completion marker with timestamp (for job manager to detect)
+            print(f"TRAINING_ITERATION_COMPLETE: {finetuned_model_name}", flush=True)
+
+            # Auto-serve if requested
+            if args.auto_serve:
+                if not server_started:
+                    # First time: start inference server in background thread
+                    try:
+                        _start_inference_server_background(
+                            args, model_config, lora_model, restart_controller=restart_controller
+                        )
+                        server_started = True
+                    except Exception as e:
+                        logger.error(f"Failed to start inference server: {e}", exc_info=True)
+                        print(f"INFERENCE_SERVER_FAILED: {e}", flush=True)
+                        return 0
+                else:
+                    # Server already running - just set model back to eval mode
+                    # The server shares the same model object, so it automatically
+                    # serves with the updated weights
+                    lora_model.eval()
+                    logger.info("Model updated and set to eval mode. Server continuing with new weights.")
+
+                # Watch for restart signal
+                signal_file = Path(args.output_dir) / "restart_signal.json"
+                restart_data = _wait_for_restart_signal(
+                    signal_file=signal_file,
+                    check_interval=1.0,
+                    restart_controller=restart_controller,
+                )
+
+                if restart_data is None:
+                    logger.error("Malformed restart signal, exiting")
+                    return 1
+
+                # Apply updated parameters
+                restart_apply_t0 = time.perf_counter()
+                _apply_restart_params(args, restart_data)
+
+                # Prepare for retraining
+                lora_model.train()
+                torch.cuda.empty_cache()
+                gc.collect()
+                restart_apply_elapsed = time.perf_counter() - restart_apply_t0
+                logger.info(f"Restart transition prep time: {restart_apply_elapsed:.2f}s")
+                print(f"RESTART_TRANSITION_PREP_TIME: {restart_apply_elapsed:.2f}s", flush=True)
+
+                logger.info("Restarting training with updated parameters...")
+                print("RESTARTING_TRAINING", flush=True)
+                continue  # Loop back to retrain
+
+            # No auto-serve: just exit after training
+            return 0
+
+        except KeyboardInterrupt:
+            logger.info("\nTraining interrupted by user")
+            logger.info("Saving current state...")
+            trainer.save_checkpoint(is_best=False)
+            return 1
+
+        except Exception as e:
+            logger.error(f"Training failed: {e}", exc_info=True)
+            return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

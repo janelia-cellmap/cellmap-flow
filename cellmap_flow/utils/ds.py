@@ -453,7 +453,12 @@ def open_ds_tensorstore(
                 if isinstance(norm, ChannelSelector):
                     channel = norm.channel
                     break
-            ts_dataset = ts_dataset[channel]
+            if filetype == "neuroglancer_precomputed":
+                # Precomputed stores channel as the LAST dim (x, y, z, c);
+                # zarr/n5 store it first. Slice the right axis for each.
+                ts_dataset = ts_dataset[..., channel]
+            else:
+                ts_dataset = ts_dataset[channel]
     except ValueError as e:
         if "extra members" in str(e) and filetype == "zarr":
             # Some zarr files have extra fields (e.g. "checksum") in the
@@ -491,6 +496,7 @@ def to_ndarray_tensorstore(
     output_voxel_size=None,
     axes_names=["z", "y", "x"],
     custom_fill_value=None,
+    apply_input_norms=True,
 ):
     """Read a region of a tensorstore dataset and return it as a numpy array
 
@@ -548,10 +554,9 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
-        # logger.error("norm time")
-        for norm in g.input_norms:
-            # logger.error(f"Applying norm: {norm}")
-            data = norm(data)
+        if apply_input_norms:
+            for norm in g.input_norms:
+                data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
         for s, valid_slice in zip(roi_slices, valid_slices)

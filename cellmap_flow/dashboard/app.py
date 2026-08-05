@@ -5,7 +5,8 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 
-from cellmap_flow.globals import g, LogHandler
+from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import LogHandler
 from cellmap_flow.dashboard.routes.logging_routes import logging_bp
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
@@ -14,6 +15,7 @@ from cellmap_flow.dashboard.routes.pipeline import pipeline_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
+from cellmap_flow.dashboard.routes.training_data import training_data_bp
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ CORS(app)
 
 # Add custom log handler to logger
 log_handler = LogHandler()
-log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
@@ -38,6 +40,7 @@ app.register_blueprint(pipeline_bp)
 app.register_blueprint(blockwise_bp)
 app.register_blueprint(bbx_bp)
 app.register_blueprint(finetune_bp)
+app.register_blueprint(training_data_bp)
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

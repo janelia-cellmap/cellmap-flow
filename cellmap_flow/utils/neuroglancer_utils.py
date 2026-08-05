@@ -111,7 +111,7 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
             mc = model_configs_by_name.get(model)
             if mc is not None:
                 try:
-                    output_voxel_size = tuple(mc.config.output_voxel_size)
+                    output_voxel_size = tuple(mc.lightweight_info()["output_voxel_size"])
                     closest = get_raw_closest_scale(dataset_path, output_voxel_size)
                     if closest is not None and tuple(closest) != output_voxel_size:
                         override_scales = closest

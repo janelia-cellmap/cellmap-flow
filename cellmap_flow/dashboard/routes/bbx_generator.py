@@ -115,6 +115,53 @@ def start_bbx_generator():
         return jsonify({"error": str(e)}), 500
 
 
+@bbx_bp.route("/api/bbx-generator/add-bbox", methods=["POST"])
+def add_bbox_manual():
+    """Add a bounding box to the 'bboxes' annotation layer from manual x/y/z inputs."""
+    try:
+        viewer = bbx_generator_state.get("viewer")
+        if viewer is None:
+            return jsonify({"error": "No active viewer"}), 400
+
+        data = request.json or {}
+        required = ["x1", "y1", "z1", "x2", "y2", "z2"]
+        missing = [k for k in required if k not in data]
+        if missing:
+            return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
+
+        try:
+            x1, y1, z1 = float(data["x1"]), float(data["y1"]), float(data["z1"])
+            x2, y2, z2 = float(data["x2"]), float(data["y2"]), float(data["z2"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Coordinates must be numeric"}), 400
+
+        # Viewer dimensions are ordered [z, y, x]
+        point_a = [z1, y1, x1]
+        point_b = [z2, y2, x2]
+
+        from neuroglancer import AxisAlignedBoundingBoxAnnotation
+
+        with viewer.txn() as s:
+            layer = s.layers["bboxes"]
+            new_id = f"bbox-manual-{len(layer.annotations) + 1}"
+            ann = AxisAlignedBoundingBoxAnnotation(
+                point_a=point_a,
+                point_b=point_b,
+                id=new_id,
+                description=new_id,
+            )
+            layer.annotations.append(ann)
+
+        logger.info(f"Manually added bbox {new_id}: point_a={point_a}, point_b={point_b}")
+        return jsonify({"success": True, "id": new_id, "point_a": point_a, "point_b": point_b})
+
+    except KeyError:
+        return jsonify({"error": "'bboxes' layer not found in viewer"}), 500
+    except Exception as e:
+        logger.error(f"Error adding manual bbox: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 @bbx_bp.route("/api/bbx-generator/status", methods=["GET"])
 def get_bbx_generator_status():
     """Get current status of bounding box generation"""
@@ -126,7 +173,7 @@ def get_bbx_generator_status():
             try:
                 with viewer.txn() as s:
                     try:
-                        annotations_layer = s.layers["annotations"]
+                        annotations_layer = s.layers["bboxes"]
                         if hasattr(annotations_layer, 'annotations'):
                             for ann in annotations_layer.annotations:
                                 if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
@@ -143,7 +190,7 @@ def get_bbx_generator_status():
                                         "shape": shape,
                                     })
                     except KeyError:
-                        logger.warning("Annotations layer not found in viewer")
+                        logger.warning("bboxes layer not found in viewer")
             except Exception as e:
                 logger.warning(f"Error extracting bboxes from viewer: {str(e)}")
 
@@ -172,7 +219,7 @@ def finalize_bbx_generation():
             try:
                 with viewer.txn() as s:
                     try:
-                        annotations_layer = s.layers["annotations"]
+                        annotations_layer = s.layers["bboxes"]
                         if hasattr(annotations_layer, 'annotations'):
                             for ann in annotations_layer.annotations:
                                 if type(ann).__name__ == "AxisAlignedBoundingBoxAnnotation":
@@ -189,7 +236,7 @@ def finalize_bbx_generation():
                                         "shape": shape,
                                     })
                     except KeyError:
-                        logger.warning("Annotations layer not found in viewer")
+                        logger.warning("bboxes layer not found in viewer")
             except Exception as e:
                 logger.warning(f"Error extracting final bboxes: {str(e)}")
 

@@ -78,6 +78,12 @@ class CellMapFlowBlockwiseProcessor:
         if self.workers < 1:
             raise Exception("Workers should be greater than 0.")
         self.cpu_workers = self.config.get("cpu_workers", 12)
+        # Per-worker wall-clock limit in **hours** (YAML: worker_runtime).
+        # Passed to bsub as -W <minutes>. Queue defaults are often short
+        # (gpu_h100 default = 2h); without an explicit -W, LSF kills workers
+        # mid-task with exit 140 and daisy does not respawn the local launcher.
+        # Default is 72h (3 days) — bump higher in the YAML for long jobs.
+        self.worker_runtime = self.config.get("worker_runtime", 72)
         # Added and create == True to fix client error when create: True in the yaml, so when it is a client it will not be changed
         if "create" in self.config and create == True:
             create = self.config["create"]
@@ -184,6 +190,42 @@ class CellMapFlowBlockwiseProcessor:
         self.idi_raw = ImageDataInterface(
             self.input_path, voxel_size=self.input_voxel_size
         )
+
+        self.mask_path = self.config.get("mask_path", None)
+        if self.mask_path:
+            logger.info(f"Using inference mask: {self.mask_path}")
+            self.idi_mask = ImageDataInterface(
+                self.mask_path,
+                custom_fill_value=0,
+                normalize=False,  # mask values must not pass through g.input_norms
+            )
+            # Cache the full mask as a bool array in master memory so the
+            # daisy check_function can prune empty blocks before any worker
+            # is dispatched. Tiny (~57 MB for the fish2 sparse mask).
+            logger.info(f"Loading full mask into memory for block pre-filtering...")
+            self.mask_array = self.idi_mask.to_ndarray_ts().astype(bool)
+            nonzero = int(self.mask_array.sum())
+            total = self.mask_array.size
+            logger.info(
+                f"Mask loaded: shape={self.mask_array.shape}, "
+                f"nonzero={nonzero}/{total} ({100*nonzero/total:.2f}%)"
+            )
+        else:
+            self.idi_mask = None
+            self.mask_array = None
+
+        self.data_axes = list(self.idi_raw.axes_names[:3])
+        logger.info(f"Data axes order: {self.data_axes}")
+
+        # Bounding boxes from the pipeline builder always come in z,y,x order
+        # (neuroglancer convention). Check if we need to reverse them to match data axes.
+        self._bbox_needs_reverse = (
+            len(self.data_axes) >= 3
+            and self.data_axes[0].lower() == 'x'
+        )
+        if self._bbox_needs_reverse:
+            logger.info("Data is in x,y,z order — will reverse bounding box coordinates from z,y,x to x,y,z")
+
         self.output_arrays = []
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
@@ -193,8 +235,13 @@ class CellMapFlowBlockwiseProcessor:
             if len(self.bounding_boxes)>1:
                 raise Exception("separate_bounding_boxes_zarrs can only be used with one bounding box")
             bounding_box = self.bounding_boxes[0]
-            offset = tuple(bounding_box.get("offset", [0, 0, 0]))
-            shape = tuple(bounding_box.get("shape", [0, 0, 0]))
+            offset = list(bounding_box.get("offset", [0, 0, 0]))
+            shape = list(bounding_box.get("shape", [0, 0, 0]))
+            if self._bbox_needs_reverse:
+                offset = offset[::-1]
+                shape = shape[::-1]
+            offset = tuple(offset)
+            shape = tuple(shape)
             roi = daisy.Roi(offset, shape)
             roi2 = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
             if roi2 != roi:
@@ -266,9 +313,9 @@ class CellMapFlowBlockwiseProcessor:
                             else (1,) + tuple(self.output_voxel_size)
                         ),
                         axis_names=(
-                            ["z", "y", "x"]
+                            self.data_axes
                             if len(final_output_shape) == 3
-                            else ["c", "z", "y", "x"]
+                            else ["c"] + self.data_axes
                         ),
                         units=(
                             ["nanometer"] * 3
@@ -298,19 +345,19 @@ class CellMapFlowBlockwiseProcessor:
                             metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
                             metadata_translation = list(final_offset)
                             metadata_units = [""] + ["nanometer"] * 3
-                            metadata_axes = ["c", "z", "y", "x"]
+                            metadata_axes = ["c"] + self.data_axes
                         else:
                             # 3D metadata
                             metadata_voxel_size = self.output_voxel_size
                             metadata_translation = list(final_offset)
                             metadata_units = ["nanometer"] * 3
-                            metadata_axes = ["z", "y", "x"]
+                            metadata_axes = self.data_axes
                     else:
                         # List format - 3D metadata
                         metadata_voxel_size = self.output_voxel_size
                         metadata_translation = list(final_offset)
                         metadata_units = ["nanometer"] * 3
-                        metadata_axes = ["z", "y", "x"]
+                        metadata_axes = self.data_axes
 
                     zattrs = generate_singlescale_metadata(
                         arr_name="s0",
@@ -361,6 +408,18 @@ class CellMapFlowBlockwiseProcessor:
             logger.warning(f"empty write roi: {write_roi}")
             return
 
+        # Mask-only inference: skip blocks fully outside the mask.
+        mask_native = None
+        if self.idi_mask is not None:
+            # Snap to the mask's voxel grid (grow) so write_roi smaller than
+            # one mask voxel still fetches the enclosing voxel(s).
+            mask_roi = block.write_roi.snap_to_grid(
+                self.idi_mask.voxel_size, mode="grow"
+            )
+            mask_native = self.idi_mask.to_ndarray_ts(mask_roi)
+            if not mask_native.any():
+                return
+
         # Process chunk with all models
         if len(self.inferencers) == 1:
             # Single model - original behavior
@@ -381,6 +440,25 @@ class CellMapFlowBlockwiseProcessor:
 
             # Merge outputs based on model_mode
             chunk_data = self.model_merger.merge(model_outputs)
+
+        if mask_native is not None:
+            target_shape = chunk_data.shape[-3:]
+            if mask_native.shape != target_shape:
+                from skimage.transform import resize
+                mask = resize(
+                    mask_native.astype(bool),
+                    target_shape,
+                    order=0,
+                    preserve_range=True,
+                    anti_aliasing=False,
+                )
+            else:
+                mask = mask_native.astype(bool)
+            mask = mask.astype(chunk_data.dtype)
+            if chunk_data.ndim == 4:
+                chunk_data = chunk_data * mask[None]
+            else:
+                chunk_data = chunk_data * mask
 
         chunk_data = chunk_data.astype(self.dtype)
 
@@ -477,7 +555,7 @@ class CellMapFlowBlockwiseProcessor:
         bounding_boxes = self.config.get("bounding_boxes", None)
 
         conflicts = False
-        
+
         if bounding_boxes and len(bounding_boxes) > 0:
             # Process specific ROIs from bounding boxes
             logger.info(f"Processing {len(bounding_boxes)} bounding box(es)")
@@ -486,11 +564,14 @@ class CellMapFlowBlockwiseProcessor:
             # best way is to align the ROI with the block shape, but for now we will just warn the user about potential conflicts
             if not self.separate_zarrs:
                 conflicts = True
-            
+
             for i, bbox in enumerate(bounding_boxes):
-                offset = tuple(bbox.get("offset", [0, 0, 0]))
-                shape = tuple(bbox.get("shape", [0, 0, 0]))
-                roi = daisy.Roi(offset, shape)
+                offset = list(bbox.get("offset", [0, 0, 0]))
+                shape = list(bbox.get("shape", [0, 0, 0]))
+                if self._bbox_needs_reverse:
+                    offset = offset[::-1]
+                    shape = shape[::-1]
+                roi = daisy.Roi(tuple(offset), tuple(shape))
                 roi = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
                 rois_to_process.append(roi)
                 logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
@@ -501,6 +582,7 @@ class CellMapFlowBlockwiseProcessor:
             logger.info(f"Processing entire dataset: {total_write_roi}")
 
         # Process each ROI
+        tasks = []
         for roi_idx, total_write_roi in enumerate(rois_to_process):
             total_read_roi = total_write_roi.grow(context, context)
             
@@ -519,48 +601,138 @@ class CellMapFlowBlockwiseProcessor:
                     self.charge_group,
                     self.queue,
                     ncpu=self.cpu_workers,
+                    runtime_min=int(self.worker_runtime * 60),
                 ),
-                check_function=partial(check_block, self.tmp_dir) if self.track_progress else None,
+                block_filter=self._build_block_filter(),
                 read_write_conflict=conflicts,
                 fit="overhang",
                 max_retries=0,
                 timeout=None,
                 num_workers=self.workers,
             )
+            tasks.append(task)
 
-            task_state = daisy.run_blockwise([task])
-            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
+        task_state = daisy.run_blockwise(tasks)
+        for roi_idx, task in enumerate(tasks):
+            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)}")
+
+    def _mask_block_is_empty(self, block) -> bool:
+        """Return True if the mask has no content covering this block's write_roi.
+
+        Runs in the master against the in-memory mask_array — no I/O per call,
+        so prunes empty blocks at graph-construction time via block_filter
+        before any worker is dispatched.
+        """
+        if self.mask_array is None:
+            return False
+        snapped = block.write_roi.snap_to_grid(
+            self.idi_mask.voxel_size, mode="grow"
+        )
+        voxel_roi = (snapped - self.idi_mask.offset) / self.idi_mask.voxel_size
+        slices = voxel_roi.to_slices()
+        return not self.mask_array[slices].any()
+
+    def _build_block_filter(self):
+        """Compose progress + mask checks into a single daisy block_filter.
+
+        Returns True (keep block, schedule it) unless:
+          - track_progress is on and the block is already marked complete, or
+          - the mask is empty over this block's write_roi.
+
+        Runs eagerly at graph-construction time, so the worker pool is sized
+        to only the surviving blocks (see daisy >= 1.2.3 Task.block_filter).
+        """
+        track = self.track_progress
+        has_mask = self.mask_array is not None
+        if not track and not has_mask:
+            return None
+        progress_check = partial(check_block, self.tmp_dir) if track else None
+
+        def keep(block):
+            if progress_check is not None and progress_check(block):
+                return False  # already done
+            if has_mask and self._mask_block_is_empty(block):
+                return False  # nothing to do here
+            return True
+
+        return keep
+
+    def test_block(self, offset=None):
+        """Run process_fn end-to-end on a single block — no daisy scheduling.
+
+        Useful for validating a YAML config (data path, model, mask, output writes)
+        before launching a real blockwise job. Writes to the output arrays normally,
+        so point the YAML at a sandbox output_path if you don't want side effects.
+
+        Args:
+            offset: World-coordinate (nm) write_roi offset as a tuple. Must align
+                to output_voxel_size. Defaults to the raw volume's origin shifted
+                by context so the read_roi sits fully inside the volume.
+        """
+        import time
+
+        read_shape = Coordinate(self.model_config.config.read_shape)
+        write_shape = Coordinate(self.model_config.config.write_shape)
+        context = (read_shape - write_shape) / 2
+
+        if offset is None:
+            offset = Coordinate(self.idi_raw.roi.offset) + context
+        offset = Coordinate(offset)
+
+        write_roi = daisy.Roi(offset, write_shape)
+        read_roi = write_roi.grow(context, context)
+
+        logger.info(f"Test block — read_roi:  {read_roi}")
+        logger.info(f"Test block — write_roi: {write_roi}")
+        logger.info(f"Test block — context:   {tuple(context)}")
+
+        if not self.idi_raw.roi.contains(read_roi):
+            logger.warning(
+                f"read_roi {read_roi} is not fully contained in volume "
+                f"{self.idi_raw.roi} — fetch may zero-pad or fail."
+            )
+
+        block = daisy.Block(total_roi=read_roi, read_roi=read_roi, write_roi=write_roi)
+
+        start = time.perf_counter()
+        self.process_fn(block)
+        elapsed = time.perf_counter() - start
+        logger.info(f"Test block completed in {elapsed:.2f}s")
 
 
 def check_block(tmp_dir, block: daisy.Block) -> bool:
     return (tmp_dir / f"{block.block_id[1]}").exists()
 
 
-def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
+def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, runtime_min=None):
+    # Use the master's own env path — compute nodes don't share PATH,
+    # so a bare "cellmap_flow_blockwise" resolves to nothing.
+    import sys
+    bin_dir = Path(sys.executable).parent
+    worker_cmd = str(bin_dir / "cellmap_flow_blockwise")
+
     def run_worker():
         if not Path("daisy_logs").exists():
             Path("daisy_logs").mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [
-                "bsub",
-                "-P",
-                charge_group,
-                "-J",
-                str(name),
-                "-q",
-                queue,
-                "-n",
-                str(ncpu),
-                "-gpu",
-                "num=1",
-                "-o",
-                f"daisy_logs/out.out",
-                "-e",
-                f"daisy_logs/out.err",
-                "cellmap_flow_blockwise",
-                f"{yaml_config}",
-                "--client",
-            ]
-        )
+        cmd = [
+            "bsub",
+            "-P", charge_group,
+            "-J", str(name),
+            "-q", queue,
+            "-n", str(ncpu),
+            "-gpu", "num=1",
+        ]
+        if runtime_min:
+            # bsub -W <minutes>: queue's default may be too short
+            # (e.g. gpu_h100 default = 120 min).
+            cmd += ["-W", str(int(runtime_min))]
+        cmd += [
+            "-o", "daisy_logs/out.%J.out",
+            "-e", "daisy_logs/out.%J.err",
+            worker_cmd,
+            f"{yaml_config}",
+            "--client",
+        ]
+        subprocess.run(cmd)
 
     return run_worker
