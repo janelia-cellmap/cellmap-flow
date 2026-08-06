@@ -152,9 +152,8 @@ class CorrectionDataset(Dataset):
         from cellmap_flow.image_data_interface import ImageDataInterface
 
         try:
-            raw = ImageDataInterface(
-                correction["raw_path"], normalize=False
-            ).to_ndarray_ts()
+            raw_idi = ImageDataInterface(correction["raw_path"], normalize=False)
+            raw = raw_idi.to_ndarray_ts()
             mask = ImageDataInterface(
                 correction["mask_path"], normalize=False
             ).to_ndarray_ts()
@@ -174,7 +173,12 @@ class CorrectionDataset(Dataset):
         # Patching is disabled for this case - use full corrections
         # Apply augmentation (only if raw and mask have same shape)
         if self.augment and raw.shape == mask.shape:
-            raw, mask = self._augment_3d(raw, mask)
+            # Axis-permutation augmentation (XY annotation -> equivalent
+            # XZ/YZ orientation) is only valid when voxel size is equal on
+            # all 3 axes -- otherwise it silently trains on physically
+            # distorted patches.
+            isotropic = len(set(raw_idi.voxel_size)) == 1
+            raw, mask = self._augment_3d(raw, mask, isotropic=isotropic)
         elif self.augment and raw.shape != mask.shape:
             logger.debug(
                 f"Skipping augmentation: raw {raw.shape} != mask {mask.shape}. "
@@ -230,12 +234,17 @@ class CorrectionDataset(Dataset):
         return raw_crop, mask_crop
 
     def _augment_3d(
-        self, raw: np.ndarray, mask: np.ndarray
+        self, raw: np.ndarray, mask: np.ndarray, isotropic: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Apply 3D augmentation to raw and mask.
 
         Augmentations:
+        - If isotropic: random permutation of the Z/Y/X axes, so an
+          annotation made in one viewing plane (e.g. XY) also trains the
+          model on the equivalent XZ/YZ orientation. Only valid when voxel
+          size is equal on all 3 axes -- otherwise this would train on
+          physically distorted patches.
         - Random flips on Z/Y/X axes (50% each)
         - Random 90° rotations in XY plane (0°, 90°, 180°, 270°)
         - Random intensity scaling for raw (×0.8 to ×1.2)
@@ -244,10 +253,18 @@ class CorrectionDataset(Dataset):
         Args:
             raw: Raw data (Z, Y, X)
             mask: Mask data (Z, Y, X)
+            isotropic: Whether voxel size is equal on all 3 axes
 
         Returns:
             Augmented (raw, mask) pair
         """
+        # Random axis permutation (only valid for isotropic voxel size)
+        if isotropic:
+            perm = tuple(np.random.permutation(3))
+            if perm != (0, 1, 2):
+                raw = np.transpose(raw, perm).copy()
+                mask = np.transpose(mask, perm).copy()
+
         # Random flips
         if np.random.rand() > 0.5:
             raw = np.flip(raw, axis=0).copy()  # Flip Z
