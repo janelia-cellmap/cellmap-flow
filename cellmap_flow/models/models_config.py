@@ -4,6 +4,7 @@ import copy
 
 from cellmap_models.model_export.cellmap_model import CellmapModel, get_huggingface_model
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.globals import g
 from funlib.geometry import Roi, Coordinate
 import numpy as np
 import torch
@@ -725,12 +726,38 @@ class CellMapModelConfig(ModelConfig):
         config.channels_names = metadata.channels_names
         config.channels = metadata.channels_names  # alias for compatibility
 
-        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
-        config.inference_input_shape = Coordinate(metadata.inference_input_shape)* config.input_voxel_size
-        config.inference_output_shape = Coordinate(metadata.inference_output_shape)* config.output_voxel_size
-        
-        config.block_shape = [*metadata.output_shape, metadata.out_channels]
+        # inference_input_shape/inference_output_shape (when the exported model
+        # provides them) are a larger valid-conv tile than input_shape/output_shape.
+        # Using them amortizes the fixed context halo over far more output voxels
+        # per forward pass, cutting the number of blocks (and redundant halo
+        # recompute) by (inference_output/output_shape)**3 -- a throughput win for
+        # batch blockwise jobs. It's the wrong tradeoff for live/interactive serving
+        # though (bigger tile = slower single response), so only opt in when the
+        # caller has explicitly flagged it (g.use_inference_shape, set by the
+        # blockwise processor, never by the live server).
+        use_inference_shape = getattr(g, "use_inference_shape", False)
+        if (
+            use_inference_shape
+            and metadata.inference_input_shape
+            and metadata.inference_output_shape
+        ):
+            block_input_shape = metadata.inference_input_shape
+            block_output_shape = metadata.inference_output_shape
+        else:
+            block_input_shape = metadata.input_shape
+            block_output_shape = metadata.output_shape
+
+        config.read_shape = Coordinate(block_input_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(block_output_shape) * config.output_voxel_size
+        if metadata.inference_input_shape and metadata.inference_output_shape:
+            config.inference_input_shape = (
+                Coordinate(metadata.inference_input_shape) * config.input_voxel_size
+            )
+            config.inference_output_shape = (
+                Coordinate(metadata.inference_output_shape) * config.output_voxel_size
+            )
+
+        config.block_shape = [*block_output_shape, metadata.out_channels]
 
         config.model = self.cellmap_model.ts_model
         config.model.to(_get_device())

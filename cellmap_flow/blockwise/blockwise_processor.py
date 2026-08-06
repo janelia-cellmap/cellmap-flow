@@ -34,9 +34,21 @@ class CellMapFlowBlockwiseProcessor:
         self.config = load_config(yaml_config)
         self.yaml_config = yaml_config
 
+        # Batch blockwise jobs benefit from the larger inference_input_shape/
+        # inference_output_shape tile (when a model provides one) since nothing is
+        # waiting on a single response -- unlike live/interactive serving, which
+        # deliberately stays on the smaller default tile. See models_config.py's
+        # CellMapModelConfig._get_config().
+        g.use_inference_shape = self.config.get("use_inference_shape", True)
+
         self.input_path = self.config["data_path"]
         self.charge_group = self.config["charge_group"]
         self.queue = self.config["queue"]
+        # GPU queues default to a 2 hr LSF walltime when -W is omitted, which
+        # silently kills long-running workers mid-block and leaves unwritten
+        # regions at the zarr fill value (0). Default high enough to cover a
+        # full bounding-box run; override via yaml for shorter/longer jobs.
+        self.worker_walltime = self.config.get("worker_walltime", "24:00")
 
         logger.info(f"Data path: {self.input_path}")
 
@@ -212,7 +224,19 @@ class CellMapFlowBlockwiseProcessor:
                 * np.array(self.input_voxel_size)
                 / np.array(self.output_voxel_size)
             ).astype(int)
-            offset = (0, 0, 0)
+            # The output should share the raw dataset's own translation at the
+            # output resolution (e.g. the ~4nm scale-pyramid offset baked into
+            # a downsampled level), not an assumed (0, 0, 0) origin -- otherwise
+            # this array is mis-registered by a fraction of a voxel relative to
+            # raw when overlaid in a viewer.
+            if self.output_voxel_size == self.input_voxel_size:
+                offset = np.array(self.idi_raw.offset)
+            else:
+                offset = np.array(
+                    ImageDataInterface(
+                        self.input_path, voxel_size=self.output_voxel_size
+                    ).offset
+                )
 
         logger.info(f"output_shape: {output_shape}")
         logger.info(f"type: {self.dtype}")
@@ -482,11 +506,16 @@ class CellMapFlowBlockwiseProcessor:
             # Process specific ROIs from bounding boxes
             logger.info(f"Processing {len(bounding_boxes)} bounding box(es)")
             rois_to_process = []
-            # If there is ROI the ROI can be different than the block order which can cause read-write conflicts
-            # best way is to align the ROI with the block shape, but for now we will just warn the user about potential conflicts
-            if not self.separate_zarrs:
-                conflicts = True
-            
+            # Blocks only ever read from the static raw EM input (self.idi_raw),
+            # never from the output array a sibling block is writing, so there is
+            # no real read-after-write hazard here for daisy to guard against.
+            # read_write_conflict=True was set defensively in the past for
+            # ROI/block-grid misalignment, but when context > write_shape (a
+            # block's halo reaches two blocks away, not just one) daisy's
+            # conflict scheduler permanently strands ~1-in-3 blocks in an
+            # unresolvable dependency instead of just delaying them -- leaving
+            # a periodic hole pattern that never fills in. Leave conflicts=False.
+
             for i, bbox in enumerate(bounding_boxes):
                 offset = tuple(bbox.get("offset", [0, 0, 0]))
                 shape = tuple(bbox.get("shape", [0, 0, 0]))
@@ -519,6 +548,7 @@ class CellMapFlowBlockwiseProcessor:
                     self.charge_group,
                     self.queue,
                     ncpu=self.cpu_workers,
+                    walltime=self.worker_walltime,
                 ),
                 check_function=partial(check_block, self.tmp_dir) if self.track_progress else None,
                 read_write_conflict=conflicts,
@@ -536,7 +566,7 @@ def check_block(tmp_dir, block: daisy.Block) -> bool:
     return (tmp_dir / f"{block.block_id[1]}").exists()
 
 
-def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
+def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime="24:00"):
     def run_worker():
         if not Path("daisy_logs").exists():
             Path("daisy_logs").mkdir(parents=True, exist_ok=True)
@@ -551,6 +581,8 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
                 queue,
                 "-n",
                 str(ncpu),
+                "-W",
+                str(walltime),
                 "-gpu",
                 "num=1",
                 "-o",
