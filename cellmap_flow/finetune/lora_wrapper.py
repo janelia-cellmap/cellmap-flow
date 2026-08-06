@@ -372,6 +372,12 @@ def load_lora_adapter(
         logger.info("Wrapping Sequential model for PEFT compatibility")
         model = SequentialWrapper(model)
 
+    # Replace any non-standard leaf modules (e.g. InterpreterModule from
+    # torch.export unflatten) with real nn.Conv*/Linear, same as
+    # wrap_model_with_lora() does -- PEFT's dispatch can't resolve target
+    # modules that aren't one of the standard types.
+    _replace_interpreter_modules(model)
+
     peft_model = PeftModel.from_pretrained(
         model,
         adapter_path,

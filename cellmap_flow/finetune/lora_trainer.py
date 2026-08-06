@@ -66,6 +66,12 @@ class DiceLoss(nn.Module):
             pred = pred * mask
             target = target * mask
 
+        # Cast to float32 before summing: under autocast these sums run in
+        # fp16, and a single patch can have >100k voxels, which overflows
+        # fp16's max (~65504) straight to inf and poisons the backward pass.
+        pred = pred.float()
+        target = target.float()
+
         # Compute intersection and union
         intersection = (pred * target).sum(dim=2)  # (B, C)
         union = pred.sum(dim=2) + target.sum(dim=2)  # (B, C)
@@ -141,6 +147,15 @@ class MarginLoss(nn.Module):
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         if self.apply_sigmoid:
             pred = torch.sigmoid(pred)
+
+        # Cast to float32 before the batch-wide sums below: under autocast
+        # these run in fp16, and summing an entire batch (e.g. 8 x 56^3 =
+        # ~1.4M elements) overflows fp16's max (~65504) straight to inf,
+        # poisoning the backward pass.
+        pred = pred.float()
+        target = target.float()
+        if mask is not None:
+            mask = mask.float()
 
         threshold_high = 1.0 - self.margin  # e.g., 0.7
         threshold_low = self.margin          # e.g., 0.3
@@ -276,6 +291,7 @@ class LoRAFinetuner:
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=learning_rate,
+            weight_decay=0.0,
         )
 
         # Loss function
@@ -354,6 +370,7 @@ class LoRAFinetuner:
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.optimizer.defaults['lr'],
+            weight_decay=0.0,
         )
         self.current_epoch = 0
         self.global_step = 0
@@ -526,10 +543,13 @@ class LoRAFinetuner:
                     dtype=probe_raw.dtype,
                     device=self.device,
                 ) * 100
-                with torch.no_grad(), autocast(
-                    'cuda', enabled=self.use_mixed_precision
-                ):
-                    probe_out = self.model(probe_extreme)
+                # Always run this probe in fp32, regardless of
+                # use_mixed_precision: it's a one-off diagnostic forward pass
+                # (cost doesn't matter), and the extreme x100 input can
+                # overflow fp16 internally, producing NaN that falsely looks
+                # like "no built-in sigmoid" (NaN >= 0 is False in IEEE754).
+                with torch.no_grad(), autocast('cuda', enabled=False):
+                    probe_out = self.model(probe_extreme.float())
                     if self.select_channel is not None:
                         probe_out = probe_out[
                             :,
@@ -538,13 +558,20 @@ class LoRAFinetuner:
                             :,
                             :,
                         ]
-                model_has_sigmoid = bool(
-                    ((probe_out.min() >= 0) & (probe_out.max() <= 1)).item()
-                )
-                self._cache_model_has_sigmoid(model_has_sigmoid)
-                if model_has_sigmoid:
-                    log_message("Detected built-in sigmoid in model output")
-                    self._apply_probability_output_mode(log_message)
+                if not torch.isfinite(probe_out).all():
+                    # Inconclusive, not "no sigmoid" — don't cache a guess.
+                    log_message(
+                        "WARNING: Sigmoid probe produced non-finite output "
+                        "even in fp32 — inconclusive, assuming raw logits output."
+                    )
+                else:
+                    model_has_sigmoid = bool(
+                        ((probe_out.min() >= 0) & (probe_out.max() <= 1)).item()
+                    )
+                    self._cache_model_has_sigmoid(model_has_sigmoid)
+                    if model_has_sigmoid:
+                        log_message("Detected built-in sigmoid in model output")
+                        self._apply_probability_output_mode(log_message)
                 del probe_extreme, probe_out
                 torch.cuda.empty_cache()
             except Exception as e:

@@ -432,33 +432,88 @@ def proxy_minio_annotation_response(volume_id, revision, object_path):
     return Response(upstream.content, status=upstream.status_code, headers=resp_headers)
 
 
+def _compute_ai_mask_write_index(arr_shape, write_offset_vox, depth_axis, mask_2d):
+    """Absolute zarr index (one int + two slices) for painting mask_2d into
+    an array of shape arr_shape, plus the correspondingly-clipped mask --
+    clipped to arr_shape's bounds, since the reviewed context crop can
+    extend past the dataset edge near a boundary. Raises ValueError if the
+    write region falls entirely outside the array.
+
+    write_offset_vox is the absolute output-voxel origin of the write
+    region (see ai_annotate._compute_context_write_region): its depth_axis
+    component is the single absolute index of the plane, the other two
+    components are the crop's absolute top-left corner.
+    """
+    in_plane_axes = tuple(i for i in range(3) if i != depth_axis)
+    idx = [None, None, None]
+    idx[depth_axis] = int(np.clip(write_offset_vox[depth_axis], 0, arr_shape[depth_axis] - 1))
+
+    mask_slices = [slice(None), slice(None)]
+    for local_dim, axis in enumerate(in_plane_axes):
+        start = int(write_offset_vox[axis])
+        stop = start + mask_2d.shape[local_dim]
+        clipped_start = max(start, 0)
+        clipped_stop = min(stop, int(arr_shape[axis]))
+        if clipped_stop <= clipped_start:
+            raise ValueError(
+                f"AI-annotate write region falls entirely outside the annotation volume (axis={axis})"
+            )
+        idx[axis] = slice(clipped_start, clipped_stop)
+        mask_slices[local_dim] = slice(clipped_start - start, clipped_stop - start)
+
+    return tuple(idx), mask_2d[tuple(mask_slices)]
+
+
+def _label_instances(fg_mask: np.ndarray, first_id: int = 2) -> tuple[np.ndarray, int]:
+    """Connected-component-label a 2D foreground mask so each instance
+    Gemini kept visually separated (see prompts.py's
+    _INSTANCE_SEPARATION_INSTRUCTION) gets its own id, instead of every
+    foreground pixel collapsing to one shared id -- matches crop_loader.py's
+    remap_labels(connected_components=True) convention (0=unannotated,
+    1=background, >=2=instance) so AI-annotate-painted data trains
+    identically to imported instance-labeled crops. Collapses to a single id
+    if the count would overflow uint8, same cap/behavior as remap_labels.
+    """
+    from scipy.ndimage import label as cc_label
+
+    labeled, n = cc_label(fg_mask)
+    if n == 0:
+        return np.zeros(fg_mask.shape, dtype=np.uint32), 0
+    if first_id - 1 + n > 255:
+        logger.warning(
+            f"AI-annotate mask produced {n} instances; collapsing to a single "
+            "foreground id to fit uint8."
+        )
+        return np.where(labeled > 0, first_id, 0).astype(np.uint32), 1
+    return np.where(labeled > 0, labeled + (first_id - 1), 0).astype(np.uint32), n
+
+
 def write_ai_mask_to_minio(
     volume_id: str,
-    chunk_indices: tuple[int, int, int],
-    z_row_index: int,
+    write_offset_vox: tuple[int, int, int],
+    depth_axis: int,
     mask_2d: np.ndarray,
     label_id: int = 2,
     background_label_id: int = 1,
 ):
-    """Paint one reviewed z-row of one chunk into the annotation volume in MinIO.
+    """Paint the WHOLE reviewed context crop (a single 2D plane) into the
+    annotation volume in MinIO -- the entire visible area is trusted as
+    annotated ground truth (not just a small grid-aligned model chunk), so
+    this can span many chunks of the annotation zarr; zarr's numpy-style
+    indexing handles the cross-chunk read-modify-write transparently. Only
+    where mask_2d>0 is painted foreground vs. background elsewhere in the
+    region -- voxels outside the region are left untouched, so any
+    pre-existing sparse annotation there survives.
 
-    Adapted from sam-backend-support's _write_mask_to_minio, but narrower:
-    writes only within the specific reviewed z-row, only where mask_2d>0
-    (foreground) vs. elsewhere in that row (background) -- every other
-    z-row/voxel in the chunk is left untouched, so any pre-existing sparse
-    annotation elsewhere in the chunk survives.
+    Foreground pixels are connected-component-labeled (see
+    _label_instances) rather than all written as one shared label_id, so
+    instances Gemini kept separated by a black border become distinct
+    instance ids for training.
+
+    depth_axis is which of (0=z, 1=y, 2=x) the click's view was slicing
+    along (see ai_annotate.depth_axis_from_layout) -- the click isn't always
+    in the XY plane, so this isn't always a "z-plane".
     """
-    volume_meta = _get_volume_metadata(volume_id)
-    if volume_meta is None:
-        raise ValueError(f"Unknown volume_id: {volume_id}")
-
-    chunk_size = np.array(volume_meta["output_size"])
-    cz, cy, cx = (int(v) for v in chunk_indices)
-    z0 = cz * int(chunk_size[0])
-    y0, y1 = cy * int(chunk_size[1]), (cy + 1) * int(chunk_size[1])
-    x0, x1 = cx * int(chunk_size[2]), (cx + 1) * int(chunk_size[2])
-    z = z0 + int(z_row_index)
-
     bucket = g.minio_state["bucket"]
     zarr_name = f"{volume_id}.zarr"
 
@@ -466,13 +521,17 @@ def write_ai_mask_to_minio(
     store = s3fs.S3Map(root=f"{bucket}/{zarr_name}/annotation", s3=s3)
     arr = zarr.open(store, mode="r+")["s0"]
 
-    row = arr[z, y0:y1, x0:x1]
-    row[:] = np.where(mask_2d > 0, label_id, background_label_id).astype(row.dtype)
-    arr[z, y0:y1, x0:x1] = row
+    idx, mask_clipped = _compute_ai_mask_write_index(arr.shape, write_offset_vox, depth_axis, mask_2d)
+
+    instance_labels, n_instances = _label_instances(mask_clipped > 0, first_id=label_id)
+    region = arr[idx]
+    region[:] = np.where(instance_labels > 0, instance_labels, background_label_id).astype(region.dtype)
+    arr[idx] = region
 
     logger.info(
-        f"Painted AI-annotate mask for {zarr_name} at chunk {chunk_indices}, z-row {z_row_index} "
-        f"({int(np.sum(mask_2d > 0))} foreground voxels)"
+        f"Painted AI-annotate mask for {zarr_name} at output-voxel region {idx}, "
+        f"depth_axis={depth_axis} ({n_instances} instance(s), "
+        f"{int(np.sum(instance_labels > 0))} foreground voxels)"
     )
 
 

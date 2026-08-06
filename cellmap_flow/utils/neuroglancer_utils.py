@@ -4,7 +4,7 @@ import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.utils.ds import find_closest_scale, get_scale_info, _open_zarr
+from cellmap_flow.utils.ds import find_closest_scale, get_scale_info_from_path
 from cellmap_flow.globals import g
 
 from cellmap_flow.utils.web_utils import (
@@ -39,8 +39,7 @@ def get_raw_closest_scale(dataset_path, target_resolution):
     """Return the raw multiscale scale (as a tuple of nm) closest to the
     model's target resolution, or None if it can't be determined."""
     try:
-        zarr_grp = _open_zarr(dataset_path, mode="r")
-        _, resolutions, _ = get_scale_info(zarr_grp)
+        _, resolutions, _ = get_scale_info_from_path(dataset_path)
         target_scale, _, _ = find_closest_scale(dataset_path, target_resolution)
         return tuple(resolutions[target_scale])
     except Exception as e:

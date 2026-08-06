@@ -1,6 +1,7 @@
 import os
 import socket
 import logging
+from pathlib import Path
 
 from flask import Flask
 from flask_cors import CORS
@@ -16,6 +17,27 @@ from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
 
 logger = logging.getLogger(__name__)
+
+
+def _load_dotenv() -> None:
+    """Load a .env file from the repo root if present (e.g. GOOGLE_CLOUD_PROJECT
+    for the AI-annotate Gemini/Vertex AI integration). Existing env vars win.
+    """
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.is_file():
+        return
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+_load_dotenv()
 
 # Explicitly set template and static folder paths for package installation
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")

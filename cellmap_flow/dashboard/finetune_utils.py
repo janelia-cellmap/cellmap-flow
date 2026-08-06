@@ -258,6 +258,7 @@ def create_annotation_volume_zarr(
     ai_annotate_enabled=False,
     ai_annotate_label_name=None,
     ai_annotate_gemini_model=None,
+    ai_annotate_prompt_override=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -369,6 +370,8 @@ def create_annotation_volume_zarr(
             root.attrs["ai_annotate_label_name"] = ai_annotate_label_name
         if ai_annotate_gemini_model is not None:
             root.attrs["ai_annotate_gemini_model"] = ai_annotate_gemini_model
+        if ai_annotate_prompt_override is not None:
+            root.attrs["ai_annotate_prompt_override"] = ai_annotate_prompt_override
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(
@@ -818,6 +821,7 @@ def _get_volume_metadata(volume_id, zarr_path=None):
             "ai_annotate_enabled": attrs.get("ai_annotate_enabled", False),
             "ai_annotate_label_name": attrs.get("ai_annotate_label_name"),
             "ai_annotate_gemini_model": attrs.get("ai_annotate_gemini_model"),
+            "ai_annotate_prompt_override": attrs.get("ai_annotate_prompt_override"),
             "extracted_chunks": set(),
             "chunk_sync_state": {},
         }

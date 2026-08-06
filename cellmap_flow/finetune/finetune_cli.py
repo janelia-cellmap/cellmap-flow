@@ -760,7 +760,20 @@ def main():
             cellmap_model = model_config.cellmap_model
 
         if cellmap_model is not None:
-            trainable = cellmap_model.train()
+            try:
+                trainable = cellmap_model.train()
+            except Exception as e:
+                # cellmap_models' train() can raise instead of falling back to
+                # TorchScript when the .pt2 (torch.export) file's schema version
+                # doesn't match the installed torch (e.g. exported with an older
+                # torch than the training env). Fall back to model.ts ourselves.
+                logger.warning(
+                    f"cellmap_model.train() raised ({e}); falling back to TorchScript model.ts"
+                )
+                trainable = cellmap_model.ts_model
+                if trainable is not None:
+                    trainable.train()
+                    logger.info("Loaded trainable model via TorchScript fallback")
             if trainable is not None:
                 # UnflattenedModule (from torch.export) often has fixed batch=1.
                 # Wrap it so the trainer can use any batch size.

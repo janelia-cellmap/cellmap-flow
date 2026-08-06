@@ -232,6 +232,7 @@ def create_annotation_volume_response(data):
         ai_annotate_enabled = bool(data.get("ai_annotate_enabled", False))
         ai_annotate_label_name = data.get("ai_annotate_label_name")
         ai_annotate_gemini_model = data.get("ai_annotate_gemini_model")
+        ai_annotate_prompt_override = data.get("ai_annotate_prompt_override")
 
         model_config, error_response = _get_selected_model_config(model_name)
         if error_response is not None:
@@ -289,6 +290,7 @@ def create_annotation_volume_response(data):
             ai_annotate_enabled=ai_annotate_enabled,
             ai_annotate_label_name=ai_annotate_label_name,
             ai_annotate_gemini_model=ai_annotate_gemini_model,
+            ai_annotate_prompt_override=ai_annotate_prompt_override,
         )
         if not success:
             return jsonify({"success": False, "error": zarr_info}), 500
@@ -310,6 +312,7 @@ def create_annotation_volume_response(data):
             ai_annotate_enabled=ai_annotate_enabled,
             ai_annotate_label_name=ai_annotate_label_name,
             ai_annotate_gemini_model=ai_annotate_gemini_model,
+            ai_annotate_prompt_override=ai_annotate_prompt_override,
         )
         refresh_annotated_regions_layer()
 

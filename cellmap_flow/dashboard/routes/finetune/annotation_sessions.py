@@ -323,6 +323,7 @@ def load_existing_volume_response(data):
             ai_annotate_enabled=volume_meta.get("ai_annotate_enabled", False),
             ai_annotate_label_name=volume_meta.get("ai_annotate_label_name"),
             ai_annotate_gemini_model=volume_meta.get("ai_annotate_gemini_model"),
+            ai_annotate_prompt_override=volume_meta.get("ai_annotate_prompt_override"),
         )
         refresh_annotated_regions_layer()
 

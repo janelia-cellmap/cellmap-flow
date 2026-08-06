@@ -3,7 +3,10 @@ from flask import Blueprint, request
 from cellmap_flow.dashboard.routes.finetune.ai_annotate import (
     accept_ai_annotate_response,
     get_ai_annotate_status_response,
+    list_ai_annotate_organelles_response,
     reject_ai_annotate_response,
+    resend_ai_annotate_response,
+    update_ai_annotate_prompt_response,
 )
 from cellmap_flow.dashboard.routes.finetune.annotation import (
     add_crop_to_viewer_response,
@@ -165,6 +168,11 @@ def restart_finetuning_job(job_id):
     return restart_finetuning_job_response(job_id, request.get_json() or {})
 
 
+@finetune_bp.route("/api/finetune/ai-annotate/organelles", methods=["GET"])
+def list_ai_annotate_organelles():
+    return list_ai_annotate_organelles_response()
+
+
 @finetune_bp.route("/api/finetune/ai-annotate/status", methods=["GET"])
 def get_ai_annotate_status():
     return get_ai_annotate_status_response(request.args.get("volume_id"))
@@ -178,6 +186,16 @@ def accept_ai_annotate():
 @finetune_bp.route("/api/finetune/ai-annotate/reject", methods=["POST"])
 def reject_ai_annotate():
     return reject_ai_annotate_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/ai-annotate/resend", methods=["POST"])
+def resend_ai_annotate():
+    return resend_ai_annotate_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/ai-annotate/update-prompt", methods=["POST"])
+def update_ai_annotate_prompt():
+    return update_ai_annotate_prompt_response(request.get_json() or {})
 
 
 @finetune_bp.route(

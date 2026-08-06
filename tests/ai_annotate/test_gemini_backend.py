@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 from cellmap_flow.ai_annotate.mask_extraction import extract_mask, slice_to_rgb
+from cellmap_flow.ai_annotate.organelles import OrganelleProfile, resolve_organelle_profile
 from cellmap_flow.ai_annotate.prompts import build_recolor_prompt
 
 
@@ -66,11 +67,29 @@ def _make_fake_genai_module(response_image: Image.Image | None, rate_limit_first
     return calls
 
 
-def test_build_recolor_prompt():
-    prompt = build_recolor_prompt("mitochondria", "bright red")
-    assert "mitochondria" in prompt
+def test_build_recolor_prompt_generic():
+    profile = OrganelleProfile(key="foo", name="foo structures", color_name="bright red", rgb=(255, 0, 0))
+    prompt = build_recolor_prompt(profile)
+    assert "foo structures" in prompt
     assert "bright red" in prompt
     assert "segmentation mask" in prompt
+    assert "EM image" in prompt
+    assert "black border between them" in prompt  # instance-separation instruction
+
+
+def test_build_recolor_prompt_known_organelle_includes_description():
+    profile = resolve_organelle_profile("mitochondria")
+    prompt = build_recolor_prompt(profile, resolution_nm=8.0)
+    assert "mitochondria" in prompt
+    assert "membrane-bound" in prompt  # from the EM-appearance description
+    assert "8nm/px" in prompt
+
+
+def test_build_recolor_prompt_unknown_label_has_no_description():
+    profile = resolve_organelle_profile("some unusual thing")
+    prompt = build_recolor_prompt(profile)
+    assert "some unusual thing" in prompt
+    assert "appear as" not in prompt
 
 
 def test_slice_to_rgb_normalizes_and_stacks():

@@ -110,24 +110,22 @@ def get_array_path_if_needed(zarr_grp_path, target_resolution):
 
 def find_target_scale(zarr_grp_path, target_resolution):
     try:
-        zarr_grp = _open_zarr(zarr_grp_path, mode="r")
+        offsets, resolutions, shapes = get_scale_info_from_path(zarr_grp_path)
     except Exception as e:
         raise RuntimeError(f"Failed to open zarr group at {zarr_grp_path}: {e}")
-    offsets, resolutions, shapes = get_scale_info(zarr_grp)
     target_scale = None
     for scale, res in resolutions.items():
         if Coordinate(res) == Coordinate(target_resolution):
             target_scale = scale
             break
     if target_scale is None:
-        msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
+        msg = f"Zarr group {zarr_grp_path} does not contain array with sampling {target_resolution}"
         raise ValueError(msg)
     return target_scale, offsets[target_scale], shapes[target_scale]
 
 
 def find_closest_scale(zarr_grp_path, target_resolution):
-    zarr_grp = _open_zarr(zarr_grp_path, mode="r")
-    offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    offsets, resolutions, shapes = get_scale_info_from_path(zarr_grp_path)
     target_scale = None
     last_scale = None
     for scale, res in resolutions.items():
@@ -204,7 +202,169 @@ def _is_zarr_container(path: str) -> bool:
         os.path.exists(os.path.join(path, ".zgroup"))
         or os.path.exists(os.path.join(path, ".zarray"))
         or os.path.exists(os.path.join(path, ".zattrs"))
+        or os.path.exists(os.path.join(path, "zarr.json"))
     )
+
+
+# ---------------------------------------------------------------------------
+# Zarr v3 support
+#
+# The pinned `zarr` python package (v2) cannot open Zarr v3 stores at all --
+# v3 uses a single `zarr.json` per node instead of `.zarray`/.zgroup`/
+# `.zattrs`, and chunk data is keyed under `c/...` rather than flat
+# `0.0.0`-style keys. `zarr.open()` on a v3 store raises PathNotFoundError.
+# Reads of the actual array data work fine via tensorstore's "zarr3" driver
+# (independent of the pip `zarr` package version), but metadata/group
+# navigation -- used to resolve a multiscale group path down to a concrete
+# scale array, and to read voxel size/offset/units -- goes through the v2
+# `zarr` package everywhere else in this module. The functions below read
+# `zarr.json` directly (it's just JSON) to provide v3-store equivalents of
+# that navigation, dispatched to only when a v3 store is detected so the
+# existing v2/n5/h5 code paths are unaffected.
+# ---------------------------------------------------------------------------
+
+
+def _is_zarr_v3_container(path: str) -> bool:
+    if _is_remote_path(path):
+        return False
+    return os.path.isdir(path) and os.path.exists(os.path.join(path, "zarr.json"))
+
+
+def _read_zarr_v3_json(path: str) -> dict:
+    with open(os.path.join(path, "zarr.json")) as f:
+        return json.load(f)
+
+
+def is_zarr_v3_group(path: str) -> bool:
+    return _is_zarr_v3_container(path) and _read_zarr_v3_json(path).get("node_type") == "group"
+
+
+def _zarr_v3_multiscales(attrs: dict):
+    """OME-Zarr multiscales metadata, handling both the legacy (NGFF <=0.4)
+    unwrapped `multiscales` key and the NGFF 0.5+ `ome.multiscales` key
+    (the namespacing introduced alongside Zarr v3 support)."""
+    if "multiscales" in attrs:
+        return attrs["multiscales"]
+    return attrs.get("ome", {}).get("multiscales")
+
+
+def _zarr_v3_chunk_shape(array_json: dict) -> tuple:
+    chunk_grid = array_json["chunk_grid"]
+    if chunk_grid.get("name") != "regular":
+        raise ValueError(f"Unsupported Zarr v3 chunk_grid: {chunk_grid.get('name')}")
+    return tuple(chunk_grid["configuration"]["chunk_shape"])
+
+
+def _zarr_v3_scale_info(group_path: str, group_json: dict):
+    """Zarr v3 equivalent of get_scale_info(_open_zarr(path)) -- same
+    (offsets, resolutions, shapes) shape, read from zarr.json instead of via
+    the v2 `zarr` package."""
+    multiscales = _zarr_v3_multiscales(group_json.get("attributes", {}))
+    ms = multiscales[0]
+    axes = ms.get("axes", [])
+    spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
+    if not spatial_indices:
+        spatial_indices = None
+
+    resolutions, offsets, shapes = {}, {}, {}
+    for scale in ms["datasets"]:
+        transforms = scale["coordinateTransformations"]
+        full_res = transforms[0]["scale"]
+        full_translation = next(
+            (t["translation"] for t in transforms if t["type"] == "translation"),
+            [0.0] * len(full_res),
+        )
+        scale_path = scale["path"].lstrip("/")
+        full_shape = _read_zarr_v3_json(os.path.join(group_path, scale_path))["shape"]
+
+        if spatial_indices is not None:
+            resolutions[scale["path"]] = [full_res[i] for i in spatial_indices]
+            offsets[scale["path"]] = [full_translation[i] for i in spatial_indices]
+            shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
+        else:
+            resolutions[scale["path"]] = full_res
+            offsets[scale["path"]] = full_translation
+            shapes[scale["path"]] = tuple(full_shape)
+    return offsets, resolutions, shapes
+
+
+def get_scale_info_from_path(zarr_grp_path: str):
+    """v2/v3-dispatching equivalent of get_scale_info(_open_zarr(path))."""
+    if _is_zarr_v3_container(zarr_grp_path):
+        group_json = _read_zarr_v3_json(zarr_grp_path)
+        return _zarr_v3_scale_info(zarr_grp_path, group_json)
+    zarr_grp = _open_zarr(zarr_grp_path, mode="r")
+    return get_scale_info(zarr_grp)
+
+
+def _find_zarr_v3_multiscale_group(array_path: str, container_path: str):
+    """Walk up from a Zarr v3 array's directory toward container_path
+    looking for the nearest ancestor group with OME-Zarr multiscales
+    metadata (mirrors check_for_multiscale's v2 group-walking behavior).
+    Returns (group_path, group_json), or (None, None) if not found.
+    """
+    search_path = os.path.dirname(array_path)
+    while True:
+        if _is_zarr_v3_container(search_path):
+            group_json = _read_zarr_v3_json(search_path)
+            if _zarr_v3_multiscales(group_json.get("attributes", {})):
+                return search_path, group_json
+        if search_path == container_path or search_path == os.path.dirname(search_path):
+            return None, None
+        search_path = os.path.dirname(search_path)
+
+
+def _get_ds_info_zarr_v3(container_path: str, array_path: str):
+    """Zarr v3 equivalent of get_ds_info's local-path zarr branch."""
+    array_json = _read_zarr_v3_json(array_path)
+    if array_json.get("node_type") != "array":
+        raise RuntimeError(
+            f"Expected a Zarr v3 array at {array_path}, found node_type={array_json.get('node_type')}"
+        )
+
+    shape_full = tuple(array_json["shape"])
+    chunk_shape_full = _zarr_v3_chunk_shape(array_json)
+
+    group_path, group_json = _find_zarr_v3_multiscale_group(array_path, container_path)
+    if group_path is not None:
+        ms = _zarr_v3_multiscales(group_json["attributes"])[0]
+        axes = ms.get("axes", [])
+        spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
+        if not spatial_indices:
+            spatial_indices = list(range(len(shape_full)))
+        scale_rel_path = os.path.relpath(array_path, group_path)
+        dataset_entry = next(
+            (d for d in ms["datasets"] if d["path"].lstrip("/") == scale_rel_path),
+            ms["datasets"][0],
+        )
+        scale_transform = dataset_entry["coordinateTransformations"][0]["scale"]
+        voxel_size = Coordinate(scale_transform[i] for i in spatial_indices)
+        translation = next(
+            (
+                t["translation"]
+                for t in dataset_entry["coordinateTransformations"]
+                if t["type"] == "translation"
+            ),
+            [0.0] * len(scale_transform),
+        )
+        offset = Coordinate(translation[i] for i in spatial_indices)
+        axes_names = (
+            [axes[i]["name"] for i in spatial_indices] if axes else ["z", "y", "x"][-len(spatial_indices) :]
+        )
+        shape = Coordinate(shape_full[i] for i in spatial_indices)
+        chunk_shape = tuple(chunk_shape_full[i] for i in spatial_indices)
+    else:
+        # No discoverable multiscales metadata -- fall back to defaults, as
+        # the v2 code path does when no voxel_size/offset attrs are found.
+        dims = min(len(shape_full), 3)
+        voxel_size = Coordinate((1,) * dims)
+        offset = Coordinate((0,) * dims)
+        shape = Coordinate(shape_full[-dims:])
+        chunk_shape = tuple(chunk_shape_full[-dims:])
+        axes_names = ["z", "y", "x"][-dims:]
+
+    roi = Roi(offset, voxel_size * shape)
+    return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
 
 
 def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
@@ -301,7 +461,14 @@ class LazyNormalization:
 
 
 def _detect_filetype(dataset_path: str) -> str:
-    """Detect whether a dataset path is zarr or n5."""
+    """Detect whether a dataset path is zarr (v2), zarr3, or n5.
+
+    tensorstore uses distinct driver names for Zarr v2 ("zarr") vs v3
+    ("zarr3") stores, so this must check the actual on-disk store format at
+    dataset_path (not just the ".zarr" extension) to pick the right one.
+    """
+    if _is_zarr_v3_container(dataset_path):
+        return "zarr3"
     if ".zarr" in dataset_path or ".n5" in dataset_path:
         return (
             "zarr"
@@ -312,6 +479,8 @@ def _detect_filetype(dataset_path: str) -> str:
     normalized = os.path.normpath(dataset_path)
     path = normalized
     while path and path != os.path.dirname(path):
+        if _is_zarr_v3_container(path):
+            return "zarr3"
         if _is_zarr_container(path):
             return "zarr"
         path = os.path.dirname(path)
@@ -1128,6 +1297,10 @@ def get_ds_info(path: str, mode: str = "r"):
         return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
 
     filename, ds_name = split_dataset_path(path)
+    array_path = os.path.join(filename, ds_name) if ds_name else filename
+    if _is_zarr_v3_container(array_path):
+        return _get_ds_info_zarr_v3(filename, array_path)
+
     if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):
         assert (
             not filename.endswith(".zip") or mode == "r"

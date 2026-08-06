@@ -23,8 +23,8 @@ def _stage_fake_result(tmp_path, volume_id="vol-test", annotate_id="annotate-1")
     meta = {
         "volume_id": volume_id,
         "annotate_id": annotate_id,
-        "chunk_indices": [1, 1, 1],
-        "z_row_index": 0,
+        "write_offset_vox": [8, 8, 8],
+        "depth_axis": 0,
         "label_id": 2,
         "background_label_id": 1,
     }

@@ -13,13 +13,20 @@ import time
 from PIL import Image
 
 
+def upsample_scale_for_edit(width: int, height: int, floor: int = 1024) -> float:
+    """The factor `_upsample_for_edit` will scale an image of this size by.
+    Exposed so callers can report the resolution Gemini actually sees (after
+    this upsample) rather than the resolution of the crop as fetched."""
+    return max(1.0, floor / min(width, height))
+
+
 def _upsample_for_edit(image: Image.Image, floor: int = 1024) -> Image.Image:
     """Lanczos-upsample small crops before sending, so the model's own
     uncontrolled internal resize doesn't coarsen detail first. The result is
     resized back to the caller's original size regardless.
     """
     w, h = image.size
-    scale = max(1.0, floor / min(w, h))
+    scale = upsample_scale_for_edit(w, h, floor=floor)
     if scale == 1.0:
         return image
     return image.resize((round(w * scale), round(h * scale)), Image.LANCZOS)

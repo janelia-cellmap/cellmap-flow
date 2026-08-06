@@ -71,7 +71,10 @@
     </small>
   </div>
 
-  <!-- AI-assisted annotation (new volumes only) -->
+  <!-- AI-assisted annotation: prompt is set here for new volumes; use
+       "Update Prompt for Active Volume" below to push edits to one already
+       created/resumed, since Shift+G reads whatever was last pushed, not
+       this textbox live. -->
   <div class="mb-2 p-2 border rounded">
     <div class="form-check">
       <input class="form-check-input" type="checkbox" id="aiAnnotateEnabledCheck">
@@ -80,13 +83,30 @@
       </label>
     </div>
     <div id="aiAnnotateOptions" style="display: none;" class="mt-1">
-      <input type="text" class="form-control form-control-sm" id="aiAnnotateLabelName"
-        placeholder="Label name (e.g. mitochondria)">
+      <select class="form-select form-select-sm mb-1" id="aiAnnotateLabelSelect">
+        <option value="">Loading organelles…</option>
+      </select>
+      <input type="text" class="form-control form-control-sm mb-1" id="aiAnnotateLabelName"
+        placeholder="Custom label name (e.g. mitochondria)" style="display: none;">
+      <label for="aiAnnotatePromptPreview" class="form-label small mb-1">
+        Prompt (edit for this dataset — EM appearance varies a lot between datasets)
+      </label>
+      <textarea class="form-control form-control-sm" id="aiAnnotatePromptPreview" rows="3"></textarea>
+      <button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="updateAiAnnotatePromptBtn"
+        title="Push this edited prompt to the currently active volume so the next Shift+G uses it">
+        Update Prompt for Active Volume
+      </button>
+      <div id="updateAiAnnotatePromptStatus" class="text-muted small mt-1"></div>
+      <small class="form-text text-muted d-block mt-1">
+        Keep the recolor color name (e.g. "bright red") as-is — the mask extraction looks
+        for that exact color in Gemini's output.
+      </small>
       <small class="form-text text-muted d-block mt-1">
         Place a point in the <code>ai_annotate_point</code> layer and press
         <strong>Shift+G</strong> to send a crop around it to Gemini for a first-pass mask.
         You'll review and accept/reject before anything is written.
       </small>
+      <div id="aiAnnotateRunStatus" class="text-muted small mt-1"></div>
     </div>
   </div>
 
@@ -196,7 +216,7 @@
   </div>
   <!-- AI-annotate Review Modal -->
   <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="aiAnnotateReviewLabel">Review AI-Generated Annotation</h5>
@@ -204,10 +224,18 @@
         </div>
         <div class="modal-body">
           <p class="text-muted small">
-            Left to right: original EM crop, Gemini's recolored output, mask overlay.
-            Nothing is written to the annotation volume until you click Accept.
+            Left to right: original EM crop, Gemini's recolored output, mask overlay. Accepting writes
+            the whole crop shown here (foreground + background) into the annotation volume. Click the
+            image to open it full-size in a new tab. Nothing is written until you click Accept.
           </p>
-          <img id="aiAnnotatePreviewImg" class="img-fluid border rounded" alt="AI-annotate preview">
+          <img id="aiAnnotatePreviewImg" class="img-fluid border rounded" alt="AI-annotate preview" style="cursor: zoom-in;">
+          <div class="mt-2">
+            <label for="aiAnnotatePromptText" class="form-label small mb-1">Prompt sent to Gemini</label>
+            <textarea class="form-control form-control-sm" id="aiAnnotatePromptText" rows="3"></textarea>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="aiAnnotateResendBtn">
+              Resend with edited prompt
+            </button>
+          </div>
           <div id="aiAnnotateReviewStatus" class="text-muted small mt-2"></div>
         </div>
         <div class="modal-footer">
@@ -875,17 +903,22 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    const aiAnnotateEnabled = document.getElementById("aiAnnotateEnabledCheck").checked;
+    if (aiAnnotateEnabled && !getAiAnnotateLabelName()) {
+      alert("Please select an organelle (or choose Custom… and type a label) for AI-assisted annotation.");
+      return;
+    }
+
     createVolumeBtn.disabled = true;
     createVolumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
     finetuneLog.value += `Creating annotation volume for full dataset...\n`;
     finetuneLog.value += `Output path: ${outputPath}\n`;
-
-    const aiAnnotateEnabled = document.getElementById("aiAnnotateEnabledCheck").checked;
     const payload = {
       model_name: selectedModel.name,
       output_path: outputPath,
       ai_annotate_enabled: aiAnnotateEnabled,
-      ai_annotate_label_name: document.getElementById("aiAnnotateLabelName").value.trim() || null,
+      ai_annotate_label_name: getAiAnnotateLabelName(),
+      ai_annotate_prompt_override: getAiAnnotatePromptOverride(),
     };
 
     fetch("/api/finetune/create-volume", {
@@ -1299,15 +1332,132 @@ document.addEventListener("DOMContentLoaded", function () {
   // modal pops up as soon as a staged mask is ready.
   const aiAnnotateEnabledCheck = document.getElementById("aiAnnotateEnabledCheck");
   const aiAnnotateOptions = document.getElementById("aiAnnotateOptions");
+  const aiAnnotateLabelSelect = document.getElementById("aiAnnotateLabelSelect");
+  const aiAnnotateLabelName = document.getElementById("aiAnnotateLabelName");
+  const aiAnnotatePromptPreview = document.getElementById("aiAnnotatePromptPreview");
   aiAnnotateEnabledCheck.addEventListener("change", function() {
     aiAnnotateOptions.style.display = aiAnnotateEnabledCheck.checked ? "block" : "none";
   });
 
+  const AI_ANNOTATE_CUSTOM_VALUE = "__custom__";
+  let aiAnnotateOrganellePrompts = {};
+  function aiAnnotateGenericTemplate(label) {
+    return `This is an EM image of cell(s). Create a segmentation mask: color all the ${label || "labeled structure"} in bright red and make everything else black.`;
+  }
+
+  // Auto-fills the prompt box whenever the selection changes -- edits made
+  // by hand afterward are left alone (this only overwrites on selection
+  // change, not on every keystroke elsewhere), since EM appearance/staining
+  // varies enough between datasets that the generic template is only ever
+  // a starting point.
+  function updateAiAnnotatePromptPreview() {
+    if (aiAnnotateLabelSelect.value === AI_ANNOTATE_CUSTOM_VALUE) {
+      aiAnnotatePromptPreview.value = aiAnnotateGenericTemplate(aiAnnotateLabelName.value.trim());
+    } else {
+      aiAnnotatePromptPreview.value = aiAnnotateOrganellePrompts[aiAnnotateLabelSelect.value] || "";
+    }
+  }
+
+  let aiAnnotateOrganellesLoaded = false;
+  function loadAiAnnotateOrganelles() {
+    if (aiAnnotateOrganellesLoaded) return;
+    aiAnnotateOrganellesLoaded = true;
+    fetch("/api/finetune/ai-annotate/organelles")
+      .then(res => res.json())
+      .then(data => {
+        // No option is pre-selected here on purpose: a real organelle sorted
+        // first alphabetically (e.g. "cells") would otherwise be the
+        // browser's silent default selection, and it's easy to create a
+        // volume without ever noticing the wrong structure got picked.
+        aiAnnotateLabelSelect.innerHTML =
+          '<option value="" disabled selected hidden>Select an organelle…</option>';
+        (data.organelles || []).forEach(o => {
+          aiAnnotateOrganellePrompts[o.key] = o.prompt;
+          const opt = document.createElement("option");
+          opt.value = o.key;
+          opt.textContent = o.name;
+          aiAnnotateLabelSelect.appendChild(opt);
+        });
+        const customOpt = document.createElement("option");
+        customOpt.value = AI_ANNOTATE_CUSTOM_VALUE;
+        customOpt.textContent = "Custom…";
+        aiAnnotateLabelSelect.appendChild(customOpt);
+        updateAiAnnotatePromptPreview();
+      })
+      .catch(err => {
+        console.error("Could not load AI-annotate organelle list", err);
+        aiAnnotateLabelSelect.innerHTML = '<option value="__custom__">Custom…</option>';
+        updateAiAnnotatePromptPreview();
+      });
+  }
+  loadAiAnnotateOrganelles();
+
+  aiAnnotateLabelSelect.addEventListener("change", function() {
+    const isCustom = aiAnnotateLabelSelect.value === AI_ANNOTATE_CUSTOM_VALUE;
+    aiAnnotateLabelName.style.display = isCustom ? "block" : "none";
+    if (isCustom) aiAnnotateLabelName.focus();
+    updateAiAnnotatePromptPreview();
+  });
+
+  aiAnnotateLabelName.addEventListener("input", function() {
+    if (aiAnnotateLabelSelect.value === AI_ANNOTATE_CUSTOM_VALUE) {
+      updateAiAnnotatePromptPreview();
+    }
+  });
+
+  function getAiAnnotateLabelName() {
+    if (aiAnnotateLabelSelect.value === AI_ANNOTATE_CUSTOM_VALUE) {
+      return aiAnnotateLabelName.value.trim() || null;
+    }
+    return aiAnnotateLabelSelect.value || null;
+  }
+
+  function getAiAnnotatePromptOverride() {
+    return aiAnnotatePromptPreview.value.trim() || null;
+  }
+
   let aiAnnotateReviewModal = null;
   let aiAnnotatePollHandle = null;
   let aiAnnotatePendingVolumeId = null;
+  let aiAnnotateActiveVolumeId = null;
+
+  document.getElementById("updateAiAnnotatePromptBtn").addEventListener("click", function() {
+    const statusEl = document.getElementById("updateAiAnnotatePromptStatus");
+    if (!aiAnnotateActiveVolumeId) {
+      statusEl.textContent = "No active AI-annotate volume yet — create or resume one first.";
+      return;
+    }
+    statusEl.textContent = "Updating…";
+    fetch("/api/finetune/ai-annotate/update-prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        volume_id: aiAnnotateActiveVolumeId,
+        ai_annotate_prompt_override: getAiAnnotatePromptOverride(),
+      }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        statusEl.textContent = data.success
+          ? "✓ Prompt updated — next Shift+G will use it."
+          : `✗ ${data.error}`;
+      })
+      .catch(err => {
+        statusEl.textContent = `✗ ${err}`;
+      });
+  });
+
+  // Click the preview to open it full-resolution in a new tab (the modal's
+  // img-fluid sizing is capped to the dialog width, which isn't always big
+  // enough to make out fine detail).
+  document.getElementById("aiAnnotatePreviewImg").addEventListener("click", function() {
+    if (!this.src) return;
+    const win = window.open();
+    if (win) win.document.write(`<img src="${this.src}" style="max-width:none;">`);
+  });
 
   function startAiAnnotatePolling(volumeId) {
+    aiAnnotateActiveVolumeId = volumeId;
     if (aiAnnotatePollHandle) clearInterval(aiAnnotatePollHandle);
     aiAnnotatePollHandle = setInterval(() => pollAiAnnotateStatus(volumeId), 2000);
   }
@@ -1318,16 +1468,31 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!res.ok) return;
       const data = await res.json();
       if (!data.success) return;
+      const runStatus = document.getElementById("aiAnnotateRunStatus");
       if (data.status === "ready" && aiAnnotatePendingVolumeId !== volumeId) {
         aiAnnotatePendingVolumeId = volumeId;
+        runStatus.textContent = "";
         document.getElementById("aiAnnotatePreviewImg").src = `data:image/png;base64,${data.preview_png_base64}`;
+        document.getElementById("aiAnnotatePromptText").value = data.prompt || "";
         document.getElementById("aiAnnotateReviewStatus").textContent = "";
         if (!aiAnnotateReviewModal) {
           aiAnnotateReviewModal = new bootstrap.Modal(document.getElementById("aiAnnotateReviewModal"));
         }
         aiAnnotateReviewModal.show();
+      } else if (data.status === "running") {
+        const label = data.stage_label || "Running...";
+        runStatus.textContent = `AI-annotate: ${label}`;
+        if (aiAnnotatePendingVolumeId === null) {
+          // Only true while a resend is in flight (the initial run has no
+          // modal open yet, so this is harmless either way).
+          document.getElementById("aiAnnotateReviewStatus").textContent = label;
+        }
       } else if (data.status === "failed") {
+        runStatus.textContent = `AI-annotate failed: ${data.error}`;
         finetuneLog.value += `✗ AI-annotate failed: ${data.error}\n`;
+        document.getElementById("aiAnnotateReviewStatus").textContent = `Failed: ${data.error}`;
+      } else if (data.status === "idle") {
+        runStatus.textContent = "";
       }
     } catch (_) {
       // Poll errors are non-fatal — keep going.
@@ -1355,6 +1520,35 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch(err => {
         status.textContent = `Failed: ${err}`;
+      });
+  });
+
+  document.getElementById("aiAnnotateResendBtn").addEventListener("click", function() {
+    if (!aiAnnotatePendingVolumeId) return;
+    const promptText = document.getElementById("aiAnnotatePromptText").value.trim();
+    if (!promptText) return;
+    const volumeId = aiAnnotatePendingVolumeId;
+    const status = document.getElementById("aiAnnotateReviewStatus");
+    status.textContent = "Resending to Gemini...";
+    // Clear the pending-volume guard so the next "ready" poll tick refreshes
+    // the modal with the new result (it's otherwise suppressed once a result
+    // for this volume has already been shown).
+    aiAnnotatePendingVolumeId = null;
+    fetch("/api/finetune/ai-annotate/resend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volume_id: volumeId, prompt: promptText })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) {
+          status.textContent = `Resend failed: ${data.error}`;
+          aiAnnotatePendingVolumeId = volumeId;
+        }
+      })
+      .catch(err => {
+        status.textContent = `Resend failed: ${err}`;
+        aiAnnotatePendingVolumeId = volumeId;
       });
   });
 
