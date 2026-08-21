@@ -17,6 +17,7 @@ from cellmap_flow.utils.ds import (
     check_for_multiscale,
     get_ds_info,
 )
+from cellmap_flow.utils import zarr_v3
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,11 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
         is_multiscale = True
     else:
         try:
-            is_multiscale = check_for_multiscale(_open_zarr(dataset_path, mode="r"))[0]
+            v3_container = zarr_v3.find_v3_container(dataset_path)
+            if v3_container is not None:
+                is_multiscale = zarr_v3.multiscales_from_group(v3_container) is not None
+            else:
+                is_multiscale = check_for_multiscale(_open_zarr(dataset_path, mode="r"))[0]
         except Exception as e:
             logger.error(e)
             is_multiscale = False
