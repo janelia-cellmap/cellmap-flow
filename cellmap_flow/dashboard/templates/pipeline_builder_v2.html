@@ -3112,7 +3112,10 @@
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Submitting...';
             
-            const jobName = prompt('Enter job name:', 'cellmap_flow_' + Date.now());
+            // The server appends a timestamp and uses the result as the LSF
+            // master job name, the task YAML name, the daisy task id (and so
+            // the worker job names) and the daisy_logs/ folder.
+            const jobName = prompt('Enter job name (a timestamp is appended; names the LSF jobs, task YAML and daisy_logs):', 'cellmap_flow');
             if (!jobName) {
                 status.textContent = '';
                 return;
@@ -3133,8 +3136,8 @@
                 
                 const data = await response.json();
                 if (data.success) {
-                    showMessage('✓ Task submitted: ' + data.job_id, 'success');
-                    status.textContent = '✓ Submitted - Job: ' + data.job_id;
+                    showMessage('✓ Task submitted: ' + data.job_id + ' (' + data.task_name + '); master log: ' + data.log_file, 'success');
+                    status.textContent = '✓ Submitted - Job: ' + data.job_id + ' - ' + data.task_name;
                     status.style.color = 'var(--accent-green)';
                 } else {
                     showMessage('✗ ' + data.error, 'error');

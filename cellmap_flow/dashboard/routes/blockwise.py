@@ -3,8 +3,9 @@ import re
 import ast
 import logging
 import subprocess
-import time
 from datetime import datetime
+
+from pathlib import Path
 
 import yaml
 from flask import Blueprint, request
@@ -16,6 +17,27 @@ from cellmap_flow.globals import get_blockwise_tasks_dir
 logger = logging.getLogger(__name__)
 
 blockwise_bp = Blueprint("blockwise", __name__)
+
+
+def _sanitize_job_name(name) -> str:
+    """Reduce a user-typed job name to something safe for an LSF -J value, a
+    YAML filename, a daisy task id and a daisy_logs/ directory: keep
+    [A-Za-z0-9_.-], collapse everything else into single underscores."""
+    if not name:
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name).strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned
+
+
+def _make_task_name(requested_name: str, timestamp: str) -> str:
+    """Single source of truth for the blockwise run's identifier. It names the
+    generated YAML(s), the master LSF job (-J), the daisy task and therefore
+    the worker LSF jobs and every log under daisy_logs/. The timestamp keeps
+    it unique so re-using a name never overwrites the YAML a running master's
+    workers are still reading."""
+    base = _sanitize_job_name(requested_name) or "cellmap_flow"
+    return f"{base}_{timestamp}"
 
 
 @blockwise_bp.route("/api/blockwise/validate", methods=["POST"])
@@ -83,8 +105,12 @@ def generate_blockwise_task():
             if '.zarr' not in output_path:
                 output_path = output_path + '.zarr'
 
-        # Create task YAML content
-        task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Create task YAML content. The task name derives from the job name the
+        # user typed in the dashboard so the master job, the YAML, the daisy
+        # task, the worker jobs and the logs all share one identifier.
+        task_name = _make_task_name(
+            data.get("job_name", ""), datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
         task_yaml = {
             "data_path": input_node["params"]["dataset_path"],
             "output_path": output_path,
@@ -296,14 +322,14 @@ def submit_blockwise_task():
     try:
         data = request.get_json()
         pipeline = data.get("pipeline", {})
-        job_name = data.get("job_name", f"cellmap_flow_{int(time.time())}")
 
         # First validate
         validation = validate_blockwise()
         if not validation.get("valid"):
             return {"success": False, "error": validation.get("error")}
 
-        # Generate task YAML
+        # Generate task YAML (reads job_name from this same request and folds
+        # it into task_name -- see _make_task_name).
         gen_result = generate_blockwise_task()
         if not gen_result.get("success"):
             return {"success": False, "error": gen_result.get("error")}
@@ -311,17 +337,33 @@ def submit_blockwise_task():
         yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
         blockwise_config = pipeline["blockwise_config"][0]
 
+        # The master LSF job carries the task name, so `bjobs -J <task_name>`
+        # is the master and `bjobs -J predict_*_<task_name>` are its workers.
+        task_name = gen_result.get("task_name") or _make_task_name(
+            data.get("job_name", ""), datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
+        job_name = task_name
+
+        # Master stdout/stderr used to be discarded (no -o/-e). Keep it next to
+        # the workers' logs; %J (LSF job id) makes the file unique per run
+        # because bsub -o appends.
+        log_dir = Path("daisy_logs")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        master_log = log_dir / f"{task_name}.master.%J.log"
+
         # Build bsub command
         cores_master = blockwise_config["params"]["nb_cores_master"]
         charge_group = blockwise_config["params"]["charge_group"]
-        queue = blockwise_config["params"]["queue"]
 
         bsub_cmd = [
             "bsub",
             "-J", job_name,
             "-n", str(cores_master),
             "-P", charge_group,
-            # "-q", queue,
+            "-o", str(master_log),
+            "-e", str(master_log),
+            # Master stays on the default CPU queue; the generated YAML carries
+            # the configured queue for GPU workers.
             "python", "-m", "cellmap_flow.blockwise.multiple_cli",
         ] + yaml_paths
 
@@ -337,13 +379,17 @@ def submit_blockwise_task():
             # Extract job ID from bsub output (format: "Job <12345> is submitted")
             match = re.search(r'<(\d+)>', output)
             job_id = match.group(1) if match else "unknown"
+            resolved_log = str(master_log).replace("%J", job_id)
 
             return {
                 "success": True,
                 "job_id": job_id,
+                "job_name": job_name,
+                "task_name": task_name,
                 "task_paths": yaml_paths,
+                "log_file": resolved_log,
                 "command": " ".join(bsub_cmd),
-                "message": f"Task submitted as job {job_id}"
+                "message": f"Task {task_name} submitted as job {job_id}; master log: {resolved_log}"
                 }
         else:
             error_msg = result.stderr or result.stdout

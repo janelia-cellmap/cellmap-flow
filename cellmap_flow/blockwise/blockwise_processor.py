@@ -105,8 +105,10 @@ class CellMapFlowBlockwiseProcessor:
 
         # Build model configuration objects
         models = build_models(self.config["models"])
-        # For debugging, print each model config
+        # Master/precheck processes only need model metadata to schedule blocks and
+        # prepare outputs. GPU optimization and dummy forward validation happen in workers.
         for model in models:
+            model.validate_model_shapes = not create
             logger.info(str(model))
 
         if len(models) == 0:
@@ -175,11 +177,13 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        # Create inferencers for all models
-        self.inferencers = [
-            Inferencer(model, use_half_prediction=False) for model in self.models
-        ]
-        self.inferencer = self.inferencers[0]  # Keep for backward compatibility
+        self.inferencers = []
+        self.inferencer = None
+        if not create:
+            self.inferencers = [
+                Inferencer(model, use_half_prediction=False) for model in self.models
+            ]
+            self.inferencer = self.inferencers[0]  # Keep for backward compatibility
 
         self.idi_raw = ImageDataInterface(
             self.input_path, voxel_size=self.input_voxel_size
@@ -344,6 +348,8 @@ class CellMapFlowBlockwiseProcessor:
 
     def process_fn(self, block):
         # logger.error(f"Processing block {block}")
+        if not self.inferencers:
+            raise RuntimeError("Blockwise inferencers are only initialized in client mode")
 
         # Handle 4D vs 3D array ROI intersection
         first_array = self.output_arrays[0]
@@ -504,7 +510,8 @@ class CellMapFlowBlockwiseProcessor:
         for roi_idx, total_write_roi in enumerate(rois_to_process):
             total_read_roi = total_write_roi.grow(context, context)
             
-            name = f"predict_{self.model_config.name}{self.task_name}"
+            # daisy task id == worker LSF job name (-J) == daisy_logs/<name>/ dir.
+            name = f"predict_{self.model_config.name}_{self.task_name}"
             if len(rois_to_process) > 1:
                 name = f"{name}_roi{roi_idx+1}"
 
@@ -538,8 +545,13 @@ def check_block(tmp_dir, block: daisy.Block) -> bool:
 
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
     def run_worker():
-        if not Path("daisy_logs").exists():
-            Path("daisy_logs").mkdir(parents=True, exist_ok=True)
+        # Per-task directory -- the same one daisy writes its own
+        # worker_<n>.out/.err into -- and one file per LSF job. Previously
+        # every worker of every task ever run appended to the single shared
+        # daisy_logs/out.out / out.err, which made them unreadable. %J is
+        # expanded by bsub to the LSF job id.
+        log_dir = Path("daisy_logs") / str(name)
+        log_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
                 "bsub",
@@ -554,9 +566,9 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
                 "-gpu",
                 "num=1",
                 "-o",
-                f"daisy_logs/out.out",
+                str(log_dir / "lsf_worker.%J.out"),
                 "-e",
-                f"daisy_logs/out.err",
+                str(log_dir / "lsf_worker.%J.err"),
                 "cellmap_flow_blockwise",
                 f"{yaml_config}",
                 "--client",
