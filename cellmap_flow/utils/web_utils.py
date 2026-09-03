@@ -101,10 +101,19 @@ def stringify_list_values_for_template(d):
 
 
 def kill_n_remove_from_neuroglancer(jobs, s):
+    from cellmap_flow.globals import g
+
     for job in jobs:
         if job.model_name in s.layers:
             del s.layers[job.model_name]
         job.kill()
+    # Without this, a killed job's stale entry stays in g.jobs forever --
+    # update_run_models()'s "already running" check (names_running) then
+    # permanently refuses to resubmit that model name, and any lookup by
+    # model_name can keep resolving to this now-dead job instead of a
+    # fresh one.
+    killed_ids = {id(job) for job in jobs}
+    g.jobs = [j for j in g.jobs if id(j) not in killed_ids]
 
 
 def get_norms_post_args(input_norms, postprocess):

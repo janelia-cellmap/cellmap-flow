@@ -33,6 +33,9 @@ def run_model(model_path, name, st_data):
     job = start_hosts(
         command, job_name=name, queue=g.queue, charge_group=g.charge_group
     )
+    if not job.host:
+        logger.error(f"No host discovered for {name} -- not adding it to the viewer")
+        return
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(
             source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
@@ -52,6 +55,9 @@ def run_hf_model(repo, name, st_data):
     job = start_hosts(
         command, job_name=name, queue=g.queue, charge_group=g.charge_group
     )
+    if not job.host:
+        logger.error(f"No host discovered for {name} -- not adding it to the viewer")
+        return
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(
             source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",

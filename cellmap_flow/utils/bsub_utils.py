@@ -86,10 +86,33 @@ class Job(ABC):
 class LocalJob(Job):
     """Job running as a local subprocess."""
     
-    def __init__(self, process: subprocess.Popen, model_name: Optional[str] = None):
+    def __init__(
+        self,
+        process: subprocess.Popen,
+        model_name: Optional[str] = None,
+        log_file: Optional[str] = None,
+        log_offset: int = 0,
+    ):
         super().__init__(model_name)
         self.process = process
         self.job_id = f"local-{process.pid}" if process is not None else "local"
+        # Set when run_locally() redirected stdout/stderr to a file. In that
+        # case process.stdout is None, so wait_for_host() tails this file
+        # from log_offset (its size at launch) instead of select()ing on
+        # pipes -- and never parses content a previous run appended.
+        self.log_file = str(log_file) if log_file is not None else None
+        self._log_offset = log_offset
+
+    def _read_log_since_start(self) -> str:
+        """Return everything this launch has written to its log file so far."""
+        if not self.log_file:
+            return ""
+        try:
+            with open(self.log_file, "r", errors="replace") as fh:
+                fh.seek(self._log_offset)
+                return fh.read()
+        except OSError:
+            return ""
 
     def kill(self) -> None:
         """Terminate the local process."""
@@ -140,12 +163,20 @@ class LocalJob(Job):
         logger.info(f"Monitoring local process for host information...")
         output = ""
         waited = 0
+        # stdout/stderr are None when run_locally() redirected them to a log
+        # file; select() on None raises TypeError, so tail the file instead.
+        file_mode = self.process.stdout is None
         
         while waited < timeout:
-            # Non-blocking read with 1 second timeout
-            rlist, _, _ = select.select(
-                [self.process.stdout, self.process.stderr], [], [], 1.0
-            )
+            if file_mode:
+                time.sleep(1.0)
+                output = self._read_log_since_start()
+                rlist = []
+            else:
+                # Non-blocking read with 1 second timeout
+                rlist, _, _ = select.select(
+                    [self.process.stdout, self.process.stderr], [], [], 1.0
+                )
 
             # Read available output
             if self.process.stdout in rlist:
@@ -181,9 +212,13 @@ class LocalJob(Job):
 class LSFJob(Job):
     """Job submitted to LSF cluster via bsub."""
     
-    def __init__(self, job_id: str, model_name: Optional[str] = None):
+    def __init__(
+        self, job_id: str, model_name: Optional[str] = None, log_file: Optional[str] = None
+    ):
         super().__init__(model_name)
         self.job_id = job_id
+        # Resolved (%J-expanded) path of this job's bsub -o/-e file, if any.
+        self.log_file = log_file
     
     def kill(self) -> None:
         """Terminate the LSF job using bkill."""
@@ -352,8 +387,19 @@ def extract_host_from_output(output: str) -> Optional[str]:
     
     try:
         if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
-            host = output.split(IP_PATTERN[0])[1].split(IP_PATTERN[1])[0]
-            return host
+            # Take the LAST marker pair, never the first. When the job writes
+            # to an append-mode log shared across runs (bsub -o file), bpeek
+            # and the file itself contain every previous run's address too,
+            # and the first one is the OLDEST -- that is exactly how the
+            # viewer ended up pointing at long-dead servers. The current
+            # job's own address is always the newest occurrence.
+            tail = output.rsplit(IP_PATTERN[0], 1)[1]
+            if IP_PATTERN[1] not in tail:
+                # Closing marker not flushed yet -- wait for the full line
+                # rather than returning a truncated host.
+                return None
+            host = tail.split(IP_PATTERN[1])[0].strip()
+            return host or None
     except (IndexError, AttributeError) as e:
         logger.debug(f"Could not extract host: {e}")
     
@@ -413,6 +459,10 @@ def submit_bsub_job(
         num_cpus: Number of CPUs to request
         log_file: Optional path to redirect the job's stdout/stderr to via
             bsub's `-o`/`-e`. Without this, LSF discards the job's output.
+            Use a `%J` placeholder (expanded by LSF to the job id) so each
+            job gets its own file: `-o` APPENDS, and with a shared per-model
+            file `bpeek` returns every earlier run's output as well, which
+            is how wait_for_host() used to pick up stale addresses.
 
     Returns:
         LSFJob object for the submitted job
@@ -448,9 +498,10 @@ def submit_bsub_job(
         
         # Extract job ID from output like "Job <12345> is submitted..."
         job_id = result.stdout.split()[1].strip('<>')
-        logger.info(f"Job {job_id} submitted successfully")
-        
-        return LSFJob(job_id=job_id, model_name=job_name)
+        resolved_log = str(log_file).replace("%J", job_id) if log_file else None
+        logger.info(f"Job {job_id} submitted successfully (log: {resolved_log})")
+
+        return LSFJob(job_id=job_id, model_name=job_name, log_file=resolved_log)
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Job submission failed: {e.stderr}")
@@ -488,7 +539,17 @@ def run_locally(command: str, name: str, log_file=None) -> LocalJob:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        log_offset = 0
         if log_file is not None:
+            log_file = str(log_file)
+            if "%J" in log_file:
+                # bsub expands %J to the LSF job id (see submit_bsub_job);
+                # there is no job id here, so substitute a timestamp to keep
+                # the log unique per launch instead of a literal "%J".
+                log_file = log_file.replace("%J", time.strftime("%Y%m%d-%H%M%S"))
+            # Remember where this launch's output starts so wait_for_host()
+            # never parses content a previous run appended to the same file.
+            log_offset = os.path.getsize(log_file) if os.path.exists(log_file) else 0
             log_fh = open(log_file, "a")
             process = subprocess.Popen(
                 args,
@@ -505,12 +566,32 @@ def run_locally(command: str, name: str, log_file=None) -> LocalJob:
                 env=env,
             )
 
-        local_job = LocalJob(process=process, model_name=name)
+        local_job = LocalJob(
+            process=process, model_name=name, log_file=log_file, log_offset=log_offset
+        )
         return local_job
 
     except Exception as e:
         logger.error(f"Error starting local process: {e}")
         raise
+
+
+def _register_job(job: "Job", job_name: str) -> None:
+    """Add `job` to g.jobs, evicting (and killing) any prior job already
+    registered under the same name first.
+
+    Without this, resubmitting/restarting a model piles up duplicate Job
+    entries with the same model_name -- a lookup by name (e.g.
+    update_run_models()'s "is this model already running" check, or the
+    viewer's own per-job loop) then resolves to whichever entry happens to
+    come first, which can be a stale, already-dead job instead of the
+    current live one.
+    """
+    stale = [j for j in g.jobs if j.model_name == job_name]
+    for j in stale:
+        j.kill()
+    g.jobs = [j for j in g.jobs if j.model_name != job_name]
+    g.jobs.append(job)
 
 
 def start_hosts(
@@ -564,7 +645,7 @@ def start_hosts(
             if wait_for_host:
                 job.wait_for_host()
 
-            g.jobs.append(job)
+            _register_job(job, job_name)
             return job
 
         except Exception as e:
@@ -579,5 +660,5 @@ def start_hosts(
     if wait_for_host:
         job.wait_for_host()
 
-    g.jobs.append(job)
+    _register_job(job, job_name)
     return job

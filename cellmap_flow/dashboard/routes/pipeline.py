@@ -125,6 +125,9 @@ def process():
         for job in g.jobs:
             model = job.model_name
             host = job.host
+            if not host:
+                logger.warning(f"Skipping layer for {model}: host not yet known")
+                continue
             st_data = encode_to_str(data)
             shader = g.shaders.get(model)
 

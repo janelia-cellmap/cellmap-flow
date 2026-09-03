@@ -85,6 +85,9 @@ def build_prediction_source(host, model, st_data, override_scales):
     The prediction zarr is 4D (z, y, x, c). We override the spatial scales
     and leave the channel dim as a unitless dimension.
     """
+    if not host:
+        logger.warning(f"No host known yet for model '{model}' -- skipping its layer")
+        return None
     url = f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"
     if override_scales is None:
         return url
@@ -190,6 +193,8 @@ void main() {{
                     logger.warning(f"Could not compute override scales for '{model}': {e}")
 
             source = build_prediction_source(host, model, st_data, override_scales)
+            if source is None:
+                continue
             layer_kwargs = {
                 "source": source,
                 "shader": shader,
@@ -219,21 +224,24 @@ void main() {{
                 # were bare layers.
                 llayer = item
             s.layers[lname] = llayer
-    # show(viewer)
+    # viewer_url is neuroglancer.Viewer()'s own self-contained address (serves both
+    # the web UI and data from one origin) -- correct to use as-is for direct/
+    # non-tunneled access (the common case: user reaches the compute node's real
+    # address directly, no reverse proxy in front). It's only wrong if the user is
+    # SSH-tunneling (localhost:port -> node:port) -- there's no reliable way to
+    # detect that server-side, so we no longer force-rewrite the host; if you're
+    # tunneling and the printed link's host isn't reachable, swap it to localhost
+    # (same port) yourself. Do NOT rewrite this to match the dashboard's own
+    # X-Forwarded-* handling either -- that's a separate, genuinely-proxy-only
+    # concern (see index_page.py's forwarded_host check).
     viewer_url = str(g.viewer)
-    # When accessed via SSH tunnel, the compute node hostname is not resolvable
-    # from the client browser. Replace it with localhost.
-    import socket
-    hostname = socket.gethostname()
-    if hostname in viewer_url:
-        viewer_url = viewer_url.replace(hostname, "localhost")
-        logger.info(f"Replaced {hostname} with localhost in viewer URL (SSH tunnel mode)")
-    print("viewer", viewer_url)
+    show(viewer_url)  # print prominently *before* the blocking create_and_run_app() call below
+    logger.info(f"Neuroglancer viewer (open directly, no dashboard needed): {viewer_url}")
     from cellmap_flow.dashboard.app import create_and_run_app
 
-    url = create_and_run_app(neuroglancer_url=viewer_url, port=5000)
-    show(url)
-    return url
+    # create_and_run_app() calls app.run() and blocks forever -- nothing after this
+    # line ever executes. Do not add more "print/return the final URL" logic here.
+    create_and_run_app(neuroglancer_url=viewer_url, port=5000)
 
 
 def show(viewer):

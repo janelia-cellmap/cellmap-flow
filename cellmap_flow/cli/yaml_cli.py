@@ -71,25 +71,51 @@ def run_multiple(
             logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
             current_data_path = os.path.join(dataset_path, model.scale)
 
-        # Pre-assign a port so we know the host URL immediately (no waiting).
-        # Patch b8c22bf: instead of waiting up to 120s for the subprocess to
-        # print its address, get_free_port() picks an unused port and we pass
-        # -p {port}. wait_for_host=False short-circuits the parent's
-        # output-monitoring loop; the model loads in the background and
-        # predictions appear in NG once ready (~60-90s) without blocking
-        # dashboard startup. Phase 8 amendment: job.host is proxy-aware.
-        # bootstrap_dashboard.sh exports CMFLOW_PROXY_MODE; under spine,
-        # browser reaches the subprocess via spine's nginx /inf-{port}/
-        # forward. Otherwise job.host uses the node's address (matches what
-        # server.py itself binds to), same as the pre-pre-assignment behavior.
-        from cellmap_flow.utils.web_utils import get_free_port, get_public_ip
-        server_port = get_free_port()
-        command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
+        # job.host is proxy-aware: bootstrap_dashboard.sh exports
+        # CMFLOW_PROXY_MODE; under spine, the browser reaches the subprocess
+        # via spine's nginx /inf-{port}/ forward, which requires the port to
+        # be picked and known *before* the job starts, so we pre-assign one
+        # with get_free_port() on this (submission) machine -- that URL
+        # pattern is deterministic (doesn't depend on which node LSF
+        # assigns), so it's safe to assign immediately.
+        #
+        # For non-spine (direct) access, neither job.host nor the port can be
+        # *guessed* at all: a real bsub job can land on any compute node, not
+        # necessarily the one running this yaml_cli process, so a port free
+        # on *this* node is not guaranteed free on that node either -- a
+        # prior version of this code pre-assigned the port here too, which
+        # caused server.py's Werkzeug bind to fail right after it printed its
+        # address: wait_for_host() would capture a valid-looking host:port,
+        # then the process died immediately, giving ERR_CONNECTION_REFUSED in
+        # the browser. So for direct access we don't pass -p at all --
+        # server_cli.py's default (`-p 0`) makes server.py call its own
+        # get_free_port() on whichever node it actually lands on. The model's
+        # own server.py process then prints its true, self-detected
+        # http://ip:port (computed on that node) wrapped in IP_PATTERN
+        # markers once it starts; job.wait_for_host() polls for that via
+        # bpeek. We block here (inside this ThreadPoolExecutor worker, so all
+        # models still discover their hosts concurrently) until it's found --
+        # run_multiple() must not call generate_neuroglancer_url() while any
+        # job.host is still None, or the viewer/URL gets a "zarr://None/..."
+        # source baked in.
         model_name = getattr(model, "name", None) or type(model).__name__
+        proxy_mode = os.environ.get("CMFLOW_PROXY_MODE", "direct-ssh")
+        if proxy_mode == "spine":
+            from cellmap_flow.utils.web_utils import get_free_port
+            server_port = get_free_port()
+            command = f"{SERVER_COMMAND} {model.command} -d {current_data_path} -p {server_port}"
+        else:
+            command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
 
+        # One log file PER JOB, not per model. bsub -o appends, so a shared
+        # daisy_logs/<model>.log accumulates every run; bpeek then returns
+        # all of it and host discovery used to grab the very first (oldest,
+        # long-dead) CELLMAP_FLOW_SERVER_IP marker -- the same two stale
+        # addresses on every restart. %J is expanded to the LSF job id by
+        # bsub (and to a timestamp by the local fallback).
         log_dir = Path("daisy_logs")
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / f"{model_name}.log"
+        log_file = log_dir / f"{model_name}.%J.log"
 
         logger.info(f"Submitting job for model: {model_name}")
         logger.warning(f"Executing command: {command}")
@@ -97,15 +123,28 @@ def run_multiple(
             command, job_name=model_name, queue=queue, charge_group=charge_group,
             wait_for_host=False, log_file=log_file,
         )
-        proxy_mode = os.environ.get("CMFLOW_PROXY_MODE", "direct-ssh")
         if proxy_mode == "spine":
             spine_url = os.environ.get(
                 "CMFLOW_SPINE_URL", "https://spine.med.uvm.edu"
             ).rstrip("/")
             job.host = f"{spine_url}/inf-{server_port}"
+            logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
         else:
-            job.host = f"http://{get_public_ip()}:{server_port}"
-        logger.info(f"Pre-assigned inference server {model_name} at {job.host}")
+            real_host = job.wait_for_host()
+            resolved_log = getattr(job, "log_file", None) or log_file
+            if not real_host:
+                raise RuntimeError(
+                    f"Could not discover real host for {model_name} within timeout "
+                    f"(check 'bjobs -J {model_name}' / bpeek, or {resolved_log})"
+                )
+            # WARNING level on purpose: the root logger in this process ends up
+            # at WARNING (an import configures it before main()'s basicConfig),
+            # so INFO lines never reach the job log -- and this is the single
+            # most useful line for debugging "which server is the viewer using".
+            logger.warning(
+                f"Inference server {model_name} (job {job.job_id}) is at {real_host}; "
+                f"log: {resolved_log}"
+            )
         return model_name
 
     if models:
