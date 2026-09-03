@@ -9,6 +9,7 @@ import mwatershed as mws
 from scipy.ndimage import measurements
 import fastremap
 from funlib.math import cantor_number
+from scipy.special import expit
 import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 
@@ -86,6 +87,44 @@ class ThresholdPostprocessor(PostProcessor):
     def _process(self, data):
         data = (data.astype(np.float32) > self.threshold).astype(np.uint8)
         return data
+
+    @property
+    def dtype(self):
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
+class FillHolesPostprocessor(PostProcessor):
+    """Threshold, then fill topologically enclosed background holes inside
+    each connected foreground blob (fastmorph.fill_holes). Intended for
+    compact single-instance organelles (e.g. a nucleus) that should never
+    have interior gaps -- do not use on structures with genuine internal
+    lumens.
+
+    Runs per-chunk with no cross-chunk halo, so a hole that itself touches
+    the chunk boundary is not topologically enclosed *within the chunk* and
+    won't be filled by fill_holes alone. morphological_closing is exposed
+    for that case but defaults off: in testing, fastmorph's dilate-then-erode
+    closing pass sometimes leaves small (~2-voxel) fully-enclosed holes
+    unfilled where plain fill_holes fills them correctly -- verify before
+    relying on it.
+    """
+
+    def __init__(self, threshold: float = 0.0, morphological_closing: str = "False"):
+        self.threshold = float(threshold)
+        self.morphological_closing = morphological_closing == "True"
+
+    def _process(self, data):
+        binary = data.astype(np.float32) > self.threshold
+        filled = fastmorph.fill_holes(
+            binary,
+            remove_enclosed=True,
+            morphological_closing=self.morphological_closing,
+        )
+        return filled.astype(np.uint8)
 
     @property
     def dtype(self):
@@ -380,6 +419,22 @@ def get_postprocessors_list() -> list[dict]:
         )
     return postprocessors
 
+class SigmoidPostprocessor(PostProcessor):
+    """Applies a sigmoid activation, for models exported without it baked in (e.g. raw DaCapo checkpoints trained with a fused BCEWithLogitsLoss)."""
+
+    def __init__(self):
+        pass
+
+    def _process(self, data) -> np.ndarray:
+        return expit(data.astype(np.float32))
+
+    @property
+    def dtype(self):
+        return np.float32
+
+    @property
+    def is_segmentation(self):
+        return False
 
 def get_postprocessors(elms) -> list[PostProcessor]:
     """Get postprocessors from either dict or list format."""
