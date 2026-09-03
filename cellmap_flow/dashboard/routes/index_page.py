@@ -50,19 +50,30 @@ def index():
         if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
     ]
 
-    # When the dashboard is accessed via a reverse proxy (e.g. spine.med.uvm.edu
-    # forwarding to localhost:5000), rewrite the iframe URL to use the same
-    # external host. Otherwise the browser sees an HTTPS page trying to load an
+    # When the dashboard is accessed via a genuine reverse proxy (e.g. spine.med.uvm.edu
+    # forwarding to localhost:5000), rewrite the iframe URL to use the same external
+    # host. Otherwise the browser sees an HTTPS page trying to load an
     # `http://localhost:NGPORT/v/<hash>/` iframe and blocks it as mixed-content
-    # + cross-origin. Honors X-Forwarded-Host/X-Forwarded-Proto if set; falls
-    # back to request.host. No-op for direct (localhost:5000) access.
+    # + cross-origin. Only X-Forwarded-Host counts as "there's a proxy" -- falling back
+    # to request.host (as this used to) fires the rewrite for *any* non-localhost direct
+    # access too, pointing the iframe at the dashboard's own port where no matching proxy
+    # route actually exists (404s), when the original unrewritten neuroglancer_url -- the
+    # real embedded viewer server's own address -- would have worked fine as-is.
     ng_url = g.NEUROGLANCER_URL
-    forwarded_host = request.headers.get("X-Forwarded-Host") or request.host
+    forwarded_host = request.headers.get("X-Forwarded-Host")
     if forwarded_host and not forwarded_host.startswith(("localhost", "127.")):
         from urllib.parse import urlparse
         parsed = urlparse(ng_url) if ng_url else None
         if parsed and parsed.netloc and parsed.netloc != forwarded_host:
-            proto = request.headers.get("X-Forwarded-Proto", "https")
+            # Honor a reverse proxy's X-Forwarded-Proto when present (e.g. spine's nginx
+            # terminates TLS and forwards plain HTTP to us, so the *client*-facing scheme
+            # is https even though request.scheme here is http). With no proxy in front
+            # (direct-ssh/direct-network access), there's no such header, so this must
+            # fall back to the current request's own actual scheme -- not a hardcoded
+            # "https", which broke plain-http direct access (browser tries to load the
+            # iframe over https, hitting our plain-HTTP werkzeug server with a TLS
+            # handshake it can't parse: "<ip> sent an invalid response").
+            proto = request.headers.get("X-Forwarded-Proto", request.scheme)
             ng_url = f"{proto}://{forwarded_host}{parsed.path}"
 
     return render_template(
