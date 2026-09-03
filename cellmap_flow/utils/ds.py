@@ -258,7 +258,16 @@ class ZarrV3Node:
 
     @property
     def attrs(self) -> dict:
-        return self._meta.get("attributes", {})
+        attributes = self._meta.get("attributes", {})
+        # OME-Zarr 0.5 nests multiscales (and other OME metadata) under an "ome" sub-key
+        # to avoid clashing with user-defined top-level attributes; 0.4-style stores keep
+        # it flat. Expose "multiscales" at the top level either way so existing callers
+        # (e.g. check_for_multiscale) work uniformly across both conventions.
+        if "multiscales" not in attributes and isinstance(attributes.get("ome"), dict):
+            ome = attributes["ome"]
+            if "multiscales" in ome:
+                attributes = {**attributes, "multiscales": ome["multiscales"]}
+        return attributes
 
     @property
     def shape(self) -> tuple:
