@@ -22,6 +22,7 @@ def _get_device():
 class ModelConfig:
     def __init__(self):
         self._config = None
+        self.validate_model_shapes = True
 
     def __str__(self) -> str:
         elms = []
@@ -62,7 +63,10 @@ class ModelConfig:
             if not hasattr(self._config, attr):
                 raise AttributeError(f"{attr} not found in config")
 
-        self._validate_model_shapes()
+        if self.validate_model_shapes:
+            self._validate_model_shapes()
+        else:
+            logger.info("Skipping model shape validation for %s", type(self).__name__)
         logger.warning(f"Model config validated: {self.__str__()}")
 
     def _validate_model_shapes(self):
