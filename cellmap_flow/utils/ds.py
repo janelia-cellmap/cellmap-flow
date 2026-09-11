@@ -15,6 +15,7 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
+from cellmap_flow.utils import zarr_v3
 
 
 def generate_singlescale_metadata(
@@ -204,6 +205,7 @@ def _is_zarr_container(path: str) -> bool:
         os.path.exists(os.path.join(path, ".zgroup"))
         or os.path.exists(os.path.join(path, ".zarray"))
         or os.path.exists(os.path.join(path, ".zattrs"))
+        or zarr_v3.is_v3_container(path)
     )
 
 
@@ -416,7 +418,16 @@ def open_ds_tensorstore(
             "path": os.path.normpath(dataset_path),
         }
 
-    # For local zarr files, clean compressor metadata to remove fields
+    is_v3 = (
+        filetype == "zarr"
+        and isinstance(kvstore, dict)
+        and kvstore.get("driver") == "file"
+        and zarr_v3.is_v3_container(kvstore["path"])
+    )
+    if is_v3:
+        filetype = "zarr3"
+
+    # For local zarr (v2) files, clean compressor metadata to remove fields
     # unsupported by tensorstore (e.g. 'checksum' from newer numcodecs)
     assume_metadata = False
     if (
@@ -1188,6 +1199,10 @@ def get_ds_info(path: str, mode: str = "r"):
         roi = Roi(offset, voxel_size * shape)
         chunk_shape = ds.chunks
         return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
+
+    v3_container = zarr_v3.find_v3_container(path)
+    if v3_container is not None:
+        return zarr_v3.get_ds_info_v3(path)
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):

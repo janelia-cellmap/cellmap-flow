@@ -771,11 +771,20 @@ class FinetuneModelConfig(ModelConfig):
             lora_adapter_path: Path to the saved LoRA adapter directory.
             base_model: Dict describing the base model (same format as a YAML
                 model entry, e.g. {"type": "fly", "checkpoint_path": "...", ...}).
+                May also be passed as a string produced by
+                ``cellmap_flow.utils.web_utils.encode_to_str`` -- the
+                dynamic server CLI (see ``command`` below) can only pass
+                plain strings, so ``command`` encodes the dict and this
+                constructor decodes it back on the receiving end.
             name: Display name for this model.
             scale: Optional scale override.
         """
         super().__init__()
         self.lora_adapter_path = lora_adapter_path
+        if isinstance(base_model, str):
+            from cellmap_flow.utils.web_utils import decode_to_json
+
+            base_model = decode_to_json(base_model)
         self.base_model_dict = base_model
         self.name = name
         self.scale = scale
@@ -795,7 +804,13 @@ class FinetuneModelConfig(ModelConfig):
 
     @property
     def command(self):
-        return f"finetune --lora-adapter-path {self.lora_adapter_path}"
+        from cellmap_flow.utils.web_utils import encode_to_str
+
+        encoded_base_model = encode_to_str(self.base_model_dict)
+        return (
+            f"finetune --lora-adapter-path {self.lora_adapter_path} "
+            f"--base-model {encoded_base_model}"
+        )
 
     def _get_config(self):
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
