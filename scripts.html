@@ -104,17 +104,17 @@ Then you can call Flow.run with the appropriate parameters.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlyModelConfig</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.norm.input_normalize</span><span class="w"> </span><span class="kn">import</span> <span class="n">MinMaxNormalizer</span>
 
-<span class="n">queue</span> <span class="o">=</span> <span class="s2">&quot;gpu_h100&quot;</span>
-<span class="n">charge_group</span> <span class="o">=</span> <span class="s2">&quot;CHARGE_GROUP&quot;</span>
+<span class="n">queue</span> <span class="o">=</span> <span class="s2">"gpu_h100"</span>
+<span class="n">charge_group</span> <span class="o">=</span> <span class="s2">"CHARGE_GROUP"</span>
 <span class="n">model_scale</span> <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
-<span class="n">checkpoint_path</span> <span class="o">=</span> <span class="s2">&quot;../fly_organelles/run07/model_checkpoint_432000&quot;</span>
+<span class="n">checkpoint_path</span> <span class="o">=</span> <span class="s2">"../fly_organelles/run07/model_checkpoint_432000"</span>
 
 <span class="n">model_config</span> <span class="o">=</span> <span class="n">FlyModelConfig</span><span class="p">(</span>
     <span class="n">checkpoint_path</span><span class="o">=</span><span class="n">checkpoint_path</span><span class="p">,</span>
-    <span class="n">channels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;classes&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="n">channels</span><span class="o">=</span><span class="p">[</span><span class="s2">"classes"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span>
     <span class="n">input_voxel_size</span><span class="o">=</span><span class="n">model_scale</span><span class="p">,</span>
     <span class="n">output_voxel_size</span><span class="o">=</span><span class="n">model_scale</span><span class="p">,</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;FLY&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"FLY"</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">url</span> <span class="o">=</span> <span class="n">Flow</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>

@@ -1,0 +1,108 @@
+cellmap_flow.utils.zarr_v3
+==========================
+
+.. py:module:: cellmap_flow.utils.zarr_v3
+
+.. autoapi-nested-parse::
+
+   Read support for Zarr **v3**-format stores (``zarr.json`` metadata).
+
+   The ``zarr`` package pinned in this project (2.18.4) has no awareness of the
+   Zarr v3 storage format at all — ``zarr.open()`` cannot even recognize a
+   ``zarr.json``-only store, let alone read one. Bumping to zarr-python 3.x was
+   considered and rejected (it drops ``zarr.n5``, used elsewhere in this
+   codebase, and conflicts with the installed ``funlib.persistence`` pin).
+
+   Instead, this module reads v3 metadata directly with ``json.load`` and reads
+   v3 chunk data via ``tensorstore``'s ``zarr3`` driver, which is already a
+   project dependency. It mirrors the output *contracts* of the equivalent v2
+   helpers in :mod:`cellmap_flow.utils.ds` so callers can dispatch on format and
+   otherwise not care which one they got. Local filesystem stores only — remote
+   (s3/gs/http) v3 stores are not handled here.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.zarr_v3.logger
+   cellmap_flow.utils.zarr_v3.ZARR_JSON
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.zarr_v3.is_v3_container
+   cellmap_flow.utils.zarr_v3.find_v3_container
+   cellmap_flow.utils.zarr_v3.read_zarr_json
+   cellmap_flow.utils.zarr_v3.attrs_from_meta
+   cellmap_flow.utils.zarr_v3.open_array_v3
+   cellmap_flow.utils.zarr_v3.multiscales_from_group
+   cellmap_flow.utils.zarr_v3.get_scale_info_v3
+   cellmap_flow.utils.zarr_v3.find_closest_scale_v3
+   cellmap_flow.utils.zarr_v3.get_ds_info_v3
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: ZARR_JSON
+   :value: 'zarr.json'
+
+
+.. py:function:: is_v3_container(path: str) -> bool
+
+   True if ``path`` is a directory with a ``zarr.json`` at its root.
+
+
+.. py:function:: find_v3_container(path: str) -> Optional[str]
+
+   Walk up from ``path`` looking for the nearest directory containing a
+   ``zarr.json``. Returns ``None`` if none is found (e.g. a v2 store, or a
+   remote URL).
+
+
+.. py:function:: read_zarr_json(path: str) -> dict
+
+.. py:function:: attrs_from_meta(meta: dict) -> dict
+
+   Merge OME-NGFF 0.5's nested ``attributes.ome`` with the top-level
+   ``attributes`` dict (some writers emit OME metadata unnested).
+
+
+.. py:function:: open_array_v3(path: str) -> _TensorstoreArray
+
+   Open a v3 array for reading. ``path`` must be the array's own
+   directory (i.e. already descended into, not its parent group).
+
+
+.. py:function:: multiscales_from_group(group_path: str) -> Optional[dict]
+
+.. py:function:: get_scale_info_v3(group_path: str) -> Tuple[dict, dict, dict]
+
+   Mirror of ``ds.py``'s ``get_scale_info`` for a v3 multiscale group.
+
+   Returns ``(offsets, resolutions, shapes)`` keyed by dataset path.
+
+
+.. py:function:: find_closest_scale_v3(group_path: str, target_resolution) -> Tuple[str, list, tuple]
+
+   Mirror of ``ds.py``'s ``find_closest_scale`` for a v3 multiscale group.
+
+   ``target_resolution=None`` defaults to the finest (first) scale rather
+   than raising, since callers sometimes ask for the "closest scale" without
+   a specific target in mind.
+
+
+.. py:function:: get_ds_info_v3(path: str)
+
+   Mirror of ``ds.py``'s ``get_ds_info`` return contract for a local v3
+   store: ``(voxel_size, chunk_shape, shape, roi, axes_names, "zarr")``.
+
+

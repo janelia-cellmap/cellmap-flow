@@ -49,7 +49,7 @@ Module Contents
 
 
    .. py:property:: chunk_output_axes
-      :type: tuple[str, Ellipsis]
+      :type: tuple[str, ...]
 
 
       Returns the axes order of processed chunk output. Defaults to ('c', 'z', 'y', 'x').

@@ -24,5 +24,6 @@ Submodules
    /autoapi/cellmap_flow/utils/serialize_config/index
    /autoapi/cellmap_flow/utils/serilization_utils/index
    /autoapi/cellmap_flow/utils/web_utils/index
+   /autoapi/cellmap_flow/utils/zarr_v3/index
 
 

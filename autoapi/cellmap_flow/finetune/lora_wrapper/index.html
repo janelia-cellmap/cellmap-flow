@@ -277,10 +277,10 @@ Typical: 2*r, default 16</p></li>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Wrap specific layers with custom config</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">target_modules</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;encoder.conv1&quot;</span><span class="p">,</span> <span class="s2">&quot;encoder.conv2&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">target_modules</span><span class="o">=</span><span class="p">[</span><span class="s2">"encoder.conv1"</span><span class="p">,</span> <span class="s2">"encoder.conv2"</span><span class="p">],</span>
 <span class="gp">... </span>    <span class="n">lora_r</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">lora_alpha</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">modules_to_save</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;final_conv&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">modules_to_save</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_conv"</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
 </div>
@@ -329,14 +329,14 @@ If False, adapter parameters are frozen (for inference)</p></li>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load adapter for inference</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">load_lora_adapter</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">base_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">&quot;models/fly_organelles/v1.1.0/lora_adapter&quot;</span>
+<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load adapter for continued training</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">load_lora_adapter</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">base_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">&quot;models/fly_organelles/v1.1.0/lora_adapter&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">is_trainable</span><span class="o">=</span><span class="kc">True</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
@@ -360,7 +360,7 @@ the entire model (~200-500 MB).</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">save_lora_adapter</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">lora_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">&quot;models/fly_organelles/v1.1.0/lora_adapter&quot;</span>
+<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
 </div>
@@ -384,7 +384,7 @@ Only use if you need a standalone model without PEFT dependency.</p>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">merged_model</span> <span class="o">=</span> <span class="n">merge_lora_into_base</span><span class="p">(</span><span class="n">lora_model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">merged_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">&quot;merged_model.pt&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">merged_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"merged_model.pt"</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>

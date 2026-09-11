@@ -295,11 +295,11 @@ See cellmap_flow.finetune.target_transforms.</p></li>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">create_dataloader</span><span class="p">(</span><span class="s2">&quot;corrections.zarr&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">create_dataloader</span><span class="p">(</span><span class="s2">"corrections.zarr"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">LoRAFinetuner</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">lora_model</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">dataloader</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;output/fly_organelles_v1.1&quot;</span>
+<span class="gp">... </span>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"output/fly_organelles_v1.1"</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">save_adapter</span><span class="p">()</span>

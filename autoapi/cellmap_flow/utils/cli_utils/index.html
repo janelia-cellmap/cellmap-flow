@@ -154,7 +154,7 @@
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelConfig</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">configs</span> <span class="o">=</span> <span class="n">get_all_subclasses</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {&#39;dacapo&#39;: DaCapoModelConfig, &#39;script&#39;: ScriptModelConfig, ...}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {'dacapo': DaCapoModelConfig, 'script': ScriptModelConfig, ...}</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -220,10 +220,10 @@
 </dd>
 </dl>
 <p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">parse_comma_separated_values</span><span class="p">(</span><span class="s2">&quot;1,2,3&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">parse_comma_separated_values</span><span class="p">(</span><span class="s2">"1,2,3"</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
 <span class="go">[1, 2, 3]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">parse_comma_separated_values</span><span class="p">(</span><span class="s2">&quot;a,b,c&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="go">[&#39;a&#39;, &#39;b&#39;, &#39;c&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">parse_comma_separated_values</span><span class="p">(</span><span class="s2">"a,b,c"</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+<span class="go">['a', 'b', 'c']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -246,9 +246,9 @@
 </dl>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">MyClass</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">param</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;my_param&#39;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">create_click_option_from_param</span><span class="p">(</span><span class="s1">&#39;my_param&#39;</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {&#39;param_decls&#39;: [&#39;-m&#39;, &#39;--my-param&#39;], &#39;required&#39;: True, ...}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">param</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">'my_param'</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">create_click_option_from_param</span><span class="p">(</span><span class="s1">'my_param'</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {'param_decls': ['-m', '--my-param'], 'required': True, ...}</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -273,9 +273,9 @@ Handle list/tuple type conversions from comma-separated strings.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyConfig</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="k">pass</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;items&#39;</span><span class="p">:</span> <span class="s1">&#39;1,2,3&#39;</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;test&#39;</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'items'</span><span class="p">:</span> <span class="s1">'1,2,3'</span><span class="p">,</span> <span class="s1">'name'</span><span class="p">:</span> <span class="s1">'test'</span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">process_constructor_args</span><span class="p">(</span><span class="n">MyConfig</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {&#39;items&#39;: [1, 2, 3], &#39;name&#39;: &#39;test&#39;}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Returns: {'items': [1, 2, 3], 'name': 'test'}</span>
 </pre></div>
 </div>
 </dd></dl>

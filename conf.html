@@ -103,55 +103,55 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 
-<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="s2">&quot;../..&quot;</span><span class="p">))</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="s2">"../.."</span><span class="p">))</span>
 
 
 <span class="c1"># -- Project information -----------------------------------------------------</span>
 
-<span class="n">project</span> <span class="o">=</span> <span class="s2">&quot;CellMap Flow&quot;</span>
-<span class="n">copyright</span> <span class="o">=</span> <span class="s2">&quot;2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel&quot;</span>
+<span class="n">project</span> <span class="o">=</span> <span class="s2">"CellMap Flow"</span>
+<span class="n">copyright</span> <span class="o">=</span> <span class="s2">"2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel"</span>
 <span class="n">author</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s2">&quot;David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel&quot;</span>
+    <span class="s2">"David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel"</span>
 <span class="p">)</span>
 
 
 <span class="c1"># -- General configuration ---------------------------------------------------</span>
 
 <span class="c1"># Add any Sphinx extension module names here, as strings. They can be</span>
-<span class="c1"># extensions coming with Sphinx (named &#39;sphinx.ext.*&#39;) or your custom</span>
+<span class="c1"># extensions coming with Sphinx (named 'sphinx.ext.*') or your custom</span>
 <span class="c1"># ones.</span>
 <span class="n">extensions</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;nbsphinx&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;sphinx.ext.autodoc&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;sphinx.ext.napoleon&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;sphinx_autodoc_typehints&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;autoapi.extension&quot;</span><span class="p">,</span>  <span class="c1"># autobuild api docs</span>
-    <span class="s2">&quot;sphinx_click&quot;</span><span class="p">,</span>  <span class="c1"># auto document cli</span>
-    <span class="c1"># &quot;myst_parser&quot;,  # include md files in rst files</span>
-    <span class="s2">&quot;myst_nb&quot;</span><span class="p">,</span>  <span class="c1"># integrate ipynb</span>
+    <span class="s2">"nbsphinx"</span><span class="p">,</span>
+    <span class="s2">"sphinx.ext.autodoc"</span><span class="p">,</span>
+    <span class="s2">"sphinx.ext.napoleon"</span><span class="p">,</span>
+    <span class="s2">"sphinx_autodoc_typehints"</span><span class="p">,</span>
+    <span class="s2">"autoapi.extension"</span><span class="p">,</span>  <span class="c1"># autobuild api docs</span>
+    <span class="s2">"sphinx_click"</span><span class="p">,</span>  <span class="c1"># auto document cli</span>
+    <span class="c1"># "myst_parser",  # include md files in rst files</span>
+    <span class="s2">"myst_nb"</span><span class="p">,</span>  <span class="c1"># integrate ipynb</span>
 <span class="p">]</span>
 
 <span class="n">nbsphinx_custom_formats</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;.py&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;jupytext.reads&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;fmt&quot;</span><span class="p">:</span> <span class="s2">&quot;py:percent&quot;</span><span class="p">}],</span>
+    <span class="s2">".py"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"jupytext.reads"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"fmt"</span><span class="p">:</span> <span class="s2">"py:percent"</span><span class="p">}],</span>
 <span class="p">}</span>
 
 <span class="c1"># Add any paths that contain templates here, relative to this directory.</span>
-<span class="n">templates_path</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;_templates&quot;</span><span class="p">]</span>
+<span class="n">templates_path</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"_templates"</span><span class="p">]</span>
 
 <span class="c1"># List of patterns, relative to source directory, that match files and</span>
 <span class="c1"># directories to ignore when looking for source files.</span>
 <span class="c1"># This pattern also affects html_static_path and html_extra_path.</span>
-<span class="n">exclude_patterns</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;_build&quot;</span><span class="p">,</span> <span class="s2">&quot;Thumbs.db&quot;</span><span class="p">,</span> <span class="s2">&quot;.DS_Store&quot;</span><span class="p">]</span>
+<span class="n">exclude_patterns</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"_build"</span><span class="p">,</span> <span class="s2">"Thumbs.db"</span><span class="p">,</span> <span class="s2">".DS_Store"</span><span class="p">]</span>
 
 <span class="c1"># -- AutoAPI configuration ---------------------------------------------------</span>
-<span class="n">autoapi_dirs</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;../../cellmap_flow&quot;</span><span class="p">]</span>
-<span class="n">autoapi_type</span> <span class="o">=</span> <span class="s2">&quot;python&quot;</span>
+<span class="n">autoapi_dirs</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"../../cellmap_flow"</span><span class="p">]</span>
+<span class="n">autoapi_type</span> <span class="o">=</span> <span class="s2">"python"</span>
 
 <span class="n">autoapi_options</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;members&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;undoc-members&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;show-module-summary&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;imported-members&quot;</span><span class="p">,</span>
+    <span class="s2">"members"</span><span class="p">,</span>
+    <span class="s2">"undoc-members"</span><span class="p">,</span>
+    <span class="s2">"show-module-summary"</span><span class="p">,</span>
+    <span class="s2">"imported-members"</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="c1"># -- Options for HTML output -------------------------------------------------</span>
@@ -159,15 +159,15 @@
 <span class="c1"># The theme to use for HTML and HTML Help pages.  See the documentation for</span>
 <span class="c1"># a list of builtin themes.</span>
 <span class="c1">#</span>
-<span class="n">html_theme</span> <span class="o">=</span> <span class="s2">&quot;sphinx_rtd_theme&quot;</span>
+<span class="n">html_theme</span> <span class="o">=</span> <span class="s2">"sphinx_rtd_theme"</span>
 
 <span class="c1"># Add any paths that contain custom static files (such as style sheets) here,</span>
 <span class="c1"># relative to this directory. They are copied after the builtin static files,</span>
-<span class="c1"># so a file named &quot;default.css&quot; will overwrite the builtin &quot;default.css&quot;.</span>
-<span class="n">html_static_path</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;_static&quot;</span><span class="p">]</span>
-<span class="n">html_favicon</span> <span class="o">=</span> <span class="s2">&quot;_static/favicon.ico&quot;</span>
+<span class="c1"># so a file named "default.css" will overwrite the builtin "default.css".</span>
+<span class="n">html_static_path</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"_static"</span><span class="p">]</span>
+<span class="n">html_favicon</span> <span class="o">=</span> <span class="s2">"_static/favicon.ico"</span>
 <span class="n">html_css_files</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;css/custom.css&quot;</span><span class="p">,</span>
+    <span class="s2">"css/custom.css"</span><span class="p">,</span>
 <span class="p">]</span>
 </pre></div>
 </div>
