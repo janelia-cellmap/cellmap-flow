@@ -24,23 +24,27 @@ def _chunk_outside_all_bboxes(
     bbox_offsets: np.ndarray,
     bbox_ends: np.ndarray,
 ) -> bool:
-    """Return True if the chunk is NOT fully contained in any
-    ``imported_crops`` bbox -- i.e. it represents painted-scribble
-    work that the per-import yellow boxes don't already cover.
+    """Return True if the chunk does not overlap any ``imported_crops`` bbox
+    -- i.e. it represents painted-scribble work that the per-import yellow
+    boxes don't already cover.
 
-    YAML imports write chunk-aligned slabs, so imported chunks land
-    fully inside an import bbox; painted-only chunks land fully outside.
-    A mixed chunk (rare; user paints over an import edge) reads as
-    "outside" by this rule, which is what we want -- it has painted
-    work the existing yellow box may not visually cue.
+    A YAML crop's own voxel offset (relative to the annotation volume) is
+    essentially never a multiple of the volume's chunk size -- externally
+    authored crops (e.g. Amira exports) land at arbitrary nm offsets, not
+    chunk-aligned ones. So every chunk straddling an import bbox's boundary
+    only partially overlaps it; requiring *full* containment misclassifies
+    that entire boundary layer of chunks as "painted-only" and draws a small
+    box for each one, producing a fence of duplicate-looking boxes right
+    along the real import box's edges. Any overlap is enough to call a
+    chunk covered.
     """
     if bbox_offsets.shape[0] == 0:
         return True
-    fully_inside = np.all(
-        (chunk_lo_voxels >= bbox_offsets) & (chunk_hi_voxels <= bbox_ends),
+    overlaps = np.all(
+        (chunk_lo_voxels < bbox_ends) & (chunk_hi_voxels > bbox_offsets),
         axis=1,
     )
-    return not bool(fully_inside.any())
+    return not bool(overlaps.any())
 
 
 def refresh_annotated_regions_layer(corrections_path=None):
