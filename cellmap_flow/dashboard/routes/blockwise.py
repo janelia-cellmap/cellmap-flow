@@ -11,7 +11,7 @@ from flask import Blueprint, request
 
 from cellmap_flow.globals import g
 from cellmap_flow.utils.web_utils import INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
-from cellmap_flow.dashboard.state import get_blockwise_tasks_dir
+from cellmap_flow.globals import get_blockwise_tasks_dir
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def generate_blockwise_task():
             # Remove trailing slashes
             output_path = output_path.rstrip('/\\')
             # Add .zarr if not already present
-            if not output_path.endswith('.zarr'):
+            if '.zarr' not in output_path:
                 output_path = output_path + '.zarr'
 
         # Create task YAML content

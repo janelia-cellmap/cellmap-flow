@@ -4,7 +4,9 @@ import neuroglancer
 from flask import Blueprint, request, jsonify
 
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.dashboard.state import bbx_generator_state
+from cellmap_flow.globals import g
+
+bbx_generator_state = g.bbx_generator_state
 
 logger = logging.getLogger(__name__)
 

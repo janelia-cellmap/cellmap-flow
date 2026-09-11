@@ -17,6 +17,7 @@
    install
    scripts
    yaml_config
+   huggingface
    custom_script
    post
    plugins

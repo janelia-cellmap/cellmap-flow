@@ -87,16 +87,21 @@ class CellMapFlowBlockwiseProcessor:
                 )
                 create = create.lower() == "true"
 
-        if "tmp_dir" not in self.config:
-            raise Exception(
-                "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
-            )
+        self.track_progress = self.config.get("track_progress", False)
 
-        self.tmp_dir = (
-            Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
-        )
-        if not self.tmp_dir.exists():
-            self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        if self.track_progress:
+            if "tmp_dir" not in self.config:
+                raise Exception(
+                    "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
+                )
+
+            self.tmp_dir = (
+                Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
+            )
+            if not self.tmp_dir.exists():
+                self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.tmp_dir = None
 
         # Build model configuration objects
         models = build_models(self.config["models"])
@@ -452,7 +457,8 @@ class CellMapFlowBlockwiseProcessor:
                     self.process_fn(block)
 
                     block.status = daisy.BlockStatus.SUCCESS
-                    (self.tmp_dir / f"{block.block_id[1]}").touch()
+                    if self.track_progress:
+                        (self.tmp_dir / f"{block.block_id[1]}").touch()
                 except Exception as e:
                     logger.error(f"Error processing block {block}: {e}")
                     block.status = daisy.BlockStatus.FAILED
@@ -514,7 +520,7 @@ class CellMapFlowBlockwiseProcessor:
                     self.queue,
                     ncpu=self.cpu_workers,
                 ),
-                check_function=partial(check_block, self.tmp_dir),
+                check_function=partial(check_block, self.tmp_dir) if self.track_progress else None,
                 read_write_conflict=conflicts,
                 fit="overhang",
                 max_retries=0,

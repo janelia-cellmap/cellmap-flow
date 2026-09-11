@@ -44,6 +44,22 @@
           Postprocess
         </button>
       </li>
+
+      <!-- Finetune Tab -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="finetune-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#finetune"
+          type="button"
+          role="tab"
+          aria-controls="finetune"
+          aria-selected="false"
+        >
+          Finetune
+        </button>
+      </li>
     </ul>
 
     <!-- Tab Contents -->
@@ -71,6 +87,16 @@
         aria-labelledby="output-tab"
       >
         {% include "_output_tab.html" %}
+      </div>
+
+      <!-- Finetune Tab Content -->
+      <div
+        class="tab-pane fade p-3"
+        id="finetune"
+        role="tabpanel"
+        aria-labelledby="finetune-tab"
+      >
+        {% include "_finetune_tab.html" %}
       </div>
     </div>
   </div>

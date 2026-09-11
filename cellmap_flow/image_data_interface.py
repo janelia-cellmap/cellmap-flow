@@ -1,6 +1,7 @@
-import os
 import zarr
 from cellmap_flow.utils.ds import (
+    _join_path,
+    _open_zarr,
     find_closest_scale,
     get_ds_info,
     open_ds_tensorstore,
@@ -23,15 +24,17 @@ class ImageDataInterface:
         concurrency_limit=1,
         normalize=True,
     ):
-        try:
-            ds = zarr.open(dataset_path, mode="r")
-            if isinstance(ds, zarr.hierarchy.Group):
-                scale, _, _ = find_closest_scale(dataset_path, voxel_size)
-                logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                dataset_path = os.path.join(dataset_path, scale)
-                logger.info(f"using dataset path {dataset_path}")
-        except Exception as e:
-            logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
+        dataset_path = dataset_path.replace("\\ ", " ")
+        if not dataset_path.startswith("precomputed://"):
+            try:
+                ds = _open_zarr(dataset_path, mode="r")
+                if isinstance(ds, zarr.hierarchy.Group):
+                    scale, _, _ = find_closest_scale(dataset_path, voxel_size)
+                    logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                    dataset_path = _join_path(dataset_path, scale)
+                    logger.info(f"using dataset path {dataset_path}")
+            except Exception as e:
+                logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         self._ts = None
         (

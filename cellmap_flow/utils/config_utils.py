@@ -65,21 +65,11 @@ def load_config(path: str) -> Dict[str, Any]:
         logger.warning(f"Missing 'queue' in YAML, using: {fallback}")
         config["queue"] = fallback
 
-    # Models must be present and non-empty (can be dict or list for backward compatibility)
-    if "models" not in config:
-        logger.error("YAML must contain 'models' field")
-        sys.exit(1)
-    
-    if isinstance(config["models"], dict):
-        if not config["models"]:
-            logger.error("YAML 'models' dict is empty")
-            sys.exit(1)
-    elif isinstance(config["models"], list):
-        if not config["models"]:
-            logger.error("YAML 'models' list is empty")
-            sys.exit(1)
-        # logger.warning("Using deprecated list format for models. Consider using dict format with model names as keys.")
-    else:
+    # Models field: must be a dict, list, or empty/missing (for dashboard-only mode)
+    if "models" not in config or config["models"] is None:
+        config["models"] = {}
+
+    if not isinstance(config["models"], (dict, list)):
         logger.error("YAML 'models' must be either a dict or list")
         sys.exit(1)
 

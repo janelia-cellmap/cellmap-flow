@@ -8,6 +8,7 @@ Supports:
 """
 
 import subprocess
+import shlex
 import logging
 import sys
 import signal
@@ -121,13 +122,13 @@ class LocalJob(Job):
         else:
             return JobStatus.FAILED
     
-    def wait_for_host(self, timeout: int = 60) -> Optional[str]:
+    def wait_for_host(self, timeout: int = 180) -> Optional[str]:
         """
         Monitor process output for host information.
-        
+
         Args:
-            timeout: Maximum time to wait in seconds
-            
+            timeout: Maximum time to wait in seconds (default 180s for model loading)
+
         Returns:
             Host URL if found, None otherwise
         """
@@ -464,18 +465,23 @@ def run_locally(command: str, name: str) -> LocalJob:
         LocalJob object with process information
     """
     logger.info(f"Running locally: {command}")
-    
+
+    # Use shlex.split + shell=False to avoid shell-injection on user-controlled
+    # command strings. Callers must not rely on shell features (pipes, &&, env
+    # expansion) — pass a plain argv-style command.
+    args = shlex.split(command) if isinstance(command, str) else list(command)
+
     try:
         process = subprocess.Popen(
-            command.split(),
+            args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
-        
+
         local_job = LocalJob(process=process, model_name=name)
         return local_job
-        
+
     except Exception as e:
         logger.error(f"Error starting local process: {e}")
         raise

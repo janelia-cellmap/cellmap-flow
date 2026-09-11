@@ -49,13 +49,13 @@ pip install cellmap-flow[dacapo]
 To install CellMapFlow with BioImage.io support, use the following command:
 
 ```bash
-pip install cellmap-flow[bioimage]
+pip install cellmap-flow[bioimageio]
 ```
 
 To install CellMapFlow with both DaCapo and BioImage.io support, use the following command:
 
 ```bash
-pip install cellmap-flow[dacapo,bioimage]
+pip install cellmap-flow[dacapo,bioimageio]
 ```
 
 ## Usage

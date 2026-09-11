@@ -4,7 +4,7 @@ import logging
 
 from flask import Blueprint, Response
 
-from cellmap_flow.dashboard.state import log_buffer, log_clients
+from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,12 @@ def stream_logs():
     """Stream logs via Server-Sent Events (SSE)"""
     def generate():
         # Send existing log buffer first
-        for log_line in log_buffer:
+        for log_line in g.log_buffer:
             yield f"data: {log_line}\n\n"
 
         # Create a queue for this client
         client_queue = queue.Queue(maxsize=100)
-        log_clients.append(client_queue)
+        g.log_clients.append(client_queue)
 
         try:
             while True:
@@ -33,8 +33,8 @@ def stream_logs():
                     yield ": keepalive\n\n"
         finally:
             # Clean up when client disconnects
-            if client_queue in log_clients:
-                log_clients.remove(client_queue)
+            if client_queue in g.log_clients:
+                g.log_clients.remove(client_queue)
 
     return Response(generate(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",

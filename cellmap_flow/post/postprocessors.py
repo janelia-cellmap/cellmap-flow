@@ -21,9 +21,25 @@ logger = logging.getLogger(__name__)
 class PostProcessor(SerializableInterface):
     """Base class for post-processing methods."""
 
+    def __init__(self):
+        # Explicit empty __init__ so the GUI doesn't introspect *args/**kwargs
+        # for subclasses that don't define their own signature.
+        pass
+
     @property
     def is_segmentation(self):
         return None
+
+
+class SigmoidPostprocessor(PostProcessor):
+    """Apply sigmoid activation to convert logits to probabilities."""
+
+    def _process(self, data):
+        return 1.0 / (1.0 + np.exp(-data.astype(np.float32)))
+
+    @property
+    def dtype(self):
+        return np.float32
 
 
 class DefaultPostprocessor(PostProcessor):

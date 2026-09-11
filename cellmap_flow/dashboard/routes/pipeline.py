@@ -16,7 +16,6 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postpr
 from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.utils.web_utils import encode_to_str, ARGS_KEY
-from cellmap_flow.dashboard.state import CUSTOM_CODE_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,15 @@ def process():
         del data["custom_code"]
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     g.input_norms = get_normalizations(data["input_norm"])
+    # Keep the raw, JSON-serializable input_norm dict around so downstream
+    # components (finetune submit/restart, manifest, generated yaml) can
+    # propagate the same normalization to the trainer process. Without this
+    # the trainer reads raw uint8 from /nrs while inference normalizes to
+    # the model's expected range -> trained model never sees inference-scale
+    # inputs.
+    g.input_norm_config = data.get("input_norm", {}) or {}
     g.postprocess = get_postprocessors(data["postprocess"])
+    g.postprocess_config = data.get("postprocess", {}) or {}
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
@@ -141,7 +148,7 @@ def process():
             # Save custom code to a file with date and time
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"custom_code_{timestamp}.py"
-            filepath = os.path.join(CUSTOM_CODE_FOLDER, filename)
+            filepath = os.path.join(g.CUSTOM_CODE_FOLDER, filename)
 
             with open(filepath, "w") as file:
                 file.write(custom_code)
@@ -265,6 +272,10 @@ def apply_pipeline():
         }
         logger.warning(f"\nNormalizers config dict: {input_norms_config}")
         g.input_norms = get_normalizations(input_norms_config)
+        # Mirror the JSON-serializable form so finetune submit/restart can
+        # propagate it to the trainer process (where g.input_norms can't be
+        # easily reconstructed across the LSF process boundary).
+        g.input_norm_config = input_norms_config or {}
 
         # Apply postprocessors
         postprocs_config = {
@@ -272,6 +283,7 @@ def apply_pipeline():
         }
         logger.warning(f"Postprocessors config dict: {postprocs_config}")
         g.postprocess = get_postprocessors(postprocs_config)
+        g.postprocess_config = postprocs_config or {}
 
         # Save complete pipeline visual state to globals
         g.pipeline_inputs = data.get("inputs", [])

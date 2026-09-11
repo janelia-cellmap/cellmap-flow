@@ -2,9 +2,12 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
+import queue
 import yaml
+import logging
 import threading
 import numpy as np
+from collections import deque
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -77,6 +80,18 @@ class Flow:
     shader_controls: dict
     _server_config_cached: bool
 
+    # Dashboard state (moved from cellmap_flow.dashboard.state)
+    log_buffer: deque
+    log_clients: list
+    NEUROGLANCER_URL: Optional[str]
+    INFERENCE_SERVER: Optional[Any]
+    CUSTOM_CODE_FOLDER: str
+    bbx_generator_state: dict
+    finetune_job_manager: Any
+    minio_state: dict
+    annotation_volumes: dict
+    output_sessions: dict
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Flow, cls).__new__(cls)
@@ -85,7 +100,19 @@ class Flow:
             cls._instance.servers = []
             cls._instance.raw = None
             cls._instance.input_norms = input_norms
+            # Raw JSON-serializable form of the dashboard's input_norm config.
+            # Populated by /api/run from the request payload; used by the
+            # finetune submit/restart flow so the trainer process applies the
+            # same normalization the dashboard uses at inference.
+            #
+            # NOTE: prefer ``current_input_norm_config()`` over reading this
+            # directly. Some startup paths (e.g. yaml_cli.py at server boot)
+            # populate ``input_norms`` from a YAML's ``json_data.input_norm``
+            # but never touch ``input_norm_config``. The helper falls back to
+            # reconstructing the dict from the live normalizer instances.
+            cls._instance.input_norm_config = {}
             cls._instance.postprocess = postprocess
+            cls._instance.postprocess_config = {}
             cls._instance.viewer = None
             cls._instance.dataset_path = None
             cls._instance.model_catalog = {}
@@ -129,7 +156,54 @@ class Flow:
             cls._instance.shaders = {}
             # ShaderControls state: key = layer name, value = shaderControls dict
             cls._instance.shader_controls = {}
+
+            # Dashboard state (moved from cellmap_flow.dashboard.state)
+            cls._instance.log_buffer = deque(maxlen=1000)
+            cls._instance.log_clients = []
+            cls._instance.NEUROGLANCER_URL = None
+            cls._instance.INFERENCE_SERVER = None
+            cls._instance.CUSTOM_CODE_FOLDER = os.path.expanduser(
+                os.environ.get(
+                    "CUSTOM_CODE_FOLDER",
+                    "~/Desktop/cellmap/cellmap-flow/example/example_norm",
+                )
+            )
+            cls._instance.bbx_generator_state = {
+                "dataset_path": None,
+                "num_boxes": 0,
+                "bounding_boxes": [],
+                "viewer": None,
+                "viewer_process": None,
+                "viewer_url": None,
+                "viewer_state": None,
+            }
+            cls._instance.minio_state = {
+                "process": None,
+                "port": None,
+                "ip": None,
+                "bucket": "annotations",
+                "minio_root": None,
+                "output_base": None,
+                "last_sync": {},
+                "chunk_sync_state": {},
+                "sync_thread": None,
+            }
+            cls._instance.annotation_volumes = {}
+            cls._instance.output_sessions = {}
+            cls._instance._finetune_job_manager = None
+
         return cls._instance
+
+    @property
+    def finetune_job_manager(self):
+        if self._finetune_job_manager is None:
+            from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+            self._finetune_job_manager = FinetuneJobManager()
+        return self._finetune_job_manager
+
+    @finetune_job_manager.setter
+    def finetune_job_manager(self, value):
+        self._finetune_job_manager = value
 
     def to_dict(self):
         return self.__dict__.items()
@@ -231,3 +305,49 @@ class Flow:
 
 
 g = Flow()
+
+
+# Custom handler to capture logs into Flow singleton
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = self.format(record)
+        g.log_buffer.append(log_entry)
+        # Send to all connected clients
+        for client_queue in g.log_clients:
+            try:
+                client_queue.put_nowait(log_entry)
+            except queue.Full:
+                pass
+
+
+def current_input_norm_config() -> dict:
+    """Return the dashboard's current input_norm as a JSON-serializable dict.
+
+    Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
+    dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
+    The fallback matters because some startup paths (yaml_cli) populate
+    ``g.input_norms`` from the YAML at server boot but never touch
+    ``input_norm_config`` -- if the user submits training without first
+    hitting /api/run, the manifest would otherwise be written empty.
+    """
+    cfg = getattr(g, "input_norm_config", None) or {}
+    if cfg:
+        return cfg
+    norms = getattr(g, "input_norms", None) or []
+    derived = {}
+    for n in norms:
+        try:
+            d = n.to_dict()
+            name = d.pop("name", type(n).__name__)
+            derived[name] = d
+        except Exception:
+            continue
+    return derived
+
+
+def get_blockwise_tasks_dir():
+    tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
+        "~/.cellmap_flow/blockwise_tasks"
+    )
+    os.makedirs(tasks_dir, exist_ok=True)
+    return tasks_dir
