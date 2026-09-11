@@ -30,9 +30,11 @@ import time
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
 
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
@@ -344,12 +346,110 @@ def _generate_model_files(args, model_config, timestamp):
     return finetuned_model_name, yaml_path
 
 
+class _SkootsHead(nn.Module):
+    """Multi-head output layer matching the official SKOOTS architecture
+    (`bism.models.spatial_embedding.SpatialEmbedding`): separate 3x3x3
+    (padding=1) conv heads per output group -- [semantic(1), skeleton(1),
+    vector(3)] or [semantic(1), skeleton(1), distance(1)] -- concatenated
+    into one raw-logit tensor, instead of one shared 1x1x1 conv slicing a
+    single 5-channel output into meaning-groups after the fact. Unlike the
+    reference, activation (sigmoid/tanh) is deliberately NOT applied here:
+    `SkootsLoss`/`SkeletonDistanceLoss` already apply it on the assumption
+    the model returns raw logits, so baking it in here too would silently
+    double-apply sigmoid/tanh on top of itself.
+    """
+
+    def __init__(self, in_channels: int, group_sizes: Tuple[int, ...], kernel_size: int = 3, bias: bool = True):
+        super().__init__()
+        self.heads = nn.ModuleList(
+            nn.Conv3d(in_channels, size, kernel_size, padding=kernel_size // 2, bias=bias)
+            for size in group_sizes
+        )
+        for head in self.heads:
+            nn.init.zeros_(head.weight)
+            if bias:
+                nn.init.zeros_(head.bias)
+
+    def forward(self, x):
+        return torch.cat([head(x) for head in self.heads], dim=1)
+
+
+def _swap_final_conv_for_skoots(model, model_config, num_channels: int = 5):
+    """Replace a pretrained model's output head with a fresh N-channel one.
+
+    Warm-starting SKOOTS (or its skeleton_distance sibling) from an existing
+    checkpoint (e.g. an affinity or distance model) means reusing its trained
+    backbone but not its output layer, which was learned for a different,
+    incompatible channel meaning (e.g. 3 affinity directions) -- there's
+    nothing meaningful to transfer from that into a semantic/skeleton/(vector
+    or distance) head, so it's reinitialized rather than resized/padded.
+
+    Assumes the loaded model exposes its output layer as a top-level
+    `final_conv` attribute (true for the torch.export-unflattened models
+    produced by `CellmapModel.train()`, which is the only path this has been
+    exercised against). Also patches `model_config.config.output_channels`
+    to `num_channels` so downstream channel-count checks (e.g. in
+    `_build_target_transform`) see the model's real, post-swap shape rather
+    than the original checkpoint's.
+    """
+    if not hasattr(model, "final_conv"):
+        raise ValueError(
+            f"--output-type skoots/skeleton_distance/skeleton_semantic requires the base model to expose a "
+            f"'final_conv' output layer to replace; {type(model).__name__} has none. "
+            f"Only models loaded via CellmapModel.train() (huggingface/dacapo) are supported."
+        )
+
+    old_conv = model.final_conv
+    weight = old_conv.weight
+    out_c, in_c = weight.shape[0], weight.shape[1]
+    has_bias = getattr(old_conv, "bias", None) is not None
+
+    if num_channels == 5:
+        group_sizes = (1, 1, 3)  # semantic, skeleton, vector(z,y,x)
+    elif num_channels == 3:
+        group_sizes = (1, 1, 1)  # semantic, skeleton, distance
+    elif num_channels == 2:
+        group_sizes = (1, 1)  # semantic, skeleton
+    else:
+        raise ValueError(f"_swap_final_conv_for_skoots: unsupported num_channels={num_channels}")
+
+    # PyTorch's default Conv3d init assumes roughly unit-scale input
+    # activations; this backbone's penultimate feature map is not unit-scale,
+    # so the default random init lands each output channel at an arbitrary,
+    # uncontrolled logit magnitude -- empirically anywhere from -27 to +28
+    # across the old 5-channel swap. Any channel that lands deep in
+    # sigmoid/tanh's saturated region starts training with ~zero gradient
+    # (sigmoid(-21) is already indistinguishable from 0), so it can never
+    # recover no matter how many epochs run. `_SkootsHead` zero-initializes
+    # every head, putting every channel at exactly the neutral point
+    # (sigmoid(0)=0.5, tanh(0)=0) regardless of the backbone's activation
+    # scale, so no channel starts pre-saturated.
+    #
+    # kernel_size=3 (not the original 1x1x1) matches the official SKOOTS
+    # head (`bism.models.spatial_embedding.SpatialEmbedding`), giving the
+    # output heads a real receptive field instead of a bare per-voxel linear
+    # projection of the backbone's last feature map.
+    model.final_conv = _SkootsHead(in_c, group_sizes, kernel_size=3, bias=has_bias)
+    logger.info(
+        f"Swapped final_conv: {out_c}->{num_channels} output channels via "
+        f"{len(group_sizes)} separate 3x3x3 heads {group_sizes} "
+        f"(in_channels={in_c}, backbone weights kept, zero-initialized to "
+        f"avoid pre-saturated sigmoid/tanh channels)"
+    )
+
+    model_config.config.output_channels = num_channels
+    return model
+
+
 def _build_target_transform(args, model_config):
     """Build a TargetTransform based on CLI args."""
     from cellmap_flow.finetune.target_transforms import (
         BinaryTargetTransform,
         BroadcastBinaryTargetTransform,
         AffinityTargetTransform,
+        SkootsTargetTransform,
+        SkeletonDistanceTargetTransform,
+        SkeletonSemanticTargetTransform,
     )
 
     output_type = args.output_type
@@ -400,6 +500,34 @@ def _build_target_transform(args, model_config):
 
         logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
         return AffinityTargetTransform(offsets, num_channels=num_channels)
+
+    elif output_type == "skoots":
+        if num_channels != 5:
+            raise ValueError(
+                f"SKOOTS output type requires exactly 5 model output channels "
+                f"(semantic, skeleton, vec_z, vec_y, vec_x); model has {num_channels}."
+            )
+        # SkootsDataset precomputes the (target, mask) pair per crop and packs
+        # both into the batch's "target" tensor (see SkootsTargetTransform's
+        # docstring) -- this transform only unpacks them, it does no
+        # on-the-fly target computation.
+        return SkootsTargetTransform()
+
+    elif output_type == "skeleton_distance":
+        if num_channels != 3:
+            raise ValueError(
+                f"skeleton_distance output type requires exactly 3 model output channels "
+                f"(semantic, skeleton, distance); model has {num_channels}."
+            )
+        return SkeletonDistanceTargetTransform()
+
+    elif output_type == "skeleton_semantic":
+        if num_channels != 2:
+            raise ValueError(
+                f"skeleton_semantic output type requires exactly 2 model output channels "
+                f"(semantic, skeleton); model has {num_channels}."
+            )
+        return SkeletonSemanticTargetTransform()
 
     else:
         raise ValueError(f"Unknown output type: {output_type}")
@@ -568,8 +696,14 @@ def build_arg_parser():
         "--loss-type",
         type=str,
         default="combined",
-        choices=["dice", "bce", "combined", "mse", "margin"],
-        help="Loss function (default: combined)"
+        choices=["dice", "bce", "combined", "mse", "margin", "skoots", "skoots_simple_vector", "skeleton_distance", "skeleton_semantic"],
+        help="Loss function (default: combined). 'skoots' or "
+             "'skoots_simple_vector' (plain balanced MSE on the vector head "
+             "instead of the annealed Gaussian/Tversky embedding loss) is "
+             "required for --output-type skoots, 'skeleton_distance' is "
+             "required for --output-type skeleton_distance, 'skeleton_semantic' "
+             "is required for --output-type skeleton_semantic, and all are "
+             "ignored otherwise."
     )
     parser.add_argument(
         "--label-smoothing",
@@ -652,12 +786,98 @@ def build_arg_parser():
         "--output-type",
         type=str,
         default="binary",
-        choices=["binary", "binary_broadcast", "affinities"],
+        choices=["binary", "binary_broadcast", "affinities", "skoots", "skeleton_distance", "skeleton_semantic"],
         help="How to generate training targets from annotations. "
              "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
              "'binary_broadcast': broadcast binary target to all output channels. "
              "'affinities': compute affinity targets from instance labels (requires offsets). "
+             "'skoots': semantic+skeleton+vector instance targets (requires --skoots-crops-yaml "
+             "and a 5-channel model; targets are precomputed per crop, not per batch). "
+             "'skeleton_distance': semantic+skeleton+distance-from-skeleton instance targets -- "
+             "same --skoots-crops-yaml infra as 'skoots' but a 3-channel model and a scalar "
+             "distance-to-medial-axis head instead of a 3-channel vector field; appropriate only "
+             "when instances don't actually touch (no directional disambiguation at boundaries). "
+             "'skeleton_semantic': semantic+skeleton only, no instance-splitting channel at all -- "
+             "same --skoots-crops-yaml infra but a 2-channel model; use when you only need a "
+             "semantic mask + skeleton, or as a diagnostic to isolate those two heads from any "
+             "vector/distance-loss effects. "
              "(default: binary)"
+    )
+    parser.add_argument(
+        "--skoots-crops-yaml",
+        type=str,
+        default=None,
+        help="Path to a CropsConfig YAML (see crop_loader.py) of dense instance-labeled "
+             "crops to train a SKOOTS/skeleton_distance/skeleton_semantic head on. Required and "
+             "only used with --output-type skoots/skeleton_distance/skeleton_semantic -- bypasses "
+             "--corrections/create_dataloader entirely, since all three need dense full-instance "
+             "labels, not sparse correction scribbles."
+    )
+    parser.add_argument(
+        "--skoots-raw-dataset-path",
+        type=str,
+        default=None,
+        help="Path to the raw EM zarr the --skoots-crops-yaml crops were annotated on "
+             "(paired to each crop by physical nm coordinates, since it may be at a "
+             "different resolution than the label crops). Required with --output-type skoots."
+    )
+    parser.add_argument(
+        "--skoots-cache-dir",
+        type=str,
+        default=None,
+        help="Directory to cache precomputed SKOOTS targets (semantic/skeleton/vectors), "
+             "keyed by crop name. Defaults to a 'skoots_cache' dir next to --skoots-crops-yaml. "
+             "Building targets is expensive (skeletonize + vector bake per instance), so "
+             "this cache persists across training restarts."
+    )
+    parser.add_argument(
+        "--skoots-patches-per-epoch",
+        type=int,
+        default=1000,
+        help="Number of random patches sampled per epoch for --output-type skoots "
+             "(default: 1000). Patch locations are freshly sampled every epoch; only "
+             "target *computation* is precomputed/cached, not the patch sampling."
+    )
+    parser.add_argument(
+        "--skoots-target-voxel-size",
+        type=float,
+        nargs=3,
+        default=None,
+        help="If set, decimate crop labels to this voxel size (nm, Z Y X) before "
+             "building SKOOTS targets, so they match a base model trained at a "
+             "coarser resolution than the label crops' own native voxel size. "
+             "Must be an integer multiple of the crops' native voxel size. "
+             "(default: None, use crops' native resolution)"
+    )
+    parser.add_argument(
+        "--skoots-context-voxels",
+        type=int,
+        nargs=3,
+        default=[0, 0, 0],
+        help="Extra halo (Z Y X, in --skoots-target-voxel-size/native voxels) added "
+             "per side when reading the raw EM patch, beyond --patch-shape. Needed for "
+             "valid-padding base models whose input tile is larger than their output "
+             "tile (e.g. 61 61 61 for a 178-in/56-out model). (default: 0 0 0)"
+    )
+    parser.add_argument(
+        "--skoots-skeleton-radius",
+        type=int,
+        default=2,
+        help="Ball radius (voxels, at --skoots-target-voxel-size/native resolution) "
+             "stamped around each skeleton voxel to build the skeleton-mask training "
+             "target. Too large bridges nearby-but-separate instances' skeleton masks "
+             "into one connected component, which then makes skeleton-seeded "
+             "postprocessing wrongly merge them. (default: 2)"
+    )
+    parser.add_argument(
+        "--skoots-min-branch-length",
+        type=float,
+        default=3.0,
+        help="Prune terminal skeleton branches (voxels, at "
+             "--skoots-target-voxel-size/native resolution) shorter than this from the "
+             "raw skimage.skeletonize output -- removes small stair-step spurs from "
+             "voxelization without touching real (non-spur) branch structure. Set to 0 "
+             "to disable. (default: 3.0)"
     )
     parser.add_argument(
         "--select-channel",
@@ -697,6 +917,34 @@ def main():
     logger.info(f"Epochs: {args.num_epochs}")
     logger.info(f"Learning rate: {args.learning_rate}")
     logger.info("")
+
+    if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic"):
+        if not args.skoots_crops_yaml or not args.skoots_raw_dataset_path:
+            raise ValueError(
+                f"--output-type {args.output_type} requires --skoots-crops-yaml and "
+                "--skoots-raw-dataset-path."
+            )
+        # "skoots" output allows either loss_type variant (the default
+        # annealed Gaussian/Tversky embedding loss, or the plain balanced-MSE
+        # A/B alternative); "skeleton_distance"/"skeleton_semantic" each have
+        # just the one.
+        if args.output_type == "skoots":
+            allowed_loss_types = {"skoots", "skoots_simple_vector"}
+        elif args.output_type == "skeleton_distance":
+            allowed_loss_types = {"skeleton_distance"}
+        else:
+            allowed_loss_types = {"skeleton_semantic"}
+        if args.loss_type not in allowed_loss_types:
+            raise ValueError(
+                f"--output-type {args.output_type} requires --loss-type in {sorted(allowed_loss_types)} "
+                f"(got {args.loss_type!r})."
+            )
+        # --corrections/create_dataloader is skipped entirely for these output types
+        # (SkootsDataset reads directly from --skoots-crops-yaml), but --corrections
+        # stays required at the argparse level to keep every other output type
+        # unaffected -- pass any placeholder value here.
+        logger.info(f"SKOOTS crops YAML: {args.skoots_crops_yaml}")
+        logger.info(f"SKOOTS raw dataset: {args.skoots_raw_dataset_path}")
 
     # === Load model (once) ===
     logger.info("Loading model...")
@@ -762,6 +1010,9 @@ def main():
         if cellmap_model is not None:
             trainable = cellmap_model.train()
             if trainable is not None:
+                if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic"):
+                    num_channels = {"skoots": 5, "skeleton_distance": 3, "skeleton_semantic": 2}[args.output_type]
+                    trainable = _swap_final_conv_for_skoots(trainable, model_config, num_channels)
                 # UnflattenedModule (from torch.export) often has fixed batch=1.
                 # Wrap it so the trainer can use any batch size.
                 if type(trainable).__name__ == 'UnflattenedModule':
@@ -782,6 +1033,10 @@ def main():
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
+        # A freshly reinitialized head needs full gradient descent, not a
+        # low-rank delta on top of random weights -- LoRA-decomposing it
+        # would badly bottleneck how much it can learn.
+        modules_to_save=["final_conv"] if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic") else None,
     )
 
     # === Training loop (supports restart via signal file) ===
@@ -802,41 +1057,77 @@ def main():
         # Create dataloader (re-created each iteration to pick up new annotations)
         if iteration > 1:
             print("RESTART_STATUS: Loading corrections...", flush=True)
-        logger.info(f"Loading corrections from {args.corrections}...")
-        dataloader = create_dataloader(
-            args.corrections,
-            batch_size=args.batch_size,
-            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
-            augment=not args.no_augment,
-            num_workers=args.num_workers,
-            shuffle=True,
-            model_name=args.model_name,
-        )
-        logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
+        if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic"):
+            from cellmap_flow.finetune.skoots_dataset import SkootsDataset
+
+            logger.info(f"Loading SKOOTS crops from {args.skoots_crops_yaml}...")
+            skoots_dataset = SkootsDataset(
+                crops_yaml_path=args.skoots_crops_yaml,
+                raw_dataset_path=args.skoots_raw_dataset_path,
+                output_size_voxels=tuple(args.patch_shape) if args.patch_shape is not None else (64, 64, 64),
+                target_voxel_size_nm=tuple(args.skoots_target_voxel_size) if args.skoots_target_voxel_size is not None else None,
+                context_voxels=tuple(args.skoots_context_voxels),
+                skeleton_radius=args.skoots_skeleton_radius,
+                min_branch_length=args.skoots_min_branch_length,
+                cache_dir=args.skoots_cache_dir,
+                patches_per_epoch=args.skoots_patches_per_epoch,
+                target_mode=args.output_type,
+            )
+            # num_workers must stay 0: forked DataLoader workers crash immediately
+            # ("aborting: fork() use detected") because ImageDataInterface's raw
+            # reads go through tensorstore, which installs a pthread_atfork guard
+            # that refuses to survive fork() once its internal thread pool exists
+            # in the parent process -- and by this point (model/config loading)
+            # it already does. Spawning instead of forking would dodge that, but
+            # would also re-pickle this dataset's already-in-memory precomputed
+            # per-crop target arrays (several GB) into every worker process, which
+            # is worse than just reading raw patches from the main process.
+            dataloader = DataLoader(
+                skoots_dataset,
+                batch_size=args.batch_size,
+                shuffle=True,
+                num_workers=0,
+            )
+            logger.info(f"DataLoader created: {len(skoots_dataset)} patches/epoch over {len(skoots_dataset.crops)} crops")
+        else:
+            logger.info(f"Loading corrections from {args.corrections}...")
+            dataloader = create_dataloader(
+                args.corrections,
+                batch_size=args.batch_size,
+                patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                model_name=args.model_name,
+            )
+            logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
         # Snapshot the active input_norm into metadata.json so any saved
         # checkpoint in this iteration is reproducible -- you can read
         # metadata.json next to the .pth and know exactly which
         # normalization was applied to the training data.
-        try:
-            from cellmap_flow.finetune.virtual_dataset import read_manifest
+        if args.output_type not in ("skoots", "skeleton_distance", "skeleton_semantic"):
+            # --corrections isn't a manifest path in skoots/skeleton_distance
+            # mode, so there's nothing to snapshot here.
+            try:
+                from cellmap_flow.finetune.virtual_dataset import read_manifest
 
-            manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
-            if manifest_norm is not None and args.output_dir:
-                metadata_file = Path(args.output_dir) / "metadata.json"
-                if metadata_file.exists():
-                    import json as json_mod
-                    with open(metadata_file) as f:
-                        md = json_mod.load(f)
-                    md.setdefault("params", {})["input_norm"] = manifest_norm
-                    with open(metadata_file, "w") as f:
-                        json_mod.dump(md, f, indent=2)
-                    logger.info(
-                        f"Snapshot input_norm into {metadata_file} "
-                        f"(keys: {list(manifest_norm.keys())})"
-                    )
-        except Exception as _e:
-            logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
+                manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
+                if manifest_norm is not None and args.output_dir:
+                    metadata_file = Path(args.output_dir) / "metadata.json"
+                    if metadata_file.exists():
+                        import json as json_mod
+                        with open(metadata_file) as f:
+                            md = json_mod.load(f)
+                        md.setdefault("params", {})["input_norm"] = manifest_norm
+                        with open(metadata_file, "w") as f:
+                            json_mod.dump(md, f, indent=2)
+                        logger.info(
+                            f"Snapshot input_norm into {metadata_file} "
+                            f"(keys: {list(manifest_norm.keys())})"
+                        )
+            except Exception as _e:
+                logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
 
         # Build target transform (re-built each iteration to pick up restart params)
         select_channel = args.select_channel
@@ -903,6 +1194,7 @@ def main():
                             lora_r=args.lora_r,
                             lora_alpha=args.lora_alpha,
                             lora_dropout=args.lora_dropout,
+                            modules_to_save=["final_conv"] if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic") else None,
                         )
 
                     lora_model.train()
@@ -981,6 +1273,7 @@ def main():
                         lora_r=args.lora_r,
                         lora_alpha=args.lora_alpha,
                         lora_dropout=args.lora_dropout,
+                        modules_to_save=["final_conv"] if args.output_type in ("skoots", "skeleton_distance", "skeleton_semantic") else None,
                     )
 
                 lora_model.train()

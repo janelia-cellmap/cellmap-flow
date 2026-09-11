@@ -231,7 +231,6 @@ class Flow:
                         f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
                     )
                     dtype = postprocess.dtype
-                    break
 
         return dtype
 

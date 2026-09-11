@@ -109,6 +109,34 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
         self.assertEqual(down.shape, (2, 2, 2))
         self.assertTrue(np.all(down == 5))
 
+    def test_true_background_is_never_outvoted_by_foreground(self):
+        """A block spanning a real annotated gap -- e.g. between two
+        instances, or between two near-touching parts of the same curved
+        instance -- must stay background (1) even when foreground instance
+        voxels are the numeric majority of that block. Erasing such a gap
+        would train the network to bridge similarly close approaches at
+        inference, i.e. false merges. So background wins outright whenever
+        it's present at all in the block; only an unmixed, all-foreground
+        block resolves via ordinary majority vote among the ids present."""
+        # z axis: 6 voxels -> 2 blocks of 3, using the real trainer
+        # convention (1 = background, >=2 = foreground instance): 2 of 3
+        # voxels per block are foreground instance id 5, but the remaining
+        # voxel is a genuine background gap -- background must still win.
+        labels = np.full((6, 2, 2), 5, dtype=np.uint8)
+        labels[[0, 3]] = 1  # one true background voxel per block (minority)
+        down = _majority_vote_downsample(labels, factors=(3, 1, 1))
+        self.assertEqual(down.shape, (2, 2, 2))
+        self.assertTrue(np.all(down == 1))
+
+        # No background present at all (e.g. two different instances
+        # directly touching, no gap between them) -- falls back to ordinary
+        # majority vote among the foreground ids, unaffected by the
+        # background-preservation rule.
+        labels2 = np.full((3, 2, 2), 5, dtype=np.uint8)
+        labels2[0] = 7
+        down2 = _majority_vote_downsample(labels2, factors=(3, 1, 1))
+        self.assertTrue(np.all(down2 == 5))
+
     def test_offset_correction_for_half_voxel_shift(self):
         """write_voxel_offset must add half the crop's *native* voxel size
         to its translation before dividing by the volume's (coarser) voxel

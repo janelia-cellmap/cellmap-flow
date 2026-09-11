@@ -200,9 +200,12 @@ def _ensure_editable_layer(volume_id, minio_url):
 # Crop -> volume write
 # ---------------------------------------------------------------------------
 
-def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
+def _majority_vote_downsample(
+    labels: np.ndarray, factors, background_value: int = 1
+) -> np.ndarray:
     """Downsample integer label data by exact per-axis block factors using
-    majority vote (mode) over each block.
+    majority vote (mode) over each block, with background given first claim
+    on any block it appears in at all.
 
     Unlike single-point nearest-neighbor sampling (which always picks one
     fixed corner of each block, e.g. scipy.ndimage.zoom's grid_mode=True
@@ -210,6 +213,20 @@ def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
     represents each output voxel by the value most common across its whole
     footprint -- no systematic corner-bias, and fewer boundary voxels
     flipped by picking an unrepresentative single sample.
+
+    A plain plurality vote would let a block spanning a true (annotated)
+    gap -- between two instances, or between two near-touching parts of the
+    same curved instance -- get called foreground whenever the instance
+    outnumbers the gap's native voxels, silently erasing a real anatomical
+    separation from the training label and teaching the network to bridge
+    similar close approaches at inference. So background instead wins
+    outright if it's present in the block at all; a block only becomes a
+    foreground instance id when *all* of its native voxels agree on that id.
+    Blocks with no background voxels (e.g. two different instances directly
+    touching with no gap between them) still fall back to an ordinary
+    majority vote among the foreground ids present -- that case doesn't need
+    protecting, since instance identity there is already preserved by ID
+    inequality regardless of which id wins the block.
     """
     factors = tuple(int(round(f)) for f in factors)
     shape = labels.shape
@@ -221,12 +238,16 @@ def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
     )
     reshaped = reshaped.transpose(0, 2, 4, 1, 3, 5)
     flat_blocks = reshaped.reshape(block_dims[0], block_dims[1], block_dims[2], -1)
+    block_size = flat_blocks.shape[-1]
 
+    has_bg = (flat_blocks == background_value).any(axis=-1)
+    result = np.full(block_dims, background_value, dtype=labels.dtype)
     best_count = np.zeros(block_dims, dtype=np.int32)
-    result = np.zeros(block_dims, dtype=labels.dtype)
     for val in np.unique(labels):
+        if val == background_value:
+            continue
         count = (flat_blocks == val).sum(axis=-1)
-        better = count > best_count
+        better = (count > best_count) & ~has_bg
         result[better] = val
         best_count[better] = count[better]
     return result

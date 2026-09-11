@@ -110,6 +110,57 @@ class AffinityTargetTransform(TargetTransform):
         return target, mask
 
 
+class SkootsTargetTransform(TargetTransform):
+    """Split a SKOOTS dataset's precomputed (target, mask) pair back apart.
+
+    SKOOTS targets (semantic + skeleton + 3-channel vector field) require
+    full-instance context to build correctly -- skeletonizing a randomly
+    cropped patch produces a wrong, truncated skeleton for any instance that
+    extends past the patch. So unlike every other transform here, SKOOTS
+    targets can't be computed on-the-fly from a patch of raw labels; they're
+    precomputed once per crop by `SkootsDataset` and sliced in lockstep with
+    the raw/annotation patch.
+
+    The training loop (`LoRAFinetuner._train_epoch`) is hard-wired to unpack
+    each batch as a 2-tuple `(raw, target)`, so `SkootsDataset.__getitem__`
+    packs its (5, Z, Y, X) target and (5, Z, Y, X) mask into one (10, Z, Y, X)
+    tensor along the channel axis. This transform is the inverse of that
+    packing -- it does no target computation itself.
+    """
+
+    def __call__(self, annotation: Tensor) -> Tuple[Tensor, Tensor]:
+        target, mask = annotation[:, :5], annotation[:, 5:]
+        return target, mask
+
+
+class SkeletonDistanceTargetTransform(TargetTransform):
+    """Split a SkootsDataset(target_mode="skeleton_distance") precomputed
+    (target, mask) pair back apart.
+
+    Same rationale as `SkootsTargetTransform` (full-instance context needed
+    to skeletonize correctly, so this can't be computed on-the-fly from a
+    patch) -- just 3 channels each [semantic, skeleton, distance] instead of
+    5, since there's no vector field here.
+    """
+
+    def __call__(self, annotation: Tensor) -> Tuple[Tensor, Tensor]:
+        target, mask = annotation[:, :3], annotation[:, 3:]
+        return target, mask
+
+
+class SkeletonSemanticTargetTransform(TargetTransform):
+    """Split a SkootsDataset(target_mode="skeleton_semantic") precomputed
+    (target, mask) pair back apart.
+
+    Same rationale as `SkootsTargetTransform` -- just 2 channels
+    [semantic, skeleton], no vector field or distance channel at all.
+    """
+
+    def __call__(self, annotation: Tensor) -> Tuple[Tensor, Tensor]:
+        target, mask = annotation[:, :2], annotation[:, 2:]
+        return target, mask
+
+
 def _offset_slices(Z, Y, X, dz, dy, dx):
     """Compute source and destination slices for an offset.
 

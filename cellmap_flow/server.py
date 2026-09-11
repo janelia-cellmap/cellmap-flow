@@ -177,6 +177,17 @@ class CellMapFlowServer:
     def refresh_dataset(self, dataset):
         g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
 
+        # Reset to the model's real channel count first -- self.vol_shape is
+        # mutated in place and shared across every request this long-running
+        # server handles, so without resetting here, a request that enables
+        # a channel-reducing postprocessor (e.g. an instance-segmentation
+        # postprocessor collapsing 5 channels to 1) permanently "sticks" the
+        # advertised shape at that smaller count for every later request,
+        # even ones with postprocessing turned back off.
+        if self.has_channel:
+            self.vol_shape[-1] = self.output_channels
+            self.zarr_block_shape[-1] = self.output_channels
+
         for postprocess in g.postprocess:
             if hasattr(postprocess, "num_channels") and self.has_channel:
                 self.vol_shape[-1] = postprocess.num_channels

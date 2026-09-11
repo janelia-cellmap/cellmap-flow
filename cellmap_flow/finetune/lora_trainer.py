@@ -294,8 +294,51 @@ class LoRAFinetuner:
             self._use_mse = True
         elif loss_type == "margin":
             self.criterion = MarginLoss(margin=margin, balance_classes=balance_classes)
+        elif loss_type == "skoots":
+            from cellmap_flow.finetune.skoots_loss import SkootsLoss
+
+            # SkootsLoss's default anneal_steps=10_000 assumes a much longer
+            # training run than this project's small dataset/patches-per-epoch
+            # setup actually produces (e.g. 100 epochs x 7 steps/epoch = 700
+            # total steps observed in practice) -- at that step count sigma
+            # barely moves from sigma_start=20 toward sigma_end=2, so the
+            # vector loss's Gaussian-similarity term stays forgiving of large
+            # errors for the entire run and never demands real precision.
+            # Scale the anneal schedule to this run's actual step budget
+            # instead (reach sigma_end at ~80% of total steps, leaving a tail
+            # of full-precision training).
+            total_steps = self.num_epochs * len(self.dataloader)
+            anneal_steps = max(1, int(0.8 * total_steps))
+            logger.info(
+                f"SkootsLoss anneal_steps={anneal_steps} (80% of {total_steps} "
+                f"total steps = {self.num_epochs} epochs x {len(self.dataloader)} steps/epoch)"
+            )
+            self.criterion = SkootsLoss(anneal_steps=anneal_steps)
+        elif loss_type == "skoots_simple_vector":
+            from cellmap_flow.finetune.skoots_loss import SkootsLoss
+
+            # A/B against "skoots" above: plain balanced-fg/bg MSE on the
+            # displacement vector instead of the annealed Gaussian/Tversky
+            # embedding loss -- no anneal_steps to compute since there's no
+            # sigma schedule in this mode.
+            self.criterion = SkootsLoss(vector_loss_type="mse")
+        elif loss_type == "skeleton_distance":
+            from cellmap_flow.finetune.skoots_loss import SkeletonDistanceLoss
+
+            self.criterion = SkeletonDistanceLoss()
+        elif loss_type == "skeleton_semantic":
+            from cellmap_flow.finetune.skoots_loss import SkeletonSemanticLoss
+
+            self.criterion = SkeletonSemanticLoss()
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
+
+        # Only SkootsLoss currently owns device-resident state (buffers like
+        # vector_scaling/sigma); the others are either plain functions or
+        # stateless nn.Modules, so this was never needed before. .to() is a
+        # harmless no-op for those.
+        if isinstance(self.criterion, nn.Module):
+            self.criterion = self.criterion.to(self.device)
 
         # Label smoothing is redundant with margin loss
         if loss_type == "margin" and self.label_smoothing > 0:
@@ -717,7 +760,25 @@ class LoRAFinetuner:
         # batch of the epoch (cumulative grad before zero_grad fires).
         diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
-        for batch_idx, (raw, target) in enumerate(self.dataloader):
+        # Per-epoch timing breakdown: "data" is time blocked inside the
+        # dataloader iterator's __next__ (patch sampling + raw EM read +
+        # any on-the-fly target transform); "compute" is everything between
+        # one batch arriving and the next being requested (forward, loss,
+        # backward, optimizer step). Measured with an explicit iterator
+        # rather than timing around the `for` statement, since a plain
+        # `for batch in self.dataloader:` loop hides exactly the boundary
+        # this is trying to isolate.
+        data_time_total = 0.0
+        compute_time_total = 0.0
+        component_totals: Dict[str, float] = {}
+
+        data_iter = iter(self.dataloader)
+        t_batch_ready = time.perf_counter()
+        for batch_idx in range(num_batches):
+            raw, target = next(data_iter)
+            t_after_fetch = time.perf_counter()
+            data_time_total += t_after_fetch - t_batch_ready
+
             # Move to device
             raw = raw.to(self.device, non_blocking=True)
             target = target.to(self.device, non_blocking=True)
@@ -784,7 +845,20 @@ class LoRAFinetuner:
                         supervised_loss = (per_element_loss * mask).sum() / mask.sum().clamp(min=1)
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
                     # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
+                    if hasattr(self.criterion, 'set_step'):
+                        # SkootsLoss anneals its Gaussian-similarity sigma against this
+                        # step count; every other masked loss here ignores set_step.
+                        self.criterion.set_step(self.global_step)
                     supervised_loss = self.criterion(pred, target, mask)
+                    if hasattr(self.criterion, "last_components"):
+                        # SkootsLoss/SkeletonDistanceLoss stash their
+                        # per-head breakdown here (see those classes'
+                        # docstrings) -- accumulated per-epoch and written
+                        # to loss_history.csv below so loss-per-head over
+                        # time can actually be plotted, instead of only
+                        # ever seeing the single combined scalar.
+                        for k, v in self.criterion.last_components.items():
+                            component_totals[k] = component_totals.get(k, 0.0) + v
                 else:
                     # No masking needed
                     supervised_loss = self.criterion(pred, target)
@@ -871,6 +945,10 @@ class LoRAFinetuner:
                 print(msg)
                 logger.info(msg)
 
+            t_compute_done = time.perf_counter()
+            compute_time_total += t_compute_done - t_after_fetch
+            t_batch_ready = t_compute_done
+
         # Handle leftover accumulated gradients at end of epoch
         # (in case num_batches is not divisible by gradient_accumulation_steps)
         if num_batches % self.gradient_accumulation_steps != 0:
@@ -912,7 +990,70 @@ class LoRAFinetuner:
                 f"First 5 dead: {dead_names[:5]}"
             )
 
+        total_time = data_time_total + compute_time_total
+        data_pct = 100.0 * data_time_total / total_time if total_time > 0 else 0.0
+        if hasattr(self, "_log_message"):
+            self._log_message(
+                f"  [timing] data={data_time_total:.2f}s ({data_pct:.0f}%), "
+                f"compute={compute_time_total:.2f}s ({100.0 - data_pct:.0f}%)"
+            )
+        self._write_loss_history_row(
+            avg_loss=epoch_loss / num_batches,
+            avg_supervised_loss=epoch_supervised_loss / num_batches,
+            avg_distill_loss=epoch_distill_loss / num_batches,
+            component_totals=component_totals,
+            num_batches=num_batches,
+            data_time_total=data_time_total,
+            compute_time_total=compute_time_total,
+        )
+
         return epoch_loss / num_batches
+
+    def _write_loss_history_row(
+        self,
+        avg_loss: float,
+        avg_supervised_loss: float,
+        avg_distill_loss: float,
+        component_totals: Dict[str, float],
+        num_batches: int,
+        data_time_total: float,
+        compute_time_total: float,
+    ) -> None:
+        """Append one row of this epoch's losses/timing to loss_history.csv.
+
+        Written every epoch (not just at the end of training) so the file is
+        readable and plottable while a long run is still in progress, and so
+        a crashed/killed run still leaves a usable partial history. Columns
+        are fixed once by the first component keys seen (from
+        `criterion.last_components`, e.g. semantic/skeleton/vector or
+        semantic/skeleton/distance) -- consistent within one run since a
+        run's loss_type never changes mid-training.
+        """
+        import csv
+
+        component_avgs = {k: v / num_batches for k, v in component_totals.items()}
+        history_path = self.output_dir / "loss_history.csv"
+        component_keys = sorted(component_avgs.keys())
+        fieldnames = (
+            ["epoch", "avg_loss", "avg_supervised_loss", "avg_distill_loss"]
+            + component_keys
+            + ["data_time_s", "compute_time_s"]
+        )
+        write_header = not history_path.exists()
+        with open(history_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if write_header:
+                writer.writeheader()
+            row = {
+                "epoch": self.current_epoch + 1,
+                "avg_loss": avg_loss,
+                "avg_supervised_loss": avg_supervised_loss,
+                "avg_distill_loss": avg_distill_loss,
+                "data_time_s": data_time_total,
+                "compute_time_s": compute_time_total,
+            }
+            row.update(component_avgs)
+            writer.writerow(row)
 
     def save_checkpoint(self, is_best: bool = False):
         """

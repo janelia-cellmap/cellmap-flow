@@ -6,6 +6,8 @@ import neuroglancer
 import pymorton
 import threading
 from scipy.ndimage import label
+from skimage.segmentation import watershed
+from scipy.spatial import cKDTree
 import mwatershed as mws
 from scipy.ndimage import measurements
 import fastremap
@@ -227,6 +229,265 @@ class AffinityPostprocessor(PostProcessor):
         return 1
 
 
+class SkootsPostprocessor(PostProcessor):
+    """Turn an already-decoded 5-channel SKOOTS head (semantic, skeleton,
+    vec_z, vec_y, vec_x -- channels 0-1 true [0,1] probabilities, channels
+    2-4 displacement in voxels; see `SkootsDecodeWrapper` in
+    my_yamls/jrc_axolotl-heart-1_mito_skoots_finetuned.py, which applies
+    that decode in the model's forward pass so thresholds here are on
+    meaningful units instead of raw logits/unbounded regression) into an
+    instance segmentation for a single block.
+
+    Algorithm, per foreground connected-component in this block:
+      1. threshold semantic/skeleton channels into binary masks.
+      2. label the skeleton mask *restricted to that component* -- each
+         skeleton connected-component is one candidate instance seed.
+      3. if the component has no skeleton seed at all (its true skeleton
+         lies entirely in a neighboring block), keep it as one provisional
+         instance -- chain `SimpleBlockwiseMerger` afterward to stitch it
+         to whatever id the neighboring block assigns to the touching
+         piece; the merger only needs matching face voxels, not matching
+         algorithms, so it works unchanged for this postprocessor too.
+      4. otherwise, decode each foreground voxel's vector to an "embedded"
+         position (voxel coord + predicted displacement, which the training
+         target points *toward* the voxel's own instance's nearest skeleton
+         point) and assign it the id of whichever of *this component's*
+         skeleton seeds has the closest skeleton voxel to that embedded
+         position. This is what actually splits two touching/close
+         instances that share one semantic blob -- gating candidates to the
+         component the voxel is already in keeps a stray vector from
+         grabbing a seed id from a spatially distant, unrelated object.
+
+    Restricting to per-component skeleton labeling (rather than one
+    skeleton-mask connected-components pass over the whole block) also
+    protects against a skeleton mask that's slightly too thick and bridges
+    two objects' skeletons across a gap that isn't itself foreground --
+    with per-component gating those two skeleton pieces can still only earn
+    non-foreground gap voxels below (they're outside the component/foreground
+    mask entirely), it does not by itself fix a skeleton mask that bridges
+    *within* one continuous foreground blob (that's a training-target
+    thickness problem, see skoots_targets.py::skeleton_mask_target).
+
+    IDs are local-unique within the block, then offset by `chunk_corner`
+    (same trick as `AffinityPostprocessor`) so they stay globally unique
+    across blocks without a merge step. This produces *some* consistent
+    per-block labeling, not a final cross-block-stitched segmentation --
+    see class docstring precedent (`AffinityPostprocessor`/
+    `SimpleBlockwiseMerger`) for why: blockwise inference here (daisy,
+    `cellmap_flow/blockwise/blockwise_processor.py`) never gives a
+    postprocessor access to neighboring blocks' data, only this block's own
+    write_roi-sized model output. `SimpleBlockwiseMerger` can stitch
+    instances across block faces for a single long-running interactive
+    viewer/server process (it works by duck-typed `equivalences` polling in
+    `server.py`, not by touching the written data) -- chain it right after
+    this class in the yaml's `postprocess:` list for that. It does *not*
+    work for the separate multi-worker `cellmap_flow_blockwise` batch export
+    path (each bsub worker is an independent process with its own empty
+    equivalence map) -- a real cross-block stitching pass for that path
+    doesn't exist yet anywhere in this codebase and would need to be added
+    separately (e.g. an offline union-find over block-boundary faces,
+    applied as a final relabeling pass over the written zarr).
+    """
+
+    def __init__(
+        self,
+        semantic_channel: int = 0,
+        skeleton_channel: int = 1,
+        vector_channels: str = "[2, 3, 4]",
+        semantic_threshold: float = 0.5,
+        skeleton_threshold: float = 0.5,
+        min_skeleton_size: int = 0,
+    ):
+        # Every param here must survive a str(stored_value) -> re-parse
+        # round trip: `refresh_dataset` (server.py) rebuilds a fresh
+        # postprocessor instance from `to_dict()`'s stringified attrs on
+        # every request (see serialize_norms_posts_to_json / decode_to_json
+        # + deserialize_list). ast.literal_eval on a python-list-repr string
+        # is idempotent under that round trip (matches AffinityPostprocessor's
+        # `neighborhood`); `"2,3,4".split(",")` is not, once the parsed list
+        # itself gets stringified back to `"[2, 3, 4]"` on the next request.
+        self.semantic_channel = int(semantic_channel)
+        self.skeleton_channel = int(skeleton_channel)
+        self.vector_channels = ast.literal_eval(vector_channels)
+        self.semantic_threshold = float(semantic_threshold)
+        self.skeleton_threshold = float(skeleton_threshold)
+        # Dropping a low skeleton_threshold way down (e.g. to catch faint
+        # true skeleton) also lets through isolated speckle -- a handful of
+        # stray voxels barely over threshold with no real skeleton structure.
+        # Each speckle still forms its own connected component and becomes a
+        # seed, manufacturing a spurious tiny instance. Filtering candidate
+        # skeleton components below this voxel count before they're used as
+        # seeds removes that noise; their would-be seed voxels either fall to
+        # a remaining real seed in the same foreground component, or (if none
+        # remain) the whole component becomes provisional, same as the
+        # existing num_local_skel == 0 path.
+        self.min_skeleton_size = int(min_skeleton_size)
+
+    def _process(self, data, chunk_corner, chunk_num_voxels):
+        data = data.astype(np.float32)
+        semantic_prob = data[self.semantic_channel]
+        skeleton_prob = data[self.skeleton_channel]
+        vectors = data[self.vector_channels]
+
+        fg_mask = semantic_prob > self.semantic_threshold
+        skel_mask = (skeleton_prob > self.skeleton_threshold) & fg_mask
+
+        fg_components, num_fg = label(fg_mask)
+        segmentation = np.zeros(fg_mask.shape, dtype=np.int64)
+        next_id = 1
+
+        for comp_id in range(1, num_fg + 1):
+            comp_mask = fg_components == comp_id
+            coords = np.argwhere(comp_mask)
+
+            local_skel_labels, num_local_skel = label(comp_mask & skel_mask)
+            if self.min_skeleton_size > 0 and num_local_skel > 0:
+                sizes = np.bincount(local_skel_labels.ravel())
+                too_small = np.nonzero(sizes < self.min_skeleton_size)[0]
+                too_small = too_small[too_small != 0]
+                if too_small.size:
+                    local_skel_labels[np.isin(local_skel_labels, too_small)] = 0
+                    local_skel_labels, num_local_skel = label(local_skel_labels > 0)
+
+            if num_local_skel == 0:
+                # true skeleton not visible in this block -- provisional id,
+                # left for SimpleBlockwiseMerger (or a future offline
+                # stitching pass) to reconcile with a neighboring block.
+                segmentation[coords[:, 0], coords[:, 1], coords[:, 2]] = next_id
+                next_id += 1
+                continue
+
+            skel_coords = np.argwhere(local_skel_labels > 0)
+            skel_ids = local_skel_labels[
+                skel_coords[:, 0], skel_coords[:, 1], skel_coords[:, 2]
+            ]
+            tree = cKDTree(skel_coords)
+
+            disp = vectors[:, coords[:, 0], coords[:, 1], coords[:, 2]].T
+            embedded = coords + disp
+            _, idx = tree.query(embedded)
+            segmentation[coords[:, 0], coords[:, 1], coords[:, 2]] = (
+                skel_ids[idx] + next_id - 1
+            )
+            next_id += num_local_skel
+
+        unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
+        segmentation[segmentation > 0] += unique_increment
+        segmentation = segmentation.astype(np.uint64)
+
+        return np.expand_dims(segmentation, axis=0)
+
+    @property
+    def dtype(self):
+        return np.uint64
+
+    @property
+    def is_segmentation(self):
+        return True
+
+    @property
+    def num_channels(self):
+        return 1
+
+
+class SkeletonDistancePostprocessor(PostProcessor):
+    """Turn an already-decoded 3-channel skeleton_distance head (semantic,
+    skeleton, distance-from-skeleton -- channels 0-1 true [0,1] probabilities,
+    channel 2 distance in voxels; see a `SkeletonDistanceDecodeWrapper` model
+    wrapper analogous to `SkootsDecodeWrapper`) into an instance segmentation
+    for a single block.
+
+    Sibling of `SkootsPostprocessor` for the 3-channel scalar-distance head
+    (see `skoots_loss.SkeletonDistanceLoss`'s docstring for why that head
+    exists: no per-voxel direction, only distance, appropriate when
+    instances don't actually touch). Same per-foreground-component gating
+    and provisional-id/`SimpleBlockwiseMerger` chaining story as
+    `SkootsPostprocessor` -- see that class's docstring for the full
+    blockwise-stitching caveats, which apply unchanged here.
+
+    Algorithm, per foreground connected-component in this block:
+      1. threshold semantic/skeleton channels into binary masks.
+      2. label the skeleton mask *restricted to that component* -- each
+         skeleton connected-component is one candidate instance seed.
+      3. if the component has no skeleton seed at all, keep it as one
+         provisional instance (see `SkootsPostprocessor` point 3).
+      4. otherwise, marker-controlled watershed: flood outward from each
+         skeleton seed, walking uphill through the predicted
+         distance-from-skeleton surface, restricted to this component. A
+         voxel joins whichever seed's flood reaches it first -- i.e.
+         whichever skeleton component the network estimates it's closest to
+         the medial axis of. This is the classic distance-transform-watershed
+         instance-splitting technique; it has no way to disambiguate two
+         instances by *direction* the way `SkootsPostprocessor`'s vector
+         embedding does, so it only works when this component's shape
+         already implies which points belong to which skeleton (true here
+         because these instances don't touch -- see corrections/skoots_mito
+         investigation).
+    """
+
+    def __init__(
+        self,
+        semantic_channel: int = 0,
+        skeleton_channel: int = 1,
+        distance_channel: int = 2,
+        semantic_threshold: float = 0.5,
+        skeleton_threshold: float = 0.5,
+    ):
+        self.semantic_channel = int(semantic_channel)
+        self.skeleton_channel = int(skeleton_channel)
+        self.distance_channel = int(distance_channel)
+        self.semantic_threshold = float(semantic_threshold)
+        self.skeleton_threshold = float(skeleton_threshold)
+
+    def _process(self, data, chunk_corner, chunk_num_voxels):
+        data = data.astype(np.float32)
+        semantic_prob = data[self.semantic_channel]
+        skeleton_prob = data[self.skeleton_channel]
+        distance = data[self.distance_channel]
+
+        fg_mask = semantic_prob > self.semantic_threshold
+        skel_mask = (skeleton_prob > self.skeleton_threshold) & fg_mask
+
+        fg_components, num_fg = label(fg_mask)
+        segmentation = np.zeros(fg_mask.shape, dtype=np.int64)
+        next_id = 1
+
+        for comp_id in range(1, num_fg + 1):
+            comp_mask = fg_components == comp_id
+
+            local_skel_labels, num_local_skel = label(comp_mask & skel_mask)
+            if num_local_skel == 0:
+                # true skeleton not visible in this block -- provisional id,
+                # left for SimpleBlockwiseMerger (or a future offline
+                # stitching pass) to reconcile with a neighboring block.
+                segmentation[comp_mask] = next_id
+                next_id += 1
+                continue
+
+            markers = np.where(comp_mask, local_skel_labels, 0)
+            grown = watershed(distance, markers=markers, mask=comp_mask)
+            segmentation[comp_mask] = grown[comp_mask] + next_id - 1
+            next_id += num_local_skel
+
+        unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
+        segmentation[segmentation > 0] += unique_increment
+        segmentation = segmentation.astype(np.uint64)
+
+        return np.expand_dims(segmentation, axis=0)
+
+    @property
+    def dtype(self):
+        return np.uint64
+
+    @property
+    def is_segmentation(self):
+        return True
+
+    @property
+    def num_channels(self):
+        return 1
+
+
 class SimpleBlockwiseMerger(PostProcessor):
     # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
     def __init__(
@@ -275,8 +536,23 @@ class SimpleBlockwiseMerger(PostProcessor):
         # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
         return data.astype(np.uint64 if self.use_exact else np.uint16)
 
-    # def to_dict(self):
-    #     return {"name": self.name()}
+    def to_dict(self):
+        # Base to_dict() serializes every non-underscore instance attr, but
+        # this class stores accumulated runtime state (equivalences, the
+        # face dict, etc.) as plain attrs -- not to_dict()'s fault in
+        # general, just this class's -- because `equivalences` specifically
+        # needs to stay a plain public attribute for server.py's duck-typed
+        # `hasattr(postprocess, "equivalences")` polling. Overriding here
+        # instead: only the real constructor params round-trip through
+        # to_dict() -> URL -> deserialize_list() -> __init__(**kwargs)
+        # (see server.py's `refresh_dataset`, called on every request) --
+        # everything else would fail with "unexpected keyword argument"
+        # since __init__ doesn't accept it back.
+        return {
+            "name": self.name(),
+            "channel": self.channel,
+            "face_erosion_iterations": self.face_erosion_iterations,
+        }
 
     def calculate_equivalences(self):
         chunk_slice_position_to_coords_id_dict = (
