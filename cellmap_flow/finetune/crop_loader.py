@@ -28,6 +28,8 @@ import yaml
 import zarr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from cellmap_flow.utils import zarr_v3
+
 logger = logging.getLogger(__name__)
 
 
@@ -142,7 +144,14 @@ def _read_voxel_size_and_offset(
         2. Plain ``zarr.Array`` with ``transform``/``resolution`` attrs.
         3. Plain ``zarr.Array`` with no metadata -> voxel_size=(1,1,1),
            offset=(0,0,0).
+
+    Zarr **v3**-format stores (``zarr.json``) are handled separately in
+    :func:`_read_voxel_size_and_offset_v3`, since zarr-python 2.x cannot open
+    them at all.
     """
+    if zarr_v3.is_v3_container(zarr_path):
+        return _read_voxel_size_and_offset_v3(zarr_path)
+
     node = zarr.open(zarr_path, mode="r")
 
     if isinstance(node, zarr.hierarchy.Group):
@@ -179,10 +188,52 @@ def _read_voxel_size_and_offset(
     return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
 
 
-def _open_array(zarr_path: str, sub: Tuple[str, ...]) -> zarr.Array:
+def _read_voxel_size_and_offset_v3(
+    zarr_path: str,
+) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
+    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`. Same three
+    layouts, read via plain ``json.load`` on ``zarr.json`` instead of
+    zarr-python (which cannot open v3 stores)."""
+    meta = zarr_v3.read_zarr_json(zarr_path)
+
+    if meta.get("node_type") == "group":
+        ms = zarr_v3.multiscales_from_group(zarr_path)
+        if ms is not None:
+            ds = ms["datasets"][0]
+            sub = ds["path"]
+            scale = np.array([1.0, 1.0, 1.0])
+            translation = np.array([0.0, 0.0, 0.0])
+            for tx in ds.get("coordinateTransformations", []):
+                if tx.get("type") == "scale":
+                    scale = np.array(tx["scale"], dtype=float)
+                elif tx.get("type") == "translation":
+                    translation = np.array(tx["translation"], dtype=float)
+            return (sub,), scale, translation
+        if zarr_v3.is_v3_container(os.path.join(zarr_path, "s0")):
+            return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+        raise ValueError(
+            f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
+        )
+
+    attrs = zarr_v3.attrs_from_meta(meta)
+    if "transform" in attrs:
+        tx = attrs["transform"]
+        scale = np.array(tx.get("scale", [1, 1, 1]), dtype=float)
+        translation = np.array(tx.get("translate", [0, 0, 0]), dtype=float)
+        return (), scale, translation
+    if "resolution" in attrs:
+        scale = np.array(attrs["resolution"], dtype=float)
+        translation = np.array(attrs.get("offset", [0, 0, 0]), dtype=float)
+        return (), scale, translation
+    return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+
+
+def _open_array(zarr_path: str, sub: Tuple[str, ...]):
     target = zarr_path
     for piece in sub:
         target = os.path.join(target, piece)
+    if zarr_v3.is_v3_container(target):
+        return zarr_v3.open_array_v3(target)
     arr = zarr.open(target, mode="r")
     if not isinstance(arr, zarr.Array):
         raise ValueError(f"Expected zarr.Array at {target}, got {type(arr).__name__}")

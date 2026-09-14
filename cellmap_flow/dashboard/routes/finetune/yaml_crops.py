@@ -200,6 +200,38 @@ def _ensure_editable_layer(volume_id, minio_url):
 # Crop -> volume write
 # ---------------------------------------------------------------------------
 
+def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
+    """Downsample integer label data by exact per-axis block factors using
+    majority vote (mode) over each block.
+
+    Unlike single-point nearest-neighbor sampling (which always picks one
+    fixed corner of each block, e.g. scipy.ndimage.zoom's grid_mode=True
+    deterministically picks the block's *last* voxel on every axis), this
+    represents each output voxel by the value most common across its whole
+    footprint -- no systematic corner-bias, and fewer boundary voxels
+    flipped by picking an unrepresentative single sample.
+    """
+    factors = tuple(int(round(f)) for f in factors)
+    shape = labels.shape
+    trimmed_shape = tuple((s // f) * f for s, f in zip(shape, factors))
+    trimmed = labels[tuple(slice(0, s) for s in trimmed_shape)]
+    block_dims = tuple(s // f for s, f in zip(trimmed_shape, factors))
+    reshaped = trimmed.reshape(
+        block_dims[0], factors[0], block_dims[1], factors[1], block_dims[2], factors[2]
+    )
+    reshaped = reshaped.transpose(0, 2, 4, 1, 3, 5)
+    flat_blocks = reshaped.reshape(block_dims[0], block_dims[1], block_dims[2], -1)
+
+    best_count = np.zeros(block_dims, dtype=np.int32)
+    result = np.zeros(block_dims, dtype=labels.dtype)
+    for val in np.unique(labels):
+        count = (flat_blocks == val).sum(axis=-1)
+        better = count > best_count
+        result[better] = val
+        best_count[better] = count[better]
+    return result
+
+
 def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
     """Read a YAML crop's annotation, remap, and write it into volume[s0] at the
     crop's physical offset. Returns the number of FG voxels written."""
@@ -216,12 +248,6 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         )
 
     eff_output_vs = np.array(volume_meta["output_voxel_size"], dtype=float)
-    if not np.allclose(src_voxel_size_nm, eff_output_vs):
-        logger.warning(
-            f"Crop {entry.path} voxel size {tuple(src_voxel_size_nm)} != "
-            f"volume voxel size {tuple(eff_output_vs)}. Writing values as-is "
-            "without resampling — caller should ensure scale compatibility."
-        )
 
     t2 = time.time()
     remapped = remap_labels(
@@ -232,6 +258,47 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         connected_components=entry.connected_components,
     )
     t_remap = time.time() - t2
+
+    if not np.allclose(src_voxel_size_nm, eff_output_vs):
+        scale_ratio = src_voxel_size_nm / eff_output_vs
+        logger.info(
+            f"Crop {entry.path} voxel size {tuple(src_voxel_size_nm)} != "
+            f"volume voxel size {tuple(eff_output_vs)}. Resampling by "
+            f"{tuple(scale_ratio)} before writing so the written data "
+            "occupies its true physical extent."
+        )
+
+        integer_factors = eff_output_vs / src_voxel_size_nm
+        if np.all(scale_ratio <= 1.0) and np.allclose(
+            integer_factors, np.round(integer_factors), atol=1e-6
+        ):
+            # Exact integer downsample: majority-vote (mode) over each
+            # block, rather than picking one arbitrary corner sample.
+            remapped = _majority_vote_downsample(remapped, integer_factors)
+        else:
+            from scipy.ndimage import zoom
+
+            # grid_mode=True aligns to pixel *centers* rather than the
+            # default's array-endpoint alignment (wrong, and increasingly
+            # so toward the edges) -- but it still samples a single fixed
+            # corner of each block, used here only as a fallback for
+            # non-integer ratios / upsampling where block-voting doesn't
+            # apply.
+            remapped = zoom(remapped, scale_ratio, order=0, grid_mode=True, mode="nearest")
+
+        # Collapsing multiple fine voxels into one coarse voxel shifts that
+        # coarse voxel's true center by half a *fine* voxel relative to the
+        # crop's own translate (which refers to fine voxel 0's center) --
+        # this is the same +scale_fine/2 accumulation OME-NGFF's own
+        # multiscale pyramids apply between levels (confirmed on this
+        # dataset's own zarr.json: s0->s1->s2 translations are
+        # 0 -> 4 -> 12nm). Omitting it introduces a systematic, one-sided
+        # sub-voxel offset -- confirmed by directly overlaying the written
+        # volume against the source crop in neuroglancer.
+        src_offset_nm = src_offset_nm + np.where(
+            scale_ratio < 1.0, src_voxel_size_nm / 2.0, 0.0
+        )
+
     t3 = time.time()
     n_fg = int(np.count_nonzero(remapped >= 2))
     t_count = time.time() - t3
@@ -242,7 +309,7 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
     )
 
     dataset_offset_nm = np.array(volume_meta["dataset_offset_nm"], dtype=float)
-    write_voxel_offset = (
+    write_voxel_offset = np.round(
         (src_offset_nm - dataset_offset_nm) / eff_output_vs
     ).astype(int)
     z0, y0, x0 = write_voxel_offset.tolist()

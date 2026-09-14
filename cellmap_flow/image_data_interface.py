@@ -1,14 +1,13 @@
 import zarr
 from cellmap_flow.utils.ds import (
-    _is_zarr_v3_container,
     _join_path,
     _open_zarr,
     find_closest_scale,
     get_ds_info,
-    is_zarr_v3_group,
     open_ds_tensorstore,
     to_ndarray_tensorstore,
 )
+from cellmap_flow.utils import zarr_v3
 import logging
 from funlib.geometry import Coordinate
 
@@ -28,26 +27,31 @@ class ImageDataInterface:
     ):
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
-            try:
-                # The v2 `zarr` package (_open_zarr) can't open Zarr v3
-                # stores at all, so a v3 group is detected up front instead
-                # of via isinstance(ds, zarr.hierarchy.Group); a v3 array
-                # (already a concrete scale, no group resolution needed)
-                # skips the v2 attempt entirely rather than let it fail.
-                if is_zarr_v3_group(dataset_path):
-                    scale, _, _ = find_closest_scale(dataset_path, voxel_size)
-                    logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                    dataset_path = _join_path(dataset_path, scale)
-                    logger.info(f"using dataset path {dataset_path}")
-                elif not _is_zarr_v3_container(dataset_path):
+            v3_container = zarr_v3.find_v3_container(dataset_path)
+            if v3_container is not None:
+                try:
+                    meta = zarr_v3.read_zarr_json(v3_container)
+                    if meta.get("node_type") == "group":
+                        scale, _, _ = zarr_v3.find_closest_scale_v3(
+                            v3_container, voxel_size
+                        )
+                        logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                        dataset_path = _join_path(v3_container, scale)
+                        logger.info(f"using dataset path {dataset_path}")
+                except Exception as e:
+                    logger.warning(
+                        f"could not open v3 dataset {dataset_path} to find scale: {e}"
+                    )
+            else:
+                try:
                     ds = _open_zarr(dataset_path, mode="r")
                     if isinstance(ds, zarr.hierarchy.Group):
                         scale, _, _ = find_closest_scale(dataset_path, voxel_size)
                         logger.info(f"found scale {scale} for voxel size {voxel_size}")
                         dataset_path = _join_path(dataset_path, scale)
                         logger.info(f"using dataset path {dataset_path}")
-            except Exception as e:
-                logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
+                except Exception as e:
+                    logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         self._ts = None
         (
