@@ -225,7 +225,16 @@ class Flow:
         dtype = model_output_dtype
 
         if len(self.postprocess) > 0:
-            for postprocess in self.postprocess:
+            # Postprocessors are applied in order (see Inferencer), so the dtype
+            # that actually reaches the client is the one declared by the LAST
+            # step that declares one. Scan in reverse, matching
+            # is_output_segmentation(). Scanning forward picked e.g.
+            # SigmoidPostprocessor's float32 ahead of a trailing
+            # AffinityPostprocessor's uint64, which both advertised the wrong
+            # dtype in the zarr metadata (neuroglancer: "Data type not
+            # compatible with segmentation layer") and cast uint64 label ids
+            # through float32, corrupting any id above 2**24.
+            for postprocess in self.postprocess[::-1]:
                 if postprocess.dtype:
                     logger.info(
                         f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
