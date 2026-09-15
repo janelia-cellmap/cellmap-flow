@@ -283,6 +283,23 @@ def stream_job_logs_response(job_id):
         streamed_bpeek = False
         file_seen = finetune_job.log_file.exists()
         last_position = 0
+        # A read can land mid-line ("Epoch 7/10 - Lo"). Emitting that as a
+        # complete line and advancing past it splits the record in two, and
+        # neither half matches the client's "Epoch N/M - Loss:" pattern, so the
+        # epoch silently vanishes from the loss plot. Hold the incomplete tail
+        # back and prepend it to the next read.
+        pending_partial = ""
+
+        def split_complete_lines(chunk):
+            """Return (complete_text, leftover_partial) for a freshly read chunk."""
+            nonlocal pending_partial
+            chunk = pending_partial + chunk
+            cut = chunk.rfind("\n")
+            if cut == -1:
+                pending_partial = chunk
+                return ""
+            pending_partial = chunk[cut + 1:]
+            return chunk[:cut]
 
         if file_seen:
             try:
@@ -323,7 +340,8 @@ def stream_job_logs_response(job_id):
                         new_content = f.read()
                         last_position = f.tell()
                     if new_content:
-                        block = sse_data_block(list(iter_visible_lines(new_content)))
+                        complete = split_complete_lines(new_content)
+                        block = sse_data_block(list(iter_visible_lines(complete)))
                         if block:
                             yield block
                 elif use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
@@ -348,6 +366,25 @@ def stream_job_logs_response(job_id):
             except Exception as e:
                 logger.error(f"Error streaming logs: {e}")
                 break
+
+        # The loop above exits as soon as status leaves PENDING/RUNNING, which
+        # can happen before the last chunk of the log has been read. Without
+        # this final drain the closing epochs -- and the "Training Complete!"
+        # summary -- are never streamed, which is most likely exactly when
+        # training finished quickly.
+        try:
+            if finetune_job.log_file.exists():
+                with open(finetune_job.log_file, "r") as f:
+                    f.seek(last_position)
+                    remaining = f.read()
+                    last_position = f.tell()
+                remaining = (pending_partial + remaining) if pending_partial else remaining
+                pending_partial = ""
+                block = sse_data_block(list(iter_visible_lines(remaining)))
+                if block:
+                    yield block
+        except Exception as e:
+            logger.error(f"Error draining final log content: {e}")
 
         yield f"data: === Training {finetune_job.status.value} ===\n\n"
 

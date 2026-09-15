@@ -1435,7 +1435,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource.onmessage = function(event) {
       appendLog(event.data);
-      updateProgressFromLogLine(event.data);
+      // One SSE event can carry several log lines: the server emits a block of
+      // "data: " lines and the browser concatenates them into a single
+      // newline-separated event.data. Parsing the blob as one line would only
+      // ever match the FIRST "Epoch N/M - Loss:" in it (String.match without
+      // /g returns one match), silently dropping every other epoch from the
+      // plot whenever epochs complete fast enough to batch.
+      event.data.split("\n").forEach(function(logLine) {
+        updateProgressFromLogLine(logLine);
+      });
 
       // Auto-scroll if enabled
       const logsArea = document.getElementById("trainingLogs");
