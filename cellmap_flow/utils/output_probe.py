@@ -165,3 +165,74 @@ def review_postprocess(
             "suggest": ["SigmoidPostprocessor"],
         }
     return {"level": "ok", "message": "Model output is unbounded; current postprocessing left as set.", "suggest": []}
+
+
+# --- input normalization -----------------------------------------------------
+#
+# Unlike the output side, the input scale a model expects leaves no signature in
+# its weights -- it is a training-time convention. So this does not infer
+# anything; it reads a declared convention and falls back to the raw dtype.
+
+DACAPO_FRAMEWORKS = ("dacapo",)
+
+
+def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict:
+    """Propose an input_norm config for a model.
+
+    Priority:
+      1. ``declared`` -- an explicit input_norm in the model's own metadata.
+         Nothing writes this today, but honour it when it appears.
+      2. The training framework's convention. DaCapo trains on [-1, 1], hence
+         the extra ``x*2-1`` on top of the 0-1 rescale.
+      3. The raw dtype alone, giving [0, 1].
+
+    Returns ``{"input_norm": {...}, "reason": str, "confidence": str}``.
+    """
+    if declared:
+        return {
+            "input_norm": declared,
+            "reason": "declared in the model's own metadata",
+            "confidence": "high",
+        }
+
+    try:
+        import numpy as np
+
+        info = np.iinfo(np.dtype(raw_dtype))
+        lo, hi = float(info.min), float(info.max)
+    except Exception:
+        lo, hi = 0.0, 255.0
+
+    norm = {
+        "MinMaxNormalizer": {
+            "name": "MinMaxNormalizer",
+            "min_value": lo,
+            "max_value": hi,
+            "invert": False,
+        }
+    }
+
+    fw = str(framework or "").lower()
+    if any(tok in fw for tok in DACAPO_FRAMEWORKS):
+        norm["LambdaNormalizer"] = {
+            "name": "LambdaNormalizer",
+            "expression": "x*2-1",
+        }
+        return {
+            "input_norm": norm,
+            "reason": (
+                f"framework is '{framework}'; DaCapo models are trained on "
+                f"inputs in [-1, 1], so {raw_dtype} is rescaled to [0,1] then "
+                "shifted with x*2-1"
+            ),
+            "confidence": "medium",
+        }
+
+    return {
+        "input_norm": norm,
+        "reason": (
+            f"no framework declared; defaulting to a plain {raw_dtype} rescale "
+            "to [0, 1]. Check this against how the model was trained."
+        ),
+        "confidence": "low",
+    }
