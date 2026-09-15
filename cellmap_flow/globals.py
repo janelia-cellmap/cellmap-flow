@@ -345,6 +345,31 @@ def current_input_norm_config() -> dict:
     return derived
 
 
+def current_postprocess_config() -> dict:
+    """Return the dashboard's current postprocess chain as a JSON-serializable dict.
+
+    Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
+    populated, otherwise reconstructs the dict from the live ``g.postprocess``
+    instances via their ``.to_dict()``. The fallback matters for the same
+    reason it does for input_norm -- e.g. a yaml booted with a
+    ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
+    ``g.postprocess`` but never touches ``postprocess_config``.
+    """
+    cfg = getattr(g, "postprocess_config", None) or {}
+    if cfg:
+        return cfg
+    procs = getattr(g, "postprocess", None) or []
+    derived = {}
+    for p in procs:
+        try:
+            d = p.to_dict()
+            name = d.pop("name", type(p).__name__)
+            derived[name] = d
+        except Exception:
+            continue
+    return derived
+
+
 def get_blockwise_tasks_dir():
     tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
         "~/.cellmap_flow/blockwise_tasks"
