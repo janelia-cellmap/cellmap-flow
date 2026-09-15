@@ -1,4 +1,5 @@
 # %%
+import time
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -87,6 +88,50 @@ class Inferencer:
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)
         # print("Model compiled")
         self.model_config.config.model.eval()
+        self._warmup()
+
+    def _warmup(self):
+        """Run one throwaway forward pass so the first real chunk doesn't pay for it.
+
+        ``.to(device)`` only moves weights; cuDNN algorithm selection, CUDA
+        kernel module loading and workspace allocation all happen lazily on the
+        first actual ``forward()``. Without this, that one-time cost lands on
+        whichever chunk neuroglancer happens to request first, which presents as
+        "the layer appeared but nothing loads for a while". Doing it here moves
+        the stall to server startup, where the dashboard is already blocked in
+        ``wait_for_host()`` and it costs the user nothing.
+
+        Best effort: a failure here (unknown shapes, an unusual forward
+        signature, OOM) must never stop the server from coming up.
+        """
+        config = self.model_config.config
+        try:
+            input_size = getattr(config, "input_size", None)
+            if input_size is None:
+                # read_shape is in world units; convert to voxels the same way
+                # ModelConfig does.
+                input_size = np.array(config.read_shape) // np.array(
+                    config.input_voxel_size
+                )
+            shape = (1, 1, *(int(s) for s in input_size))
+        except Exception as e:
+            logger.info(f"Skipping warmup, could not determine input shape: {e}")
+            return
+
+        try:
+            dummy = torch.zeros(shape, device=self.device)
+            dummy = dummy.half() if self.use_half_prediction else dummy.float()
+            start = time.time()
+            with torch.no_grad():
+                config.model.forward(dummy)
+            if self.device.type == "cuda":
+                torch.cuda.synchronize()
+            logger.info(f"Warmup forward {shape} took {time.time() - start:.1f}s")
+        except Exception as e:
+            logger.warning(
+                f"Warmup forward {shape} failed ({e}); the first chunk request "
+                "will absorb the one-time initialization cost instead"
+            )
 
     def process_chunk(self, idi, roi):
         # check if process_chunk is in self.config
