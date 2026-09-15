@@ -8,6 +8,7 @@ periodic synchronization of annotations between MinIO and local disk.
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import time
