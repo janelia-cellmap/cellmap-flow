@@ -121,6 +121,15 @@ def process():
 
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(g.dataset_path)
+        # Restore the user's raw-layer contrast/shader instead of the fresh
+        # default get_raw_layer() always builds, which otherwise resets it
+        # every time the pipeline is (re)submitted.
+        raw_shader = g.shaders.get("data")
+        if raw_shader:
+            g.raw.shader = raw_shader
+        raw_shader_controls = g.shader_controls.get("data")
+        if raw_shader_controls:
+            g.raw.shaderControls = raw_shader_controls
         s.layers["data"] = g.raw
         for job in g.jobs:
             model = job.model_name
