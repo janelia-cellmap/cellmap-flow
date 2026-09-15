@@ -109,9 +109,20 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
             logger.error(f"Error creating {config_class.__name__}: {e}")
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
+        except Exception:
+            logger.exception(
+                f"Failed to create {config_class.__name__} with arguments "
+                f"{processed_kwargs} (likely a missing/mismatched dependency "
+                "for this model's framework)"
+            )
+            sys.exit(1)
 
         # Run the server
-        run_server(model_config, data_path, debug, port, certfile, keyfile)
+        try:
+            run_server(model_config, data_path, debug, port, certfile, keyfile)
+        except Exception:
+            logger.exception(f"Server for {config_class.__name__} crashed")
+            sys.exit(1)
 
     # Add docstring
     command_func.__doc__ = f"""

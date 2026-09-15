@@ -18,6 +18,27 @@ This installs:
 - **Neuroglancer** (voxel annotation branch) — adds voxel-level annotation tools needed for painting labels
 - **LoRA/PEFT dependencies** — for parameter-efficient finetuning
 
+MinIO must come from conda-forge. Upstream stopped publishing prebuilt
+community server binaries — `dl.min.io` now returns `410 Gone`, and the
+`minio/minio` GitHub releases carry no assets — so conda-forge, which still
+builds from source, is the only practical source.
+
+### Verify the environment
+
+```bash
+cellmap_flow_doctor
+```
+
+This checks every piece the finetune workflow needs and prints the exact fix
+command for anything missing. Worth running before you start annotating: the
+two most common failures — MinIO not on `PATH`, and upstream Neuroglancer
+installed instead of the voxel-annotation fork — otherwise only surface after
+you have loaded a dataset and created an annotation volume.
+
+Note that the fork check does not look at the version number, since the fork
+keeps upstream's version string. It checks the bundled client for the
+painting tools directly.
+
 ## 1. Launch the Dashboard
 
 Start by loading your data and model with a YAML configuration file:

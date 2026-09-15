@@ -298,36 +298,65 @@ def _generate_model_files(args, model_config, timestamp):
 
     logger.info(f"Generating model config for {finetuned_model_name}...")
 
-    # Extract data path from corrections
+    # Extract data path (and, as a fallback source of normalization/
+    # postprocessing metadata below) from the first correction zarr's own
+    # attrs.
     corrections_path = Path(args.corrections)
     zarr_dirs = list(corrections_path.glob("*.zarr"))
     data_path = None
+    zattrs_input_norm = None
+    zattrs_postprocess = None
     if zarr_dirs:
         zattrs_file = zarr_dirs[0] / ".zattrs"
         if zattrs_file.exists():
             with open(zattrs_file) as f:
                 metadata = json.load(f)
                 data_path = metadata.get("dataset_path")
+                zattrs_input_norm = metadata.get("input_norm")
+                zattrs_postprocess = metadata.get("postprocess")
 
     if not data_path:
         logger.warning("Could not extract data_path from corrections, using serve_data_path")
         data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
 
-    # Bake the training-time input_norm into the generated yaml so the
-    # served finetuned model gets queried with the same normalization the
-    # adapter was trained on. Without this, training-vs-inference scale
-    # mismatch silently destroys finetuning quality.
-    json_data = None
+    # Bake the training-time input_norm/postprocess into the generated yaml
+    # so the served finetuned model gets queried with the same normalization
+    # (and produces output through the same postprocessing, e.g.
+    # SigmoidPostprocessor) the adapter was trained on. Without this,
+    # training-vs-inference scale mismatch silently destroys finetuning
+    # quality.
+    #
+    # Two correction workflows exist and store this differently:
+    #  - the manifest-based workflow (_virtual_sources.json, written by
+    #    yaml_crops.py) -- checked first, since it's kept fresh on restart.
+    #  - the annotation-volume/MinIO workflow (stored directly on the
+    #    correction zarr's own .zattrs, written by annotation_core.py /
+    #    finetune_utils.create_annotation_volume_zarr) -- used as a fallback
+    #    when no manifest exists.
+    train_input_norm = None
+    train_postprocess = None
     try:
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         manifest = read_manifest(str(corrections_path)) or {}
         train_input_norm = manifest.get("input_norm")
-        if train_input_norm:
-            json_data = {"input_norm": train_input_norm, "postprocess": {}}
+        train_postprocess = manifest.get("postprocess")
     except Exception as _e:
+        logger.warning(f"Could not load manifest from {corrections_path}: {_e}")
+
+    train_input_norm = train_input_norm or zattrs_input_norm
+    train_postprocess = train_postprocess or zattrs_postprocess
+
+    if train_input_norm or train_postprocess:
+        json_data = {
+            "input_norm": train_input_norm or {},
+            "postprocess": train_postprocess or {},
+        }
+    else:
+        json_data = None
         logger.warning(
-            f"Could not load training input_norm from manifest: {_e}. "
+            "Could not find training input_norm/postprocess in either the "
+            "corrections manifest or the correction zarr's own attrs. "
             "Generated finetuned yaml will lack normalization metadata."
         )
 

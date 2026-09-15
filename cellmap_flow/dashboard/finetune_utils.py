@@ -8,6 +8,7 @@ periodic synchronization of annotations between MinIO and local disk.
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import time
@@ -255,6 +256,7 @@ def create_annotation_volume_zarr(
     claimed_output_voxel_size=None,
     claimed_input_voxel_size=None,
     input_norm_config=None,
+    postprocess_config=None,
     ai_annotate_enabled=False,
     ai_annotate_label_name=None,
     ai_annotate_gemini_model=None,
@@ -365,6 +367,11 @@ def create_annotation_volume_zarr(
         # trips via json.load / yaml.safe_load without any extra parsing.
         if input_norm_config is not None:
             root.attrs["input_norm"] = input_norm_config
+        # Same rationale as input_norm above: without this, a served
+        # finetuned model generated from this correction data has no way to
+        # know it needs e.g. a SigmoidPostprocessor on its output.
+        if postprocess_config is not None:
+            root.attrs["postprocess"] = postprocess_config
         root.attrs["ai_annotate_enabled"] = bool(ai_annotate_enabled)
         if ai_annotate_label_name is not None:
             root.attrs["ai_annotate_label_name"] = ai_annotate_label_name
@@ -390,6 +397,28 @@ def create_annotation_volume_zarr(
 # MinIO management
 # ---------------------------------------------------------------------------
 
+def _require_minio_binaries():
+    """Fail early, with a fix, if the MinIO binaries are missing.
+
+    Without this the missing binary surfaces as a bare FileNotFoundError from
+    subprocess, after the user has already created a session directory and a
+    full-extent annotation zarr. Note that MinIO no longer publishes prebuilt
+    community server binaries (dl.min.io is 410 Gone and the GitHub releases
+    carry no assets), so conda-forge -- which still builds from source -- is
+    the only practical way to install them.
+    """
+    missing = [name for name in ("minio", "mc") if shutil.which(name) is None]
+    if missing:
+        raise RuntimeError(
+            f"Required MinIO binaries not found on PATH: {', '.join(missing)}. "
+            "Annotation volumes are served to Neuroglancer through a local MinIO "
+            "server, so painting cannot start without them.\n\n"
+            "Install with:\n"
+            "    mamba install minio-server minio-client -c conda-forge\n\n"
+            "Run `cellmap_flow_doctor` to check the rest of the finetune environment."
+        )
+
+
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
@@ -402,6 +431,8 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     Returns:
         MinIO URL for the zarr file
     """
+    _require_minio_binaries()
+
     if minio_state["process"] is None or minio_state["process"].poll() is not None:
         # Determine MinIO storage location
         if output_base_dir:

@@ -30,7 +30,11 @@ def _save_shaders_from_viewer() -> None:
         state = g.viewer.state
         for layer in state.layers:
             shader = getattr(layer, "shader", None)
-            if shader:
+            # A neuroglancer layer with no shader set reports the *string*
+            # "None" (not Python None), which is truthy. Storing it would
+            # later be restored onto the layer verbatim and fail to compile,
+            # wiping the user's rendering. Treat it as "unset".
+            if shader and shader != "None":
                 g.shaders[layer.name] = shader
             shader_controls = getattr(layer, "shaderControls", None) or getattr(layer, "shader_controls", None)
             if shader_controls:
@@ -121,6 +125,15 @@ def process():
 
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(g.dataset_path)
+        # Restore the user's raw-layer contrast/shader instead of the fresh
+        # default get_raw_layer() always builds, which otherwise resets it
+        # every time the pipeline is (re)submitted.
+        raw_shader = g.shaders.get("data")
+        if raw_shader and raw_shader != "None":
+            g.raw.shader = raw_shader
+        raw_shader_controls = g.shader_controls.get("data")
+        if raw_shader_controls:
+            g.raw.shaderControls = raw_shader_controls
         s.layers["data"] = g.raw
         for job in g.jobs:
             model = job.model_name

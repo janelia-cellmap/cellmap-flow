@@ -20,7 +20,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     viewer_position_and_scales,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.globals import current_input_norm_config, g
+from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +287,7 @@ def create_annotation_volume_response(data):
             claimed_output_voxel_size=claimed_output_voxel_size,
             claimed_input_voxel_size=claimed_input_voxel_size,
             input_norm_config=current_input_norm_config(),
+            postprocess_config=current_postprocess_config(),
             ai_annotate_enabled=ai_annotate_enabled,
             ai_annotate_label_name=ai_annotate_label_name,
             ai_annotate_gemini_model=ai_annotate_gemini_model,

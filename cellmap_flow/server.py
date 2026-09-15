@@ -40,6 +40,10 @@ class CellMapFlowServer:
         """
 
         self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
+        # Original (model-native) channel count, so refresh_dataset() can restore
+        # it once a postprocessor that overrode num_channels (e.g. affinities) is
+        # removed again instead of leaving vol_shape/zarr_block_shape pinned.
+        self._default_zarr_block_channels = self.zarr_block_shape[-1]
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
@@ -176,6 +180,13 @@ class CellMapFlowServer:
 
     def refresh_dataset(self, dataset):
         g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
+
+        if self.has_channel:
+            # Reset to the model's native channel count first so that removing a
+            # postprocessor which had overridden it (e.g. affinities -> 1 channel)
+            # actually restores the previous working state instead of staying stuck.
+            self.vol_shape[-1] = self.output_channels
+            self.zarr_block_shape[-1] = self._default_zarr_block_channels
 
         for postprocess in g.postprocess:
             if hasattr(postprocess, "num_channels") and self.has_channel:

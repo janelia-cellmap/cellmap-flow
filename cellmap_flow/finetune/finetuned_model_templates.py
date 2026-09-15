@@ -98,3 +98,64 @@ def generate_finetuned_model_yaml(
     logger.info(f"Generated finetuned model YAML: {output_path}")
 
     return output_path
+
+
+def generate_current_config_yaml(
+    models: list,
+    data_path: str,
+    queue: str = "gpu_h100",
+    charge_group: str = "cellmap",
+    json_data: dict = None,
+) -> str:
+    """
+    Build YAML text snapshotting the dashboard's current live server config
+    (whatever models/normalization/postprocessing/queue are active right
+    now), so it can be handed back to `cellmap_flow_yaml` later.
+
+    Unlike generate_finetuned_model_yaml (which describes one specific
+    finetune job), this is a general "export what's currently running"
+    dump -- it doesn't write to disk itself, callers decide where the
+    result goes (a download response, a file, etc).
+
+    Args:
+        models: list of model entry dicts (each from ModelConfig.to_dict())
+        data_path: current dataset path
+        queue: LSF queue name
+        charge_group: LSF charge group
+        json_data: dict with "input_norm"/"postprocess" keys reflecting the
+            currently active normalization/postprocessing, if any
+
+    Returns:
+        YAML text (str) ready to write to a file.
+    """
+    import yaml as yaml_lib
+
+    yaml_dict = {
+        "data_path": data_path,
+        "charge_group": charge_group,
+        "queue": queue,
+    }
+
+    has_json_data = json_data and (
+        json_data.get("input_norm") or json_data.get("postprocess")
+    )
+    if has_json_data:
+        yaml_dict["json_data"] = json_data
+
+    yaml_dict["models"] = models
+
+    header = (
+        "# CellMap-Flow exported configuration\n"
+        "# Reload with: cellmap_flow_yaml <this file>\n"
+        "#\n"
+    )
+    if not has_json_data:
+        header += (
+            "# WARNING: no normalization/postprocessing was active when this\n"
+            "# was exported -- add a json_data block manually if your model(s)\n"
+            "# need one (e.g. logit outputs need a SigmoidPostprocessor).\n"
+            "#\n"
+        )
+
+    yaml_content = yaml_lib.dump(yaml_dict, default_flow_style=False, sort_keys=False)
+    return header + yaml_content
