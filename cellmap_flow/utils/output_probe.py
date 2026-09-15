@@ -32,7 +32,48 @@ def classify_output_range(lo: float, hi: float) -> str:
     return UNBOUNDED
 
 
-def review_postprocess(output_class: str, postprocess_names) -> dict:
+def looks_like_affinities(out_channels=None, model_name="", channels_names=None) -> bool:
+    """Heuristic: does this model emit affinities rather than a single map?
+
+    Affinity models have one output channel per neighborhood offset (3 for
+    nearest-neighbour, 9 with longer range), so a channel count of 3+ is the
+    structural tell. Require a naming hint as well, since a multi-class
+    semantic model also has several channels and wants entirely different
+    handling.
+    """
+    if not out_channels or int(out_channels) < 3:
+        return False
+    haystack = " ".join(
+        [str(model_name or "")] + [str(c) for c in (channels_names or [])]
+    ).lower()
+    return any(tok in haystack for tok in ("aff", "affinit"))
+
+
+def suggest_affinity_chain(output_class: str) -> list:
+    """The postprocessing an affinity model needs, in order.
+
+    AffinityPostprocessor divides its input by 255 -- it is written to sit
+    downstream of DefaultPostprocessor, which maps [-1,1] to uint8 0-255. Feed
+    it probabilities in [0,1] directly and the affinities come out ~250x too
+    small, so every edge reads as weakly attractive and the mutex watershed
+    degenerates. The rescale step is therefore mandatory, not cosmetic.
+    """
+    chain = []
+    if output_class == UNBOUNDED:
+        chain.append("SigmoidPostprocessor")  # logits -> probabilities
+    # [0,1] -> 0-255, the range AffinityPostprocessor expects
+    chain.append("DefaultPostprocessor")
+    chain.append("AffinityPostprocessor")
+    return chain
+
+
+def review_postprocess(
+    output_class: str,
+    postprocess_names,
+    out_channels=None,
+    model_name="",
+    channels_names=None,
+) -> dict:
     """Compare an observed output class against the configured postprocessors.
 
     Returns ``{"level", "message", "suggest"}`` where ``level`` is one of
@@ -45,6 +86,30 @@ def review_postprocess(output_class: str, postprocess_names) -> dict:
     names = list(postprocess_names or [])
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
+
+    if looks_like_affinities(out_channels, model_name, channels_names):
+        if "AffinityPostprocessor" in names:
+            if not has_default:
+                return {
+                    "level": "warn",
+                    "message": (
+                        "AffinityPostprocessor divides its input by 255, so it "
+                        "needs DefaultPostprocessor ahead of it to rescale "
+                        "[0,1] to 0-255. Without that the affinities are ~250x "
+                        "too small and the watershed collapses to one segment."
+                    ),
+                    "suggest": suggest_affinity_chain(output_class),
+                }
+            return {"level": "ok", "message": "Affinity chain looks complete.", "suggest": []}
+        return {
+            "level": "suggest",
+            "message": (
+                f"This model has {out_channels} output channels and an affinity "
+                "name, so it probably predicts affinities. The chain below "
+                "converts them to a segmentation."
+            ),
+            "suggest": suggest_affinity_chain(output_class),
+        }
 
     if output_class == UNIT:
         if has_sigmoid:

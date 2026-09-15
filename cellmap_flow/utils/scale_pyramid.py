@@ -22,6 +22,85 @@ from cellmap_flow.utils import zarr_v3
 logger = logging.getLogger(__name__)
 
 
+# Shader for the raw EM layer. ``range`` is the displayed contrast window;
+# ``window`` is the wider span the UI slider can be dragged over.
+RAW_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+#uicontrol vec3 color color(default="white");
+void main(){{{{emitRGB(color * normalized());}}}}"""
+
+
+def _dtype_default_range(image):
+    """Fallback display range when percentiles can't be computed."""
+    try:
+        kind = np.dtype(image.dtype).kind
+        if kind == "u":
+            info = np.iinfo(image.dtype)
+            return float(info.min), float(info.max)
+        if kind == "i":
+            info = np.iinfo(image.dtype)
+            return float(info.min), float(info.max)
+    except Exception:
+        pass
+    return -1.0, 1.0
+
+
+def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
+    """Derive a display range from the data rather than hardcoding one.
+
+    Reads the coarsest pyramid level that is still big enough to be
+    representative -- the bottom of a deep pyramid is only a few voxels, and the
+    top is far too large to read here. Percentiles rather than min/max so a
+    handful of saturated voxels (very common in EM) don't flatten everything
+    else into a narrow band, which is what makes the default 0-255 window look
+    washed out on real data.
+
+    ``paths`` is ordered fine -> coarse. Returns (lo, hi), or None to let the
+    caller fall back.
+    """
+    MIN_VOXELS = 4096
+    MAX_VOXELS = 8_000_000
+    for path in reversed(paths):
+        try:
+            image = ImageDataInterface(path, normalize=normalize)
+            n_voxels = int(np.prod(image.shape))
+            if n_voxels < MIN_VOXELS:
+                continue  # too small to be representative; try a finer level
+            if n_voxels > MAX_VOXELS:
+                break  # finer levels are only bigger -- stop rather than read them
+            arr = np.asarray(image.to_ndarray_ts())
+            arr = arr[np.isfinite(arr)]
+            if arr.size == 0:
+                continue
+            lo, hi = (float(v) for v in np.percentile(arr, [lo_pct, hi_pct]))
+            if hi <= lo:
+                continue  # flat level (e.g. all padding)
+            return lo, hi
+        except Exception as e:
+            logger.debug(f"Auto-contrast failed on {path}: {e}")
+            continue
+    return None
+
+
+def _raw_shader(paths, normalize, image_for_fallback=None):
+    """Build the raw-layer shader, preferring a data-derived contrast range."""
+    rng = _auto_contrast_range(paths, normalize) if paths else None
+    if rng is not None:
+        lo, hi = rng
+        # Let the slider reach well beyond the auto range so it stays adjustable.
+        pad = (hi - lo) * 0.5 or 1.0
+        wlo, whi = lo - pad, hi + pad
+        logger.info(f"Raw auto-contrast range [{lo:.6g}, {hi:.6g}]")
+    else:
+        lo, hi = (
+            _dtype_default_range(image_for_fallback)
+            if image_for_fallback is not None
+            else (0.0, 255.0)
+        )
+        wlo, whi = lo, hi
+        logger.info(f"Raw auto-contrast unavailable; using [{lo:.6g}, {hi:.6g}]")
+    return RAW_SHADER.format(lo=lo, hi=hi, wlo=wlo, whi=whi)
+
+
 def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
@@ -64,9 +143,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             source = f"{filetype}://{dataset_path}"
         return neuroglancer.ImageLayer(
             source=source,
-            shader="""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-    #uicontrol vec3 color color(default="white");
-    void main(){{emitRGB(color * normalized());}}""",
+            shader=_raw_shader([original_dataset_path], normalize),
         )
 
     if is_multiscale:
@@ -103,8 +180,14 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                     )
                 )
 
+            # Previously this branch set no shader at all, which neuroglancer
+            # reports back as the literal string "None" -- see the guard in
+            # dashboard/routes/pipeline.py.
             return neuroglancer.ImageLayer(
-                dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers))
+                dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers)),
+                shader=_raw_shader(
+                    [_join_path(dataset_path, sc) for sc in scales], normalize
+                ),
             )
         except Exception as e:
             logger.error(e)
@@ -122,9 +205,9 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                 ),
                 voxel_offset=image.offset,
             ),
-            shader="""#uicontrol invlerp normalized(range=[-1, 1], window=[-1, 1]);
-    #uicontrol vec3 color color(default="white");
-    void main(){{emitRGB(color * normalized());}}""",
+            shader=_raw_shader(
+                [original_dataset_path], normalize, image_for_fallback=image
+            ),
         )
 
 
