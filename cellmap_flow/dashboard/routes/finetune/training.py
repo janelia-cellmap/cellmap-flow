@@ -46,7 +46,7 @@ def _parse_patches_per_epoch_override(data):
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
     from cellmap_flow.finetune.virtual_dataset import write_manifest
-    from cellmap_flow.globals import current_input_norm_config
+    from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
 
     current_norm = current_input_norm_config()
     if current_norm and manifest.get("input_norm") != current_norm:
@@ -58,6 +58,17 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             list(current_norm.keys()),
         )
     manifest["input_norm"] = current_norm
+
+    current_postprocess = current_postprocess_config()
+    if current_postprocess and manifest.get("postprocess") != current_postprocess:
+        logger.info(
+            "Refreshing manifest postprocess before %s "
+            "(was: %s, now: %s)",
+            context,
+            list((manifest.get("postprocess") or {}).keys()),
+            list(current_postprocess.keys()),
+        )
+    manifest["postprocess"] = current_postprocess
 
     override_given, patches_per_epoch = _parse_patches_per_epoch_override(data)
     if override_given:

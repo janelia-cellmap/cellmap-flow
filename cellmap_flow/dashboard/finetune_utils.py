@@ -255,6 +255,7 @@ def create_annotation_volume_zarr(
     claimed_output_voxel_size=None,
     claimed_input_voxel_size=None,
     input_norm_config=None,
+    postprocess_config=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -361,6 +362,11 @@ def create_annotation_volume_zarr(
         # trips via json.load / yaml.safe_load without any extra parsing.
         if input_norm_config is not None:
             root.attrs["input_norm"] = input_norm_config
+        # Same rationale as input_norm above: without this, a served
+        # finetuned model generated from this correction data has no way to
+        # know it needs e.g. a SigmoidPostprocessor on its output.
+        if postprocess_config is not None:
+            root.attrs["postprocess"] = postprocess_config
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(

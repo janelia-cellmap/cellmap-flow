@@ -7,6 +7,7 @@ Supports:
 - Extensible to cloud providers and other cluster types
 """
 
+import os
 import subprocess
 import shlex
 import logging
@@ -14,6 +15,7 @@ import sys
 import signal
 import select
 import time
+from pathlib import Path
 from typing import Optional, List
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -27,7 +29,22 @@ logger = logging.getLogger(__name__)
 DEFAULT_SECURITY = "http"
 DEFAULT_QUEUE = "gpu_h100"
 DEFAULT_CHARGE_GROUP = "cellmap"
+# Keep fileglancer's pixi-wrapped launch: Fileglancer's runnables drive the
+# server through `pixi run`, so the env is resolved from the lockfile.
 SERVER_COMMAND = "pixi run cellmap_flow_server"
+SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
+
+
+def _tail(path: Path, max_chars: int = 4000) -> Optional[str]:
+    """Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty."""
+    try:
+        content = path.read_text()
+    except OSError:
+        return None
+    content = content.strip()
+    if not content:
+        return None
+    return content[-max_chars:]
 
 
 class JobStatus(Enum):
@@ -178,9 +195,15 @@ class LocalJob(Job):
 class LSFJob(Job):
     """Job submitted to LSF cluster via bsub."""
     
-    def __init__(self, job_id: str, model_name: Optional[str] = None):
+    def __init__(
+        self,
+        job_id: str,
+        model_name: Optional[str] = None,
+        log_file: Optional[Path] = None,
+    ):
         super().__init__(model_name)
         self.job_id = job_id
+        self.log_file = log_file
     
     def kill(self) -> None:
         """Terminate the LSF job using bkill."""
@@ -305,6 +328,11 @@ class LSFJob(Job):
                 # Check if job has finished
                 if not output and result.returncode != 0:
                     logger.warning(f"Job {self.job_id} may have finished")
+                    crash_output = self.log_file and _tail(self.log_file)
+                    if crash_output:
+                        logger.error(
+                            f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
+                        )
                     break
                 
                 # Try to extract host
@@ -331,6 +359,11 @@ class LSFJob(Job):
                 break
         
         logger.warning(f"Timeout waiting for host from job {self.job_id}")
+        crash_output = self.log_file and _tail(self.log_file)
+        if crash_output:
+            logger.error(
+                f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
+            )
         return None
 
 
@@ -414,11 +447,15 @@ def submit_bsub_job(
     Raises:
         subprocess.CalledProcessError: If job submission fails
     """
-    bsub_command = ["bsub", "-J", job_name]
-    
+    SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # %J is substituted by LSF with the actual job ID once assigned.
+    log_pattern = SERVER_LOG_DIR / f"{job_name}_%J.log"
+
+    bsub_command = ["bsub", "-J", job_name, "-o", str(log_pattern)]
+
     if charge_group:
         bsub_command += ["-P", charge_group]
-    
+
     bsub_command += [
         "-q", queue,
         "-gpu", f"num={num_gpus}",
@@ -436,12 +473,13 @@ def submit_bsub_job(
             check=True,
             timeout=30
         )
-        
+
         # Extract job ID from output like "Job <12345> is submitted..."
         job_id = result.stdout.split()[1].strip('<>')
         logger.info(f"Job {job_id} submitted successfully")
-        
-        return LSFJob(job_id=job_id, model_name=job_name)
+
+        log_file = SERVER_LOG_DIR / f"{job_name}_{job_id}.log"
+        return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Job submission failed: {e.stderr}")
