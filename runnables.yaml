@@ -1,0 +1,25 @@
+name: CellMap Flow
+description: Real-time neural network inference on EM microscopy data.
+version: "0.1.7"
+
+requirements:
+  - "pixi>=0.40"
+
+runnables:
+  - id: run
+    type: service
+    name: Run Inference
+    description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
+    # conda_env: cellmap-flow
+    command: pixi run cellmap_flow_view
+    parameters:
+      - flag: -d
+        name: Dataset Path
+        type: directory
+        description: Path to the EM dataset (e.g., Zarr file).
+        required: true
+
+    resources:
+      cpus: 4
+      memory: "32 GB"
+      walltime: "08:00"

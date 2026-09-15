@@ -322,10 +322,11 @@ def _detect_filetype(dataset_path: str) -> str:
 
 
 def _clean_zarr_compressor(dataset_path: str):
-    """Return .zarray metadata with unsupported compressor fields removed.
+    """Read .zarray metadata and strip unknown compressor fields for tensorstore compatibility.
 
-    Tensorstore is strict about compressor metadata and rejects extra fields
-    added by newer numcodecs versions, such as ``checksum``.
+    Tensorstore is strict about compressor fields and rejects unknown ones
+    (e.g. 'checksum' added by newer numcodecs). Returns cleaned metadata dict
+    or None if not applicable.
     """
     zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
     if not os.path.isfile(zarray_path):
@@ -337,9 +338,10 @@ def _clean_zarr_compressor(dataset_path: str):
         return None
 
     compressor = meta.get("compressor")
-    if not isinstance(compressor, dict):
+    if not compressor or not isinstance(compressor, dict):
         return None
 
+    # Known fields per compressor type that tensorstore accepts
     known_fields = {
         "zstd": {"id", "level"},
         "zlib": {"id", "level"},
@@ -347,7 +349,8 @@ def _clean_zarr_compressor(dataset_path: str):
         "bz2": {"id", "level"},
         "blosc": {"id", "cname", "clevel", "shuffle", "blocksize"},
     }
-    allowed = known_fields.get(compressor.get("id", ""))
+    codec_id = compressor.get("id", "")
+    allowed = known_fields.get(codec_id)
     if allowed is None:
         return None
 
@@ -424,6 +427,8 @@ def open_ds_tensorstore(
     if is_v3:
         filetype = "zarr3"
 
+    # For local zarr (v2) files, clean compressor metadata to remove fields
+    # unsupported by tensorstore (e.g. 'checksum' from newer numcodecs)
     assume_metadata = False
     if (
         filetype == "zarr"
