@@ -58,6 +58,33 @@ To install CellMapFlow with both DaCapo and BioImage.io support, use the followi
 pip install cellmap-flow[dacapo,bioimageio]
 ```
 
+### Installing from GitHub
+
+To get an unreleased branch without cloning:
+
+```bash
+pip install "cellmap-flow @ git+https://github.com/janelia-cellmap/cellmap-flow.git"
+```
+
+Append `@<branch>` to the URL for a specific branch, and add extras in
+brackets after the name, e.g.
+`"cellmap-flow[dacapo] @ git+https://github.com/janelia-cellmap/cellmap-flow.git@my-branch"`.
+
+For development, clone and install in editable mode instead:
+
+```bash
+git clone https://github.com/janelia-cellmap/cellmap-flow.git
+cd cellmap-flow
+pip install -e .
+```
+
+### Finetuning
+
+Interactive finetuning needs two dependencies that cannot come from PyPI — a
+MinIO server (conda-forge only) and a Neuroglancer fork with voxel-annotation
+support — so `pip install cellmap-flow[finetune]` on its own is not enough.
+See [docs/finetuning.md](docs/finetuning.md) for the full setup.
+
 ## Usage
 
 ```bash
