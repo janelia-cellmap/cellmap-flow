@@ -607,7 +607,26 @@ def _copy_chunks_parallel(s3, copy_pairs):
 
 
 def _make_s3_filesystem():
-    """Create an s3fs filesystem pointed at the local MinIO instance."""
+    """Create an s3fs filesystem pointed at the local MinIO instance.
+
+    Both cache opt-outs are load-bearing, not tuning knobs.
+
+    fsspec caches filesystem *instances* keyed on their constructor
+    arguments, so every call here would otherwise hand back the same object
+    -- and with it the same ``dircache``. s3fs fills ``dircache`` on ``ls()``
+    and never expires it by default. The periodic sync thread starts when the
+    annotation volume is created, so its first listing of ``annotation/s0``
+    runs before the user has painted anything and caches a chunk-less
+    listing. Every later sync then reuses that stale listing,
+    ``_diff_and_sync_chunks`` sees no chunk keys, and painted scribbles never
+    reach disk -- while ``_sync_zarr_group_metadata`` keeps working, because
+    ``cat()``/``exists()`` address objects directly and bypass the cache.
+    The symptom is a permanent "Synced 0/N annotations" and a training run
+    that dies with "No corrections found".
+
+    Listings here are small and served by a local MinIO, so not caching them
+    costs nothing.
+    """
     return s3fs.S3FileSystem(
         anon=False,
         key="minio",
@@ -616,6 +635,8 @@ def _make_s3_filesystem():
             "endpoint_url": f"http://{minio_state['ip']}:{minio_state['port']}",
             "region_name": "us-east-1",
         },
+        skip_instance_cache=True,
+        use_listings_cache=False,
     )
 
 
