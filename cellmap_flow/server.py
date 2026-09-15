@@ -106,6 +106,32 @@ class CellMapFlowServer:
         def home():
             return redirect("/apidocs/")
 
+        @self.app.route("/__control__/output_probe", methods=["GET"])
+        def control_output_probe():
+            """Report what activation the model's output already has.
+
+            Measured once during startup warmup (see Inferencer._warmup). The
+            dashboard uses this to propose a postprocessing chain for a freshly
+            loaded model, and to flag an existing one that contradicts the
+            model -- e.g. a SigmoidPostprocessor on a model that already ends in
+            a sigmoid.
+            """
+            inferencer = self.inferencer
+            output_class = getattr(inferencer, "output_class", None)
+            if output_class is None:
+                return jsonify(
+                    {"available": False, "reason": "output probe did not run"}
+                ), HTTPStatus.OK
+            output_range = getattr(inferencer, "output_range", None)
+            return jsonify(
+                {
+                    "available": True,
+                    "output_class": output_class,
+                    "output_min": output_range[0] if output_range else None,
+                    "output_max": output_range[1] if output_range else None,
+                }
+            ), HTTPStatus.OK
+
         @self.app.route("/__control__/restart", methods=["POST"])
         def control_restart():
             if self.restart_callback is None:
