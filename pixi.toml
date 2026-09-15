@@ -70,8 +70,34 @@ edt = "*"
 mwatershed = { git = "https://github.com/pattonw/mwatershed" }
 funlib-math = { git = "https://github.com/funkelab/funlib.math.git" }
 
+# Interactive finetuning. These land in the DEFAULT environment on purpose:
+# Fileglancer launches the tool via `pixi run`, and the training job shells out
+# to `sys.executable -m cellmap_flow.finetune.finetune_cli` -- i.e. the same
+# interpreter the dashboard runs under. A side environment would only work if
+# every launch path remembered `-e finetune`.
+#
+# minio-server/minio-client are conda-only: upstream stopped publishing
+# prebuilt server binaries (dl.min.io is 410 Gone, the GitHub releases carry no
+# assets), so conda-forge -- which still builds from source -- is the only
+# practical source.
+[feature.finetune.dependencies]
+minio-server = "*"
+minio-client = "*"
+
+# The neuroglancer fork adds the voxel-annotation painting tools and the S3
+# kvstore write support they need; upstream neuroglancer has neither, and it is
+# not on PyPI. Declared here rather than in pyproject's [project.optional-
+# dependencies] because a PEP 508 direct reference there would make the
+# published PyPI sdist/wheel unuploadable.
+[feature.finetune.pypi-dependencies]
+peft = ">=0.7.0"
+transformers = ">=4.35.0"
+accelerate = ">=0.20.0"
+requests = "*"
+neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", branch = "feature/voxel-annotation" }
+
 [environments]
-default = { solve-group = "default" }
+default = { features = ["finetune"], solve-group = "default" }
 dacapo = { features = ["dacapo"], solve-group = "dacapo" }
 cellpose = { features = ["cellpose"], solve-group = "cellpose" }
 bioimageio = { features = ["bioimageio"], solve-group = "bioimageio" }
