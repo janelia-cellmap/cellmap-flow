@@ -663,29 +663,65 @@ document.addEventListener("DOMContentLoaded", function () {
       models = [];
       selectedModel = null;
       modelSelect.innerHTML = "";
+      cancelModelPoll();
+      modelPollAttempts = 0;
       loadModels();
     });
   }
 
-  function loadModels() {
+  // Models only appear in g.models_config once a pipeline has been submitted
+  // on the main tab. The finetune tab is usually opened first, so a single
+  // load-on-page-load almost always finds nothing -- previously leaving the
+  // user to click the refresh button until it happened to succeed. Poll
+  // quietly in the background instead, and stop as soon as models show up.
+  let modelPollTimer = null;
+  let modelPollAttempts = 0;
+  let loggedNoModels = false;
+  let lastLoadedCount = null;
+  const MODEL_POLL_INTERVAL_MS = 2000;
+  const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
+
+  function cancelModelPoll() {
+    if (modelPollTimer) {
+      clearTimeout(modelPollTimer);
+      modelPollTimer = null;
+    }
+  }
+
+  function scheduleModelPoll() {
+    if (modelPollTimer || modelPollAttempts >= MODEL_POLL_MAX_ATTEMPTS) return;
+    modelPollTimer = setTimeout(function() {
+      modelPollTimer = null;
+      modelPollAttempts += 1;
+      loadModels({ quiet: true });
+    }, MODEL_POLL_INTERVAL_MS);
+  }
+
+  function loadModels(opts) {
+    const quiet = !!(opts && opts.quiet);
     fetch("/api/finetune/models")
       .then(res => res.json())
       .then(data => {
         if (data.error) {
-          finetuneLog.value += `Error: ${data.error}\n`;
+          if (!quiet) finetuneLog.value += `Error: ${data.error}\n`;
           createCropBtn.disabled = true;
+          scheduleModelPoll();
           return;
         }
 
         models = data.models;
 
         if (models.length === 0) {
-          finetuneLog.value += "Error: No models available for finetuning\n";
-          finetuneLog.value += "  → Submit a model from the main tab first, then click the refresh button (↻) above\n";
+          if (!loggedNoModels) {
+            loggedNoModels = true;
+            finetuneLog.value += "No models available for finetuning yet\n";
+            finetuneLog.value += "  \u2192 Submit a model from the main tab; this list updates automatically\n";
+          }
           createCropBtn.disabled = true;
+          lastLoadedCount = 0;
+          scheduleModelPoll();
           return;
         }
-
         // If only one model, hide dropdown and auto-select
         if (models.length === 1) {
           modelSelectionDiv.style.display = "none";
@@ -722,12 +758,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Enable create button if we have models
         createCropBtn.disabled = false;
-        finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+        cancelModelPoll();
+        loggedNoModels = false;
+        if (!quiet || models.length !== lastLoadedCount) {
+          finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+        }
+        lastLoadedCount = models.length;
       })
       .catch(err => {
-        finetuneLog.value += `Error loading models: ${err}\n`;
+        if (!quiet) finetuneLog.value += `Error loading models: ${err}\n`;
         console.error(err);
         createCropBtn.disabled = true;
+        scheduleModelPoll();
       });
   }
 

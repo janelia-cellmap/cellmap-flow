@@ -4,7 +4,17 @@ This guide walks through the full finetuning workflow in CellMap-Flow: loading d
 
 ## Installation
 
-Create a conda environment with the finetuning dependencies:
+Finetuning needs an editable checkout, not the PyPI release — the dependency
+set is not installable from PyPI alone (see the notes below). So start by
+cloning the repository:
+
+```bash
+git clone https://github.com/janelia-cellmap/cellmap-flow.git
+cd cellmap-flow
+```
+
+Everything after this assumes you are in that directory; the `.` in the
+install command below refers to the checkout.
 
 ```bash
 mamba create -n cellmap-flow-finetune python=3.11 minio-server minio-client -c conda-forge -y
@@ -13,10 +23,23 @@ pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotati
 pip install -e ".[finetune]"
 ```
 
-This installs:
-- **MinIO** (server + client) — local S3-compatible server for serving annotation zarr files to Neuroglancer
-- **Neuroglancer** (voxel annotation branch) — adds voxel-level annotation tools needed for painting labels
-- **LoRA/PEFT dependencies** — for parameter-efficient finetuning
+### What these install, and why they are not just `pip install cellmap-flow`
+
+- **MinIO** (server + client) — a local S3-compatible server that serves
+  annotation zarr files to Neuroglancer for painting. Conda-forge only:
+  upstream stopped publishing prebuilt community server binaries, so
+  `dl.min.io` returns `410 Gone` and the GitHub releases carry no server
+  assets. Conda-forge still builds it from source.
+- **Neuroglancer** (voxel-annotation fork) — adds the voxel-level painting
+  tools and the S3 write support they depend on. Upstream Neuroglancer has
+  neither, and the fork is not published to PyPI. Note that it keeps
+  upstream's version number, so a version check cannot tell them apart; if
+  painting tools are missing from the Draw tab, you have the upstream build.
+- **LoRA/PEFT dependencies** — for parameter-efficient finetuning.
+
+The fork has to be installed as a separate step rather than being listed in
+`pyproject.toml`'s `[project.optional-dependencies]`, because a PEP 508 direct
+git reference there would make the published PyPI package unuploadable.
 
 ## 1. Launch the Dashboard
 

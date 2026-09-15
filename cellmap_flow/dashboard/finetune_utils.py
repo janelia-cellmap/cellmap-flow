@@ -8,6 +8,7 @@ periodic synchronization of annotations between MinIO and local disk.
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import time
@@ -385,6 +386,28 @@ def create_annotation_volume_zarr(
 # MinIO management
 # ---------------------------------------------------------------------------
 
+def _require_minio_binaries():
+    """Fail early, with a fix, if the MinIO binaries are missing.
+
+    Otherwise the missing binary surfaces as a bare
+    ``FileNotFoundError: [Errno 2] ... 'minio'`` from subprocess, after the user
+    has already picked an output path and created a session directory.
+
+    MinIO no longer publishes prebuilt community server binaries (dl.min.io is
+    410 Gone and the GitHub releases carry no assets), so conda-forge -- which
+    still builds from source -- is the only practical way to install them.
+    """
+    missing = [name for name in ("minio", "mc") if shutil.which(name) is None]
+    if missing:
+        raise RuntimeError(
+            f"Required MinIO binaries not found on PATH: {', '.join(missing)}. "
+            "Annotation volumes are served to Neuroglancer through a local MinIO "
+            "server, so painting cannot start without them.\n\n"
+            "Install with:\n"
+            "    mamba install minio-server minio-client -c conda-forge"
+        )
+
+
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
@@ -397,6 +420,8 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     Returns:
         MinIO URL for the zarr file
     """
+    _require_minio_binaries()
+
     if minio_state["process"] is None or minio_state["process"].poll() is not None:
         # Determine MinIO storage location
         if output_base_dir:
