@@ -5,6 +5,15 @@ description = "Realtime prediction using neuroglancer"
 channels = ["nvidia", "conda-forge", "pytorch"]
 platforms = ["linux-64"]
 
+# The neuroglancer fork's C++ extension declares `uint64_t` in
+# python/ext/src/on_demand_object_mesh_generator.h while including only
+# <cstddef>/<memory>/<string>. GCC 13+ stopped pulling <cstdint> in
+# transitively and this environment resolves GCC 15, so the build fails with
+# "'uint64_t' has not been declared". Force the include instead of carrying a
+# patched fork; harmless for every other compile.
+[activation.env]
+CXXFLAGS = "-include cstdint"
+
 [dependencies]
 python = ">=3.11,<4.0"
 pip = "*"
