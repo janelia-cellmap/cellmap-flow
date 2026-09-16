@@ -101,6 +101,18 @@ def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
     when no running server can answer, leaving the caller to fall back.
     """
     info = fetch_model_info(running_job_host(model_name), timeout)
-    if not info or not info.get("write_shape"):
+    if not info:
         return None
-    return SimpleNamespace(**{f: info[f] for f in GEOMETRY_FIELDS if f in info})
+    # Every field, or nothing. Callers use this as ``model_geometry_config(x)
+    # or model_config.config``, and a SimpleNamespace missing one attribute is
+    # still truthy -- so a partial answer would defeat the fallback and raise
+    # AttributeError deep in the caller instead. An older server that cannot
+    # report all of them should fall back cleanly.
+    missing = [f for f in GEOMETRY_FIELDS if info.get(f) is None]
+    if missing:
+        logger.debug(
+            f"Server geometry for {model_name} is missing {missing}; "
+            "falling back to building the model locally."
+        )
+        return None
+    return SimpleNamespace(**{f: info[f] for f in GEOMETRY_FIELDS})
