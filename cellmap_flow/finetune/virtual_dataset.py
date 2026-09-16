@@ -153,9 +153,19 @@ class VirtualPatchDataset(Dataset):
         # before feeding the model; the trainer (a separate LSF process)
         # has an empty ``g.input_norms``, so without this the trainer would
         # train on raw uint8 while inference sees normalized [-1, 1].
-        # ``input_norm_config`` is the JSON-serializable dict from the YAML
-        # (e.g. {"MinMaxNormalizer": {...}, "LambdaNormalizer": {...}}).
-        self.input_norm_config: dict = dict(input_norm_config or {})
+        # ``input_norm_config`` arrives in either shape: the name-keyed dict a
+        # yaml gives (e.g. {"MinMaxNormalizer": {...}, "LambdaNormalizer":
+        # {...}}), or the list of {"name": ..., ...} dicts the dashboard POSTs
+        # -- a list on purpose, because jsonify sorts dict keys and the order
+        # of these steps changes what they compute.
+        #
+        # Do not coerce with dict(). Over a list whose entries have exactly two
+        # keys it does not raise; it silently returns {"name": "expression"},
+        # which builds no normalizers at all. That would train on raw uint8
+        # while inference sees [-1, 1] -- the exact mismatch this block exists
+        # to prevent. get_normalizations() understands both shapes, so pass it
+        # through untouched.
+        self.input_norm_config = input_norm_config or {}
         self._input_normalizers = self._build_input_normalizers(self.input_norm_config)
         if not self._input_normalizers and self.input_norm_config:
             logger.warning(
