@@ -231,6 +231,21 @@ def refresh_annotated_regions_layer(corrections_path=None):
 
     try:
         with g.viewer.txn() as s:
+            # Whether the layer is shown is the user's call, not ours.
+            #
+            # This used to force visible=True on every refresh, and the
+            # periodic sync thread calls this every 30s -- so turning the boxes
+            # off in neuroglancer un-did itself moments later, over and over.
+            # Keep whatever visibility the layer already has, and start hidden
+            # when creating it: the boxes are an occasional orientation aid,
+            # not something to draw over the data by default.
+            was_visible = None
+            if layer_name in s.layers:
+                try:
+                    was_visible = bool(s.layers[layer_name].visible)
+                except Exception:
+                    was_visible = None
+
             s.layers[layer_name] = neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
                     names=axes_names,
@@ -239,9 +254,10 @@ def refresh_annotated_regions_layer(corrections_path=None):
                 ),
                 annotations=annotations,
             )
-            # Force-visible in case a prior toggle archived the layer.
             try:
-                s.layers[layer_name].visible = True
+                s.layers[layer_name].visible = (
+                    False if was_visible is None else was_visible
+                )
             except Exception:
                 pass
     except Exception as e:
