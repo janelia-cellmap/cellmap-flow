@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>cellmap_flow.utils.lsf_queues &mdash; CellMap Flow  documentation</title>
+  <title>cellmap_flow.utils.logging_setup &mdash; CellMap Flow  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
@@ -24,8 +24,8 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils.neuroglancer_utils" href="../neuroglancer_utils/index.html" />
-    <link rel="prev" title="cellmap_flow.utils.logging_setup" href="../logging_setup/index.html" /> 
+    <link rel="next" title="cellmap_flow.utils.lsf_queues" href="../lsf_queues/index.html" />
+    <link rel="prev" title="cellmap_flow.utils.load_py" href="../load_py/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -96,9 +96,9 @@
           <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
           <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
           <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
-      <li class="breadcrumb-item active">cellmap_flow.utils.lsf_queues</li>
+      <li class="breadcrumb-item active">cellmap_flow.utils.logging_setup</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../../../../_sources/autoapi/cellmap_flow/utils/lsf_queues/index.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../../../../_sources/autoapi/cellmap_flow/utils/logging_setup/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -106,34 +106,31 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-cellmap_flow.utils.lsf_queues">
-<span id="cellmap-flow-utils-lsf-queues"></span><h1>cellmap_flow.utils.lsf_queues<a class="headerlink" href="#module-cellmap_flow.utils.lsf_queues" title="Link to this heading"></a></h1>
-<p>Report which GPU queues are actually usable, for the dashboard’s picker.</p>
-<p>Picking a queue blind is how a job ends up behind nine thousand pending ones:
-at the time this was written <code class="docutils literal notranslate"><span class="pre">gpu_h200</span></code> had 9224 jobs pending while
-<code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code> had none, and nothing in the UI said so. LSF already knows –
-<code class="docutils literal notranslate"><span class="pre">bqueues</span></code> for the backlog, <code class="docutils literal notranslate"><span class="pre">bhosts</span></code> for whether the nodes behind the queue
-are up at all – so ask it, cache the answer, and let the UI show it next to
-each option.</p>
-<p>Host state matters separately from queue state. A queue reports <code class="docutils literal notranslate"><span class="pre">Open:Active</span></code>
-while its nodes are individually closed: <code class="docutils literal notranslate"><span class="pre">closed_Adm</span></code> when an admin has taken
-them out for maintenance, <code class="docutils literal notranslate"><span class="pre">closed_Full</span></code> when they are merely saturated. Those
-mean different things to someone deciding where to submit – the first will not
-clear on its own – so they are counted separately rather than lumped into one
-“busy” number.</p>
-<p>Nothing here raises. A dashboard running somewhere without LSF should show a
-queue picker that still works, just without the annotations.</p>
+  <section id="module-cellmap_flow.utils.logging_setup">
+<span id="cellmap-flow-utils-logging-setup"></span><h1>cellmap_flow.utils.logging_setup<a class="headerlink" href="#module-cellmap_flow.utils.logging_setup" title="Link to this heading"></a></h1>
+<p>One logging format, actually applied.</p>
+<p><code class="docutils literal notranslate"><span class="pre">logging.basicConfig</span></code> does nothing once the root logger has a handler, and
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals</span></code> configures it at import time – which nearly
+everything imports early. So every later <code class="docutils literal notranslate"><span class="pre">basicConfig</span></code> call in a CLI was a
+silent no-op: <code class="docutils literal notranslate"><span class="pre">yaml_cli</span></code> has been asking for a timestamped format for a
+while, and the output has always come out as the bare default:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">INFO</span><span class="p">:</span><span class="n">cellmap_flow</span><span class="o">.</span><span class="n">cli</span><span class="o">.</span><span class="n">yaml_cli</span><span class="p">:</span><span class="n">Loading</span> <span class="n">configuration</span> <span class="n">from</span><span class="p">:</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>with no time on it, which is no help at all when the question is which step
+took four minutes. <code class="docutils literal notranslate"><span class="pre">finetune_cli</span></code> is the one place that passed
+<code class="docutils literal notranslate"><span class="pre">force=True</span></code>, which is why training logs have timestamps and nothing else
+does.</p>
+<p>Anything that wants to set the format has to pass <code class="docutils literal notranslate"><span class="pre">force=True</span></code>, and should
+use the same format while doing it. That is all this module is.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.lsf_queues.logger" title="cellmap_flow.utils.lsf_queues.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.logging_setup.LOG_FORMAT" title="cellmap_flow.utils.logging_setup.LOG_FORMAT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOG_FORMAT</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.lsf_queues.GPU_QUEUES" title="cellmap_flow.utils.lsf_queues.GPU_QUEUES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GPU_QUEUES</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.lsf_queues.CACHE_TTL_SECONDS" title="cellmap_flow.utils.lsf_queues.CACHE_TTL_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CACHE_TTL_SECONDS</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.logging_setup.LOG_DATEFMT" title="cellmap_flow.utils.logging_setup.LOG_DATEFMT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOG_DATEFMT</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -143,8 +140,8 @@ queue picker that still works, just without the annotations.</p>
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.lsf_queues.gpu_queue_availability" title="cellmap_flow.utils.lsf_queues.gpu_queue_availability"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_queue_availability</span></code></a>([force])</p></td>
-<td><p>Current GPU queue availability, cached for <code class="docutils literal notranslate"><span class="pre">CACHE_TTL_SECONDS</span></code>.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.logging_setup.configure_logging" title="cellmap_flow.utils.logging_setup.configure_logging"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configure_logging</span></code></a>([level])</p></td>
+<td><p>Install the shared timestamped format, replacing any earlier config.</p></td>
 </tr>
 </tbody>
 </table>
@@ -152,27 +149,21 @@ queue picker that still works, just without the annotations.</p>
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.lsf_queues.logger">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.lsf_queues.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.lsf_queues.logger" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.utils.logging_setup.LOG_FORMAT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.logging_setup.</span></span><span class="sig-name descname"><span class="pre">LOG_FORMAT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'%(asctime)s</span> <span class="pre">%(levelname)s</span> <span class="pre">%(name)s:</span> <span class="pre">%(message)s'</span></span><a class="headerlink" href="#cellmap_flow.utils.logging_setup.LOG_FORMAT" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.lsf_queues.GPU_QUEUES">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.lsf_queues.</span></span><span class="sig-name descname"><span class="pre">GPU_QUEUES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(('gpu_h100',</span> <span class="pre">'H100',</span> <span class="pre">'h100s'),</span> <span class="pre">('gpu_h200',</span> <span class="pre">'H200',</span> <span class="pre">'h200s'),</span> <span class="pre">('gpu_a100',</span> <span class="pre">'A100',</span> <span class="pre">'a100s'))</span></span><a class="headerlink" href="#cellmap_flow.utils.lsf_queues.GPU_QUEUES" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.utils.lsf_queues.CACHE_TTL_SECONDS">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.lsf_queues.</span></span><span class="sig-name descname"><span class="pre">CACHE_TTL_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">60</span></span><a class="headerlink" href="#cellmap_flow.utils.lsf_queues.CACHE_TTL_SECONDS" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.utils.logging_setup.LOG_DATEFMT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.logging_setup.</span></span><span class="sig-name descname"><span class="pre">LOG_DATEFMT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'%Y-%m-%d</span> <span class="pre">%H:%M:%S'</span></span><a class="headerlink" href="#cellmap_flow.utils.logging_setup.LOG_DATEFMT" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.utils.lsf_queues.gpu_queue_availability">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.lsf_queues.</span></span><span class="sig-name descname"><span class="pre">gpu_queue_availability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.lsf_queues.gpu_queue_availability" title="Link to this definition"></a></dt>
-<dd><p>Current GPU queue availability, cached for <code class="docutils literal notranslate"><span class="pre">CACHE_TTL_SECONDS</span></code>.</p>
-<p>The UI polls this about once a minute; the cache means several open
-dashboards don’t multiply into an LSF query storm, since the answer is the
-same for all of them.</p>
+<dt class="sig sig-object py" id="cellmap_flow.utils.logging_setup.configure_logging">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.logging_setup.</span></span><span class="sig-name descname"><span class="pre">configure_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">logging.INFO</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.logging_setup.configure_logging" title="Link to this definition"></a></dt>
+<dd><p>Install the shared timestamped format, replacing any earlier config.</p>
+<p><code class="docutils literal notranslate"><span class="pre">force=True</span></code> is the point: without it this is a no-op in every process
+that has already imported <code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals</span></code>.</p>
 </dd></dl>
 
 </section>
@@ -182,8 +173,8 @@ same for all of them.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../logging_setup/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.logging_setup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../neuroglancer_utils/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.neuroglancer_utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../load_py/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.load_py" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../lsf_queues/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.lsf_queues" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
