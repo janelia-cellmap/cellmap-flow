@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ``window`` is the wider span the UI slider can be dragged over.
 RAW_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
 #uicontrol vec3 color color(default="white");
-void main(){{{{emitRGB(color * normalized());}}}}"""
+void main(){{emitRGB(color * normalized());}}"""
 
 
 PREDICTION_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
