@@ -324,28 +324,32 @@
 
       function renderInputNormAdvice(m, box) {
         const sug = m.input_norm_suggestion || {};
-        // null means the suggestion was only a dtype default, with no declared
-        // framework or recognised source behind it -- stay quiet rather than
-        // second-guess a hand-tuned config.
-        if (m.input_norm_matches === null || m.input_norm_matches === undefined) return;
         if (!sug.input_norm) return;
         // sug.order, not Object.keys: jsonify sorts keys and the order
         // of these steps changes what they compute.
         const names = sug.order || Object.keys(sug.input_norm);
+        // "low" means nothing declared how the model was trained and the
+        // [-1, 1] range was assumed. Still say so -- the wrong input scale is
+        // not visibly wrong, it just degrades the prediction -- but render it
+        // muted so it does not read as a finding.
+        const assumed = sug.confidence === "low";
         const div = document.createElement("div");
         if (m.input_norm_matches) {
           // Confirmation, not a prompt: when the norms came from a yaml there
           // is no other way to tell whether they suit the model.
-          div.className = "alert alert-success py-1 px-2";
-          div.innerHTML = "<small><strong>Input normalization looks right</strong> for <code>"
-                        + (m.model || "model") + "</code>: " + names.join(" \u2192 ")
-                        + ". " + (sug.reason || "") + "</small>";
+          div.className = "alert py-1 px-2 " + (assumed ? "alert-secondary" : "alert-success");
+          div.innerHTML = "<small><strong>Input normalization "
+                        + (assumed ? "matches the assumed range" : "looks right")
+                        + "</strong> for <code>" + (m.model || "model") + "</code>: "
+                        + names.join(" \u2192 ") + ". " + (sug.reason || "") + "</small>";
           box.appendChild(div);
           return;
         }
-        div.className = "alert alert-info";
-        div.innerHTML = "<strong>Suggested input normalization</strong> for <code>"
-                      + (m.model || "model") + "</code><br>" + (sug.reason || "")
+        div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
+        div.innerHTML = "<strong>"
+                      + (assumed ? "Assumed input normalization" : "Suggested input normalization")
+                      + "</strong> for <code>" + (m.model || "model") + "</code><br>"
+                      + (sug.reason || "")
                       + "<br><small>confidence: " + (sug.confidence || "unknown")
                       + "; currently set: "
                       + ((m.configured_input_norm || []).join(" \u2192 ") || "none")

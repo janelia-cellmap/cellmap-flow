@@ -267,8 +267,23 @@ def _is_cellmap_model(source) -> bool:
     return src.startswith(CELLMAP_HF_ORG) or CELLMAP_MODEL_DIR in src
 
 
+def _to_unit_range(lo, hi) -> dict:
+    """A MinMaxNormalizer mapping [lo, hi] onto [0, 1]."""
+    return {
+        "MinMaxNormalizer": {
+            "name": "MinMaxNormalizer",
+            "min_value": lo,
+            "max_value": hi,
+            "invert": False,
+        }
+    }
+
+
+SHIFT_TO_SIGNED = {"name": "LambdaNormalizer", "expression": "x*2-1"}
+
+
 def suggest_input_norm(
-    framework=None, raw_dtype="uint8", declared=None, source=None
+    framework=None, raw_dtype="uint8", declared=None, source=None, data_range=None
 ) -> dict:
     """Propose an input_norm config for a model.
 
@@ -279,7 +294,16 @@ def suggest_input_norm(
          the extra ``x*2-1`` on top of the 0-1 rescale.
       3. ``source`` -- where the model came from. A CellMap model follows the
          same [-1, 1] convention whatever its metadata calls the framework.
-      4. The raw dtype alone, giving [0, 1].
+      4. Nothing known about the model: assume [-1, 1] anyway, because it is
+         what everything else in this repo trains on, and mark it low
+         confidence so callers can present it as the assumption it is. Getting
+         the scale wrong is not subtle -- the model sees inputs far outside its
+         training range and predicts noise -- so a stated assumption beats
+         silently feeding it raw uint8.
+
+    ``data_range`` is the actual (min, max) of the raw data. Prefer it over
+    ``raw_dtype``: uint8 data spans 0-255, but float data can span anything and
+    its dtype says nothing useful.
 
     Returns ``{"input_norm": {...}, "order": [...], "reason", "confidence"}``.
 
@@ -296,62 +320,54 @@ def suggest_input_norm(
             "confidence": "high",
         }
 
-    try:
-        import numpy as np
+    if data_range:
+        lo, hi = (float(v) for v in data_range)
+        span = f"{raw_dtype or 'the raw data'} spans [{lo:.6g}, {hi:.6g}]"
+    else:
+        try:
+            import numpy as np
 
-        info = np.iinfo(np.dtype(raw_dtype))
-        lo, hi = float(info.min), float(info.max)
-    except Exception:
-        lo, hi = 0.0, 255.0
+            info = np.iinfo(np.dtype(raw_dtype))
+            lo, hi = float(info.min), float(info.max)
+            span = f"{raw_dtype} spans [{lo:.6g}, {hi:.6g}]"
+        except Exception:
+            lo, hi = 0.0, 255.0
+            span = "assuming 8-bit data in [0, 255] (could not read the dtype)"
 
-    norm = {
-        "MinMaxNormalizer": {
-            "name": "MinMaxNormalizer",
-            "min_value": lo,
-            "max_value": hi,
-            "invert": False,
-        }
-    }
+    norm = _to_unit_range(lo, hi)
 
     fw = str(framework or "").lower()
     if any(tok in fw for tok in DACAPO_FRAMEWORKS):
-        norm["LambdaNormalizer"] = {
-            "name": "LambdaNormalizer",
-            "expression": "x*2-1",
-        }
+        norm["LambdaNormalizer"] = dict(SHIFT_TO_SIGNED)
         return {
             "input_norm": norm,
             "order": list(norm.keys()),
             "reason": (
                 f"framework is '{framework}'; DaCapo models are trained on "
-                f"inputs in [-1, 1], so {raw_dtype} is rescaled to [0,1] then "
-                "shifted with x*2-1"
+                f"inputs in [-1, 1], and {span}"
             ),
             "confidence": "medium",
         }
 
     if _is_cellmap_model(source):
-        norm["LambdaNormalizer"] = {
-            "name": "LambdaNormalizer",
-            "expression": "x*2-1",
-        }
+        norm["LambdaNormalizer"] = dict(SHIFT_TO_SIGNED)
         return {
             "input_norm": norm,
             "order": list(norm.keys()),
             "reason": (
                 "this is a CellMap model; the collection is trained on inputs "
-                f"in [-1, 1], so {raw_dtype} is rescaled to [0,1] then shifted "
-                "with x*2-1"
+                f"in [-1, 1], and {span}"
             ),
             "confidence": "medium",
         }
 
+    norm["LambdaNormalizer"] = dict(SHIFT_TO_SIGNED)
     return {
         "input_norm": norm,
         "order": list(norm.keys()),
         "reason": (
-            f"no framework declared; defaulting to a plain {raw_dtype} rescale "
-            "to [0, 1]. Check this against how the model was trained."
+            "nothing declares how this model was trained, so assuming the "
+            f"[-1, 1] range everything else here uses; {span}"
         ),
         "confidence": "low",
     }

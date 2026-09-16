@@ -18,6 +18,8 @@ import json
 import logging
 import os
 
+import numpy as np
+
 from flask import Blueprint, jsonify
 
 from cellmap_flow.globals import g
@@ -50,6 +52,47 @@ def _model_metadata(model_config) -> dict:
     return meta
 
 
+# Reading the dataset costs a metadata fetch (and, for float data, a sample),
+# and it cannot change while the dashboard runs.
+_raw_range_cache = {}
+
+
+def _raw_dtype_and_range(dataset_path):
+    """The dtype and value range of the raw data, for scaling it to the model.
+
+    Integer data has an exact range from its dtype. Float data does not -- the
+    dtype permits anything -- so sample percentiles instead, the same way the
+    raw layer's auto-contrast does. Returns (dtype_name, (lo, hi)); either part
+    may be None when it could not be determined.
+    """
+    if not dataset_path:
+        return None, None
+    if dataset_path in _raw_range_cache:
+        return _raw_range_cache[dataset_path]
+
+    dtype_name, value_range = None, None
+    try:
+        from cellmap_flow.image_data_interface import ImageDataInterface
+        from cellmap_flow.utils.scale_pyramid import _auto_contrast_range
+
+        # normalize=False: we want the range of the data as stored, which is
+        # what the normalizers being proposed have to map from.
+        idi = ImageDataInterface(dataset_path, normalize=False)
+        dtype = idi.ts.dtype
+        dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+        dtype_name = dtype.name
+        if dtype.kind in "ui":
+            info = np.iinfo(dtype)
+            value_range = (float(info.min), float(info.max))
+        else:
+            value_range = _auto_contrast_range([dataset_path], normalize=False)
+    except Exception as e:
+        logger.debug(f"Could not read raw dtype/range for {dataset_path}: {e}")
+
+    _raw_range_cache[dataset_path] = (dtype_name, value_range)
+    return dtype_name, value_range
+
+
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
     return fetch_model_info(host)
@@ -64,6 +107,8 @@ def model_advice():
     configured_norm = [
         n.to_dict().get("name") for n in (g.input_norms or []) if hasattr(n, "to_dict")
     ]
+
+    raw_dtype, raw_range = _raw_dtype_and_range(getattr(g, "dataset_path", None))
 
     by_name = {}
     for cfg in g.models_config or []:
@@ -115,8 +160,9 @@ def model_advice():
         # Input side is a declared convention, not something we can observe.
         entry["input_norm_suggestion"] = suggest_input_norm(
             framework=meta.get("framework"),
-            raw_dtype=meta.get("raw_dtype", "uint8"),
+            raw_dtype=raw_dtype,
             source=meta.get("repo") or meta.get("folder_path"),
+            data_range=raw_range,
         )
         # A "low" confidence suggestion is just the dtype default, made without
         # knowing the training framework -- reporting a mismatch against it
@@ -126,10 +172,8 @@ def model_advice():
         # Order-sensitive on purpose: LambdaNormalizer("x*2-1") before the
         # rescale computes something quite different from after it, so the
         # same two normalizers in the wrong sequence is not a match.
-        entry["input_norm_matches"] = (
-            None
-            if suggestion["confidence"] == "low"
-            else list(configured_norm) == list(suggestion["order"])
+        entry["input_norm_matches"] = list(configured_norm) == list(
+            suggestion["order"]
         )
         results.append(entry)
 
