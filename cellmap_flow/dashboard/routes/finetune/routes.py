@@ -27,6 +27,11 @@ from cellmap_flow.dashboard.routes.finetune.training import (
     stream_job_logs_response,
     submit_finetuning_response,
 )
+from cellmap_flow.dashboard.routes.finetune.good_regions import (
+    delete_good_region_response,
+    list_good_regions_response,
+    mark_current_view_response,
+)
 from cellmap_flow.dashboard.routes.finetune.viewer import (
     add_finetuned_layer_to_viewer_response,
 )
@@ -37,6 +42,21 @@ from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
 )
 
 finetune_bp = Blueprint("finetune", __name__)
+
+
+@finetune_bp.route("/api/finetune/good-regions", methods=["GET"])
+def list_good_regions():
+    return list_good_regions_response()
+
+
+@finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
+def mark_current_view_good():
+    return mark_current_view_response(request.get_json(silent=True))
+
+
+@finetune_bp.route("/api/finetune/good-regions/delete", methods=["POST"])
+def delete_good_region():
+    return delete_good_region_response(request.get_json(silent=True))
 
 
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
