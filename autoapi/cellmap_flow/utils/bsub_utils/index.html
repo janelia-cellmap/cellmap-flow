@@ -135,6 +135,9 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR" title="cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_LOG_DIR</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS" title="cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PENDING_FALLBACK_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -167,16 +170,19 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.cleanup_handler" title="cellmap_flow.utils.bsub_utils.cleanup_handler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cleanup_handler</span></code></a>(→ None)</p></td>
 <td><p>Signal handler for graceful shutdown.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.is_bsub_available" title="cellmap_flow.utils.bsub_utils.is_bsub_available"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_bsub_available</span></code></a>(→ bool)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.gpu_queue_candidates" title="cellmap_flow.utils.bsub_utils.gpu_queue_candidates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_queue_candidates</span></code></a>(preferred)</p></td>
+<td><p>The queue to try first, then the others worth falling back to.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.is_bsub_available" title="cellmap_flow.utils.bsub_utils.is_bsub_available"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_bsub_available</span></code></a>(→ bool)</p></td>
 <td><p>Check if bsub command is available in the system PATH.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.submit_bsub_job" title="cellmap_flow.utils.bsub_utils.submit_bsub_job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_bsub_job</span></code></a>(→ LSFJob)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.submit_bsub_job" title="cellmap_flow.utils.bsub_utils.submit_bsub_job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_bsub_job</span></code></a>(→ LSFJob)</p></td>
 <td><p>Submit a job to LSF cluster using bsub.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.run_locally" title="cellmap_flow.utils.bsub_utils.run_locally"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_locally</span></code></a>(→ LocalJob)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.run_locally" title="cellmap_flow.utils.bsub_utils.run_locally"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_locally</span></code></a>(→ LocalJob)</p></td>
 <td><p>Run command locally as a subprocess (fallback when bsub unavailable).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.start_hosts" title="cellmap_flow.utils.bsub_utils.start_hosts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_hosts</span></code></a>(→ Job)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.start_hosts" title="cellmap_flow.utils.bsub_utils.start_hosts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_hosts</span></code></a>(→ Job)</p></td>
 <td><p>Start a server job either via bsub or locally.</p></td>
 </tr>
 </tbody>
@@ -295,6 +301,15 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.Job.peek">
+<span class="sig-name descname"><span class="pre">peek</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_chars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.Job.peek" title="Link to this definition"></a></dt>
+<dd><p>The tail of this job’s own output, or None if it cannot be read.</p>
+<p>Only LSF jobs can answer: a local job’s output is already being
+consumed by wait_for_host, and reading the same pipe again here would
+block the request.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.Job.is_running">
 <span class="sig-name descname"><span class="pre">is_running</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.Job.is_running" title="Link to this definition"></a></dt>
 <dd><p>Check if the job is currently running.</p>
@@ -360,6 +375,16 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.LSFJob.peek">
+<span class="sig-name descname"><span class="pre">peek</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_chars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob.peek" title="Link to this definition"></a></dt>
+<dd><p>The job’s own output, so nobody has to ssh in and run bpeek.</p>
+<p>A running job’s output has not been flushed to the <code class="docutils literal notranslate"><span class="pre">-o</span></code> file yet –
+LSF writes that at the end – so bpeek is the only way to see it live.
+Once the job is gone bpeek has nothing, and the file is the only
+record. Try them in that order.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.LSFJob.get_status">
 <span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.JobStatus" title="cellmap_flow.utils.bsub_utils.JobStatus"><span class="pre">JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob.get_status" title="Link to this definition"></a></dt>
 <dd><p>Query LSF for job status using bjobs.</p>
@@ -400,6 +425,23 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.cleanup_handler" title="Link to this definition"></a></dt>
 <dd><p>Signal handler for graceful shutdown.
 Kills all tracked jobs before exiting.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">PENDING_FALLBACK_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">180</span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.gpu_queue_candidates">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">gpu_queue_candidates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">preferred</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.gpu_queue_candidates" title="Link to this definition"></a></dt>
+<dd><p>The queue to try first, then the others worth falling back to.</p>
+<p>Ordered by what LSF says is actually free rather than by a fixed list, so
+the first fallback is the one most likely to start now. Queues that are
+not accepting work are dropped entirely: they take submissions and never
+run them, which is indistinguishable from a very slow job.</p>
+<p>Falls back to the fixed GPU list when LSF cannot be queried, so this never
+returns fewer options than the caller asked for.</p>
 </dd></dl>
 
 <dl class="py function">

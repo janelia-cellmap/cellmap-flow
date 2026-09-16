@@ -144,16 +144,19 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.submit_models" title="cellmap_flow.dashboard.routes.models.submit_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_models</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.gpu_queues" title="cellmap_flow.dashboard.routes.models.gpu_queues"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_queues</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.job_logs" title="cellmap_flow.dashboard.routes.models.job_logs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">job_logs</span></code></a>()</p></td>
+<td><p>The inference jobs' own output, so a failure can be read here.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.gpu_queues" title="cellmap_flow.dashboard.routes.models.gpu_queues"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_queues</span></code></a>()</p></td>
 <td><p>Which GPU queues are open and how busy, for the queue picker.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="cellmap_flow.dashboard.routes.models.get_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_server_config</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="cellmap_flow.dashboard.routes.models.get_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_server_config</span></code></a>()</p></td>
 <td><p>Get current server configuration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.export_config" title="cellmap_flow.dashboard.routes.models.export_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export_config</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.export_config" title="cellmap_flow.dashboard.routes.models.export_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export_config</span></code></a>()</p></td>
 <td><p>Export the dashboard's current live config (models, normalization,</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.update_server_config" title="cellmap_flow.dashboard.routes.models.update_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_server_config</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.update_server_config" title="cellmap_flow.dashboard.routes.models.update_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_server_config</span></code></a>()</p></td>
 <td><p>Update server configuration and save to cache.</p></td>
 </tr>
 </tbody>
@@ -205,6 +208,15 @@
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.submit_models">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">submit_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.submit_models" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.job_logs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">job_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.job_logs" title="Link to this definition"></a></dt>
+<dd><p>The inference jobs’ own output, so a failure can be read here.</p>
+<p>Without this, a server that dies on startup or 500s on every chunk says
+nothing in the dashboard – the traceback is in the LSF job’s output on a
+cluster node, and reading it means logging in and running bpeek.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.gpu_queues">

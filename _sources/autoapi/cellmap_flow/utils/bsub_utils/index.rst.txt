@@ -25,6 +25,7 @@ Attributes
    cellmap_flow.utils.bsub_utils.DEFAULT_CHARGE_GROUP
    cellmap_flow.utils.bsub_utils.SERVER_COMMAND
    cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR
+   cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS
 
 
 Classes
@@ -45,6 +46,7 @@ Functions
 
    cellmap_flow.utils.bsub_utils.extract_host_from_output
    cellmap_flow.utils.bsub_utils.cleanup_handler
+   cellmap_flow.utils.bsub_utils.gpu_queue_candidates
    cellmap_flow.utils.bsub_utils.is_bsub_available
    cellmap_flow.utils.bsub_utils.submit_bsub_job
    cellmap_flow.utils.bsub_utils.run_locally
@@ -160,6 +162,16 @@ Module Contents
 
 
 
+   .. py:method:: peek(max_chars: int = 4000) -> Optional[str]
+
+      The tail of this job's own output, or None if it cannot be read.
+
+      Only LSF jobs can answer: a local job's output is already being
+      consumed by wait_for_host, and reading the same pipe again here would
+      block the request.
+
+
+
    .. py:method:: is_running() -> bool
 
       Check if the job is currently running.
@@ -219,6 +231,17 @@ Module Contents
 
 
 
+   .. py:method:: peek(max_chars: int = 4000) -> Optional[str]
+
+      The job's own output, so nobody has to ssh in and run bpeek.
+
+      A running job's output has not been flushed to the ``-o`` file yet --
+      LSF writes that at the end -- so bpeek is the only way to see it live.
+      Once the job is gone bpeek has nothing, and the file is the only
+      record. Try them in that order.
+
+
+
    .. py:method:: get_status() -> JobStatus
 
       Query LSF for job status using bjobs.
@@ -248,6 +271,23 @@ Module Contents
 
    Signal handler for graceful shutdown.
    Kills all tracked jobs before exiting.
+
+
+.. py:data:: PENDING_FALLBACK_SECONDS
+   :value: 180
+
+
+.. py:function:: gpu_queue_candidates(preferred)
+
+   The queue to try first, then the others worth falling back to.
+
+   Ordered by what LSF says is actually free rather than by a fixed list, so
+   the first fallback is the one most likely to start now. Queues that are
+   not accepting work are dropped entirely: they take submissions and never
+   run them, which is indistinguishable from a very slow job.
+
+   Falls back to the fixed GPU list when LSF cannot be queried, so this never
+   returns fewer options than the caller asked for.
 
 
 .. py:function:: is_bsub_available() -> bool

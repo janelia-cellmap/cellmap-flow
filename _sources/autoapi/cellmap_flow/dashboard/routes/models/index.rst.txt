@@ -24,6 +24,7 @@ Functions
    cellmap_flow.dashboard.routes.models.get_huggingface_models
    cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route
    cellmap_flow.dashboard.routes.models.submit_models
+   cellmap_flow.dashboard.routes.models.job_logs
    cellmap_flow.dashboard.routes.models.gpu_queues
    cellmap_flow.dashboard.routes.models.get_server_config
    cellmap_flow.dashboard.routes.models.export_config
@@ -63,6 +64,15 @@ Module Contents
 
 
 .. py:function:: submit_models()
+
+.. py:function:: job_logs()
+
+   The inference jobs' own output, so a failure can be read here.
+
+   Without this, a server that dies on startup or 500s on every chunk says
+   nothing in the dashboard -- the traceback is in the LSF job's output on a
+   cluster node, and reading it means logging in and running bpeek.
+
 
 .. py:function:: gpu_queues()
 
