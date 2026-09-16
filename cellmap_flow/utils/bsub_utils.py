@@ -500,6 +500,35 @@ signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
 # another. Long enough that a queue which is merely busy still gets used,
 # short enough that nobody watches a spinner while 9000 jobs clear ahead of
 # them on a queue that was never going to start.
+# LSF's own default run limit on the GPU queues is 120 minutes, and we never
+# passed -W, so every inference server was killed two hours in -- while the
+# Fileglancer app job that spawns them asks for 8 hours, so the dashboard
+# outlived its own servers by six. Match the session: 8 hours, overridable
+# per-yaml, per-submission, or from the dashboard. The queues allow up to
+# 20160 minutes (14 days).
+DEFAULT_WALLTIME = "08:00"
+
+
+def _walltime_arg(walltime):
+    """``["-W", value]`` for bsub, or ``[]`` when there is nothing to set.
+
+    LSF accepts ``[hour:]minute``, so both "08:00" and "480" are valid and
+    mean the same thing. Anything else would make bsub reject the whole
+    submission, so an unparseable value is dropped with a warning rather than
+    taking the job down with it -- the queue default still applies.
+    """
+    if walltime in (None, "", False):
+        return []
+    text = str(walltime).strip()
+    if re.fullmatch(r"\d+(:\d{1,2})?", text):
+        return ["-W", text]
+    logger.warning(
+        f"Ignoring unusable walltime {walltime!r}; expected minutes (480) or "
+        "hours:minutes (08:00). Falling back to the queue default."
+    )
+    return []
+
+
 PENDING_FALLBACK_SECONDS = 180
 
 
@@ -589,6 +618,7 @@ def submit_bsub_job(
     job_name: str = "my_job",
     num_gpus: int = 1,
     num_cpus: int = 4,
+    walltime: Optional[str] = None,
 ) -> LSFJob:
     """
     Submit a job to LSF cluster using bsub.
@@ -621,8 +651,9 @@ def submit_bsub_job(
         "-q", queue,
         "-gpu", f"num={num_gpus}",
         "-n", str(num_cpus),
-        "bash", "-c", command,
     ]
+    bsub_command += _walltime_arg(walltime)
+    bsub_command += ["bash", "-c", command]
 
     logger.info(f"Submitting bsub job: {' '.join(bsub_command)}")
 
@@ -693,6 +724,7 @@ def start_hosts(
     job_name: str = "example_job",
     use_https: bool = False,
     wait_for_host: bool = True,
+    walltime: Optional[str] = None,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
@@ -711,6 +743,12 @@ def start_hosts(
     # Update global settings
     g.queue = queue
     g.charge_group = charge_group
+
+    # An explicit argument wins; otherwise whatever the dashboard or yaml set;
+    # otherwise the shared default. Never None, or the job silently inherits
+    # the queue's two hours.
+    if walltime is None:
+        walltime = getattr(g, "walltime", None) or DEFAULT_WALLTIME
     
     # Add HTTPS flags if needed
     if use_https:
@@ -729,6 +767,7 @@ def start_hosts(
                     candidate,
                     charge_group,
                     job_name=f"{job_name}",
+                    walltime=walltime,
                 )
             except Exception as e:
                 logger.error(f"Failed to submit bsub job to {candidate}: {e}")
