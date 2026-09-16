@@ -1010,8 +1010,8 @@ document.addEventListener("DOMContentLoaded", function () {
           if (!data.success || !data.progress) return;
           const p = data.progress;
           let msg;
-          if (p.phase === "starting") {
-            msg = "Starting...";
+          if (p.phase === "starting" || p.phase === "setup") {
+            msg = p.message || "Starting...";
           } else if (p.phase === "crop_start") {
             msg = `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
           } else if (p.phase === "tile") {
@@ -1020,7 +1020,7 @@ document.addEventListener("DOMContentLoaded", function () {
           } else if (p.phase === "done") {
             msg = `Finishing... ${p.n_chunks_created || 0} chunks created`;
           } else {
-            msg = JSON.stringify(p);
+            msg = p.message || JSON.stringify(p);
           }
           status.textContent = msg;
         } catch (_) {
@@ -1183,8 +1183,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!payload.success || !payload.progress) return;
         const p = payload.progress;
         let msg;
-        if (p.phase === "starting") {
-          msg = "Starting...";
+        if (p.phase === "starting" || p.phase === "setup") {
+          msg = p.message || "Starting...";
         } else if (p.phase === "copying") {
           const filePart = p.files_total
             ? ` — ${p.files_done}/${p.files_total} files`
@@ -1199,7 +1199,7 @@ document.addEventListener("DOMContentLoaded", function () {
         } else if (p.phase === "error") {
           msg = `Error: ${p.error || "load failed"}`;
         } else {
-          msg = JSON.stringify(p);
+          msg = p.message || JSON.stringify(p);
         }
         status.textContent = msg;
       } catch (_) {
