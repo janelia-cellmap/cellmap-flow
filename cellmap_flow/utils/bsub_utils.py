@@ -123,6 +123,15 @@ class Job(ABC):
         """
         pass
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The tail of this job's own output, or None if it cannot be read.
+
+        Only LSF jobs can answer: a local job's output is already being
+        consumed by wait_for_host, and reading the same pipe again here would
+        block the request.
+        """
+        return None
+
     def is_running(self) -> bool:
         """Check if the job is currently running."""
         return self.status == JobStatus.RUNNING
@@ -252,6 +261,25 @@ class LSFJob(Job):
         except Exception as e:
             logger.error(f"Error killing LSF job {self.job_id}: {e}")
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The job's own output, so nobody has to ssh in and run bpeek.
+
+        A running job's output has not been flushed to the ``-o`` file yet --
+        LSF writes that at the end -- so bpeek is the only way to see it live.
+        Once the job is gone bpeek has nothing, and the file is the only
+        record. Try them in that order.
+        """
+        try:
+            result = subprocess.run(
+                ["bpeek", self.job_id], capture_output=True, text=True, timeout=10
+            )
+            output = (result.stdout or "").strip()
+            if output:
+                return output[-max_chars:]
+        except Exception as e:
+            logger.debug(f"bpeek {self.job_id} failed: {e}")
+        return self.log_file and _tail(self.log_file, max_chars)
+
     def get_status(self) -> JobStatus:
         """Query LSF for job status using bjobs."""
         try:
@@ -436,6 +464,47 @@ signal.signal(signal.SIGINT, cleanup_handler)  # Handle Ctrl+C
 signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
 
 
+# How long a job may sit PENDING before we give up on that queue and try
+# another. Long enough that a queue which is merely busy still gets used,
+# short enough that nobody watches a spinner while 9000 jobs clear ahead of
+# them on a queue that was never going to start.
+PENDING_FALLBACK_SECONDS = 180
+
+
+def gpu_queue_candidates(preferred):
+    """The queue to try first, then the others worth falling back to.
+
+    Ordered by what LSF says is actually free rather than by a fixed list, so
+    the first fallback is the one most likely to start now. Queues that are
+    not accepting work are dropped entirely: they take submissions and never
+    run them, which is indistinguishable from a very slow job.
+
+    Falls back to the fixed GPU list when LSF cannot be queried, so this never
+    returns fewer options than the caller asked for.
+    """
+    from cellmap_flow.utils.lsf_queues import GPU_QUEUES, gpu_queue_availability
+
+    candidates = [preferred] if preferred else []
+    all_gpu = [q for q, _, _ in GPU_QUEUES]
+
+    try:
+        info = gpu_queue_availability()
+    except Exception as e:
+        logger.debug(f"Could not read queue availability: {e}")
+        info = {}
+
+    if not info.get("available"):
+        return candidates + [q for q in all_gpu if q != preferred]
+
+    others = [
+        q for q in info["queues"]
+        if q["queue"] != preferred and q.get("accepting")
+    ]
+    # Most free GPUs first; break ties on the shorter pending queue.
+    others.sort(key=lambda q: (-(q.get("gpus_free") or 0), q.get("pending") or 0))
+    return candidates + [q["queue"] for q in others]
+
+
 def is_bsub_available() -> bool:
     """Check if bsub command is available in the system PATH."""
     try:
@@ -589,23 +658,59 @@ def start_hosts(
     
     if is_bsub_available():
         logger.info("Using bsub for job submission")
-        try:
-            job = submit_bsub_job(
-                command,
-                queue,
-                charge_group,
-                job_name=f"{job_name}"
+        candidates = gpu_queue_candidates(queue)
+        logger.info(f"Queue order: {' -> '.join(candidates)}")
+        for index, candidate in enumerate(candidates):
+            try:
+                job = submit_bsub_job(
+                    command,
+                    candidate,
+                    charge_group,
+                    job_name=f"{job_name}",
+                )
+            except Exception as e:
+                logger.error(f"Failed to submit bsub job to {candidate}: {e}")
+                continue
+
+            if not wait_for_host:
+                g.queue = candidate
+                g.jobs.append(job)
+                return job
+
+            # Give an unstarted job less patience while there is somewhere
+            # else to try, and the full wait once this is the last option.
+            more_to_try = index < len(candidates) - 1
+            host = job.wait_for_host(
+                timeout=PENDING_FALLBACK_SECONDS if more_to_try else 300
             )
-            
-            if wait_for_host:
-                job.wait_for_host()
-            
-            g.jobs.append(job)
-            return job
-            
-        except Exception as e:
-            logger.error(f"Failed to submit bsub job: {e}")
-            logger.info("Falling back to local execution")
+            if host:
+                g.queue = candidate
+                g.jobs.append(job)
+                return job
+
+            # Only a job that never started is a queue problem. One that ran
+            # and crashed will crash the same way everywhere else, so keep it
+            # and let the caller surface the failure instead of burning
+            # through every queue reproducing it.
+            if job.get_status() != JobStatus.PENDING:
+                g.queue = candidate
+                g.jobs.append(job)
+                return job
+
+            if more_to_try:
+                logger.warning(
+                    f"Job {job.job_id} has not started on {candidate} after "
+                    f"{PENDING_FALLBACK_SECONDS}s; killing it and trying "
+                    f"{candidates[index + 1]}"
+                )
+                job.kill()
+            else:
+                g.queue = candidate
+                g.jobs.append(job)
+                return job
+
+        logger.error("No GPU queue accepted the job")
+        logger.info("Falling back to local execution")
     else:
         logger.info("bsub not available, running locally")
     

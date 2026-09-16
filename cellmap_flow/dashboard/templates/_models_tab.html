@@ -152,6 +152,30 @@
         readonly
       ></textarea>
     </div>
+
+    <!-- Inference job output. Lives on a cluster node, so without this the
+         only way to read a server that died on startup is bpeek over ssh. -->
+    <div class="mt-3">
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="jobLogsBtn">
+          Show Job Logs
+        </button>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="jobLogsFollow" />
+          <label class="form-check-label" for="jobLogsFollow">
+            <small>Follow</small>
+          </label>
+        </div>
+        <span id="jobLogsStatus" class="text-muted" style="font-size: 0.85rem"></span>
+      </div>
+      <textarea
+        id="jobLogsArea"
+        class="form-control mt-2"
+        rows="12"
+        readonly
+        style="display: none; font-family: monospace; font-size: 0.8rem"
+      ></textarea>
+    </div>
   </form>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -247,6 +271,70 @@
           const searchData = item.getAttribute("data-search");
           item.style.display = searchData.includes(query) ? "" : "none";
         });
+      });
+
+      // Inference job output.
+      //
+      // The dashboard's own log stream only carries what this process logs.
+      // A server that dies on startup, or 500s on every chunk, writes its
+      // traceback to the LSF job's output on whichever node it landed on --
+      // so the only way to read it used to be ssh + bpeek.
+      const JOB_LOGS_POLL_MS = 5000;
+      let jobLogsTimer = null;
+
+      function renderJobLogs(data) {
+        const area = document.getElementById("jobLogsArea");
+        const statusEl = document.getElementById("jobLogsStatus");
+        const jobs = (data && data.jobs) || [];
+        if (!jobs.length) {
+          area.value = "No inference jobs have been submitted yet.";
+          statusEl.textContent = "";
+          return;
+        }
+        area.value = jobs.map(function (j) {
+          const header = [
+            j.model_name || "(unnamed)",
+            j.job_id ? "job " + j.job_id : null,
+            j.status || null,
+            j.host || null,
+          ].filter(Boolean).join("  |  ");
+          // null log means there is no way to read this job's output at all,
+          // which is worth saying plainly rather than showing as empty.
+          const body = j.log === null || j.log === undefined
+            ? "(no output available for this job)"
+            : (j.log || "(no output yet)");
+          return "=== " + header + " ===\n" + body;
+        }).join("\n\n");
+        // Keep the newest output in view.
+        area.scrollTop = area.scrollHeight;
+        statusEl.textContent = "updated " + new Date().toLocaleTimeString();
+      }
+
+      function refreshJobLogs() {
+        const statusEl = document.getElementById("jobLogsStatus");
+        return fetch("/api/job-logs")
+          .then(function (r) { return r.json(); })
+          .then(renderJobLogs)
+          .catch(function (e) { statusEl.textContent = "error: " + e; });
+      }
+
+      document.getElementById("jobLogsBtn").addEventListener("click", function () {
+        const area = document.getElementById("jobLogsArea");
+        const showing = area.style.display !== "none";
+        area.style.display = showing ? "none" : "block";
+        this.textContent = showing ? "Show Job Logs" : "Hide Job Logs";
+        if (!showing) refreshJobLogs();
+      });
+
+      document.getElementById("jobLogsFollow").addEventListener("change", function () {
+        if (jobLogsTimer) { clearInterval(jobLogsTimer); jobLogsTimer = null; }
+        if (this.checked) {
+          const area = document.getElementById("jobLogsArea");
+          if (area.style.display === "none") {
+            document.getElementById("jobLogsBtn").click();
+          }
+          jobLogsTimer = setInterval(refreshJobLogs, JOB_LOGS_POLL_MS);
+        }
       });
 
       // GPU queue picker.

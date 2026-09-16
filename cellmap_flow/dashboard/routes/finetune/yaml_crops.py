@@ -29,6 +29,8 @@ import zarr
 from flask import jsonify
 from pydantic import ValidationError
 
+from cellmap_flow.utils.server_info import model_geometry_config
+
 # Module-level progress tracker, keyed by load_id supplied by the client.
 # Each value is the most recent progress snapshot for that load + its
 # final result (or None while in progress). Old entries are evicted after
@@ -422,11 +424,24 @@ def load_crops_from_yaml_response(data):
                 done=False,
             )
 
+        def step(phase, message, **extra):
+            """Report a setup step.
+
+            Everything between "starting" and the first crop used to run
+            silently, and it is the slow part: resolving the model, creating
+            the annotation volume, starting MinIO. The UI sat on "Starting..."
+            for all of it with no way to tell which step was running, or
+            whether anything was running at all.
+            """
+            if load_id:
+                _set_progress(load_id, phase=phase, message=message, **extra)
+
         if not yaml_input:
             return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400
         if not model_name:
             return jsonify({"success": False, "error": "Missing 'model_name' field"}), 400
 
+        step("setup", "Reading the crop manifest...")
         try:
             crops_config = parse_crops_yaml(yaml_input)
         except ValidationError as e:
@@ -440,6 +455,13 @@ def load_crops_from_yaml_response(data):
         if not crops_config.crops:
             return jsonify({"success": False, "error": "No crops listed in YAML"}), 400
 
+        n_crops = len(crops_config.crops)
+        step(
+            "setup",
+            f"Found {n_crops} crop{'' if n_crops == 1 else 's'}; resolving model "
+            f"{model_name}...",
+            n_crops=n_crops,
+        )
         model_config, error_response = _get_selected_model_config(model_name)
         if error_response is not None:
             return error_response
@@ -448,6 +470,7 @@ def load_crops_from_yaml_response(data):
         if not raw_dataset_path:
             return jsonify({"success": False, "error": "No raw dataset path configured"}), 400
 
+        step("setup", "Preparing the corrections directory...", n_crops=n_crops)
         _, corrections_dir = ensure_corrections_storage(output_path)
 
         # Reuse the session's annotation_volume if the user already created one
@@ -456,6 +479,12 @@ def load_crops_from_yaml_response(data):
         volume_id, volume_meta = _find_session_annotation_volume(corrections_dir)
         created_volume = False
         if volume_meta is None:
+            step(
+                "setup",
+                "Creating the annotation volume (asking the inference server "
+                "for the model's geometry)...",
+                n_crops=n_crops,
+            )
             volume_id, volume_meta = _create_session_annotation_volume(
                 raw_dataset_path=raw_dataset_path,
                 corrections_dir=corrections_dir,
@@ -465,9 +494,13 @@ def load_crops_from_yaml_response(data):
                 config=model_geometry_config(model_name) or model_config.config,
             )
             created_volume = True
+        step(
+            "setup",
+            "Serving the volume through MinIO and adding the editable layer...",
+            n_crops=n_crops,
+        )
         _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))
 
-        n_crops = len(crops_config.crops)
         errors = []
         total_fg_written = 0
         for crop_index, entry in enumerate(crops_config.crops):
