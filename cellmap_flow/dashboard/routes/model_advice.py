@@ -116,16 +116,20 @@ def model_advice():
         entry["input_norm_suggestion"] = suggest_input_norm(
             framework=meta.get("framework"),
             raw_dtype=meta.get("raw_dtype", "uint8"),
+            source=meta.get("repo") or meta.get("folder_path"),
         )
         # A "low" confidence suggestion is just the dtype default, made without
         # knowing the training framework -- reporting a mismatch against it
         # would flag a correct hand-tuned config as wrong. Say "unknown"
         # instead, so callers can stay quiet rather than mislead.
         suggestion = entry["input_norm_suggestion"]
+        # Order-sensitive on purpose: LambdaNormalizer("x*2-1") before the
+        # rescale computes something quite different from after it, so the
+        # same two normalizers in the wrong sequence is not a match.
         entry["input_norm_matches"] = (
             None
             if suggestion["confidence"] == "low"
-            else sorted(configured_norm) == sorted(suggestion["input_norm"].keys())
+            else list(configured_norm) == list(suggestion["order"])
         )
         results.append(entry)
 

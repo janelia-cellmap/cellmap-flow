@@ -175,8 +175,27 @@ def review_postprocess(
 
 DACAPO_FRAMEWORKS = ("dacapo",)
 
+# Models published by the CellMap project. Their metadata.json does not always
+# say "dacapo" -- cellmap/mito-aff-unet-setup-16 reports a bare "torch" -- but
+# the collection is trained on EM rescaled to [-1, 1]. The repo agrees with
+# itself on this: the commented-out default in globals.py, every example yaml,
+# and the training input_norm used for the finetuning runs all use
+# MinMax(0,255) then x*2-1.
+# The HF org prefix must be anchored: every model on this filesystem lives
+# under /nrs/cellmap/models/, including other groups' (saalfeldlab's fly
+# models), so a bare "cellmap/" substring matches far too much.
+CELLMAP_HF_ORG = "cellmap/"
+CELLMAP_MODEL_DIR = "/models/cellmap/"
 
-def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict:
+
+def _is_cellmap_model(source) -> bool:
+    src = str(source or "")
+    return src.startswith(CELLMAP_HF_ORG) or CELLMAP_MODEL_DIR in src
+
+
+def suggest_input_norm(
+    framework=None, raw_dtype="uint8", declared=None, source=None
+) -> dict:
     """Propose an input_norm config for a model.
 
     Priority:
@@ -184,7 +203,9 @@ def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict
          Nothing writes this today, but honour it when it appears.
       2. The training framework's convention. DaCapo trains on [-1, 1], hence
          the extra ``x*2-1`` on top of the 0-1 rescale.
-      3. The raw dtype alone, giving [0, 1].
+      3. ``source`` -- where the model came from. A CellMap model follows the
+         same [-1, 1] convention whatever its metadata calls the framework.
+      4. The raw dtype alone, giving [0, 1].
 
     Returns ``{"input_norm": {...}, "order": [...], "reason", "confidence"}``.
 
@@ -231,6 +252,22 @@ def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict
                 f"framework is '{framework}'; DaCapo models are trained on "
                 f"inputs in [-1, 1], so {raw_dtype} is rescaled to [0,1] then "
                 "shifted with x*2-1"
+            ),
+            "confidence": "medium",
+        }
+
+    if _is_cellmap_model(source):
+        norm["LambdaNormalizer"] = {
+            "name": "LambdaNormalizer",
+            "expression": "x*2-1",
+        }
+        return {
+            "input_norm": norm,
+            "order": list(norm.keys()),
+            "reason": (
+                "this is a CellMap model; the collection is trained on inputs "
+                f"in [-1, 1], so {raw_dtype} is rescaled to [0,1] then shifted "
+                "with x*2-1"
             ),
             "confidence": "medium",
         }

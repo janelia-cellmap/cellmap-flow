@@ -315,14 +315,25 @@
 
       function renderInputNormAdvice(m, box) {
         const sug = m.input_norm_suggestion || {};
-        // input_norm_matches is null when the suggestion is only the dtype
-        // default -- no declared framework to go on -- so stay quiet then
-        // rather than second-guess a hand-tuned config.
-        if (m.input_norm_matches !== false || !sug.input_norm) return;
+        // null means the suggestion was only a dtype default, with no declared
+        // framework or recognised source behind it -- stay quiet rather than
+        // second-guess a hand-tuned config.
+        if (m.input_norm_matches === null || m.input_norm_matches === undefined) return;
+        if (!sug.input_norm) return;
         // sug.order, not Object.keys: jsonify sorts keys and the order
         // of these steps changes what they compute.
         const names = sug.order || Object.keys(sug.input_norm);
         const div = document.createElement("div");
+        if (m.input_norm_matches) {
+          // Confirmation, not a prompt: when the norms came from a yaml there
+          // is no other way to tell whether they suit the model.
+          div.className = "alert alert-success py-1 px-2";
+          div.innerHTML = "<small><strong>Input normalization looks right</strong> for <code>"
+                        + (m.model || "model") + "</code>: " + names.join(" \u2192 ")
+                        + ". " + (sug.reason || "") + "</small>";
+          box.appendChild(div);
+          return;
+        }
         div.className = "alert alert-info";
         div.innerHTML = "<strong>Suggested input normalization</strong> for <code>"
                       + (m.model || "model") + "</code><br>" + (sug.reason || "")
