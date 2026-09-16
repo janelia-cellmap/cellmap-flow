@@ -334,6 +334,10 @@ class LoRAFinetuner:
         self.current_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Average supervised loss of the epoch just finished. Checkpoint
+        # selection uses this rather than the combined loss -- see the epoch
+        # loop for why the combined loss cannot rank epochs.
+        self.last_supervised_loss = float('nan')
         self.training_stats = []
 
     def _fallback_to_fp32(self):
@@ -358,6 +362,10 @@ class LoRAFinetuner:
         self.current_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Average supervised loss of the epoch just finished. Checkpoint
+        # selection uses this rather than the combined loss -- see the epoch
+        # loop for why the combined loss cannot rank epochs.
+        self.last_supervised_loss = float('nan')
         self.training_stats = []
 
     def _halve_batch_size(self):
@@ -643,16 +651,36 @@ class LoRAFinetuner:
                     'diverged': True,
                 }
 
+            # Rank epochs by the supervised term, not the combined loss.
+            #
+            # loss = supervised + lambda * distillation, and the distillation
+            # term is minimized by *not changing the model*: at init LoRA has
+            # B=0, so the student is identical to the teacher and distillation
+            # is exactly 0. Epoch 1 therefore posts a combined loss no later
+            # epoch can beat, and "best" stayed pinned to epoch 1 for the whole
+            # run. save_adapter() loads best_checkpoint.pth before exporting,
+            # so every finetune shipped a model one optimizer step from its
+            # starting point -- measurably so: every LoRA B matrix came out at
+            # max|B| = 1e-4, which is Adam's first step at lr=1e-4.
+            #
+            # Distillation belongs in the objective, where it restrains the
+            # update; it cannot also be the yardstick for which epoch is best.
+            # With lambda=0 the two terms are equal, so this changes nothing.
+            selection_loss = self.last_supervised_loss
+            if not math.isfinite(selection_loss):
+                selection_loss = epoch_loss
+
             # Log epoch results
             self._log_message(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
-                f"Best: {self.best_loss:.6f}"
+                f"Supervised: {selection_loss:.6f} - "
+                f"Best supervised: {self.best_loss:.6f}"
             )
 
             # Save checkpoint if best
-            if epoch_loss < self.best_loss:
-                self.best_loss = epoch_loss
+            if selection_loss < self.best_loss:
+                self.best_loss = selection_loss
                 self._log_message("  Saving best checkpoint...")
                 self.save_checkpoint(is_best=True)
                 self._log_message(f"  → Saved best checkpoint")
@@ -845,6 +873,7 @@ class LoRAFinetuner:
             batch_loss = loss.item() * self.gradient_accumulation_steps
             if not math.isfinite(batch_loss):
                 logger.warning(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}. Aborting epoch.")
+                self.last_supervised_loss = float('nan')
                 return float('nan')
             epoch_loss += batch_loss
             epoch_supervised_loss += supervised_loss.item()
@@ -912,6 +941,7 @@ class LoRAFinetuner:
                 f"First 5 dead: {dead_names[:5]}"
             )
 
+        self.last_supervised_loss = epoch_supervised_loss / num_batches
         return epoch_loss / num_batches
 
     def save_checkpoint(self, is_best: bool = False):
