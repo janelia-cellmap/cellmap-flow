@@ -113,6 +113,14 @@
               <input type="text" class="form-control form-control-sm" id="cfg_charge_group" />
             </div>
             <div class="mb-2">
+              <label class="form-label" for="cfg_walltime">Time Limit</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_walltime" placeholder="08:00" />
+              <div class="form-text">
+                LSF run limit, <code>HH:MM</code> or minutes. Jobs are killed at
+                this point. Leave blank for the queue default, which is 2 hours.
+              </div>
+            </div>
+            <div class="mb-2">
               <label class="form-label" for="cfg_nb_cores_worker">Cores per Worker</label>
               <input type="number" class="form-control form-control-sm" id="cfg_nb_cores_worker" />
             </div>
@@ -454,6 +462,7 @@
               if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
             });
             document.getElementById("cfg_charge_group").value = data.charge_group || "";
+            document.getElementById("cfg_walltime").value = data.walltime || "";
             document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
             document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
             serverConfigLoaded = true;
@@ -464,6 +473,7 @@
         const payload = {
           queue: document.getElementById("cfg_queue").value,
           charge_group: document.getElementById("cfg_charge_group").value,
+          walltime: document.getElementById("cfg_walltime").value,
           nb_cores_worker: document.getElementById("cfg_nb_cores_worker").value,
           nb_workers: document.getElementById("cfg_nb_workers").value,
         };

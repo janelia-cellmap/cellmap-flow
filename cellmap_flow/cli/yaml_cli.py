@@ -111,6 +111,9 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     data_path: /path/to/data
     charge_group: my_group
     queue: gpu_h100        # optional, defaults to gpu_h100
+    walltime: "08:00"      # optional; LSF run limit, "HH:MM" or minutes.
+                           # Without it the queue's own default applies,
+                           # which is 2 hours on the Janelia GPU queues.
     wrap_raw: true         # optional; false serves raw straight from the file
     json_data:             # optional; normalization and postprocessing
       input_norm:
@@ -202,10 +205,15 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     charge_group = config["charge_group"]
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
+    # Optional; falls back to the cached dashboard setting, then to
+    # bsub_utils.DEFAULT_WALLTIME. Accepts "08:00" or plain minutes.
+    walltime = config.get("walltime")
 
     # Update globals and save to cache
     g.queue = queue
     g.charge_group = charge_group
+    if walltime:
+        g.walltime = walltime
     g.save_server_config()
 
     logger.info(f"Data path: {data_path}")

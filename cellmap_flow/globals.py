@@ -23,6 +23,10 @@ SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
 SERVER_CONFIG_DEFAULTS = {
     "queue": "gpu_h100",
     "charge_group": "",
+    # LSF's own default on the GPU queues is 120 minutes, which killed
+    # inference servers two hours into a session. See DEFAULT_WALLTIME in
+    # bsub_utils for why this matches the Fileglancer app's own 8 hours.
+    "walltime": "08:00",
     "nb_cores_master": 4,
     "nb_cores_worker": 12,
     "nb_workers": 14,
