@@ -235,9 +235,9 @@
           <label for="loraRank" class="form-label">LoRA Rank</label>
           <select id="loraRank" class="form-select">
             <option value="4">4 (Fast, lower capacity)</option>
-            <option value="8" selected>8 (Balanced) - Recommended</option>
+            <option value="8">8 (Balanced)</option>
             <option value="16">16 (High capacity)</option>
-            <option value="64">64 (Very high capacity)</option>
+            <option value="64" selected>64 (Very high capacity) - Recommended</option>
           </select>
           <small class="text-muted">Higher rank = more trainable parameters</small>
         </div>
@@ -257,8 +257,9 @@
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
             <option value="1">1</option>
-            <option value="2" selected>2 (Default)</option>
+            <option value="2">2</option>
             <option value="4">4</option>
+            <option value="7" selected>7 (Default)</option>
             <option value="8">8</option>
             <option value="16">16</option>
             <option value="32">32</option>

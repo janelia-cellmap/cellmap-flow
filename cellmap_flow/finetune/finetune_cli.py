@@ -13,8 +13,8 @@ Usage:
         --model-checkpoint /path/to/checkpoint \
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1 \
-        --lora-r 16 \
-        --batch-size 4 \
+        --lora-r 64 \
+        --batch-size 7 \
         --num-epochs 20 \
         --learning-rate 2e-4
 """
@@ -526,14 +526,14 @@ def build_arg_parser():
     parser.add_argument(
         "--lora-r",
         type=int,
-        default=8,
-        help="LoRA rank (default: 8)"
+        default=64,
+        help="LoRA rank (default: 64)"
     )
     parser.add_argument(
         "--lora-alpha",
         type=int,
-        default=16,
-        help="LoRA alpha scaling (default: 16)"
+        default=None,
+        help="LoRA alpha scaling (default: twice --lora-r)"
     )
     parser.add_argument(
         "--lora-dropout",
@@ -572,8 +572,8 @@ def build_arg_parser():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=2,
-        help="Batch size (default: 2)"
+        default=7,
+        help="Batch size (default: 7)"
     )
     parser.add_argument(
         "--num-epochs",
@@ -713,6 +713,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Keep the LoRA scaling factor (alpha/r) fixed at 2 regardless of rank,
+    # which is what FinetuneJobManager already does for dashboard-submitted
+    # jobs via lora_alpha = lora_r * 2. A fixed alpha default would silently
+    # change the scaling whenever the rank default moved -- at r=64 an
+    # alpha of 16 is a scaling of 0.25 rather than 2.
+    if args.lora_alpha is None:
+        args.lora_alpha = args.lora_r * 2
+
     # Print configuration
     logger.info("=" * 60)
     logger.info("LoRA Finetuning Configuration")
@@ -721,7 +729,7 @@ def main():
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
-    logger.info(f"LoRA rank: {args.lora_r}")
+    logger.info(f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha})")
     logger.info(f"Batch size: {args.batch_size}")
     logger.info(f"Epochs: {args.num_epochs}")
     logger.info(f"Learning rate: {args.learning_rate}")
