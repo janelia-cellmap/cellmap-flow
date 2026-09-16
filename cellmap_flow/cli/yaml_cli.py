@@ -114,6 +114,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     walltime: "08:00"      # optional; LSF run limit, "HH:MM" or minutes.
                            # Without it the queue's own default applies,
                            # which is 2 hours on the Janelia GPU queues.
+    cycle_gpu_queues: true # optional; false pins the job to `queue` above
+                           # instead of falling back to a queue with capacity.
     wrap_raw: true         # optional; false serves raw straight from the file
     json_data:             # optional; normalization and postprocessing
       input_norm:
@@ -208,17 +210,24 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     # Optional; falls back to the cached dashboard setting, then to
     # bsub_utils.DEFAULT_WALLTIME. Accepts "08:00" or plain minutes.
     walltime = config.get("walltime")
+    # Optional; None means "leave whatever the dashboard setting is". Only an
+    # explicit false pins submissions to `queue`.
+    cycle_gpu_queues = config.get("cycle_gpu_queues")
 
     # Update globals and save to cache
     g.queue = queue
     g.charge_group = charge_group
     if walltime:
         g.walltime = walltime
+    if cycle_gpu_queues is not None:
+        g.cycle_gpu_queues = bool(cycle_gpu_queues)
     g.save_server_config()
 
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
     logger.info(f"Queue: {queue}")
+    if not getattr(g, "cycle_gpu_queues", True):
+        logger.info("GPU queue cycling: off (jobs wait for the queue above)")
 
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")

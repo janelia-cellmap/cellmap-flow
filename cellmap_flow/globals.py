@@ -27,6 +27,11 @@ SERVER_CONFIG_DEFAULTS = {
     # inference servers two hours into a session. See DEFAULT_WALLTIME in
     # bsub_utils for why this matches the Fileglancer app's own 8 hours.
     "walltime": "08:00",
+    # Try other GPU queues when the requested one is busy or closed. On by
+    # default because a job that starts elsewhere beats one that never
+    # starts; turn it off when the queue itself matters (a benchmark pinned
+    # to one GPU model, a charge group valid on only one queue).
+    "cycle_gpu_queues": True,
     "nb_cores_master": 4,
     "nb_cores_worker": 12,
     "nb_workers": 14,
