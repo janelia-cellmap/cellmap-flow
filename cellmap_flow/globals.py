@@ -11,7 +11,12 @@ import logging
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+# This is the basicConfig that actually takes effect in most processes,
+# because globals is imported before any CLI gets to configure logging.
+from cellmap_flow.utils.logging_setup import configure_logging
+
+configure_logging()
 
 SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
 

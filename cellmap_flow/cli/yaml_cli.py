@@ -9,6 +9,7 @@ making it easy to add new model types without modifying this file.
 import os
 import sys
 import logging
+from cellmap_flow.utils.logging_setup import configure_logging
 import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -143,10 +144,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         cellmap_flow_yaml --list-types
         cellmap_flow_yaml config.yaml --validate-only
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    configure_logging(getattr(logging, log_level.upper()))
 
     # List available model types
     if list_types:
