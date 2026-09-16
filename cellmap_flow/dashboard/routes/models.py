@@ -130,6 +130,35 @@ def submit_models():
     )
 
 
+@models_bp.route("/api/job-logs")
+def job_logs():
+    """The inference jobs' own output, so a failure can be read here.
+
+    Without this, a server that dies on startup or 500s on every chunk says
+    nothing in the dashboard -- the traceback is in the LSF job's output on a
+    cluster node, and reading it means logging in and running bpeek.
+    """
+    jobs = []
+    for job in getattr(g, "jobs", []) or []:
+        try:
+            status = job.get_status()
+            text = job.peek()
+        except Exception as e:
+            status, text = None, f"Could not read job output: {e}"
+        jobs.append(
+            {
+                "model_name": getattr(job, "model_name", None),
+                "job_id": getattr(job, "job_id", None),
+                "host": getattr(job, "host", None),
+                "status": getattr(status, "value", None),
+                # None means "no way to read this one" (a local job), which is
+                # different from "read it and it was empty".
+                "log": text,
+            }
+        )
+    return jsonify({"success": True, "jobs": jobs})
+
+
 @models_bp.route("/api/gpu-queues")
 def gpu_queues():
     """Which GPU queues are open and how busy, for the queue picker.

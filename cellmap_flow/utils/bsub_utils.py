@@ -121,6 +121,15 @@ class Job(ABC):
         """
         pass
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The tail of this job's own output, or None if it cannot be read.
+
+        Only LSF jobs can answer: a local job's output is already being
+        consumed by wait_for_host, and reading the same pipe again here would
+        block the request.
+        """
+        return None
+
     def is_running(self) -> bool:
         """Check if the job is currently running."""
         return self.status == JobStatus.RUNNING
@@ -250,6 +259,25 @@ class LSFJob(Job):
         except Exception as e:
             logger.error(f"Error killing LSF job {self.job_id}: {e}")
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The job's own output, so nobody has to ssh in and run bpeek.
+
+        A running job's output has not been flushed to the ``-o`` file yet --
+        LSF writes that at the end -- so bpeek is the only way to see it live.
+        Once the job is gone bpeek has nothing, and the file is the only
+        record. Try them in that order.
+        """
+        try:
+            result = subprocess.run(
+                ["bpeek", self.job_id], capture_output=True, text=True, timeout=10
+            )
+            output = (result.stdout or "").strip()
+            if output:
+                return output[-max_chars:]
+        except Exception as e:
+            logger.debug(f"bpeek {self.job_id} failed: {e}")
+        return self.log_file and _tail(self.log_file, max_chars)
+
     def get_status(self) -> JobStatus:
         """Query LSF for job status using bjobs."""
         try:
