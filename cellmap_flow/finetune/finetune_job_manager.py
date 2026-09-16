@@ -421,7 +421,7 @@ class FinetuneJobManager:
         corrections_path: Path,
         lora_r: int = 64,
         num_epochs: int = 10,
-        batch_size: int = 7,
+        batch_size: int = 8,
         learning_rate: float = 1e-4,
         output_base: Optional[Path] = None,
         queue: str = "gpu_h100",
@@ -447,7 +447,7 @@ class FinetuneJobManager:
             corrections_path: Path to corrections.zarr directory
             lora_r: LoRA rank (default: 64)
             num_epochs: Number of training epochs (default: 10)
-            batch_size: Training batch size (default: 7)
+            batch_size: Training batch size (default: 8)
             learning_rate: Learning rate (default: 1e-4)
             output_base: Base directory for outputs (default: output/finetuning)
             queue: LSF queue name (default: gpu_h100)
