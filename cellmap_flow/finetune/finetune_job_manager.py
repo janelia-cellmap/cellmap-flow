@@ -648,8 +648,14 @@ class FinetuneJobManager:
             # Fallback to local execution
             self.logger.info("bsub not available - running finetuning locally")
             try:
+                # cli_command is a shell command: it sets LD_LIBRARY_PATH as a
+                # prefix assignment and pipes through tee. run_locally splits
+                # with shlex and runs shell=False on purpose, so handing it
+                # this string would exec "LD_LIBRARY_PATH=..." as a program.
+                # Give it an argv list with an explicit shell instead -- the
+                # list form skips run_locally's shlex.split entirely.
                 lsf_job = run_locally(
-                    command=cli_command,
+                    command=["bash", "-c", cli_command],
                     name=job_name
                 )
                 self.logger.info(f"Started local finetuning job (PID: {lsf_job.process.pid})")
