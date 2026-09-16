@@ -176,8 +176,8 @@ class SequentialWrapper(nn.Module):
 def wrap_model_with_lora(
     model: nn.Module,
     target_modules: Optional[List[str]] = None,
-    lora_r: int = 8,
-    lora_alpha: int = 16,
+    lora_r: int = 64,
+    lora_alpha: int = 128,
     lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
     task_type: Optional[str] = None,
