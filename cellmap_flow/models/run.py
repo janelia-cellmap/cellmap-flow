@@ -29,7 +29,7 @@ def run_model(model_path, name, st_data):
     command = (
         f"{SERVER_COMMAND} cellmap --folder-path {model_path} --name {name} -d {g.dataset_path}"
     )
-    logger.error(f"To be submitted command : {command}")
+    logger.info(f"To be submitted command : {command}")
     job = start_hosts(
         command, job_name=name, queue=g.queue, charge_group=g.charge_group
     )
@@ -48,7 +48,7 @@ def run_hf_model(repo, name, st_data):
     command = (
         f"{SERVER_COMMAND} huggingface --repo {repo} --name {name} -d {g.dataset_path}"
     )
-    logger.error(f"To be submitted HF command : {command}")
+    logger.info(f"To be submitted HF command : {command}")
     job = start_hosts(
         command, job_name=name, queue=g.queue, charge_group=g.charge_group
     )
@@ -80,7 +80,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
         for _, group in g.model_catalog.items():
             for name, model_path in group.items():
                 if name in names and name not in names_running:
-                    logger.error(f"To be submitted model : {model_path}")
+                    logger.info(f"To be submitted model : {model_path}")
                     thread = threading.Thread(
                         target=run_model, args=(model_path, name, st_data)
                     )
@@ -91,7 +91,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
         for repo in hf_repos:
             hf_name = _sanitize_job_name(repo.split("/")[-1])
             if hf_name not in names_running:
-                logger.error(f"To be submitted HF model : {repo}")
+                logger.info(f"To be submitted HF model : {repo}")
                 # Create and store HuggingFaceModelConfig for pipeline builder
                 hf_config = HuggingFaceModelConfig(repo=repo, name=hf_name)
                 existing_names = [getattr(mc, 'name', None) for mc in g.models_config]

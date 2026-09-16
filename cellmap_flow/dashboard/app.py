@@ -74,7 +74,7 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     server = make_server("0.0.0.0", port, app, threaded=True)
     actual_port = server.socket.getsockname()[1]
     url = f"http://{hostname}:{actual_port}"
-    logger.warning(f"Dashboard running at: {url}")
+    logger.info(f"Dashboard running at: {url}")
     print(f"\n * Dashboard URL: {url}\n")
     try:
         service_url_path = os.environ.get("SERVICE_URL_PATH")
