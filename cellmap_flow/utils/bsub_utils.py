@@ -530,8 +530,14 @@ def _walltime_arg(walltime):
 PENDING_FALLBACK_SECONDS = 180
 
 
-def gpu_queue_candidates(preferred):
+def gpu_queue_candidates(preferred, cycle=True):
     """The queue to try first, then the others worth falling back to.
+
+    With ``cycle=False`` the requested queue is the only candidate: the job
+    waits for it however long that takes, rather than being moved to whatever
+    is free. Some work is pinned to a queue on purpose -- a benchmark that
+    must run on one GPU model, or a charge group only valid on one queue --
+    and silently landing somewhere else is worse than waiting.
 
     Ordered by what LSF says is actually free rather than by a fixed list, so
     the first fallback is the one most likely to start now. Fallback queues
@@ -547,6 +553,13 @@ def gpu_queue_candidates(preferred):
     from cellmap_flow.utils.lsf_queues import GPU_QUEUES, gpu_queue_availability
 
     candidates = [preferred] if preferred else []
+
+    if not cycle:
+        logger.info(
+            f"Queue cycling disabled; using {preferred or 'the default queue'} "
+            f"only, and waiting for it."
+        )
+        return candidates
     all_gpu = [q for q, _, _ in GPU_QUEUES]
 
     try:
@@ -723,6 +736,7 @@ def start_hosts(
     use_https: bool = False,
     wait_for_host: bool = True,
     walltime: Optional[str] = None,
+    cycle_queues: Optional[bool] = None,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
@@ -734,6 +748,9 @@ def start_hosts(
         job_name: Name for the job
         use_https: Whether to use HTTPS (adds cert/key flags)
         wait_for_host: Whether to wait for host information before returning
+        walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
+        cycle_queues: Try other GPU queues when the requested one is busy or
+            closed. Defaults to g.cycle_gpu_queues, which defaults to True.
         
     Returns:
         Job object (LSFJob or LocalJob) with job information
@@ -747,6 +764,12 @@ def start_hosts(
     # the queue's two hours.
     if walltime is None:
         walltime = getattr(g, "walltime", None) or DEFAULT_WALLTIME
+
+    # Same precedence as walltime: explicit argument, then the dashboard/yaml
+    # setting, then the default. Cycling is on by default because a job that
+    # starts on a different GPU queue beats one that never starts.
+    if cycle_queues is None:
+        cycle_queues = getattr(g, "cycle_gpu_queues", True)
     
     # Add HTTPS flags if needed
     if use_https:
@@ -756,7 +779,7 @@ def start_hosts(
     
     if is_bsub_available():
         logger.info("Using bsub for job submission")
-        candidates = gpu_queue_candidates(queue)
+        candidates = gpu_queue_candidates(queue, cycle=cycle_queues)
         logger.info(f"Queue order: {' -> '.join(candidates)}")
         for index, candidate in enumerate(candidates):
             try:
