@@ -315,8 +315,15 @@ def remap_labels(
         return _remap_per_class(source, fg_classes, bg_set, mode)
 
     default = 1 if mode == "dense" else 0
-    # uint32 so we can hold instance ids before the uint8 clamp warning fires.
-    lookup = np.full(src_max + 1, default, dtype=np.uint32)
+    # The result is uint8. When the instance ids already fit in a byte -- which
+    # is every ordinary crop -- build the table as uint8 so the fancy-index
+    # pass writes one byte per voxel instead of four and needs no second copy
+    # to convert. On the 850x800x600 crop that made this step 11s, that is
+    # 408 MB of output instead of 1.6 GB plus a 408 MB astype.
+    # uint32 is only needed for the overflow path, where ids exceed 255 before
+    # being collapsed.
+    fits_uint8 = 2 + len(fg_classes) <= 256
+    lookup = np.full(src_max + 1, default, dtype=np.uint8 if fits_uint8 else np.uint32)
     if mode != "dense":
         # sparse: source==0 stays 0 (unannotated)
         lookup[0] = 0
@@ -333,13 +340,14 @@ def remap_labels(
 
     out = lookup[source]
 
-    if next_instance_id > 256:
-        logger.warning(
-            f"Crop produced {next_instance_id - 2} instances; collapsing to single FG class "
-            "to fit uint8. Affinities between distinct blobs may be inaccurate."
-        )
-        np.minimum(out, 2, out=out, where=(out >= 2))
+    if fits_uint8:
+        return out
 
+    logger.warning(
+        f"Crop produced {next_instance_id - 2} instances; collapsing to single FG class "
+        "to fit uint8. Affinities between distinct blobs may be inaccurate."
+    )
+    np.minimum(out, 2, out=out, where=(out >= 2))
     return out.astype(np.uint8)
 
 
