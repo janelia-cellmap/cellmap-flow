@@ -267,7 +267,7 @@
       // Asks the server what activation the model's output actually has (see
       // cellmap_flow/utils/output_probe.py) and compares it against the chain
       // currently configured. Only renders when there is something to say.
-      function applyPostprocessSuggestion(names) {
+      function applyPostprocessSuggestion(names, params) {
         const list = document.getElementById("postProcessList");
         if (!list) return;
         // Tick exactly the suggested set.
@@ -277,6 +277,15 @@
             cb.checked = want;
             cb.dispatchEvent(new Event("change", { bubbles: true }));
           }
+        });
+        // Defaults assume each step sees the range its usual predecessor
+        // produces; where this chain differs, the server says what to use.
+        Object.keys(params || {}).forEach(function (name) {
+          const values = params[name] || {};
+          Object.keys(values).forEach(function (key) {
+            const inp = document.getElementById("postProcess_" + name + "_" + key);
+            if (inp) inp.value = values[key];
+          });
         });
         // Order matters -- steps are applied top to bottom -- so reorder the
         // DOM to match the suggested sequence.
@@ -374,13 +383,22 @@
                  + Number(m.output_max).toPrecision(4) + "]</small><br>";
           }
           html += rev.message;
+          const tuned = Object.keys(rev.params || {});
+          if (tuned.length) {
+            html += "<br><small>with " + tuned.map(function (name) {
+              const v = rev.params[name];
+              return "<code>" + name + "</code> " + Object.keys(v).map(function (k) {
+                return k + "=" + v[k];
+              }).join(", ");
+            }).join("; ") + "</small>";
+          }
           div.innerHTML = html;
           if ((rev.suggest || []).length) {
             const btn = document.createElement("button");
             btn.className = "btn btn-sm btn-primary ms-2 mt-2";
             btn.textContent = "Apply: " + rev.suggest.join(" \u2192 ");
             btn.onclick = function () {
-              applyPostprocessSuggestion(rev.suggest);
+              applyPostprocessSuggestion(rev.suggest, rev.params);
               div.remove();
             };
             div.appendChild(document.createElement("br"));

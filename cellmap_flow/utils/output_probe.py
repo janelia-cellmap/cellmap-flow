@@ -67,6 +67,71 @@ def suggest_affinity_chain(output_class: str) -> list:
     return chain
 
 
+# Offsets for the mutex watershed, longest-range last: AffinityPostprocessor
+# truncates to the model's channel count, so the order decides which offsets a
+# 3-channel model actually gets.
+NEIGHBORHOOD_OFFSETS = [
+    [1, 0, 0], [0, 1, 0], [0, 0, 1],
+    [3, 0, 0], [0, 3, 0], [0, 0, 3],
+    [9, 0, 0], [0, 9, 0], [0, 0, 9],
+]
+
+# What each activation class means as a value range. UNBOUNDED stays None:
+# logits and distances share it and imply different parameters.
+_CLASS_RANGE = {UNIT: (0.0, 1.0), SIGNED_UNIT: (-1.0, 1.0)}
+
+
+def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
+    """Parameter values for a suggested chain, from the range flowing into each step.
+
+    The default parameters assume each step sees the range its most common
+    predecessor produces, which stops being true as soon as the chain differs.
+    The costly case is DefaultPostprocessor after a sigmoid: its defaults clip
+    to [-1, 1] and map that to 0-255, so probabilities in [0, 1] land in
+    [127.5, 255] -- half the range. AffinityPostprocessor then divides by 255
+    and subtracts its bias, and a probability of 0.0003 (a strongly repulsive
+    edge) comes out at -0.002 instead of -0.5. The mutex watershed is left with
+    essentially no repulsive edges and merges everything.
+
+    Returns ``{postprocessor_name: {param: value}}``, containing only the steps
+    whose defaults are wrong for this chain.
+    """
+    params = {}
+    rng = _CLASS_RANGE.get(output_class)  # None while the range is unknown
+
+    for name in chain:
+        if name == "SigmoidPostprocessor":
+            rng = (0.0, 1.0)
+        elif name == "DefaultPostprocessor":
+            if rng is not None:
+                lo, hi = rng
+                params[name] = {
+                    "clip_min": lo,
+                    "clip_max": hi,
+                    "bias": -lo + 0.0,  # avoid rendering "-0.0" in the form
+                    "multiplier": 255.0 / (hi - lo),
+                }
+            rng = (0.0, 255.0)
+        elif name == "ThresholdPostprocessor":
+            # Unbounded means logits here: the decision boundary is 0, not the
+            # 0.5 that only makes sense once a sigmoid has been applied.
+            threshold = 0.0 if rng is None else (rng[0] + rng[1]) / 2.0
+            params[name] = {"threshold": threshold}
+            rng = (0.0, 1.0)
+        elif name == "AffinityPostprocessor":
+            # It divides by 255 internally, so it wants 0-255 in and works in
+            # [0, 1]; the mutex watershed needs the midpoint subtracted to get
+            # the signed affinities it is defined on.
+            affinity = {"bias": 0.5}
+            if out_channels:
+                offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
+                affinity["neighborhood"] = str(offsets)
+            params[name] = affinity
+            rng = None  # labels from here on
+
+    return params
+
+
 def review_postprocess(
     output_class: str,
     postprocess_names,
@@ -87,84 +152,93 @@ def review_postprocess(
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
 
+    def verdict(level, message, suggest):
+        """Attach parameter values to whatever chain we are proposing."""
+        return {
+            "level": level,
+            "message": message,
+            "suggest": suggest,
+            "params": suggest_postprocess_params(suggest, output_class, out_channels),
+        }
+
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
             if not has_default:
-                return {
-                    "level": "warn",
-                    "message": (
+                return verdict(
+                    "warn",
+                    (
                         "AffinityPostprocessor divides its input by 255, so it "
                         "needs DefaultPostprocessor ahead of it to rescale "
                         "[0,1] to 0-255. Without that the affinities are ~250x "
                         "too small and the watershed collapses to one segment."
                     ),
-                    "suggest": suggest_affinity_chain(output_class),
-                }
-            return {"level": "ok", "message": "Affinity chain looks complete.", "suggest": []}
-        return {
-            "level": "suggest",
-            "message": (
+                    suggest_affinity_chain(output_class),
+                )
+            return verdict("ok", "Affinity chain looks complete.", [])
+        return verdict(
+            "suggest",
+            (
                 f"This model has {out_channels} output channels and an affinity "
                 "name, so it probably predicts affinities. The chain below "
                 "converts them to a segmentation."
             ),
-            "suggest": suggest_affinity_chain(output_class),
-        }
+            suggest_affinity_chain(output_class),
+        )
 
     if output_class == UNIT:
         if has_sigmoid:
-            return {
-                "level": "warn",
-                "message": (
+            return verdict(
+                "warn",
+                (
                     "This model's output is already bounded to [0, 1], so it "
                     "ends in a sigmoid. SigmoidPostprocessor would apply a "
                     "second one, flattening the contrast."
                 ),
-                "suggest": [n for n in names if n != "SigmoidPostprocessor"],
-            }
-        return {
-            "level": "ok",
-            "message": "Model output is already in [0, 1]; no activation needed.",
-            "suggest": [],
-        }
+                [n for n in names if n != "SigmoidPostprocessor"],
+            )
+        return verdict(
+            "ok",
+            "Model output is already in [0, 1]; no activation needed.",
+            [],
+        )
 
     if output_class == SIGNED_UNIT:
         if has_sigmoid:
-            return {
-                "level": "warn",
-                "message": (
+            return verdict(
+                "warn",
+                (
                     "This model's output is bounded to [-1, 1] (a tanh head). "
                     "A sigmoid on top compresses it to roughly [0.27, 0.73], "
                     "which looks washed out. DefaultPostprocessor is the usual "
                     "choice for this range."
                 ),
-                "suggest": ["DefaultPostprocessor"],
-            }
+                ["DefaultPostprocessor"],
+            )
         if not has_default:
-            return {
-                "level": "suggest",
-                "message": (
+            return verdict(
+                "suggest",
+                (
                     "Model output is in [-1, 1] (a tanh head). "
                     "DefaultPostprocessor rescales that to 0-255 for display."
                 ),
-                "suggest": ["DefaultPostprocessor"],
-            }
-        return {"level": "ok", "message": "DefaultPostprocessor suits this [-1, 1] output.", "suggest": []}
+                ["DefaultPostprocessor"],
+            )
+        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output.", [])
 
     # UNBOUNDED: logits and signed distances are indistinguishable here, so
     # suggest only when nothing at all is configured, and say why it's a guess.
     if not names:
-        return {
-            "level": "suggest",
-            "message": (
+        return verdict(
+            "suggest",
+            (
                 "Model output is unbounded, so it has no activation. If these "
                 "are logits, SigmoidPostprocessor converts them to "
                 "probabilities. If they are distances or affinities, leave this "
                 "alone -- the output range cannot tell the two apart."
             ),
-            "suggest": ["SigmoidPostprocessor"],
-        }
-    return {"level": "ok", "message": "Model output is unbounded; current postprocessing left as set.", "suggest": []}
+            ["SigmoidPostprocessor"],
+        )
+    return verdict("ok", "Model output is unbounded; current postprocessing left as set.", [])
 
 
 # --- input normalization -----------------------------------------------------
