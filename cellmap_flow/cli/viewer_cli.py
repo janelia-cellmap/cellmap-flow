@@ -30,8 +30,14 @@ def main(dataset, log_level):
     """
     Start CellMap Flow viewer with a dataset.
 
+    Opens neuroglancer on the raw data and starts the dashboard, where models
+    can be picked and submitted interactively. Use cellmap_flow_yaml instead to
+    launch models from a config file.
+
     Example:
-        cellmap_flow_viewer -d /path/to/dataset.zarr
+
+    \b
+      cellmap_flow_view -d /path/to/dataset.zarr
     """
     # Imported inside the command so --help and argument errors do not
     # pay for the whole inference stack (~16s before this).

@@ -1,8 +1,8 @@
 """
 YAML-based CLI for running multiple models.
-Similar to cli_v2 but uses YAML configuration files for batch processing.
+Uses YAML configuration files for batch processing.
 
-This dynamically discovers ModelConfig subclasses just like cli_v2,
+This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.
 """
 
@@ -103,20 +103,34 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     \b
     data_path: /path/to/data
     charge_group: my_group
-    queue: gpu_h100  # optional, defaults to gpu_h100
-    json_data: /path/to/config.json  # optional
+    queue: gpu_h100        # optional, defaults to gpu_h100
+    wrap_raw: true         # optional; false serves raw straight from the file
+    json_data:             # optional; normalization and postprocessing
+      input_norm:
+        MinMaxNormalizer: {min_value: 0, max_value: 255}
+        LambdaNormalizer: {expression: "x*2-1"}
+      postprocess:
+        SigmoidPostprocessor: {}
     models:
-      my_model:
-        type: dacapo
+      - type: dacapo
+        name: my_model
         run_name: my_run
         iteration: 100
-      fly_model:
-        type: fly
+      - type: fly
+        name: fly_model
         checkpoint: /path/to/checkpoint.ts
         classes: [mito, er, nucleus]
         resolution: [4, 4, 4]
 
-    The model keys (my_model, fly_model) become the model names.
+    Models may also be given as a mapping, where each key is the model name:
+
+    \b
+    models:
+      my_model:
+        type: dacapo
+        run_name: my_run
+
+    json_data is an inline mapping (or a JSON string), not a path to a file.
 
     Model types are automatically discovered from ModelConfig subclasses.
     Use --list-types to see all available types.

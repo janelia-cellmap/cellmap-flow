@@ -47,9 +47,21 @@ def cli(log_level):
     Automatically generates commands for all available ModelConfig subclasses.
 
     Examples:
-        cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
-        cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_v2 cellmap -f /path/to/model -n mymodel -d /path/to/data
+
+    \b
+      cellmap_flow dacapo -r my_run -i 100 -d /path/to/data
+      cellmap_flow script -s /path/to/script.py -d /path/to/data
+      cellmap_flow cellmap -f /path/to/model -n mymodel -d /path/to/data
+
+    Related commands, each with its own --help:
+
+    \b
+      cellmap_flow_yaml                run one or more models from a YAML config
+      cellmap_flow_view                open the viewer, pick models in the UI
+      cellmap_flow_blockwise           run a model over a whole volume to disk
+      cellmap_flow_blockwise_multiple  the same for several models
+      cellmap_flow_server              serve one model (usually launched for you)
+      cellmap_flow_app                 serve the dashboard against a running server
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
@@ -134,7 +146,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     Generic run command that accepts any model type with dynamic configuration.
 
     Example:
-        cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
+        cellmap_flow run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
     """
     # Fall back to cached values if not provided
     if project is None:
