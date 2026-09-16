@@ -632,13 +632,19 @@ class FinetuneJobManager:
         if is_bsub_available():
             self.logger.info("Submitting to LSF cluster via bsub")
             try:
+                # Training runs epochs, not chunks, so it is the likeliest
+                # thing here to outlive the queue's 120-minute default.
+                from cellmap_flow.globals import g as _g
+                from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME
+
                 lsf_job = submit_bsub_job(
                     command=cli_command,
                     queue=queue,
                     charge_group=charge_group,
                     job_name=job_name,
                     num_gpus=1,
-                    num_cpus=4
+                    num_cpus=4,
+                    walltime=getattr(_g, "walltime", None) or DEFAULT_WALLTIME,
                 )
                 self.logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
             except Exception as e:
