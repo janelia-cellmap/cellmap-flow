@@ -127,3 +127,35 @@ def test_no_boxes_does_not_open_a_transaction(corrections, monkeypatch):
 
     assert overlay.refresh_annotated_regions_layer(str(corrections)) == 0
     assert viewer.txn_count == 0, "nothing to remove, so nothing to push"
+
+
+def test_annotation_layers_get_the_draw_tools_prebound(monkeypatch):
+    """A/F must be bound on the layer we hand neuroglancer, not hunted for."""
+    import neuroglancer
+    from cellmap_flow.dashboard.app import app
+
+    viewer = _FakeViewer()
+    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
+
+    app.config.update(TESTING=True)
+    client = app.test_client()
+    r = client.post(
+        "/api/finetune/add-to-viewer",
+        json={"crop_id": "c1", "minio_url": "http://minio/x.zarr"},
+    )
+    assert r.status_code == 200 and r.get_json()["success"]
+
+    # Assert on the serialized form: that JSON is what the browser is sent,
+    # and it is the only thing that decides whether the keys work.
+    bindings = viewer.state.layers["annotation_c1"].to_json()["toolBindings"]
+
+    def tool_of(value):
+        # A Tool serializes bare when it carries nothing but a type, and as
+        # {"type": ...} once anything has materialized it. Both are valid.
+        return value["type"] if isinstance(value, dict) else value
+
+    assert tool_of(bindings["A"]) == "vox-brush"
+    assert tool_of(bindings["F"]) == "vox-flood-fill"
+    # Keys must be a single capital letter or neuroglancer drops the binding
+    # (TOOL_KEY_PATTERN = /^[A-Z]$/ in src/ui/tool.ts).
+    assert all(k.isupper() and len(k) == 1 for k in bindings)

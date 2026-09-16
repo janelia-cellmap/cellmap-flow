@@ -434,6 +434,7 @@
             <option value="gpu_a100">A100</option>
             <option value="gpu_h200">H200</option>
           </select>
+          <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
         </div>
       </div>
     </div>
@@ -671,6 +672,64 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.gpuQueue) document.getElementById("gpuQueue").value = savedState.gpuQueue;
   }
   attachStateListeners();
+
+  // Show what the GPU queues actually look like right now.
+  //
+  // A training job is not cycled onto another queue if the one you picked is
+  // busy -- it just waits -- so the only thing that helps is seeing the wait
+  // before you submit rather than after.
+  const FINETUNE_GPU_QUEUE_POLL_MS = 60000;
+
+  function renderFinetuneGpuQueues(data) {
+    const sel = document.getElementById("gpuQueue");
+    if (!sel) return;
+    const queues = (data && data.queues) || [];
+    if (!queues.length) return;  // Keep the hardcoded options rather than emptying the picker.
+
+    const chosen = sel.value;
+    sel.innerHTML = "";
+    queues.forEach(function (q) {
+      const opt = document.createElement("option");
+      opt.value = q.queue;
+      // textContent, not innerHTML -- assembled from LSF output.
+      opt.textContent = q.label + (q.description ? " \u2014 " + q.description : "");
+      // A closed queue accepts submissions and never starts them, which looks
+      // exactly like a very slow job. Don't offer it.
+      opt.disabled = q.open === false;
+      sel.appendChild(opt);
+    });
+    // Keep what the user picked, even if LSF no longer lists it.
+    if (chosen) {
+      if (!queues.some(function (q) { return q.queue === chosen; })) {
+        const opt = document.createElement("option");
+        opt.value = chosen;
+        opt.textContent = chosen + " (selected)";
+        sel.appendChild(opt);
+      }
+      sel.value = chosen;
+    }
+
+    const hint = document.getElementById("finetuneGpuQueueHint");
+    if (hint) {
+      hint.textContent =
+        data && data.available === false
+          ? data.reason || "Queue availability is unavailable."
+          : "";
+    }
+  }
+
+  function refreshFinetuneGpuQueues() {
+    fetch("/api/gpu-queues")
+      .then(function (r) { return r.json(); })
+      .then(renderFinetuneGpuQueues)
+      .catch(function () {
+        // Transient; the next poll retries. Leave the options as they are
+        // rather than blanking the picker under the user.
+      });
+  }
+
+  refreshFinetuneGpuQueues();
+  setInterval(refreshFinetuneGpuQueues, FINETUNE_GPU_QUEUE_POLL_MS);
 
   // Load models on page load
   loadModels();
