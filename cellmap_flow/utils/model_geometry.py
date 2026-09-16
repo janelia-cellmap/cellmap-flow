@@ -28,7 +28,11 @@ import tempfile
 import threading
 from types import SimpleNamespace
 
-from cellmap_flow.utils.server_info import GEOMETRY_FIELDS, model_geometry_config
+from cellmap_flow.utils.server_info import (
+    GEOMETRY_FIELDS,
+    OPTIONAL_FIELDS,
+    model_geometry_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +117,11 @@ def load_cached_geometry(model_config):
     if any(entry.get(f) is None for f in GEOMETRY_FIELDS):
         return None
     logger.info(f"Model geometry from cache for {key.split(':')[0]} model")
-    return SimpleNamespace(**{f: entry[f] for f in GEOMETRY_FIELDS})
+    fields = {f: entry[f] for f in GEOMETRY_FIELDS}
+    for f in OPTIONAL_FIELDS:
+        if entry.get(f) is not None:
+            fields[f] = entry[f]
+    return SimpleNamespace(**fields)
 
 
 def store_geometry(model_config, config):
@@ -133,6 +141,20 @@ def store_geometry(model_config, config):
     except (AttributeError, TypeError, ValueError) as e:
         logger.debug(f"Not caching geometry for {key}: {e}")
         return
+
+    # Channel names are optional but worth keeping: the finetune tab reads
+    # them to tell an affinity model from a binary one, and a cache hit that
+    # dropped them would silently downgrade that to "binary".
+    channels = (
+        getattr(config, "channels", None)
+        or getattr(config, "channels_names", None)
+        or getattr(config, "classes", None)
+    )
+    if channels:
+        try:
+            entry["channels"] = [str(c) for c in channels]
+        except TypeError:
+            pass
 
     with _lock:
         data = _read_cache()

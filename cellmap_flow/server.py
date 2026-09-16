@@ -136,8 +136,19 @@ class CellMapFlowServer:
             # models expose nothing to the dashboard through to_dict(), which
             # makes this the only place it can learn e.g. that a model has 3+
             # channels and might be predicting affinities.
+            # Channel names, not just the count: the dashboard decides whether
+            # a model predicts affinities by looking for "_aff" in them, and a
+            # script model exposes nothing through to_dict(), so this is the
+            # only way it can learn them without building the model.
+            channels = (
+                getattr(config, "channels", None)
+                or getattr(config, "channels_names", None)
+                or getattr(config, "classes", None)
+            )
+
             info = {
                 "output_channels": self.output_channels,
+                "channels": [str(c) for c in channels] if channels else None,
                 "write_shape": [int(v) for v in config.write_shape],
                 "read_shape": [int(v) for v in config.read_shape],
                 "output_voxel_size": [int(v) for v in config.output_voxel_size],

@@ -92,6 +92,11 @@ GEOMETRY_FIELDS = (
     "output_channels",
 )
 
+# Reported when the server can, absent from servers predating it. Kept out of
+# GEOMETRY_FIELDS so a server that cannot supply it still satisfies the
+# all-or-nothing check above rather than forcing a local model build.
+OPTIONAL_FIELDS = ("channels",)
+
 
 def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
     """A stand-in for ``ModelConfig.config`` carrying geometry and nothing else.
@@ -115,4 +120,8 @@ def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
             "falling back to building the model locally."
         )
         return None
-    return SimpleNamespace(**{f: info[f] for f in GEOMETRY_FIELDS})
+    fields = {f: info[f] for f in GEOMETRY_FIELDS}
+    for f in OPTIONAL_FIELDS:
+        if info.get(f) is not None:
+            fields[f] = info[f]
+    return SimpleNamespace(**fields)
