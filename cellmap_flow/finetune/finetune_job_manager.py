@@ -11,6 +11,7 @@ import logging
 import os
 import shlex
 import re
+import string
 import sys
 import threading
 import time
@@ -40,6 +41,33 @@ class JobStatus(Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+# Values in this command survive two rounds of shell quoting: the one bsub
+# starts on the exec host, and LSF's own handling, which re-wraps the whole
+# `bash -c` argument in single quotes. A single quote of ours therefore closes
+# LSF's and the argument word-splits. That is not hypothetical:
+#
+#     --offsets '[[1, 0, 0], [0, 1, 0], [0, 0, 1]]'
+#
+# reached the trainer as the bare word "[[1," with the rest scattered as stray
+# arguments, and json.loads died with "Expecting value: line 1 column 5".
+# Double quotes nest inside LSF's single quotes safely, so quote with those.
+_SHELL_SAFE = frozenset(string.ascii_letters + string.digits + "@%+=:,./-_")
+
+
+def _sh_quote(part: str) -> str:
+    """Shell-quote without ever emitting a single quote."""
+    part = str(part)
+    if part and all(c in _SHELL_SAFE for c in part):
+        return part
+    escaped = (
+        part.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
+    return f'"{escaped}"'
 
 
 @dataclass
@@ -299,7 +327,7 @@ class FinetuneJobManager:
         if offsets is not None:
             command_parts += ["--offsets", str(offsets)]
 
-        command = " ".join(shlex.quote(part) for part in command_parts)
+        command = " ".join(_sh_quote(part) for part in command_parts)
 
         # Put this interpreter's own lib directory first on the loader path.
         #
@@ -314,12 +342,12 @@ class FinetuneJobManager:
         # via cellpose on a GCC 13+ build.
         env_lib = os.path.join(sys.prefix, "lib")
         loader_path = (
-            f"LD_LIBRARY_PATH={shlex.quote(env_lib)}"
+            f"LD_LIBRARY_PATH={_sh_quote(env_lib)}"
             '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
         )
         return (
             f"{loader_path}stdbuf -oL {command} 2>&1 "
-            f"| tee {shlex.quote(str(log_file))}"
+            f"| tee {_sh_quote(log_file)}"
         )
 
     def _build_submission_metadata(
