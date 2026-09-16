@@ -2873,10 +2873,28 @@
             }
         });
 
-        function toggleBlockwiseBar() {
+        async function toggleBlockwiseBar() {
             const blockwiseBar = document.getElementById('blockwise-bar');
             const isHidden = blockwiseBar.style.display === 'none';
             blockwiseBar.style.display = isHidden ? 'flex' : 'none';
+            if (!isHidden) return;
+
+            // Opening the bar means the user is doing blockwise work, and that
+            // always needs exactly one config node. Requiring them to find it
+            // first was a trap: this button reveals the Validate/Generate/
+            // Submit bar, while the draggable node lives in a palette section
+            // that starts collapsed, so clicking "Blockwise" showed the steps
+            // but nothing to drag. Place the node, and open the section so it
+            // is visible where it came from.
+            if (!pipeline.blockwise_config.length) {
+                await addNode('blockwise-config', 'Blockwise Configuration', null);
+            }
+            const items = document.getElementById('config-items');
+            if (items && !items.classList.contains('show')) {
+                items.classList.add('show');
+                const toggle = document.getElementById('config-toggle');
+                if (toggle) toggle.textContent = '▲';
+            }
         }
 
         initializeLibrary();
