@@ -322,6 +322,20 @@
         });
       }
 
+      // Model names reach this banner from HuggingFace repo ids and from user
+      // YAML, and the HF catalogue is third-party data we render verbatim.
+      // None of it is trusted markup, so escape everything interpolated into
+      // innerHTML below.
+      const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+      function esc(value) {
+        return String(value === null || value === undefined ? "" : value)
+          .replace(/[&<>"']/g, function (c) { return ESC_MAP[c]; });
+      }
+
+      // A confirmation needs no decision from anyone, so it should not sit at
+      // the top of the page indefinitely the way an actionable suggestion does.
+      const CONFIRM_BANNER_MS = 8000;
+
       function renderInputNormAdvice(m, box) {
         const sug = m.input_norm_suggestion || {};
         if (!sug.input_norm) return;
@@ -340,19 +354,20 @@
           div.className = "alert py-1 px-2 " + (assumed ? "alert-secondary" : "alert-success");
           div.innerHTML = "<small><strong>Input normalization "
                         + (assumed ? "matches the assumed range" : "looks right")
-                        + "</strong> for <code>" + (m.model || "model") + "</code>: "
-                        + names.join(" \u2192 ") + ". " + (sug.reason || "") + "</small>";
+                        + "</strong> for <code>" + esc(m.model || "model") + "</code>: "
+                        + esc(names.join(" \u2192 ")) + ". " + esc(sug.reason || "") + "</small>";
           box.appendChild(div);
+          setTimeout(function () { div.remove(); }, CONFIRM_BANNER_MS);
           return;
         }
         div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
         div.innerHTML = "<strong>"
                       + (assumed ? "Assumed input normalization" : "Suggested input normalization")
-                      + "</strong> for <code>" + (m.model || "model") + "</code><br>"
-                      + (sug.reason || "")
-                      + "<br><small>confidence: " + (sug.confidence || "unknown")
+                      + "</strong> for <code>" + esc(m.model || "model") + "</code><br>"
+                      + esc(sug.reason || "")
+                      + "<br><small>confidence: " + esc(sug.confidence || "unknown")
                       + "; currently set: "
-                      + ((m.configured_input_norm || []).join(" \u2192 ") || "none")
+                      + esc((m.configured_input_norm || []).join(" \u2192 ") || "none")
                       + "</small>";
         const btn = document.createElement("button");
         btn.className = "btn btn-sm btn-primary ms-2 mt-2";
@@ -380,19 +395,19 @@
           const div = document.createElement("div");
           div.className = "alert " + (warn ? "alert-warning" : "alert-info");
           let html = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
-                   + "</strong> for <code>" + (m.model || "model") + "</code><br>";
+                   + "</strong> for <code>" + esc(m.model || "model") + "</code><br>";
           if (m.output_min !== null && m.output_min !== undefined) {
             html += "<small>Observed output range ["
                  + Number(m.output_min).toPrecision(4) + ", "
                  + Number(m.output_max).toPrecision(4) + "]</small><br>";
           }
-          html += rev.message;
+          html += esc(rev.message);
           const tuned = Object.keys(rev.params || {});
           if (tuned.length) {
             html += "<br><small>with " + tuned.map(function (name) {
               const v = rev.params[name];
-              return "<code>" + name + "</code> " + Object.keys(v).map(function (k) {
-                return k + "=" + v[k];
+              return "<code>" + esc(name) + "</code> " + Object.keys(v).map(function (k) {
+                return esc(k) + "=" + esc(v[k]);
               }).join(", ");
             }).join("; ") + "</small>";
           }

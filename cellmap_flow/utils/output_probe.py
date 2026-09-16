@@ -372,7 +372,7 @@ def suggest_input_norm(
         return {
             "input_norm": declared,
             "order": list(declared.keys()),
-            "reason": "declared in the model's own metadata",
+            "reason": "Declared in the model's own metadata",
             "confidence": "high",
         }
 
@@ -399,7 +399,7 @@ def suggest_input_norm(
             "input_norm": norm,
             "order": list(norm.keys()),
             "reason": (
-                f"framework is '{framework}'; DaCapo models are trained on "
+                f"Framework is '{framework}'; DaCapo models are trained on "
                 f"inputs in [-1, 1], and {span}"
             ),
             "confidence": "medium",
@@ -411,7 +411,7 @@ def suggest_input_norm(
             "input_norm": norm,
             "order": list(norm.keys()),
             "reason": (
-                "this is a CellMap model; the collection is trained on inputs "
+                "This is a CellMap model; the collection is trained on inputs "
                 f"in [-1, 1], and {span}"
             ),
             "confidence": "medium",
@@ -422,7 +422,7 @@ def suggest_input_norm(
         "input_norm": norm,
         "order": list(norm.keys()),
         "reason": (
-            "nothing declares how this model was trained, so assuming the "
+            "Nothing declares how this model was trained, so assuming the "
             f"[-1, 1] range everything else here uses; {span}"
         ),
         "confidence": "low",
