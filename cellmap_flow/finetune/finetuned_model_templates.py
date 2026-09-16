@@ -105,6 +105,7 @@ def generate_current_config_yaml(
     data_path: str,
     queue: str = "gpu_h100",
     charge_group: str = "cellmap",
+    walltime: str = None,
     json_data: dict = None,
 ) -> str:
     """
@@ -122,6 +123,8 @@ def generate_current_config_yaml(
         data_path: current dataset path
         queue: LSF queue name
         charge_group: LSF charge group
+        walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
+            the reloaded config falls back to the built-in default
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
             currently active normalization/postprocessing, if any
 
@@ -135,6 +138,8 @@ def generate_current_config_yaml(
         "charge_group": charge_group,
         "queue": queue,
     }
+    if walltime:
+        yaml_dict["walltime"] = walltime
 
     has_json_data = json_data and (
         json_data.get("input_norm") or json_data.get("postprocess")
