@@ -11,6 +11,7 @@ from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
 from cellmap_flow.dashboard.routes.models import models_bp
 from cellmap_flow.dashboard.routes.pipeline import pipeline_bp
+from cellmap_flow.dashboard.routes.model_advice import model_advice_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
@@ -38,6 +39,7 @@ app.register_blueprint(pipeline_bp)
 app.register_blueprint(blockwise_bp)
 app.register_blueprint(bbx_bp)
 app.register_blueprint(finetune_bp)
+app.register_blueprint(model_advice_bp)
 
 
 def create_and_run_app(neuroglancer_url=None, inference_servers=None):

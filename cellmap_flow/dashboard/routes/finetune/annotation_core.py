@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import uuid
 from datetime import datetime
 
@@ -21,6 +22,11 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.utils.server_info import (
+    fetch_model_info,
+    model_geometry,
+    running_job_host,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,44 +55,100 @@ def _register_annotation_volume(volume_id, **volume_data):
     }
 
 
+# ``model_config.config`` is far from free: for a script model it executes the
+# config file, which downloads weights and runs torch.export before it can
+# report a shape. ModelConfig caches the result, but only on success -- a
+# failure leaves ``_config`` None, so the next access redoes the whole thing.
+# The finetune tab polls this endpoint every two seconds while it waits for a
+# model, which turns one failure (a busy GPU, say) into hundreds of full model
+# loads. Remember failures briefly instead, short enough that a transient cause
+# still recovers on its own.
+_CONFIG_FAILURE_COOLDOWN_SECONDS = 60
+_config_failure_until = {}
+
+
+def _config_retry_blocked(name) -> bool:
+    until = _config_failure_until.get(name)
+    return until is not None and time.time() < until
+
+
+def _geometry_from_server(name):
+    """Geometry from the running inference server, which already has the model."""
+    return model_geometry(fetch_model_info(running_job_host(name)))
+
+
+def _geometry_from_saved_pipeline(name):
+    configs = getattr(g, "pipeline_model_configs", None) or {}
+    cfg = configs.get(name)
+    if not cfg:
+        return None
+    return {
+        "write_shape": cfg.get("write_shape", []),
+        "output_voxel_size": cfg.get("output_voxel_size", []),
+        "output_channels": cfg.get("output_channels", 1),
+    }
+
+
+def _geometry_from_local_load(name, model_config):
+    """Last resort: build the model here just to read its shape.
+
+    Only reached when no server is up and nothing was saved, because it is by
+    far the most expensive and least reliable source -- see the note on
+    _CONFIG_FAILURE_COOLDOWN_SECONDS above.
+    """
+    if model_config is None or _config_retry_blocked(name):
+        return None
+    try:
+        config = model_config.config
+        _config_failure_until.pop(name, None)
+        return {
+            "write_shape": list(config.write_shape),
+            "output_voxel_size": list(config.output_voxel_size),
+            "output_channels": config.output_channels,
+        }
+    except Exception as e:
+        _config_failure_until[name] = time.time() + _CONFIG_FAILURE_COOLDOWN_SECONDS
+        logger.warning(
+            f"Could not extract config for {name}: {e}. Not retrying for "
+            f"{_CONFIG_FAILURE_COOLDOWN_SECONDS}s."
+        )
+        return None
+
+
 def get_finetune_models_response():
     try:
         models = []
-        for model_config in getattr(g, "models_config", []) or []:
-            try:
-                config = model_config.config
-                models.append(
-                    {
-                        "name": model_config.name,
-                        "write_shape": list(config.write_shape),
-                        "output_voxel_size": list(config.output_voxel_size),
-                        "output_channels": config.output_channels,
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Could not extract config for {model_config.name}: {e}")
+        seen = set()
 
-        if not models and hasattr(g, "jobs") and g.jobs:
-            logger.warning("No models in g.models_config, checking running jobs")
-            for job in g.jobs:
-                job_model_name = getattr(job, "model_name", None)
-                if not job_model_name:
-                    continue
-                if hasattr(g, "pipeline_model_configs") and job_model_name in g.pipeline_model_configs:
-                    config_dict = g.pipeline_model_configs[job_model_name]
-                    try:
-                        models.append(
-                            {
-                                "name": job_model_name,
-                                "write_shape": config_dict.get("write_shape", []),
-                                "output_voxel_size": config_dict.get("output_voxel_size", []),
-                                "output_channels": config_dict.get("output_channels", 1),
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not extract config for {job_model_name}: {e}")
-                else:
-                    logger.warning(f"No configuration found for running job: {job_model_name}")
+        # Every name we might report on: configured models first, then any job
+        # running without a matching config (a yaml-launched model, say).
+        configs_by_name = {}
+        for mc in getattr(g, "models_config", []) or []:
+            name = getattr(mc, "name", None)
+            if name:
+                configs_by_name[name] = mc
+        names = list(configs_by_name)
+        for job in getattr(g, "jobs", []) or []:
+            job_name = getattr(job, "model_name", None)
+            if job_name and job_name not in configs_by_name:
+                names.append(job_name)
+
+        for name in names:
+            if name in seen:
+                continue
+            # Cheapest and most reliable source first. Asking the server costs
+            # one HTTP round trip; loading the model locally costs a weight
+            # download, a torch.export and a CUDA context.
+            geometry = (
+                _geometry_from_server(name)
+                or _geometry_from_saved_pipeline(name)
+                or _geometry_from_local_load(name, configs_by_name.get(name))
+            )
+            if geometry is None:
+                logger.warning(f"No configuration available for model: {name}")
+                continue
+            seen.add(name)
+            models.append({"name": name, **geometry})
 
         selected = models[0]["name"] if len(models) == 1 else None
         return jsonify({"models": models, "selected_model": selected})

@@ -54,8 +54,8 @@ pip install -e ".[finetune]"
 - **LoRA/PEFT dependencies** — for parameter-efficient finetuning.
 
 The fork is declared in `pixi.toml` rather than in `pyproject.toml`'s
-optional-dependencies because a direct git reference there would make the
-published PyPI package unuploadable.
+`[project.optional-dependencies]`, because a PEP 508 direct git reference
+there would make the published PyPI package unuploadable.
 
 ## 1. Launch the Dashboard
 

@@ -239,6 +239,7 @@
       {% endif %}
     </div>
     <div class="col-3" id="dashboard-column" style="width:340px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;overflow-x:hidden;height:100%;background:var(--bg-base);">
+      <div id="modelAdviceBanner" class="mb-3"></div>
       {% include "_dashboard.html" %}
     </div>
 
@@ -260,6 +261,204 @@
     document.addEventListener("DOMContentLoaded", function () {
       // Find all elements with id="submitAll" (there could be 2 if both partials exist)
       const submitAllButtons = document.querySelectorAll("#submitAll");
+
+
+      // ---- Model advice -------------------------------------------------
+      // Asks the server what activation the model's output actually has (see
+      // cellmap_flow/utils/output_probe.py) and compares it against the chain
+      // currently configured. Only renders when there is something to say.
+      function applyPostprocessSuggestion(names, params) {
+        const list = document.getElementById("postProcessList");
+        if (!list) return;
+        // Tick exactly the suggested set.
+        list.querySelectorAll(".postProcessCheckbox").forEach(function (cb) {
+          const want = names.indexOf(cb.value) !== -1;
+          if (cb.checked !== want) {
+            cb.checked = want;
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        // Defaults assume each step sees the range its usual predecessor
+        // produces; where this chain differs, the server says what to use.
+        Object.keys(params || {}).forEach(function (name) {
+          const values = params[name] || {};
+          Object.keys(values).forEach(function (key) {
+            const inp = document.getElementById("postProcess_" + name + "_" + key);
+            if (inp) inp.value = values[key];
+          });
+        });
+        // Order matters -- steps are applied top to bottom -- so reorder the
+        // DOM to match the suggested sequence.
+        names.slice().reverse().forEach(function (name) {
+          const item = list.querySelector('[data-postprocessor="' + name + '"]');
+          if (item) list.insertBefore(item, list.firstChild);
+        });
+      }
+
+      // Same idea for the input side. Normalizers carry parameter values, not
+      // just a name, so this fills those in as well as ticking the box.
+      function applyInputNormSuggestion(norms, order) {
+        const list = document.getElementById("inputNormList");
+        if (!list) return;
+        const names = order || Object.keys(norms || {});
+        list.querySelectorAll(".inputNormCheckbox").forEach(function (cb) {
+          const want = names.indexOf(cb.value) !== -1;
+          if (cb.checked !== want) {
+            cb.checked = want;
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        names.forEach(function (name) {
+          const params = norms[name] || {};
+          Object.keys(params).forEach(function (key) {
+            if (key === "name") return;
+            const inp = document.getElementById("inputNorm_" + name + "_" + key);
+            if (inp) inp.value = params[key];
+          });
+        });
+        names.slice().reverse().forEach(function (name) {
+          const item = list.querySelector('[data-normalizer="' + name + '"]');
+          if (item) list.insertBefore(item, list.firstChild);
+        });
+      }
+
+      // Model names reach this banner from HuggingFace repo ids and from user
+      // YAML, and the HF catalogue is third-party data we render verbatim.
+      // None of it is trusted markup, so escape everything interpolated into
+      // innerHTML below.
+      const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+      function esc(value) {
+        return String(value === null || value === undefined ? "" : value)
+          .replace(/[&<>"']/g, function (c) { return ESC_MAP[c]; });
+      }
+
+      // A confirmation needs no decision from anyone, so it should not sit at
+      // the top of the page indefinitely the way an actionable suggestion does.
+      const CONFIRM_BANNER_MS = 8000;
+
+      function renderInputNormAdvice(m, box) {
+        const sug = m.input_norm_suggestion || {};
+        if (!sug.input_norm) return;
+        // sug.order, not Object.keys: jsonify sorts keys and the order
+        // of these steps changes what they compute.
+        const names = sug.order || Object.keys(sug.input_norm);
+        // "low" means nothing declared how the model was trained and the
+        // [-1, 1] range was assumed. Still say so -- the wrong input scale is
+        // not visibly wrong, it just degrades the prediction -- but render it
+        // muted so it does not read as a finding.
+        const assumed = sug.confidence === "low";
+        const div = document.createElement("div");
+        if (m.input_norm_matches) {
+          // Confirmation, not a prompt: when the norms came from a yaml there
+          // is no other way to tell whether they suit the model.
+          div.className = "alert py-1 px-2 " + (assumed ? "alert-secondary" : "alert-success");
+          div.innerHTML = "<small><strong>Input normalization "
+                        + (assumed ? "matches the assumed range" : "looks right")
+                        + "</strong> for <code>" + esc(m.model || "model") + "</code>: "
+                        + esc(names.join(" \u2192 ")) + ". " + esc(sug.reason || "") + "</small>";
+          box.appendChild(div);
+          setTimeout(function () { div.remove(); }, CONFIRM_BANNER_MS);
+          return;
+        }
+        div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
+        div.innerHTML = "<strong>"
+                      + (assumed ? "Assumed input normalization" : "Suggested input normalization")
+                      + "</strong> for <code>" + esc(m.model || "model") + "</code><br>"
+                      + esc(sug.reason || "")
+                      + "<br><small>confidence: " + esc(sug.confidence || "unknown")
+                      + "; currently set: "
+                      + esc((m.configured_input_norm || []).join(" \u2192 ") || "none")
+                      + "</small>";
+        const btn = document.createElement("button");
+        btn.className = "btn btn-sm btn-primary ms-2 mt-2";
+        btn.textContent = "Apply: " + names.join(" \u2192 ");
+        btn.onclick = function () { applyInputNormSuggestion(sug.input_norm, names); div.remove(); };
+        div.appendChild(document.createElement("br"));
+        div.appendChild(btn);
+        const dismiss = document.createElement("button");
+        dismiss.className = "btn btn-sm btn-link";
+        dismiss.textContent = "Dismiss";
+        dismiss.onclick = function () { div.remove(); };
+        div.appendChild(dismiss);
+        box.appendChild(div);
+      }
+
+      function renderModelAdvice(models) {
+        const box = document.getElementById("modelAdviceBanner");
+        if (!box) return;
+        box.innerHTML = "";
+        (models || []).forEach(function (m) {
+          renderInputNormAdvice(m, box);
+          const rev = m.postprocess_review || {};
+          if (rev.level !== "suggest" && rev.level !== "warn") return;
+          const warn = rev.level === "warn";
+          const div = document.createElement("div");
+          div.className = "alert " + (warn ? "alert-warning" : "alert-info");
+          let html = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
+                   + "</strong> for <code>" + esc(m.model || "model") + "</code><br>";
+          if (m.output_min !== null && m.output_min !== undefined) {
+            html += "<small>Observed output range ["
+                 + Number(m.output_min).toPrecision(4) + ", "
+                 + Number(m.output_max).toPrecision(4) + "]</small><br>";
+          }
+          html += esc(rev.message);
+          const tuned = Object.keys(rev.params || {});
+          if (tuned.length) {
+            html += "<br><small>with " + tuned.map(function (name) {
+              const v = rev.params[name];
+              return "<code>" + esc(name) + "</code> " + Object.keys(v).map(function (k) {
+                return esc(k) + "=" + esc(v[k]);
+              }).join(", ");
+            }).join("; ") + "</small>";
+          }
+          div.innerHTML = html;
+          if ((rev.suggest || []).length) {
+            const btn = document.createElement("button");
+            btn.className = "btn btn-sm btn-primary ms-2 mt-2";
+            btn.textContent = "Apply: " + rev.suggest.join(" \u2192 ");
+            btn.onclick = function () {
+              applyPostprocessSuggestion(rev.suggest, rev.params);
+              div.remove();
+            };
+            div.appendChild(document.createElement("br"));
+            div.appendChild(btn);
+          }
+          const dismiss = document.createElement("button");
+          dismiss.className = "btn btn-sm btn-link";
+          dismiss.textContent = "Dismiss";
+          dismiss.onclick = function () { div.remove(); };
+          div.appendChild(dismiss);
+          box.appendChild(div);
+        });
+      }
+
+      // The probe is collected during inference-server startup, and models are
+      // launched on background threads that the submit request does not wait
+      // for -- so right after a submit there is usually nothing to report yet.
+      // Keep checking until every job has answered, rather than taking one shot
+      // at a fixed delay and silently giving up.
+      const ADVICE_POLL_INTERVAL_MS = 5000;
+      const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
+
+      window.refreshModelAdvice = function (attempt) {
+        attempt = attempt || 0;
+        fetch("/api/model_advice")
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.success) return;
+            renderModelAdvice(d.models);
+            const models = d.models || [];
+            const pending = models.length === 0 || models.some(function (m) {
+              return !m.probe_available;
+            });
+            if (pending && attempt < ADVICE_POLL_MAX_ATTEMPTS) {
+              setTimeout(function () {
+                window.refreshModelAdvice(attempt + 1);
+              }, ADVICE_POLL_INTERVAL_MS);
+            }
+          })
+          .catch(function (e) { console.log("model advice unavailable", e); });
+      };
 
       // A single function that merges data & sends the fetch
       function handleSubmitAll() {
@@ -300,6 +499,8 @@
             if (logAreaPost) {
               logAreaPost.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
             }
+
+            window.refreshModelAdvice();
           })
           .catch((err) => {
             console.error("Error:", err);

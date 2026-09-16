@@ -2,11 +2,9 @@ import logging
 import warnings
 import copy
 
-from cellmap_models.model_export.cellmap_model import CellmapModel, get_huggingface_model
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
-import torch
 from cellmap_flow.utils.serialize_config import Config
 
 logger = logging.getLogger(__name__)
@@ -14,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 def _get_device():
     """Get the appropriate device (CUDA if available, else CPU)."""
+    # Imported here rather than at module scope: importing torch costs
+    # ~7s, and the CLI builds its command list from this module, so
+    # `cellmap_flow --help` paid that before printing anything.
+    import torch
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
     return device
@@ -67,6 +70,11 @@ class ModelConfig:
 
     def _validate_model_shapes(self):
         """Run a dummy forward pass to verify declared shapes match actual model output."""
+        # Imported here rather than at module scope: importing torch costs
+        # ~7s, and the CLI builds its command list from this module, so
+        # `cellmap_flow --help` paid that before printing anything.
+        import torch
+
         config = self._config
         if not hasattr(config, "model"):
             return
@@ -353,6 +361,11 @@ class FlyModelConfig(ModelConfig):
 
     def load_eval_model(self, num_channels, checkpoint_path):
         """Load evaluation model from checkpoint (TorchScript or PyTorch)."""
+        # Imported here rather than at module scope: importing torch costs
+        # ~7s, and the CLI builds its command list from this module, so
+        # `cellmap_flow --help` paid that before printing anything.
+        import torch
+
         device = _get_device()
 
         if checkpoint_path.endswith(".ts"):
@@ -697,6 +710,8 @@ class CellMapModelConfig(ModelConfig):
 
     def __init__(self, folder_path, name=None, scale=None):
         super().__init__()
+        from cellmap_models.model_export.cellmap_model import CellmapModel
+
         self.cellmap_model = CellmapModel(folder_path=folder_path)
         if name is None:
             # folder name 
@@ -813,6 +828,11 @@ class FinetuneModelConfig(ModelConfig):
         )
 
     def _get_config(self):
+        # Imported here rather than at module scope: importing torch costs
+        # ~7s, and the CLI builds its command list from this module, so
+        # `cellmap_flow --help` paid that before printing anything.
+        import torch
+
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 
         # Get the fully-populated config from the base model
@@ -830,10 +850,18 @@ class FinetuneModelConfig(ModelConfig):
                 repo = self.base_model_dict.get("repo")
                 revision = self.base_model_dict.get("revision")
                 if repo:
+                    from cellmap_models.model_export.cellmap_model import (
+                        get_huggingface_model,
+                    )
+
                     cellmap_model = get_huggingface_model(repo, revision)
             elif base_type == "cellmap":
                 folder_path = self.base_model_dict.get("folder_path")
                 if folder_path:
+                    from cellmap_models.model_export.cellmap_model import (
+                        CellmapModel,
+                    )
+
                     cellmap_model = CellmapModel(folder_path=folder_path)
 
             if cellmap_model is not None:
@@ -939,6 +967,8 @@ class HuggingFaceModelConfig(ModelConfig):
         return cmd
 
     def _get_config(self) -> Config:
+        from cellmap_models.model_export.cellmap_model import get_huggingface_model
+
         cellmap_model = get_huggingface_model(self.repo, self.revision)
         config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
         return config

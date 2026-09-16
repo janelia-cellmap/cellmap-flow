@@ -56,6 +56,9 @@ class Inferencer:
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
+        # Populated by the warmup probe; None when it could not run.
+        self.output_range = None
+        self.output_class = None
         # config is lazy so one call is needed to get the config
         _ = self.model_config.config
 
@@ -119,19 +122,44 @@ class Inferencer:
             return
 
         try:
-            dummy = torch.zeros(shape, device=self.device)
+            # Deliberately extreme inputs rather than zeros: this same pass
+            # doubles as the output-activation probe below, and only inputs far
+            # outside the trained range reveal whether the model saturates.
+            dummy = torch.randn(shape, device=self.device) * 100
             dummy = dummy.half() if self.use_half_prediction else dummy.float()
             start = time.time()
             with torch.no_grad():
-                config.model.forward(dummy)
+                out = config.model.forward(dummy)
             if self.device.type == "cuda":
                 torch.cuda.synchronize()
             logger.info(f"Warmup forward {shape} took {time.time() - start:.1f}s")
+            self._record_output_class(out)
         except Exception as e:
             logger.warning(
                 f"Warmup forward {shape} failed ({e}); the first chunk request "
                 "will absorb the one-time initialization cost instead"
             )
+
+    def _record_output_class(self, out):
+        """Classify the model's output activation from the warmup pass.
+
+        Stored on the instance so the server can report it to the dashboard,
+        which uses it to suggest (or sanity-check) the postprocessing chain.
+        """
+        from cellmap_flow.utils.output_probe import classify_output_range
+
+        try:
+            lo, hi = float(out.min()), float(out.max())
+            if not (np.isfinite(lo) and np.isfinite(hi)):
+                logger.info("Output probe saw non-finite values; skipping")
+                return
+            self.output_range = (lo, hi)
+            self.output_class = classify_output_range(lo, hi)
+            logger.info(
+                f"Model output range [{lo:.4g}, {hi:.4g}] -> {self.output_class}"
+            )
+        except Exception as e:
+            logger.info(f"Could not classify model output: {e}")
 
     def process_chunk(self, idi, roi):
         # check if process_chunk is in self.config

@@ -1,8 +1,6 @@
 import logging
 import numpy as np
 import inspect
-from skimage.morphology import dilation, cube
-from edt import edt
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +71,8 @@ class Dilate(InputNormalizer):
         self.size = int(size)
 
     def _process(self, data) -> np.ndarray:
+        from skimage.morphology import cube, dilation  # ~2s to import
+
         return dilation(data, cube(self.size))
 
 
@@ -138,6 +138,8 @@ class EuclideanDistance(InputNormalizer):
 
         if not isinstance(data, np.ndarray):
             raise TypeError("Input data must be a numpy array.")
+
+        from edt import edt
 
         return edt(
             data.astype(np.uint8),

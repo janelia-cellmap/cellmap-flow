@@ -3,7 +3,6 @@ import logging
 import logging
 logging.getLogger().setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
-from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
 
 
 @click.command()
@@ -23,6 +22,10 @@ from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
     default="INFO",
 )
 def cli(yaml_config, client, log_level):
+    # Imported inside the command so --help and argument errors do not
+    # pay for the whole inference stack (~16s before this).
+    from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
+
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
     is_server = not client
