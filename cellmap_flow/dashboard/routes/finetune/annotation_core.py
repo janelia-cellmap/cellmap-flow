@@ -25,6 +25,7 @@ from cellmap_flow.globals import current_input_norm_config, current_postprocess_
 from cellmap_flow.utils.server_info import (
     fetch_model_info,
     model_geometry,
+    model_geometry_config,
     running_job_host,
 )
 
@@ -184,7 +185,13 @@ def create_annotation_crop_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
+        # Ask the running inference server for the geometry. It already has
+        # the model; building it here instead costs a full load on the
+        # dashboard's CPU -- 43s in one measured session, for shapes the
+        # server can report in milliseconds -- and is what made "create
+        # annotation volume" feel slow. model_config.config stays as the
+        # fallback for when no server is up.
+        config = model_geometry_config(model_name) or model_config.config
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         input_voxel_size = np.array(config.input_voxel_size)
@@ -269,7 +276,13 @@ def create_annotation_volume_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
+        # Ask the running inference server for the geometry. It already has
+        # the model; building it here instead costs a full load on the
+        # dashboard's CPU -- 43s in one measured session, for shapes the
+        # server can report in milliseconds -- and is what made "create
+        # annotation volume" feel slow. model_config.config stays as the
+        # fallback for when no server is up.
+        config = model_geometry_config(model_name) or model_config.config
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         claimed_input_voxel_size = np.array(config.input_voxel_size)
