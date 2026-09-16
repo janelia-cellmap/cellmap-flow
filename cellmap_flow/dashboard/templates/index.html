@@ -325,10 +325,31 @@
         });
       }
 
-      window.refreshModelAdvice = function () {
+      // The probe is collected during inference-server startup, and models are
+      // launched on background threads that the submit request does not wait
+      // for -- so right after a submit there is usually nothing to report yet.
+      // Keep checking until every job has answered, rather than taking one shot
+      // at a fixed delay and silently giving up.
+      const ADVICE_POLL_INTERVAL_MS = 5000;
+      const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
+
+      window.refreshModelAdvice = function (attempt) {
+        attempt = attempt || 0;
         fetch("/api/model_advice")
           .then(function (r) { return r.json(); })
-          .then(function (d) { if (d && d.success) renderModelAdvice(d.models); })
+          .then(function (d) {
+            if (!d || !d.success) return;
+            renderModelAdvice(d.models);
+            const models = d.models || [];
+            const pending = models.length === 0 || models.some(function (m) {
+              return !m.probe_available;
+            });
+            if (pending && attempt < ADVICE_POLL_MAX_ATTEMPTS) {
+              setTimeout(function () {
+                window.refreshModelAdvice(attempt + 1);
+              }, ADVICE_POLL_INTERVAL_MS);
+            }
+          })
           .catch(function (e) { console.log("model advice unavailable", e); });
       };
 
@@ -372,9 +393,7 @@
               logAreaPost.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
             }
 
-            // The probe only exists once the inference server has started, so
-            // give it a moment before asking.
-            setTimeout(window.refreshModelAdvice, 4000);
+            window.refreshModelAdvice();
           })
           .catch((err) => {
             console.error("Error:", err);

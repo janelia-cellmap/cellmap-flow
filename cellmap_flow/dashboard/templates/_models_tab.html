@@ -316,6 +316,11 @@
           .then((data) => {
             console.log("Server response:", data);
             logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+            // Loading a model is the point at which advice is most useful, and
+            // this path never goes through /api/process. The jobs start on
+            // background threads, so refreshModelAdvice polls rather than
+            // assuming the server is already up.
+            if (window.refreshModelAdvice) window.refreshModelAdvice();
           })
           .catch((err) => {
             console.error("Error:", err);

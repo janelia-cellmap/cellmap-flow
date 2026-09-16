@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import uuid
 from datetime import datetime
 
@@ -49,12 +50,33 @@ def _register_annotation_volume(volume_id, **volume_data):
     }
 
 
+# ``model_config.config`` is far from free: for a script model it executes the
+# config file, which downloads weights and runs torch.export before it can
+# report a shape. ModelConfig caches the result, but only on success -- a
+# failure leaves ``_config`` None, so the next access redoes the whole thing.
+# The finetune tab polls this endpoint every two seconds while it waits for a
+# model, which turns one failure (a busy GPU, say) into hundreds of full model
+# loads. Remember failures briefly instead, short enough that a transient cause
+# still recovers on its own.
+_CONFIG_FAILURE_COOLDOWN_SECONDS = 60
+_config_failure_until = {}
+
+
+def _config_retry_blocked(name) -> bool:
+    until = _config_failure_until.get(name)
+    return until is not None and time.time() < until
+
+
 def get_finetune_models_response():
     try:
         models = []
         for model_config in getattr(g, "models_config", []) or []:
+            name = getattr(model_config, "name", None)
+            if _config_retry_blocked(name):
+                continue
             try:
                 config = model_config.config
+                _config_failure_until.pop(name, None)
                 models.append(
                     {
                         "name": model_config.name,
@@ -64,7 +86,13 @@ def get_finetune_models_response():
                     }
                 )
             except Exception as e:
-                logger.warning(f"Could not extract config for {model_config.name}: {e}")
+                _config_failure_until[name] = (
+                    time.time() + _CONFIG_FAILURE_COOLDOWN_SECONDS
+                )
+                logger.warning(
+                    f"Could not extract config for {name}: {e}. Not retrying "
+                    f"for {_CONFIG_FAILURE_COOLDOWN_SECONDS}s."
+                )
 
         if not models and hasattr(g, "jobs") and g.jobs:
             logger.warning("No models in g.models_config, checking running jobs")
