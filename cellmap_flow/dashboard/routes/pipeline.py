@@ -161,7 +161,7 @@ def process():
     # we want to set the time such that each request is unique
     data["time"] = time.time()
 
-    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
+    logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:
         del data["custom_code"]
@@ -170,7 +170,7 @@ def process():
     previous_norm_signature = _chain_signature(getattr(g, "input_norms", None))
     previous_post_signature = _chain_signature(getattr(g, "postprocess", None))
 
-    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
+    logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
     g.input_norms = get_normalizations(data["input_norm"])
     # Keep the raw, JSON-serializable input_norm dict around so downstream
     # components (finetune submit/restart, manifest, generated yaml) can
@@ -251,7 +251,7 @@ def process():
                     kwargs["shaderControls"] = shader_controls
                 s.layers[model] = neuroglancer.ImageLayer(**kwargs)
 
-    logger.warning(f"Input normalizers: {g.input_norms}")
+    logger.debug(f"Input normalizers: {g.input_norms}")
 
     if custom_code:
         try:
@@ -264,9 +264,9 @@ def process():
                 file.write(custom_code)
 
             config = load_safe_config(filepath)
-            logger.warning(f"Custom code loaded successfully: {config}")
+            logger.debug(f"Custom code loaded successfully: {config}")
 
-            logger.warning(get_input_normalizers())
+            logger.debug(get_input_normalizers())
 
         except Exception as e:
             logger.warning(f"Error executing custom code: {e}")
@@ -323,7 +323,7 @@ def dataset_path_api():
         data = request.get_json()
         dataset_path = data.get('dataset_path', '')
         g.dataset_path = dataset_path
-        logger.warning(f"Dataset path updated to: {dataset_path}")
+        logger.debug(f"Dataset path updated to: {dataset_path}")
         return jsonify({'success': True, 'dataset_path': g.dataset_path})
 
 
@@ -349,7 +349,7 @@ def blockwise_config_api():
         g.nb_workers = int(data.get('nb_workers'))
         g.tmp_dir = data.get('tmp_dir')
         g.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
-        logger.warning(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")
+        logger.debug(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")
         return jsonify({'success': True, 'config': {
             'queue': g.queue,
             'charge_group': g.charge_group,
@@ -366,10 +366,10 @@ def apply_pipeline():
     """Apply a pipeline configuration to the current inference"""
     try:
         data = request.get_json()
-        logger.warning(f"\n{'='*80}")
-        logger.warning(f"APPLY PIPELINE - Received data:")
-        logger.warning(f"  Input normalizers: {data.get('input_normalizers', [])}")
-        logger.warning(f"  Postprocessors: {data.get('postprocessors', [])}")
+        logger.debug(f"\n{'='*80}")
+        logger.debug(f"APPLY PIPELINE - Received data:")
+        logger.debug(f"  Input normalizers: {data.get('input_normalizers', [])}")
+        logger.debug(f"  Postprocessors: {data.get('postprocessors', [])}")
 
         # Validate first
         validation = validate_pipeline_config(data)
@@ -380,7 +380,7 @@ def apply_pipeline():
         input_norms_config = {
             n["name"]: n.get("params", {}) for n in data.get("input_normalizers", [])
         }
-        logger.warning(f"\nNormalizers config dict: {input_norms_config}")
+        logger.debug(f"\nNormalizers config dict: {input_norms_config}")
         g.input_norms = get_normalizations(input_norms_config)
         # Mirror the JSON-serializable form so finetune submit/restart can
         # propagate it to the trainer process (where g.input_norms can't be
@@ -391,7 +391,7 @@ def apply_pipeline():
         postprocs_config = {
             p["name"]: p.get("params", {}) for p in data.get("postprocessors", [])
         }
-        logger.warning(f"Postprocessors config dict: {postprocs_config}")
+        logger.debug(f"Postprocessors config dict: {postprocs_config}")
         g.postprocess = get_postprocessors(postprocs_config)
         g.postprocess_config = postprocs_config or {}
 
@@ -411,29 +411,29 @@ def apply_pipeline():
                 g.pipeline_model_configs[model['name']] = model['config']
 
         # Log the updated globals state
-        logger.warning(f"\n{'='*80}")
-        logger.warning(f"UPDATED GLOBALS (g) STATE:")
-        logger.warning(f"{'='*80}")
-        logger.warning(f"\ng.input_norms ({len(g.input_norms)} items):")
+        logger.debug(f"\n{'='*80}")
+        logger.debug(f"UPDATED GLOBALS (g) STATE:")
+        logger.debug(f"{'='*80}")
+        logger.debug(f"\ng.input_norms ({len(g.input_norms)} items):")
         for idx, norm in enumerate(g.input_norms):
-            logger.warning(f"  [{idx}] {norm}")
+            logger.debug(f"  [{idx}] {norm}")
 
-        logger.warning(f"\ng.postprocess ({len(g.postprocess)} items):")
+        logger.debug(f"\ng.postprocess ({len(g.postprocess)} items):")
         for idx, post in enumerate(g.postprocess):
-            logger.warning(f"  [{idx}] {post}")
+            logger.debug(f"  [{idx}] {post}")
 
-        logger.warning(f"\ng.jobs ({len(g.jobs)} items):")
+        logger.debug(f"\ng.jobs ({len(g.jobs)} items):")
         for idx, job in enumerate(g.jobs):
-            logger.warning(f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}")
+            logger.debug(f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}")
 
-        logger.warning(f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}")
-        logger.warning(f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}")
-        logger.warning(f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}")
-        logger.warning(f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}")
-        logger.warning(f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}")
-        logger.warning(f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}")
+        logger.debug(f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}")
+        logger.debug(f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}")
+        logger.debug(f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}")
+        logger.debug(f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}")
+        logger.debug(f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}")
+        logger.debug(f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}")
 
-        logger.warning(f"{'='*80}\n")
+        logger.debug(f"{'='*80}\n")
 
         return jsonify({
             "message": "Pipeline applied successfully",

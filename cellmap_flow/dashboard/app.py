@@ -60,7 +60,7 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     g.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
     port = 0
-    logger.warning(f"Host name: {hostname}")
+    logger.debug(f"Host name: {hostname}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 

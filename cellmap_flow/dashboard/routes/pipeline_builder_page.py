@@ -41,11 +41,11 @@ def pipeline_builder():
             if model_name not in available_models:
                 available_models[model_name] = model_dict
 
-    logger.warning(f"\n{'='*80}")
-    logger.warning(f"AVAILABLE MODELS DEBUG:")
-    logger.warning(f"  Models from catalog: {[k for k in available_models.keys() if '/' in k]}")
-    logger.warning(f"  Models from config: {[k for k in available_models.keys() if '/' not in k]}")
-    logger.warning(f"  Total available models: {len(available_models)}")
+    logger.debug(f"\n{'='*80}")
+    logger.debug(f"AVAILABLE MODELS DEBUG:")
+    logger.debug(f"  Models from catalog: {[k for k in available_models.keys() if '/' in k]}")
+    logger.debug(f"  Models from config: {[k for k in available_models.keys() if '/' not in k]}")
+    logger.debug(f"  Total available models: {len(available_models)}")
 
     # Ensure all models have proper structure for UI
     models_with_config = {}
@@ -59,7 +59,7 @@ def pipeline_builder():
             models_with_config[model_name] = {'name': model_name}
 
     available_models = models_with_config
-    logger.warning(f"  Final available_models count: {len(available_models)}")
+    logger.debug(f"  Final available_models count: {len(available_models)}")
 
     # Check if we have stored pipeline state from previous apply
     if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
@@ -98,29 +98,29 @@ def pipeline_builder():
 
         # Current models (from jobs and models_config)
         current_models = []
-        logger.warning(f"\n{'='*80}")
-        logger.warning(f"Building current_models from g.jobs:")
-        logger.warning(f"  g.jobs count: {len(g.jobs)}")
-        logger.warning(f"  g.models_config exists: {hasattr(g, 'models_config')}")
+        logger.debug(f"\n{'='*80}")
+        logger.debug(f"Building current_models from g.jobs:")
+        logger.debug(f"  g.jobs count: {len(g.jobs)}")
+        logger.debug(f"  g.models_config exists: {hasattr(g, 'models_config')}")
         if hasattr(g, 'models_config'):
-            logger.warning(f"  g.models_config count: {len(g.models_config) if g.models_config else 0}")
-            logger.warning(f"  g.models_config type: {type(g.models_config)}")
-            logger.warning(f"  g.models_config value: {g.models_config}")
+            logger.debug(f"  g.models_config count: {len(g.models_config) if g.models_config else 0}")
+            logger.debug(f"  g.models_config type: {type(g.models_config)}")
+            logger.debug(f"  g.models_config value: {g.models_config}")
             if g.models_config:
-                logger.warning(f"  g.models_config names: {[getattr(mc, 'name', 'NO_NAME') for mc in g.models_config]}")
+                logger.debug(f"  g.models_config names: {[getattr(mc, 'name', 'NO_NAME') for mc in g.models_config]}")
                 for mc in g.models_config:
-                    logger.warning(f"    Config object: {mc}, has to_dict: {hasattr(mc, 'to_dict')}")
+                    logger.debug(f"    Config object: {mc}, has to_dict: {hasattr(mc, 'to_dict')}")
 
         # If models_config is empty but we have jobs, try to get configs from model_catalog
         if (not hasattr(g, 'models_config') or not g.models_config) and hasattr(g, 'model_catalog'):
-            logger.warning(f"  models_config is empty, checking model_catalog for configs...")
+            logger.debug(f"  models_config is empty, checking model_catalog for configs...")
             # Check if available_models dict has configs
             if available_models:
-                logger.warning(f"  available_models has {len(available_models)} entries with potential configs")
+                logger.debug(f"  available_models has {len(available_models)} entries with potential configs")
 
         for idx, job in enumerate(g.jobs):
             if hasattr(job, 'model_name'):
-                logger.warning(f"\n  Processing job {idx}: model_name={job.model_name}")
+                logger.debug(f"\n  Processing job {idx}: model_name={job.model_name}")
                 model_dict = {'id': f'model-{idx}-{int(time.time()*1000)}', 'name': job.model_name, 'params': {}}
                 # Try to find the corresponding ModelConfig to get full configuration
                 config_found = False
@@ -132,12 +132,12 @@ def pipeline_builder():
                     for model_config in g.models_config:
                         model_config_name = getattr(model_config, 'name', None)
                         config_name_stripped = model_config_name.replace('_server', '') if model_config_name else None
-                        logger.warning(f"    Checking model_config: {model_config_name} (stripped: {config_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
+                        logger.debug(f"    Checking model_config: {model_config_name} (stripped: {config_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
                         if config_name_stripped and config_name_stripped == job_model_name:
                             # Export the full model config using to_dict()
                             if hasattr(model_config, 'to_dict'):
                                 model_dict['config'] = model_config.to_dict()
-                                logger.warning(f"    ✓ Config attached from models_config: {model_dict['config']}")
+                                logger.debug(f"    ✓ Config attached from models_config: {model_dict['config']}")
                                 config_found = True
                             break
 
@@ -146,12 +146,12 @@ def pipeline_builder():
                     job_model_name = job.model_name.replace('_server', '')
                     for model_name, model_data in available_models.items():
                         model_name_stripped = model_name.replace('_server', '')
-                        logger.warning(f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
+                        logger.debug(f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
                         if model_name_stripped == job_model_name and isinstance(model_data, dict):
                             # Models from g.models_config store to_dict() directly
                             # (no nested 'config' key); use the dict itself as config
                             model_dict['config'] = model_data.get('config', model_data)
-                            logger.warning(f"    ✓ Config attached from available_models: {model_dict['config']}")
+                            logger.debug(f"    ✓ Config attached from available_models: {model_dict['config']}")
                             config_found = True
                             break
 
@@ -160,18 +160,18 @@ def pipeline_builder():
                     job_model_name = job.model_name.replace('_server', '')
                     for saved_name, saved_config in g.pipeline_model_configs.items():
                         saved_name_stripped = saved_name.replace('_server', '')
-                        logger.warning(f"    Checking pipeline_model_configs: {saved_name} (stripped: {saved_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
+                        logger.debug(f"    Checking pipeline_model_configs: {saved_name} (stripped: {saved_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
                         if saved_name_stripped == job_model_name:
                             model_dict['config'] = saved_config
-                            logger.warning(f"    ✓ Config attached from pipeline_model_configs: {model_dict['config']}")
+                            logger.debug(f"    ✓ Config attached from pipeline_model_configs: {model_dict['config']}")
                             config_found = True
                             break
 
                 if not config_found:
                     logger.warning(f"    ✗ No matching config found for {job.model_name}")
-                    logger.warning(f"       TIP: Import a YAML with full model configs to populate g.pipeline_model_configs")
+                    logger.debug(f"       TIP: Import a YAML with full model configs to populate g.pipeline_model_configs")
                 current_models.append(model_dict)
-        logger.warning(f"{'='*80}\n")
+        logger.debug(f"{'='*80}\n")
 
         current_postprocessors = []
         for idx, post in enumerate(g.postprocess):
