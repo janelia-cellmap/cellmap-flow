@@ -43,6 +43,23 @@ def _parse_patches_per_epoch_override(data):
     return True, (None if value == 0 else value)
 
 
+def _step_names(config):
+    """Step names from an input_norm/postprocess config, whichever shape it is.
+
+    The dashboard POSTs these as a list of dicts carrying a "name" key, on
+    purpose: jsonify sorts dict keys, and the order of these steps changes
+    what they compute. pipeline.py stores that list verbatim, so
+    current_*_config() hands back a list whenever the pipeline has been
+    applied, and a name-keyed dict otherwise. Only used for logging, so an
+    unrecognised shape is worth naming rather than raising.
+    """
+    if isinstance(config, dict):
+        return list(config.keys())
+    if isinstance(config, list):
+        return [d.get("name") for d in config if isinstance(d, dict)]
+    return []
+
+
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
     from cellmap_flow.finetune.virtual_dataset import write_manifest
@@ -54,8 +71,8 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             "Refreshing manifest input_norm before %s "
             "(was: %s, now: %s)",
             context,
-            list((manifest.get("input_norm") or {}).keys()),
-            list(current_norm.keys()),
+            _step_names(manifest.get("input_norm")),
+            _step_names(current_norm),
         )
     manifest["input_norm"] = current_norm
 
@@ -65,8 +82,8 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             "Refreshing manifest postprocess before %s "
             "(was: %s, now: %s)",
             context,
-            list((manifest.get("postprocess") or {}).keys()),
-            list(current_postprocess.keys()),
+            _step_names(manifest.get("postprocess")),
+            _step_names(current_postprocess),
         )
     manifest["postprocess"] = current_postprocess
 
