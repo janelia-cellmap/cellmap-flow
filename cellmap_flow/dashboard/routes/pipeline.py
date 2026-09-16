@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import time
 from datetime import datetime
@@ -41,6 +42,25 @@ def _save_shaders_from_viewer() -> None:
                 g.shader_controls[layer.name] = shader_controls
     except Exception as exc:
         logger.warning(f"Could not save shaders from viewer: {exc}")
+
+
+def _norm_signature(norms) -> str:
+    """Stable key identifying which input normalization a shader belongs to.
+
+    Built from the deserialized normalizer objects rather than the raw request
+    dict, so the before/after comparison is apples to apples -- the two differ
+    in shape (defaults filled in, ``name`` added) even when they mean the same
+    thing.
+    """
+    try:
+        return json.dumps(
+            [n.to_dict() for n in (norms or []) if hasattr(n, "to_dict")],
+            sort_keys=True,
+            default=str,
+        )
+    except Exception as exc:
+        logger.debug(f"Could not build a normalization signature: {exc}")
+        return repr(norms)
 
 
 def is_output_segmentation():
@@ -108,6 +128,10 @@ def process():
     custom_code = data.get("custom_code", None)
     if "custom_code" in data:
         del data["custom_code"]
+    # Capture which normalization the *currently displayed* raw layer was built
+    # under, before it is replaced below.
+    previous_norm_signature = _norm_signature(getattr(g, "input_norms", None))
+
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     g.input_norms = get_normalizations(data["input_norm"])
     # Keep the raw, JSON-serializable input_norm dict around so downstream
@@ -122,6 +146,21 @@ def process():
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
+
+    # The raw layer is displayed *through* the input normalizers -- its
+    # tensorstore is wrapped by LazyNormalization -- so its value range moves
+    # when they change: plain uint8 raw spans 0-255, but MinMax+Lambda("x*2-1")
+    # puts the same data in [-1, 1]. Restoring a contrast range captured under
+    # the old normalization would then map every voxel outside the new range,
+    # showing solid black or white. Drop it and let get_raw_layer() recompute
+    # percentiles through the normalizers now in effect.
+    if previous_norm_signature != _norm_signature(g.input_norms):
+        if g.shaders.pop("data", None) is not None:
+            logger.info(
+                "Input normalization changed; recomputing the raw contrast "
+                "range instead of restoring the previous one"
+            )
+        g.shader_controls.pop("data", None)
 
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(g.dataset_path)

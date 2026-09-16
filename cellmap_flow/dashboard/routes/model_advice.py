@@ -92,9 +92,15 @@ def model_advice():
         meta = _model_metadata(by_name[name]) if name in by_name else {}
         probe = _fetch_probe(getattr(job, "host", None))
 
+        # Only folder-backed models carry metadata.json; a script model
+        # declares nothing, so without this fallback out_channels is always
+        # None and the affinity heuristic can never fire.
+        out_channels = meta.get("out_channels") or probe.get("output_channels")
+
         entry = {
             "model": name,
             "probe_available": bool(probe.get("available")),
+            "out_channels": out_channels,
             "output_class": probe.get("output_class"),
             "output_min": probe.get("output_min"),
             "output_max": probe.get("output_max"),
@@ -115,7 +121,7 @@ def model_advice():
             entry["postprocess_review"] = review_postprocess(
                 probe["output_class"],
                 configured_post,
-                out_channels=meta.get("out_channels"),
+                out_channels=out_channels,
                 model_name=meta.get("model_name") or name or "",
                 channels_names=meta.get("channels_names"),
             )
@@ -125,8 +131,15 @@ def model_advice():
             framework=meta.get("framework"),
             raw_dtype=meta.get("raw_dtype", "uint8"),
         )
-        entry["input_norm_matches"] = sorted(configured_norm) == sorted(
-            entry["input_norm_suggestion"]["input_norm"].keys()
+        # A "low" confidence suggestion is just the dtype default, made without
+        # knowing the training framework -- reporting a mismatch against it
+        # would flag a correct hand-tuned config as wrong. Say "unknown"
+        # instead, so callers can stay quiet rather than mislead.
+        suggestion = entry["input_norm_suggestion"]
+        entry["input_norm_matches"] = (
+            None
+            if suggestion["confidence"] == "low"
+            else sorted(configured_norm) == sorted(suggestion["input_norm"].keys())
         )
         results.append(entry)
 

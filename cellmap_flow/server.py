@@ -117,10 +117,19 @@ class CellMapFlowServer:
             a sigmoid.
             """
             inferencer = self.inferencer
+            # Channel count comes from the validated model config, not the
+            # warmup, so it is reported even when the probe itself failed.
+            # Script-defined models expose nothing to the dashboard through
+            # to_dict(), which makes this the only place it can learn that a
+            # model has 3+ channels and might be predicting affinities.
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:
                 return jsonify(
-                    {"available": False, "reason": "output probe did not run"}
+                    {
+                        "available": False,
+                        "reason": "output probe did not run",
+                        "output_channels": self.output_channels,
+                    }
                 ), HTTPStatus.OK
             output_range = getattr(inferencer, "output_range", None)
             return jsonify(
@@ -129,6 +138,7 @@ class CellMapFlowServer:
                     "output_class": output_class,
                     "output_min": output_range[0] if output_range else None,
                     "output_max": output_range[1] if output_range else None,
+                    "output_channels": self.output_channels,
                 }
             ), HTTPStatus.OK
 

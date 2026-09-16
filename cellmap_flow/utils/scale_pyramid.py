@@ -143,7 +143,10 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             source = f"{filetype}://{dataset_path}"
         return neuroglancer.ImageLayer(
             source=source,
-            shader=_raw_shader([original_dataset_path], normalize),
+            # Unwrapped: neuroglancer fetches the file directly, so the input
+            # normalizers never run on what it displays. Sample unnormalized
+            # too, or the contrast range lands in the wrong space entirely.
+            shader=_raw_shader([original_dataset_path], normalize=False),
         )
 
     if is_multiscale:
