@@ -164,7 +164,10 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.current_input_norm_config" title="cellmap_flow.globals.current_input_norm_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_input_norm_config</span></code></a>(→ dict)</p></td>
 <td><p>Return the dashboard's current input_norm as a JSON-serializable dict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.get_blockwise_tasks_dir" title="cellmap_flow.globals.get_blockwise_tasks_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_blockwise_tasks_dir</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.globals.current_postprocess_config" title="cellmap_flow.globals.current_postprocess_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_postprocess_config</span></code></a>(→ dict)</p></td>
+<td><p>Return the dashboard's current postprocess chain as a JSON-serializable dict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.globals.get_blockwise_tasks_dir" title="cellmap_flow.globals.get_blockwise_tasks_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_blockwise_tasks_dir</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -463,6 +466,18 @@ The fallback matters because some startup paths (yaml_cli) populate
 <code class="docutils literal notranslate"><span class="pre">g.input_norms</span></code> from the YAML at server boot but never touch
 <code class="docutils literal notranslate"><span class="pre">input_norm_config</span></code> – if the user submits training without first
 hitting /api/run, the manifest would otherwise be written empty.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.globals.current_postprocess_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.globals.</span></span><span class="sig-name descname"><span class="pre">current_postprocess_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.globals.current_postprocess_config" title="Link to this definition"></a></dt>
+<dd><p>Return the dashboard’s current postprocess chain as a JSON-serializable dict.</p>
+<p>Mirrors <code class="docutils literal notranslate"><span class="pre">current_input_norm_config()</span></code>: reads <code class="docutils literal notranslate"><span class="pre">g.postprocess_config</span></code> if
+populated, otherwise reconstructs the dict from the live <code class="docutils literal notranslate"><span class="pre">g.postprocess</span></code>
+instances via their <code class="docutils literal notranslate"><span class="pre">.to_dict()</span></code>. The fallback matters for the same
+reason it does for input_norm – e.g. a yaml booted with a
+<code class="docutils literal notranslate"><span class="pre">json_data.postprocess</span></code> (like <code class="docutils literal notranslate"><span class="pre">SigmoidPostprocessor</span></code>) populates
+<code class="docutils literal notranslate"><span class="pre">g.postprocess</span></code> but never touches <code class="docutils literal notranslate"><span class="pre">postprocess_config</span></code>.</p>
 </dd></dl>
 
 <dl class="py function">

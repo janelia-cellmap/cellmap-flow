@@ -24,7 +24,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils.ds" href="../ds/index.html" />
+    <link rel="next" title="cellmap_flow.utils.doctor" href="../doctor/index.html" />
     <link rel="prev" title="cellmap_flow.utils.cli_utils" href="../cli_utils/index.html" /> 
 </head>
 
@@ -158,7 +158,7 @@ ModelConfig subclasses, similar to the CLI v2 approach.</p>
 <dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.get_model_type_mapping">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">get_model_type_mapping</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">type</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.get_model_type_mapping" title="Link to this definition"></a></dt>
 <dd><p>Get mapping of CLI-friendly names to ModelConfig classes.
-Uses the same logic as cli_v2 for consistency.</p>
+Uses the same logic as the cellmap_flow CLI for consistency.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Dictionary mapping model type names to ModelConfig classes</p>
@@ -202,7 +202,7 @@ Dynamically discovers the appropriate class and validates parameters.</p>
 <dt class="sig sig-object py" id="cellmap_flow.utils.config_utils.build_models">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.config_utils.</span></span><span class="sig-name descname"><span class="pre">build_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_entries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.utils.config_utils.build_models" title="Link to this definition"></a></dt>
 <dd><p>Given model entries from YAML, instantiate the correct ModelConfig objects.
-Uses dynamic discovery like cli_v2 instead of hardcoded if/else chains.</p>
+Uses dynamic discovery like the cellmap_flow CLI instead of hardcoded if/else chains.</p>
 <p>YAML format:
 models:</p>
 <blockquote>
@@ -234,7 +234,7 @@ iteration: 50000</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../cli_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.cli_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../ds/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.ds" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../doctor/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.doctor" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

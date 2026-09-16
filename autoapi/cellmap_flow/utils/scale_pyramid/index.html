@@ -115,6 +115,15 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.logger" title="cellmap_flow.utils.scale_pyramid.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.RAW_SHADER" title="cellmap_flow.utils.scale_pyramid.RAW_SHADER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAW_SHADER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.PREDICTION_SHADER" title="cellmap_flow.utils.scale_pyramid.PREDICTION_SHADER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_SHADER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.PREDICTION_COLORS" title="cellmap_flow.utils.scale_pyramid.PREDICTION_COLORS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_COLORS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -132,7 +141,10 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.get_raw_layer" title="cellmap_flow.utils.scale_pyramid.get_raw_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_raw_layer</span></code></a>(dataset_path[, normalize, wrap_raw])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.prediction_shader" title="cellmap_flow.utils.scale_pyramid.prediction_shader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_shader</span></code></a>(color[, value_range])</p></td>
+<td><p>Shader for a model output layer, over the range the chain produces.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.scale_pyramid.get_raw_layer" title="cellmap_flow.utils.scale_pyramid.get_raw_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_raw_layer</span></code></a>(dataset_path[, normalize, wrap_raw])</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -144,6 +156,42 @@
 <dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.scale_pyramid.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.scale_pyramid.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.RAW_SHADER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.scale_pyramid.</span></span><span class="sig-name descname"><span class="pre">RAW_SHADER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">Multiline-String</span></span><a class="headerlink" href="#cellmap_flow.utils.scale_pyramid.RAW_SHADER" title="Link to this definition"></a></dt>
+<dd><details><summary>Show Value</summary><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);</span>
+<span class="sd">#uicontrol vec3 color color(default="white");</span>
+<span class="sd">void main(){{emitRGB(color * normalized());}}"""</span>
+</pre></div>
+</div>
+</details></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.PREDICTION_SHADER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.scale_pyramid.</span></span><span class="sig-name descname"><span class="pre">PREDICTION_SHADER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">Multiline-String</span></span><a class="headerlink" href="#cellmap_flow.utils.scale_pyramid.PREDICTION_SHADER" title="Link to this definition"></a></dt>
+<dd><details><summary>Show Value</summary><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);</span>
+<span class="sd">#uicontrol vec3 color color(default="{color}");</span>
+<span class="sd">void main(){{emitRGB(color * normalized());}}"""</span>
+</pre></div>
+</div>
+</details></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.PREDICTION_COLORS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.scale_pyramid.</span></span><span class="sig-name descname"><span class="pre">PREDICTION_COLORS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['red',</span> <span class="pre">'green',</span> <span class="pre">'blue',</span> <span class="pre">'yellow',</span> <span class="pre">'purple',</span> <span class="pre">'orange',</span> <span class="pre">'cyan',</span> <span class="pre">'magenta']</span></span><a class="headerlink" href="#cellmap_flow.utils.scale_pyramid.PREDICTION_COLORS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.prediction_shader">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.scale_pyramid.</span></span><span class="sig-name descname"><span class="pre">prediction_shader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.scale_pyramid.prediction_shader" title="Link to this definition"></a></dt>
+<dd><p>Shader for a model output layer, over the range the chain produces.</p>
+<p>Falls back to [0, 1] when the range is undetermined. That is a guess, but
+the previous default was <code class="docutils literal notranslate"><span class="pre">range=[0.5,</span> <span class="pre">0.5]</span></code> – lo == hi makes invlerp a
+step function rather than a ramp, so every value above 0.5 rendered as
+solid colour. After a DefaultPostprocessor (0-255) that is the entire
+prediction.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.utils.scale_pyramid.get_raw_layer">

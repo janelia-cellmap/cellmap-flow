@@ -128,6 +128,9 @@ finetuned models using FinetuneModelConfig (type: finetune).</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.finetuned_model_templates.generate_finetuned_model_yaml" title="cellmap_flow.finetune.finetuned_model_templates.generate_finetuned_model_yaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_finetuned_model_yaml</span></code></a>(→ pathlib.Path)</p></td>
 <td><p>Generate .yaml configuration for serving a finetuned model.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml" title="cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_current_config_yaml</span></code></a>(→ str)</p></td>
+<td><p>Build YAML text snapshotting the dashboard's current live server config</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -161,6 +164,33 @@ ModelConfig, applies the LoRA adapter, and serves the result.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Path to the generated YAML file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.finetuned_model_templates.</span></span><span class="sig-name descname"><span class="pre">generate_current_config_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpu_h100'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cellmap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">json_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml" title="Link to this definition"></a></dt>
+<dd><p>Build YAML text snapshotting the dashboard’s current live server config
+(whatever models/normalization/postprocessing/queue are active right
+now), so it can be handed back to <cite>cellmap_flow_yaml</cite> later.</p>
+<p>Unlike generate_finetuned_model_yaml (which describes one specific
+finetune job), this is a general “export what’s currently running”
+dump – it doesn’t write to disk itself, callers decide where the
+result goes (a download response, a file, etc).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>models</strong> – list of model entry dicts (each from ModelConfig.to_dict())</p></li>
+<li><p><strong>data_path</strong> – current dataset path</p></li>
+<li><p><strong>queue</strong> – LSF queue name</p></li>
+<li><p><strong>charge_group</strong> – LSF charge group</p></li>
+<li><p><strong>json_data</strong> – dict with “input_norm”/”postprocess” keys reflecting the
+currently active normalization/postprocessing, if any</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>YAML text (str) ready to write to a file.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -166,10 +166,23 @@ and creates CLI commands based on their __init__ parameters.</p>
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">cli</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.cli" title="Link to this definition"></a></dt>
 <dd><p>CellMap Flow - Dynamic CLI for model inference.</p>
 <p>Automatically generates commands for all available ModelConfig subclasses.</p>
-<p class="rubric">Examples</p>
-<p>cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
-cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
-cellmap_flow_v2 cellmap -f /path/to/model -n mymodel -d /path/to/data</p>
+<p>Examples:</p>
+<dl class="simple">
+<dt></dt><dd><p>cellmap_flow dacapo -r my_run -i 100 -d /path/to/data
+cellmap_flow script -s /path/to/script.py -d /path/to/data
+cellmap_flow cellmap -f /path/to/model -n mymodel -d /path/to/data</p>
+</dd>
+</dl>
+<p>Related commands, each with its own –help:</p>
+<dl class="simple">
+<dt></dt><dd><p>cellmap_flow_yaml                run one or more models from a YAML config
+cellmap_flow_view                open the viewer, pick models in the UI
+cellmap_flow_blockwise           run a model over a whole volume to disk
+cellmap_flow_blockwise_multiple  the same for several models
+cellmap_flow_server              serve one model (usually launched for you)
+cellmap_flow_app                 serve the dashboard against a running server</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
@@ -208,7 +221,7 @@ InputNormalizer, PostProcessor, or ModelConfig.</p>
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">run_generic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server_check</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.run_generic" title="Link to this definition"></a></dt>
 <dd><p>Generic run command that accepts any model type with dynamic configuration.</p>
 <p class="rubric">Example</p>
-<p>cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100</p>
+<p>cellmap_flow run -m dacapo -d /data/path -c run_name=myrun -c iteration=100</p>
 </dd></dl>
 
 <dl class="py function">

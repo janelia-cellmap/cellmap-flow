@@ -36,6 +36,7 @@ Functions
    cellmap_flow.globals.load_server_config_cache
    cellmap_flow.globals.save_server_config_cache
    cellmap_flow.globals.current_input_norm_config
+   cellmap_flow.globals.current_postprocess_config
    cellmap_flow.globals.get_blockwise_tasks_dir
 
 
@@ -275,6 +276,18 @@ Module Contents
    ``g.input_norms`` from the YAML at server boot but never touch
    ``input_norm_config`` -- if the user submits training without first
    hitting /api/run, the manifest would otherwise be written empty.
+
+
+.. py:function:: current_postprocess_config() -> dict
+
+   Return the dashboard's current postprocess chain as a JSON-serializable dict.
+
+   Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
+   populated, otherwise reconstructs the dict from the live ``g.postprocess``
+   instances via their ``.to_dict()``. The fallback matters for the same
+   reason it does for input_norm -- e.g. a yaml booted with a
+   ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
+   ``g.postprocess`` but never touches ``postprocess_config``.
 
 
 .. py:function:: get_blockwise_tasks_dir()

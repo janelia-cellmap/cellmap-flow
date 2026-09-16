@@ -48,6 +48,16 @@ Module Contents
    .. py:attribute:: model_config
 
 
+   .. py:attribute:: output_range
+      :value: None
+
+
+
+   .. py:attribute:: output_class
+      :value: None
+
+
+
    .. py:method:: optimize_model()
 
 

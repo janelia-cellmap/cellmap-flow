@@ -140,8 +140,14 @@
 <dt class="sig sig-object py" id="cellmap_flow.cli.viewer_cli.main">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.viewer_cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.viewer_cli.main" title="Link to this definition"></a></dt>
 <dd><p>Start CellMap Flow viewer with a dataset.</p>
-<p class="rubric">Example</p>
-<p>cellmap_flow_viewer -d /path/to/dataset.zarr</p>
+<p>Opens neuroglancer on the raw data and starts the dashboard, where models
+can be picked and submitted interactively. Use cellmap_flow_yaml instead to
+launch models from a config file.</p>
+<p>Example:</p>
+<dl class="simple">
+<dt></dt><dd><p>cellmap_flow_view -d /path/to/dataset.zarr</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

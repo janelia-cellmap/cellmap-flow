@@ -90,7 +90,7 @@ Module Contents
    :rtype: (success
 
 
-.. py:function:: create_annotation_volume_zarr(zarr_path, dataset_shape_voxels, output_voxel_size, dataset_offset_nm, chunk_size, dataset_path, model_name, input_size, input_voxel_size, claimed_output_voxel_size=None, claimed_input_voxel_size=None, input_norm_config=None)
+.. py:function:: create_annotation_volume_zarr(zarr_path, dataset_shape_voxels, output_voxel_size, dataset_offset_nm, chunk_size, dataset_path, model_name, input_size, input_voxel_size, claimed_output_voxel_size=None, claimed_input_voxel_size=None, input_norm_config=None, postprocess_config=None)
 
    Create a sparse annotation volume zarr covering the full dataset extent.
 

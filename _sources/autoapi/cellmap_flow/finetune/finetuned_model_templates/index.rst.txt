@@ -26,6 +26,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.finetune.finetuned_model_templates.generate_finetuned_model_yaml
+   cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml
 
 
 Module Contents
@@ -52,5 +53,26 @@ Module Contents
    :param scale: Scale level (e.g., "s0", "s1") from base model
 
    :returns: Path to the generated YAML file
+
+
+.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: str = 'gpu_h100', charge_group: str = 'cellmap', json_data: dict = None) -> str
+
+   Build YAML text snapshotting the dashboard's current live server config
+   (whatever models/normalization/postprocessing/queue are active right
+   now), so it can be handed back to `cellmap_flow_yaml` later.
+
+   Unlike generate_finetuned_model_yaml (which describes one specific
+   finetune job), this is a general "export what's currently running"
+   dump -- it doesn't write to disk itself, callers decide where the
+   result goes (a download response, a file, etc).
+
+   :param models: list of model entry dicts (each from ModelConfig.to_dict())
+   :param data_path: current dataset path
+   :param queue: LSF queue name
+   :param charge_group: LSF charge group
+   :param json_data: dict with "input_norm"/"postprocess" keys reflecting the
+                     currently active normalization/postprocessing, if any
+
+   :returns: YAML text (str) ready to write to a file.
 
 

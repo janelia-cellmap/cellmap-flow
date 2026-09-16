@@ -10,6 +10,9 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.utils.scale_pyramid.logger
+   cellmap_flow.utils.scale_pyramid.RAW_SHADER
+   cellmap_flow.utils.scale_pyramid.PREDICTION_SHADER
+   cellmap_flow.utils.scale_pyramid.PREDICTION_COLORS
 
 
 Classes
@@ -25,6 +28,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.utils.scale_pyramid.prediction_shader
    cellmap_flow.utils.scale_pyramid.get_raw_layer
 
 
@@ -32,6 +36,59 @@ Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:data:: RAW_SHADER
+   :value: Multiline-String
+
+   .. raw:: html
+
+      <details><summary>Show Value</summary>
+
+   .. code-block:: python
+
+      """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+      #uicontrol vec3 color color(default="white");
+      void main(){{emitRGB(color * normalized());}}"""
+
+   .. raw:: html
+
+      </details>
+
+
+
+.. py:data:: PREDICTION_SHADER
+   :value: Multiline-String
+
+   .. raw:: html
+
+      <details><summary>Show Value</summary>
+
+   .. code-block:: python
+
+      """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+      #uicontrol vec3 color color(default="{color}");
+      void main(){{emitRGB(color * normalized());}}"""
+
+   .. raw:: html
+
+      </details>
+
+
+
+.. py:data:: PREDICTION_COLORS
+   :value: ['red', 'green', 'blue', 'yellow', 'purple', 'orange', 'cyan', 'magenta']
+
+
+.. py:function:: prediction_shader(color, value_range=None)
+
+   Shader for a model output layer, over the range the chain produces.
+
+   Falls back to [0, 1] when the range is undetermined. That is a guess, but
+   the previous default was ``range=[0.5, 0.5]`` -- lo == hi makes invlerp a
+   step function rather than a ramp, so every value above 0.5 rendered as
+   solid colour. After a DefaultPostprocessor (0-255) that is the entire
+   prediction.
+
 
 .. py:function:: get_raw_layer(dataset_path, normalize=True, wrap_raw=True)
 

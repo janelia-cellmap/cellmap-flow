@@ -1,0 +1,365 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.utils.output_probe &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.utils.plugin_manager" href="../plugin_manager/index.html" />
+    <link rel="prev" title="cellmap_flow.utils.neuroglancer_utils" href="../neuroglancer_utils/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.utils</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.utils.output_probe</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/utils/output_probe/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.utils.output_probe">
+<span id="cellmap-flow-utils-output-probe"></span><h1>cellmap_flow.utils.output_probe<a class="headerlink" href="#module-cellmap_flow.utils.output_probe" title="Link to this heading"></a></h1>
+<p>Infer what postprocessing a model’s raw output needs, from the output itself.</p>
+<p>A model’s output activation is observable: feed it extreme inputs and see
+whether the result stays bounded. That tells us what activation is <em>already</em>
+baked into the weights, which is enough to catch the common misconfigurations
+(a SigmoidPostprocessor stacked on a model that already ends in a sigmoid, or a
+tanh-range model served without the rescale it needs).</p>
+<p>Deliberately does NOT try to decide what unbounded output <em>means</em>. Raw logits
+and signed-distance predictions are both unbounded and want opposite treatment,
+and nothing in the tensor distinguishes them – see <code class="docutils literal notranslate"><span class="pre">UNBOUNDED</span></code> below.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.logger" title="cellmap_flow.utils.output_probe.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.UNIT" title="cellmap_flow.utils.output_probe.UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.SIGNED_UNIT" title="cellmap_flow.utils.output_probe.SIGNED_UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SIGNED_UNIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.UNBOUNDED" title="cellmap_flow.utils.output_probe.UNBOUNDED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNBOUNDED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.NEIGHBORHOOD_OFFSETS" title="cellmap_flow.utils.output_probe.NEIGHBORHOOD_OFFSETS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NEIGHBORHOOD_OFFSETS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.DACAPO_FRAMEWORKS" title="cellmap_flow.utils.output_probe.DACAPO_FRAMEWORKS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DACAPO_FRAMEWORKS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.CELLMAP_HF_ORG" title="cellmap_flow.utils.output_probe.CELLMAP_HF_ORG"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLMAP_HF_ORG</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.CELLMAP_MODEL_DIR" title="cellmap_flow.utils.output_probe.CELLMAP_MODEL_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLMAP_MODEL_DIR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.SHIFT_TO_SIGNED" title="cellmap_flow.utils.output_probe.SHIFT_TO_SIGNED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SHIFT_TO_SIGNED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.classify_output_range" title="cellmap_flow.utils.output_probe.classify_output_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">classify_output_range</span></code></a>(→ str)</p></td>
+<td><p>Bucket an observed (min, max) output range into an activation class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.looks_like_affinities" title="cellmap_flow.utils.output_probe.looks_like_affinities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">looks_like_affinities</span></code></a>(→ bool)</p></td>
+<td><p>Heuristic: does this model emit affinities rather than a single map?</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.suggest_affinity_chain" title="cellmap_flow.utils.output_probe.suggest_affinity_chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">suggest_affinity_chain</span></code></a>(→ list)</p></td>
+<td><p>The postprocessing an affinity model needs, in order.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.suggest_postprocess_params" title="cellmap_flow.utils.output_probe.suggest_postprocess_params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">suggest_postprocess_params</span></code></a>(→ dict)</p></td>
+<td><p>Parameter values for a suggested chain, from the range flowing into each step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.output_display_range" title="cellmap_flow.utils.output_probe.output_display_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">output_display_range</span></code></a>(postprocess_steps, output_class)</p></td>
+<td><p>The value range a configured chain produces, for the viewer's shader.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.review_postprocess" title="cellmap_flow.utils.output_probe.review_postprocess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">review_postprocess</span></code></a>(→ dict)</p></td>
+<td><p>Compare an observed output class against the configured postprocessors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.output_probe.suggest_input_norm" title="cellmap_flow.utils.output_probe.suggest_input_norm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">suggest_input_norm</span></code></a>(→ dict)</p></td>
+<td><p>Propose an input_norm config for a model.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.UNIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">UNIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unit'</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.UNIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.SIGNED_UNIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">SIGNED_UNIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'signed_unit'</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.SIGNED_UNIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.UNBOUNDED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">UNBOUNDED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unbounded'</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.UNBOUNDED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.classify_output_range">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">classify_output_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.classify_output_range" title="Link to this definition"></a></dt>
+<dd><p>Bucket an observed (min, max) output range into an activation class.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.looks_like_affinities">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">looks_like_affinities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.looks_like_affinities" title="Link to this definition"></a></dt>
+<dd><p>Heuristic: does this model emit affinities rather than a single map?</p>
+<p>Affinity models have one output channel per neighborhood offset (3 for
+nearest-neighbour, 9 with longer range), so a channel count of 3+ is the
+structural tell. Require a naming hint as well, since a multi-class
+semantic model also has several channels and wants entirely different
+handling.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.suggest_affinity_chain">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">suggest_affinity_chain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.suggest_affinity_chain" title="Link to this definition"></a></dt>
+<dd><p>The postprocessing an affinity model needs, in order.</p>
+<p>AffinityPostprocessor divides its input by 255 – it is written to sit
+downstream of DefaultPostprocessor, which maps [-1,1] to uint8 0-255. Feed
+it probabilities in [0,1] directly and the affinities come out ~250x too
+small, so every edge reads as weakly attractive and the mutex watershed
+degenerates. The rescale step is therefore mandatory, not cosmetic.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.NEIGHBORHOOD_OFFSETS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">NEIGHBORHOOD_OFFSETS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[[1,</span> <span class="pre">0,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">1,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1],</span> <span class="pre">[3,</span> <span class="pre">0,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">3,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">3],</span> <span class="pre">[9,</span> <span class="pre">0,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">9,</span> <span class="pre">0],</span> <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">9]]</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.NEIGHBORHOOD_OFFSETS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.suggest_postprocess_params">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">suggest_postprocess_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.suggest_postprocess_params" title="Link to this definition"></a></dt>
+<dd><p>Parameter values for a suggested chain, from the range flowing into each step.</p>
+<p>The default parameters assume each step sees the range its most common
+predecessor produces, which stops being true as soon as the chain differs.
+The costly case is DefaultPostprocessor after a sigmoid: its defaults clip
+to [-1, 1] and map that to 0-255, so probabilities in [0, 1] land in
+[127.5, 255] – half the range. AffinityPostprocessor then divides by 255
+and subtracts its bias, and a probability of 0.0003 (a strongly repulsive
+edge) comes out at -0.002 instead of -0.5. The mutex watershed is left with
+essentially no repulsive edges and merges everything.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">{postprocessor_name:</span> <span class="pre">{param:</span> <span class="pre">value}}</span></code>, containing only the steps
+whose defaults are wrong for this chain.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.output_display_range">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">output_display_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">postprocess_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.output_probe.output_display_range" title="Link to this definition"></a></dt>
+<dd><p>The value range a configured chain produces, for the viewer’s shader.</p>
+<p>The raw layer has to sample percentiles because its distribution is
+unknown. A postprocessed output does not: the last step’s arithmetic fixes
+the range exactly, so this is both cheaper and more accurate than sampling
+would be – and sampling would mean running inference purely to choose a
+display range.</p>
+<p><code class="docutils literal notranslate"><span class="pre">postprocess_steps</span></code> is a list of <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> dicts, so the real
+configured parameters are used rather than assumed defaults.</p>
+<p>Returns (lo, hi), or None when the chain leaves the range undetermined –
+an unbounded model output with nothing applied, where logits could be any
+scale. Callers should leave neuroglancer’s own range controls to it there.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.review_postprocess">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">review_postprocess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess_names</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.review_postprocess" title="Link to this definition"></a></dt>
+<dd><p>Compare an observed output class against the configured postprocessors.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">{&quot;level&quot;,</span> <span class="pre">&quot;message&quot;,</span> <span class="pre">&quot;suggest&quot;}</span></code> where <code class="docutils literal notranslate"><span class="pre">level</span></code> is one of
+“ok” / “suggest” / “warn”, and <code class="docutils literal notranslate"><span class="pre">suggest</span></code> is a list of postprocessor names
+to apply (empty when the current configuration is already sensible).</p>
+<p><code class="docutils literal notranslate"><span class="pre">level</span> <span class="pre">==</span> <span class="pre">&quot;warn&quot;</span></code> means the current chain is actively wrong, not merely
+unconventional.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.DACAPO_FRAMEWORKS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">DACAPO_FRAMEWORKS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('dacapo',)</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.DACAPO_FRAMEWORKS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.CELLMAP_HF_ORG">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">CELLMAP_HF_ORG</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap/'</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.CELLMAP_HF_ORG" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.CELLMAP_MODEL_DIR">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">CELLMAP_MODEL_DIR</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'/models/cellmap/'</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.CELLMAP_MODEL_DIR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.SHIFT_TO_SIGNED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">SHIFT_TO_SIGNED</span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.SHIFT_TO_SIGNED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.utils.output_probe.suggest_input_norm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.output_probe.</span></span><span class="sig-name descname"><span class="pre">suggest_input_norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">framework</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'uint8'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">declared</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.utils.output_probe.suggest_input_norm" title="Link to this definition"></a></dt>
+<dd><p>Propose an input_norm config for a model.</p>
+<dl class="simple">
+<dt>Priority:</dt><dd><ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">declared</span></code> – an explicit input_norm in the model’s own metadata.
+Nothing writes this today, but honour it when it appears.</p></li>
+<li><p>The training framework’s convention. DaCapo trains on [-1, 1], hence
+the extra <code class="docutils literal notranslate"><span class="pre">x*2-1</span></code> on top of the 0-1 rescale.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source</span></code> – where the model came from. A CellMap model follows the
+same [-1, 1] convention whatever its metadata calls the framework.</p></li>
+<li><p>Nothing known about the model: assume [-1, 1] anyway, because it is
+what everything else in this repo trains on, and mark it low
+confidence so callers can present it as the assumption it is. Getting
+the scale wrong is not subtle – the model sees inputs far outside its
+training range and predicts noise – so a stated assumption beats
+silently feeding it raw uint8.</p></li>
+</ol>
+</dd>
+</dl>
+<p><code class="docutils literal notranslate"><span class="pre">data_range</span></code> is the actual (min, max) of the raw data. Prefer it over
+<code class="docutils literal notranslate"><span class="pre">raw_dtype</span></code>: uint8 data spans 0-255, but float data can span anything and
+its dtype says nothing useful.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">{&quot;input_norm&quot;:</span> <span class="pre">{...},</span> <span class="pre">&quot;order&quot;:</span> <span class="pre">[...],</span> <span class="pre">&quot;reason&quot;,</span> <span class="pre">&quot;confidence&quot;}</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">order</span></code> is redundant with the dict’s insertion order but not with what
+survives transport: Flask’s jsonify sorts keys, which would silently turn
+MinMax-then-Lambda into Lambda-then-MinMax – i.e. apply <code class="docutils literal notranslate"><span class="pre">x*2-1</span></code> to raw
+uint8 before the rescale. Callers must use <code class="docutils literal notranslate"><span class="pre">order</span></code>.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../neuroglancer_utils/index.html" class="btn btn-neutral float-left" title="cellmap_flow.utils.neuroglancer_utils" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../plugin_manager/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils.plugin_manager" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

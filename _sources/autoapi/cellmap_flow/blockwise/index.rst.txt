@@ -3,6 +3,16 @@ cellmap_flow.blockwise
 
 .. py:module:: cellmap_flow.blockwise
 
+.. autoapi-nested-parse::
+
+   Blockwise processing.
+
+   ``CellMapFlowBlockwiseProcessor`` is re-exported lazily: importing it pulls in
+   the whole inference stack, and ``cellmap_flow_blockwise --help`` -- which goes
+   through this package to reach cli.py -- paid ~18s for it before printing
+   anything.
+
+
 
 Submodules
 ----------
@@ -13,112 +23,5 @@ Submodules
    /autoapi/cellmap_flow/blockwise/blockwise_processor/index
    /autoapi/cellmap_flow/blockwise/cli/index
    /autoapi/cellmap_flow/blockwise/multiple_cli/index
-
-
-Classes
--------
-
-.. autoapisummary::
-
-   cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor
-
-
-Package Contents
-----------------
-
-.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=False)
-
-   .. py:attribute:: config
-
-
-   .. py:attribute:: yaml_config
-
-
-   .. py:attribute:: input_path
-
-
-   .. py:attribute:: charge_group
-
-
-   .. py:attribute:: queue
-
-
-   .. py:attribute:: output_path
-
-
-   .. py:attribute:: workers
-
-
-   .. py:attribute:: output_channels_is_dict
-
-
-   .. py:attribute:: cpu_workers
-
-
-   .. py:attribute:: track_progress
-
-
-   .. py:attribute:: models
-      :value: []
-
-
-
-   .. py:attribute:: model_mode_str
-
-
-   .. py:attribute:: process_only
-
-
-   .. py:attribute:: cross_channels_mode
-
-
-   .. py:attribute:: model_config
-
-
-   .. py:attribute:: block_shape
-
-
-   .. py:attribute:: input_voxel_size
-
-
-   .. py:attribute:: output_voxel_size
-
-
-   .. py:attribute:: channels
-
-
-   .. py:attribute:: task_name
-
-
-   .. py:attribute:: dtype
-
-
-   .. py:attribute:: inferencers
-
-
-   .. py:attribute:: inferencer
-
-
-   .. py:attribute:: idi_raw
-
-
-   .. py:attribute:: output_arrays
-      :value: []
-
-
-
-   .. py:attribute:: bounding_boxes
-
-
-   .. py:attribute:: separate_zarrs
-
-
-   .. py:method:: process_fn(block)
-
-
-   .. py:method:: client()
-
-
-   .. py:method:: run()
 
 

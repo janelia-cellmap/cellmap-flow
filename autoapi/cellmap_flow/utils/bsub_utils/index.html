@@ -132,6 +132,9 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.SERVER_COMMAND" title="cellmap_flow.utils.bsub_utils.SERVER_COMMAND"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_COMMAND</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR" title="cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_LOG_DIR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -204,6 +207,11 @@
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.SERVER_COMMAND">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">SERVER_COMMAND</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap_flow_server'</span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.SERVER_COMMAND" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">SERVER_LOG_DIR</span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py class">
@@ -333,11 +341,16 @@
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.LSFJob">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">LSFJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.utils.bsub_utils.</span></span><span class="sig-name descname"><span class="pre">LSFJob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob" title="Link to this definition"></a></dt>
 <dd><p>Job submitted to LSF cluster via bsub.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.LSFJob.job_id">
 <span class="sig-name descname"><span class="pre">job_id</span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.utils.bsub_utils.LSFJob.log_file">
+<span class="sig-name descname"><span class="pre">log_file</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.utils.bsub_utils.LSFJob.log_file" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">

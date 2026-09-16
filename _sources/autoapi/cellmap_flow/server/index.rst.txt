@@ -49,6 +49,9 @@ Module Contents
    .. py:attribute:: model_output_axes
 
 
+   .. py:attribute:: model_config
+
+
    .. py:attribute:: inferencer
 
 

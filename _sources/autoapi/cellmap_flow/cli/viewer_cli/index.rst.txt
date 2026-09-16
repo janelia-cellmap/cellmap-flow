@@ -34,8 +34,13 @@ Module Contents
 
    Start CellMap Flow viewer with a dataset.
 
-   .. rubric:: Example
+   Opens neuroglancer on the raw data and starts the dashboard, where models
+   can be picked and submitted interactively. Use cellmap_flow_yaml instead to
+   launch models from a config file.
 
-   cellmap_flow_viewer -d /path/to/dataset.zarr
+   Example:
+
+   
+     cellmap_flow_view -d /path/to/dataset.zarr
 
 

@@ -15,6 +15,7 @@ Submodules
    /autoapi/cellmap_flow/dashboard/routes/finetune/index
    /autoapi/cellmap_flow/dashboard/routes/index_page/index
    /autoapi/cellmap_flow/dashboard/routes/logging_routes/index
+   /autoapi/cellmap_flow/dashboard/routes/model_advice/index
    /autoapi/cellmap_flow/dashboard/routes/models/index
    /autoapi/cellmap_flow/dashboard/routes/pipeline/index
    /autoapi/cellmap_flow/dashboard/routes/pipeline_builder_page/index

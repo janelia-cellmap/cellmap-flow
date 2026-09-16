@@ -107,6 +107,11 @@
              
   <section id="module-cellmap_flow.blockwise">
 <span id="cellmap-flow-blockwise"></span><h1>cellmap_flow.blockwise<a class="headerlink" href="#module-cellmap_flow.blockwise" title="Link to this heading"></a></h1>
+<p>Blockwise processing.</p>
+<p><code class="docutils literal notranslate"><span class="pre">CellMapFlowBlockwiseProcessor</span></code> is re-exported lazily: importing it pulls in
+the whole inference stack, and <code class="docutils literal notranslate"><span class="pre">cellmap_flow_blockwise</span> <span class="pre">--help</span></code> – which goes
+through this package to reach cli.py – paid ~18s for it before printing
+anything.</p>
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
@@ -116,174 +121,6 @@
 <li class="toctree-l1"><a class="reference internal" href="multiple_cli/index.html">cellmap_flow.blockwise.multiple_cli</a></li>
 </ul>
 </div>
-</section>
-<section id="classes">
-<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor" title="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapFlowBlockwiseProcessor</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="package-contents">
-<h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading"></a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.</span></span><span class="sig-name descname"><span class="pre">CellMapFlowBlockwiseProcessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.config">
-<span class="sig-name descname"><span class="pre">config</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.yaml_config">
-<span class="sig-name descname"><span class="pre">yaml_config</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.yaml_config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.input_path">
-<span class="sig-name descname"><span class="pre">input_path</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.input_path" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.charge_group">
-<span class="sig-name descname"><span class="pre">charge_group</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.charge_group" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.queue">
-<span class="sig-name descname"><span class="pre">queue</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.queue" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_path">
-<span class="sig-name descname"><span class="pre">output_path</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_path" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.workers">
-<span class="sig-name descname"><span class="pre">workers</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.workers" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_channels_is_dict">
-<span class="sig-name descname"><span class="pre">output_channels_is_dict</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_channels_is_dict" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.cpu_workers">
-<span class="sig-name descname"><span class="pre">cpu_workers</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.cpu_workers" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.track_progress">
-<span class="sig-name descname"><span class="pre">track_progress</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.track_progress" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.models">
-<span class="sig-name descname"><span class="pre">models</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.models" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.model_mode_str">
-<span class="sig-name descname"><span class="pre">model_mode_str</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.model_mode_str" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.process_only">
-<span class="sig-name descname"><span class="pre">process_only</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.process_only" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.cross_channels_mode">
-<span class="sig-name descname"><span class="pre">cross_channels_mode</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.cross_channels_mode" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.model_config">
-<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.model_config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.block_shape">
-<span class="sig-name descname"><span class="pre">block_shape</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.block_shape" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.input_voxel_size">
-<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.input_voxel_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_voxel_size">
-<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_voxel_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.channels">
-<span class="sig-name descname"><span class="pre">channels</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.channels" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.task_name">
-<span class="sig-name descname"><span class="pre">task_name</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.task_name" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.dtype">
-<span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.dtype" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.inferencers">
-<span class="sig-name descname"><span class="pre">inferencers</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.inferencers" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.inferencer">
-<span class="sig-name descname"><span class="pre">inferencer</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.inferencer" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.idi_raw">
-<span class="sig-name descname"><span class="pre">idi_raw</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.idi_raw" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_arrays">
-<span class="sig-name descname"><span class="pre">output_arrays</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.output_arrays" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.bounding_boxes">
-<span class="sig-name descname"><span class="pre">bounding_boxes</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.bounding_boxes" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.separate_zarrs">
-<span class="sig-name descname"><span class="pre">separate_zarrs</span></span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.separate_zarrs" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.process_fn">
-<span class="sig-name descname"><span class="pre">process_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">block</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.process_fn" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.client">
-<span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.client" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.run">
-<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.CellMapFlowBlockwiseProcessor.run" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 </section>
 </section>
 

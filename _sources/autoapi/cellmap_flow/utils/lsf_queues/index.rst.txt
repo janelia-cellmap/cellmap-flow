@@ -1,0 +1,68 @@
+cellmap_flow.utils.lsf_queues
+=============================
+
+.. py:module:: cellmap_flow.utils.lsf_queues
+
+.. autoapi-nested-parse::
+
+   Report which GPU queues are actually usable, for the dashboard's picker.
+
+   Picking a queue blind is how a job ends up behind nine thousand pending ones:
+   at the time this was written ``gpu_h200`` had 9224 jobs pending while
+   ``gpu_h100`` had none, and nothing in the UI said so. LSF already knows --
+   ``bqueues`` for the backlog, ``bhosts`` for whether the nodes behind the queue
+   are up at all -- so ask it, cache the answer, and let the UI show it next to
+   each option.
+
+   Host state matters separately from queue state. A queue reports ``Open:Active``
+   while its nodes are individually closed: ``closed_Adm`` when an admin has taken
+   them out for maintenance, ``closed_Full`` when they are merely saturated. Those
+   mean different things to someone deciding where to submit -- the first will not
+   clear on its own -- so they are counted separately rather than lumped into one
+   "busy" number.
+
+   Nothing here raises. A dashboard running somewhere without LSF should show a
+   queue picker that still works, just without the annotations.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.lsf_queues.logger
+   cellmap_flow.utils.lsf_queues.GPU_QUEUES
+   cellmap_flow.utils.lsf_queues.CACHE_TTL_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.lsf_queues.gpu_queue_availability
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GPU_QUEUES
+   :value: (('gpu_h100', 'H100', 'h100s'), ('gpu_h200', 'H200', 'h200s'), ('gpu_a100', 'A100', 'a100s'))
+
+
+.. py:data:: CACHE_TTL_SECONDS
+   :value: 60
+
+
+.. py:function:: gpu_queue_availability(force=False)
+
+   Current GPU queue availability, cached for ``CACHE_TTL_SECONDS``.
+
+   The UI polls this about once a minute; the cache means several open
+   dashboards don't multiply into an LSF query storm, since the answer is the
+   same for all of them.
+
+

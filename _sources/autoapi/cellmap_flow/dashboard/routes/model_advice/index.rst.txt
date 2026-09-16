@@ -1,0 +1,53 @@
+cellmap_flow.dashboard.routes.model_advice
+==========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.model_advice
+
+.. autoapi-nested-parse::
+
+   Advice about a served model's normalization and postprocessing.
+
+   Nothing in cellmap-flow records what a model expects: metadata.json carries
+   geometry and provenance only, and the input/output handling is set by
+   convention plus whatever happens to be toggled in the UI. A wrong choice
+   degrades the result silently rather than erroring, which is a bad failure mode.
+
+   This endpoint combines two sources into a verdict the UI can show:
+
+   * the running server's output probe (``/__control__/output_probe``), which
+     observes what activation the model's output already has, and
+   * the model's declared metadata (channel count, name, training framework).
+
+   It never changes anything -- callers decide whether to apply the suggestion.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_advice.logger
+   cellmap_flow.dashboard.routes.model_advice.model_advice_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_advice.model_advice
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: model_advice_bp
+
+.. py:function:: model_advice()
+
+   Per-model verdicts on the currently configured input/output handling.
+
+

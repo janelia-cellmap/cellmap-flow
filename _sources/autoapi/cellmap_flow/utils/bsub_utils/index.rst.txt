@@ -24,6 +24,7 @@ Attributes
    cellmap_flow.utils.bsub_utils.DEFAULT_QUEUE
    cellmap_flow.utils.bsub_utils.DEFAULT_CHARGE_GROUP
    cellmap_flow.utils.bsub_utils.SERVER_COMMAND
+   cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR
 
 
 Classes
@@ -70,6 +71,8 @@ Module Contents
 .. py:data:: SERVER_COMMAND
    :value: 'cellmap_flow_server'
 
+
+.. py:data:: SERVER_LOG_DIR
 
 .. py:class:: JobStatus(*args, **kwds)
 
@@ -195,7 +198,7 @@ Module Contents
 
 
 
-.. py:class:: LSFJob(job_id: str, model_name: Optional[str] = None)
+.. py:class:: LSFJob(job_id: str, model_name: Optional[str] = None, log_file: Optional[pathlib.Path] = None)
 
 
 
@@ -203,6 +206,11 @@ Module Contents
 
 
    .. py:attribute:: job_id
+
+
+   .. py:attribute:: log_file
+      :value: None
+
 
 
    .. py:method:: kill() -> None

@@ -1,0 +1,95 @@
+cellmap_flow.utils.doctor
+=========================
+
+.. py:module:: cellmap_flow.utils.doctor
+
+.. autoapi-nested-parse::
+
+   Preflight check for the cellmap-flow environment.
+
+   Run as ``cellmap_flow_doctor``. Reports what is installed, what is missing,
+   and the exact command to fix each gap -- so a broken finetune environment
+   surfaces up front rather than as a FileNotFoundError deep in an annotation
+   route after you have already loaded a dataset and started painting.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.doctor.OK
+   cellmap_flow.utils.doctor.FAIL
+   cellmap_flow.utils.doctor.WARN
+   cellmap_flow.utils.doctor.NEUROGLANCER_FORK_MARKER
+   cellmap_flow.utils.doctor.NEUROGLANCER_FORK_INSTALL
+   cellmap_flow.utils.doctor.MINIO_INSTALL
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.doctor.Result
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.doctor.run_checks
+   cellmap_flow.utils.doctor.main
+
+
+Module Contents
+---------------
+
+.. py:data:: OK
+   :value: '✓'
+
+
+.. py:data:: FAIL
+   :value: '✗'
+
+
+.. py:data:: WARN
+   :value: '!'
+
+
+.. py:data:: NEUROGLANCER_FORK_MARKER
+   :value: 'Paint Value'
+
+
+.. py:data:: NEUROGLANCER_FORK_INSTALL
+   :value: 'pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation'
+
+
+.. py:data:: MINIO_INSTALL
+   :value: 'mamba install minio-server minio-client -c conda-forge'
+
+
+.. py:class:: Result(name, status, detail='', fix='')
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: status
+
+
+   .. py:attribute:: detail
+      :value: ''
+
+
+
+   .. py:attribute:: fix
+      :value: ''
+
+
+
+.. py:function:: run_checks(include_finetune=True)
+
+.. py:function:: main()
+

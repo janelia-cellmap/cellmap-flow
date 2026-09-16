@@ -109,8 +109,8 @@
   <section id="module-cellmap_flow.cli.yaml_cli">
 <span id="cellmap-flow-cli-yaml-cli"></span><h1>cellmap_flow.cli.yaml_cli<a class="headerlink" href="#module-cellmap_flow.cli.yaml_cli" title="Link to this heading"></a></h1>
 <p>YAML-based CLI for running multiple models.
-Similar to cli_v2 but uses YAML configuration files for batch processing.</p>
-<p>This dynamically discovers ModelConfig subclasses just like cli_v2,
+Uses YAML configuration files for batch processing.</p>
+<p>This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
@@ -166,23 +166,43 @@ making it easy to add new model types without modifying this file.</p>
 <p>
 data_path: /path/to/data
 charge_group: my_group
-queue: gpu_h100  # optional, defaults to gpu_h100
-json_data: /path/to/config.json  # optional
+queue: gpu_h100        # optional, defaults to gpu_h100
+wrap_raw: true         # optional; false serves raw straight from the file
+json_data:             # optional; normalization and postprocessing</p>
+<blockquote>
+<div><dl class="simple">
+<dt>input_norm:</dt><dd><p>MinMaxNormalizer: {min_value: 0, max_value: 255}
+LambdaNormalizer: {expression: “x*2-1”}</p>
+</dd>
+<dt>postprocess:</dt><dd><p>SigmoidPostprocessor: {}</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="simple">
+<dt>models:</dt><dd><ul class="simple">
+<li><p>type: dacapo
+name: my_model
+run_name: my_run
+iteration: 100</p></li>
+<li><p>type: fly
+name: fly_model
+checkpoint: /path/to/checkpoint.ts
+classes: [mito, er, nucleus]
+resolution: [4, 4, 4]</p></li>
+</ul>
+</dd>
+</dl>
+<p>Models may also be given as a mapping, where each key is the model name:</p>
+<p>
 models:</p>
 <blockquote>
 <div><dl class="simple">
 <dt>my_model:</dt><dd><p>type: dacapo
-run_name: my_run
-iteration: 100</p>
-</dd>
-<dt>fly_model:</dt><dd><p>type: fly
-checkpoint: /path/to/checkpoint.ts
-classes: [mito, er, nucleus]
-resolution: [4, 4, 4]</p>
+run_name: my_run</p>
 </dd>
 </dl>
 </div></blockquote>
-<p>The model keys (my_model, fly_model) become the model names.</p>
+<p>json_data is an inline mapping (or a JSON string), not a path to a file.</p>
 <p>Model types are automatically discovered from ModelConfig subclasses.
 Use –list-types to see all available types.</p>
 <p>Examples:</p>

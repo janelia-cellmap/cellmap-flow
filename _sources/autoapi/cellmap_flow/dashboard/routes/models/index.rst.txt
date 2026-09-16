@@ -24,7 +24,9 @@ Functions
    cellmap_flow.dashboard.routes.models.get_huggingface_models
    cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route
    cellmap_flow.dashboard.routes.models.submit_models
+   cellmap_flow.dashboard.routes.models.gpu_queues
    cellmap_flow.dashboard.routes.models.get_server_config
+   cellmap_flow.dashboard.routes.models.export_config
    cellmap_flow.dashboard.routes.models.update_server_config
 
 
@@ -62,9 +64,24 @@ Module Contents
 
 .. py:function:: submit_models()
 
+.. py:function:: gpu_queues()
+
+   Which GPU queues are open and how busy, for the queue picker.
+
+   Polled about once a minute by the models tab; the underlying LSF query is
+   cached server-side, so this is cheap to call.
+
+
 .. py:function:: get_server_config()
 
    Get current server configuration.
+
+
+.. py:function:: export_config()
+
+   Export the dashboard's current live config (models, normalization,
+   postprocessing, queue/charge_group) as a downloadable YAML file that can
+   be reloaded later with `cellmap_flow_yaml`.
 
 
 .. py:function:: update_server_config()

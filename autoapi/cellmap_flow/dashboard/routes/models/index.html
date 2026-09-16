@@ -25,7 +25,7 @@
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
     <link rel="next" title="cellmap_flow.dashboard.routes.pipeline" href="../pipeline/index.html" />
-    <link rel="prev" title="cellmap_flow.dashboard.routes.logging_routes" href="../logging_routes/index.html" /> 
+    <link rel="prev" title="cellmap_flow.dashboard.routes.model_advice" href="../model_advice/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -144,8 +144,14 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.submit_models" title="cellmap_flow.dashboard.routes.models.submit_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_models</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="cellmap_flow.dashboard.routes.models.get_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_server_config</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.gpu_queues" title="cellmap_flow.dashboard.routes.models.gpu_queues"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_queues</span></code></a>()</p></td>
+<td><p>Which GPU queues are open and how busy, for the queue picker.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="cellmap_flow.dashboard.routes.models.get_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_server_config</span></code></a>()</p></td>
 <td><p>Get current server configuration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.export_config" title="cellmap_flow.dashboard.routes.models.export_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export_config</span></code></a>()</p></td>
+<td><p>Export the dashboard's current live config (models, normalization,</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.models.update_server_config" title="cellmap_flow.dashboard.routes.models.update_server_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_server_config</span></code></a>()</p></td>
 <td><p>Update server configuration and save to cache.</p></td>
@@ -201,9 +207,25 @@
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.gpu_queues">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">gpu_queues</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.gpu_queues" title="Link to this definition"></a></dt>
+<dd><p>Which GPU queues are open and how busy, for the queue picker.</p>
+<p>Polled about once a minute by the models tab; the underlying LSF query is
+cached server-side, so this is cheap to call.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.get_server_config">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">get_server_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.get_server_config" title="Link to this definition"></a></dt>
 <dd><p>Get current server configuration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.models.export_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.models.</span></span><span class="sig-name descname"><span class="pre">export_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.models.export_config" title="Link to this definition"></a></dt>
+<dd><p>Export the dashboard’s current live config (models, normalization,
+postprocessing, queue/charge_group) as a downloadable YAML file that can
+be reloaded later with <cite>cellmap_flow_yaml</cite>.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -219,7 +241,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../logging_routes/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.logging_routes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../model_advice/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.model_advice" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../pipeline/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.pipeline" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
