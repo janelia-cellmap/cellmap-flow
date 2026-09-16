@@ -4,10 +4,7 @@ Simple CLI for viewing datasets with CellMap Flow without requiring model config
 
 import click
 import logging
-import neuroglancer
-from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.globals import g
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -36,6 +33,13 @@ def main(dataset, log_level):
     Example:
         cellmap_flow_viewer -d /path/to/dataset.zarr
     """
+    # Imported inside the command so --help and argument errors do not
+    # pay for the whole inference stack (~16s before this).
+    import neuroglancer
+
+    from cellmap_flow.dashboard.app import create_and_run_app
+    from cellmap_flow.utils.scale_pyramid import get_raw_layer
+
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
     logger.info(f"Starting CellMap Flow viewer with dataset: {dataset}")
