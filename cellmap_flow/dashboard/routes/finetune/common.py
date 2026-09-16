@@ -159,10 +159,31 @@ def autodetect_output_type(model_config, output_type, offsets):
                 if hasattr(model_config, "_load_metadata"):
                     meta = model_config._load_metadata()
                     channels = meta.get("channels_names")
-                elif hasattr(model_config, "_config") and hasattr(model_config._config, "channels"):
+                elif getattr(model_config, "_config", None) is not None and hasattr(
+                    model_config._config, "channels"
+                ):
                     channels = model_config._config.channels
             except Exception:
                 pass
+
+            if not channels:
+                # _config is only populated once something has built the model
+                # in this process. The dashboard deliberately no longer does
+                # that -- it asks the running server, or the geometry cache --
+                # so _config is normally None here and this check silently
+                # fell through to "binary" for an affinity model. Ask the same
+                # sources, which now carry the channel names.
+                from cellmap_flow.utils.model_geometry import resolve_model_geometry
+
+                try:
+                    geometry = resolve_model_geometry(
+                        getattr(model_config, "name", None), model_config
+                    )
+                    channels = getattr(geometry, "channels", None) or getattr(
+                        geometry, "channels_names", None
+                    )
+                except Exception as e:
+                    logger.debug(f"Could not resolve channels for autodetect: {e}")
 
             if channels and any("_aff" in channel for channel in channels):
                 resolved_output_type = "affinities"
