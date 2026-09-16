@@ -35,7 +35,7 @@ class _FakeViewer:
         self.scales = scales
         self._state = neuroglancer.viewer_state.ViewerState()
 
-    def txn(self):
+    def _populated(self):
         import neuroglancer
 
         s = self._state
@@ -43,7 +43,15 @@ class _FakeViewer:
             names=["z", "y", "x"], units="nm", scales=self.scales
         )
         s.position = self.position
-        return _FakeTxn(s)
+        return s
+
+    @property
+    def state(self):
+        """Read-only access, like the real viewer -- reads must not push."""
+        return self._populated()
+
+    def txn(self):
+        return _FakeTxn(self._populated())
 
 
 @pytest.fixture

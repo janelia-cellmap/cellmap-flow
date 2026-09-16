@@ -17,6 +17,22 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
+# What refresh_annotated_regions_layer() last wrote into the viewer.
+#
+# neuroglancer's txn() is unconditional: it deep-copies the state on entry and
+# calls set_state() on exit whether or not the body changed anything. The
+# snapshot it copies is whatever python knew at that moment, and browser-side
+# changes -- picking a draw tool, say -- reach python asynchronously. A tool
+# selected in the window between the copy and the push is simply not in the
+# state we push, so it gets cleared.
+#
+# The periodic sync calls this every 30s for as long as annotations keep
+# arriving, i.e. continuously while you are drawing, which is exactly when a
+# tool is selected. The boxes themselves change only when a crop is added, so
+# nearly all of those pushes rewrote the layer to the identical value. Skip
+# them.
+_last_annotated_regions = None
+
 
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
@@ -200,14 +216,19 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         f"Could not read annotation_volume metadata for {entry}: {e}"
                     )
 
+    global _last_annotated_regions
+
     layer_name = "annotated_regions"
     if not boxes:
         try:
-            with g.viewer.txn() as s:
-                if layer_name in s.layers:
-                    del s.layers[layer_name]
+            # Only open a transaction if there is actually something to remove.
+            if layer_name in g.viewer.state.layers:
+                with g.viewer.txn() as s:
+                    if layer_name in s.layers:
+                        del s.layers[layer_name]
         except Exception:
             pass
+        _last_annotated_regions = None
         return 0
 
     axes_names = ["z", "y", "x"]
@@ -228,6 +249,18 @@ def refresh_annotated_regions_layer(corrections_path=None):
         )
         for index, box in enumerate(boxes)
     ]
+
+    # Nothing to say that we have not already said: leave the viewer alone.
+    # Checked against the live layer list too, so a layer that went away (a
+    # reset, a manual delete) is still restored.
+    signature = (tuple(axes_names), tuple(
+        (tuple(box["lo"]), tuple(box["hi"]), box["label"]) for box in boxes
+    ))
+    try:
+        if signature == _last_annotated_regions and layer_name in g.viewer.state.layers:
+            return len(boxes)
+    except Exception:
+        pass
 
     try:
         with g.viewer.txn() as s:
@@ -264,6 +297,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
         logger.warning(f"Could not update annotated_regions layer: {e}")
         return 0
 
+    _last_annotated_regions = signature
     return len(boxes)
 
 

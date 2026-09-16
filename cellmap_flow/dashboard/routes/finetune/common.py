@@ -52,32 +52,36 @@ def viewer_position_and_scales():
     if not hasattr(g, "viewer") or g.viewer is None:
         raise ValueError("Viewer not initialized")
 
-    with g.viewer.txn() as s:
-        position = s.position
-        dimensions = s.dimensions
-        scales_nm = None
+    # .state, not .txn(): this only reads. txn() calls set_state() on exit
+    # unconditionally, so using it here pushed a full viewer state -- built
+    # from a snapshot that may predate a browser-side tool selection -- on
+    # every crop creation, for no reason.
+    s = g.viewer.state
+    position = s.position
+    dimensions = s.dimensions
+    scales_nm = None
 
-        if dimensions and hasattr(dimensions, "scales"):
-            scales_nm = list(dimensions.scales)
-            if hasattr(dimensions, "units"):
-                units = dimensions.units
-                if isinstance(units, str):
-                    units = [units] * len(scales_nm)
-                converted_scales = []
-                for scale, unit in zip(scales_nm, units):
-                    if unit == "m":
-                        converted_scales.append(scale * 1e9)
-                    elif unit == "nm":
-                        converted_scales.append(scale)
-                    else:
-                        logger.warning(f"Unknown unit: {unit}, assuming nm")
-                        converted_scales.append(scale)
-                scales_nm = converted_scales
+    if dimensions and hasattr(dimensions, "scales"):
+        scales_nm = list(dimensions.scales)
+        if hasattr(dimensions, "units"):
+            units = dimensions.units
+            if isinstance(units, str):
+                units = [units] * len(scales_nm)
+            converted_scales = []
+            for scale, unit in zip(scales_nm, units):
+                if unit == "m":
+                    converted_scales.append(scale * 1e9)
+                elif unit == "nm":
+                    converted_scales.append(scale)
+                else:
+                    logger.warning(f"Unknown unit: {unit}, assuming nm")
+                    converted_scales.append(scale)
+            scales_nm = converted_scales
 
-        if hasattr(position, "tolist"):
-            position = position.tolist()
-        elif hasattr(position, "__iter__"):
-            position = list(position)
+    if hasattr(position, "tolist"):
+        position = position.tolist()
+    elif hasattr(position, "__iter__"):
+        position = list(position)
 
     return position, scales_nm
 
