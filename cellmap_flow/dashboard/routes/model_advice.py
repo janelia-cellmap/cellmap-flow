@@ -18,18 +18,15 @@ import json
 import logging
 import os
 
-import requests
 from flask import Blueprint, jsonify
 
 from cellmap_flow.globals import g
 from cellmap_flow.utils.output_probe import review_postprocess, suggest_input_norm
+from cellmap_flow.utils.server_info import fetch_model_info
 
 logger = logging.getLogger(__name__)
 
 model_advice_bp = Blueprint("model_advice", __name__)
-
-PROBE_TIMEOUT_SECONDS = 3
-
 
 def _model_metadata(model_config) -> dict:
     """Best-effort metadata for a model config, from whatever source has it."""
@@ -55,18 +52,7 @@ def _model_metadata(model_config) -> dict:
 
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
-    if not host:
-        return {"available": False, "reason": "job has no host yet"}
-    try:
-        r = requests.get(
-            f"{host.rstrip('/')}/__control__/output_probe",
-            timeout=PROBE_TIMEOUT_SECONDS,
-        )
-        if r.status_code != 200:
-            return {"available": False, "reason": f"probe returned HTTP {r.status_code}"}
-        return r.json()
-    except Exception as e:
-        return {"available": False, "reason": f"could not reach server ({e})"}
+    return fetch_model_info(host)
 
 
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
