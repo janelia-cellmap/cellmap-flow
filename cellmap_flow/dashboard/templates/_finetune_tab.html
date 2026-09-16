@@ -84,9 +84,10 @@
     </button>
     <small class="form-text text-muted d-block mt-1">
       Navigate until the screen shows output you are happy with, then click.
-      Training samples these regions without annotations, so they hold the
-      model to what it already does there while your scribbles correct it
-      elsewhere. Shown as the "good_regions" layer.
+      Marks one model output patch, the same size as an annotation crop.
+      Training holds the model to what it already predicts there, while your
+      scribbles correct it elsewhere &mdash; and any scribble you draw inside a
+      good region wins over that. Shown as the "good_regions" layer.
     </small>
   </div>
 

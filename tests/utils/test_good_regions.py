@@ -56,8 +56,13 @@ def session(tmp_path, monkeypatch):
         "annotation_volumes",
         {"vol-1": {
             "corrections_dir": str(corrections),
+            # Both are present on a real volume, and they differ. Keeping the
+            # input geometry here is what makes the size test discriminating:
+            # sizing off the input would give 2848nm, not 896nm.
             "input_size": [178, 178, 178],
             "input_voxel_size": [16, 16, 16],
+            "output_size": [56, 56, 56],
+            "output_voxel_size": [16, 16, 16],
         }},
         raising=False,
     )
@@ -87,8 +92,9 @@ def test_marking_records_a_box_centred_on_the_view(session, client):
 
     region = body["region"]
     # position (voxels) * scales (nm) = centre in nm; box is centred on it.
-    # 178 * 16 = 2848 nm on a side, one model field of view.
-    assert region["shape_nm"] == [2848.0, 2848.0, 2848.0]
+    # 56 * 16 = 896 nm on a side: one model *output* patch, not the 2848nm
+    # input field of view -- the box marks what you looked at and judged.
+    assert region["shape_nm"] == [896.0, 896.0, 896.0]
     centre = [o + s / 2 for o, s in zip(region["offset_nm"], region["shape_nm"])]
     assert centre == [100 * 16, 200 * 16, 300 * 16]
 
