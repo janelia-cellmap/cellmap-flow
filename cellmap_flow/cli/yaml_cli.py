@@ -1,8 +1,8 @@
 """
 YAML-based CLI for running multiple models.
-Similar to cli_v2 but uses YAML configuration files for batch processing.
+Uses YAML configuration files for batch processing.
 
-This dynamically discovers ModelConfig subclasses just like cli_v2,
+This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.
 """
 
@@ -10,25 +10,21 @@ import os
 import sys
 import logging
 import click
-from typing import List
+from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
-from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-from cellmap_flow.utils.config_utils import (
-    load_config,
-    build_models,
-    get_model_type_mapping,
-)
-from cellmap_flow.utils.serilization_utils import get_process_dataset
+from cellmap_flow.utils.config_utils import load_config
 from cellmap_flow.globals import g
-from cellmap_flow.models.models_config import ModelConfig
+
+if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
+    from cellmap_flow.models.models_config import ModelConfig
 
 logger = logging.getLogger(__name__)
 
 
 def run_multiple(
-    models: List[ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
+    models: List["ModelConfig"], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
 ) -> None:
     """
     Submit multiple model inference jobs.
@@ -70,6 +66,10 @@ def run_multiple(
                     model_name = getattr(model, "name", None) or type(model).__name__
                     logger.error(f"Failed to start job for {model_name}: {e}")
 
+    # Imported here so --help and config errors do not pay for the viewer
+    # stack (~16s before this).
+    from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
     logger.info("All jobs submitted. Monitoring...")
@@ -103,20 +103,34 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     \b
     data_path: /path/to/data
     charge_group: my_group
-    queue: gpu_h100  # optional, defaults to gpu_h100
-    json_data: /path/to/config.json  # optional
+    queue: gpu_h100        # optional, defaults to gpu_h100
+    wrap_raw: true         # optional; false serves raw straight from the file
+    json_data:             # optional; normalization and postprocessing
+      input_norm:
+        MinMaxNormalizer: {min_value: 0, max_value: 255}
+        LambdaNormalizer: {expression: "x*2-1"}
+      postprocess:
+        SigmoidPostprocessor: {}
     models:
-      my_model:
-        type: dacapo
+      - type: dacapo
+        name: my_model
         run_name: my_run
         iteration: 100
-      fly_model:
-        type: fly
+      - type: fly
+        name: fly_model
         checkpoint: /path/to/checkpoint.ts
         classes: [mito, er, nucleus]
         resolution: [4, 4, 4]
 
-    The model keys (my_model, fly_model) become the model names.
+    Models may also be given as a mapping, where each key is the model name:
+
+    \b
+    models:
+      my_model:
+        type: dacapo
+        run_name: my_run
+
+    json_data is an inline mapping (or a JSON string), not a path to a file.
 
     Model types are automatically discovered from ModelConfig subclasses.
     Use --list-types to see all available types.
@@ -136,6 +150,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
 
     # List available model types
     if list_types:
+        from cellmap_flow.utils.config_utils import get_model_type_mapping
+
         model_types = get_model_type_mapping()
         click.echo("Available model types:\n")
         for type_name, config_class in sorted(model_types.items()):
@@ -172,6 +188,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     if "json_data" in config:
         json_data = config["json_data"]
         logger.info(f"Loading normalization/postprocessing from: {json_data}")
+        from cellmap_flow.utils.serilization_utils import get_process_dataset
+
         g.input_norms, g.postprocess = get_process_dataset(json_data)
     else:
         logger.info("Using default normalization and postprocessing")
@@ -193,6 +211,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
     if config["models"]:
+        from cellmap_flow.utils.config_utils import build_models
+
         g.models_config = build_models(config["models"])
     else:
         g.models_config = []

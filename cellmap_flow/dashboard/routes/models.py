@@ -1,8 +1,14 @@
 import logging
+from datetime import datetime
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.globals import g, SERVER_CONFIG_KEYS
+from cellmap_flow.globals import (
+    g,
+    SERVER_CONFIG_KEYS,
+    current_input_norm_config,
+    current_postprocess_config,
+)
 from cellmap_flow.models.run import update_run_models
 
 logger = logging.getLogger(__name__)
@@ -124,12 +130,61 @@ def submit_models():
     )
 
 
+@models_bp.route("/api/gpu-queues")
+def gpu_queues():
+    """Which GPU queues are open and how busy, for the queue picker.
+
+    Polled about once a minute by the models tab; the underlying LSF query is
+    cached server-side, so this is cheap to call.
+    """
+    from cellmap_flow.utils.lsf_queues import gpu_queue_availability
+
+    return jsonify(gpu_queue_availability())
+
+
 @models_bp.route("/api/server-config")
 def get_server_config():
     """Get current server configuration."""
     config = {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}
     config["cached"] = g._server_config_cached
     return jsonify(config)
+
+
+@models_bp.route("/api/export-config")
+def export_config():
+    """
+    Export the dashboard's current live config (models, normalization,
+    postprocessing, queue/charge_group) as a downloadable YAML file that can
+    be reloaded later with `cellmap_flow_yaml`.
+    """
+    from cellmap_flow.finetune.finetuned_model_templates import (
+        generate_current_config_yaml,
+    )
+
+    try:
+        models = [m.to_dict() for m in (g.models_config or [])]
+        json_data = {
+            "input_norm": current_input_norm_config(),
+            "postprocess": current_postprocess_config(),
+        }
+        yaml_text = generate_current_config_yaml(
+            models=models,
+            data_path=g.dataset_path or "",
+            queue=g.queue,
+            charge_group=g.charge_group,
+            json_data=json_data,
+        )
+    except Exception as e:
+        logger.error(f"Error exporting config: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"cellmap_flow_config_{timestamp}.yaml"
+    return Response(
+        yaml_text,
+        mimetype="text/yaml",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @models_bp.route("/api/server-config", methods=["POST"])

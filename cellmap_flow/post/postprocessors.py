@@ -202,7 +202,14 @@ class AffinityPostprocessor(PostProcessor):
             # unique_increment = self.num_previous_segments
             # self.num_previous_segments += len(filtered_fragments)
 
-        segmentation[segmentation > 0] += unique_increment
+        # numpy has no common integer type for uint64 and int64, so
+        # ``np.result_type(np.uint64, np.int64)`` is float64 -- an in-place add of a
+        # numpy *signed* scalar into a uint64 array therefore raises
+        # UFuncOutputCastingError. Both increments above are numpy int64
+        # (np.prod / np.random.randint), so cast explicitly to keep the add in
+        # uint64. (A plain Python int would also work under NEP 50's weak
+        # promotion, which is why this never reproduced with literal values.)
+        segmentation[segmentation > 0] += np.uint64(unique_increment)
         segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
         # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
 

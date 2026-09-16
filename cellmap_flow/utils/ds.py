@@ -7,7 +7,6 @@ from typing import Sequence, Union
 
 import h5py
 import numpy as np
-import s3fs
 import tensorstore as ts
 import zarr
 from funlib.geometry import Coordinate, Roi
@@ -1015,6 +1014,8 @@ def get_ds_info(path: str, mode: str = "r"):
         path, filename = split_dataset_path(path)
         filename, scale = filename.rsplit("/s")
         scale = int(scale)
+        import s3fs  # ~2s to import; only remote paths need it
+
         fs = s3fs.S3FileSystem(
             anon=True
         )  # Set anon=True if you don't need authentication

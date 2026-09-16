@@ -1,4 +1,5 @@
 # %%
+import time
 import numpy as np
 import torch
 from funlib.geometry import Coordinate
@@ -55,6 +56,9 @@ class Inferencer:
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
+        # Populated by the warmup probe; None when it could not run.
+        self.output_range = None
+        self.output_class = None
         # config is lazy so one call is needed to get the config
         _ = self.model_config.config
 
@@ -87,6 +91,75 @@ class Inferencer:
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)
         # print("Model compiled")
         self.model_config.config.model.eval()
+        self._warmup()
+
+    def _warmup(self):
+        """Run one throwaway forward pass so the first real chunk doesn't pay for it.
+
+        ``.to(device)`` only moves weights; cuDNN algorithm selection, CUDA
+        kernel module loading and workspace allocation all happen lazily on the
+        first actual ``forward()``. Without this, that one-time cost lands on
+        whichever chunk neuroglancer happens to request first, which presents as
+        "the layer appeared but nothing loads for a while". Doing it here moves
+        the stall to server startup, where the dashboard is already blocked in
+        ``wait_for_host()`` and it costs the user nothing.
+
+        Best effort: a failure here (unknown shapes, an unusual forward
+        signature, OOM) must never stop the server from coming up.
+        """
+        config = self.model_config.config
+        try:
+            input_size = getattr(config, "input_size", None)
+            if input_size is None:
+                # read_shape is in world units; convert to voxels the same way
+                # ModelConfig does.
+                input_size = np.array(config.read_shape) // np.array(
+                    config.input_voxel_size
+                )
+            shape = (1, 1, *(int(s) for s in input_size))
+        except Exception as e:
+            logger.info(f"Skipping warmup, could not determine input shape: {e}")
+            return
+
+        try:
+            # Deliberately extreme inputs rather than zeros: this same pass
+            # doubles as the output-activation probe below, and only inputs far
+            # outside the trained range reveal whether the model saturates.
+            dummy = torch.randn(shape, device=self.device) * 100
+            dummy = dummy.half() if self.use_half_prediction else dummy.float()
+            start = time.time()
+            with torch.no_grad():
+                out = config.model.forward(dummy)
+            if self.device.type == "cuda":
+                torch.cuda.synchronize()
+            logger.info(f"Warmup forward {shape} took {time.time() - start:.1f}s")
+            self._record_output_class(out)
+        except Exception as e:
+            logger.warning(
+                f"Warmup forward {shape} failed ({e}); the first chunk request "
+                "will absorb the one-time initialization cost instead"
+            )
+
+    def _record_output_class(self, out):
+        """Classify the model's output activation from the warmup pass.
+
+        Stored on the instance so the server can report it to the dashboard,
+        which uses it to suggest (or sanity-check) the postprocessing chain.
+        """
+        from cellmap_flow.utils.output_probe import classify_output_range
+
+        try:
+            lo, hi = float(out.min()), float(out.max())
+            if not (np.isfinite(lo) and np.isfinite(hi)):
+                logger.info("Output probe saw non-finite values; skipping")
+                return
+            self.output_range = (lo, hi)
+            self.output_class = classify_output_range(lo, hi)
+            logger.info(
+                f"Model output range [{lo:.4g}, {hi:.4g}] -> {self.output_class}"
+            )
+        except Exception as e:
+            logger.info(f"Could not classify model output: {e}")
 
     def process_chunk(self, idi, roi):
         # check if process_chunk is in self.config

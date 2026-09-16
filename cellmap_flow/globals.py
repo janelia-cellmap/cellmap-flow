@@ -1,5 +1,4 @@
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
-from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
 import queue
@@ -225,7 +224,16 @@ class Flow:
         dtype = model_output_dtype
 
         if len(self.postprocess) > 0:
-            for postprocess in self.postprocess:
+            # Postprocessors are applied in order (see Inferencer), so the dtype
+            # that actually reaches the client is the one declared by the LAST
+            # step that declares one. Scan in reverse, matching
+            # is_output_segmentation(). Scanning forward picked e.g.
+            # SigmoidPostprocessor's float32 ahead of a trailing
+            # AffinityPostprocessor's uint64, which both advertised the wrong
+            # dtype in the zarr metadata (neuroglancer: "Data type not
+            # compatible with segmentation layer") and cast uint64 label ids
+            # through float32, corrupting any id above 2**24.
+            for postprocess in self.postprocess[::-1]:
                 if postprocess.dtype:
                     logger.info(
                         f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
@@ -339,6 +347,31 @@ def current_input_norm_config() -> dict:
         try:
             d = n.to_dict()
             name = d.pop("name", type(n).__name__)
+            derived[name] = d
+        except Exception:
+            continue
+    return derived
+
+
+def current_postprocess_config() -> dict:
+    """Return the dashboard's current postprocess chain as a JSON-serializable dict.
+
+    Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
+    populated, otherwise reconstructs the dict from the live ``g.postprocess``
+    instances via their ``.to_dict()``. The fallback matters for the same
+    reason it does for input_norm -- e.g. a yaml booted with a
+    ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
+    ``g.postprocess`` but never touches ``postprocess_config``.
+    """
+    cfg = getattr(g, "postprocess_config", None) or {}
+    if cfg:
+        return cfg
+    procs = getattr(g, "postprocess", None) or []
+    derived = {}
+    for p in procs:
+        try:
+            d = p.to_dict()
+            name = d.pop("name", type(p).__name__)
             derived[name] = d
         except Exception:
             continue

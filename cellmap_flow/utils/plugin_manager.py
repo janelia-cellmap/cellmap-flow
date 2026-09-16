@@ -14,7 +14,6 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from cellmap_flow.utils.load_py import analyze_script
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +82,11 @@ def register_plugin(filepath: str, force: bool = False) -> Path:
         raise ValueError(f"Only .py files can be registered, got: {source.suffix}")
 
     # Safety check
+    # Local: cellmap_flow/__init__ calls load_plugins() on every package
+    # import, and load_py pulls in upath/fsspec (~1.5s) that only
+    # registering a plugin actually needs.
+    from cellmap_flow.utils.load_py import analyze_script
+
     is_safe, issues = analyze_script(str(source))
     if not is_safe:
         msg = "Plugin contains unsafe elements:\n" + "\n".join(f"  - {i}" for i in issues)

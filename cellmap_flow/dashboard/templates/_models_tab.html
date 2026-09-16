@@ -105,8 +105,8 @@
         >
           <div class="accordion-body" id="serverConfigContainer">
             <div class="mb-2">
-              <label class="form-label" for="cfg_queue">Queue</label>
-              <input type="text" class="form-control form-control-sm" id="cfg_queue" />
+              <label class="form-label" for="cfg_queue">GPU Queue</label>
+              <select class="form-select form-select-sm" id="cfg_queue"></select>
             </div>
             <div class="mb-2">
               <label class="form-label" for="cfg_charge_group">Charge Group</label>
@@ -127,14 +127,21 @@
       </div>
     </div>
 
-    <!-- Submit button -->
-    <button
-      type="button"
-      class="btn btn-primary mt-3"
-      id="submitModelsBtn"
-    >
-      Submit Models
-    </button>
+    <!-- GPU type + submit -->
+    <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
+      <div>
+        <label class="form-label mb-1" for="gpuQueueSelect">GPU</label>
+        <select
+          id="gpuQueueSelect"
+          class="form-select form-select-sm"
+          style="min-width: 20rem"
+        ></select>
+      </div>
+      <button type="button" class="btn btn-primary" id="submitModelsBtn">
+        Submit Models
+      </button>
+    </div>
+    <div id="gpuQueueHint" class="form-text mt-1"></div>
 
     <!-- Log area -->
     <div class="mt-3">
@@ -242,6 +249,97 @@
         });
       });
 
+      // GPU queue picker.
+      //
+      // LSF is the only thing that knows whether a queue is open and how far
+      // behind it is, and that changes without anyone here doing something:
+      // an admin takes nodes out for maintenance, or a thousand jobs land. So
+      // re-ask on a timer rather than only at page load. The server caches the
+      // answer, so several open dashboards don't multiply into a query storm.
+      const GPU_QUEUE_POLL_MS = 60000;
+      let gpuQueueCurrent = "";
+
+      function gpuQueueSelects() {
+        return ["gpuQueueSelect", "cfg_queue"]
+          .map(function (id) { return document.getElementById(id); })
+          .filter(Boolean);
+      }
+
+      function renderGpuQueues(data) {
+        const queues = (data && data.queues) || [];
+        const known = queues.map(function (q) { return q.queue; });
+        gpuQueueSelects().forEach(function (sel) {
+          sel.innerHTML = "";
+          queues.forEach(function (q) {
+            const opt = document.createElement("option");
+            opt.value = q.queue;
+            // textContent, not innerHTML -- this string is assembled from
+            // LSF output.
+            opt.textContent =
+              q.label + (q.description ? " — " + q.description : "");
+            // A closed queue accepts submissions and never starts them, which
+            // looks exactly like a slow job. Don't offer it.
+            opt.disabled = q.open === false;
+            sel.appendChild(opt);
+          });
+          // A yaml can name any queue, so the configured one may be outside
+          // the three we offer. Show it rather than silently moving the user
+          // onto a different GPU than the one they asked for.
+          if (gpuQueueCurrent && known.indexOf(gpuQueueCurrent) === -1) {
+            const opt = document.createElement("option");
+            opt.value = gpuQueueCurrent;
+            opt.textContent = gpuQueueCurrent + " (current)";
+            sel.appendChild(opt);
+          }
+          if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
+        });
+        const hint = document.getElementById("gpuQueueHint");
+        if (hint) {
+          hint.textContent =
+            data && data.available === false
+              ? data.reason || "Queue availability is unavailable."
+              : "";
+        }
+      }
+
+      function refreshGpuQueues() {
+        fetch("/api/gpu-queues")
+          .then(function (r) { return r.json(); })
+          .then(renderGpuQueues)
+          .catch(function () {
+            // Transient; the next poll retries. Leave the current options up
+            // rather than blanking the picker under the user.
+          });
+      }
+
+      function setGpuQueue(value) {
+        if (!value) return;
+        gpuQueueCurrent = value;
+        gpuQueueSelects().forEach(function (sel) {
+          if (sel.value !== value) sel.value = value;
+        });
+        fetch("/api/server-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ queue: value }),
+        }).catch(function () {});
+      }
+
+      gpuQueueSelects().forEach(function (sel) {
+        sel.addEventListener("change", function () { setGpuQueue(sel.value); });
+      });
+
+      // Seed from the configured queue before drawing options, so an
+      // out-of-list queue survives the first render.
+      fetch("/api/server-config")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { gpuQueueCurrent = (data && data.queue) || ""; })
+        .catch(function () {})
+        .then(function () {
+          refreshGpuQueues();
+          setInterval(refreshGpuQueues, GPU_QUEUE_POLL_MS);
+        });
+
       // Server Config: load values when accordion opens
       let serverConfigLoaded = false;
       document.getElementById("collapse_server_config").addEventListener("show.bs.collapse", function () {
@@ -253,7 +351,12 @@
         fetch("/api/server-config")
           .then((res) => res.json())
           .then((data) => {
-            document.getElementById("cfg_queue").value = data.queue || "";
+            // Go through the shared value so the accordion and the picker
+            // next to Submit cannot drift apart.
+            gpuQueueCurrent = data.queue || gpuQueueCurrent;
+            gpuQueueSelects().forEach(function (sel) {
+              if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
+            });
             document.getElementById("cfg_charge_group").value = data.charge_group || "";
             document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
             document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
@@ -316,6 +419,11 @@
           .then((data) => {
             console.log("Server response:", data);
             logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+            // Loading a model is the point at which advice is most useful, and
+            // this path never goes through /api/process. The jobs start on
+            // background threads, so refreshModelAdvice polls rather than
+            // assuming the server is already up.
+            if (window.refreshModelAdvice) window.refreshModelAdvice();
           })
           .catch((err) => {
             console.error("Error:", err);

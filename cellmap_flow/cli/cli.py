@@ -10,9 +10,7 @@ import inspect
 import sys
 from typing import Type, Dict
 from typing import Type, get_type_hints
-from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
-from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.utils.cli_utils import (
@@ -49,9 +47,21 @@ def cli(log_level):
     Automatically generates commands for all available ModelConfig subclasses.
 
     Examples:
-        cellmap_flow_v2 dacapo -r my_run -i 100 -d /path/to/data
-        cellmap_flow_v2 script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_v2 cellmap -f /path/to/model -n mymodel -d /path/to/data
+
+    \b
+      cellmap_flow dacapo -r my_run -i 100 -d /path/to/data
+      cellmap_flow script -s /path/to/script.py -d /path/to/data
+      cellmap_flow cellmap -f /path/to/model -n mymodel -d /path/to/data
+
+    Related commands, each with its own --help:
+
+    \b
+      cellmap_flow_yaml                run one or more models from a YAML config
+      cellmap_flow_view                open the viewer, pick models in the UI
+      cellmap_flow_blockwise           run a model over a whole volume to disk
+      cellmap_flow_blockwise_multiple  the same for several models
+      cellmap_flow_server              serve one model (usually launched for you)
+      cellmap_flow_app                 serve the dashboard against a running server
     """
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 
@@ -136,7 +146,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     Generic run command that accepts any model type with dynamic configuration.
 
     Example:
-        cellmap_flow_v2 run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
+        cellmap_flow run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
     """
     # Fall back to cached values if not provided
     if project is None:
@@ -192,6 +202,8 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
 
     # Run the server check or full inference
     if server_check:
+        from cellmap_flow.server import CellMapFlowServer
+
         server = CellMapFlowServer(final_data_path, model_config)
         server._chunk_impl(None, None, 2, 2, 2, None)
         click.echo("Server check passed")
@@ -199,6 +211,8 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
         command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
         logger.info(f"Executing command: {command}")
         start_hosts(command, queue, project, model_config.name or model_type)
+        from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+
         neuroglancer_url = generate_neuroglancer_url(final_data_path)
         click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 
@@ -261,6 +275,8 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
 
         # Run server check or full inference
         if server_check:
+            from cellmap_flow.server import CellMapFlowServer
+
             server = CellMapFlowServer(final_data_path, model_config)
             server._chunk_impl(None, None, 2, 2, 2, None)
             click.echo("Server check passed")
@@ -269,6 +285,10 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             start_hosts(command, queue, project, base_name)
+            from cellmap_flow.utils.neuroglancer_utils import (
+                generate_neuroglancer_url,
+            )
+
             neuroglancer_url = generate_neuroglancer_url(final_data_path)
             click.echo(f"Neuroglancer URL: {neuroglancer_url}")
 

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def get_model_type_mapping() -> Dict[str, type]:
     """
     Get mapping of CLI-friendly names to ModelConfig classes.
-    Uses the same logic as cli_v2 for consistency.
+    Uses the same logic as the cellmap_flow CLI for consistency.
     
     Returns:
         Dictionary mapping model type names to ModelConfig classes
@@ -199,7 +199,7 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
 def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
     """
     Given model entries from YAML, instantiate the correct ModelConfig objects.
-    Uses dynamic discovery like cli_v2 instead of hardcoded if/else chains.
+    Uses dynamic discovery like the cellmap_flow CLI instead of hardcoded if/else chains.
     
     YAML format:
     models:

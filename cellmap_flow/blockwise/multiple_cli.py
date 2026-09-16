@@ -1,6 +1,5 @@
 import click
 import logging
-from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -8,6 +7,8 @@ logger = logging.getLogger(__name__)
 @click.argument("yaml_configs", nargs=-1, required=True, type=click.Path(exists=True))
 def cli(yaml_configs: tuple) -> None:
     """Process multiple YAML configuration files."""
+    from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
+
     for yaml_config in yaml_configs:
         logger.info(f"Processing: {yaml_config}")
         process = CellMapFlowBlockwiseProcessor(yaml_config, create=True)

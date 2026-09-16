@@ -71,7 +71,7 @@ from cellmap_flow.finetune.crop_loader import (
     remap_labels,
 )
 from cellmap_flow.finetune.virtual_dataset import write_manifest
-from cellmap_flow.globals import current_input_norm_config, g
+from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +149,11 @@ def _create_session_annotation_volume(
         input_voxel_size=eff_input_vs,
         claimed_output_voxel_size=claimed_output_voxel_size,
         claimed_input_voxel_size=claimed_input_voxel_size,
-        # Snapshot whatever input_norm the dashboard is currently using so
-        # the trainer can reproduce inference-side normalization.
+        # Snapshot whatever input_norm/postprocess the dashboard is currently
+        # using so the trainer can reproduce inference-side normalization and
+        # the generated finetuned yaml can reproduce output postprocessing.
         input_norm_config=current_input_norm_config(),
+        postprocess_config=current_postprocess_config(),
     )
     if not success:
         raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
@@ -458,7 +460,9 @@ def load_crops_from_yaml_response(data):
                 raw_dataset_path=raw_dataset_path,
                 corrections_dir=corrections_dir,
                 model_name=model_name,
-                config=model_config.config,
+                # Only shapes and voxel sizes are read from this; the running
+                # server can supply them without building the model here.
+                config=model_geometry_config(model_name) or model_config.config,
             )
             created_volume = True
         _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))
@@ -536,6 +540,7 @@ def load_crops_from_yaml_response(data):
             "jitter_voxels": crops_config.jitter_voxels,
             "seed": crops_config.seed,
             "input_norm": current_input_norm_config(),
+            "postprocess": current_postprocess_config(),
             # None → auto-balance dense vs sparse pools (50/50 when both
             # exist, else use the surviving pool).
             "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
