@@ -35,11 +35,11 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     with torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
-        logger.error(f"Predicting with model {type(config.model).__name__} on device {device}")
-        logger.error(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
+        logger.debug(f"Predicting with model {type(config.model).__name__} on device {device}")
+        logger.debug(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
         raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
         result = config.model.forward(raw_input_torch).cpu().numpy()[0]
-        logger.error(f"Output shape: {result.shape}, dtype: {result.dtype}")
+        logger.debug(f"Output shape: {result.shape}, dtype: {result.dtype}")
     return result
 
 class Inferencer:
@@ -49,7 +49,7 @@ class Inferencer:
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
-            logger.error("No GPU available, using CPU")
+            logger.warning("No GPU available, using CPU")
         # torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
         # torch.backends.cudnn.enabled = True
         # torch.backends.cudnn.benchmark = True  # Find best algorithm for the hardware
@@ -80,7 +80,7 @@ class Inferencer:
             logger.error("Model is not loaded, cannot optimize")
             return
         if not isinstance(self.model_config.config.model, torch.nn.Module):
-            logger.error("Model is not a nn.Module, we only optimize torch models")
+            logger.warning("Model is not a nn.Module, we only optimize torch models")
             return
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
