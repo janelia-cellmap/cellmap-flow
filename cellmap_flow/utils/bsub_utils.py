@@ -240,6 +240,9 @@ class LSFJob(Job):
         super().__init__(model_name)
         self.job_id = job_id
         self.log_file = log_file
+        # Set by get_status() to say whether bjobs actually answered; see
+        # observed_status().
+        self._bjobs_answered = False
     
     def kill(self) -> None:
         """Terminate the LSF job using bkill."""
@@ -278,8 +281,21 @@ class LSFJob(Job):
             logger.debug(f"bpeek {self.job_id} failed: {e}")
         return self.log_file and _tail(self.log_file, max_chars)
 
+    def observed_status(self) -> Optional[JobStatus]:
+        """The status bjobs actually reported, or None if it could not say.
+
+        get_status() falls back to self.status, which starts out RUNNING. That
+        is fine for display but wrong for decisions: a job that never started
+        reads as RUNNING the moment bjobs is unreadable, so a caller asking
+        "did this actually leave the queue?" would be told yes. Callers that
+        need the difference use this instead.
+        """
+        reported = self.get_status()
+        return reported if self._bjobs_answered else None
+
     def get_status(self) -> JobStatus:
         """Query LSF for job status using bjobs."""
+        self._bjobs_answered = False
         try:
             result = subprocess.run(
                 ["bjobs", "-noheader", self.job_id],
@@ -296,6 +312,7 @@ class LSFJob(Job):
             if not output:
                 return self.status
             
+            self._bjobs_answered = True
             # Parse bjobs output (format: JOBID USER STAT QUEUE FROM_HOST EXEC_HOST JOB_NAME SUBMIT_TIME)
             fields = output.split()
             if len(fields) >= 3:
@@ -338,6 +355,10 @@ class LSFJob(Job):
         attempts = 0
         max_attempts = timeout * 2  # Check every 0.5 seconds
         pending_time = 0
+        # pending_time is reset when the job starts, so it cannot be used to
+        # report how long the job waited. Keep a running total that is never
+        # reset -- otherwise a job that queued 5.5s reports "0s of it queued".
+        total_pending = 0.0
         warned_pending_30s = False
         warned_pending_60s = False
         
@@ -349,6 +370,7 @@ class LSFJob(Job):
                 # Track pending time and warn if too long
                 if current_status == JobStatus.PENDING:
                     pending_time += 0.5
+                    total_pending += 0.5
                     
                     if pending_time >= 30 and not warned_pending_30s:
                         logger.warning(f"Job {self.job_id} has been pending for {pending_time}s. "
@@ -404,7 +426,7 @@ class LSFJob(Job):
                         logger.info(
                             f"Found host: {host} "
                             f"({time.time() - wait_started:.0f}s after submission, "
-                            f"{pending_time:.0f}s of it queued)"
+                            f"{total_pending:.0f}s of it queued)"
                         )
                         return host
                     
@@ -487,8 +509,10 @@ def gpu_queue_candidates(preferred):
     not accepting work are dropped entirely: they take submissions and never
     run them, which is indistinguishable from a very slow job.
 
-    Falls back to the fixed GPU list when LSF cannot be queried, so this never
-    returns fewer options than the caller asked for.
+    When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
+    When it can, queues that are not accepting work are dropped, so the result
+    is deliberately shorter than the fixed list -- those options exist but
+    would never start.
     """
     from cellmap_flow.utils.lsf_queues import GPU_QUEUES, gpu_queue_availability
 
@@ -700,7 +724,15 @@ def start_hosts(
             # and crashed will crash the same way everywhere else, so keep it
             # and let the caller surface the failure instead of burning
             # through every queue reproducing it.
-            if job.get_status() != JobStatus.PENDING:
+            #
+            # observed_status(), not get_status(): the latter falls back to
+            # self.status, which starts out RUNNING, so an unreadable bjobs
+            # would look like "it started" and stop the fallback exactly when
+            # LSF is flaky. Unknown is treated as still queued -- the job has
+            # produced no host in PENDING_FALLBACK_SECONDS, so there is
+            # nothing to lose by trying elsewhere.
+            observed = job.observed_status()
+            if observed is not None and observed != JobStatus.PENDING:
                 g.queue = candidate
                 g.jobs.append(job)
                 return job
