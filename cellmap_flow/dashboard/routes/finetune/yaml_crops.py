@@ -29,6 +29,8 @@ import zarr
 from flask import jsonify
 from pydantic import ValidationError
 
+from cellmap_flow.utils.server_info import model_geometry_config
+
 # Module-level progress tracker, keyed by load_id supplied by the client.
 # Each value is the most recent progress snapshot for that load + its
 # final result (or None while in progress). Old entries are evicted after
