@@ -6,6 +6,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from cellmap_flow.globals import g, LogHandler
+from cellmap_flow.utils.logging_setup import LOG_DATEFMT, LOG_FORMAT
 from cellmap_flow.dashboard.routes.logging_routes import logging_bp
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
@@ -24,11 +25,23 @@ static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 CORS(app)
 
-# Add custom log handler to logger
-log_handler = LogHandler()
-log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(log_handler)
-logger.setLevel(logging.INFO)
+# Feed the dashboard's log panel.
+#
+# This was attached to logging.getLogger(__name__), so the panel only ever
+# received records emitted by app.py itself -- which is almost nothing.
+# Everything from finetune_utils, bsub_utils and the route modules went to
+# the terminal and nowhere else, so reading a failure meant having shell
+# access to whatever machine the dashboard happened to land on.
+#
+# Attach to the package logger instead: every cellmap_flow.* record
+# propagates up to it, while werkzeug's per-request lines -- which would
+# swamp the panel -- do not.
+package_logger = logging.getLogger("cellmap_flow")
+if not any(isinstance(h, LogHandler) for h in package_logger.handlers):
+    log_handler = LogHandler()
+    log_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
+    package_logger.addHandler(log_handler)
+package_logger.setLevel(logging.INFO)
 
 # Register all blueprints
 app.register_blueprint(logging_bp)
