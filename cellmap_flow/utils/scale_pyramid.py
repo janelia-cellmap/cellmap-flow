@@ -67,7 +67,15 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
                 continue  # too small to be representative; try a finer level
             if n_voxels > MAX_VOXELS:
                 break  # finer levels are only bigger -- stop rather than read them
-            arr = np.asarray(image.to_ndarray_ts())
+            # Index the store directly, the way neuroglancer's LocalVolume
+            # does, so LazyNormalization.__getitem__ runs and the sample is in
+            # the same space as what gets displayed. to_ndarray_ts() would
+            # silently give unnormalized data here: its roi=None branch returns
+            # the underlying store's read() without applying g.input_norms
+            # (only the roi branch does), so the percentiles would land in raw
+            # uint8 space while the layer shows [-1, 1] -- a 0-168 range over
+            # data that never exceeds 1, i.e. an all-black image.
+            arr = np.asarray(image.ts[...])
             arr = arr[np.isfinite(arr)]
             if arr.size == 0:
                 continue
