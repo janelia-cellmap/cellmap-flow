@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -15,7 +16,13 @@ from cellmap_flow.norm.input_normalize import (
 )
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
 from cellmap_flow.utils.load_py import load_safe_config
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.utils.output_probe import output_display_range
+from cellmap_flow.utils.scale_pyramid import (
+    PREDICTION_COLORS,
+    get_raw_layer,
+    prediction_shader,
+)
+from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import encode_to_str, ARGS_KEY
 
 logger = logging.getLogger(__name__)
@@ -44,23 +51,22 @@ def _save_shaders_from_viewer() -> None:
         logger.warning(f"Could not save shaders from viewer: {exc}")
 
 
-def _norm_signature(norms) -> str:
-    """Stable key identifying which input normalization a shader belongs to.
+def _chain_signature(steps) -> str:
+    """Stable key for a list of normalizers or postprocessors.
 
-    Built from the deserialized normalizer objects rather than the raw request
-    dict, so the before/after comparison is apples to apples -- the two differ
-    in shape (defaults filled in, ``name`` added) even when they mean the same
-    thing.
+    Built from the deserialized objects rather than the raw request dict, so a
+    before/after comparison is apples to apples -- the two differ in shape
+    (defaults filled in, ``name`` added) even when they mean the same thing.
     """
     try:
         return json.dumps(
-            [n.to_dict() for n in (norms or []) if hasattr(n, "to_dict")],
+            [x.to_dict() for x in (steps or []) if hasattr(x, "to_dict")],
             sort_keys=True,
             default=str,
         )
     except Exception as exc:
-        logger.debug(f"Could not build a normalization signature: {exc}")
-        return repr(norms)
+        logger.debug(f"Could not build a chain signature: {exc}")
+        return repr(steps)
 
 
 def is_output_segmentation():
@@ -97,6 +103,37 @@ def validate_pipeline_config(config):
         return {"valid": False, "error": str(e)}
 
 
+_COLOR_RE = re.compile(r'color\(default="([^"]+)"\)')
+
+
+def _default_prediction_shader(model, host, previous_shader=None):
+    """Build a prediction shader over the range the configured chain produces.
+
+    Unlike the raw layer there is nothing to sample here -- reading the model's
+    output means running inference -- but there is nothing to sample *for*
+    either: the chain's last step fixes the range exactly. See
+    output_probe.output_display_range.
+    """
+    # Keep whatever colour the layer already had, so a recomputed range does
+    # not also reshuffle the colours the user is navigating by.
+    match = _COLOR_RE.search(previous_shader or "")
+    if match:
+        color = match.group(1)
+    else:
+        names = [getattr(j, "model_name", None) for j in g.jobs]
+        index = names.index(model) if model in names else 0
+        color = PREDICTION_COLORS[index % len(PREDICTION_COLORS)]
+
+    try:
+        info = fetch_model_info(host)
+        steps = [p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")]
+        value_range = output_display_range(steps, info.get("output_class"))
+    except Exception as e:
+        logger.debug(f"Could not compute a display range for {model}: {e}")
+        value_range = None
+    return prediction_shader(color, value_range)
+
+
 @pipeline_bp.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
     equivalences_info = request.get_json()
@@ -130,7 +167,8 @@ def process():
         del data["custom_code"]
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
-    previous_norm_signature = _norm_signature(getattr(g, "input_norms", None))
+    previous_norm_signature = _chain_signature(getattr(g, "input_norms", None))
+    previous_post_signature = _chain_signature(getattr(g, "postprocess", None))
 
     logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
     g.input_norms = get_normalizations(data["input_norm"])
@@ -154,13 +192,30 @@ def process():
     # the old normalization would then map every voxel outside the new range,
     # showing solid black or white. Drop it and let get_raw_layer() recompute
     # percentiles through the normalizers now in effect.
-    if previous_norm_signature != _norm_signature(g.input_norms):
+    if previous_norm_signature != _chain_signature(g.input_norms):
         if g.shaders.pop("data", None) is not None:
             logger.info(
                 "Input normalization changed; recomputing the raw contrast "
                 "range instead of restoring the previous one"
             )
         g.shader_controls.pop("data", None)
+
+    # Prediction layers have the same problem for the same reason: their
+    # contrast range is a property of the postprocessing chain, and adding a
+    # DefaultPostprocessor moves the output from [0, 1] to 0-255. A restored
+    # [0, 1] range over 0-255 data renders every voxel saturated.
+    dropped_shaders = {}
+    postprocess_changed = previous_post_signature != _chain_signature(g.postprocess)
+    if postprocess_changed:
+        for job in g.jobs:
+            name = getattr(job, "model_name", None)
+            dropped_shaders[name] = g.shaders.pop(name, None)
+            if dropped_shaders[name] is not None:
+                logger.info(
+                    f"Postprocessing changed; recomputing the contrast range "
+                    f"for {name}"
+                )
+            g.shader_controls.pop(name, None)
 
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(g.dataset_path)
@@ -178,6 +233,7 @@ def process():
             model = job.model_name
             host = job.host
             st_data = encode_to_str(data)
+            previous_shader = dropped_shaders.get(model)
             shader = g.shaders.get(model)
 
             if is_output_segmentation():
@@ -186,6 +242,8 @@ def process():
                 )
             else:
                 kwargs = {"source": f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"}
+                if not shader:
+                    shader = _default_prediction_shader(model, host, previous_shader)
                 if shader:
                     kwargs["shader"] = shader
                 shader_controls = g.shader_controls.get(model)

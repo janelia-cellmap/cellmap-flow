@@ -132,6 +132,62 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
     return params
 
 
+def output_display_range(postprocess_steps, output_class):
+    """The value range a configured chain produces, for the viewer's shader.
+
+    The raw layer has to sample percentiles because its distribution is
+    unknown. A postprocessed output does not: the last step's arithmetic fixes
+    the range exactly, so this is both cheaper and more accurate than sampling
+    would be -- and sampling would mean running inference purely to choose a
+    display range.
+
+    ``postprocess_steps`` is a list of ``to_dict()`` dicts, so the real
+    configured parameters are used rather than assumed defaults.
+
+    Returns (lo, hi), or None when the chain leaves the range undetermined --
+    an unbounded model output with nothing applied, where logits could be any
+    scale. Callers should leave neuroglancer's own range controls to it there.
+    """
+    rng = _CLASS_RANGE.get(output_class)
+
+    for step in postprocess_steps or []:
+        name = step.get("name")
+        if name == "SigmoidPostprocessor":
+            rng = (0.0, 1.0)
+        elif name == "ThresholdPostprocessor":
+            rng = (0.0, 1.0)
+        elif name == "DefaultPostprocessor":
+            # Mirrors DefaultPostprocessor._process: clip, shift, scale, and
+            # land in uint8.
+            try:
+                clip_min = float(step.get("clip_min", -1.0))
+                clip_max = float(step.get("clip_max", 1.0))
+                bias = float(step.get("bias", 1.0))
+                multiplier = float(step.get("multiplier", 127.5))
+                # Clip against what actually arrives, not just the configured
+                # bounds: after a sigmoid, clip_min=-1 is never reached, so the
+                # output starts at 127.5 rather than 0 and the display would
+                # otherwise waste half its range on values that cannot occur.
+                if rng is not None:
+                    clip_min = max(clip_min, rng[0])
+                    clip_max = min(clip_max, rng[1])
+                lo = (clip_min + bias) * multiplier
+                hi = (clip_max + bias) * multiplier
+                rng = (max(0.0, min(lo, hi)), min(255.0, max(lo, hi)))
+            except (TypeError, ValueError):
+                rng = (0.0, 255.0)
+        elif name == "ChannelSelection":
+            pass  # picks channels, does not rescale
+        else:
+            # LambdaPostprocessor evaluates arbitrary code; the segmentation
+            # ones produce label ids that get a SegmentationLayer anyway.
+            rng = None
+
+    if rng is None or rng[1] <= rng[0]:
+        return None
+    return rng
+
+
 def review_postprocess(
     output_class: str,
     postprocess_names,

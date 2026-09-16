@@ -3,7 +3,13 @@ import itertools
 import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.utils.output_probe import output_display_range
+from cellmap_flow.utils.scale_pyramid import (
+    PREDICTION_COLORS,
+    get_raw_layer,
+    prediction_shader,
+)
+from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.ds import find_closest_scale, get_scale_info, _open_zarr
 from cellmap_flow.utils import zarr_v3
 from cellmap_flow.globals import g
@@ -87,24 +93,25 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     with g.viewer.txn() as s:
         g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
         s.layers["data"] = g.raw
-        colors = [
-            "red",
-            "green",
-            "blue",
-            "yellow",
-            "purple",
-            "orange",
-            "cyan",
-            "magenta",
-        ]
-        color_cycle = itertools.cycle(colors)
+        color_cycle = itertools.cycle(PREDICTION_COLORS)
         for job in g.jobs:
             model = job.model_name
             host = job.host
             color = next(color_cycle)
-            default_shader = f"""#uicontrol invlerp normalized(range=[0.5, 0.5], window=[0, 1]);
-    #uicontrol vec3 color color(default="{color}");
-    void main(){{emitRGB(color * normalized());}}"""
+            # Over the range the postprocessing chain actually produces. The
+            # previous default was range=[0.5, 0.5]: lo == hi turns invlerp
+            # into a step at 0.5, so after a DefaultPostprocessor (0-255) the
+            # whole prediction rendered as solid colour.
+            try:
+                info = fetch_model_info(host)
+                steps = [
+                    p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
+                ]
+                value_range = output_display_range(steps, info.get("output_class"))
+            except Exception as e:
+                logger.debug(f"Could not compute a display range for {model}: {e}")
+                value_range = None
+            default_shader = prediction_shader(color, value_range)
             shader = g.shaders.get(model, default_shader)
             if model not in g.shaders:
                 g.shaders[model] = default_shader

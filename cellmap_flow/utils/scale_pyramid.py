@@ -29,6 +29,35 @@ RAW_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window
 void main(){{{{emitRGB(color * normalized());}}}}"""
 
 
+PREDICTION_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+#uicontrol vec3 color color(default="{color}");
+void main(){{emitRGB(color * normalized());}}"""
+
+PREDICTION_COLORS = [
+    "red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta",
+]
+
+
+def prediction_shader(color, value_range=None):
+    """Shader for a model output layer, over the range the chain produces.
+
+    Falls back to [0, 1] when the range is undetermined. That is a guess, but
+    the previous default was ``range=[0.5, 0.5]`` -- lo == hi makes invlerp a
+    step function rather than a ramp, so every value above 0.5 rendered as
+    solid colour. After a DefaultPostprocessor (0-255) that is the entire
+    prediction.
+    """
+    if value_range is None:
+        lo, hi = 0.0, 1.0
+    else:
+        lo, hi = (float(v) for v in value_range)
+    # Leave the slider room to move beyond the computed range.
+    pad = (hi - lo) * 0.5 or 1.0
+    return PREDICTION_SHADER.format(
+        lo=lo, hi=hi, wlo=lo - pad, whi=hi + pad, color=color
+    )
+
+
 def _dtype_default_range(image):
     """Fallback display range when percentiles can't be computed."""
     try:
