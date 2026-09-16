@@ -1734,7 +1734,17 @@ document.addEventListener("DOMContentLoaded", function () {
       clearInterval(statusPollingInterval);
     }
 
+    // The callback below is async, so clearInterval does not stop ticks that
+    // are already suspended on their fetch. Without these guards a failed job
+    // produced one modal per in-flight tick, each of which had to be
+    // dismissed. terminalNotified makes the notification fire once; pollBusy
+    // stops ticks from overlapping in the first place.
+    let terminalNotified = false;
+    let pollBusy = false;
+
     statusPollingInterval = setInterval(async () => {
+      if (pollBusy) return;
+      pollBusy = true;
       try {
         const response = await fetch(`/api/finetune/job/${jobId}/status`);
         const data = await response.json();
@@ -1818,14 +1828,19 @@ document.addEventListener("DOMContentLoaded", function () {
           clearInterval(statusPollingInterval);
           eventSource?.close();
 
-          showNotification(
-            "Training " + data.status,
-            "Check logs for details.",
-            "error"
-          );
+          if (!terminalNotified) {
+            terminalNotified = true;
+            showNotification(
+              "Training " + data.status,
+              "Check the job log below for the traceback.",
+              "error"
+            );
+          }
         }
       } catch (error) {
         console.error("Status polling error:", error);
+      } finally {
+        pollBusy = false;
       }
     }, 3000);  // Poll every 3 seconds
   }

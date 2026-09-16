@@ -328,7 +328,13 @@ class LSFJob(Job):
             return self.host
         
         logger.info(f"Monitoring LSF job {self.job_id} for host information...")
-        
+
+        # Model load dominates this wait -- weights off /nrs, a torch.export,
+        # sometimes a HuggingFace fetch -- and it is the part people ask about
+        # when a submit "takes a while". Report it rather than leaving the gap
+        # between submission and the first chunk unaccounted for.
+        wait_started = time.time()
+
         attempts = 0
         max_attempts = timeout * 2  # Check every 0.5 seconds
         pending_time = 0
@@ -395,7 +401,11 @@ class LSFJob(Job):
                     host = extract_host_from_output(output)
                     if host:
                         self.host = host
-                        logger.info(f"Found host: {host}")
+                        logger.info(
+                            f"Found host: {host} "
+                            f"({time.time() - wait_started:.0f}s after submission, "
+                            f"{pending_time:.0f}s of it queued)"
+                        )
                         return host
                     
                     # Check for errors
