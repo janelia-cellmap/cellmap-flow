@@ -6,6 +6,7 @@ and creates CLI commands based on their __init__ parameters.
 import os
 import click
 import logging
+from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import sys
 from typing import Type, Dict
@@ -63,7 +64,7 @@ def cli(log_level):
       cellmap_flow_server              serve one model (usually launched for you)
       cellmap_flow_app                 serve the dashboard against a running server
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()))
+    configure_logging(getattr(logging, log_level.upper()))
 
 
 @cli.command(name="list-models")

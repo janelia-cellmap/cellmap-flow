@@ -5,6 +5,7 @@ and creates server commands based on their __init__ parameters.
 
 import click
 import logging
+from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import sys
 from typing import Type, Dict, get_type_hints
@@ -43,7 +44,7 @@ def cli(log_level):
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
         cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
+    configure_logging(getattr(logging, log_level.upper()))
 
 
 @cli.command(name="list-models")
