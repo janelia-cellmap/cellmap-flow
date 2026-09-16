@@ -22,10 +22,10 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.utils.model_geometry import resolve_model_geometry
 from cellmap_flow.utils.server_info import (
     fetch_model_info,
     model_geometry,
-    model_geometry_config,
     running_job_host,
 )
 
@@ -191,7 +191,7 @@ def create_annotation_crop_response(data):
         # server can report in milliseconds -- and is what made "create
         # annotation volume" feel slow. model_config.config stays as the
         # fallback for when no server is up.
-        config = model_geometry_config(model_name) or model_config.config
+        config = resolve_model_geometry(model_name, model_config)
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         input_voxel_size = np.array(config.input_voxel_size)
@@ -282,7 +282,7 @@ def create_annotation_volume_response(data):
         # server can report in milliseconds -- and is what made "create
         # annotation volume" feel slow. model_config.config stays as the
         # fallback for when no server is up.
-        config = model_geometry_config(model_name) or model_config.config
+        config = resolve_model_geometry(model_name, model_config)
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         claimed_input_voxel_size = np.array(config.input_voxel_size)
