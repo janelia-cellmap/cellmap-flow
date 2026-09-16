@@ -808,6 +808,7 @@ def sync_all_annotations_from_minio(force: bool = True):
     zarrs = s3.ls(minio_state["bucket"])
     zarr_ids = [Path(c).name.replace(".zarr", "") for c in zarrs if c.endswith(".zarr")]
     synced = 0
+    failed = 0
     for zid in zarr_ids:
         try:
             zarr_name = f"{zid}.zarr"
@@ -818,11 +819,26 @@ def sync_all_annotations_from_minio(force: bool = True):
                     if sync_annotation_volume_from_minio(zid, force=force):
                         synced += 1
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+            # Not necessarily a problem -- a crop zarr has no root .zattrs and
+            # is handled below -- but silently swallowing this hid real
+            # failures behind a count that looked like a quiet steady state.
+            logger.debug(f"Could not read root attrs for {zid}: {e}")
+            failed += 1
         if sync_annotation_from_minio(zid, force=force):
             synced += 1
-    logger.info(f"Synced {synced}/{len(zarr_ids)} annotations")
+
+    # "Synced 0/1" counted volumes that *changed*, so the healthy idle case
+    # and a broken sync printed the same line -- which is what made a real
+    # sync failure take a day to spot. Say which of the two this is.
+    unchanged = len(zarr_ids) - synced
+    if synced:
+        summary = f"{synced} updated, {unchanged} unchanged"
+    else:
+        summary = f"no changes ({len(zarr_ids)} checked)"
+    if failed:
+        summary += f", {failed} could not be read"
+    logger.info(f"Annotation sync: {summary}")
     return synced
 
 

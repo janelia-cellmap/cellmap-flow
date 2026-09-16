@@ -434,6 +434,8 @@ def load_crops_from_yaml_response(data):
                 done=False,
             )
 
+        started_at = time.time()
+
         def step(phase, message, **extra):
             """Report a setup step.
 
@@ -442,9 +444,15 @@ def load_crops_from_yaml_response(data):
             the annotation volume, starting MinIO. The UI sat on "Starting..."
             for all of it with no way to tell which step was running, or
             whether anything was running at all.
+
+            Each message carries elapsed time, so "this is slow" can be
+            answered with which step is slow rather than a guess.
             """
+            elapsed = time.time() - started_at
+            stamped = f"[{elapsed:.0f}s] {message}"
+            logger.info(stamped)
             if load_id:
-                _set_progress(load_id, phase=phase, message=message, **extra)
+                _set_progress(load_id, phase=phase, message=stamped, **extra)
 
         if not yaml_input:
             return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400

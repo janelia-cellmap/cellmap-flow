@@ -300,7 +300,27 @@ class FinetuneJobManager:
             command_parts += ["--offsets", str(offsets)]
 
         command = " ".join(shlex.quote(part) for part in command_parts)
-        return f"stdbuf -oL {command} 2>&1 | tee {shlex.quote(str(log_file))}"
+
+        # Put this interpreter's own lib directory first on the loader path.
+        #
+        # We launch sys.executable directly rather than through the
+        # environment's activation script, so nothing sets LD_LIBRARY_PATH for
+        # us -- and LSF runs the exec host's login shell first, which can put
+        # system paths ahead of ours. When that happens the system
+        # libstdc++.so.6 is loaded before anything from this environment, and
+        # the first extension module built against a newer toolchain fails
+        # with "version `CXXABI_1.3.15' not found" even though the
+        # environment ships a libstdc++ that has it. Seen with scipy pulled in
+        # via cellpose on a GCC 13+ build.
+        env_lib = os.path.join(sys.prefix, "lib")
+        loader_path = (
+            f"LD_LIBRARY_PATH={shlex.quote(env_lib)}"
+            '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
+        )
+        return (
+            f"{loader_path}stdbuf -oL {command} 2>&1 "
+            f"| tee {shlex.quote(str(log_file))}"
+        )
 
     def _build_submission_metadata(
         self,
