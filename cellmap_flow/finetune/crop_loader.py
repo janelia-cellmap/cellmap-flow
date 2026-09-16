@@ -149,6 +149,27 @@ def _read_voxel_size_and_offset(
     :func:`_read_voxel_size_and_offset_v3`, since zarr-python 2.x cannot open
     them at all.
     """
+    # zarr.open reports the path *inside* the store, which for a missing
+    # directory is the empty string -- "nothing found at path ''" names
+    # neither the crop nor the typo that caused it. A manifest listing
+    # .../rc_amphiuma-means-liver-1/... instead of .../jrc_amphiuma-.../ got
+    # exactly that, twice, with nothing to go on. Check first and say which
+    # path is missing, and how far down it stopped existing.
+    if not os.path.exists(zarr_path):
+        existing = zarr_path
+        while existing and not os.path.exists(existing):
+            parent = os.path.dirname(existing)
+            if parent == existing:
+                existing = ""
+                break
+            existing = parent
+        detail = (
+            f" The deepest part that does exist is {existing}."
+            if existing
+            else " None of that path exists."
+        )
+        raise FileNotFoundError(f"Crop path not found: {zarr_path}.{detail}")
+
     if zarr_v3.is_v3_container(zarr_path):
         return _read_voxel_size_and_offset_v3(zarr_path)
 
