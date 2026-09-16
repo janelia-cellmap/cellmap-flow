@@ -33,6 +33,48 @@ _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 # them.
 _last_annotated_regions = None
 
+# Keys pre-bound on every annotation layer we add, so the tools are reachable
+# without hunting for them in the tool palette first.
+#
+# Tool ids come from the voxel_annotation module in our neuroglancer fork
+# (src/voxel_annotation/base.ts). The keys must be a single capital letter --
+# neuroglancer rejects anything else, see TOOL_KEY_PATTERN in src/ui/tool.ts.
+ANNOTATION_TOOL_BINDINGS = {
+    "A": "vox-brush",
+    "F": "vox-flood-fill",
+}
+
+
+def _register_voxel_annotation_tools():
+    """Teach the python bindings about the fork's voxel-painting tools.
+
+    neuroglancer validates tool names against a registry built by
+    @export_tool, and only upstream's tools are in it -- assigning an
+    unregistered name raises KeyError. The voxel_annotation tools exist only
+    in our fork's frontend, so nothing ever registered them on this side.
+
+    Registering them here is additive: on a neuroglancer whose frontend does
+    not have these tools the binding is simply inert, which is the same
+    outcome as not setting it.
+    """
+    try:
+        from neuroglancer.viewer_state import Tool, tool_types
+    except Exception as e:  # pragma: no cover - neuroglancer always present
+        logger.debug(f"Could not register voxel annotation tools: {e}")
+        return
+
+    for tool_id in ANNOTATION_TOOL_BINDINGS.values():
+        if tool_id in tool_types:
+            continue
+        tool_types[tool_id] = type(
+            f"_{tool_id.replace('-', '_')}_Tool",
+            (Tool,),
+            {"__slots__": (), "TOOL_TYPE": tool_id},
+        )
+
+
+_register_voxel_annotation_tools()
+
 
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
@@ -314,7 +356,14 @@ def add_crop_to_viewer_response(data):
                 "url": f"s3+{minio_url}",
                 "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
             }
-            s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
+            layer = neuroglancer.SegmentationLayer(source=source_config)
+            try:
+                layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
+            except Exception as e:
+                # An older neuroglancer without tool_bindings should still get
+                # its layer; the keys just will not be pre-bound.
+                logger.warning(f"Could not pre-bind annotation tools: {e}")
+            s.layers[layer_name] = layer
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:
