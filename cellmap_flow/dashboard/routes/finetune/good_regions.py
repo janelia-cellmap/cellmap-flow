@@ -31,9 +31,12 @@ GOOD_REGIONS_LAYER = "good_regions"
 GOOD_REGIONS_FILENAME = "good_regions.json"
 
 # Used when neither the request nor the active volume says how big a region
-# should be. One model field of view is the natural unit -- it is exactly the
-# context a single training patch consumes.
-DEFAULT_REGION_SIZE_NM = 2848.0
+# should be. One model *output* patch is the natural unit: it is what you can
+# actually see and judge on screen, and it is the region a training patch
+# computes loss over. Sizing to the input field of view instead would claim
+# the model is right across 2848nm when you only looked at the middle 896nm
+# of it -- and would not match annotation crops, which are already write_shape.
+DEFAULT_REGION_SIZE_NM = 896.0
 
 
 def _active_volume():
@@ -86,13 +89,14 @@ def save_good_regions(regions):
 
 
 def _default_size_nm():
+    """One model output patch, in nm -- see DEFAULT_REGION_SIZE_NM."""
     volume = _active_volume() or {}
-    input_size = volume.get("input_size")
-    input_voxel_size = volume.get("input_voxel_size")
-    if input_size and input_voxel_size:
+    output_size = volume.get("output_size")
+    output_voxel_size = volume.get("output_voxel_size")
+    if output_size and output_voxel_size:
         try:
-            return (np.array(input_size, dtype=float)
-                    * np.array(input_voxel_size, dtype=float)).tolist()
+            return (np.array(output_size, dtype=float)
+                    * np.array(output_voxel_size, dtype=float)).tolist()
         except (TypeError, ValueError):
             pass
     return [DEFAULT_REGION_SIZE_NM] * 3
