@@ -133,21 +133,17 @@ class Flow:
             with open(models_path, "r") as f:
                 cls._instance.model_catalog = yaml.safe_load(f)
 
-            # Load server config from cache or use defaults
-            cached = load_server_config_cache()
-            if cached:
-                cls._instance.queue = cached.get("queue", SERVER_CONFIG_DEFAULTS["queue"])
-                cls._instance.charge_group = cached.get("charge_group", SERVER_CONFIG_DEFAULTS["charge_group"])
-                cls._instance.nb_cores_master = cached.get("nb_cores_master", SERVER_CONFIG_DEFAULTS["nb_cores_master"])
-                cls._instance.nb_cores_worker = cached.get("nb_cores_worker", SERVER_CONFIG_DEFAULTS["nb_cores_worker"])
-                cls._instance.nb_workers = cached.get("nb_workers", SERVER_CONFIG_DEFAULTS["nb_workers"])
-            else:
-                cls._instance.queue = SERVER_CONFIG_DEFAULTS["queue"]
-                cls._instance.charge_group = SERVER_CONFIG_DEFAULTS["charge_group"]
-                cls._instance.nb_cores_master = SERVER_CONFIG_DEFAULTS["nb_cores_master"]
-                cls._instance.nb_cores_worker = SERVER_CONFIG_DEFAULTS["nb_cores_worker"]
-                cls._instance.nb_workers = SERVER_CONFIG_DEFAULTS["nb_workers"]
-            cls._instance._server_config_cached = cached is not None
+            # Load server config from cache or use defaults.
+            #
+            # Drive this from SERVER_CONFIG_DEFAULTS rather than naming each
+            # key by hand. save_server_config() already iterates the same
+            # dict, so a key listed there but missing from a hand-written
+            # assignment raised AttributeError on save -- which is how adding
+            # "walltime" killed every yaml run at startup.
+            cached = load_server_config_cache() or {}
+            for key, default in SERVER_CONFIG_DEFAULTS.items():
+                setattr(cls._instance, key, cached.get(key, default))
+            cls._instance._server_config_cached = bool(cached)
             cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
             cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
