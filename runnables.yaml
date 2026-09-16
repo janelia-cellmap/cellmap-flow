@@ -6,10 +6,16 @@ requirements:
   - "pixi>=0.40"
 
 runnables:
+  # Keeps the id `run` so apps already added from this manifest keep working.
+  # The name and description previously described cellmap_flow_yaml while the
+  # command ran cellmap_flow_view; the command is the accurate half.
   - id: run
     type: service
-    name: Run Inference
-    description: Run model inference from a YAML configuration file using cellmap_flow_yaml.
+    name: Browse a Dataset
+    description: >-
+      Open a dataset in Neuroglancer with the CellMap Flow dashboard, then
+      pick models and postprocessing interactively. Start here if you do not
+      already have a configuration file.
     # conda_env: cellmap-flow
     command: pixi run cellmap_flow_view
     parameters:
@@ -17,6 +23,32 @@ runnables:
         name: Dataset Path
         type: directory
         description: Path to the EM dataset (e.g., Zarr file).
+        required: true
+
+    resources:
+      cpus: 4
+      memory: "32 GB"
+      walltime: "08:00"
+
+  - id: yaml
+    type: service
+    name: Run From a Config File
+    description: >-
+      Run inference from a YAML configuration that already names the dataset,
+      the models, and any normalization and postprocessing. Use this to
+      reproduce a previous session -- the dashboard's "Export Config" button
+      writes a file in exactly this format.
+    command: pixi run cellmap_flow_yaml
+    parameters:
+      # CONFIG_PATH is positional, so no flag. Fileglancer emits flagged
+      # parameters first and positional ones after, which is the order click
+      # expects here.
+      - name: Config File
+        type: file
+        exists: true
+        description: >-
+          YAML file describing the run: data_path, models, and optionally
+          queue, charge_group, wrap_raw and json_data.
         required: true
 
     resources:

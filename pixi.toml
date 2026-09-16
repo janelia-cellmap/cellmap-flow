@@ -116,6 +116,7 @@ docs = { features = ["docs"], solve-group = "docs" }
 postprocess = { features = ["postprocess"], solve-group = "postprocess" }
 
 [tasks]
+cellmap_flow_view = "cellmap_flow_view"
 cellmap_flow_yaml = "cellmap_flow_yaml"
 cellmap_flow_blockwise = "cellmap_flow_blockwise"
 cellmap_flow_blockwise_multiple = "cellmap_flow_blockwise_multiple"
