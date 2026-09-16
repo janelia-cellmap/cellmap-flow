@@ -22,7 +22,11 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
-from cellmap_flow.utils.server_info import fetch_model_info, model_geometry
+from cellmap_flow.utils.server_info import (
+    fetch_model_info,
+    model_geometry,
+    running_job_host,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,16 +72,9 @@ def _config_retry_blocked(name) -> bool:
     return until is not None and time.time() < until
 
 
-def _running_job_host(name):
-    for job in getattr(g, "jobs", []) or []:
-        if getattr(job, "model_name", None) == name:
-            return getattr(job, "host", None)
-    return None
-
-
 def _geometry_from_server(name):
     """Geometry from the running inference server, which already has the model."""
-    return model_geometry(fetch_model_info(_running_job_host(name)))
+    return model_geometry(fetch_model_info(running_job_host(name)))
 
 
 def _geometry_from_saved_pipeline(name):

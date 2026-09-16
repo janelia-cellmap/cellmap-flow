@@ -102,8 +102,10 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
             # previous default was range=[0.5, 0.5]: lo == hi turns invlerp
             # into a step at 0.5, so after a DefaultPostprocessor (0-255) the
             # whole prediction rendered as solid colour.
+            # One round trip, used for both the contrast range and the voxel
+            # size below.
+            info = fetch_model_info(host)
             try:
-                info = fetch_model_info(host)
                 steps = [
                     p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
                 ]
@@ -121,10 +123,19 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
             # is multiscale 6/12/24/...; we tell neuroglancer "treat the
             # output as 12nm" so it lines up).
             override_scales = None
-            mc = model_configs_by_name.get(model)
-            if mc is not None:
-                try:
-                    output_voxel_size = tuple(mc.config.output_voxel_size)
+            try:
+                # Prefer the running server's answer. mc.config would build the
+                # model here just to read a voxel size, which for a script model
+                # means downloading weights and taking a CUDA context -- it
+                # throws on a node without a free one, and the exception was
+                # swallowed, silently leaving the overlay misaligned.
+                output_voxel_size = info.get("output_voxel_size")
+                if not output_voxel_size:
+                    mc = model_configs_by_name.get(model)
+                    if mc is not None:
+                        output_voxel_size = mc.config.output_voxel_size
+                if output_voxel_size:
+                    output_voxel_size = tuple(output_voxel_size)
                     closest = get_raw_closest_scale(dataset_path, output_voxel_size)
                     if closest is not None and tuple(closest) != output_voxel_size:
                         override_scales = closest
@@ -132,8 +143,8 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
                             f"Model '{model}' output_voxel_size={output_voxel_size} "
                             f"overridden to closest raw scale {closest} for viewer overlay"
                         )
-                except Exception as e:
-                    logger.warning(f"Could not compute override scales for '{model}': {e}")
+            except Exception as e:
+                logger.warning(f"Could not compute override scales for '{model}': {e}")
 
             source = build_prediction_source(host, model, st_data, override_scales)
             layer_kwargs = {

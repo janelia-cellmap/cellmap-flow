@@ -460,7 +460,9 @@ def load_crops_from_yaml_response(data):
                 raw_dataset_path=raw_dataset_path,
                 corrections_dir=corrections_dir,
                 model_name=model_name,
-                config=model_config.config,
+                # Only shapes and voxel sizes are read from this; the running
+                # server can supply them without building the model here.
+                config=model_geometry_config(model_name) or model_config.config,
             )
             created_volume = True
         _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))

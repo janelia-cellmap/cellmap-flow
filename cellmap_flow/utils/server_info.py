@@ -12,6 +12,7 @@ submitted to. Ask it instead.
 """
 
 import logging
+from types import SimpleNamespace
 
 import requests
 
@@ -71,3 +72,35 @@ def model_geometry(info: dict):
     except Exception as e:
         logger.debug(f"Malformed model geometry {info}: {e}")
         return None
+
+
+def running_job_host(model_name):
+    """The host serving ``model_name``, if a job for it is up."""
+    from cellmap_flow.globals import g  # local: globals pulls in a lot
+
+    for job in getattr(g, "jobs", []) or []:
+        if getattr(job, "model_name", None) == model_name:
+            return getattr(job, "host", None)
+    return None
+
+
+GEOMETRY_FIELDS = (
+    "read_shape",
+    "write_shape",
+    "input_voxel_size",
+    "output_voxel_size",
+    "output_channels",
+)
+
+
+def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
+    """A stand-in for ``ModelConfig.config`` carrying geometry and nothing else.
+
+    Duck-types the real thing for callers that only read shapes and voxel
+    sizes, so they do not have to build the model to get them. Returns None
+    when no running server can answer, leaving the caller to fall back.
+    """
+    info = fetch_model_info(running_job_host(model_name), timeout)
+    if not info or not info.get("write_shape"):
+        return None
+    return SimpleNamespace(**{f: info[f] for f in GEOMETRY_FIELDS if f in info})
