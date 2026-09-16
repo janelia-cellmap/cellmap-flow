@@ -186,11 +186,17 @@ def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict
          the extra ``x*2-1`` on top of the 0-1 rescale.
       3. The raw dtype alone, giving [0, 1].
 
-    Returns ``{"input_norm": {...}, "reason": str, "confidence": str}``.
+    Returns ``{"input_norm": {...}, "order": [...], "reason", "confidence"}``.
+
+    ``order`` is redundant with the dict's insertion order but not with what
+    survives transport: Flask's jsonify sorts keys, which would silently turn
+    MinMax-then-Lambda into Lambda-then-MinMax -- i.e. apply ``x*2-1`` to raw
+    uint8 before the rescale. Callers must use ``order``.
     """
     if declared:
         return {
             "input_norm": declared,
+            "order": list(declared.keys()),
             "reason": "declared in the model's own metadata",
             "confidence": "high",
         }
@@ -220,6 +226,7 @@ def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict
         }
         return {
             "input_norm": norm,
+            "order": list(norm.keys()),
             "reason": (
                 f"framework is '{framework}'; DaCapo models are trained on "
                 f"inputs in [-1, 1], so {raw_dtype} is rescaled to [0,1] then "
@@ -230,6 +237,7 @@ def suggest_input_norm(framework=None, raw_dtype="uint8", declared=None) -> dict
 
     return {
         "input_norm": norm,
+        "order": list(norm.keys()),
         "reason": (
             f"no framework declared; defaulting to a plain {raw_dtype} rescale "
             "to [0, 1]. Check this against how the model was trained."

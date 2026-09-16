@@ -286,11 +286,70 @@
         });
       }
 
+      // Same idea for the input side. Normalizers carry parameter values, not
+      // just a name, so this fills those in as well as ticking the box.
+      function applyInputNormSuggestion(norms, order) {
+        const list = document.getElementById("inputNormList");
+        if (!list) return;
+        const names = order || Object.keys(norms || {});
+        list.querySelectorAll(".inputNormCheckbox").forEach(function (cb) {
+          const want = names.indexOf(cb.value) !== -1;
+          if (cb.checked !== want) {
+            cb.checked = want;
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        names.forEach(function (name) {
+          const params = norms[name] || {};
+          Object.keys(params).forEach(function (key) {
+            if (key === "name") return;
+            const inp = document.getElementById("inputNorm_" + name + "_" + key);
+            if (inp) inp.value = params[key];
+          });
+        });
+        names.slice().reverse().forEach(function (name) {
+          const item = list.querySelector('[data-normalizer="' + name + '"]');
+          if (item) list.insertBefore(item, list.firstChild);
+        });
+      }
+
+      function renderInputNormAdvice(m, box) {
+        const sug = m.input_norm_suggestion || {};
+        // input_norm_matches is null when the suggestion is only the dtype
+        // default -- no declared framework to go on -- so stay quiet then
+        // rather than second-guess a hand-tuned config.
+        if (m.input_norm_matches !== false || !sug.input_norm) return;
+        // sug.order, not Object.keys: jsonify sorts keys and the order
+        // of these steps changes what they compute.
+        const names = sug.order || Object.keys(sug.input_norm);
+        const div = document.createElement("div");
+        div.className = "alert alert-info";
+        div.innerHTML = "<strong>Suggested input normalization</strong> for <code>"
+                      + (m.model || "model") + "</code><br>" + (sug.reason || "")
+                      + "<br><small>confidence: " + (sug.confidence || "unknown")
+                      + "; currently set: "
+                      + ((m.configured_input_norm || []).join(" \u2192 ") || "none")
+                      + "</small>";
+        const btn = document.createElement("button");
+        btn.className = "btn btn-sm btn-primary ms-2 mt-2";
+        btn.textContent = "Apply: " + names.join(" \u2192 ");
+        btn.onclick = function () { applyInputNormSuggestion(sug.input_norm, names); div.remove(); };
+        div.appendChild(document.createElement("br"));
+        div.appendChild(btn);
+        const dismiss = document.createElement("button");
+        dismiss.className = "btn btn-sm btn-link";
+        dismiss.textContent = "Dismiss";
+        dismiss.onclick = function () { div.remove(); };
+        div.appendChild(dismiss);
+        box.appendChild(div);
+      }
+
       function renderModelAdvice(models) {
         const box = document.getElementById("modelAdviceBanner");
         if (!box) return;
         box.innerHTML = "";
         (models || []).forEach(function (m) {
+          renderInputNormAdvice(m, box);
           const rev = m.postprocess_review || {};
           if (rev.level !== "suggest" && rev.level !== "warn") return;
           const warn = rev.level === "warn";
