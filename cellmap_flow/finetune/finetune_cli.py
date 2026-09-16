@@ -14,7 +14,7 @@ Usage:
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1 \
         --lora-r 64 \
-        --batch-size 7 \
+        --batch-size 8 \
         --num-epochs 20 \
         --learning-rate 2e-4
 """
@@ -572,8 +572,8 @@ def build_arg_parser():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=7,
-        help="Batch size (default: 7)"
+        default=8,
+        help="Batch size (default: 8)"
     )
     parser.add_argument(
         "--num-epochs",
