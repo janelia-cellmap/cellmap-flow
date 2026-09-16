@@ -327,10 +327,20 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         or y0 + sy > arr.shape[1]
         or x0 + sx > arr.shape[2]
     ):
+        # The usual cause is not a bad translation but a crop belonging to a
+        # different dataset than the session: a crop annotated on a larger
+        # volume lands past the end of a smaller one, with everything about
+        # it internally consistent. Name the dataset this volume was built
+        # over so that is the first thing checked, since the path in the
+        # manifest often makes the mismatch obvious once it is put next to it.
         raise ValueError(
-            f"Crop {entry.path} write region [{z0}:{z0+sz}, {y0}:{y0+sy}, {x0}:{x0+sx}] "
-            f"is outside annotation volume shape {arr.shape}. Check the source's "
-            "OME-NGFF translation against the dataset offset."
+            f"Crop {entry.path} write region "
+            f"[{z0}:{z0+sz}, {y0}:{y0+sy}, {x0}:{x0+sx}] is outside the "
+            f"annotation volume, whose shape is {tuple(arr.shape)}. This "
+            f"volume was built over {volume_meta.get('dataset_path', 'an unknown dataset')}. "
+            "Check that the crop was annotated on that same dataset -- a crop "
+            "from a different one is the most common cause -- and otherwise "
+            "check its OME-NGFF translation against the dataset offset."
         )
 
     # Slice the crop into Z-aligned slabs and write them in parallel. Slabs
@@ -424,6 +434,8 @@ def load_crops_from_yaml_response(data):
                 done=False,
             )
 
+        started_at = time.time()
+
         def step(phase, message, **extra):
             """Report a setup step.
 
@@ -432,9 +444,15 @@ def load_crops_from_yaml_response(data):
             the annotation volume, starting MinIO. The UI sat on "Starting..."
             for all of it with no way to tell which step was running, or
             whether anything was running at all.
+
+            Each message carries elapsed time, so "this is slow" can be
+            answered with which step is slow rather than a guess.
             """
+            elapsed = time.time() - started_at
+            stamped = f"[{elapsed:.0f}s] {message}"
+            logger.info(stamped)
             if load_id:
-                _set_progress(load_id, phase=phase, message=message, **extra)
+                _set_progress(load_id, phase=phase, message=stamped, **extra)
 
         if not yaml_input:
             return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400
