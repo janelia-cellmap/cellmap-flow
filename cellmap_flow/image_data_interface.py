@@ -72,7 +72,12 @@ class ImageDataInterface:
         else:
             self.output_voxel_size = self.voxel_size
         self.normalize = normalize
-        logger.warning(str(self.info))
+        # One of these is constructed per extracted chunk and once per pyramid
+        # level at startup, so at WARNING this dumped the same multi-line dict
+        # over and over and buried anything that actually needed attention.
+        # It is useful when a dataset resolves to the wrong scale, which is a
+        # debugging question.
+        logger.debug(str(self.info))
 
     @property
     def ts(self):
