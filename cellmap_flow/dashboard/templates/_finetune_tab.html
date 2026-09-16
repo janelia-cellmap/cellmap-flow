@@ -71,6 +71,25 @@
     </small>
   </div>
 
+  <!-- Good regions: rehearsal anchors -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-success" id="markGoodRegionBtn"
+            title="Record the area currently on screen as one the model already handles well">
+      Mark This View as Good
+    </button>
+    <span id="goodRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
+    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="clearGoodRegionsBtn"
+            title="Remove all good regions from this session">
+      Clear
+    </button>
+    <small class="form-text text-muted d-block mt-1">
+      Navigate until the screen shows output you are happy with, then click.
+      Training samples these regions without annotations, so they hold the
+      model to what it already does there while your scribbles correct it
+      elsewhere. Shown as the "good_regions" layer.
+    </small>
+  </div>
+
   <!-- Save action -->
   <div class="mb-2">
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
@@ -1283,6 +1302,70 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Save annotations to disk
+  // === Good regions ===
+  const markGoodRegionBtn = document.getElementById("markGoodRegionBtn");
+  const clearGoodRegionsBtn = document.getElementById("clearGoodRegionsBtn");
+  const goodRegionCount = document.getElementById("goodRegionCount");
+
+  function renderGoodRegionCount(count) {
+    goodRegionCount.textContent = count
+      ? `${count} good region${count === 1 ? "" : "s"}`
+      : "none yet";
+  }
+
+  function refreshGoodRegionCount() {
+    fetch("/api/finetune/good-regions")
+      .then((r) => r.json())
+      .then((d) => renderGoodRegionCount(d.count || 0))
+      .catch(() => renderGoodRegionCount(0));
+  }
+
+  markGoodRegionBtn.addEventListener("click", function () {
+    markGoodRegionBtn.disabled = true;
+    fetch("/api/finetune/good-regions/mark-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          renderGoodRegionCount(d.count);
+          const at = d.region.offset_nm.map((v) => Math.round(v)).join(", ");
+          finetuneLog.value += `Marked ${d.region.label} as good at [${at}] nm\n`;
+          if (!d.persisted) {
+            finetuneLog.value +=
+              "  (not saved to disk: no annotation session yet)\n";
+          }
+        } else {
+          finetuneLog.value += `Could not mark region: ${d.error}\n`;
+        }
+        finetuneLog.scrollTop = finetuneLog.scrollHeight;
+      })
+      .catch((e) => {
+        finetuneLog.value += `Could not mark region: ${e}\n`;
+      })
+      .finally(() => {
+        markGoodRegionBtn.disabled = false;
+      });
+  });
+
+  clearGoodRegionsBtn.addEventListener("click", function () {
+    fetch("/api/finetune/good-regions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        renderGoodRegionCount(d.count || 0);
+        finetuneLog.value += "Cleared good regions\n";
+      })
+      .catch(() => {});
+  });
+
+  refreshGoodRegionCount();
+
   saveAnnotationsBtn.addEventListener("click", function() {
     saveAnnotationsBtn.disabled = true;
     const originalText = saveAnnotationsBtn.textContent;
