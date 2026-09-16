@@ -130,6 +130,18 @@ def submit_models():
     )
 
 
+@models_bp.route("/api/gpu-queues")
+def gpu_queues():
+    """Which GPU queues are open and how busy, for the queue picker.
+
+    Polled about once a minute by the models tab; the underlying LSF query is
+    cached server-side, so this is cheap to call.
+    """
+    from cellmap_flow.utils.lsf_queues import gpu_queue_availability
+
+    return jsonify(gpu_queue_availability())
+
+
 @models_bp.route("/api/server-config")
 def get_server_config():
     """Get current server configuration."""
