@@ -213,3 +213,45 @@ class CropLoaderZarrTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MissingCropPathTests(unittest.TestCase):
+    """A path that does not exist must name itself.
+
+    zarr.open reports the path *inside* the store, which for a missing
+    directory is the empty string -- "nothing found at path ''" identified
+    neither the crop nor the typo. A real manifest listing
+    .../rc_amphiuma-means-liver-1/... instead of .../jrc_amphiuma-.../ hit
+    exactly that, twice, so the diagnostics are worth pinning down.
+    """
+
+    def test_names_the_missing_path_and_where_it_breaks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = os.path.join(tmp, "annotations")
+            os.makedirs(existing)
+            missing = os.path.join(existing, "typoed-dataset", "crop.zarr", "s0")
+
+            with self.assertRaises(FileNotFoundError) as caught:
+                _read_voxel_size_and_offset(missing)
+
+            message = str(caught.exception)
+            self.assertIn(missing, message)
+            # The deepest surviving ancestor is what points at the bad
+            # component -- here, that "typoed-dataset" is the first thing
+            # that does not exist.
+            self.assertIn(existing, message)
+
+    def test_reports_when_nothing_in_the_path_exists(self):
+        with self.assertRaises(FileNotFoundError) as caught:
+            _read_voxel_size_and_offset("/nonexistent-root-for-tests/a/b.zarr")
+        self.assertIn("/nonexistent-root-for-tests/a/b.zarr", str(caught.exception))
+
+    def test_existing_crop_still_reads_normally(self):
+        """The guard must not shadow the normal path."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data = np.zeros((4, 4, 4), dtype=np.uint8)
+            path = _v2_multiscale_group(tmp, data, (8, 8, 8), (16, 32, 48))
+            sub, voxel_size, offset = _read_voxel_size_and_offset(path)
+            self.assertEqual(tuple(voxel_size), (8, 8, 8))
+            self.assertEqual(tuple(offset), (16, 32, 48))
+            self.assertTrue(sub)

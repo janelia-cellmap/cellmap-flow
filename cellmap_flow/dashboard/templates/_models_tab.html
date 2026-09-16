@@ -310,12 +310,20 @@
         statusEl.textContent = "updated " + new Date().toLocaleTimeString();
       }
 
+      // /api/job-logs runs bpeek per job, each with its own timeout, so a
+      // refresh can outlast the 5s follow interval. Without this, Follow piles
+      // overlapping requests onto a dashboard that is already the slow part.
+      let jobLogsBusy = false;
+
       function refreshJobLogs() {
+        if (jobLogsBusy) return Promise.resolve();
+        jobLogsBusy = true;
         const statusEl = document.getElementById("jobLogsStatus");
         return fetch("/api/job-logs")
           .then(function (r) { return r.json(); })
           .then(renderJobLogs)
-          .catch(function (e) { statusEl.textContent = "error: " + e; });
+          .catch(function (e) { statusEl.textContent = "error: " + e; })
+          .then(function () { jobLogsBusy = false; });
       }
 
       document.getElementById("jobLogsBtn").addEventListener("click", function () {
