@@ -8,6 +8,7 @@ Supports:
 """
 
 import os
+import re
 import subprocess
 import shlex
 import logging
@@ -34,15 +35,43 @@ SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
 
 
 def _tail(path: Path, max_chars: int = 4000) -> Optional[str]:
-    """Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty."""
+    """Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.
+
+    Seeks to the end rather than reading the whole file. An inference server
+    log can run to hundreds of megabytes, and this is called from the polling
+    loop in ``wait_for_host`` while the caller is blocked.
+
+    Reads 4 bytes per requested character so a multi-byte sequence split at
+    the seek boundary still leaves at least ``max_chars`` intact; the leading
+    partial character decodes to a replacement char and is sliced off.
+    """
     try:
-        content = path.read_text()
+        with path.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - max_chars * 4), os.SEEK_SET)
+            raw = f.read()
     except OSError:
         return None
-    content = content.strip()
+    content = raw.decode("utf-8", errors="replace").strip()
     if not content:
         return None
     return content[-max_chars:]
+
+
+def _log_stem(job_name: str) -> str:
+    """A filesystem-safe stem for this job's log file.
+
+    ``job_name`` arrives from model names, YAML and HuggingFace repo ids, so
+    it can carry a path separator or ``..``. Interpolated straight into a
+    path, that writes the log outside SERVER_LOG_DIR -- or, more quietly,
+    makes the path we read back afterwards differ from the one we handed
+    bsub, so a crashed job looks like it produced no output at all.
+
+    Both the ``-o`` pattern and the path reconstructed after submission are
+    built from this one value, so they cannot drift apart.
+    """
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", job_name).strip("._-")
+    return stem or "job"
 
 
 class JobStatus(Enum):
@@ -447,7 +476,8 @@ def submit_bsub_job(
     """
     SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
     # %J is substituted by LSF with the actual job ID once assigned.
-    log_pattern = SERVER_LOG_DIR / f"{job_name}_%J.log"
+    log_stem = _log_stem(job_name)
+    log_pattern = SERVER_LOG_DIR / f"{log_stem}_%J.log"
 
     bsub_command = ["bsub", "-J", job_name, "-o", str(log_pattern)]
 
@@ -476,7 +506,7 @@ def submit_bsub_job(
         job_id = result.stdout.split()[1].strip('<>')
         logger.info(f"Job {job_id} submitted successfully")
 
-        log_file = SERVER_LOG_DIR / f"{job_name}_{job_id}.log"
+        log_file = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
         return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
         
     except subprocess.CalledProcessError as e:
