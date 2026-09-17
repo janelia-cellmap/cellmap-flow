@@ -270,11 +270,11 @@
           <label for="loraRank" class="form-label">LoRA Rank</label>
           <select id="loraRank" class="form-select">
             <option value="4">4 (Fast, lower capacity)</option>
-            <option value="8" selected>8 (Balanced) - Recommended</option>
+            <option value="8">8 (Balanced)</option>
             <option value="16">16 (High capacity)</option>
-            <option value="64">64 (Very high capacity)</option>
+            <option value="64" selected>64 (Very high capacity) - Recommended</option>
           </select>
-          <small class="text-muted">Higher rank = more trainable parameters</small>
+          <small class="text-muted">Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change this.</small>
         </div>
       </div>
       <div class="col-md-6">

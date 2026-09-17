@@ -90,10 +90,6 @@ class FinetuneJob:
     model_yaml_path: Optional[Path] = None
     current_epoch: int = 0
     total_epochs: int = 10
-    # Where we are inside the current epoch. With only a few batches per
-    # epoch the loss is otherwise reported once per epoch and looks stuck.
-    current_batch: int = 0
-    total_batches: int = 0
     latest_loss: Optional[float] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
@@ -125,8 +121,6 @@ class FinetuneJob:
             "model_yaml_path": str(self.model_yaml_path) if self.model_yaml_path else None,
             "current_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
-            "current_batch": self.current_batch,
-            "total_batches": self.total_batches,
             "latest_loss": self.latest_loss,
             "inference_server_url": self.inference_server_url,
             "inference_server_ready": self.inference_server_ready,
@@ -351,9 +345,14 @@ class FinetuneJobManager:
             f"LD_LIBRARY_PATH={_sh_quote(env_lib)}"
             '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
         )
+        # stdbuf on *both* sides. The trainer already flushes every line it
+        # prints, but tee writes to the log file through stdio, which is
+        # block-buffered when the destination is not a terminal -- so roughly
+        # 8KB of output, five to ten epochs' worth, landed in the file at
+        # once and the dashboard showed nothing in between.
         return (
             f"{loader_path}stdbuf -oL {command} 2>&1 "
-            f"| tee {_sh_quote(log_file)}"
+            f"| stdbuf -oL tee {_sh_quote(log_file)}"
         )
 
     def _build_submission_metadata(
@@ -807,141 +806,33 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
-        # Read the three kinds of progress line in the order they were
-        # written, so the loss on screen is always the newest one and always
-        # belongs to the epoch shown beside it.
+        # One loss per epoch, from the per-epoch summary line ("Epoch X/Y -
+        # Loss: Z"), so the plot has one point per epoch and the loss is
+        # always the one belonging to the epoch shown beside it. Per-batch
+        # lines are deliberately not read: pairing them with an epoch is
+        # fiddly, and what made the display look stuck was tee's buffering,
+        # not the reporting interval.
         #
-        # Reporting only the per-epoch summary ("Epoch X/Y - Loss: Z") left
-        # the number frozen for a whole epoch -- with a handful of batches per
-        # epoch that reads as a stalled run. Per-batch lines fix that, but
-        # they cannot be scanned independently: doing so once bumped the loss
-        # from epoch N+1 while current_epoch was still pinned to epoch N.
-        # "Starting epoch N of M" is what makes it safe, because the trainer
-        # writes it before any of that epoch's batches.
-        pattern = re.compile(
-            r"Starting\s+epoch\s+(?P<sep>\d+)\s+of\s+(?P<stot>\d+)"
-            r"|Epoch\s+(?P<eep>\d+)/(?P<etot>\d+)\s*-\s*Loss:\s*(?P<eloss>[\d.]+)"
-            r"|Batch\s+(?P<bidx>\d+)/(?P<btot>\d+)\s*-\s*Loss:\s*(?P<bloss>[\d.]+)",
-            re.IGNORECASE,
-        )
+        # "Starting epoch N of M" is read too, so the epoch counter advances
+        # as soon as an epoch begins rather than when it ends.
+        start_pattern = r"Starting\s+epoch\s+(\d+)\s+of\s+(\d+)"
+        summary_pattern = r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)"
 
-        def _set_loss(raw):
+        for cur, total in re.findall(start_pattern, log_content, re.IGNORECASE):
+            finetune_job.current_epoch = int(cur)
+            finetune_job.total_epochs = int(total)
+
+        summary_matches = re.findall(summary_pattern, log_content, re.IGNORECASE)
+        if summary_matches:
+            cur, total, loss = summary_matches[-1]
+            finetune_job.current_epoch = max(
+                finetune_job.current_epoch, int(cur)
+            )
+            finetune_job.total_epochs = int(total)
             try:
-                finetune_job.latest_loss = float(raw)
-            except (TypeError, ValueError):
+                finetune_job.latest_loss = float(loss)
+            except ValueError:
                 pass
-
-        for m in pattern.finditer(log_content):
-            if m.group("sep"):
-                finetune_job.current_epoch = int(m.group("sep"))
-                finetune_job.total_epochs = int(m.group("stot"))
-            elif m.group("eep"):
-                finetune_job.current_epoch = int(m.group("eep"))
-                finetune_job.total_epochs = int(m.group("etot"))
-                _set_loss(m.group("eloss"))
-            else:
-                # A batch line belongs to whichever epoch is current, which
-                # the "Starting epoch" above it already set.
-                finetune_job.current_batch = int(m.group("bidx"))
-                finetune_job.total_batches = int(m.group("btot"))
-                _set_loss(m.group("bloss"))
-
-    def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
-        """
-        Add (or replace) the finetuned model's neuroglancer layer.
-
-        Mirrors run_model() from cellmap_flow/models/run.py:
-        1. Create/update Job object in g.jobs
-        2. Add neuroglancer ImageLayer with pre/post processing args
-
-        Args:
-            finetune_job: Job with inference_server_url set
-            model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
-        """
-        from cellmap_flow.globals import g
-        from cellmap_flow.utils.web_utils import get_norms_post_args, ARGS_KEY
-        import neuroglancer
-
-        server_url = finetune_job.inference_server_url
-
-        # Create a Job object for the running server
-        inference_job = LSFJob(
-            job_id=finetune_job.lsf_job.job_id if finetune_job.lsf_job else "local",
-            model_name=model_name
-        )
-        inference_job.host = server_url
-        inference_job.status = LSFJobStatus.RUNNING
-
-        # Remove any old finetuned jobs for this base model
-        g.jobs = [
-            j for j in g.jobs
-            if not (hasattr(j, 'model_name') and j.model_name
-                    and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
-        ]
-
-        # Add to g.jobs
-        g.jobs.append(inference_job)
-        self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
-
-        # Get pre/post processing args (same hash as other models)
-        st_data = get_norms_post_args(g.input_norms, g.postprocess)
-
-        if g.viewer is None:
-            self.logger.error("g.viewer is None - neuroglancer not initialized yet")
-            return
-
-        # Lie about the model's voxel size so the layer overlays the raw at
-        # the closest available scale (e.g. trained at 16nm but raw is
-        # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
-        from cellmap_flow.utils.neuroglancer_utils import (
-            build_prediction_source,
-            get_raw_closest_scale,
-        )
-        override_scales = None
-        try:
-            output_voxel_size = tuple(
-                finetune_job.params.get("output_voxel_size") or ()
-            )
-            dataset_path = getattr(g, "dataset_path", None)
-            if output_voxel_size and dataset_path:
-                closest = get_raw_closest_scale(dataset_path, output_voxel_size)
-                if closest is not None and tuple(closest) != tuple(output_voxel_size):
-                    override_scales = closest
-                    self.logger.info(
-                        f"Finetuned model '{model_name}' output_voxel_size="
-                        f"{output_voxel_size} overridden to closest raw scale "
-                        f"{closest} for viewer overlay"
-                    )
-        except Exception as e:
-            self.logger.warning(
-                f"Could not compute override scales for finetuned '{model_name}': {e}"
-            )
-
-        source_spec = build_prediction_source(
-            server_url, model_name, st_data, override_scales
-        )
-        self.logger.info(f"Adding neuroglancer layer: {model_name}")
-        self.logger.info(f"  source: {source_spec}")
-
-        with g.viewer.txn() as s:
-            # Remove old finetuned layer if it exists (exact name match)
-            old_layer_name = finetune_job.finetuned_model_name
-            if old_layer_name and old_layer_name in s.layers:
-                self.logger.info(f"Removing old finetuned layer: {old_layer_name}")
-                del s.layers[old_layer_name]
-
-            # Also remove by current name in case of re-add
-            if model_name in s.layers:
-                del s.layers[model_name]
-
-            s.layers[model_name] = neuroglancer.ImageLayer(
-                source=source_spec,
-                shader=self._finetuned_shader(server_url),
-            )
-
-        # Update the stored name
-        finetune_job.finetuned_model_name = model_name
-        self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
 
     def _finetuned_shader(self, server_url):
         """The same display range an ordinary model layer gets.
