@@ -401,9 +401,9 @@
           </label>
           <select id="distillationLambda" class="form-select">
             <option value="0">0 (Disabled)</option>
-            <option value="0.01">0.01</option>
+            <option value="0.01" selected>0.01 (Default)</option>
             <option value="0.05">0.05</option>
-            <option value="0.1" selected>0.1 (Default)</option>
+            <option value="0.1">0.1</option>
             <option value="0.2">0.2</option>
             <option value="0.5">0.5</option>
             <option value="1.0">1.0</option>
@@ -411,7 +411,7 @@
             <option value="5.0">5.0</option>
             <option value="10.0">10.0</option>
           </select>
-          <small class="text-muted">Keeps model close to original predictions</small>
+          <small class="text-muted">Keeps model close to original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight here mostly cancels out the correction you are making.</small>
         </div>
       </div>
     </div>

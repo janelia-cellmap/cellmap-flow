@@ -90,6 +90,10 @@ class FinetuneJob:
     model_yaml_path: Optional[Path] = None
     current_epoch: int = 0
     total_epochs: int = 10
+    # Where we are inside the current epoch. With only a few batches per
+    # epoch the loss is otherwise reported once per epoch and looks stuck.
+    current_batch: int = 0
+    total_batches: int = 0
     latest_loss: Optional[float] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
@@ -121,6 +125,8 @@ class FinetuneJob:
             "model_yaml_path": str(self.model_yaml_path) if self.model_yaml_path else None,
             "current_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
+            "current_batch": self.current_batch,
+            "total_batches": self.total_batches,
             "latest_loss": self.latest_loss,
             "inference_server_url": self.inference_server_url,
             "inference_server_ready": self.inference_server_ready,
@@ -801,34 +807,44 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
-        # Pair epoch and loss from the per-epoch summary line
-        # ("Epoch X/Y - Loss: Z") so the loss is guaranteed to belong to the
-        # epoch reported alongside it. A previous version scanned epoch and
-        # loss with independent regexes; per-batch lines ("Batch X/N - Loss: Z")
-        # then bumped latest_loss inside epoch N+1 while current_epoch was
-        # still pinned to epoch N's summary, so the dashboard plot pinned
-        # epoch N's running batch loss onto epoch N-1.
-        summary_pattern = r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)"
-        summary_matches = re.findall(summary_pattern, log_content, re.IGNORECASE)
-        if summary_matches:
-            cur, total, loss = summary_matches[-1]
-            finetune_job.current_epoch = int(cur)
-            finetune_job.total_epochs = int(total)
-            try:
-                finetune_job.latest_loss = float(loss)
-            except ValueError:
-                pass
-            return
+        # Read the three kinds of progress line in the order they were
+        # written, so the loss on screen is always the newest one and always
+        # belongs to the epoch shown beside it.
+        #
+        # Reporting only the per-epoch summary ("Epoch X/Y - Loss: Z") left
+        # the number frozen for a whole epoch -- with a handful of batches per
+        # epoch that reads as a stalled run. Per-batch lines fix that, but
+        # they cannot be scanned independently: doing so once bumped the loss
+        # from epoch N+1 while current_epoch was still pinned to epoch N.
+        # "Starting epoch N of M" is what makes it safe, because the trainer
+        # writes it before any of that epoch's batches.
+        pattern = re.compile(
+            r"Starting\s+epoch\s+(?P<sep>\d+)\s+of\s+(?P<stot>\d+)"
+            r"|Epoch\s+(?P<eep>\d+)/(?P<etot>\d+)\s*-\s*Loss:\s*(?P<eloss>[\d.]+)"
+            r"|Batch\s+(?P<bidx>\d+)/(?P<btot>\d+)\s*-\s*Loss:\s*(?P<bloss>[\d.]+)",
+            re.IGNORECASE,
+        )
 
-        # No epoch summary yet (still in epoch 1's batches): fall back to
-        # bare "Epoch X/Y" so the progress bar can advance, but leave
-        # latest_loss alone -- per-batch losses are not epoch summaries.
-        epoch_pattern = r"Epoch\s+(\d+)/(\d+)"
-        epoch_matches = re.findall(epoch_pattern, log_content, re.IGNORECASE)
-        if epoch_matches:
-            cur, total = epoch_matches[-1]
-            finetune_job.current_epoch = int(cur)
-            finetune_job.total_epochs = int(total)
+        def _set_loss(raw):
+            try:
+                finetune_job.latest_loss = float(raw)
+            except (TypeError, ValueError):
+                pass
+
+        for m in pattern.finditer(log_content):
+            if m.group("sep"):
+                finetune_job.current_epoch = int(m.group("sep"))
+                finetune_job.total_epochs = int(m.group("stot"))
+            elif m.group("eep"):
+                finetune_job.current_epoch = int(m.group("eep"))
+                finetune_job.total_epochs = int(m.group("etot"))
+                _set_loss(m.group("eloss"))
+            else:
+                # A batch line belongs to whichever epoch is current, which
+                # the "Starting epoch" above it already set.
+                finetune_job.current_batch = int(m.group("bidx"))
+                finetune_job.total_batches = int(m.group("btot"))
+                _set_loss(m.group("bloss"))
 
     def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
         """
@@ -918,17 +934,43 @@ class FinetuneJobManager:
             if model_name in s.layers:
                 del s.layers[model_name]
 
-            # Add new layer - exact same format as run_model()
             s.layers[model_name] = neuroglancer.ImageLayer(
                 source=source_spec,
-                shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-                    #uicontrol vec3 color color(default="red");
-                    void main(){{emitRGB(color * normalized());}}""",
+                shader=self._finetuned_shader(server_url),
             )
 
         # Update the stored name
         finetune_job.finetuned_model_name = model_name
         self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
+
+    def _finetuned_shader(self, server_url):
+        """The same display range an ordinary model layer gets.
+
+        This used to be hardcoded to range=[0, 255]. A sigmoid output lives in
+        [0, 1], so the finetuned layer rendered as near-black however good the
+        predictions were, while the identical model added through the normal
+        path looked fine -- an unfair comparison built into the viewer.
+
+        Falls back to the old fixed range only if the server cannot be asked.
+        """
+        from cellmap_flow.globals import g
+        from cellmap_flow.utils.output_probe import output_display_range
+        from cellmap_flow.utils.scale_pyramid import prediction_shader
+        from cellmap_flow.utils.server_info import fetch_model_info
+
+        try:
+            info = fetch_model_info(server_url)
+            steps = [
+                p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
+            ]
+            value_range = output_display_range(steps, info.get("output_class"))
+        except Exception as e:
+            self.logger.warning(
+                f"Could not work out a display range for the finetuned layer "
+                f"({e}); falling back to 0-255."
+            )
+            value_range = (0.0, 255.0)
+        return prediction_shader("red", value_range)
 
     def _parse_inference_server_ready(self, finetune_job: FinetuneJob, log_content: str):
         """
