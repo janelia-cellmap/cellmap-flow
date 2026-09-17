@@ -36,9 +36,10 @@ _last_annotated_regions = None
 # Keys pre-bound on every annotation layer we add, so the tools are reachable
 # without hunting for them in the tool palette first.
 #
-# Tool ids come from the voxel_annotation module in our neuroglancer fork
-# (src/voxel_annotation/base.ts). The keys must be a single capital letter --
-# neuroglancer rejects anything else, see TOOL_KEY_PATTERN in src/ui/tool.ts.
+# Tool ids come from the voxel_annotation module added by the open upstream PR
+# google/neuroglancer#858 (src/voxel_annotation/base.ts), which is the branch
+# this deployment runs. The keys must be a single capital letter -- anything
+# else is rejected, see TOOL_KEY_PATTERN in src/ui/tool.ts.
 ANNOTATION_TOOL_BINDINGS = {
     "A": "vox-brush",
     "F": "vox-flood-fill",
@@ -49,9 +50,9 @@ def _register_voxel_annotation_tools():
     """Teach the python bindings about the fork's voxel-painting tools.
 
     neuroglancer validates tool names against a registry built by
-    @export_tool, and only upstream's tools are in it -- assigning an
-    unregistered name raises KeyError. The voxel_annotation tools exist only
-    in our fork's frontend, so nothing ever registered them on this side.
+    @export_tool, and only the tools merged into mainline are in it --
+    assigning an unregistered name raises KeyError. The voxel_annotation
+    tools live in PR #858's frontend, which has no python side yet.
 
     Registering them here is additive: on a neuroglancer whose frontend does
     not have these tools the binding is simply inert, which is the same

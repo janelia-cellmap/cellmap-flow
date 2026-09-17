@@ -13,7 +13,7 @@ Usage:
         --model-checkpoint /path/to/checkpoint \
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1 \
-        --lora-r 64 \
+        --lora-r 8 \
         --batch-size 8 \
         --num-epochs 20 \
         --learning-rate 2e-4
@@ -526,8 +526,12 @@ def build_arg_parser():
     parser.add_argument(
         "--lora-r",
         type=int,
-        default=64,
-        help="LoRA rank (default: 64)"
+        default=8,
+        # Low rank is itself the anti-forgetting mechanism here: this is
+        # correcting a model that is mostly right, so the adapter wants just
+        # enough capacity to fix the bad regions and not enough to rewrite
+        # the good ones.
+        help="LoRA rank (default: 8)"
     )
     parser.add_argument(
         "--lora-alpha",
