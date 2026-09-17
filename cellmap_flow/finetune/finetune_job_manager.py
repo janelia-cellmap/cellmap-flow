@@ -419,7 +419,7 @@ class FinetuneJobManager:
         self,
         model_config,
         corrections_path: Path,
-        lora_r: int = 64,
+        lora_r: int = 8,
         num_epochs: int = 10,
         batch_size: int = 8,
         learning_rate: float = 1e-4,
@@ -445,7 +445,7 @@ class FinetuneJobManager:
         Args:
             model_config: Model configuration object (FlyModelConfig, etc.)
             corrections_path: Path to corrections.zarr directory
-            lora_r: LoRA rank (default: 64)
+            lora_r: LoRA rank (default: 8)
             num_epochs: Number of training epochs (default: 10)
             batch_size: Training batch size (default: 8)
             learning_rate: Learning rate (default: 1e-4)
