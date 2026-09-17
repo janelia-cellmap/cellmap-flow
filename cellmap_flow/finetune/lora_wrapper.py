@@ -421,6 +421,17 @@ def load_lora_adapter(
 
     logger.info(f"Loading LoRA adapter from: {adapter_path}")
 
+    # Fold in any adapter the model already carries, for the same reason
+    # create_lora_model() does -- and additionally because the adapter being
+    # loaded here was saved against the *merged* module tree. Calling
+    # from_pretrained() on a PeftModel wraps it a second time, which both
+    # drops the existing adapter and double-nests every module name
+    # ("base_model.model.base_model.model...."), so none of the saved keys
+    # match. PEFT reports that as a warning about missing adapter keys and
+    # then returns a model with no adapter loaded at all: the served
+    # "finetuned" model was the untouched base.
+    model = _merge_existing_adapters(model)
+
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):
         logger.info("Wrapping Sequential model for PEFT compatibility")
