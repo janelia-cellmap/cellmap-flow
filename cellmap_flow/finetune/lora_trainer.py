@@ -242,6 +242,7 @@ class LoRAFinetuner:
         # since CUDA AMP utilities can't run on CPU.
         self.select_channel = select_channel
         self.mask_unannotated = mask_unannotated
+        self._single_class_checked = False
         self.label_smoothing = label_smoothing
         self.distillation_lambda = distillation_lambda
         self.distillation_all_voxels = distillation_all_voxels
@@ -480,6 +481,62 @@ class LoRAFinetuner:
         ):
             self.criterion.dice_loss.apply_sigmoid = False
 
+    def _warn_if_single_class(self, target, mask):
+        """Say so when every supervised voxel carries the same label.
+
+        Gradient descent can only do one thing with a target that is all 1:
+        raise the prediction everywhere. The model duly does that, globally,
+        and the result is worse than the model you started from -- with a
+        loss curve that looks unremarkable, because a one-class problem is
+        genuinely easy to reduce.
+
+        The usual cause is painting only foreground. An affinity target needs
+        both: foreground says "these voxels are one object", background says
+        "this is not object, and these two are not joined". Without the
+        second, nothing anywhere says 0.
+        """
+        if self._single_class_checked:
+            return
+        self._single_class_checked = True
+        try:
+            with torch.no_grad():
+                if mask is None:
+                    supervised = target.numel()
+                    positive = float((target > 0.5).sum())
+                else:
+                    supervised = float(mask.sum())
+                    positive = float(((target > 0.5).float() * mask).sum())
+                if supervised < 1:
+                    logger.warning(
+                        "No supervised voxels in the first batch: the loss has "
+                        "nothing to learn from. Check that the annotations "
+                        "overlap the sampled patches."
+                    )
+                    return
+                frac = positive / supervised
+                logger.info(
+                    f"Supervised target: {supervised:.0f} voxels, "
+                    f"{100 * frac:.1f}% positive"
+                )
+                if frac > 0.999 or frac < 0.001:
+                    only = "positive (1)" if frac > 0.5 else "negative (0)"
+                    missing = "background" if frac > 0.5 else "foreground"
+                    logger.warning(
+                        "=" * 70 + "\n"
+                        f"EVERY supervised voxel is {only}. This run cannot "
+                        "teach the model a boundary:\n"
+                        "gradient descent will simply push the prediction that "
+                        "way everywhere, and\n"
+                        f"the result will be worse than the model you started "
+                        f"from.\n\n"
+                        f"Paint some {missing} as well, and put it where it "
+                        "decides something --\n"
+                        "between two objects that touch, and on the things "
+                        "being confused for one.\n" + "=" * 70
+                    )
+        except Exception as e:  # never let a diagnostic stop training
+            logger.debug(f"Single-class check failed: {e}")
+
     def train(self) -> Dict[str, Any]:
         """
         Run the training loop.
@@ -520,7 +577,7 @@ class LoRAFinetuner:
         # Some model+data combinations produce NaN under FP16 autocast.
         if self.use_mixed_precision:
             try:
-                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_raw = probe_raw.to(self.device)
                 with torch.no_grad(), autocast('cuda', enabled=True):
@@ -550,7 +607,7 @@ class LoRAFinetuner:
                 self._apply_probability_output_mode(log_message)
         else:
             try:
-                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_extreme = torch.randn(
                     probe_raw.shape,
@@ -794,6 +851,8 @@ class LoRAFinetuner:
                 # Shift labels down by 1 (but keep 0 as 0)
                 # e.g., 0->0 (unannotated), 1->0 (background), 2->1 (foreground)
                 target = torch.clamp(target - 1, min=0)
+
+            self._warn_if_single_class(target, mask)
 
             # Apply label smoothing: 0 -> s/2, 1 -> 1-s/2
             # This prevents the model from being pushed to extreme 0/1 outputs,
