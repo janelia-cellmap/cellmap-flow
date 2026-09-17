@@ -118,3 +118,64 @@ def test_the_new_adapter_is_the_only_trainable_thing(already_adapted):
     trainable = [n for n, p in wrapped.named_parameters() if p.requires_grad]
     assert trainable, "nothing to train"
     assert all("lora_" in n for n in trainable), trainable
+
+
+def test_train_save_serve_roundtrip_reproduces_the_trained_model():
+    """The served model must be the model that was trained.
+
+    Inference loads the saved adapter onto the same script model training
+    started from -- which is itself a PeftModel. Re-wrapping it double-nested
+    every module name ("base_model.model.base_model.model...."), so none of
+    the saved keys matched; PEFT warned about missing adapter keys and handed
+    back a model with no adapter at all. Combined with the existing adapter
+    being clobbered, the served "finetuned" model was the untouched base.
+
+    Merging on both sides keeps one module tree, so the keys line up.
+    """
+    from peft import LoraConfig, PeftModel, get_peft_model
+
+    from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
+
+    torch.manual_seed(0)
+    x = torch.randn(1, 1, 4, 4, 4)
+    base = _Net()
+    base_sd = base.conv.state_dict()
+    base_out = base(x).detach().clone()
+
+    first = get_peft_model(
+        _Net(), LoraConfig(r=64, lora_alpha=128, target_modules=["conv"], bias="none")
+    )
+    for name, param in first.named_parameters():
+        if "lora_B" in name:
+            nn.init.normal_(param, std=0.5)
+    first.base_model.model.conv.base_layer.load_state_dict(base_sd)
+    first_dir = tempfile.mkdtemp()
+    first.save_pretrained(first_dir)
+
+    def script_model():
+        m = PeftModel.from_pretrained(_Net().eval(), first_dir, is_trainable=False)
+        m.base_model.model.conv.base_layer.load_state_dict(base_sd)
+        return m
+
+    trained = wrap_model_with_lora(
+        script_model(), target_modules=["conv"], lora_r=8, lora_alpha=16
+    )
+    for name, param in trained.named_parameters():
+        if "lora_B" in name:
+            nn.init.normal_(param, std=0.3)  # stand in for a training run
+    # eval(), or lora_dropout makes both sides stochastic and nothing matches.
+    trained.eval()
+    trained_out = trained(x).detach().clone()
+    adapter_dir = tempfile.mkdtemp()
+    trained.save_pretrained(adapter_dir)
+
+    served = load_lora_adapter(script_model(), adapter_dir, is_trainable=False)
+    served.eval()
+    served_out = served(x).detach().clone()
+
+    assert torch.allclose(served_out, trained_out, atol=1e-5), (
+        "the served model is not the model that was trained"
+    )
+    assert not torch.allclose(served_out, base_out, atol=1e-5), (
+        "served the untouched base -- this is the original bug"
+    )
