@@ -1141,7 +1141,10 @@ def periodic_sync_annotations():
                     from cellmap_flow.dashboard.routes.finetune import (
                         refresh_annotated_regions_layer,
                     )
-                    refresh_annotated_regions_layer()
+                    # Nobody asked for this one, so it yields to the user: a
+                    # refresh pushes viewer state, and that takes whatever draw
+                    # tool they are holding out of their hand.
+                    refresh_annotated_regions_layer(defer_if_tool_active=True)
                 except Exception as e:
                     logger.debug(f"Periodic sync: refresh_annotated_regions_layer failed: {e}")
         except Exception as e:

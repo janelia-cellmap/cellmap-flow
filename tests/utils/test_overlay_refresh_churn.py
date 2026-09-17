@@ -1,11 +1,13 @@
 """The annotated_regions overlay must not rewrite the viewer for no reason.
 
-neuroglancer's txn() is unconditional -- it deep-copies the state on entry and
-calls set_state() on exit whether or not the body changed anything -- and the
-periodic sync calls refresh_annotated_regions_layer() every 30s for as long as
-annotations keep arriving. That is precisely while the user is drawing, so
-every one of those pushes is a chance to clobber a browser-side tool
-selection that python did not know about yet.
+Every push from python costs the browser its whole UI state: on receiving one
+it runs `trackable.reset(); trackable.restoreState(state)`, rebuilding the
+entire state object graph, tool binder included. neuroglancer's txn() is
+unconditional -- it deep-copies the state on entry and calls set_state() on
+exit whether or not the body changed anything -- and the periodic sync calls
+refresh_annotated_regions_layer() every 30s for as long as annotations keep
+arriving. That is precisely while the user is drawing, so every one of those
+pushes takes the brush out of their hand.
 """
 
 import json
@@ -24,6 +26,12 @@ class _FakeLayers(dict):
 class _FakeState:
     def __init__(self):
         self.layers = _FakeLayers()
+        # What the browser told python it has selected, as it appears in the
+        # serialized state -- None when the user is just looking around.
+        self.active_tool = None
+
+    def to_json(self):
+        return {"layers": [{"name": "sparse_annotation", "tool": self.active_tool}]}
 
 
 class _FakeViewer:
@@ -159,3 +167,93 @@ def test_annotation_layers_get_the_draw_tools_prebound(monkeypatch):
     # Keys must be a single capital letter or neuroglancer drops the binding
     # (TOOL_KEY_PATTERN = /^[A-Z]$/ in src/ui/tool.ts).
     assert all(k.isupper() and len(k) == 1 for k in bindings)
+
+
+def test_background_refresh_stands_down_while_a_tool_is_selected(
+    corrections, monkeypatch
+):
+    """The 30s sync must not take the brush out of the user's hand."""
+    _write_chunk(str(corrections))
+    viewer = _FakeViewer()
+    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
+
+    viewer.state.active_tool = "vox-brush"
+    assert (
+        overlay.refresh_annotated_regions_layer(
+            str(corrections), defer_if_tool_active=True
+        )
+        == 0
+    )
+    assert viewer.txn_count == 0, "a selected tool must veto a background push"
+
+
+def test_a_deferred_refresh_happens_once_the_tool_is_put_down(
+    corrections, monkeypatch
+):
+    """Standing down must not mean forgetting -- the boxes still catch up."""
+    _write_chunk(str(corrections))
+    viewer = _FakeViewer()
+    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
+
+    viewer.state.active_tool = "vox-brush"
+    for _ in range(3):
+        overlay.refresh_annotated_regions_layer(
+            str(corrections), defer_if_tool_active=True
+        )
+    assert viewer.txn_count == 0
+
+    viewer.state.active_tool = None
+    assert (
+        overlay.refresh_annotated_regions_layer(
+            str(corrections), defer_if_tool_active=True
+        )
+        == 1
+    )
+    assert viewer.txn_count == 1, "the skipped work must not be marked as done"
+
+
+def test_a_user_initiated_refresh_pushes_even_with_a_tool_selected(
+    corrections, monkeypatch
+):
+    """Clicking sync means now, tool or no tool -- the user asked for it."""
+    _write_chunk(str(corrections))
+    viewer = _FakeViewer()
+    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
+
+    viewer.state.active_tool = "vox-brush"
+    assert overlay.refresh_annotated_regions_layer(str(corrections)) == 1
+    assert viewer.txn_count == 1
+
+
+def test_active_tool_reads_both_serialized_tool_shapes(monkeypatch):
+    """A Tool serializes bare or as {"type": ...}; both mean "in hand"."""
+
+    class _State:
+        def __init__(self, layers):
+            self._layers = layers
+
+        def to_json(self):
+            return {"layers": self._layers}
+
+    class _V:
+        def __init__(self, layers):
+            self.state = _State(layers)
+
+    monkeypatch.setattr(overlay.g, "viewer", _V([{"tool": "vox-brush"}]), raising=False)
+    assert overlay._active_annotation_tool() == "vox-brush"
+
+    monkeypatch.setattr(
+        overlay.g, "viewer", _V([{"tool": {"type": "vox-flood-fill"}}]), raising=False
+    )
+    assert overlay._active_annotation_tool() == "vox-flood-fill"
+
+    # Older neuroglancer serialized layers as a name-keyed object.
+    monkeypatch.setattr(
+        overlay.g, "viewer", _V({"seg": {"tool": "vox-brush"}}), raising=False
+    )
+    assert overlay._active_annotation_tool() == "vox-brush"
+
+    monkeypatch.setattr(
+        overlay.g, "viewer", _V([{"name": "raw"}, {"tool": None}]), raising=False
+    )
+    assert overlay._active_annotation_tool() is None
