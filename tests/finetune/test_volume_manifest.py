@@ -130,3 +130,50 @@ def test_good_regions_live_beside_the_corrections_dir_not_inside_it(corrections)
     assert len(load_good_regions_for(corrections)) == 1
     # And the dashboard writes to that same place.
     assert os.path.basename(gr.GOOD_REGIONS_FILENAME) == GOOD_REGIONS_FILENAME
+
+
+class TestRehearsalFractionOverride:
+    """0 must stay distinct from blank: one turns rehearsal off for a run,
+    the other leaves whatever the manifest says alone."""
+
+    def test_blank_and_missing_leave_the_manifest_alone(self):
+        assert training._parse_rehearsal_fraction_override({}) == (False, None)
+        assert training._parse_rehearsal_fraction_override(
+            {"rehearsal_fraction": ""}
+        ) == (False, None)
+        assert training._parse_rehearsal_fraction_override(
+            {"rehearsal_fraction": None}
+        ) == (False, None)
+
+    def test_zero_is_a_real_choice(self):
+        assert training._parse_rehearsal_fraction_override(
+            {"rehearsal_fraction": 0}
+        ) == (True, 0.0)
+
+    @pytest.mark.parametrize("value,expected", [(0.25, 0.25), ("0.5", 0.5), (1, 1.0)])
+    def test_valid_values_pass_through(self, value, expected):
+        assert training._parse_rehearsal_fraction_override(
+            {"rehearsal_fraction": value}
+        ) == (True, expected)
+
+    @pytest.mark.parametrize("value", [-0.1, 1.5, "abc"])
+    def test_out_of_range_is_rejected(self, value):
+        with pytest.raises(ValueError):
+            training._parse_rehearsal_fraction_override({"rehearsal_fraction": value})
+
+
+def test_the_override_reaches_the_manifest(corrections, monkeypatch):
+    common.write_volume_manifest(_volume(corrections))
+    manifest = read_manifest(corrections)
+    assert "rehearsal_fraction" not in manifest
+
+    training._refresh_virtual_manifest_for_training(
+        corrections, manifest, {"rehearsal_fraction": 0.5}, "submit"
+    )
+    assert read_manifest(corrections)["rehearsal_fraction"] == 0.5
+
+    # And turning it off for a run is persisted as 0, not dropped.
+    training._refresh_virtual_manifest_for_training(
+        corrections, read_manifest(corrections), {"rehearsal_fraction": 0}, "submit"
+    )
+    assert read_manifest(corrections)["rehearsal_fraction"] == 0.0
