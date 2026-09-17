@@ -48,13 +48,39 @@ def _active_volume():
     return None
 
 
+def _minio_corrections_dir():
+    """The session's corrections dir as MinIO knows it, or None.
+
+    A second, independent witness to which session is live. The sync thread
+    runs off this, so it stays true for as long as annotations are flowing --
+    including after a dashboard restart clears g.annotation_volumes.
+    """
+    try:
+        from cellmap_flow.dashboard.finetune_utils import minio_state
+
+        return minio_state.get("output_base") or None
+    except Exception as e:
+        logger.debug(f"Could not read minio_state for the session path: {e}")
+        return None
+
+
 def _store_path():
-    """Where this session's good regions live, or None if there is no session."""
-    volume = _active_volume()
-    if not volume:
+    """Where this session's good regions live, or None if there is no session.
+
+    Falls back to MinIO's record when no volume is registered in-process.
+    The two can disagree: g.annotation_volumes is in-process state that a
+    dashboard restart wipes, while the MinIO sync keeps going from its own
+    copy. When they did disagree, every mark was lost in a way that looked
+    like success -- the save failed, so the next load returned [], so each
+    click appended to an empty list and replaced the previous region instead
+    of adding to it. You could click ten times and still have one box.
+    """
+    volume = _active_volume() or {}
+    corrections_dir = volume.get("corrections_dir") or _minio_corrections_dir()
+    if not corrections_dir:
         return None
     return os.path.join(
-        os.path.dirname(volume["corrections_dir"].rstrip("/")), GOOD_REGIONS_FILENAME
+        os.path.dirname(str(corrections_dir).rstrip("/")), GOOD_REGIONS_FILENAME
     )
 
 
@@ -130,18 +156,30 @@ def mark_current_view_response(data):
             "shape_nm": size_nm.tolist(),
         }
         regions.append(region)
-        saved = save_good_regions(regions)
-        refresh_good_regions_layer(regions)
+        if not save_good_regions(regions):
+            # Drawing the box anyway is what made this look like it worked.
+            # A mark that is not on disk will not reach training, and the
+            # next click will silently overwrite it, so say so instead.
+            return jsonify({
+                "success": False,
+                "error": (
+                    "Could not work out where to save good regions for this "
+                    "session, so the mark was discarded. Create or resume an "
+                    "annotation volume first."
+                ),
+            }), 409
 
+        refresh_good_regions_layer(regions)
         logger.info(
             f"Marked good region {region['label']} at "
-            f"{[round(v) for v in centre_nm]} nm, size {[round(v) for v in size_nm]} nm"
+            f"{[round(v) for v in centre_nm]} nm, size {[round(v) for v in size_nm]} nm "
+            f"({len(regions)} total)"
         )
         return jsonify({
             "success": True,
             "region": region,
             "count": len(regions),
-            "persisted": saved,
+            "persisted": True,
         })
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400

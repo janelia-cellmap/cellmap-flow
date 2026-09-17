@@ -152,12 +152,94 @@ def test_the_boxes_are_drawn_in_their_own_layer(session, client):
         assert len(s.layers[gr.GOOD_REGIONS_LAYER].annotations) == 1
 
 
-def test_no_session_reports_that_it_did_not_persist(tmp_path, monkeypatch, client):
+def test_no_session_is_an_error_not_a_quiet_no_op(tmp_path, monkeypatch, client):
+    """This used to return success with persisted:false and draw the box.
+
+    Nobody reads persisted:false. The mark was gone, the count still said 1,
+    and the next click overwrote it -- which is exactly how a session's worth
+    of marking turned into a single region.
+    """
+    from cellmap_flow.dashboard.finetune_utils import minio_state
+
     monkeypatch.setattr(gr.g, "annotation_volumes", {}, raising=False)
+    monkeypatch.setitem(minio_state, "output_base", None)
     monkeypatch.setattr(gr.g, "viewer", _FakeViewer([1, 2, 3], [16, 16, 16]),
                         raising=False)
     monkeypatch.setattr(gr.g, "raw", None, raising=False)
 
-    body = _post(client, "/api/finetune/good-regions/mark-view").get_json()
-    assert body["success"] is True
-    assert body["persisted"] is False, "must not claim to have saved"
+    response = _post(client, "/api/finetune/good-regions/mark-view")
+    assert response.status_code == 409
+    assert response.get_json()["success"] is False
+
+
+class TestMarksAccumulate:
+    """Marking ten regions must leave ten regions.
+
+    The field failure: g.annotation_volumes was empty, so _store_path()
+    returned None, so save_good_regions() did nothing and load_good_regions()
+    returned [] every time. Each click appended to an empty list, so the count
+    said 1, the layer drew one box, and every previous mark was gone. The
+    response still said success.
+    """
+
+    def test_minio_supplies_the_session_when_no_volume_is_registered(
+        self, tmp_path, monkeypatch
+    ):
+        from cellmap_flow.dashboard.finetune_utils import minio_state
+        from cellmap_flow.dashboard.routes.finetune import good_regions as gr
+
+        session = tmp_path / "20260916_222020"
+        corrections = session / "corrections"
+        corrections.mkdir(parents=True)
+
+        monkeypatch.setattr(gr.g, "annotation_volumes", {}, raising=False)
+        monkeypatch.setitem(minio_state, "output_base", str(corrections))
+
+        assert gr._store_path() == str(session / "good_regions.json")
+
+    def test_no_session_anywhere_still_means_no_path(self, monkeypatch):
+        from cellmap_flow.dashboard.finetune_utils import minio_state
+        from cellmap_flow.dashboard.routes.finetune import good_regions as gr
+
+        monkeypatch.setattr(gr.g, "annotation_volumes", {}, raising=False)
+        monkeypatch.setitem(minio_state, "output_base", None)
+        assert gr._store_path() is None
+
+    def test_repeated_marks_add_up(self, tmp_path, monkeypatch):
+        from cellmap_flow.dashboard.finetune_utils import minio_state
+        from cellmap_flow.dashboard.routes.finetune import good_regions as gr
+
+        session = tmp_path / "session"
+        corrections = session / "corrections"
+        corrections.mkdir(parents=True)
+        monkeypatch.setattr(gr.g, "annotation_volumes", {}, raising=False)
+        monkeypatch.setitem(minio_state, "output_base", str(corrections))
+
+        for expected in range(1, 6):
+            regions = gr.load_good_regions()
+            regions.append({"id": str(expected), "label": f"good-{expected}",
+                            "offset_nm": [0, 0, 0], "shape_nm": [896.0] * 3})
+            assert gr.save_good_regions(regions) is True
+            assert len(gr.load_good_regions()) == expected
+
+    def test_an_unsaveable_mark_is_reported_as_a_failure(self, monkeypatch):
+        """Better a visible error than a box that vanishes on the next click."""
+        from cellmap_flow.dashboard.app import app
+        from cellmap_flow.dashboard.routes.finetune import good_regions as gr
+
+        monkeypatch.setattr(gr, "_store_path", lambda: None)
+        monkeypatch.setattr(
+            gr, "viewer_position_and_scales", lambda: ([10, 10, 10], [16, 16, 16])
+        )
+        drew = []
+        monkeypatch.setattr(
+            gr, "refresh_good_regions_layer", lambda *a, **k: drew.append(1)
+        )
+
+        app.config.update(TESTING=True)
+        r = app.test_client().post(
+            "/api/finetune/good-regions/mark-view", json={}
+        )
+        assert r.status_code == 409
+        assert r.get_json()["success"] is False
+        assert not drew, "a discarded mark must not be drawn as if it landed"
