@@ -10,6 +10,7 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     list_existing_sessions_response,
     load_existing_volume_response,
     refresh_annotated_regions_layer,
+    refresh_annotated_regions_response,
     set_user_prefs_response,
     sync_annotations_manually_response,
 )
@@ -127,6 +128,11 @@ def add_crop_to_viewer():
 @finetune_bp.route("/api/finetune/sync-annotations", methods=["POST"])
 def sync_annotations_manually():
     return sync_annotations_manually_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/refresh-annotated-regions", methods=["POST"])
+def refresh_annotated_regions():
+    return refresh_annotated_regions_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/submit", methods=["POST"])

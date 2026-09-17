@@ -8,6 +8,7 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     list_existing_sessions_response,
     load_existing_volume_response,
     refresh_annotated_regions_layer,
+    refresh_annotated_regions_response,
     set_user_prefs_response,
     sync_annotations_manually_response,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "list_existing_sessions_response",
     "load_existing_volume_response",
     "refresh_annotated_regions_layer",
+    "refresh_annotated_regions_response",
     "restart_finetuning_job_response",
     "set_user_prefs_response",
     "stop_training_early_response",

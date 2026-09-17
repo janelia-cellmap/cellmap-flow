@@ -71,6 +71,21 @@
     </small>
   </div>
 
+  <!-- Annotated-region boxes, on demand only -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-primary" id="showAnnotatedRegionsBtn"
+            title="Redraw the boxes showing where this session has annotations">
+      Show Annotated Regions
+    </button>
+    <span id="annotatedRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
+    <small class="form-text text-muted d-block mt-1">
+      Redraws the "annotated_regions" boxes. Not automatic on purpose: updating
+      any layer makes neuroglancer rebuild all of them, which drops the draw
+      tool you have selected and can lose a stroke you just painted. Click this
+      when you want to see where you have been, not while you are painting.
+    </small>
+  </div>
+
   <!-- Good regions: rehearsal anchors -->
   <div class="mb-2">
     <button type="button" class="btn btn-outline-success" id="markGoodRegionBtn"
@@ -1505,6 +1520,39 @@ document.addEventListener("DOMContentLoaded", function () {
   const rehearsalFractionEl = document.getElementById("rehearsalFraction");
   if (rehearsalFractionEl) {
     rehearsalFractionEl.addEventListener("change", updateRehearsalHint);
+  }
+
+  const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
+  const annotatedRegionCount = document.getElementById("annotatedRegionCount");
+  if (showAnnotatedRegionsBtn) {
+    showAnnotatedRegionsBtn.addEventListener("click", function () {
+      showAnnotatedRegionsBtn.disabled = true;
+      annotatedRegionCount.textContent = "updating...";
+      fetch("/api/finetune/refresh-annotated-regions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) {
+            const n = d.count || 0;
+            annotatedRegionCount.textContent =
+              n === 0 ? "none yet" : `${n} region${n === 1 ? "" : "s"}`;
+          } else {
+            annotatedRegionCount.textContent = "failed";
+            finetuneLog.value += `Could not refresh annotated regions: ${d.error}\n`;
+            finetuneLog.scrollTop = finetuneLog.scrollHeight;
+          }
+        })
+        .catch((e) => {
+          annotatedRegionCount.textContent = "failed";
+          finetuneLog.value += `Could not refresh annotated regions: ${e}\n`;
+        })
+        .finally(() => {
+          showAnnotatedRegionsBtn.disabled = false;
+        });
+    });
   }
 
   refreshGoodRegionCount();
