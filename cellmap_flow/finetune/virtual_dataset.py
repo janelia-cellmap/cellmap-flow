@@ -364,6 +364,15 @@ class VirtualPatchDataset(Dataset):
             f"({'auto' if self.dense_to_sparse_ratio is None else 'explicit'}), "
             f"jitter={self.jitter.tolist()}"
         )
+        self._log_rehearsal_status()
+
+    def _log_rehearsal_status(self) -> None:
+        """Say what is happening with the good regions, if there are any.
+
+        Three different states used to share one "none usable" warning, so
+        turning rehearsal off -- a deliberate choice -- read in the log
+        exactly like a good region that had fallen outside the volume.
+        """
         if self._effective_rehearsal_fraction > 0:
             logger.info(
                 f"VirtualPatchDataset: {len(self._rehearsal_centers)} good "
@@ -371,10 +380,18 @@ class VirtualPatchDataset(Dataset):
                 f"will be rehearsal anchors "
                 f"({'auto' if self.rehearsal_fraction is None else 'explicit'})"
             )
-        elif self.good_regions:
+        elif not self.good_regions:
+            return
+        elif self.rehearsal_fraction is not None and self.rehearsal_fraction <= 0:
+            logger.info(
+                f"{len(self.good_regions)} good region(s) present, but "
+                f"rehearsal is set to 0, so training will not anchor on them."
+            )
+        else:
             logger.warning(
                 f"{len(self.good_regions)} good region(s) configured but none "
-                "usable; training will not anchor on them."
+                "of them landed inside the annotation volume; training will "
+                "not anchor on them. See the 'outside the volume' lines above."
             )
 
     def _build_rehearsal_index(self) -> None:

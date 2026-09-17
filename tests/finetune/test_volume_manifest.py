@@ -177,3 +177,55 @@ def test_the_override_reaches_the_manifest(corrections, monkeypatch):
         corrections, read_manifest(corrections), {"rehearsal_fraction": 0}, "submit"
     )
     assert read_manifest(corrections)["rehearsal_fraction"] == 0.0
+
+
+class TestGoodRegionReporting:
+    """Turning rehearsal off is not the same as a good region being broken.
+
+    Both ended up in one branch that warned "none usable", so setting
+    rehearsal to 0 -- a deliberate choice -- read in the log exactly like a
+    good region that had fallen outside the annotation volume.
+    """
+
+    def _dataset(self, rehearsal_fraction, effective=0.0, centers=None):
+        from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
+
+        ds = VirtualPatchDataset.__new__(VirtualPatchDataset)
+        ds.good_regions = [{"id": "g1"}]
+        ds.rehearsal_fraction = rehearsal_fraction
+        ds._effective_rehearsal_fraction = effective
+        ds._rehearsal_centers = centers
+        return ds
+
+    def _records(self, ds, caplog):
+        import logging
+
+        from cellmap_flow.finetune import virtual_dataset as vd
+
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger=vd.__name__):
+            ds._log_rehearsal_status()
+        return caplog.records
+
+    def test_rehearsal_zero_is_reported_as_a_choice_not_a_fault(self, caplog):
+        records = self._records(self._dataset(0.0), caplog)
+        assert [r.levelname for r in records] == ["INFO"]
+        assert "set to 0" in records[0].getMessage()
+
+    def test_a_region_outside_the_volume_is_still_a_warning(self, caplog):
+        records = self._records(self._dataset(None), caplog)
+        assert [r.levelname for r in records] == ["WARNING"]
+        assert "landed inside" in records[0].getMessage()
+
+    def test_working_anchors_say_what_share_of_patches_they_get(self, caplog):
+        import numpy as np
+
+        ds = self._dataset(None, effective=0.25, centers=np.zeros((1, 3)))
+        records = self._records(ds, caplog)
+        assert [r.levelname for r in records] == ["INFO"]
+        assert "25% of patches" in records[0].getMessage()
+
+    def test_no_good_regions_means_no_message_at_all(self, caplog):
+        ds = self._dataset(None)
+        ds.good_regions = []
+        assert self._records(ds, caplog) == []
