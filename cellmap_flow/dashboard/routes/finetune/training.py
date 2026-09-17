@@ -551,17 +551,21 @@ def restart_finetuning_job_response(job_id, data):
     try:
         restart_t0 = time.perf_counter()
 
-        # Every restart pulls the browser's latest strokes first. The trainer
-        # rebuilds its dataloader from the volume zarr on disk each iteration,
-        # and only this sync puts anything there -- the background thread runs
-        # on a 30s timer, so "annotate a bit more, then continue" would
-        # otherwise train on whatever happened to have landed by then.
+        # Every restart asks MinIO whether anything changed. That question is
+        # cheap and is the only way to answer it -- the browser writes its
+        # strokes straight to MinIO, so the dashboard has no way of knowing
+        # locally whether you drew anything since the last run. Asking *is*
+        # the check: force=False diffs chunk keys and downloads only what
+        # differs, so a parameters-only restart pulls nothing and the log says
+        # so. What it must not do is skip the question, because the trainer
+        # rebuilds its dataloader from the volume zarr on disk each iteration
+        # and the background sync only runs every 30s.
         #
         # This used to be skipped whenever a manifest was present, because the
         # sync also materialized per-chunk raw extracts the virtual dataset
         # never reads, which on a big session took minutes. That extraction is
         # now skipped inside the sync itself when a manifest exists (see
-        # sync_annotation_volume_from_minio), leaving just a chunk diff.
+        # sync_annotation_volume_from_minio), leaving just the chunk diff.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
@@ -585,14 +589,29 @@ def restart_finetuning_job_response(job_id, data):
                 corrections_dir, existing_manifest, data, "restart"
             )
 
+        pulled = 0
         try:
             sync_t0 = time.perf_counter()
-            synced = sync_all_annotations_from_minio(force=False)
+            pulled = sync_all_annotations_from_minio(force=False) or 0
             sync_elapsed = time.perf_counter() - sync_t0
-            logger.info(
-                f"Restart pre-sync complete for job {job_id}: synced={synced}, "
-                f"elapsed={sync_elapsed:.2f}s"
-            )
+            if pulled < 0:
+                logger.info(
+                    f"Restart pre-sync for job {job_id}: MinIO is not running, "
+                    f"so there is nothing to pull."
+                )
+                pulled = 0
+            elif pulled:
+                logger.info(
+                    f"Restart pre-sync for job {job_id}: pulled new annotations "
+                    f"for {pulled} volume(s) in {sync_elapsed:.2f}s. The next "
+                    f"iteration trains on them."
+                )
+            else:
+                logger.info(
+                    f"Restart pre-sync for job {job_id}: nothing new to pull "
+                    f"({sync_elapsed:.2f}s) -- annotations on disk are already "
+                    f"current, so this is a parameters-only restart."
+                )
         except Exception as e:
             logger.warning(f"Error syncing annotations before restart: {e}")
 
@@ -602,11 +621,22 @@ def restart_finetuning_job_response(job_id, data):
         )
         total_elapsed = time.perf_counter() - restart_t0
         logger.info(f"Restart request processed for job {job_id}: total={total_elapsed:.2f}s")
+        if pulled:
+            message = (
+                f"Restart request sent. Picked up new annotations from "
+                f"{pulled} volume(s); training will restart on the same GPU."
+            )
+        else:
+            message = (
+                "Restart request sent. No new annotations to pull; training "
+                "will restart on the same GPU."
+            )
         return jsonify(
             {
                 "success": True,
                 "job_id": job.job_id,
-                "message": "Restart request sent. Training will restart on the same GPU.",
+                "annotations_synced": pulled,
+                "message": message,
             }
         )
     except Exception as e:

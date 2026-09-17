@@ -3,8 +3,8 @@
 Three separate ways a run looked wrong without being wrong, or looked fine
 without being fine:
 
-  - the loss on screen only moved once per epoch, so a healthy run with a few
-    batches per epoch read as stalled;
+  - the loss on screen arrived five to ten epochs at a time, because tee
+    block-buffers its writes to a file even when the writer flushes;
   - raising the LoRA rank on restart silently shrank every update, because
     peft scales by lora_alpha / r and only r was being changed;
   - "continue with my new annotations" trained on the old ones, because the
@@ -34,53 +34,66 @@ def manager():
     return FinetuneJobManager.__new__(FinetuneJobManager)
 
 
-class TestLossMovesEveryBatch:
-    def test_a_batch_line_updates_the_loss(self, manager):
+class TestEpochLosses:
+    """One point per epoch, from the epoch summary line.
+
+    Per-batch losses are deliberately not read. What made the display look
+    stuck was tee buffering the log file, not the reporting interval -- see
+    TestTheLogReachesDiskAsItIsWritten.
+    """
+
+    def test_an_epoch_summary_sets_the_loss(self, manager):
         job = _Job()
         manager._parse_training_progress(job, """
 Starting epoch 1 of 100...
   Batch 1/3 - Loss: 0.233847 (sup: 0.233847, distill: 0.000000)
-  Batch 2/3 - Loss: 0.218966 (sup: 0.218809, distill: 0.015784)
+Epoch 1/100 - Loss: 0.218966 - Supervised: 0.218809
 """)
         assert job.latest_loss == pytest.approx(0.218966)
         assert (job.current_epoch, job.total_epochs) == (1, 100)
-        assert (job.current_batch, job.total_batches) == (2, 3)
 
-    def test_a_batch_loss_is_attributed_to_its_own_epoch(self, manager):
-        """The reason per-batch parsing was dropped once.
-
-        Scanned independently, epoch 2's batch loss landed on epoch 1, which
-        put the wrong point on the plot. "Starting epoch N" is what keeps the
-        two in step.
-        """
+    def test_batch_losses_are_ignored(self, manager):
+        """A batch loss is a running mean mid-epoch, not an epoch's result."""
         job = _Job()
         manager._parse_training_progress(job, """
-Starting epoch 1 of 10...
+Starting epoch 4 of 10...
   Batch 1/3 - Loss: 0.9
+  Batch 2/3 - Loss: 0.8
+""")
+        assert job.latest_loss is None
+        assert job.current_epoch == 4, "the counter should still advance"
+
+    def test_the_last_epoch_in_the_chunk_wins(self, manager):
+        job = _Job()
+        manager._parse_training_progress(job, """
 Epoch 1/10 - Loss: 0.9 - Supervised: 0.9
 Starting epoch 2 of 10...
-  Batch 1/3 - Loss: 0.4
+Epoch 2/10 - Loss: 0.4 - Supervised: 0.4
 """)
         assert job.current_epoch == 2
         assert job.latest_loss == pytest.approx(0.4)
 
-    def test_an_epoch_summary_still_wins_when_it_comes_last(self, manager):
-        job = _Job()
-        manager._parse_training_progress(job, """
-Starting epoch 3 of 10...
-  Batch 3/3 - Loss: 0.31
-Epoch 3/10 - Loss: 0.30 - Supervised: 0.28
-""")
-        assert job.current_epoch == 3
-        assert job.latest_loss == pytest.approx(0.30)
-
-    def test_a_chunk_with_no_starting_line_keeps_the_epoch_it_had(self, manager):
+    def test_a_chunk_of_only_batches_keeps_the_epoch_it_had(self, manager):
         """The log is read incrementally, so a chunk can be batches only."""
         job = _Job()
         job.current_epoch, job.total_epochs = 7, 10
+        job.latest_loss = 0.5
         manager._parse_training_progress(job, "  Batch 2/3 - Loss: 0.123\n")
-        assert job.current_epoch == 7
-        assert job.latest_loss == pytest.approx(0.123)
+        assert (job.current_epoch, job.latest_loss) == (7, 0.5)
+
+
+class TestTheLogReachesDiskAsItIsWritten:
+    def test_tee_is_line_buffered(self, tmp_path):
+        """The trainer flushes every line it prints, but tee writes to the log
+        file through stdio, which block-buffers to a file -- so roughly 8KB,
+        five to ten epochs' worth, landed at once and the dashboard showed
+        nothing in between."""
+        import inspect
+
+        from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+
+        src = inspect.getsource(FinetuneJobManager)
+        assert "| stdbuf -oL tee " in src, "tee must be line-buffered too"
 
 
 class TestRankChangeKeepsItsScaling:
@@ -162,3 +175,49 @@ class TestFinetunedLayerDisplayRange:
         shader = manager._finetuned_shader("http://example:8000")
         assert "range=[0, 1]" in shader
         assert "255" not in shader
+
+
+class TestRestartSyncIsReported:
+    """Asking MinIO whether anything changed is the check, not the cost.
+
+    The browser writes strokes straight to MinIO, so there is no local signal
+    to consult -- force=False diffs chunk keys and downloads only what
+    differs. A parameters-only restart therefore pulls nothing, and the log
+    and the response both say which of the two happened.
+    """
+
+    def _call(self, monkeypatch, pulled):
+        from cellmap_flow.dashboard.app import app
+        from cellmap_flow.dashboard.routes.finetune import training
+
+        monkeypatch.setattr(
+            training, "sync_all_annotations_from_minio", lambda force=True: pulled
+        )
+        monkeypatch.setattr(training, "build_restart_params", lambda data: {})
+
+        class _Manager:
+            jobs = {}
+
+            def restart_finetuning_job(self, job_id, updated_params):
+                return type("J", (), {"job_id": job_id})()
+
+        monkeypatch.setattr(training.g, "finetune_job_manager", _Manager(),
+                            raising=False)
+        with app.test_request_context():
+            response = training.restart_finetuning_job_response("job-1", {})
+        return response.get_json()
+
+    def test_new_annotations_are_announced(self, monkeypatch):
+        body = self._call(monkeypatch, 2)
+        assert body["annotations_synced"] == 2
+        assert "2 volume(s)" in body["message"]
+
+    def test_a_parameters_only_restart_says_it_pulled_nothing(self, monkeypatch):
+        body = self._call(monkeypatch, 0)
+        assert body["annotations_synced"] == 0
+        assert "No new annotations" in body["message"]
+
+    def test_minio_being_down_is_not_reported_as_a_pull(self, monkeypatch):
+        """sync_all_annotations_from_minio returns -1 when MinIO is absent."""
+        body = self._call(monkeypatch, -1)
+        assert body["annotations_synced"] == 0
