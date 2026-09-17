@@ -551,10 +551,17 @@ def restart_finetuning_job_response(job_id, data):
     try:
         restart_t0 = time.perf_counter()
 
-        # Pre-sync is only needed by the legacy CorrectionDataset path. With
-        # a virtual-sources manifest the trainer reads the volume zarr
-        # directly, so the sync would just download chunks the trainer never
-        # touches — and on big sessions can hang Restart for minutes.
+        # Every restart pulls the browser's latest strokes first. The trainer
+        # rebuilds its dataloader from the volume zarr on disk each iteration,
+        # and only this sync puts anything there -- the background thread runs
+        # on a 30s timer, so "annotate a bit more, then continue" would
+        # otherwise train on whatever happened to have landed by then.
+        #
+        # This used to be skipped whenever a manifest was present, because the
+        # sync also materialized per-chunk raw extracts the virtual dataset
+        # never reads, which on a big session took minutes. That extraction is
+        # now skipped inside the sync itself when a manifest exists (see
+        # sync_annotation_volume_from_minio), leaving just a chunk diff.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
@@ -577,21 +584,17 @@ def restart_finetuning_job_response(job_id, data):
             _refresh_virtual_manifest_for_training(
                 corrections_dir, existing_manifest, data, "restart"
             )
+
+        try:
+            sync_t0 = time.perf_counter()
+            synced = sync_all_annotations_from_minio(force=False)
+            sync_elapsed = time.perf_counter() - sync_t0
             logger.info(
-                f"Virtual sources manifest present for job {job_id}; "
-                "skipping pre-restart MinIO sync."
+                f"Restart pre-sync complete for job {job_id}: synced={synced}, "
+                f"elapsed={sync_elapsed:.2f}s"
             )
-        else:
-            try:
-                sync_t0 = time.perf_counter()
-                synced = sync_all_annotations_from_minio(force=False)
-                sync_elapsed = time.perf_counter() - sync_t0
-                logger.info(
-                    f"Restart pre-sync complete for job {job_id}: synced={synced}, "
-                    f"elapsed={sync_elapsed:.2f}s"
-                )
-            except Exception as e:
-                logger.warning(f"Error syncing annotations before restart: {e}")
+        except Exception as e:
+            logger.warning(f"Error syncing annotations before restart: {e}")
 
         job = g.finetune_job_manager.restart_finetuning_job(
             job_id=job_id,

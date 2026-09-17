@@ -251,6 +251,23 @@ def _apply_restart_params(args, signal_data: dict):
                 logger.info(f"Updated {key}: {old_value} -> {value}")
                 changed = True
 
+    # alpha is what sets LoRA's step size: peft scales the adapter by
+    # lora_alpha / r. Submit derives alpha = 2 * r, but a restart only carries
+    # lora_r -- so raising the rank from 8 to 64 while alpha stayed at 16 cut
+    # the effective update to an eighth, and produced a loss curve that looks
+    # reassuringly smooth because very little is happening per step.
+    if params.get("lora_r") is not None and params.get("lora_alpha") is None:
+        derived = int(params["lora_r"]) * 2
+        if getattr(args, "lora_alpha", None) != derived:
+            logger.info(
+                f"Updated lora_alpha: {getattr(args, 'lora_alpha', None)} -> "
+                f"{derived} (held at 2x rank so the adapter scaling does not "
+                f"change when you change the rank)"
+            )
+            args.lora_alpha = derived
+            params["lora_alpha"] = derived
+            changed = True
+
     # Persist updated params to metadata.json
     if changed and hasattr(args, 'output_dir') and args.output_dir:
         metadata_file = Path(args.output_dir) / "metadata.json"
