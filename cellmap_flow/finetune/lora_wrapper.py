@@ -344,6 +344,49 @@ def print_lora_parameters(model: nn.Module):
         logger.warning("Model has no parameters")
 
 
+def _lora_conv_delta_weight(layer, adapter):
+    """The LoRA delta for a conv layer: a contraction over the rank axis.
+
+    peft computes this itself, but takes a conv2d shortcut whenever
+    `weight.size()[2:4] == (1, 1)` -- which is also true of a *3D* conv with a
+    1x1x1 kernel, like an affinity head. The squeeze then leaves a trailing
+    spatial axis, the matmul becomes a batched one over the channel counts,
+    and it fails with a shape mismatch instead of merging. lora_B is always
+    pointwise, so the delta is just lora_B summed against lora_A over rank.
+    """
+    weight_A = layer.lora_A[adapter].weight
+    weight_B = layer.lora_B[adapter].weight
+    delta = torch.einsum(
+        "or,ri...->oi...", weight_B.flatten(1).float(), weight_A.float()
+    )
+    return (delta * layer.scaling[adapter]).to(weight_A.dtype)
+
+
+def _fix_conv_delta_weights(model: nn.Module) -> int:
+    """Give the conv layers peft would mis-merge a delta it can merge.
+
+    Returns how many were patched. Only layers that would hit the broken
+    branch are touched; every other layer keeps peft's own implementation.
+    """
+    import types
+
+    patched = 0
+    for module in model.modules():
+        if not hasattr(module, "get_base_layer") or not hasattr(module, "lora_A"):
+            continue
+        base = module.get_base_layer()
+        weight = getattr(base, "weight", None)
+        if weight is None or weight.dim() != 5 or tuple(weight.shape[2:4]) != (1, 1):
+            continue
+        if getattr(base, "groups", 1) != 1:
+            continue
+        if any(getattr(module, "use_dora", {}).values()):
+            continue
+        module.get_delta_weight = types.MethodType(_lora_conv_delta_weight, module)
+        patched += 1
+    return patched
+
+
 def _merge_existing_adapters(model: nn.Module) -> nn.Module:
     """Fold any already-attached LoRA adapter into the base weights.
 
@@ -358,6 +401,13 @@ def _merge_existing_adapters(model: nn.Module) -> nn.Module:
 
     if not isinstance(model, PeftModel):
         return model
+
+    patched = _fix_conv_delta_weights(model)
+    if patched:
+        logger.info(
+            f"Computing the LoRA delta for {patched} 1x1x1 3D conv layer(s) "
+            f"here rather than in peft, whose shortcut for them is conv2d-only."
+        )
 
     before = sum(p.numel() for p in model.parameters())
     try:
