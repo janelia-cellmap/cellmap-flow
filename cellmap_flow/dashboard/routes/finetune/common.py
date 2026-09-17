@@ -245,3 +245,80 @@ def get_lsf_job_id(finetune_job):
         if hasattr(finetune_job.lsf_job, "process"):
             return f"PID:{finetune_job.lsf_job.process.pid}"
     return None
+
+
+# Geometry the trainer cannot guess and will not run without.
+_MANIFEST_REQUIRED_FIELDS = (
+    "zarr_path",
+    "dataset_path",
+    "input_size",
+    "output_size",
+    "input_voxel_size",
+    "output_voxel_size",
+)
+
+
+def write_volume_manifest(volume):
+    """Mark a browser-painted annotation volume as trainable by the new path.
+
+    ``create_dataloader`` picks its dataset by looking for this manifest and
+    nothing else: present means VirtualPatchDataset, which streams patches
+    from the volume zarr and is the only dataset that honours good regions.
+    Absent means the legacy CorrectionDataset, which reads whatever
+    per-chunk ``_chunk_*.zarr`` extracts the MinIO sync happened to
+    materialize -- typically a handful of samples, one batch per epoch, and
+    no notion of a good region at all.
+
+    Only the YAML crop importer used to write one, so every session where
+    you painted scribbles in the browser trained on the legacy path and
+    silently ignored the regions you marked. Both volume-creating routes now
+    call this.
+
+    Returns the manifest path, or None when the volume record is too
+    incomplete to describe (a resumed session whose .zattrs predates these
+    fields, say) -- in which case the legacy path still applies, as before.
+    """
+    from cellmap_flow.finetune.virtual_dataset import write_manifest
+    from cellmap_flow.globals import (
+        current_input_norm_config,
+        current_postprocess_config,
+    )
+
+    missing = [f for f in _MANIFEST_REQUIRED_FIELDS if not volume.get(f)]
+    corrections_dir = volume.get("corrections_dir")
+    if missing or not corrections_dir:
+        logger.warning(
+            "Not writing a virtual-sources manifest: volume record is missing "
+            f"{missing or ['corrections_dir']}. Training will fall back to the "
+            "legacy correction-chunk dataset, which ignores good regions."
+        )
+        return None
+
+    manifest = {
+        "kind": "volume_zarr_v1",
+        "volume_zarr_path": volume["zarr_path"],
+        "raw_dataset_path": volume["dataset_path"],
+        "input_size_voxels": list(volume["input_size"]),
+        "output_size_voxels": list(volume["output_size"]),
+        "input_voxel_size_nm": list(volume["input_voxel_size"]),
+        "output_voxel_size_nm": list(volume["output_voxel_size"]),
+        # None means "one patch per populated chunk" -- full coverage of what
+        # the user actually painted, rather than a fixed count.
+        "patches_per_epoch": None,
+        "jitter_voxels": None,
+        "seed": 0,
+        # The trainer runs on LSF where g.input_norms is empty, so the
+        # normalization has to travel in the manifest. Without it the trainer
+        # feeds the model raw uint8 while inference feeds it [-1, 1], and the
+        # adapter is nonsense at inference time.
+        "input_norm": current_input_norm_config(),
+        "postprocess": current_postprocess_config(),
+        # None -> auto-balance the dense and sparse pools.
+        "dense_to_sparse_ratio": None,
+    }
+    path = write_manifest(str(corrections_dir), manifest)
+    logger.info(
+        f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}; "
+        "training will use VirtualPatchDataset and honour good regions."
+    )
+    return path

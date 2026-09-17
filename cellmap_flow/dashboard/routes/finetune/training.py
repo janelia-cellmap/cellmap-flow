@@ -60,6 +60,30 @@ def _step_names(config):
     return []
 
 
+def _backfill_manifest(corrections_dir):
+    """Write a manifest for a session that predates the volume routes writing one.
+
+    Returns the manifest if one could be written, else None (leaving the
+    caller on the legacy correction-chunk path, as before).
+    """
+    from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
+    from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+    volumes = getattr(g, "annotation_volumes", {}) or {}
+    for volume in reversed(list(volumes.values())):
+        if str(volume.get("corrections_dir") or "") != str(corrections_dir):
+            continue
+        if write_volume_manifest(volume) is None:
+            return None
+        return read_manifest(str(corrections_dir))
+
+    logger.info(
+        f"No annotation volume registered for {corrections_dir}; "
+        "training on the legacy correction-chunk dataset."
+    )
+    return None
+
+
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
     from cellmap_flow.finetune.virtual_dataset import write_manifest
@@ -167,6 +191,14 @@ def submit_finetuning_response(data):
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
+        if existing_manifest is None:
+            # Sessions started before the volume routes wrote a manifest have
+            # a perfectly trainable volume zarr and no sentinel pointing at
+            # it, so they would silently train on the legacy per-chunk
+            # dataset and ignore any good regions marked. Backfill from the
+            # registered volume rather than making the user start over.
+            existing_manifest = _backfill_manifest(actual_corrections_path)
+
         if existing_manifest is None:
             try:
                 sync_all_annotations_from_minio(force=False)

@@ -19,6 +19,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     load_user_prefs,
     save_user_prefs,
     viewer_position_and_scales,
+    write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
@@ -351,6 +352,9 @@ def create_annotation_volume_response(data):
             dataset_offset_nm=dataset_offset_nm.tolist(),
             corrections_dir=corrections_dir,
         )
+        # Without this the trainer falls back to the legacy per-chunk dataset
+        # and any good regions marked in this session are ignored.
+        write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
         return jsonify(
