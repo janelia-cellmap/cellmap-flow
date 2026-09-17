@@ -55,7 +55,7 @@ Module Contents
    :returns: Path to the generated YAML file
 
 
-.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: str = 'gpu_h100', charge_group: str = 'cellmap', json_data: dict = None) -> str
+.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: str = 'gpu_h100', charge_group: str = 'cellmap', walltime: str = None, json_data: dict = None) -> str
 
    Build YAML text snapshotting the dashboard's current live server config
    (whatever models/normalization/postprocessing/queue are active right
@@ -70,6 +70,8 @@ Module Contents
    :param data_path: current dataset path
    :param queue: LSF queue name
    :param charge_group: LSF charge group
+   :param walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
+                    the reloaded config falls back to the built-in default
    :param json_data: dict with "input_norm"/"postprocess" keys reflecting the
                      currently active normalization/postprocessing, if any
 

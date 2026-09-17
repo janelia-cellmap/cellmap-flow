@@ -258,6 +258,9 @@ Module Contents
    .. py:attribute:: best_loss
 
 
+   .. py:attribute:: last_supervised_loss
+
+
    .. py:attribute:: training_stats
       :value: []
 

@@ -25,7 +25,7 @@
     <link rel="index" title="Index" href="../../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../../search.html" />
     <link rel="next" title="cellmap_flow.dashboard.routes.finetune.routes" href="../routes/index.html" />
-    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.common" href="../common/index.html" /> 
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.good_regions" href="../good_regions/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -117,6 +117,9 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.logger" title="cellmap_flow.dashboard.routes.finetune.overlay.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.ANNOTATION_TOOL_BINDINGS" title="cellmap_flow.dashboard.routes.finetune.overlay.ANNOTATION_TOOL_BINDINGS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ANNOTATION_TOOL_BINDINGS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -125,12 +128,15 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
+<td><p>Draw a box around every region that has annotations in it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_response</span></code></a>(data)</p></td>
+<td><p>Redraw the annotated-regions boxes because the user asked for it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer_response</span></code></a>(data)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer_response</span></code></a>(data)</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually_response</span></code></a>(data)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually_response</span></code></a>(data)</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -143,10 +149,30 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.ANNOTATION_TOOL_BINDINGS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">ANNOTATION_TOOL_BINDINGS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.ANNOTATION_TOOL_BINDINGS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Draw a box around every region that has annotations in it.</p>
+<p>Only ever called for something the user just did – creating a volume,
+importing crops, or clicking “Show Annotated Regions”. Nothing calls this
+on a timer: see the note on _last_annotated_regions for why a push the
+user did not ask for is destructive.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response" title="Link to this definition"></a></dt>
+<dd><p>Redraw the annotated-regions boxes because the user asked for it.</p>
+<p>This is the only way the boxes update during a session. It pushes viewer
+state, which rebuilds every layer browser-side, so it is deliberately a
+button: you click it when you want to see where you have painted, not
+while you are in the middle of painting.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response">
@@ -165,7 +191,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../common/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.common" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../good_regions/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.good_regions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../routes/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.routes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

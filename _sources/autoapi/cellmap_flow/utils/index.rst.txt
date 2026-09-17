@@ -21,6 +21,7 @@ Submodules
    /autoapi/cellmap_flow/utils/load_py/index
    /autoapi/cellmap_flow/utils/logging_setup/index
    /autoapi/cellmap_flow/utils/lsf_queues/index
+   /autoapi/cellmap_flow/utils/model_geometry/index
    /autoapi/cellmap_flow/utils/neuroglancer_utils/index
    /autoapi/cellmap_flow/utils/output_probe/index
    /autoapi/cellmap_flow/utils/plugin_manager/index

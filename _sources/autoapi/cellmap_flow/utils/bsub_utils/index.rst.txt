@@ -25,6 +25,7 @@ Attributes
    cellmap_flow.utils.bsub_utils.DEFAULT_CHARGE_GROUP
    cellmap_flow.utils.bsub_utils.SERVER_COMMAND
    cellmap_flow.utils.bsub_utils.SERVER_LOG_DIR
+   cellmap_flow.utils.bsub_utils.DEFAULT_WALLTIME
    cellmap_flow.utils.bsub_utils.PENDING_FALLBACK_SECONDS
 
 
@@ -242,6 +243,18 @@ Module Contents
 
 
 
+   .. py:method:: observed_status() -> Optional[JobStatus]
+
+      The status bjobs actually reported, or None if it could not say.
+
+      get_status() falls back to self.status, which starts out RUNNING. That
+      is fine for display but wrong for decisions: a job that never started
+      reads as RUNNING the moment bjobs is unreadable, so a caller asking
+      "did this actually leave the queue?" would be told yes. Callers that
+      need the difference use this instead.
+
+
+
    .. py:method:: get_status() -> JobStatus
 
       Query LSF for job status using bjobs.
@@ -273,21 +286,34 @@ Module Contents
    Kills all tracked jobs before exiting.
 
 
+.. py:data:: DEFAULT_WALLTIME
+   :value: '08:00'
+
+
 .. py:data:: PENDING_FALLBACK_SECONDS
    :value: 180
 
 
-.. py:function:: gpu_queue_candidates(preferred)
+.. py:function:: gpu_queue_candidates(preferred, cycle=True)
 
    The queue to try first, then the others worth falling back to.
 
+   With ``cycle=False`` the requested queue is the only candidate: the job
+   waits for it however long that takes, rather than being moved to whatever
+   is free. Some work is pinned to a queue on purpose -- a benchmark that
+   must run on one GPU model, or a charge group only valid on one queue --
+   and silently landing somewhere else is worse than waiting.
+
    Ordered by what LSF says is actually free rather than by a fixed list, so
-   the first fallback is the one most likely to start now. Queues that are
-   not accepting work are dropped entirely: they take submissions and never
+   the first fallback is the one most likely to start now. Fallback queues
+   that are not accepting work are dropped: they take submissions and never
    run them, which is indistinguishable from a very slow job.
 
-   Falls back to the fixed GPU list when LSF cannot be queried, so this never
-   returns fewer options than the caller asked for.
+   The requested queue is kept whatever LSF says about it, but demoted to
+   last if LSF says it is not accepting work, so a closed request does not
+   cost a full pending timeout before anything else is tried.
+
+   When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
 
 
 .. py:function:: is_bsub_available() -> bool
@@ -295,7 +321,7 @@ Module Contents
    Check if bsub command is available in the system PATH.
 
 
-.. py:function:: submit_bsub_job(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'my_job', num_gpus: int = 1, num_cpus: int = 4) -> LSFJob
+.. py:function:: submit_bsub_job(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'my_job', num_gpus: int = 1, num_cpus: int = 4, walltime: Optional[str] = None) -> LSFJob
 
    Submit a job to LSF cluster using bsub.
 
@@ -321,7 +347,7 @@ Module Contents
    :returns: LocalJob object with process information
 
 
-.. py:function:: start_hosts(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'example_job', use_https: bool = False, wait_for_host: bool = True) -> Job
+.. py:function:: start_hosts(command: str, queue: str = DEFAULT_QUEUE, charge_group: Optional[str] = None, job_name: str = 'example_job', use_https: bool = False, wait_for_host: bool = True, walltime: Optional[str] = None, cycle_queues: Optional[bool] = None) -> Job
 
    Start a server job either via bsub or locally.
 
@@ -331,6 +357,9 @@ Module Contents
    :param job_name: Name for the job
    :param use_https: Whether to use HTTPS (adds cert/key flags)
    :param wait_for_host: Whether to wait for host information before returning
+   :param walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
+   :param cycle_queues: Try other GPU queues when the requested one is busy or
+                        closed. Defaults to g.cycle_gpu_queues, which defaults to True.
 
    :returns: Job object (LSFJob or LocalJob) with job information
 

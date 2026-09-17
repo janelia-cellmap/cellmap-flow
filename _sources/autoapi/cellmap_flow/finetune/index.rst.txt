@@ -77,7 +77,7 @@ Package Contents
    :returns: List of layer names suitable for LoRA adaptation
 
 
-.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 8, lora_alpha: int = 16, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
 
    Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
 
@@ -352,6 +352,9 @@ Package Contents
 
 
    .. py:attribute:: best_loss
+
+
+   .. py:attribute:: last_supervised_loss
 
 
    .. py:attribute:: training_stats

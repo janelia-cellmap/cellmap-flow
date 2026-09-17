@@ -50,7 +50,7 @@ Module Contents
 .. py:data:: SERVER_CONFIG_DEFAULTS
 
 .. py:data:: SERVER_CONFIG_KEYS
-   :value: ['queue', 'charge_group', 'nb_cores_master', 'nb_cores_worker', 'nb_workers']
+   :value: ['queue', 'charge_group', 'walltime', 'cycle_gpu_queues', 'nb_cores_master', 'nb_cores_worker',...
 
 
 .. py:function:: load_server_config_cache() -> Optional[Dict[str, Any]]

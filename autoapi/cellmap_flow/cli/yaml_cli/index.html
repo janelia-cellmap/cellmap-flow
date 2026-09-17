@@ -167,7 +167,16 @@ making it easy to add new model types without modifying this file.</p>
 data_path: /path/to/data
 charge_group: my_group
 queue: gpu_h100        # optional, defaults to gpu_h100
-wrap_raw: true         # optional; false serves raw straight from the file
+walltime: “08:00”      # optional; LSF run limit, “HH:MM” or minutes.</p>
+<blockquote>
+<div><p># Without it the queue’s own default applies,
+# which is 2 hours on the Janelia GPU queues.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>cycle_gpu_queues: true # optional; false pins the job to <cite>queue</cite> above</dt><dd><p># instead of falling back to a queue with capacity.</p>
+</dd>
+</dl>
+<p>wrap_raw: true         # optional; false serves raw straight from the file
 json_data:             # optional; normalization and postprocessing</p>
 <blockquote>
 <div><dl class="simple">

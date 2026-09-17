@@ -60,6 +60,7 @@ Attributes
 
    cellmap_flow.finetune.virtual_dataset.logger
    cellmap_flow.finetune.virtual_dataset.VIRTUAL_MANIFEST_FILENAME
+   cellmap_flow.finetune.virtual_dataset.GOOD_REGIONS_FILENAME
 
 
 Classes
@@ -77,6 +78,7 @@ Functions
 
    cellmap_flow.finetune.virtual_dataset.write_manifest
    cellmap_flow.finetune.virtual_dataset.read_manifest
+   cellmap_flow.finetune.virtual_dataset.load_good_regions_for
    cellmap_flow.finetune.virtual_dataset.dataset_from_manifest
 
 
@@ -85,7 +87,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None)
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None)
 
 
 
@@ -148,8 +150,15 @@ Module Contents
    .. py:attribute:: dense_to_sparse_ratio
 
 
+   .. py:attribute:: good_regions
+      :value: []
+
+
+
+   .. py:attribute:: rehearsal_fraction
+
+
    .. py:attribute:: input_norm_config
-      :type:  dict
 
 
    .. py:attribute:: dataset_offset_nm
@@ -158,6 +167,17 @@ Module Contents
 
    .. py:attribute:: volume_shape_voxels
       :type:  numpy.ndarray
+
+
+   .. py:property:: emits_anchor
+      :type: bool
+
+
+      Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
+
+      Only once there is something to anchor on. Without good regions the
+      dataset keeps its original 2-tuple contract, so nothing about an
+      existing run changes.
 
 
 .. py:data:: VIRTUAL_MANIFEST_FILENAME
@@ -174,12 +194,29 @@ Module Contents
    Return the manifest if present, else ``None``.
 
 
-.. py:function:: dataset_from_manifest(manifest: dict) -> VirtualPatchDataset
+.. py:data:: GOOD_REGIONS_FILENAME
+   :value: 'good_regions.json'
+
+
+.. py:function:: load_good_regions_for(corrections_dir: Optional[str]) -> list
+
+   Read the session's good regions, if any were marked.
+
+   Deliberately read here rather than snapshotted into the manifest: the
+   manifest is written when crops are imported, and regions get marked
+   afterwards, for as long as the user keeps browsing. Reading at training
+   time means the run uses every region marked up to the moment it started.
+
+
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None) -> VirtualPatchDataset
 
    Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
    Recognized manifest kinds:
      - ``volume_zarr_v1`` (current): trainer reads the session's
        annotation_volume.zarr directly. Field ``volume_zarr_path``.
+
+   ``corrections_dir`` is where the session's good regions are looked up;
+   omit it and the dataset simply trains without rehearsal anchors.
 
 

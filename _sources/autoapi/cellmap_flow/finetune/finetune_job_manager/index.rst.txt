@@ -192,7 +192,7 @@ Module Contents
    .. py:attribute:: logger
 
 
-   .. py:method:: submit_finetuning_job(model_config, corrections_path: pathlib.Path, lora_r: int = 8, num_epochs: int = 10, batch_size: int = 2, learning_rate: float = 0.0001, output_base: Optional[pathlib.Path] = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', checkpoint_path_override: Optional[pathlib.Path] = None, auto_serve: bool = True, mask_unannotated: bool = False, loss_type: str = 'combined', label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_scope: str = 'unlabeled', margin: float = 0.3, balance_classes: bool = False, output_type: str = 'binary', select_channel: Optional[int] = None, offsets: Optional[str] = None) -> FinetuneJob
+   .. py:method:: submit_finetuning_job(model_config, corrections_path: pathlib.Path, lora_r: int = 8, num_epochs: int = 10, batch_size: int = 8, learning_rate: float = 0.0001, output_base: Optional[pathlib.Path] = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', checkpoint_path_override: Optional[pathlib.Path] = None, auto_serve: bool = True, mask_unannotated: bool = False, loss_type: str = 'combined', label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_scope: str = 'unlabeled', margin: float = 0.3, balance_classes: bool = False, output_type: str = 'binary', select_channel: Optional[int] = None, offsets: Optional[str] = None) -> FinetuneJob
 
       Submit finetuning job to LSF cluster.
 
@@ -200,7 +200,7 @@ Module Contents
       :param corrections_path: Path to corrections.zarr directory
       :param lora_r: LoRA rank (default: 8)
       :param num_epochs: Number of training epochs (default: 10)
-      :param batch_size: Training batch size (default: 2)
+      :param batch_size: Training batch size (default: 8)
       :param learning_rate: Learning rate (default: 1e-4)
       :param output_base: Base directory for outputs (default: output/finetuning)
       :param queue: LSF queue name (default: gpu_h100)

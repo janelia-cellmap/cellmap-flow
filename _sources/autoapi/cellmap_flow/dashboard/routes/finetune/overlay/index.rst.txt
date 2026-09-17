@@ -10,6 +10,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.dashboard.routes.finetune.overlay.logger
+   cellmap_flow.dashboard.routes.finetune.overlay.ANNOTATION_TOOL_BINDINGS
 
 
 Functions
@@ -18,6 +19,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer
+   cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response
    cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response
    cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response
 
@@ -27,7 +29,27 @@ Module Contents
 
 .. py:data:: logger
 
+.. py:data:: ANNOTATION_TOOL_BINDINGS
+
 .. py:function:: refresh_annotated_regions_layer(corrections_path=None)
+
+   Draw a box around every region that has annotations in it.
+
+   Only ever called for something the user just did -- creating a volume,
+   importing crops, or clicking "Show Annotated Regions". Nothing calls this
+   on a timer: see the note on _last_annotated_regions for why a push the
+   user did not ask for is destructive.
+
+
+.. py:function:: refresh_annotated_regions_response(data)
+
+   Redraw the annotated-regions boxes because the user asked for it.
+
+   This is the only way the boxes update during a session. It pushes viewer
+   state, which rebuilds every layer browser-side, so it is deliberately a
+   button: you click it when you want to see where you have painted, not
+   while you are in the middle of painting.
+
 
 .. py:function:: add_crop_to_viewer_response(data)
 

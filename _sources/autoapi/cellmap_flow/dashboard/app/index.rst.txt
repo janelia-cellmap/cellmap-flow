@@ -13,6 +13,7 @@ Attributes
    cellmap_flow.dashboard.app.template_dir
    cellmap_flow.dashboard.app.static_dir
    cellmap_flow.dashboard.app.app
+   cellmap_flow.dashboard.app.package_logger
    cellmap_flow.dashboard.app.log_handler
 
 
@@ -34,6 +35,8 @@ Module Contents
 .. py:data:: static_dir
 
 .. py:data:: app
+
+.. py:data:: package_logger
 
 .. py:data:: log_handler
 

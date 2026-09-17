@@ -24,7 +24,7 @@
     <script src="../../../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../../search.html" />
-    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.overlay" href="../overlay/index.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.good_regions" href="../good_regions/index.html" />
     <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.annotation_sessions" href="../annotation_sessions/index.html" /> 
 </head>
 
@@ -163,6 +163,9 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id" title="cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_lsf_job_id</span></code></a>(finetune_job)</p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest" title="cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_volume_manifest</span></code></a>(volume)</p></td>
+<td><p>Mark a browser-painted annotation volume as trainable by the new path.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -238,6 +241,26 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">get_lsf_job_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">finetune_job</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">write_volume_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest" title="Link to this definition"></a></dt>
+<dd><p>Mark a browser-painted annotation volume as trainable by the new path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> picks its dataset by looking for this manifest and
+nothing else: present means VirtualPatchDataset, which streams patches
+from the volume zarr and is the only dataset that honours good regions.
+Absent means the legacy CorrectionDataset, which reads whatever
+per-chunk <code class="docutils literal notranslate"><span class="pre">_chunk_*.zarr</span></code> extracts the MinIO sync happened to
+materialize – typically a handful of samples, one batch per epoch, and
+no notion of a good region at all.</p>
+<p>Only the YAML crop importer used to write one, so every session where
+you painted scribbles in the browser trained on the legacy path and
+silently ignored the regions you marked. Both volume-creating routes now
+call this.</p>
+<p>Returns the manifest path, or None when the volume record is too
+incomplete to describe (a resumed session whose .zattrs predates these
+fields, say) – in which case the legacy path still applies, as before.</p>
+</dd></dl>
+
 </section>
 </section>
 
@@ -246,7 +269,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../annotation_sessions/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.annotation_sessions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../overlay/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.overlay" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../good_regions/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.good_regions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

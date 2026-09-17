@@ -30,6 +30,7 @@ Functions
    cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type
    cellmap_flow.dashboard.routes.finetune.common.build_restart_params
    cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id
+   cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest
 
 
 Module Contents
@@ -66,4 +67,26 @@ Module Contents
 .. py:function:: build_restart_params(data)
 
 .. py:function:: get_lsf_job_id(finetune_job)
+
+.. py:function:: write_volume_manifest(volume)
+
+   Mark a browser-painted annotation volume as trainable by the new path.
+
+   ``create_dataloader`` picks its dataset by looking for this manifest and
+   nothing else: present means VirtualPatchDataset, which streams patches
+   from the volume zarr and is the only dataset that honours good regions.
+   Absent means the legacy CorrectionDataset, which reads whatever
+   per-chunk ``_chunk_*.zarr`` extracts the MinIO sync happened to
+   materialize -- typically a handful of samples, one batch per epoch, and
+   no notion of a good region at all.
+
+   Only the YAML crop importer used to write one, so every session where
+   you painted scribbles in the browser trained on the legacy path and
+   silently ignored the regions you marked. Both volume-creating routes now
+   call this.
+
+   Returns the manifest path, or None when the volume record is too
+   incomplete to describe (a resumed session whose .zattrs predates these
+   fields, say) -- in which case the legacy path still applies, as before.
+
 

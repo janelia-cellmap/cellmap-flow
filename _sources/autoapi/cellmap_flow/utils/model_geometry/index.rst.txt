@@ -1,0 +1,93 @@
+cellmap_flow.utils.model_geometry
+=================================
+
+.. py:module:: cellmap_flow.utils.model_geometry
+
+.. autoapi-nested-parse::
+
+   Get a model's geometry without building the model, when possible.
+
+   Sizing an annotation volume needs five numbers: ``read_shape``,
+   ``write_shape``, the two voxel sizes, and the output channel count. Reading
+   them from ``ModelConfig.config`` costs a full model load -- for a script model
+   that executes the config file, which downloads weights, loads adapters, and
+   runs a validation forward pass. One measured session spent 43s of a 47s
+   "create annotation volume" there, on the dashboard's CPU, for numbers the
+   inference server already had.
+
+   Three sources, cheapest first:
+
+   1. a running inference server, which already holds the model;
+   2. this cache, keyed so that it invalidates itself when the model changes;
+   3. building the model, which then populates the cache.
+
+   Reading the declarations statically is deliberately *not* among them. The
+   script contract allows geometry to depend on the model -- for instance
+   ``example/dacapo_run_retrieve.py`` has ``output_voxel_size =
+   Coordinate(model.scale(voxel_size))`` -- so parsing literals would silently
+   produce wrong numbers for those scripts rather than failing.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.model_geometry.logger
+   cellmap_flow.utils.model_geometry.CACHE_PATH
+   cellmap_flow.utils.model_geometry.MAX_ENTRIES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.model_geometry.cache_key
+   cellmap_flow.utils.model_geometry.load_cached_geometry
+   cellmap_flow.utils.model_geometry.store_geometry
+   cellmap_flow.utils.model_geometry.resolve_model_geometry
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: CACHE_PATH
+
+.. py:data:: MAX_ENTRIES
+   :value: 200
+
+
+.. py:function:: cache_key(model_config)
+
+   A key that changes when the model does, or None if we cannot make one.
+
+   Only keys that invalidate themselves are allowed. A script is keyed by
+   path and mtime, so editing it misses the cache. A HuggingFace repo is
+   keyed by an explicit revision, which is immutable; without one the
+   revision is whatever ``main`` points at today, so those are not cached
+   rather than risk serving geometry for a model that has since moved.
+
+
+.. py:function:: load_cached_geometry(model_config)
+
+   Geometry remembered for this exact model, or None.
+
+
+.. py:function:: store_geometry(model_config, config)
+
+   Remember the geometry of a model we just paid to build.
+
+
+.. py:function:: resolve_model_geometry(model_name, model_config)
+
+   The five geometry fields, by the cheapest route that can supply them.
+
+   Returns an object exposing ``read_shape``, ``write_shape``,
+   ``input_voxel_size``, ``output_voxel_size`` and ``output_channels`` --
+   either a stand-in or, on the build path, the real ``ModelConfig.config``.
+
+

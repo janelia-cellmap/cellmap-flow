@@ -117,6 +117,7 @@
 <li class="toctree-l1"><a class="reference internal" href="annotation_core/index.html">cellmap_flow.dashboard.routes.finetune.annotation_core</a></li>
 <li class="toctree-l1"><a class="reference internal" href="annotation_sessions/index.html">cellmap_flow.dashboard.routes.finetune.annotation_sessions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="common/index.html">cellmap_flow.dashboard.routes.finetune.common</a></li>
+<li class="toctree-l1"><a class="reference internal" href="good_regions/index.html">cellmap_flow.dashboard.routes.finetune.good_regions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="overlay/index.html">cellmap_flow.dashboard.routes.finetune.overlay</a></li>
 <li class="toctree-l1"><a class="reference internal" href="routes/index.html">cellmap_flow.dashboard.routes.finetune.routes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="service/index.html">cellmap_flow.dashboard.routes.finetune.service</a></li>
@@ -141,7 +142,7 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
-<td><p></p></td>
+<td><p>Draw a box around every region that has annotations in it.</p></td>
 </tr>
 </tbody>
 </table>
@@ -151,7 +152,12 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Draw a box around every region that has annotations in it.</p>
+<p>Only ever called for something the user just did – creating a volume,
+importing crops, or clicking “Show Annotated Regions”. Nothing calls this
+on a timer: see the note on _last_annotated_regions for why a push the
+user did not ask for is destructive.</p>
+</dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.finetune_bp">

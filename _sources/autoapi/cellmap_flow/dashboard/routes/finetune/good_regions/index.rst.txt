@@ -1,0 +1,82 @@
+cellmap_flow.dashboard.routes.finetune.good_regions
+===================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.good_regions
+
+.. autoapi-nested-parse::
+
+   Regions the user has looked at and judged the model already handles well.
+
+   These are the counterweight to corrections. Painted scribbles say "you got
+   this wrong, here"; a good region says "you got this right, here, and I
+   checked". Training samples patches from both: the scribbles supply the
+   supervised signal, and the good regions supply rehearsal -- patches with no
+   annotation at all, which the trainer already treats correctly (an empty mask
+   zeroes the supervised term and hands the whole patch to the distillation
+   term against the frozen teacher).
+
+   Kept deliberately separate from ``imported_crops``: those carry real labels,
+   these carry only a human's assertion that the model's own output is
+   acceptable there. Both are evidence, but not the same kind.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.good_regions.logger
+   cellmap_flow.dashboard.routes.finetune.good_regions.GOOD_REGIONS_LAYER
+   cellmap_flow.dashboard.routes.finetune.good_regions.GOOD_REGIONS_FILENAME
+   cellmap_flow.dashboard.routes.finetune.good_regions.DEFAULT_REGION_SIZE_NM
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.good_regions.load_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_response
+   cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions_response
+   cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region_response
+   cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GOOD_REGIONS_LAYER
+   :value: 'good_regions'
+
+
+.. py:data:: GOOD_REGIONS_FILENAME
+   :value: 'good_regions.json'
+
+
+.. py:data:: DEFAULT_REGION_SIZE_NM
+   :value: 896.0
+
+
+.. py:function:: load_good_regions()
+
+.. py:function:: save_good_regions(regions)
+
+.. py:function:: mark_current_view_response(data)
+
+   Record a box centred on wherever the viewer is looking right now.
+
+
+.. py:function:: list_good_regions_response()
+
+.. py:function:: delete_good_region_response(data)
+
+.. py:function:: refresh_good_regions_layer(regions=None)
+
+   Draw the good regions in the viewer so you can see what you marked.
+
+

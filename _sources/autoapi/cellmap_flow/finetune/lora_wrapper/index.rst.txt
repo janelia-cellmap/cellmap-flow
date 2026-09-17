@@ -104,7 +104,7 @@ Module Contents
    .. py:method:: forward(x=None, input_ids=None, **kwargs)
 
 
-.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 8, lora_alpha: int = 16, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
 
    Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
 

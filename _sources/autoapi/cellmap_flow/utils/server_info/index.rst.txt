@@ -27,6 +27,7 @@ Attributes
    cellmap_flow.utils.server_info.logger
    cellmap_flow.utils.server_info.DEFAULT_TIMEOUT_SECONDS
    cellmap_flow.utils.server_info.GEOMETRY_FIELDS
+   cellmap_flow.utils.server_info.OPTIONAL_FIELDS
 
 
 Functions
@@ -72,6 +73,10 @@ Module Contents
 
 .. py:data:: GEOMETRY_FIELDS
    :value: ('read_shape', 'write_shape', 'input_voxel_size', 'output_voxel_size', 'output_channels')
+
+
+.. py:data:: OPTIONAL_FIELDS
+   :value: ('channels',)
 
 
 .. py:function:: model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS)

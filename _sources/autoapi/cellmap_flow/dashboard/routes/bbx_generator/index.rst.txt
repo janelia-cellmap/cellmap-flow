@@ -12,6 +12,7 @@ Attributes
    cellmap_flow.dashboard.routes.bbx_generator.bbx_generator_state
    cellmap_flow.dashboard.routes.bbx_generator.logger
    cellmap_flow.dashboard.routes.bbx_generator.bbx_bp
+   cellmap_flow.dashboard.routes.bbx_generator.BBOX_LAYER_NAME
 
 
 Functions
@@ -32,6 +33,10 @@ Module Contents
 .. py:data:: logger
 
 .. py:data:: bbx_bp
+
+.. py:data:: BBOX_LAYER_NAME
+   :value: 'bboxes'
+
 
 .. py:function:: start_bbx_generator()
 
