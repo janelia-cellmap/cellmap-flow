@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_SECURITY = "http"
 DEFAULT_QUEUE = "gpu_h100"
 DEFAULT_CHARGE_GROUP = "cellmap"
-SERVER_COMMAND = "cellmap_flow_server"
+# Keep fileglancer's pixi-wrapped launch: Fileglancer's runnables drive the
+# server through `pixi run`, so the env is resolved from the lockfile.
+SERVER_COMMAND = "pixi run cellmap_flow_server"
 SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
 
 

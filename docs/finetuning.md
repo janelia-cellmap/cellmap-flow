@@ -14,7 +14,23 @@ cd cellmap-flow
 ```
 
 Everything after this assumes you are in that directory; the `.` in the
-install command below refers to the checkout.
+install commands below refers to the checkout.
+
+### With pixi (recommended)
+
+```bash
+pixi install
+```
+
+That is the whole install. It reads `pixi.toml` and builds an environment
+with every prerequisite pinned by `pixi.lock`. Run commands in it with
+`pixi run <command>`, e.g. `pixi run cellmap_flow_view -d /path/to/data.zarr`
+— no separate activation step.
+
+The first run takes several minutes: the Neuroglancer fork is built from
+source, which compiles a C++ extension and bundles the web client with npm.
+
+### Without pixi
 
 ```bash
 mamba create -n cellmap-flow-finetune python=3.11 minio-server minio-client -c conda-forge -y
@@ -37,9 +53,9 @@ pip install -e ".[finetune]"
   painting tools are missing from the Draw tab, you have the upstream build.
 - **LoRA/PEFT dependencies** — for parameter-efficient finetuning.
 
-The fork has to be installed as a separate step rather than being listed in
-`pyproject.toml`'s `[project.optional-dependencies]`, because a PEP 508 direct
-git reference there would make the published PyPI package unuploadable.
+The fork is declared in `pixi.toml` rather than in `pyproject.toml`'s
+`[project.optional-dependencies]`, because a PEP 508 direct git reference
+there would make the published PyPI package unuploadable.
 
 ## 1. Launch the Dashboard
 
