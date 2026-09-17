@@ -306,6 +306,24 @@ class LoRAFinetuner:
             logger.info("Class balancing enabled: fg and bg scribble voxels weighted equally")
 
         logger.info(f"Using {loss_type} loss")
+
+        # Good regions are useless without a teacher term to apply in them:
+        # the supervised loss never touches an unannotated voxel, so with
+        # lambda at 0 every rehearsal patch would contribute exactly nothing
+        # and the regions the user marked would silently do nothing at all.
+        # Marking them is an explicit request to be held there, so honour it
+        # rather than training a no-op and looking like it worked.
+        self._anchors_available = bool(
+            getattr(getattr(self.dataloader, "dataset", None), "emits_anchor", False)
+        )
+        if self._anchors_available and self.distillation_lambda <= 0:
+            self.distillation_lambda = 1.0
+            logger.warning(
+                "Good regions are marked but distillation_lambda was 0, which "
+                "would make them inert. Setting lambda=1.0 so the anchors take "
+                "effect; pass an explicit lambda to override."
+            )
+
         if self.label_smoothing > 0:
             logger.info(f"Label smoothing: {self.label_smoothing} (targets: {self.label_smoothing/2:.3f} to {1-self.label_smoothing/2:.3f})")
         if self.distillation_lambda > 0:
@@ -324,7 +342,12 @@ class LoRAFinetuner:
                     "if you OOM, distillation will be disabled automatically as "
                     "a fallback in the OOM handler."
                 )
-            scope_str = "all voxels" if self.distillation_all_voxels else "unlabeled voxels only"
+            if self._anchors_available:
+                scope_str = "good regions only"
+            elif self.distillation_all_voxels:
+                scope_str = "all voxels"
+            else:
+                scope_str = "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
         # Mixed precision scaler
@@ -745,7 +768,18 @@ class LoRAFinetuner:
         # batch of the epoch (cumulative grad before zero_grad fires).
         diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
-        for batch_idx, (raw, target) in enumerate(self.dataloader):
+        for batch_idx, batch in enumerate(self.dataloader):
+            # The dataset yields a third tensor once the session has good
+            # regions: a per-voxel mask marking where the student should be
+            # held to the teacher. Older datasets yield the 2-tuple, so both
+            # shapes have to work.
+            if len(batch) == 3:
+                raw, target, anchor = batch
+                anchor = anchor.to(self.device, non_blocking=True)
+            else:
+                raw, target = batch
+                anchor = None
+
             # Move to device
             raw = raw.to(self.device, non_blocking=True)
             target = target.to(self.device, non_blocking=True)
@@ -828,7 +862,22 @@ class LoRAFinetuner:
                 distillation_loss = torch.tensor(0.0, device=self.device)
                 if self.distillation_lambda > 0 and teacher_pred is not None:
                     distill_loss_map = (pred - teacher_pred) ** 2  # per-element MSE
-                    if self.distillation_all_voxels or mask is None:
+                    if anchor is not None:
+                        # Good regions decide where the teacher is worth
+                        # copying. Distilling on every unlabeled voxel
+                        # instead -- the branch below -- anchors hardest
+                        # right beside the scribbles, which is the one place
+                        # the teacher is known to be wrong, so it partly
+                        # fights the correction being made. Restrict it to
+                        # the regions the user actually vouched for.
+                        #
+                        # Broadcast over channels: the mask is single-channel
+                        # (it is about location) while pred may not be.
+                        anchor_mask = anchor.float().expand_as(distill_loss_map)
+                        distillation_loss = (
+                            distill_loss_map.float() * anchor_mask
+                        ).sum() / anchor_mask.sum().clamp(min=1)
+                    elif self.distillation_all_voxels or mask is None:
                         # Apply on all voxels
                         distillation_loss = distill_loss_map.mean()
                     else:

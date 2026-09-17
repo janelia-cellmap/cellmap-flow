@@ -123,6 +123,8 @@ class VirtualPatchDataset(Dataset):
         seed: int = 0,
         input_norm_config: Optional[dict] = None,
         dense_to_sparse_ratio: Optional[float] = None,
+        good_regions: Optional[list] = None,
+        rehearsal_fraction: Optional[float] = None,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
@@ -147,6 +149,27 @@ class VirtualPatchDataset(Dataset):
             else None
         )
         self._effective_dense_ratio: float = 0.0  # set in _build_index
+
+        # Rehearsal ("good") regions: boxes the user looked at and certified
+        # the model already handles. They carry no annotations by
+        # construction, so neither FG pool can reach them -- both index on
+        # foreground voxels, and a good region has none. Hence a third pool
+        # that samples boxes directly.
+        #
+        # What they are for: the supervised loss only touches voxels you
+        # labelled, so nothing stops the adapter drifting everywhere else.
+        # A rehearsal patch pins the student to the teacher inside a region
+        # you have vouched for -- chosen deliberately, rather than
+        # "wherever happens to sit next to a scribble", which is where the
+        # model is least likely to be right.
+        self.good_regions = list(good_regions or [])
+        self.rehearsal_fraction = (
+            float(rehearsal_fraction) if rehearsal_fraction is not None else None
+        )
+        self._effective_rehearsal_fraction: float = 0.0  # set in _build_index
+        # Centres of the good regions, in annotation voxels. Built in
+        # _build_index once dataset_offset_nm is known.
+        self._rehearsal_centers: Optional[np.ndarray] = None
 
         # Input normalization to apply to every raw patch the dataset emits.
         # The dashboard's inference path normalizes raw via ``g.input_norms``
@@ -320,6 +343,8 @@ class VirtualPatchDataset(Dataset):
             else:
                 self._effective_dense_ratio = ratio
 
+        self._build_rehearsal_index()
+
         # Default patches_per_epoch = number of FG-bearing chunks: each
         # such chunk gets ~1 patch per epoch on average. Cheap "auto cover
         # everything" mode the user can override via YAML or UI. We count
@@ -339,6 +364,66 @@ class VirtualPatchDataset(Dataset):
             f"({'auto' if self.dense_to_sparse_ratio is None else 'explicit'}), "
             f"jitter={self.jitter.tolist()}"
         )
+        if self._effective_rehearsal_fraction > 0:
+            logger.info(
+                f"VirtualPatchDataset: {len(self._rehearsal_centers)} good "
+                f"region(s); {self._effective_rehearsal_fraction:.0%} of patches "
+                f"will be rehearsal anchors "
+                f"({'auto' if self.rehearsal_fraction is None else 'explicit'})"
+            )
+        elif self.good_regions:
+            logger.warning(
+                f"{len(self.good_regions)} good region(s) configured but none "
+                "usable; training will not anchor on them."
+            )
+
+    def _build_rehearsal_index(self) -> None:
+        """Turn the good-region boxes (nm) into patch centres (annotation voxels).
+
+        A region is sized to one model output patch, so one region is one
+        patch: centre on it and the loss covers exactly the area that was
+        looked at and judged. No jitter -- jitter would slide the patch out
+        of the region the user actually vouched for.
+        """
+        centers = []
+        for region in self.good_regions:
+            try:
+                offset_nm = np.array(region["offset_nm"], dtype=float)
+                shape_nm = np.array(region["shape_nm"], dtype=float)
+            except (KeyError, TypeError, ValueError):
+                logger.warning(f"Skipping malformed good region: {region!r}")
+                continue
+            centre_nm = offset_nm + shape_nm / 2.0
+            centre_voxels = (centre_nm - self.dataset_offset_nm) / self.output_voxel_size
+            # A region marked against a different volume would sample pure
+            # out-of-bounds zeros and quietly anchor the model to nothing.
+            if np.any(centre_voxels < 0) or np.any(
+                centre_voxels >= self.volume_shape_voxels
+            ):
+                logger.warning(
+                    f"Good region {region.get('id', '?')} centres outside the "
+                    f"volume at voxel {centre_voxels.astype(int).tolist()}; skipping."
+                )
+                continue
+            centers.append(centre_voxels)
+
+        if not centers:
+            self._rehearsal_centers = None
+            self._effective_rehearsal_fraction = 0.0
+            return
+
+        self._rehearsal_centers = np.array(centers, dtype=np.float64)
+        if self.rehearsal_fraction is None:
+            # One patch in four. Enough to hold the model without drowning
+            # out the corrections: rehearsal patches carry dense teacher
+            # targets over the whole output, whereas a scribble patch may
+            # label only a few hundred voxels, so parity by patch count is
+            # already generous to the anchor.
+            self._effective_rehearsal_fraction = 0.25
+        else:
+            self._effective_rehearsal_fraction = max(
+                0.0, min(1.0, self.rehearsal_fraction)
+            )
 
     # ------------------------------------------------------------------
     # Dataset protocol
@@ -348,21 +433,43 @@ class VirtualPatchDataset(Dataset):
         # Resolved by _build_index() in __init__.
         return int(self.patches_per_epoch or 0)
 
+    @property
+    def emits_anchor(self) -> bool:
+        """Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
+
+        Only once there is something to anchor on. Without good regions the
+        dataset keeps its original 2-tuple contract, so nothing about an
+        existing run changes.
+        """
+        return self._effective_rehearsal_fraction > 0.0
+
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()
-        # Pick a pool by the resolved dense ratio. Both indices may exist;
-        # _build_index guarantees we never end up with the chosen pool empty.
-        use_dense = (
-            self._effective_dense_ratio >= 1.0
-            or (self._effective_dense_ratio > 0.0 and rng.random() < self._effective_dense_ratio)
-        )
-        pool = self._fg_index_dense if use_dense else self._fg_index_sparse
-        anchor_zyx = pool[rng.integers(0, pool.shape[0])].astype(np.float64)
 
-        jitter_offset = rng.integers(
-            low=-self.jitter, high=self.jitter + 1, size=3
-        ).astype(np.float64)
-        ann_center_voxels = anchor_zyx + jitter_offset
+        is_rehearsal = (
+            self._effective_rehearsal_fraction > 0.0
+            and rng.random() < self._effective_rehearsal_fraction
+        )
+
+        if is_rehearsal:
+            # One region is one patch, centred exactly: no jitter, or the
+            # loss would spill outside the area that was actually judged.
+            centers = self._rehearsal_centers
+            ann_center_voxels = centers[rng.integers(0, centers.shape[0])].copy()
+        else:
+            # Pick a pool by the resolved dense ratio. Both indices may exist;
+            # _build_index guarantees we never end up with the chosen pool empty.
+            use_dense = (
+                self._effective_dense_ratio >= 1.0
+                or (self._effective_dense_ratio > 0.0 and rng.random() < self._effective_dense_ratio)
+            )
+            pool = self._fg_index_dense if use_dense else self._fg_index_sparse
+            anchor_zyx = pool[rng.integers(0, pool.shape[0])].astype(np.float64)
+
+            jitter_offset = rng.integers(
+                low=-self.jitter, high=self.jitter + 1, size=3
+            ).astype(np.float64)
+            ann_center_voxels = anchor_zyx + jitter_offset
 
         # Convert annotation-space voxel center to physical (nm) for the raw read.
         ann_center_nm = (
@@ -374,7 +481,28 @@ class VirtualPatchDataset(Dataset):
 
         raw_t = torch.from_numpy(raw_patch.astype(np.float32)[np.newaxis, ...])
         ann_t = torch.from_numpy(ann_patch.astype(np.float32)[np.newaxis, ...])
-        return raw_t, ann_t
+
+        if not self.emits_anchor:
+            return raw_t, ann_t
+
+        # Per-voxel anchor mask, the third thing the loss needs to know.
+        #
+        #   annotated voxel          -> supervised loss, anchor 0
+        #   unannotated in a good    -> anchor 1: hold the student to the
+        #     region                    teacher here
+        #   unannotated anywhere     -> anchor 0, no loss at all: you did not
+        #     else                      say it was right, only that you had
+        #                               not got to it
+        #
+        # A scribble inside a good region therefore wins over the anchor,
+        # which is what keeps a marked region correctable: notice a mistake
+        # inside one, paint over it, and the paint takes precedence.
+        if is_rehearsal:
+            anchor = (ann_patch == 0).astype(np.float32)
+        else:
+            anchor = np.zeros_like(ann_patch, dtype=np.float32)
+        anchor_t = torch.from_numpy(anchor[np.newaxis, ...])
+        return raw_t, ann_t, anchor_t
 
     # ------------------------------------------------------------------
     # Patch reads
@@ -505,12 +633,48 @@ def read_manifest(corrections_dir: str) -> Optional[dict]:
         return json.load(f)
 
 
-def dataset_from_manifest(manifest: dict) -> VirtualPatchDataset:
+GOOD_REGIONS_FILENAME = "good_regions.json"
+
+
+def load_good_regions_for(corrections_dir: Optional[str]) -> list:
+    """Read the session's good regions, if any were marked.
+
+    Deliberately read here rather than snapshotted into the manifest: the
+    manifest is written when crops are imported, and regions get marked
+    afterwards, for as long as the user keeps browsing. Reading at training
+    time means the run uses every region marked up to the moment it started.
+    """
+    if not corrections_dir:
+        return []
+    path = os.path.join(
+        os.path.dirname(str(corrections_dir).rstrip("/")), GOOD_REGIONS_FILENAME
+    )
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            regions = json.load(f)
+    except (OSError, ValueError) as e:
+        logger.warning(f"Could not read good regions from {path}: {e}")
+        return []
+    if not isinstance(regions, list):
+        logger.warning(f"Ignoring good regions at {path}: expected a list.")
+        return []
+    logger.info(f"Loaded {len(regions)} good region(s) from {path}")
+    return regions
+
+
+def dataset_from_manifest(
+    manifest: dict, corrections_dir: Optional[str] = None
+) -> VirtualPatchDataset:
     """Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
     Recognized manifest kinds:
       - ``volume_zarr_v1`` (current): trainer reads the session's
         annotation_volume.zarr directly. Field ``volume_zarr_path``.
+
+    ``corrections_dir`` is where the session's good regions are looked up;
+    omit it and the dataset simply trains without rehearsal anchors.
     """
     kind = manifest.get("kind")
     if kind != "volume_zarr_v1":
@@ -530,4 +694,6 @@ def dataset_from_manifest(manifest: dict) -> VirtualPatchDataset:
         seed=manifest.get("seed", 0),
         input_norm_config=manifest.get("input_norm") or None,
         dense_to_sparse_ratio=manifest.get("dense_to_sparse_ratio"),
+        good_regions=load_good_regions_for(corrections_dir),
+        rehearsal_fraction=manifest.get("rehearsal_fraction"),
     )
