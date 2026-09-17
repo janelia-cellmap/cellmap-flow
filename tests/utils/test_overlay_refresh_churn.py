@@ -7,7 +7,12 @@ unconditional -- it deep-copies the state on entry and calls set_state() on
 exit whether or not the body changed anything -- and the periodic sync calls
 refresh_annotated_regions_layer() every 30s for as long as annotations keep
 arriving. That is precisely while the user is drawing, so every one of those
-pushes takes the brush out of their hand.
+pushes takes the brush out of their hand -- and can drop a stroke still sitting
+in the brush's commit buffer.
+
+So the sync thread no longer touches the viewer at all; the boxes are redrawn
+on demand from a button. These tests pin both halves of that: the background
+thread stays out, and an on-demand refresh still does the work.
 """
 
 import json
@@ -169,91 +174,74 @@ def test_annotation_layers_get_the_draw_tools_prebound(monkeypatch):
     assert all(k.isupper() and len(k) == 1 for k in bindings)
 
 
-def test_background_refresh_stands_down_while_a_tool_is_selected(
-    corrections, monkeypatch
-):
-    """The 30s sync must not take the brush out of the user's hand."""
-    _write_chunk(str(corrections))
-    viewer = _FakeViewer()
-    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
+def test_the_periodic_sync_never_writes_to_the_viewer(monkeypatch):
+    """The whole point of the button: no push the user did not ask for.
 
-    viewer.state.active_tool = "vox-brush"
-    assert (
-        overlay.refresh_annotated_regions_layer(
-            str(corrections), defer_if_tool_active=True
-        )
-        == 0
+    Pinned by reading the source rather than running the thread, because the
+    failure mode is someone adding a viewer call back into it later.
+    """
+    import inspect
+
+    from cellmap_flow.dashboard import finetune_utils
+
+    body = inspect.getsource(finetune_utils.periodic_sync_annotations)
+    # Comments in there explain at length why it must not touch the viewer,
+    # so look at the code only.
+    code = "\n".join(
+        line.split("#", 1)[0] for line in body.splitlines()
     )
-    assert viewer.txn_count == 0, "a selected tool must veto a background push"
+    assert "refresh_annotated_regions_layer" not in code
+    assert "viewer" not in code
+    # It must still do its actual job.
+    assert "sync_all_annotations_from_minio" in code
 
 
-def test_a_deferred_refresh_happens_once_the_tool_is_put_down(
+def test_refresh_is_not_callable_on_a_timer_any_more():
+    """defer_if_tool_active was scaffolding for a background caller that no
+    longer exists; its presence would mean one had come back."""
+    import inspect
+
+    params = inspect.signature(overlay.refresh_annotated_regions_layer).parameters
+    assert list(params) == ["corrections_path"]
+
+
+def test_the_button_endpoint_refreshes_and_reports_the_count(
     corrections, monkeypatch
 ):
-    """Standing down must not mean forgetting -- the boxes still catch up."""
+    from cellmap_flow.dashboard.app import app
+
     _write_chunk(str(corrections))
+    _write_chunk(str(corrections), name="vol_chunk_1.zarr", offset=(56, 0, 0))
     viewer = _FakeViewer()
     monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
 
-    viewer.state.active_tool = "vox-brush"
-    for _ in range(3):
-        overlay.refresh_annotated_regions_layer(
-            str(corrections), defer_if_tool_active=True
-        )
-    assert viewer.txn_count == 0
-
-    viewer.state.active_tool = None
-    assert (
-        overlay.refresh_annotated_regions_layer(
-            str(corrections), defer_if_tool_active=True
-        )
-        == 1
+    app.config.update(TESTING=True)
+    r = app.test_client().post(
+        "/api/finetune/refresh-annotated-regions",
+        json={"corrections_path": str(corrections)},
     )
-    assert viewer.txn_count == 1, "the skipped work must not be marked as done"
-
-
-def test_a_user_initiated_refresh_pushes_even_with_a_tool_selected(
-    corrections, monkeypatch
-):
-    """Clicking sync means now, tool or no tool -- the user asked for it."""
-    _write_chunk(str(corrections))
-    viewer = _FakeViewer()
-    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
-
-    viewer.state.active_tool = "vox-brush"
-    assert overlay.refresh_annotated_regions_layer(str(corrections)) == 1
+    assert r.status_code == 200
+    payload = r.get_json()
+    assert payload["success"] and payload["count"] == 2
+    assert "annotated_regions" in viewer.state.layers
     assert viewer.txn_count == 1
 
 
-def test_active_tool_reads_both_serialized_tool_shapes(monkeypatch):
-    """A Tool serializes bare or as {"type": ...}; both mean "in hand"."""
+def test_clicking_the_button_twice_with_nothing_changed_costs_nothing(
+    corrections, monkeypatch
+):
+    from cellmap_flow.dashboard.app import app
 
-    class _State:
-        def __init__(self, layers):
-            self._layers = layers
+    _write_chunk(str(corrections))
+    viewer = _FakeViewer()
+    monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
 
-        def to_json(self):
-            return {"layers": self._layers}
-
-    class _V:
-        def __init__(self, layers):
-            self.state = _State(layers)
-
-    monkeypatch.setattr(overlay.g, "viewer", _V([{"tool": "vox-brush"}]), raising=False)
-    assert overlay._active_annotation_tool() == "vox-brush"
-
-    monkeypatch.setattr(
-        overlay.g, "viewer", _V([{"tool": {"type": "vox-flood-fill"}}]), raising=False
-    )
-    assert overlay._active_annotation_tool() == "vox-flood-fill"
-
-    # Older neuroglancer serialized layers as a name-keyed object.
-    monkeypatch.setattr(
-        overlay.g, "viewer", _V({"seg": {"tool": "vox-brush"}}), raising=False
-    )
-    assert overlay._active_annotation_tool() == "vox-brush"
-
-    monkeypatch.setattr(
-        overlay.g, "viewer", _V([{"name": "raw"}, {"tool": None}]), raising=False
-    )
-    assert overlay._active_annotation_tool() is None
+    app.config.update(TESTING=True)
+    client = app.test_client()
+    for _ in range(3):
+        r = client.post(
+            "/api/finetune/refresh-annotated-regions",
+            json={"corrections_path": str(corrections)},
+        )
+        assert r.get_json()["count"] == 1
+    assert viewer.txn_count == 1, "an impatient double-click must not rebuild layers"

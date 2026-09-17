@@ -32,10 +32,13 @@ _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 # neuroglancer's txn() is also unconditional -- it deep-copies the state on
 # entry and calls set_state() on exit whether or not the body changed
 # anything -- so a refresh that decides nothing needs saying still pays that
-# cost. The periodic sync calls this every 30s for as long as annotations keep
-# arriving, i.e. continuously while you are drawing. The boxes themselves
-# change only when a crop is added, so nearly all of those pushes rewrote the
-# layer to the identical value. Skip them.
+# cost.
+#
+# So nothing refreshes these boxes on a timer. The 30s annotation sync used
+# to, which meant a teardown every time a chunk finished syncing, i.e.
+# continuously while you were drawing. They are refreshed on demand instead,
+# from a button. The cache below still matters: clicking the button twice
+# with nothing changed in between should not cost a rebuild either.
 _last_annotated_regions = None
 
 # Keys pre-bound on every annotation layer we add, so the tools are reachable
@@ -82,34 +85,6 @@ def _register_voxel_annotation_tools():
 _register_voxel_annotation_tools()
 
 
-def _active_annotation_tool():
-    """Name of the draw tool the user currently has in hand, if any.
-
-    Pushing viewer state while a tool is selected takes the tool away (see
-    _last_annotated_regions above), so background refreshes ask this first and
-    stand down if the answer is yes.
-
-    Reads the serialized state rather than the typed wrappers on purpose:
-    touching layer.tool materialises a Tool object on the state copy, which is
-    the same kind of incidental mutation this module exists to avoid.
-    """
-    try:
-        layers = g.viewer.state.to_json().get("layers", [])
-    except Exception:
-        return None
-    if isinstance(layers, dict):
-        layers = list(layers.values())
-    for layer in layers:
-        if not isinstance(layer, dict):
-            continue
-        tool = layer.get("tool")
-        if isinstance(tool, dict):
-            tool = tool.get("type")
-        if tool:
-            return str(tool)
-    return None
-
-
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,
@@ -139,29 +114,16 @@ def _chunk_outside_all_bboxes(
     return not bool(overlaps.any())
 
 
-def refresh_annotated_regions_layer(corrections_path=None, defer_if_tool_active=False):
+def refresh_annotated_regions_layer(corrections_path=None):
     """Draw a box around every region that has annotations in it.
 
-    ``defer_if_tool_active`` is for callers that nobody asked for -- the 30s
-    background sync. Refreshing costs the browser its tool selection, and the
-    background sync fires precisely while the user is drawing, so it gives up
-    rather than interrupt; returns 0 without touching the viewer. The boxes are
-    hidden by default anyway, so the wait costs nothing visible, and the cached
-    signature is left alone so the next quiet tick still does the work.
-
-    Callers acting on something the user just did pass False and push now.
+    Only ever called for something the user just did -- creating a volume,
+    importing crops, or clicking "Show Annotated Regions". Nothing calls this
+    on a timer: see the note on _last_annotated_regions for why a push the
+    user did not ask for is destructive.
     """
     if not hasattr(g, "viewer") or g.viewer is None:
         return 0
-
-    if defer_if_tool_active:
-        tool = _active_annotation_tool()
-        if tool is not None:
-            logger.debug(
-                f"Not refreshing annotated_regions: {tool} is selected, and "
-                "pushing viewer state would take it out of the user's hand."
-            )
-            return 0
 
     scan_dirs = []
     if corrections_path:
@@ -395,6 +357,26 @@ def refresh_annotated_regions_layer(corrections_path=None, defer_if_tool_active=
 
     _last_annotated_regions = signature
     return len(boxes)
+
+
+def refresh_annotated_regions_response(data):
+    """Redraw the annotated-regions boxes because the user asked for it.
+
+    This is the only way the boxes update during a session. It pushes viewer
+    state, which rebuilds every layer browser-side, so it is deliberately a
+    button: you click it when you want to see where you have painted, not
+    while you are in the middle of painting.
+    """
+    try:
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+        count = refresh_annotated_regions_layer(
+            corrections_path=(data or {}).get("corrections_path")
+        )
+        return jsonify({"success": True, "count": count})
+    except Exception as e:
+        logger.error(f"Error refreshing annotated regions: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def add_crop_to_viewer_response(data):
