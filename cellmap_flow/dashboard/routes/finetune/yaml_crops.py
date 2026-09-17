@@ -29,7 +29,7 @@ import zarr
 from flask import jsonify
 from pydantic import ValidationError
 
-from cellmap_flow.utils.server_info import model_geometry_config
+from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
 # Module-level progress tracker, keyed by load_id supplied by the client.
 # Each value is the most recent progress snapshot for that load + its
@@ -509,7 +509,7 @@ def load_crops_from_yaml_response(data):
                 model_name=model_name,
                 # Only shapes and voxel sizes are read from this; the running
                 # server can supply them without building the model here.
-                config=model_geometry_config(model_name) or model_config.config,
+                config=resolve_model_geometry(model_name, model_config),
             )
             created_volume = True
         step(

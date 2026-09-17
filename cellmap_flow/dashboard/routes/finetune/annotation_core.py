@@ -19,9 +19,11 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     load_user_prefs,
     save_user_prefs,
     viewer_position_and_scales,
+    write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.utils.model_geometry import resolve_model_geometry
 from cellmap_flow.utils.server_info import (
     fetch_model_info,
     model_geometry,
@@ -184,7 +186,13 @@ def create_annotation_crop_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
+        # Ask the running inference server for the geometry. It already has
+        # the model; building it here instead costs a full load on the
+        # dashboard's CPU -- 43s in one measured session, for shapes the
+        # server can report in milliseconds -- and is what made "create
+        # annotation volume" feel slow. model_config.config stays as the
+        # fallback for when no server is up.
+        config = resolve_model_geometry(model_name, model_config)
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         input_voxel_size = np.array(config.input_voxel_size)
@@ -269,7 +277,13 @@ def create_annotation_volume_response(data):
         if error_response is not None:
             return error_response
 
-        config = model_config.config
+        # Ask the running inference server for the geometry. It already has
+        # the model; building it here instead costs a full load on the
+        # dashboard's CPU -- 43s in one measured session, for shapes the
+        # server can report in milliseconds -- and is what made "create
+        # annotation volume" feel slow. model_config.config stays as the
+        # fallback for when no server is up.
+        config = resolve_model_geometry(model_name, model_config)
         read_shape = np.array(config.read_shape)
         write_shape = np.array(config.write_shape)
         claimed_input_voxel_size = np.array(config.input_voxel_size)
@@ -338,6 +352,9 @@ def create_annotation_volume_response(data):
             dataset_offset_nm=dataset_offset_nm.tolist(),
             corrections_dir=corrections_dir,
         )
+        # Without this the trainer falls back to the legacy per-chunk dataset
+        # and any good regions marked in this session are ignored.
+        write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
         return jsonify(

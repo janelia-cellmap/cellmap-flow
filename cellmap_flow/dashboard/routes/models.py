@@ -201,6 +201,7 @@ def export_config():
             data_path=g.dataset_path or "",
             queue=g.queue,
             charge_group=g.charge_group,
+            walltime=getattr(g, "walltime", None),
             json_data=json_data,
         )
     except Exception as e:

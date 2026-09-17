@@ -113,6 +113,23 @@
               <input type="text" class="form-control form-control-sm" id="cfg_charge_group" />
             </div>
             <div class="mb-2">
+              <label class="form-label" for="cfg_walltime">Time Limit</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_walltime" placeholder="08:00" />
+              <div class="form-text">
+                LSF run limit, <code>HH:MM</code> or minutes. Jobs are killed at
+                this point. Leave blank for the queue default, which is 2 hours.
+              </div>
+            </div>
+            <div class="mb-2 form-check">
+              <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
+              <label class="form-check-label" for="cfg_cycle_gpu_queues">Try other GPU queues</label>
+              <div class="form-text">
+                If the queue above is full or closed, submit to whichever GPU
+                queue has capacity instead of waiting. Uncheck to always use
+                the queue above, however long it takes to start.
+              </div>
+            </div>
+            <div class="mb-2">
               <label class="form-label" for="cfg_nb_cores_worker">Cores per Worker</label>
               <input type="number" class="form-control form-control-sm" id="cfg_nb_cores_worker" />
             </div>
@@ -310,12 +327,20 @@
         statusEl.textContent = "updated " + new Date().toLocaleTimeString();
       }
 
+      // /api/job-logs runs bpeek per job, each with its own timeout, so a
+      // refresh can outlast the 5s follow interval. Without this, Follow piles
+      // overlapping requests onto a dashboard that is already the slow part.
+      let jobLogsBusy = false;
+
       function refreshJobLogs() {
+        if (jobLogsBusy) return Promise.resolve();
+        jobLogsBusy = true;
         const statusEl = document.getElementById("jobLogsStatus");
         return fetch("/api/job-logs")
           .then(function (r) { return r.json(); })
           .then(renderJobLogs)
-          .catch(function (e) { statusEl.textContent = "error: " + e; });
+          .catch(function (e) { statusEl.textContent = "error: " + e; })
+          .then(function () { jobLogsBusy = false; });
       }
 
       document.getElementById("jobLogsBtn").addEventListener("click", function () {
@@ -446,6 +471,10 @@
               if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
             });
             document.getElementById("cfg_charge_group").value = data.charge_group || "";
+            document.getElementById("cfg_walltime").value = data.walltime || "";
+            // Default to on when the server has not stored a preference.
+            document.getElementById("cfg_cycle_gpu_queues").checked =
+              data.cycle_gpu_queues !== false;
             document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
             document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
             serverConfigLoaded = true;
@@ -456,6 +485,10 @@
         const payload = {
           queue: document.getElementById("cfg_queue").value,
           charge_group: document.getElementById("cfg_charge_group").value,
+          walltime: document.getElementById("cfg_walltime").value,
+          // Send a real boolean: the server stores this verbatim, and the
+          // string "false" would read as true.
+          cycle_gpu_queues: document.getElementById("cfg_cycle_gpu_queues").checked,
           nb_cores_worker: document.getElementById("cfg_nb_cores_worker").value,
           nb_workers: document.getElementById("cfg_nb_workers").value,
         };

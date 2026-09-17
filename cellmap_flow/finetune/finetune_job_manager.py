@@ -11,6 +11,7 @@ import logging
 import os
 import shlex
 import re
+import string
 import sys
 import threading
 import time
@@ -40,6 +41,33 @@ class JobStatus(Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+# Values in this command survive two rounds of shell quoting: the one bsub
+# starts on the exec host, and LSF's own handling, which re-wraps the whole
+# `bash -c` argument in single quotes. A single quote of ours therefore closes
+# LSF's and the argument word-splits. That is not hypothetical:
+#
+#     --offsets '[[1, 0, 0], [0, 1, 0], [0, 0, 1]]'
+#
+# reached the trainer as the bare word "[[1," with the rest scattered as stray
+# arguments, and json.loads died with "Expecting value: line 1 column 5".
+# Double quotes nest inside LSF's single quotes safely, so quote with those.
+_SHELL_SAFE = frozenset(string.ascii_letters + string.digits + "@%+=:,./-_")
+
+
+def _sh_quote(part: str) -> str:
+    """Shell-quote without ever emitting a single quote."""
+    part = str(part)
+    if part and all(c in _SHELL_SAFE for c in part):
+        return part
+    escaped = (
+        part.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
+    return f'"{escaped}"'
 
 
 @dataclass
@@ -299,7 +327,7 @@ class FinetuneJobManager:
         if offsets is not None:
             command_parts += ["--offsets", str(offsets)]
 
-        command = " ".join(shlex.quote(part) for part in command_parts)
+        command = " ".join(_sh_quote(part) for part in command_parts)
 
         # Put this interpreter's own lib directory first on the loader path.
         #
@@ -314,12 +342,17 @@ class FinetuneJobManager:
         # via cellpose on a GCC 13+ build.
         env_lib = os.path.join(sys.prefix, "lib")
         loader_path = (
-            f"LD_LIBRARY_PATH={shlex.quote(env_lib)}"
+            f"LD_LIBRARY_PATH={_sh_quote(env_lib)}"
             '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
         )
+        # stdbuf on *both* sides. The trainer already flushes every line it
+        # prints, but tee writes to the log file through stdio, which is
+        # block-buffered when the destination is not a terminal -- so roughly
+        # 8KB of output, five to ten epochs' worth, landed in the file at
+        # once and the dashboard showed nothing in between.
         return (
             f"{loader_path}stdbuf -oL {command} 2>&1 "
-            f"| tee {shlex.quote(str(log_file))}"
+            f"| stdbuf -oL tee {_sh_quote(log_file)}"
         )
 
     def _build_submission_metadata(
@@ -393,7 +426,7 @@ class FinetuneJobManager:
         corrections_path: Path,
         lora_r: int = 8,
         num_epochs: int = 10,
-        batch_size: int = 2,
+        batch_size: int = 8,
         learning_rate: float = 1e-4,
         output_base: Optional[Path] = None,
         queue: str = "gpu_h100",
@@ -419,7 +452,7 @@ class FinetuneJobManager:
             corrections_path: Path to corrections.zarr directory
             lora_r: LoRA rank (default: 8)
             num_epochs: Number of training epochs (default: 10)
-            batch_size: Training batch size (default: 2)
+            batch_size: Training batch size (default: 8)
             learning_rate: Learning rate (default: 1e-4)
             output_base: Base directory for outputs (default: output/finetuning)
             queue: LSF queue name (default: gpu_h100)
@@ -604,13 +637,19 @@ class FinetuneJobManager:
         if is_bsub_available():
             self.logger.info("Submitting to LSF cluster via bsub")
             try:
+                # Training runs epochs, not chunks, so it is the likeliest
+                # thing here to outlive the queue's 120-minute default.
+                from cellmap_flow.globals import g as _g
+                from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME
+
                 lsf_job = submit_bsub_job(
                     command=cli_command,
                     queue=queue,
                     charge_group=charge_group,
                     job_name=job_name,
                     num_gpus=1,
-                    num_cpus=4
+                    num_cpus=4,
+                    walltime=getattr(_g, "walltime", None) or DEFAULT_WALLTIME,
                 )
                 self.logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
             except Exception as e:
@@ -620,8 +659,14 @@ class FinetuneJobManager:
             # Fallback to local execution
             self.logger.info("bsub not available - running finetuning locally")
             try:
+                # cli_command is a shell command: it sets LD_LIBRARY_PATH as a
+                # prefix assignment and pipes through tee. run_locally splits
+                # with shlex and runs shell=False on purpose, so handing it
+                # this string would exec "LD_LIBRARY_PATH=..." as a program.
+                # Give it an argv list with an explicit shell instead -- the
+                # list form skips run_locally's shlex.split entirely.
                 lsf_job = run_locally(
-                    command=cli_command,
+                    command=["bash", "-c", cli_command],
                     name=job_name
                 )
                 self.logger.info(f"Started local finetuning job (PID: {lsf_job.process.pid})")
@@ -761,134 +806,62 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
-        # Pair epoch and loss from the per-epoch summary line
-        # ("Epoch X/Y - Loss: Z") so the loss is guaranteed to belong to the
-        # epoch reported alongside it. A previous version scanned epoch and
-        # loss with independent regexes; per-batch lines ("Batch X/N - Loss: Z")
-        # then bumped latest_loss inside epoch N+1 while current_epoch was
-        # still pinned to epoch N's summary, so the dashboard plot pinned
-        # epoch N's running batch loss onto epoch N-1.
+        # One loss per epoch, from the per-epoch summary line ("Epoch X/Y -
+        # Loss: Z"), so the plot has one point per epoch and the loss is
+        # always the one belonging to the epoch shown beside it. Per-batch
+        # lines are deliberately not read: pairing them with an epoch is
+        # fiddly, and what made the display look stuck was tee's buffering,
+        # not the reporting interval.
+        #
+        # "Starting epoch N of M" is read too, so the epoch counter advances
+        # as soon as an epoch begins rather than when it ends.
+        start_pattern = r"Starting\s+epoch\s+(\d+)\s+of\s+(\d+)"
         summary_pattern = r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)"
+
+        for cur, total in re.findall(start_pattern, log_content, re.IGNORECASE):
+            finetune_job.current_epoch = int(cur)
+            finetune_job.total_epochs = int(total)
+
         summary_matches = re.findall(summary_pattern, log_content, re.IGNORECASE)
         if summary_matches:
             cur, total, loss = summary_matches[-1]
-            finetune_job.current_epoch = int(cur)
+            finetune_job.current_epoch = max(
+                finetune_job.current_epoch, int(cur)
+            )
             finetune_job.total_epochs = int(total)
             try:
                 finetune_job.latest_loss = float(loss)
             except ValueError:
                 pass
-            return
 
-        # No epoch summary yet (still in epoch 1's batches): fall back to
-        # bare "Epoch X/Y" so the progress bar can advance, but leave
-        # latest_loss alone -- per-batch losses are not epoch summaries.
-        epoch_pattern = r"Epoch\s+(\d+)/(\d+)"
-        epoch_matches = re.findall(epoch_pattern, log_content, re.IGNORECASE)
-        if epoch_matches:
-            cur, total = epoch_matches[-1]
-            finetune_job.current_epoch = int(cur)
-            finetune_job.total_epochs = int(total)
+    def _finetuned_shader(self, server_url):
+        """The same display range an ordinary model layer gets.
 
-    def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
-        """
-        Add (or replace) the finetuned model's neuroglancer layer.
+        This used to be hardcoded to range=[0, 255]. A sigmoid output lives in
+        [0, 1], so the finetuned layer rendered as near-black however good the
+        predictions were, while the identical model added through the normal
+        path looked fine -- an unfair comparison built into the viewer.
 
-        Mirrors run_model() from cellmap_flow/models/run.py:
-        1. Create/update Job object in g.jobs
-        2. Add neuroglancer ImageLayer with pre/post processing args
-
-        Args:
-            finetune_job: Job with inference_server_url set
-            model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
+        Falls back to the old fixed range only if the server cannot be asked.
         """
         from cellmap_flow.globals import g
-        from cellmap_flow.utils.web_utils import get_norms_post_args, ARGS_KEY
-        import neuroglancer
+        from cellmap_flow.utils.output_probe import output_display_range
+        from cellmap_flow.utils.scale_pyramid import prediction_shader
+        from cellmap_flow.utils.server_info import fetch_model_info
 
-        server_url = finetune_job.inference_server_url
-
-        # Create a Job object for the running server
-        inference_job = LSFJob(
-            job_id=finetune_job.lsf_job.job_id if finetune_job.lsf_job else "local",
-            model_name=model_name
-        )
-        inference_job.host = server_url
-        inference_job.status = LSFJobStatus.RUNNING
-
-        # Remove any old finetuned jobs for this base model
-        g.jobs = [
-            j for j in g.jobs
-            if not (hasattr(j, 'model_name') and j.model_name
-                    and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
-        ]
-
-        # Add to g.jobs
-        g.jobs.append(inference_job)
-        self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
-
-        # Get pre/post processing args (same hash as other models)
-        st_data = get_norms_post_args(g.input_norms, g.postprocess)
-
-        if g.viewer is None:
-            self.logger.error("g.viewer is None - neuroglancer not initialized yet")
-            return
-
-        # Lie about the model's voxel size so the layer overlays the raw at
-        # the closest available scale (e.g. trained at 16nm but raw is
-        # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
-        from cellmap_flow.utils.neuroglancer_utils import (
-            build_prediction_source,
-            get_raw_closest_scale,
-        )
-        override_scales = None
         try:
-            output_voxel_size = tuple(
-                finetune_job.params.get("output_voxel_size") or ()
-            )
-            dataset_path = getattr(g, "dataset_path", None)
-            if output_voxel_size and dataset_path:
-                closest = get_raw_closest_scale(dataset_path, output_voxel_size)
-                if closest is not None and tuple(closest) != tuple(output_voxel_size):
-                    override_scales = closest
-                    self.logger.info(
-                        f"Finetuned model '{model_name}' output_voxel_size="
-                        f"{output_voxel_size} overridden to closest raw scale "
-                        f"{closest} for viewer overlay"
-                    )
+            info = fetch_model_info(server_url)
+            steps = [
+                p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
+            ]
+            value_range = output_display_range(steps, info.get("output_class"))
         except Exception as e:
             self.logger.warning(
-                f"Could not compute override scales for finetuned '{model_name}': {e}"
+                f"Could not work out a display range for the finetuned layer "
+                f"({e}); falling back to 0-255."
             )
-
-        source_spec = build_prediction_source(
-            server_url, model_name, st_data, override_scales
-        )
-        self.logger.info(f"Adding neuroglancer layer: {model_name}")
-        self.logger.info(f"  source: {source_spec}")
-
-        with g.viewer.txn() as s:
-            # Remove old finetuned layer if it exists (exact name match)
-            old_layer_name = finetune_job.finetuned_model_name
-            if old_layer_name and old_layer_name in s.layers:
-                self.logger.info(f"Removing old finetuned layer: {old_layer_name}")
-                del s.layers[old_layer_name]
-
-            # Also remove by current name in case of re-add
-            if model_name in s.layers:
-                del s.layers[model_name]
-
-            # Add new layer - exact same format as run_model()
-            s.layers[model_name] = neuroglancer.ImageLayer(
-                source=source_spec,
-                shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-                    #uicontrol vec3 color color(default="red");
-                    void main(){{emitRGB(color * normalized());}}""",
-            )
-
-        # Update the stored name
-        finetune_job.finetuned_model_name = model_name
-        self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
+            value_range = (0.0, 255.0)
+        return prediction_shader("red", value_range)
 
     def _parse_inference_server_ready(self, finetune_job: FinetuneJob, log_content: str):
         """

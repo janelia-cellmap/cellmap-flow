@@ -17,6 +17,73 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
+# What refresh_annotated_regions_layer() last wrote into the viewer.
+#
+# Every push from python costs the browser its whole UI state, not just the
+# part we changed. On receiving a state from python, the browser runs
+# `trackable.reset(); trackable.restoreState(state)`
+# (ClientStateSynchronizer.setServerState, src/python_integration/api.ts) --
+# a teardown and rebuild of the entire state object graph. Layer data sources
+# are cached, so the imagery does not flicker and the annotations stay put;
+# what does not survive is everything reconstructed from JSON, including the
+# layer's tool binder. That is why the brush toolbar vanishes and the "are you
+# sure you want to annotate" confirmation re-arms mid-session.
+#
+# neuroglancer's txn() is also unconditional -- it deep-copies the state on
+# entry and calls set_state() on exit whether or not the body changed
+# anything -- so a refresh that decides nothing needs saying still pays that
+# cost.
+#
+# So nothing refreshes these boxes on a timer. The 30s annotation sync used
+# to, which meant a teardown every time a chunk finished syncing, i.e.
+# continuously while you were drawing. They are refreshed on demand instead,
+# from a button. The cache below still matters: clicking the button twice
+# with nothing changed in between should not cost a rebuild either.
+_last_annotated_regions = None
+
+# Keys pre-bound on every annotation layer we add, so the tools are reachable
+# without hunting for them in the tool palette first.
+#
+# Tool ids come from the voxel_annotation module added by the open upstream PR
+# google/neuroglancer#858 (src/voxel_annotation/base.ts), which is the branch
+# this deployment runs. The keys must be a single capital letter -- anything
+# else is rejected, see TOOL_KEY_PATTERN in src/ui/tool.ts.
+ANNOTATION_TOOL_BINDINGS = {
+    "A": "vox-brush",
+    "F": "vox-flood-fill",
+}
+
+
+def _register_voxel_annotation_tools():
+    """Teach the python bindings about the fork's voxel-painting tools.
+
+    neuroglancer validates tool names against a registry built by
+    @export_tool, and only the tools merged into mainline are in it --
+    assigning an unregistered name raises KeyError. The voxel_annotation
+    tools live in PR #858's frontend, which has no python side yet.
+
+    Registering them here is additive: on a neuroglancer whose frontend does
+    not have these tools the binding is simply inert, which is the same
+    outcome as not setting it.
+    """
+    try:
+        from neuroglancer.viewer_state import Tool, tool_types
+    except Exception as e:  # pragma: no cover - neuroglancer always present
+        logger.debug(f"Could not register voxel annotation tools: {e}")
+        return
+
+    for tool_id in ANNOTATION_TOOL_BINDINGS.values():
+        if tool_id in tool_types:
+            continue
+        tool_types[tool_id] = type(
+            f"_{tool_id.replace('-', '_')}_Tool",
+            (Tool,),
+            {"__slots__": (), "TOOL_TYPE": tool_id},
+        )
+
+
+_register_voxel_annotation_tools()
+
 
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
@@ -48,6 +115,13 @@ def _chunk_outside_all_bboxes(
 
 
 def refresh_annotated_regions_layer(corrections_path=None):
+    """Draw a box around every region that has annotations in it.
+
+    Only ever called for something the user just did -- creating a volume,
+    importing crops, or clicking "Show Annotated Regions". Nothing calls this
+    on a timer: see the note on _last_annotated_regions for why a push the
+    user did not ask for is destructive.
+    """
     if not hasattr(g, "viewer") or g.viewer is None:
         return 0
 
@@ -200,14 +274,19 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         f"Could not read annotation_volume metadata for {entry}: {e}"
                     )
 
+    global _last_annotated_regions
+
     layer_name = "annotated_regions"
     if not boxes:
         try:
-            with g.viewer.txn() as s:
-                if layer_name in s.layers:
-                    del s.layers[layer_name]
+            # Only open a transaction if there is actually something to remove.
+            if layer_name in g.viewer.state.layers:
+                with g.viewer.txn() as s:
+                    if layer_name in s.layers:
+                        del s.layers[layer_name]
         except Exception:
             pass
+        _last_annotated_regions = None
         return 0
 
     axes_names = ["z", "y", "x"]
@@ -229,8 +308,35 @@ def refresh_annotated_regions_layer(corrections_path=None):
         for index, box in enumerate(boxes)
     ]
 
+    # Nothing to say that we have not already said: leave the viewer alone.
+    # Checked against the live layer list too, so a layer that went away (a
+    # reset, a manual delete) is still restored.
+    signature = (tuple(axes_names), tuple(
+        (tuple(box["lo"]), tuple(box["hi"]), box["label"]) for box in boxes
+    ))
+    try:
+        if signature == _last_annotated_regions and layer_name in g.viewer.state.layers:
+            return len(boxes)
+    except Exception:
+        pass
+
     try:
         with g.viewer.txn() as s:
+            # Whether the layer is shown is the user's call, not ours.
+            #
+            # This used to force visible=True on every refresh, and the
+            # periodic sync thread calls this every 30s -- so turning the boxes
+            # off in neuroglancer un-did itself moments later, over and over.
+            # Keep whatever visibility the layer already has, and start hidden
+            # when creating it: the boxes are an occasional orientation aid,
+            # not something to draw over the data by default.
+            was_visible = None
+            if layer_name in s.layers:
+                try:
+                    was_visible = bool(s.layers[layer_name].visible)
+                except Exception:
+                    was_visible = None
+
             s.layers[layer_name] = neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
                     names=axes_names,
@@ -239,16 +345,38 @@ def refresh_annotated_regions_layer(corrections_path=None):
                 ),
                 annotations=annotations,
             )
-            # Force-visible in case a prior toggle archived the layer.
             try:
-                s.layers[layer_name].visible = True
+                s.layers[layer_name].visible = (
+                    False if was_visible is None else was_visible
+                )
             except Exception:
                 pass
     except Exception as e:
         logger.warning(f"Could not update annotated_regions layer: {e}")
         return 0
 
+    _last_annotated_regions = signature
     return len(boxes)
+
+
+def refresh_annotated_regions_response(data):
+    """Redraw the annotated-regions boxes because the user asked for it.
+
+    This is the only way the boxes update during a session. It pushes viewer
+    state, which rebuilds every layer browser-side, so it is deliberately a
+    button: you click it when you want to see where you have painted, not
+    while you are in the middle of painting.
+    """
+    try:
+        if not hasattr(g, "viewer") or g.viewer is None:
+            return jsonify({"success": False, "error": "Viewer not initialized"}), 400
+        count = refresh_annotated_regions_layer(
+            corrections_path=(data or {}).get("corrections_path")
+        )
+        return jsonify({"success": True, "count": count})
+    except Exception as e:
+        logger.error(f"Error refreshing annotated regions: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def add_crop_to_viewer_response(data):
@@ -264,7 +392,14 @@ def add_crop_to_viewer_response(data):
                 "url": f"s3+{minio_url}",
                 "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
             }
-            s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
+            layer = neuroglancer.SegmentationLayer(source=source_config)
+            try:
+                layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
+            except Exception as e:
+                # An older neuroglancer without tool_bindings should still get
+                # its layer; the keys just will not be pre-bound.
+                logger.warning(f"Could not pre-bind annotation tools: {e}")
+            s.layers[layer_name] = layer
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:

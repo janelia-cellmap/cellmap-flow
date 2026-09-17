@@ -13,8 +13,8 @@ Usage:
         --model-checkpoint /path/to/checkpoint \
         --corrections corrections.zarr \
         --output-dir output/fly_organelles_v1.1 \
-        --lora-r 16 \
-        --batch-size 4 \
+        --lora-r 8 \
+        --batch-size 8 \
         --num-epochs 20 \
         --learning-rate 2e-4
 """
@@ -250,6 +250,23 @@ def _apply_restart_params(args, signal_data: dict):
             if old_value != value:
                 logger.info(f"Updated {key}: {old_value} -> {value}")
                 changed = True
+
+    # alpha is what sets LoRA's step size: peft scales the adapter by
+    # lora_alpha / r. Submit derives alpha = 2 * r, but a restart only carries
+    # lora_r -- so raising the rank from 8 to 64 while alpha stayed at 16 cut
+    # the effective update to an eighth, and produced a loss curve that looks
+    # reassuringly smooth because very little is happening per step.
+    if params.get("lora_r") is not None and params.get("lora_alpha") is None:
+        derived = int(params["lora_r"]) * 2
+        if getattr(args, "lora_alpha", None) != derived:
+            logger.info(
+                f"Updated lora_alpha: {getattr(args, 'lora_alpha', None)} -> "
+                f"{derived} (held at 2x rank so the adapter scaling does not "
+                f"change when you change the rank)"
+            )
+            args.lora_alpha = derived
+            params["lora_alpha"] = derived
+            changed = True
 
     # Persist updated params to metadata.json
     if changed and hasattr(args, 'output_dir') and args.output_dir:
@@ -527,13 +544,17 @@ def build_arg_parser():
         "--lora-r",
         type=int,
         default=8,
+        # Low rank is itself the anti-forgetting mechanism here: this is
+        # correcting a model that is mostly right, so the adapter wants just
+        # enough capacity to fix the bad regions and not enough to rewrite
+        # the good ones.
         help="LoRA rank (default: 8)"
     )
     parser.add_argument(
         "--lora-alpha",
         type=int,
-        default=16,
-        help="LoRA alpha scaling (default: 16)"
+        default=None,
+        help="LoRA alpha scaling (default: twice --lora-r)"
     )
     parser.add_argument(
         "--lora-dropout",
@@ -572,8 +593,8 @@ def build_arg_parser():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=2,
-        help="Batch size (default: 2)"
+        default=8,
+        help="Batch size (default: 8)"
     )
     parser.add_argument(
         "--num-epochs",
@@ -713,6 +734,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Keep the LoRA scaling factor (alpha/r) fixed at 2 regardless of rank,
+    # which is what FinetuneJobManager already does for dashboard-submitted
+    # jobs via lora_alpha = lora_r * 2. A fixed alpha default would silently
+    # change the scaling whenever the rank default moved -- at r=64 an
+    # alpha of 16 is a scaling of 0.25 rather than 2.
+    if args.lora_alpha is None:
+        args.lora_alpha = args.lora_r * 2
+
     # Print configuration
     logger.info("=" * 60)
     logger.info("LoRA Finetuning Configuration")
@@ -721,7 +750,7 @@ def main():
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
-    logger.info(f"LoRA rank: {args.lora_r}")
+    logger.info(f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha})")
     logger.info(f"Batch size: {args.batch_size}")
     logger.info(f"Epochs: {args.num_epochs}")
     logger.info(f"Learning rate: {args.learning_rate}")

@@ -242,6 +242,7 @@ class LoRAFinetuner:
         # since CUDA AMP utilities can't run on CPU.
         self.select_channel = select_channel
         self.mask_unannotated = mask_unannotated
+        self._single_class_checked = False
         self.label_smoothing = label_smoothing
         self.distillation_lambda = distillation_lambda
         self.distillation_all_voxels = distillation_all_voxels
@@ -306,6 +307,24 @@ class LoRAFinetuner:
             logger.info("Class balancing enabled: fg and bg scribble voxels weighted equally")
 
         logger.info(f"Using {loss_type} loss")
+
+        # Good regions are useless without a teacher term to apply in them:
+        # the supervised loss never touches an unannotated voxel, so with
+        # lambda at 0 every rehearsal patch would contribute exactly nothing
+        # and the regions the user marked would silently do nothing at all.
+        # Marking them is an explicit request to be held there, so honour it
+        # rather than training a no-op and looking like it worked.
+        self._anchors_available = bool(
+            getattr(getattr(self.dataloader, "dataset", None), "emits_anchor", False)
+        )
+        if self._anchors_available and self.distillation_lambda <= 0:
+            self.distillation_lambda = 1.0
+            logger.warning(
+                "Good regions are marked but distillation_lambda was 0, which "
+                "would make them inert. Setting lambda=1.0 so the anchors take "
+                "effect; pass an explicit lambda to override."
+            )
+
         if self.label_smoothing > 0:
             logger.info(f"Label smoothing: {self.label_smoothing} (targets: {self.label_smoothing/2:.3f} to {1-self.label_smoothing/2:.3f})")
         if self.distillation_lambda > 0:
@@ -324,7 +343,12 @@ class LoRAFinetuner:
                     "if you OOM, distillation will be disabled automatically as "
                     "a fallback in the OOM handler."
                 )
-            scope_str = "all voxels" if self.distillation_all_voxels else "unlabeled voxels only"
+            if self._anchors_available:
+                scope_str = "good regions only"
+            elif self.distillation_all_voxels:
+                scope_str = "all voxels"
+            else:
+                scope_str = "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
         # Mixed precision scaler
@@ -334,6 +358,10 @@ class LoRAFinetuner:
         self.current_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Average supervised loss of the epoch just finished. Checkpoint
+        # selection uses this rather than the combined loss -- see the epoch
+        # loop for why the combined loss cannot rank epochs.
+        self.last_supervised_loss = float('nan')
         self.training_stats = []
 
     def _fallback_to_fp32(self):
@@ -358,6 +386,10 @@ class LoRAFinetuner:
         self.current_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Average supervised loss of the epoch just finished. Checkpoint
+        # selection uses this rather than the combined loss -- see the epoch
+        # loop for why the combined loss cannot rank epochs.
+        self.last_supervised_loss = float('nan')
         self.training_stats = []
 
     def _halve_batch_size(self):
@@ -449,6 +481,62 @@ class LoRAFinetuner:
         ):
             self.criterion.dice_loss.apply_sigmoid = False
 
+    def _warn_if_single_class(self, target, mask):
+        """Say so when every supervised voxel carries the same label.
+
+        Gradient descent can only do one thing with a target that is all 1:
+        raise the prediction everywhere. The model duly does that, globally,
+        and the result is worse than the model you started from -- with a
+        loss curve that looks unremarkable, because a one-class problem is
+        genuinely easy to reduce.
+
+        The usual cause is painting only foreground. An affinity target needs
+        both: foreground says "these voxels are one object", background says
+        "this is not object, and these two are not joined". Without the
+        second, nothing anywhere says 0.
+        """
+        if self._single_class_checked:
+            return
+        self._single_class_checked = True
+        try:
+            with torch.no_grad():
+                if mask is None:
+                    supervised = target.numel()
+                    positive = float((target > 0.5).sum())
+                else:
+                    supervised = float(mask.sum())
+                    positive = float(((target > 0.5).float() * mask).sum())
+                if supervised < 1:
+                    logger.warning(
+                        "No supervised voxels in the first batch: the loss has "
+                        "nothing to learn from. Check that the annotations "
+                        "overlap the sampled patches."
+                    )
+                    return
+                frac = positive / supervised
+                logger.info(
+                    f"Supervised target: {supervised:.0f} voxels, "
+                    f"{100 * frac:.1f}% positive"
+                )
+                if frac > 0.999 or frac < 0.001:
+                    only = "positive (1)" if frac > 0.5 else "negative (0)"
+                    missing = "background" if frac > 0.5 else "foreground"
+                    logger.warning(
+                        "=" * 70 + "\n"
+                        f"EVERY supervised voxel is {only}. This run cannot "
+                        "teach the model a boundary:\n"
+                        "gradient descent will simply push the prediction that "
+                        "way everywhere, and\n"
+                        f"the result will be worse than the model you started "
+                        f"from.\n\n"
+                        f"Paint some {missing} as well, and put it where it "
+                        "decides something --\n"
+                        "between two objects that touch, and on the things "
+                        "being confused for one.\n" + "=" * 70
+                    )
+        except Exception as e:  # never let a diagnostic stop training
+            logger.debug(f"Single-class check failed: {e}")
+
     def train(self) -> Dict[str, Any]:
         """
         Run the training loop.
@@ -489,7 +577,7 @@ class LoRAFinetuner:
         # Some model+data combinations produce NaN under FP16 autocast.
         if self.use_mixed_precision:
             try:
-                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_raw = probe_raw.to(self.device)
                 with torch.no_grad(), autocast('cuda', enabled=True):
@@ -519,7 +607,7 @@ class LoRAFinetuner:
                 self._apply_probability_output_mode(log_message)
         else:
             try:
-                probe_raw, _ = next(iter(self.dataloader))
+                probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_extreme = torch.randn(
                     probe_raw.shape,
@@ -643,16 +731,36 @@ class LoRAFinetuner:
                     'diverged': True,
                 }
 
+            # Rank epochs by the supervised term, not the combined loss.
+            #
+            # loss = supervised + lambda * distillation, and the distillation
+            # term is minimized by *not changing the model*: at init LoRA has
+            # B=0, so the student is identical to the teacher and distillation
+            # is exactly 0. Epoch 1 therefore posts a combined loss no later
+            # epoch can beat, and "best" stayed pinned to epoch 1 for the whole
+            # run. save_adapter() loads best_checkpoint.pth before exporting,
+            # so every finetune shipped a model one optimizer step from its
+            # starting point -- measurably so: every LoRA B matrix came out at
+            # max|B| = 1e-4, which is Adam's first step at lr=1e-4.
+            #
+            # Distillation belongs in the objective, where it restrains the
+            # update; it cannot also be the yardstick for which epoch is best.
+            # With lambda=0 the two terms are equal, so this changes nothing.
+            selection_loss = self.last_supervised_loss
+            if not math.isfinite(selection_loss):
+                selection_loss = epoch_loss
+
             # Log epoch results
             self._log_message(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
-                f"Best: {self.best_loss:.6f}"
+                f"Supervised: {selection_loss:.6f} - "
+                f"Best supervised: {self.best_loss:.6f}"
             )
 
             # Save checkpoint if best
-            if epoch_loss < self.best_loss:
-                self.best_loss = epoch_loss
+            if selection_loss < self.best_loss:
+                self.best_loss = selection_loss
                 self._log_message("  Saving best checkpoint...")
                 self.save_checkpoint(is_best=True)
                 self._log_message(f"  → Saved best checkpoint")
@@ -717,7 +825,18 @@ class LoRAFinetuner:
         # batch of the epoch (cumulative grad before zero_grad fires).
         diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
-        for batch_idx, (raw, target) in enumerate(self.dataloader):
+        for batch_idx, batch in enumerate(self.dataloader):
+            # The dataset yields a third tensor once the session has good
+            # regions: a per-voxel mask marking where the student should be
+            # held to the teacher. Older datasets yield the 2-tuple, so both
+            # shapes have to work.
+            if len(batch) == 3:
+                raw, target, anchor = batch
+                anchor = anchor.to(self.device, non_blocking=True)
+            else:
+                raw, target = batch
+                anchor = None
+
             # Move to device
             raw = raw.to(self.device, non_blocking=True)
             target = target.to(self.device, non_blocking=True)
@@ -732,6 +851,8 @@ class LoRAFinetuner:
                 # Shift labels down by 1 (but keep 0 as 0)
                 # e.g., 0->0 (unannotated), 1->0 (background), 2->1 (foreground)
                 target = torch.clamp(target - 1, min=0)
+
+            self._warn_if_single_class(target, mask)
 
             # Apply label smoothing: 0 -> s/2, 1 -> 1-s/2
             # This prevents the model from being pushed to extreme 0/1 outputs,
@@ -800,7 +921,22 @@ class LoRAFinetuner:
                 distillation_loss = torch.tensor(0.0, device=self.device)
                 if self.distillation_lambda > 0 and teacher_pred is not None:
                     distill_loss_map = (pred - teacher_pred) ** 2  # per-element MSE
-                    if self.distillation_all_voxels or mask is None:
+                    if anchor is not None:
+                        # Good regions decide where the teacher is worth
+                        # copying. Distilling on every unlabeled voxel
+                        # instead -- the branch below -- anchors hardest
+                        # right beside the scribbles, which is the one place
+                        # the teacher is known to be wrong, so it partly
+                        # fights the correction being made. Restrict it to
+                        # the regions the user actually vouched for.
+                        #
+                        # Broadcast over channels: the mask is single-channel
+                        # (it is about location) while pred may not be.
+                        anchor_mask = anchor.float().expand_as(distill_loss_map)
+                        distillation_loss = (
+                            distill_loss_map.float() * anchor_mask
+                        ).sum() / anchor_mask.sum().clamp(min=1)
+                    elif self.distillation_all_voxels or mask is None:
                         # Apply on all voxels
                         distillation_loss = distill_loss_map.mean()
                     else:
@@ -845,6 +981,7 @@ class LoRAFinetuner:
             batch_loss = loss.item() * self.gradient_accumulation_steps
             if not math.isfinite(batch_loss):
                 logger.warning(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}. Aborting epoch.")
+                self.last_supervised_loss = float('nan')
                 return float('nan')
             epoch_loss += batch_loss
             epoch_supervised_loss += supervised_loss.item()
@@ -912,6 +1049,7 @@ class LoRAFinetuner:
                 f"First 5 dead: {dead_names[:5]}"
             )
 
+        self.last_supervised_loss = epoch_supervised_loss / num_batches
         return epoch_loss / num_batches
 
     def save_checkpoint(self, is_best: bool = False):

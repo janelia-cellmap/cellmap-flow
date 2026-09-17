@@ -1130,17 +1130,15 @@ def periodic_sync_annotations():
                 continue
             if not minio_state["ip"] or not minio_state["port"]:
                 continue
-            synced = sync_all_annotations_from_minio(force=False)
-            # After each successful sync, refresh the bounding-box overlay so
-            # the user sees where they've painted without clicking a button.
-            if synced and synced > 0:
-                try:
-                    from cellmap_flow.dashboard.routes.finetune import (
-                        refresh_annotated_regions_layer,
-                    )
-                    refresh_annotated_regions_layer()
-                except Exception as e:
-                    logger.debug(f"Periodic sync: refresh_annotated_regions_layer failed: {e}")
+            # Pull annotations to disk, and stop there. This thread must
+            # never write to the viewer: python owns the whole state
+            # document, so any write makes the browser run
+            # `trackable.reset(); restoreState(...)` and rebuild every layer
+            # -- taking the draw tool out of the user's hand and dropping
+            # whatever strokes were still buffered behind the brush's commit
+            # debounce. The annotated-regions boxes are refreshed on demand
+            # instead, from the "Show Annotated Regions" button.
+            sync_all_annotations_from_minio(force=False)
         except Exception as e:
             logger.debug(f"Error in periodic sync: {e}")
 

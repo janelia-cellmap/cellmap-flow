@@ -13,6 +13,7 @@ from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
 from cellmap_flow.dashboard.routes.finetune.overlay import (
     add_crop_to_viewer_response,
     refresh_annotated_regions_layer,
+    refresh_annotated_regions_response,
     sync_annotations_manually_response,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "list_existing_sessions_response",
     "load_existing_volume_response",
     "refresh_annotated_regions_layer",
+    "refresh_annotated_regions_response",
     "set_user_prefs_response",
     "sync_annotations_manually_response",
 ]

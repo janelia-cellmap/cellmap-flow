@@ -43,6 +43,68 @@ def _parse_patches_per_epoch_override(data):
     return True, (None if value == 0 else value)
 
 
+def _parse_rehearsal_fraction_override(data):
+    """Return ``(provided, value)`` for the optional rehearsal-fraction override.
+
+    Blank/missing leaves the manifest alone. ``0`` is meaningful and distinct
+    from blank: it turns rehearsal off for this run without discarding the
+    regions, so you can compare with and without them.
+    """
+    if "rehearsal_fraction" not in data:
+        return False, None
+    raw = data.get("rehearsal_fraction")
+    if raw is None or raw == "":
+        return False, None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
+    return True, value
+
+
+def _step_names(config):
+    """Step names from an input_norm/postprocess config, whichever shape it is.
+
+    The dashboard POSTs these as a list of dicts carrying a "name" key, on
+    purpose: jsonify sorts dict keys, and the order of these steps changes
+    what they compute. pipeline.py stores that list verbatim, so
+    current_*_config() hands back a list whenever the pipeline has been
+    applied, and a name-keyed dict otherwise. Only used for logging, so an
+    unrecognised shape is worth naming rather than raising.
+    """
+    if isinstance(config, dict):
+        return list(config.keys())
+    if isinstance(config, list):
+        return [d.get("name") for d in config if isinstance(d, dict)]
+    return []
+
+
+def _backfill_manifest(corrections_dir):
+    """Write a manifest for a session that predates the volume routes writing one.
+
+    Returns the manifest if one could be written, else None (leaving the
+    caller on the legacy correction-chunk path, as before).
+    """
+    from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
+    from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+    volumes = getattr(g, "annotation_volumes", {}) or {}
+    for volume in reversed(list(volumes.values())):
+        if str(volume.get("corrections_dir") or "") != str(corrections_dir):
+            continue
+        if write_volume_manifest(volume) is None:
+            return None
+        return read_manifest(str(corrections_dir))
+
+    logger.info(
+        f"No annotation volume registered for {corrections_dir}; "
+        "training on the legacy correction-chunk dataset."
+    )
+    return None
+
+
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
     from cellmap_flow.finetune.virtual_dataset import write_manifest
@@ -54,8 +116,8 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             "Refreshing manifest input_norm before %s "
             "(was: %s, now: %s)",
             context,
-            list((manifest.get("input_norm") or {}).keys()),
-            list(current_norm.keys()),
+            _step_names(manifest.get("input_norm")),
+            _step_names(current_norm),
         )
     manifest["input_norm"] = current_norm
 
@@ -65,8 +127,8 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             "Refreshing manifest postprocess before %s "
             "(was: %s, now: %s)",
             context,
-            list((manifest.get("postprocess") or {}).keys()),
-            list(current_postprocess.keys()),
+            _step_names(manifest.get("postprocess")),
+            _step_names(current_postprocess),
         )
     manifest["postprocess"] = current_postprocess
 
@@ -79,6 +141,17 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             context,
             old_value,
             "auto" if patches_per_epoch is None else patches_per_epoch,
+        )
+
+    rehearsal_given, rehearsal_fraction = _parse_rehearsal_fraction_override(data)
+    if rehearsal_given:
+        old_value = manifest.get("rehearsal_fraction")
+        manifest["rehearsal_fraction"] = rehearsal_fraction
+        logger.info(
+            "Applying rehearsal_fraction override before %s: %s -> %s",
+            context,
+            "auto" if old_value is None else old_value,
+            rehearsal_fraction,
         )
 
     write_manifest(str(corrections_dir), manifest)
@@ -150,6 +223,14 @@ def submit_finetuning_response(data):
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
+        if existing_manifest is None:
+            # Sessions started before the volume routes wrote a manifest have
+            # a perfectly trainable volume zarr and no sentinel pointing at
+            # it, so they would silently train on the legacy per-chunk
+            # dataset and ignore any good regions marked. Backfill from the
+            # registered volume rather than making the user start over.
+            existing_manifest = _backfill_manifest(actual_corrections_path)
+
         if existing_manifest is None:
             try:
                 sync_all_annotations_from_minio(force=False)
@@ -470,10 +551,21 @@ def restart_finetuning_job_response(job_id, data):
     try:
         restart_t0 = time.perf_counter()
 
-        # Pre-sync is only needed by the legacy CorrectionDataset path. With
-        # a virtual-sources manifest the trainer reads the volume zarr
-        # directly, so the sync would just download chunks the trainer never
-        # touches — and on big sessions can hang Restart for minutes.
+        # Every restart asks MinIO whether anything changed. That question is
+        # cheap and is the only way to answer it -- the browser writes its
+        # strokes straight to MinIO, so the dashboard has no way of knowing
+        # locally whether you drew anything since the last run. Asking *is*
+        # the check: force=False diffs chunk keys and downloads only what
+        # differs, so a parameters-only restart pulls nothing and the log says
+        # so. What it must not do is skip the question, because the trainer
+        # rebuilds its dataloader from the volume zarr on disk each iteration
+        # and the background sync only runs every 30s.
+        #
+        # This used to be skipped whenever a manifest was present, because the
+        # sync also materialized per-chunk raw extracts the virtual dataset
+        # never reads, which on a big session took minutes. That extraction is
+        # now skipped inside the sync itself when a manifest exists (see
+        # sync_annotation_volume_from_minio), leaving just the chunk diff.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
@@ -487,25 +579,41 @@ def restart_finetuning_job_response(job_id, data):
         existing_manifest = (
             read_manifest(corrections_dir) if corrections_dir else None
         )
+        if existing_manifest is None and corrections_dir:
+            # Same backfill as submit: a restart must not quietly drop to the
+            # legacy dataset just because the session predates the manifest.
+            existing_manifest = _backfill_manifest(corrections_dir)
+
         if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
                 corrections_dir, existing_manifest, data, "restart"
             )
-            logger.info(
-                f"Virtual sources manifest present for job {job_id}; "
-                "skipping pre-restart MinIO sync."
-            )
-        else:
-            try:
-                sync_t0 = time.perf_counter()
-                synced = sync_all_annotations_from_minio(force=False)
-                sync_elapsed = time.perf_counter() - sync_t0
+
+        pulled = 0
+        try:
+            sync_t0 = time.perf_counter()
+            pulled = sync_all_annotations_from_minio(force=False) or 0
+            sync_elapsed = time.perf_counter() - sync_t0
+            if pulled < 0:
                 logger.info(
-                    f"Restart pre-sync complete for job {job_id}: synced={synced}, "
-                    f"elapsed={sync_elapsed:.2f}s"
+                    f"Restart pre-sync for job {job_id}: MinIO is not running, "
+                    f"so there is nothing to pull."
                 )
-            except Exception as e:
-                logger.warning(f"Error syncing annotations before restart: {e}")
+                pulled = 0
+            elif pulled:
+                logger.info(
+                    f"Restart pre-sync for job {job_id}: pulled new annotations "
+                    f"for {pulled} volume(s) in {sync_elapsed:.2f}s. The next "
+                    f"iteration trains on them."
+                )
+            else:
+                logger.info(
+                    f"Restart pre-sync for job {job_id}: nothing new to pull "
+                    f"({sync_elapsed:.2f}s) -- annotations on disk are already "
+                    f"current, so this is a parameters-only restart."
+                )
+        except Exception as e:
+            logger.warning(f"Error syncing annotations before restart: {e}")
 
         job = g.finetune_job_manager.restart_finetuning_job(
             job_id=job_id,
@@ -513,11 +621,22 @@ def restart_finetuning_job_response(job_id, data):
         )
         total_elapsed = time.perf_counter() - restart_t0
         logger.info(f"Restart request processed for job {job_id}: total={total_elapsed:.2f}s")
+        if pulled:
+            message = (
+                f"Restart request sent. Picked up new annotations from "
+                f"{pulled} volume(s); training will restart on the same GPU."
+            )
+        else:
+            message = (
+                "Restart request sent. No new annotations to pull; training "
+                "will restart on the same GPU."
+            )
         return jsonify(
             {
                 "success": True,
                 "job_id": job.job_id,
-                "message": "Restart request sent. Training will restart on the same GPU.",
+                "annotations_synced": pulled,
+                "message": message,
             }
         )
     except Exception as e:

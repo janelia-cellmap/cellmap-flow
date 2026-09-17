@@ -176,8 +176,8 @@ class SequentialWrapper(nn.Module):
 def wrap_model_with_lora(
     model: nn.Module,
     target_modules: Optional[List[str]] = None,
-    lora_r: int = 8,
-    lora_alpha: int = 16,
+    lora_r: int = 64,
+    lora_alpha: int = 128,
     lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
     task_type: Optional[str] = None,
@@ -235,6 +235,23 @@ def wrap_model_with_lora(
             "peft library is required for LoRA finetuning. "
             "Install with: pip install peft"
         )
+
+    # Bake in any adapter the model already carries, before adding ours.
+    #
+    # Calling get_peft_model() on something that is already a PeftModel does
+    # not stack: both adapters are named "default", so the second injection
+    # replaces the first and its weights are dropped on the floor. PEFT says
+    # as much ("modify a model with PEFT for a second time... call .unload()
+    # before"), but only as a warning, so finetuning a model that already had
+    # an adapter -- which is every "continue from my last run" -- silently
+    # started from the bare base instead. The only visible trace was the total
+    # parameter count going *down* after wrapping.
+    #
+    # Merging makes the existing adapter part of the frozen base weights, so
+    # the new LoRA starts from the model you were actually looking at, and the
+    # distillation teacher (adapters disabled) is that same model rather than
+    # the untuned original.
+    model = _merge_existing_adapters(model)
 
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):
@@ -327,6 +344,93 @@ def print_lora_parameters(model: nn.Module):
         logger.warning("Model has no parameters")
 
 
+def _lora_conv_delta_weight(layer, adapter):
+    """The LoRA delta for a conv layer: a contraction over the rank axis.
+
+    peft computes this itself, but takes a conv2d shortcut whenever
+    `weight.size()[2:4] == (1, 1)` -- which is also true of a *3D* conv with a
+    1x1x1 kernel, like an affinity head. The squeeze then leaves a trailing
+    spatial axis, the matmul becomes a batched one over the channel counts,
+    and it fails with a shape mismatch instead of merging. lora_B is always
+    pointwise, so the delta is just lora_B summed against lora_A over rank.
+    """
+    weight_A = layer.lora_A[adapter].weight
+    weight_B = layer.lora_B[adapter].weight
+    delta = torch.einsum(
+        "or,ri...->oi...", weight_B.flatten(1).float(), weight_A.float()
+    )
+    return (delta * layer.scaling[adapter]).to(weight_A.dtype)
+
+
+def _fix_conv_delta_weights(model: nn.Module) -> int:
+    """Give the conv layers peft would mis-merge a delta it can merge.
+
+    Returns how many were patched. Only layers that would hit the broken
+    branch are touched; every other layer keeps peft's own implementation.
+    """
+    import types
+
+    patched = 0
+    for module in model.modules():
+        if not hasattr(module, "get_base_layer") or not hasattr(module, "lora_A"):
+            continue
+        base = module.get_base_layer()
+        weight = getattr(base, "weight", None)
+        if weight is None or weight.dim() != 5 or tuple(weight.shape[2:4]) != (1, 1):
+            continue
+        if getattr(base, "groups", 1) != 1:
+            continue
+        if any(getattr(module, "use_dora", {}).values()):
+            continue
+        module.get_delta_weight = types.MethodType(_lora_conv_delta_weight, module)
+        patched += 1
+    return patched
+
+
+def _merge_existing_adapters(model: nn.Module) -> nn.Module:
+    """Fold any already-attached LoRA adapter into the base weights.
+
+    Returns the plain module to wrap. A model with no adapter passes straight
+    through. See the note in create_lora_model() for why stacking is not an
+    option.
+    """
+    try:
+        from peft import PeftModel
+    except ImportError:
+        return model
+
+    if not isinstance(model, PeftModel):
+        return model
+
+    patched = _fix_conv_delta_weights(model)
+    if patched:
+        logger.info(
+            f"Computing the LoRA delta for {patched} 1x1x1 3D conv layer(s) "
+            f"here rather than in peft, whose shortcut for them is conv2d-only."
+        )
+
+    before = sum(p.numel() for p in model.parameters())
+    try:
+        merged = model.merge_and_unload()
+    except Exception as e:
+        # Losing the adapter silently is what caused the original bug, so
+        # refuse rather than carry on and train from the wrong starting point.
+        raise RuntimeError(
+            "This model already has a LoRA adapter, and it could not be "
+            f"merged into the base weights ({e}). Training on top of it would "
+            "silently discard that adapter and start from the untuned base "
+            "model instead."
+        ) from e
+
+    after = sum(p.numel() for p in merged.parameters())
+    logger.info(
+        f"Merged the model's existing LoRA adapter into its base weights "
+        f"({before:,} -> {after:,} params); the new adapter will train on top "
+        f"of it."
+    )
+    return merged
+
+
 def load_lora_adapter(
     model: nn.Module,
     adapter_path: str,
@@ -366,6 +470,17 @@ def load_lora_adapter(
         )
 
     logger.info(f"Loading LoRA adapter from: {adapter_path}")
+
+    # Fold in any adapter the model already carries, for the same reason
+    # create_lora_model() does -- and additionally because the adapter being
+    # loaded here was saved against the *merged* module tree. Calling
+    # from_pretrained() on a PeftModel wraps it a second time, which both
+    # drops the existing adapter and double-nests every module name
+    # ("base_model.model.base_model.model...."), so none of the saved keys
+    # match. PEFT reports that as a warning about missing adapter keys and
+    # then returns a model with no adapter loaded at all: the served
+    # "finetuned" model was the untouched base.
+    model = _merge_existing_adapters(model)
 
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):
