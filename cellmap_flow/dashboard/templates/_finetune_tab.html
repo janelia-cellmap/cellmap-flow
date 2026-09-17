@@ -1483,13 +1483,14 @@ document.addEventListener("DOMContentLoaded", function () {
         if (d.success) {
           renderGoodRegionCount(d.count);
           const at = d.region.offset_nm.map((v) => Math.round(v)).join(", ");
-          finetuneLog.value += `Marked ${d.region.label} as good at [${at}] nm\n`;
-          if (!d.persisted) {
-            finetuneLog.value +=
-              "  (not saved to disk: no annotation session yet)\n";
-          }
+          finetuneLog.value +=
+            `Marked ${d.region.label} as good at [${at}] nm ` +
+            `(${d.count} total)\n`;
         } else {
+          // A mark that could not be saved used to come back as a success
+          // with persisted:false, draw its box, and be gone. Make it loud.
           finetuneLog.value += `Could not mark region: ${d.error}\n`;
+          alert(`Could not mark region as good:\n\n${d.error}`);
         }
         finetuneLog.scrollTop = finetuneLog.scrollHeight;
       })
