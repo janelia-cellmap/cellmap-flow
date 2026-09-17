@@ -236,6 +236,23 @@ def wrap_model_with_lora(
             "Install with: pip install peft"
         )
 
+    # Bake in any adapter the model already carries, before adding ours.
+    #
+    # Calling get_peft_model() on something that is already a PeftModel does
+    # not stack: both adapters are named "default", so the second injection
+    # replaces the first and its weights are dropped on the floor. PEFT says
+    # as much ("modify a model with PEFT for a second time... call .unload()
+    # before"), but only as a warning, so finetuning a model that already had
+    # an adapter -- which is every "continue from my last run" -- silently
+    # started from the bare base instead. The only visible trace was the total
+    # parameter count going *down* after wrapping.
+    #
+    # Merging makes the existing adapter part of the frozen base weights, so
+    # the new LoRA starts from the model you were actually looking at, and the
+    # distillation teacher (adapters disabled) is that same model rather than
+    # the untuned original.
+    model = _merge_existing_adapters(model)
+
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):
         logger.info("Wrapping Sequential model for PEFT compatibility")
@@ -325,6 +342,43 @@ def print_lora_parameters(model: nn.Module):
         logger.info(f"Total params: {total_params:,}")
     else:
         logger.warning("Model has no parameters")
+
+
+def _merge_existing_adapters(model: nn.Module) -> nn.Module:
+    """Fold any already-attached LoRA adapter into the base weights.
+
+    Returns the plain module to wrap. A model with no adapter passes straight
+    through. See the note in create_lora_model() for why stacking is not an
+    option.
+    """
+    try:
+        from peft import PeftModel
+    except ImportError:
+        return model
+
+    if not isinstance(model, PeftModel):
+        return model
+
+    before = sum(p.numel() for p in model.parameters())
+    try:
+        merged = model.merge_and_unload()
+    except Exception as e:
+        # Losing the adapter silently is what caused the original bug, so
+        # refuse rather than carry on and train from the wrong starting point.
+        raise RuntimeError(
+            "This model already has a LoRA adapter, and it could not be "
+            f"merged into the base weights ({e}). Training on top of it would "
+            "silently discard that adapter and start from the untuned base "
+            "model instead."
+        ) from e
+
+    after = sum(p.numel() for p in merged.parameters())
+    logger.info(
+        f"Merged the model's existing LoRA adapter into its base weights "
+        f"({before:,} -> {after:,} params); the new adapter will train on top "
+        f"of it."
+    )
+    return merged
 
 
 def load_lora_adapter(
