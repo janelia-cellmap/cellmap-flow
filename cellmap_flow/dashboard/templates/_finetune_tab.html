@@ -324,6 +324,26 @@
           </small>
         </div>
       </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="rehearsalFraction" class="form-label">
+            Good-Region Rehearsal
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="rehearsalFraction" class="form-select">
+            <option value="" selected>Auto (25%)</option>
+            <option value="0">0% (ignore good regions)</option>
+            <option value="0.1">10%</option>
+            <option value="0.25">25%</option>
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+          </select>
+          <small class="text-muted" id="rehearsalFractionHint">
+            Share of training patches drawn from regions you marked good,
+            where the model is held to what it already predicts.
+          </small>
+        </div>
+      </div>
     </div>
 
     <div class="row">
@@ -557,6 +577,7 @@ document.addEventListener("DOMContentLoaded", function () {
       numEpochs: document.getElementById("numEpochs").value,
       batchSize: document.getElementById("batchSize").value,
       patchesPerEpoch: document.getElementById("patchesPerEpoch").value,
+      rehearsalFraction: document.getElementById("rehearsalFraction").value,
       learningRate: document.getElementById("learningRate").value,
       lossType: document.getElementById("lossType").value,
       marginValue: document.getElementById("marginValue").value,
@@ -603,11 +624,26 @@ document.addEventListener("DOMContentLoaded", function () {
     return value;
   }
 
+  function readRehearsalFractionOverride() {
+    const el = document.getElementById("rehearsalFraction");
+    if (!el) return undefined;
+    const raw = el.value.trim();
+    // Blank means "leave the manifest alone"; "0" is a real choice (train
+    // without rehearsal while keeping the regions), so it must not be
+    // collapsed into blank here.
+    if (!raw) return undefined;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error("Good-region rehearsal must be blank or between 0 and 1.");
+    }
+    return value;
+  }
+
   // Attach change listeners to all form elements to auto-save state
   function attachStateListeners() {
     const ids = [
       "outputPath", "checkpointPath", "loraRank", "numEpochs",
-      "batchSize", "patchesPerEpoch", "learningRate", "lossType", "marginValue", "labelSmoothing",
+      "batchSize", "patchesPerEpoch", "rehearsalFraction", "learningRate", "lossType", "marginValue", "labelSmoothing",
       "distillationLambda", "distillationScope",
       "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
     ];
@@ -656,6 +692,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.loraRank) document.getElementById("loraRank").value = savedState.loraRank;
     if (savedState.numEpochs) document.getElementById("numEpochs").value = savedState.numEpochs;
     if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
+    if (savedState.rehearsalFraction !== undefined && savedState.rehearsalFraction !== null) {
+      document.getElementById("rehearsalFraction").value = savedState.rehearsalFraction;
+    }
     if (savedState.patchesPerEpoch !== undefined && savedState.patchesPerEpoch !== null) {
       document.getElementById("patchesPerEpoch").value = savedState.patchesPerEpoch;
     }
@@ -1367,10 +1406,47 @@ document.addEventListener("DOMContentLoaded", function () {
   const clearGoodRegionsBtn = document.getElementById("clearGoodRegionsBtn");
   const goodRegionCount = document.getElementById("goodRegionCount");
 
+  // Last count seen, so the rehearsal hint can say whether the setting will
+  // do anything without re-fetching every time the dropdown moves.
+  let lastGoodRegionCount = 0;
+
   function renderGoodRegionCount(count) {
+    lastGoodRegionCount = count || 0;
     goodRegionCount.textContent = count
       ? `${count} good region${count === 1 ? "" : "s"}`
       : "none yet";
+    updateRehearsalHint();
+  }
+
+  function updateRehearsalHint() {
+    const hint = document.getElementById("rehearsalFractionHint");
+    const select = document.getElementById("rehearsalFraction");
+    if (!hint || !select) return;
+
+    const base =
+      "Share of training patches drawn from regions you marked good, " +
+      "where the model is held to what it already predicts.";
+
+    if (lastGoodRegionCount === 0) {
+      hint.textContent =
+        base + " No good regions marked yet, so this has no effect.";
+      return;
+    }
+    const raw = select.value.trim();
+    // Blank means the manifest decides, which is 25% unless it says otherwise.
+    const fraction = raw === "" ? 0.25 : Number(raw);
+    if (!Number.isFinite(fraction) || fraction <= 0) {
+      hint.textContent =
+        base +
+        ` Set to 0, so the ${lastGoodRegionCount} marked region` +
+        `${lastGoodRegionCount === 1 ? "" : "s"} will be ignored this run.`;
+      return;
+    }
+    hint.textContent =
+      base +
+      ` About ${Math.round(fraction * 100)}% of patches will come from the ` +
+      `${lastGoodRegionCount} region${lastGoodRegionCount === 1 ? "" : "s"} ` +
+      "you marked.";
   }
 
   function refreshGoodRegionCount() {
@@ -1423,6 +1499,13 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch(() => {});
   });
+
+  // Guarded like readPatchesPerEpochOverride: an uncaught throw here would
+  // kill every handler defined below it in this block.
+  const rehearsalFractionEl = document.getElementById("rehearsalFraction");
+  if (rehearsalFractionEl) {
+    rehearsalFractionEl.addEventListener("change", updateRehearsalHint);
+  }
 
   refreshGoodRegionCount();
 
@@ -1486,8 +1569,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       let patchesPerEpochOverride;
+      let rehearsalFractionOverride;
       try {
         patchesPerEpochOverride = readPatchesPerEpochOverride();
+        rehearsalFractionOverride = readRehearsalFractionOverride();
       } catch (error) {
         alert(error.message);
         return;
@@ -1511,6 +1596,9 @@ document.addEventListener("DOMContentLoaded", function () {
       };
       if (patchesPerEpochOverride !== undefined) {
         params.patches_per_epoch = patchesPerEpochOverride;
+      }
+      if (rehearsalFractionOverride !== undefined) {
+        params.rehearsal_fraction = rehearsalFractionOverride;
       }
 
       // Forward margin value when using margin loss
@@ -2096,8 +2184,10 @@ document.addEventListener("DOMContentLoaded", function () {
     restartJobBtn.addEventListener('click', async () => {
       const lossType = document.getElementById('lossType').value;
       let patchesPerEpochOverride;
+      let rehearsalFractionOverride;
       try {
         patchesPerEpochOverride = readPatchesPerEpochOverride();
+        rehearsalFractionOverride = readRehearsalFractionOverride();
       } catch (error) {
         alert(error.message);
         return;
@@ -2116,6 +2206,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (patchesPerEpochOverride !== undefined) {
         requestBody.patches_per_epoch = patchesPerEpochOverride;
       }
+      if (rehearsalFractionOverride !== undefined) {
+        requestBody.rehearsal_fraction = rehearsalFractionOverride;
+      }
       if (lossType === 'margin') {
         const m = parseFloat(document.getElementById('marginValue').value);
         if (Number.isFinite(m)) requestBody.margin = m;
@@ -2131,6 +2224,7 @@ document.addEventListener("DOMContentLoaded", function () {
         `  epochs:         ${requestBody.num_epochs}\n` +
         `  batch_size:     ${requestBody.batch_size}\n` +
         `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
+        `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
         `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
         `  label_smoothing:${requestBody.label_smoothing}\n` +
         `  balance_classes:${requestBody.balance_classes}\n`;

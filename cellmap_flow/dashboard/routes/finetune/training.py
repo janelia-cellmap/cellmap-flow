@@ -43,6 +43,27 @@ def _parse_patches_per_epoch_override(data):
     return True, (None if value == 0 else value)
 
 
+def _parse_rehearsal_fraction_override(data):
+    """Return ``(provided, value)`` for the optional rehearsal-fraction override.
+
+    Blank/missing leaves the manifest alone. ``0`` is meaningful and distinct
+    from blank: it turns rehearsal off for this run without discarding the
+    regions, so you can compare with and without them.
+    """
+    if "rehearsal_fraction" not in data:
+        return False, None
+    raw = data.get("rehearsal_fraction")
+    if raw is None or raw == "":
+        return False, None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
+    return True, value
+
+
 def _step_names(config):
     """Step names from an input_norm/postprocess config, whichever shape it is.
 
@@ -120,6 +141,17 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
             context,
             old_value,
             "auto" if patches_per_epoch is None else patches_per_epoch,
+        )
+
+    rehearsal_given, rehearsal_fraction = _parse_rehearsal_fraction_override(data)
+    if rehearsal_given:
+        old_value = manifest.get("rehearsal_fraction")
+        manifest["rehearsal_fraction"] = rehearsal_fraction
+        logger.info(
+            "Applying rehearsal_fraction override before %s: %s -> %s",
+            context,
+            "auto" if old_value is None else old_value,
+            rehearsal_fraction,
         )
 
     write_manifest(str(corrections_dir), manifest)
@@ -536,6 +568,11 @@ def restart_finetuning_job_response(job_id, data):
         existing_manifest = (
             read_manifest(corrections_dir) if corrections_dir else None
         )
+        if existing_manifest is None and corrections_dir:
+            # Same backfill as submit: a restart must not quietly drop to the
+            # legacy dataset just because the session predates the manifest.
+            existing_manifest = _backfill_manifest(corrections_dir)
+
         if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
                 corrections_dir, existing_manifest, data, "restart"
