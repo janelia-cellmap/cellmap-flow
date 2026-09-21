@@ -347,7 +347,7 @@ def create_dataloader(
             f"{Path(corrections_zarr_path) / VIRTUAL_MANIFEST_FILENAME}; "
             f"using VirtualPatchDataset."
         )
-        dataset = dataset_from_manifest(manifest)
+        dataset = dataset_from_manifest(manifest, corrections_zarr_path)
         actual_batch_size = max(1, min(batch_size, len(dataset)))
         return torch.utils.data.DataLoader(
             dataset,

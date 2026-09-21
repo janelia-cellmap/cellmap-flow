@@ -11,6 +11,7 @@ from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     rewrite_minio_url_for_proxy,
+    write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.globals import g
@@ -325,6 +326,11 @@ def load_existing_volume_response(data):
             dataset_offset_nm=volume_meta.get("dataset_offset_nm"),
             corrections_dir=new_corrections,
         )
+        # A resumed session is trained the same way a fresh one is. The
+        # geometry comes from the copied .zattrs, so a volume written before
+        # those keys existed simply gets no manifest and stays on the legacy
+        # path -- write_volume_manifest says so in the log.
+        write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
         if load_id:

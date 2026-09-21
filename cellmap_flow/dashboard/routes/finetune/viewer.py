@@ -5,7 +5,8 @@ import neuroglancer
 from flask import jsonify
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils.load_py import load_safe_config
+from cellmap_flow.utils.server_info import model_geometry_config
+from cellmap_flow.models.models_config import ScriptModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,10 @@ def add_finetuned_layer_to_viewer_response(data):
         base_model_name = model_name.rsplit("_finetuned_", 1)[0] if "_finetuned_" in model_name else model_name
         if model_script_path and Path(model_script_path).exists():
             try:
-                model_config = load_safe_config(model_script_path)
+                # Register lazily. ScriptModelConfig only execs the script (and
+                # loads weights) when .config is read, which the dashboard
+                # never does -- that happens on the GPU server serving this layer.
+                model_config = ScriptModelConfig(model_script_path, name=model_name)
                 if not hasattr(g, "models_config"):
                     g.models_config = []
                 g.models_config = [
@@ -85,6 +89,12 @@ def add_finetuned_layer_to_viewer_response(data):
                 output_voxel_size = None
                 if finetune_job is not None and finetune_job.params:
                     output_voxel_size = tuple(finetune_job.params.get("output_voxel_size") or ())
+                if not output_voxel_size:
+                    # Ask the server before falling back to mc.config, which
+                    # builds the model locally just to read a voxel size.
+                    remote = model_geometry_config(model_name)
+                    if remote is not None:
+                        output_voxel_size = tuple(remote.output_voxel_size)
                 if not output_voxel_size:
                     for mc in getattr(g, "models_config", []) or []:
                         if mc.name == model_name:

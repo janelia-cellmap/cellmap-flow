@@ -1,6 +1,5 @@
 import zarr
 from cellmap_flow.utils.ds import (
-    _is_zarr_group,
     _join_path,
     _open_zarr,
     find_closest_scale,
@@ -8,6 +7,7 @@ from cellmap_flow.utils.ds import (
     open_ds_tensorstore,
     to_ndarray_tensorstore,
 )
+from cellmap_flow.utils import zarr_v3
 import logging
 from funlib.geometry import Coordinate
 
@@ -27,15 +27,31 @@ class ImageDataInterface:
     ):
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
-            try:
-                ds = _open_zarr(dataset_path, mode="r")
-                if _is_zarr_group(ds):
-                    scale, _, _ = find_closest_scale(dataset_path, voxel_size)
-                    logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                    dataset_path = _join_path(dataset_path, scale)
-                    logger.info(f"using dataset path {dataset_path}")
-            except Exception as e:
-                logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
+            v3_container = zarr_v3.find_v3_container(dataset_path)
+            if v3_container is not None:
+                try:
+                    meta = zarr_v3.read_zarr_json(v3_container)
+                    if meta.get("node_type") == "group":
+                        scale, _, _ = zarr_v3.find_closest_scale_v3(
+                            v3_container, voxel_size
+                        )
+                        logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                        dataset_path = _join_path(v3_container, scale)
+                        logger.info(f"using dataset path {dataset_path}")
+                except Exception as e:
+                    logger.warning(
+                        f"could not open v3 dataset {dataset_path} to find scale: {e}"
+                    )
+            else:
+                try:
+                    ds = _open_zarr(dataset_path, mode="r")
+                    if isinstance(ds, zarr.hierarchy.Group):
+                        scale, _, _ = find_closest_scale(dataset_path, voxel_size)
+                        logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                        dataset_path = _join_path(dataset_path, scale)
+                        logger.info(f"using dataset path {dataset_path}")
+                except Exception as e:
+                    logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         self._ts = None
         (
@@ -56,7 +72,12 @@ class ImageDataInterface:
         else:
             self.output_voxel_size = self.voxel_size
         self.normalize = normalize
-        logger.warning(str(self.info))
+        # One of these is constructed per extracted chunk and once per pyramid
+        # level at startup, so at WARNING this dumped the same multi-line dict
+        # over and over and buried anything that actually needed attention.
+        # It is useful when a dataset resolves to the wrong scale, which is a
+        # debugging question.
+        logger.debug(str(self.info))
 
     @property
     def ts(self):

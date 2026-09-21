@@ -5,14 +5,12 @@ and creates server commands based on their __init__ parameters.
 
 import click
 import logging
+from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import sys
 from typing import Type, Dict, get_type_hints
 
-from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.cli_utils import (
     get_all_subclasses,
     create_click_option_from_param,
@@ -46,7 +44,7 @@ def cli(log_level):
         cellmap_flow_server script -s /path/to/script.py -d /path/to/data
         cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
-    logging.basicConfig(level=getattr(logging, log_level.upper()), force=True)
+    configure_logging(getattr(logging, log_level.upper()))
 
 
 @cli.command(name="list-models")
@@ -59,6 +57,8 @@ def run_server(
     model_config, data_path, debug=False, port=0, certfile=None, keyfile=None
 ):
     """Run the CellMapFlow server with the given configuration."""
+    from cellmap_flow.server import CellMapFlowServer
+
     server = CellMapFlowServer(data_path, model_config)
     server.run(
         debug=debug,
@@ -109,9 +109,20 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
             logger.error(f"Error creating {config_class.__name__}: {e}")
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
+        except Exception:
+            logger.exception(
+                f"Failed to create {config_class.__name__} with arguments "
+                f"{processed_kwargs} (likely a missing/mismatched dependency "
+                "for this model's framework)"
+            )
+            sys.exit(1)
 
         # Run the server
-        run_server(model_config, data_path, debug, port, certfile, keyfile)
+        try:
+            run_server(model_config, data_path, debug, port, certfile, keyfile)
+        except Exception:
+            logger.exception(f"Server for {config_class.__name__} crashed")
+            sys.exit(1)
 
     # Add docstring
     command_func.__doc__ = f"""
@@ -185,6 +196,8 @@ register_all_server_commands()
 )
 def run_ui_server(neuroglancer_url, inference_host):
     """Run the dashboard UI server."""
+    from cellmap_flow.dashboard.app import create_and_run_app
+
     create_and_run_app(neuroglancer_url, inference_host)
 
 

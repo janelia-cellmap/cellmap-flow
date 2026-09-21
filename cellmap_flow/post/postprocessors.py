@@ -42,17 +42,6 @@ class PostProcessor(SerializableInterface):
         return None
 
 
-class SigmoidPostprocessor(PostProcessor):
-    """Apply sigmoid activation to convert logits to probabilities."""
-
-    def _process(self, data):
-        return 1.0 / (1.0 + np.exp(-data.astype(np.float32)))
-
-    @property
-    def dtype(self):
-        return np.float32
-
-
 class DefaultPostprocessor(PostProcessor):
     def __init__(
         self,
@@ -113,18 +102,38 @@ class FillHolesPostprocessor(PostProcessor):
     relying on it.
     """
 
+    # fastmorph builds vary: some accept morphological_closing on fill_holes,
+    # some don't (and raise TypeError). Detect once rather than pin a version.
+    _FILL_HOLES_ACCEPTS_CLOSING = (
+        "morphological_closing" in inspect.signature(fastmorph.fill_holes).parameters
+    )
+
     def __init__(self, threshold: float = 0.0, morphological_closing: str = "False"):
         self.threshold = float(threshold)
-        self.morphological_closing = morphological_closing == "True"
+        self.morphological_closing = str(morphological_closing) == "True"
 
     def _process(self, data):
         binary = data.astype(np.float32) > self.threshold
-        filled = fastmorph.fill_holes(
-            binary,
-            remove_enclosed=True,
-            morphological_closing=self.morphological_closing,
-        )
+        if binary.ndim == 4:
+            filled = np.stack([self._fill_volume(ch) for ch in binary], axis=0)
+        elif binary.ndim == 3:
+            filled = self._fill_volume(binary)
+        else:
+            raise ValueError(
+                f"FillHolesPostprocessor expects 3D or (c, z, y, x) data, got shape {data.shape}"
+            )
         return filled.astype(np.uint8)
+
+    def _fill_volume(self, binary):
+        # fastmorph.fill_holes only accepts up to 3D input.
+        if not self.morphological_closing:
+            return fastmorph.fill_holes(binary, remove_enclosed=True)
+        if self._FILL_HOLES_ACCEPTS_CLOSING:
+            return fastmorph.fill_holes(
+                binary, remove_enclosed=True, morphological_closing=True
+            )
+        closed = fastmorph.closing(binary.astype(np.uint8)) > 0
+        return fastmorph.fill_holes(closed, remove_enclosed=True)
 
     @property
     def dtype(self):
@@ -251,7 +260,14 @@ class AffinityPostprocessor(PostProcessor):
             # unique_increment = self.num_previous_segments
             # self.num_previous_segments += len(filtered_fragments)
 
-        segmentation[segmentation > 0] += unique_increment
+        # numpy has no common integer type for uint64 and int64, so
+        # ``np.result_type(np.uint64, np.int64)`` is float64 -- an in-place add of a
+        # numpy *signed* scalar into a uint64 array therefore raises
+        # UFuncOutputCastingError. Both increments above are numpy int64
+        # (np.prod / np.random.randint), so cast explicitly to keep the add in
+        # uint64. (A plain Python int would also work under NEP 50's weak
+        # promotion, which is why this never reproduced with literal values.)
+        segmentation[segmentation > 0] += np.uint64(unique_increment)
         segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
         # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
 

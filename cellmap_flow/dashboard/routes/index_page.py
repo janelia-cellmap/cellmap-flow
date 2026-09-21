@@ -38,9 +38,9 @@ def index():
         d.to_dict()["name"]: stringify_list_values_for_template(d.to_dict())
         for d in g.input_norms
     }
-    logger.warning(f"Model catalog: {model_catalog}")
-    logger.warning(f"Default postprocess: {default_post_process}")
-    logger.warning(f"Default input norm: {default_input_norm}")
+    logger.debug(f"Model catalog: {model_catalog}")
+    logger.debug(f"Default postprocess: {default_post_process}")
+    logger.debug(f"Default input norm: {default_input_norm}")
 
     # Collect running HF model repos
     from cellmap_flow.models.models_config import HuggingFaceModelConfig
@@ -117,7 +117,7 @@ def set_data():
             s.layers["data"] = get_raw_layer(dataset_path)
 
         g.NEUROGLANCER_URL = str(viewer)
-        logger.warning(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
+        logger.debug(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
 
         return jsonify({
             "success": True,

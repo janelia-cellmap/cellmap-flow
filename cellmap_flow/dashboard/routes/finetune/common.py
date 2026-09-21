@@ -52,32 +52,36 @@ def viewer_position_and_scales():
     if not hasattr(g, "viewer") or g.viewer is None:
         raise ValueError("Viewer not initialized")
 
-    with g.viewer.txn() as s:
-        position = s.position
-        dimensions = s.dimensions
-        scales_nm = None
+    # .state, not .txn(): this only reads. txn() calls set_state() on exit
+    # unconditionally, so using it here pushed a full viewer state -- built
+    # from a snapshot that may predate a browser-side tool selection -- on
+    # every crop creation, for no reason.
+    s = g.viewer.state
+    position = s.position
+    dimensions = s.dimensions
+    scales_nm = None
 
-        if dimensions and hasattr(dimensions, "scales"):
-            scales_nm = list(dimensions.scales)
-            if hasattr(dimensions, "units"):
-                units = dimensions.units
-                if isinstance(units, str):
-                    units = [units] * len(scales_nm)
-                converted_scales = []
-                for scale, unit in zip(scales_nm, units):
-                    if unit == "m":
-                        converted_scales.append(scale * 1e9)
-                    elif unit == "nm":
-                        converted_scales.append(scale)
-                    else:
-                        logger.warning(f"Unknown unit: {unit}, assuming nm")
-                        converted_scales.append(scale)
-                scales_nm = converted_scales
+    if dimensions and hasattr(dimensions, "scales"):
+        scales_nm = list(dimensions.scales)
+        if hasattr(dimensions, "units"):
+            units = dimensions.units
+            if isinstance(units, str):
+                units = [units] * len(scales_nm)
+            converted_scales = []
+            for scale, unit in zip(scales_nm, units):
+                if unit == "m":
+                    converted_scales.append(scale * 1e9)
+                elif unit == "nm":
+                    converted_scales.append(scale)
+                else:
+                    logger.warning(f"Unknown unit: {unit}, assuming nm")
+                    converted_scales.append(scale)
+            scales_nm = converted_scales
 
-        if hasattr(position, "tolist"):
-            position = position.tolist()
-        elif hasattr(position, "__iter__"):
-            position = list(position)
+    if hasattr(position, "tolist"):
+        position = position.tolist()
+    elif hasattr(position, "__iter__"):
+        position = list(position)
 
     return position, scales_nm
 
@@ -159,10 +163,31 @@ def autodetect_output_type(model_config, output_type, offsets):
                 if hasattr(model_config, "_load_metadata"):
                     meta = model_config._load_metadata()
                     channels = meta.get("channels_names")
-                elif hasattr(model_config, "_config") and hasattr(model_config._config, "channels"):
+                elif getattr(model_config, "_config", None) is not None and hasattr(
+                    model_config._config, "channels"
+                ):
                     channels = model_config._config.channels
             except Exception:
                 pass
+
+            if not channels:
+                # _config is only populated once something has built the model
+                # in this process. The dashboard deliberately no longer does
+                # that -- it asks the running server, or the geometry cache --
+                # so _config is normally None here and this check silently
+                # fell through to "binary" for an affinity model. Ask the same
+                # sources, which now carry the channel names.
+                from cellmap_flow.utils.model_geometry import resolve_model_geometry
+
+                try:
+                    geometry = resolve_model_geometry(
+                        getattr(model_config, "name", None), model_config
+                    )
+                    channels = getattr(geometry, "channels", None) or getattr(
+                        geometry, "channels_names", None
+                    )
+                except Exception as e:
+                    logger.debug(f"Could not resolve channels for autodetect: {e}")
 
             if channels and any("_aff" in channel for channel in channels):
                 resolved_output_type = "affinities"
@@ -258,3 +283,80 @@ def rewrite_minio_url_for_proxy(minio_url, request):
         return minio_url
     proto = request.headers.get("X-Forwarded-Proto", "https")
     return f"{proto}://{forwarded_host}/minio{parsed.path}"
+
+
+# Geometry the trainer cannot guess and will not run without.
+_MANIFEST_REQUIRED_FIELDS = (
+    "zarr_path",
+    "dataset_path",
+    "input_size",
+    "output_size",
+    "input_voxel_size",
+    "output_voxel_size",
+)
+
+
+def write_volume_manifest(volume):
+    """Mark a browser-painted annotation volume as trainable by the new path.
+
+    ``create_dataloader`` picks its dataset by looking for this manifest and
+    nothing else: present means VirtualPatchDataset, which streams patches
+    from the volume zarr and is the only dataset that honours good regions.
+    Absent means the legacy CorrectionDataset, which reads whatever
+    per-chunk ``_chunk_*.zarr`` extracts the MinIO sync happened to
+    materialize -- typically a handful of samples, one batch per epoch, and
+    no notion of a good region at all.
+
+    Only the YAML crop importer used to write one, so every session where
+    you painted scribbles in the browser trained on the legacy path and
+    silently ignored the regions you marked. Both volume-creating routes now
+    call this.
+
+    Returns the manifest path, or None when the volume record is too
+    incomplete to describe (a resumed session whose .zattrs predates these
+    fields, say) -- in which case the legacy path still applies, as before.
+    """
+    from cellmap_flow.finetune.virtual_dataset import write_manifest
+    from cellmap_flow.globals import (
+        current_input_norm_config,
+        current_postprocess_config,
+    )
+
+    missing = [f for f in _MANIFEST_REQUIRED_FIELDS if not volume.get(f)]
+    corrections_dir = volume.get("corrections_dir")
+    if missing or not corrections_dir:
+        logger.warning(
+            "Not writing a virtual-sources manifest: volume record is missing "
+            f"{missing or ['corrections_dir']}. Training will fall back to the "
+            "legacy correction-chunk dataset, which ignores good regions."
+        )
+        return None
+
+    manifest = {
+        "kind": "volume_zarr_v1",
+        "volume_zarr_path": volume["zarr_path"],
+        "raw_dataset_path": volume["dataset_path"],
+        "input_size_voxels": list(volume["input_size"]),
+        "output_size_voxels": list(volume["output_size"]),
+        "input_voxel_size_nm": list(volume["input_voxel_size"]),
+        "output_voxel_size_nm": list(volume["output_voxel_size"]),
+        # None means "one patch per populated chunk" -- full coverage of what
+        # the user actually painted, rather than a fixed count.
+        "patches_per_epoch": None,
+        "jitter_voxels": None,
+        "seed": 0,
+        # The trainer runs on LSF where g.input_norms is empty, so the
+        # normalization has to travel in the manifest. Without it the trainer
+        # feeds the model raw uint8 while inference feeds it [-1, 1], and the
+        # adapter is nonsense at inference time.
+        "input_norm": current_input_norm_config(),
+        "postprocess": current_postprocess_config(),
+        # None -> auto-balance the dense and sparse pools.
+        "dense_to_sparse_ratio": None,
+    }
+    path = write_manifest(str(corrections_dir), manifest)
+    logger.info(
+        f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}; "
+        "training will use VirtualPatchDataset and honour good regions."
+    )
+    return path

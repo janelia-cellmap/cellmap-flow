@@ -71,6 +71,41 @@
     </small>
   </div>
 
+  <!-- Annotated-region boxes, on demand only -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-primary" id="showAnnotatedRegionsBtn"
+            title="Redraw the boxes showing where this session has annotations">
+      Show Annotated Regions
+    </button>
+    <span id="annotatedRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
+    <small class="form-text text-muted d-block mt-1">
+      Redraws the "annotated_regions" boxes. Not automatic on purpose: updating
+      any layer makes neuroglancer rebuild all of them, which drops the draw
+      tool you have selected and can lose a stroke you just painted. Click this
+      when you want to see where you have been, not while you are painting.
+    </small>
+  </div>
+
+  <!-- Good regions: rehearsal anchors -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-success" id="markGoodRegionBtn"
+            title="Record the area currently on screen as one the model already handles well">
+      Mark This View as Good
+    </button>
+    <span id="goodRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
+    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="clearGoodRegionsBtn"
+            title="Remove all good regions from this session">
+      Clear
+    </button>
+    <small class="form-text text-muted d-block mt-1">
+      Navigate until the screen shows output you are happy with, then click.
+      Marks one model output patch, the same size as an annotation crop.
+      Training holds the model to what it already predicts there, while your
+      scribbles correct it elsewhere &mdash; and any scribble you draw inside a
+      good region wins over that. Shown as the "good_regions" layer.
+    </small>
+  </div>
+
   <!-- Save action -->
   <div class="mb-2">
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
@@ -235,11 +270,11 @@
           <label for="loraRank" class="form-label">LoRA Rank</label>
           <select id="loraRank" class="form-select">
             <option value="4">4 (Fast, lower capacity)</option>
-            <option value="8" selected>8 (Balanced) - Recommended</option>
+            <option value="8">8 (Balanced)</option>
             <option value="16">16 (High capacity)</option>
-            <option value="64">64 (Very high capacity)</option>
+            <option value="64" selected>64 (Very high capacity) - Recommended</option>
           </select>
-          <small class="text-muted">Higher rank = more trainable parameters</small>
+          <small class="text-muted">Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change this.</small>
         </div>
       </div>
       <div class="col-md-6">
@@ -257,9 +292,9 @@
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
             <option value="1">1</option>
-            <option value="2" selected>2 (Default)</option>
+            <option value="2">2</option>
             <option value="4">4</option>
-            <option value="8">8</option>
+            <option value="8" selected>8 (Default)</option>
             <option value="16">16</option>
             <option value="32">32</option>
           </select>
@@ -301,6 +336,26 @@
           <small class="text-muted">
             Blank keeps the manifest value. 0 uses auto. A positive value
             caps random samples per epoch.
+          </small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="rehearsalFraction" class="form-label">
+            Good-Region Rehearsal
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="rehearsalFraction" class="form-select">
+            <option value="" selected>Auto (25%)</option>
+            <option value="0">0% (ignore good regions)</option>
+            <option value="0.1">10%</option>
+            <option value="0.25">25%</option>
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+          </select>
+          <small class="text-muted" id="rehearsalFractionHint">
+            Share of training patches drawn from regions you marked good,
+            where the model is held to what it already predicts.
           </small>
         </div>
       </div>
@@ -346,9 +401,9 @@
           </label>
           <select id="distillationLambda" class="form-select">
             <option value="0">0 (Disabled)</option>
-            <option value="0.01">0.01</option>
+            <option value="0.01" selected>0.01 (Default)</option>
             <option value="0.05">0.05</option>
-            <option value="0.1" selected>0.1 (Default)</option>
+            <option value="0.1">0.1</option>
             <option value="0.2">0.2</option>
             <option value="0.5">0.5</option>
             <option value="1.0">1.0</option>
@@ -356,7 +411,7 @@
             <option value="5.0">5.0</option>
             <option value="10.0">10.0</option>
           </select>
-          <small class="text-muted">Keeps model close to original predictions</small>
+          <small class="text-muted">Keeps model close to original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight here mostly cancels out the correction you are making.</small>
         </div>
       </div>
     </div>
@@ -414,6 +469,7 @@
             <option value="gpu_a100">A100</option>
             <option value="gpu_h200">H200</option>
           </select>
+          <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
         </div>
       </div>
     </div>
@@ -536,6 +592,7 @@ document.addEventListener("DOMContentLoaded", function () {
       numEpochs: document.getElementById("numEpochs").value,
       batchSize: document.getElementById("batchSize").value,
       patchesPerEpoch: document.getElementById("patchesPerEpoch").value,
+      rehearsalFraction: document.getElementById("rehearsalFraction").value,
       learningRate: document.getElementById("learningRate").value,
       lossType: document.getElementById("lossType").value,
       marginValue: document.getElementById("marginValue").value,
@@ -582,11 +639,26 @@ document.addEventListener("DOMContentLoaded", function () {
     return value;
   }
 
+  function readRehearsalFractionOverride() {
+    const el = document.getElementById("rehearsalFraction");
+    if (!el) return undefined;
+    const raw = el.value.trim();
+    // Blank means "leave the manifest alone"; "0" is a real choice (train
+    // without rehearsal while keeping the regions), so it must not be
+    // collapsed into blank here.
+    if (!raw) return undefined;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error("Good-region rehearsal must be blank or between 0 and 1.");
+    }
+    return value;
+  }
+
   // Attach change listeners to all form elements to auto-save state
   function attachStateListeners() {
     const ids = [
       "outputPath", "checkpointPath", "loraRank", "numEpochs",
-      "batchSize", "patchesPerEpoch", "learningRate", "lossType", "marginValue", "labelSmoothing",
+      "batchSize", "patchesPerEpoch", "rehearsalFraction", "learningRate", "lossType", "marginValue", "labelSmoothing",
       "distillationLambda", "distillationScope",
       "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
     ];
@@ -635,6 +707,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.loraRank) document.getElementById("loraRank").value = savedState.loraRank;
     if (savedState.numEpochs) document.getElementById("numEpochs").value = savedState.numEpochs;
     if (savedState.batchSize) document.getElementById("batchSize").value = savedState.batchSize;
+    if (savedState.rehearsalFraction !== undefined && savedState.rehearsalFraction !== null) {
+      document.getElementById("rehearsalFraction").value = savedState.rehearsalFraction;
+    }
     if (savedState.patchesPerEpoch !== undefined && savedState.patchesPerEpoch !== null) {
       document.getElementById("patchesPerEpoch").value = savedState.patchesPerEpoch;
     }
@@ -652,6 +727,64 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   attachStateListeners();
 
+  // Show what the GPU queues actually look like right now.
+  //
+  // A training job is not cycled onto another queue if the one you picked is
+  // busy -- it just waits -- so the only thing that helps is seeing the wait
+  // before you submit rather than after.
+  const FINETUNE_GPU_QUEUE_POLL_MS = 60000;
+
+  function renderFinetuneGpuQueues(data) {
+    const sel = document.getElementById("gpuQueue");
+    if (!sel) return;
+    const queues = (data && data.queues) || [];
+    if (!queues.length) return;  // Keep the hardcoded options rather than emptying the picker.
+
+    const chosen = sel.value;
+    sel.innerHTML = "";
+    queues.forEach(function (q) {
+      const opt = document.createElement("option");
+      opt.value = q.queue;
+      // textContent, not innerHTML -- assembled from LSF output.
+      opt.textContent = q.label + (q.description ? " \u2014 " + q.description : "");
+      // A closed queue accepts submissions and never starts them, which looks
+      // exactly like a very slow job. Don't offer it.
+      opt.disabled = q.open === false;
+      sel.appendChild(opt);
+    });
+    // Keep what the user picked, even if LSF no longer lists it.
+    if (chosen) {
+      if (!queues.some(function (q) { return q.queue === chosen; })) {
+        const opt = document.createElement("option");
+        opt.value = chosen;
+        opt.textContent = chosen + " (selected)";
+        sel.appendChild(opt);
+      }
+      sel.value = chosen;
+    }
+
+    const hint = document.getElementById("finetuneGpuQueueHint");
+    if (hint) {
+      hint.textContent =
+        data && data.available === false
+          ? data.reason || "Queue availability is unavailable."
+          : "";
+    }
+  }
+
+  function refreshFinetuneGpuQueues() {
+    fetch("/api/gpu-queues")
+      .then(function (r) { return r.json(); })
+      .then(renderFinetuneGpuQueues)
+      .catch(function () {
+        // Transient; the next poll retries. Leave the options as they are
+        // rather than blanking the picker under the user.
+      });
+  }
+
+  refreshFinetuneGpuQueues();
+  setInterval(refreshFinetuneGpuQueues, FINETUNE_GPU_QUEUE_POLL_MS);
+
   // Load models on page load
   loadModels();
 
@@ -663,29 +796,65 @@ document.addEventListener("DOMContentLoaded", function () {
       models = [];
       selectedModel = null;
       modelSelect.innerHTML = "";
+      cancelModelPoll();
+      modelPollAttempts = 0;
       loadModels();
     });
   }
 
-  function loadModels() {
+  // Models only appear in g.models_config once a pipeline has been submitted
+  // on the main tab. The finetune tab is usually opened first, so a single
+  // load-on-page-load almost always finds nothing -- previously leaving the
+  // user to click the refresh button until it happened to succeed. Poll
+  // quietly in the background instead, and stop as soon as models show up.
+  let modelPollTimer = null;
+  let modelPollAttempts = 0;
+  let loggedNoModels = false;
+  let lastLoadedCount = null;
+  const MODEL_POLL_INTERVAL_MS = 2000;
+  const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
+
+  function cancelModelPoll() {
+    if (modelPollTimer) {
+      clearTimeout(modelPollTimer);
+      modelPollTimer = null;
+    }
+  }
+
+  function scheduleModelPoll() {
+    if (modelPollTimer || modelPollAttempts >= MODEL_POLL_MAX_ATTEMPTS) return;
+    modelPollTimer = setTimeout(function() {
+      modelPollTimer = null;
+      modelPollAttempts += 1;
+      loadModels({ quiet: true });
+    }, MODEL_POLL_INTERVAL_MS);
+  }
+
+  function loadModels(opts) {
+    const quiet = !!(opts && opts.quiet);
     fetch("/api/finetune/models")
       .then(res => res.json())
       .then(data => {
         if (data.error) {
-          finetuneLog.value += `Error: ${data.error}\n`;
+          if (!quiet) finetuneLog.value += `Error: ${data.error}\n`;
           createCropBtn.disabled = true;
+          scheduleModelPoll();
           return;
         }
 
         models = data.models;
 
         if (models.length === 0) {
-          finetuneLog.value += "Error: No models available for finetuning\n";
-          finetuneLog.value += "  → Submit a model from the main tab first, then click the refresh button (↻) above\n";
+          if (!loggedNoModels) {
+            loggedNoModels = true;
+            finetuneLog.value += "No models available for finetuning yet\n";
+            finetuneLog.value += "  \u2192 Submit a model from the main tab; this list updates automatically\n";
+          }
           createCropBtn.disabled = true;
+          lastLoadedCount = 0;
+          scheduleModelPoll();
           return;
         }
-
         // If only one model, hide dropdown and auto-select
         if (models.length === 1) {
           modelSelectionDiv.style.display = "none";
@@ -722,12 +891,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Enable create button if we have models
         createCropBtn.disabled = false;
-        finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+        cancelModelPoll();
+        loggedNoModels = false;
+        if (!quiet || models.length !== lastLoadedCount) {
+          finetuneLog.value += `Loaded ${models.length} model(s)\n`;
+        }
+        lastLoadedCount = models.length;
       })
       .catch(err => {
-        finetuneLog.value += `Error loading models: ${err}\n`;
+        if (!quiet) finetuneLog.value += `Error loading models: ${err}\n`;
         console.error(err);
         createCropBtn.disabled = true;
+        scheduleModelPoll();
       });
   }
 
@@ -968,8 +1143,8 @@ document.addEventListener("DOMContentLoaded", function () {
           if (!data.success || !data.progress) return;
           const p = data.progress;
           let msg;
-          if (p.phase === "starting") {
-            msg = "Starting...";
+          if (p.phase === "starting" || p.phase === "setup") {
+            msg = p.message || "Starting...";
           } else if (p.phase === "crop_start") {
             msg = `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
           } else if (p.phase === "tile") {
@@ -978,7 +1153,7 @@ document.addEventListener("DOMContentLoaded", function () {
           } else if (p.phase === "done") {
             msg = `Finishing... ${p.n_chunks_created || 0} chunks created`;
           } else {
-            msg = JSON.stringify(p);
+            msg = p.message || JSON.stringify(p);
           }
           status.textContent = msg;
         } catch (_) {
@@ -1141,8 +1316,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!payload.success || !payload.progress) return;
         const p = payload.progress;
         let msg;
-        if (p.phase === "starting") {
-          msg = "Starting...";
+        if (p.phase === "starting" || p.phase === "setup") {
+          msg = p.message || "Starting...";
         } else if (p.phase === "copying") {
           const filePart = p.files_total
             ? ` — ${p.files_done}/${p.files_total} files`
@@ -1157,7 +1332,7 @@ document.addEventListener("DOMContentLoaded", function () {
         } else if (p.phase === "error") {
           msg = `Error: ${p.error || "load failed"}`;
         } else {
-          msg = JSON.stringify(p);
+          msg = p.message || JSON.stringify(p);
         }
         status.textContent = msg;
       } catch (_) {
@@ -1241,6 +1416,148 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Save annotations to disk
+  // === Good regions ===
+  const markGoodRegionBtn = document.getElementById("markGoodRegionBtn");
+  const clearGoodRegionsBtn = document.getElementById("clearGoodRegionsBtn");
+  const goodRegionCount = document.getElementById("goodRegionCount");
+
+  // Last count seen, so the rehearsal hint can say whether the setting will
+  // do anything without re-fetching every time the dropdown moves.
+  let lastGoodRegionCount = 0;
+
+  function renderGoodRegionCount(count) {
+    lastGoodRegionCount = count || 0;
+    goodRegionCount.textContent = count
+      ? `${count} good region${count === 1 ? "" : "s"}`
+      : "none yet";
+    updateRehearsalHint();
+  }
+
+  function updateRehearsalHint() {
+    const hint = document.getElementById("rehearsalFractionHint");
+    const select = document.getElementById("rehearsalFraction");
+    if (!hint || !select) return;
+
+    const base =
+      "Share of training patches drawn from regions you marked good, " +
+      "where the model is held to what it already predicts.";
+
+    if (lastGoodRegionCount === 0) {
+      hint.textContent =
+        base + " No good regions marked yet, so this has no effect.";
+      return;
+    }
+    const raw = select.value.trim();
+    // Blank means the manifest decides, which is 25% unless it says otherwise.
+    const fraction = raw === "" ? 0.25 : Number(raw);
+    if (!Number.isFinite(fraction) || fraction <= 0) {
+      hint.textContent =
+        base +
+        ` Set to 0, so the ${lastGoodRegionCount} marked region` +
+        `${lastGoodRegionCount === 1 ? "" : "s"} will be ignored this run.`;
+      return;
+    }
+    hint.textContent =
+      base +
+      ` About ${Math.round(fraction * 100)}% of patches will come from the ` +
+      `${lastGoodRegionCount} region${lastGoodRegionCount === 1 ? "" : "s"} ` +
+      "you marked.";
+  }
+
+  function refreshGoodRegionCount() {
+    fetch("/api/finetune/good-regions")
+      .then((r) => r.json())
+      .then((d) => renderGoodRegionCount(d.count || 0))
+      .catch(() => renderGoodRegionCount(0));
+  }
+
+  markGoodRegionBtn.addEventListener("click", function () {
+    markGoodRegionBtn.disabled = true;
+    fetch("/api/finetune/good-regions/mark-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          renderGoodRegionCount(d.count);
+          const at = d.region.offset_nm.map((v) => Math.round(v)).join(", ");
+          finetuneLog.value +=
+            `Marked ${d.region.label} as good at [${at}] nm ` +
+            `(${d.count} total)\n`;
+        } else {
+          // A mark that could not be saved used to come back as a success
+          // with persisted:false, draw its box, and be gone. Make it loud.
+          finetuneLog.value += `Could not mark region: ${d.error}\n`;
+          alert(`Could not mark region as good:\n\n${d.error}`);
+        }
+        finetuneLog.scrollTop = finetuneLog.scrollHeight;
+      })
+      .catch((e) => {
+        finetuneLog.value += `Could not mark region: ${e}\n`;
+      })
+      .finally(() => {
+        markGoodRegionBtn.disabled = false;
+      });
+  });
+
+  clearGoodRegionsBtn.addEventListener("click", function () {
+    fetch("/api/finetune/good-regions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        renderGoodRegionCount(d.count || 0);
+        finetuneLog.value += "Cleared good regions\n";
+      })
+      .catch(() => {});
+  });
+
+  // Guarded like readPatchesPerEpochOverride: an uncaught throw here would
+  // kill every handler defined below it in this block.
+  const rehearsalFractionEl = document.getElementById("rehearsalFraction");
+  if (rehearsalFractionEl) {
+    rehearsalFractionEl.addEventListener("change", updateRehearsalHint);
+  }
+
+  const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
+  const annotatedRegionCount = document.getElementById("annotatedRegionCount");
+  if (showAnnotatedRegionsBtn) {
+    showAnnotatedRegionsBtn.addEventListener("click", function () {
+      showAnnotatedRegionsBtn.disabled = true;
+      annotatedRegionCount.textContent = "updating...";
+      fetch("/api/finetune/refresh-annotated-regions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) {
+            const n = d.count || 0;
+            annotatedRegionCount.textContent =
+              n === 0 ? "none yet" : `${n} region${n === 1 ? "" : "s"}`;
+          } else {
+            annotatedRegionCount.textContent = "failed";
+            finetuneLog.value += `Could not refresh annotated regions: ${d.error}\n`;
+            finetuneLog.scrollTop = finetuneLog.scrollHeight;
+          }
+        })
+        .catch((e) => {
+          annotatedRegionCount.textContent = "failed";
+          finetuneLog.value += `Could not refresh annotated regions: ${e}\n`;
+        })
+        .finally(() => {
+          showAnnotatedRegionsBtn.disabled = false;
+        });
+    });
+  }
+
+  refreshGoodRegionCount();
+
   saveAnnotationsBtn.addEventListener("click", function() {
     saveAnnotationsBtn.disabled = true;
     const originalText = saveAnnotationsBtn.textContent;
@@ -1301,8 +1618,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       let patchesPerEpochOverride;
+      let rehearsalFractionOverride;
       try {
         patchesPerEpochOverride = readPatchesPerEpochOverride();
+        rehearsalFractionOverride = readRehearsalFractionOverride();
       } catch (error) {
         alert(error.message);
         return;
@@ -1326,6 +1645,9 @@ document.addEventListener("DOMContentLoaded", function () {
       };
       if (patchesPerEpochOverride !== undefined) {
         params.patches_per_epoch = patchesPerEpochOverride;
+      }
+      if (rehearsalFractionOverride !== undefined) {
+        params.rehearsal_fraction = rehearsalFractionOverride;
       }
 
       // Forward margin value when using margin loss
@@ -1435,7 +1757,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource.onmessage = function(event) {
       appendLog(event.data);
-      updateProgressFromLogLine(event.data);
+      // One SSE event can carry several log lines: the server emits a block of
+      // "data: " lines and the browser concatenates them into a single
+      // newline-separated event.data. Parsing the blob as one line would only
+      // ever match the FIRST "Epoch N/M - Loss:" in it (String.match without
+      // /g returns one match), silently dropping every other epoch from the
+      // plot whenever epochs complete fast enough to batch.
+      event.data.split("\n").forEach(function(logLine) {
+        updateProgressFromLogLine(logLine);
+      });
 
       // Auto-scroll if enabled
       const logsArea = document.getElementById("trainingLogs");
@@ -1684,7 +2014,17 @@ document.addEventListener("DOMContentLoaded", function () {
       clearInterval(statusPollingInterval);
     }
 
+    // The callback below is async, so clearInterval does not stop ticks that
+    // are already suspended on their fetch. Without these guards a failed job
+    // produced one modal per in-flight tick, each of which had to be
+    // dismissed. terminalNotified makes the notification fire once; pollBusy
+    // stops ticks from overlapping in the first place.
+    let terminalNotified = false;
+    let pollBusy = false;
+
     statusPollingInterval = setInterval(async () => {
+      if (pollBusy) return;
+      pollBusy = true;
       try {
         const response = await fetch(`/api/finetune/job/${jobId}/status`);
         const data = await response.json();
@@ -1768,14 +2108,19 @@ document.addEventListener("DOMContentLoaded", function () {
           clearInterval(statusPollingInterval);
           eventSource?.close();
 
-          showNotification(
-            "Training " + data.status,
-            "Check logs for details.",
-            "error"
-          );
+          if (!terminalNotified) {
+            terminalNotified = true;
+            showNotification(
+              "Training " + data.status,
+              "Check the job log below for the traceback.",
+              "error"
+            );
+          }
         }
       } catch (error) {
         console.error("Status polling error:", error);
+      } finally {
+        pollBusy = false;
       }
     }, 3000);  // Poll every 3 seconds
   }
@@ -1888,8 +2233,10 @@ document.addEventListener("DOMContentLoaded", function () {
     restartJobBtn.addEventListener('click', async () => {
       const lossType = document.getElementById('lossType').value;
       let patchesPerEpochOverride;
+      let rehearsalFractionOverride;
       try {
         patchesPerEpochOverride = readPatchesPerEpochOverride();
+        rehearsalFractionOverride = readRehearsalFractionOverride();
       } catch (error) {
         alert(error.message);
         return;
@@ -1908,6 +2255,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (patchesPerEpochOverride !== undefined) {
         requestBody.patches_per_epoch = patchesPerEpochOverride;
       }
+      if (rehearsalFractionOverride !== undefined) {
+        requestBody.rehearsal_fraction = rehearsalFractionOverride;
+      }
       if (lossType === 'margin') {
         const m = parseFloat(document.getElementById('marginValue').value);
         if (Number.isFinite(m)) requestBody.margin = m;
@@ -1923,6 +2273,7 @@ document.addEventListener("DOMContentLoaded", function () {
         `  epochs:         ${requestBody.num_epochs}\n` +
         `  batch_size:     ${requestBody.batch_size}\n` +
         `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
+        `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
         `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
         `  label_smoothing:${requestBody.label_smoothing}\n` +
         `  balance_classes:${requestBody.balance_classes}\n`;

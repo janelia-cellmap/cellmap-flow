@@ -8,6 +8,7 @@ periodic synchronization of annotations between MinIO and local disk.
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import time
@@ -253,6 +254,7 @@ def create_annotation_volume_zarr(
     claimed_output_voxel_size=None,
     claimed_input_voxel_size=None,
     input_norm_config=None,
+    postprocess_config=None,
 ):
     """
     Create a sparse annotation volume zarr covering the full dataset extent.
@@ -359,6 +361,11 @@ def create_annotation_volume_zarr(
         # trips via json.load / yaml.safe_load without any extra parsing.
         if input_norm_config is not None:
             root.attrs["input_norm"] = input_norm_config
+        # Same rationale as input_norm above: without this, a served
+        # finetuned model generated from this correction data has no way to
+        # know it needs e.g. a SigmoidPostprocessor on its output.
+        if postprocess_config is not None:
+            root.attrs["postprocess"] = postprocess_config
         root.attrs["created_at"] = datetime.now().isoformat()
 
         logger.info(
@@ -376,6 +383,28 @@ def create_annotation_volume_zarr(
 # ---------------------------------------------------------------------------
 # MinIO management
 # ---------------------------------------------------------------------------
+
+def _require_minio_binaries():
+    """Fail early, with a fix, if the MinIO binaries are missing.
+
+    Otherwise the missing binary surfaces as a bare
+    ``FileNotFoundError: [Errno 2] ... 'minio'`` from subprocess, after the user
+    has already picked an output path and created a session directory.
+
+    MinIO no longer publishes prebuilt community server binaries (dl.min.io is
+    410 Gone and the GitHub releases carry no assets), so conda-forge -- which
+    still builds from source -- is the only practical way to install them.
+    """
+    missing = [name for name in ("minio", "mc") if shutil.which(name) is None]
+    if missing:
+        raise RuntimeError(
+            f"Required MinIO binaries not found on PATH: {', '.join(missing)}. "
+            "Annotation volumes are served to Neuroglancer through a local MinIO "
+            "server, so painting cannot start without them.\n\n"
+            "Install with:\n"
+            "    mamba install minio-server minio-client -c conda-forge"
+        )
+
 
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_name=None):
     """
@@ -398,6 +427,8 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_nam
     Returns:
         MinIO URL for the zarr file
     """
+    _require_minio_binaries()
+
     if minio_state["process"] is None or minio_state["process"].poll() is not None:
         # Determine MinIO storage location
         if output_base_dir:
@@ -593,20 +624,33 @@ def _copy_chunks_parallel(s3, copy_pairs):
 def _make_s3_filesystem():
     """Create an s3fs filesystem pointed at the local MinIO instance.
 
-    Uses skip_instance_cache=True to defeat fsspec's default
-    instance-caching behavior (`s3fs.S3FileSystem(...) is s3fs.S3FileSystem(...)`
-    returns True for identical kwargs). Without this, every caller of
-    this factory shares a single S3FileSystem object with a single
-    dircache — a partial s3.ls result poisons subsequent s3.exists()
-    calls and causes the partial-ls-unlink bug (validated 2026-05-10:
-    chunks vanished post-Save in both spine and direct-ssh modes; a
-    "fresh" verify_s3 was actually the same poisoned instance, and
-    Patch D's smoking-gun warning never fired despite the bug
-    triggering).
+    Both cache opt-outs are load-bearing, not tuning knobs.
 
-    Cost of skip_instance_cache=True: a few microseconds of S3FileSystem
-    object construction per call. Cheap relative to the remote calls
-    each instance subsequently makes.
+    ``skip_instance_cache=True`` defeats fsspec's default instance-caching
+    behavior (`s3fs.S3FileSystem(...) is s3fs.S3FileSystem(...)` returns True
+    for identical kwargs). Without this, every caller of this factory shares
+    a single S3FileSystem object with a single dircache -- a partial s3.ls
+    result poisons subsequent s3.exists() calls and causes the
+    partial-ls-unlink bug (validated 2026-05-10: chunks vanished post-Save in
+    both spine and direct-ssh modes; a "fresh" verify_s3 was actually the
+    same poisoned instance, and Patch D's smoking-gun warning never fired
+    despite the bug triggering). Cost: a few microseconds of S3FileSystem
+    object construction per call, cheap relative to the remote calls each
+    instance subsequently makes.
+
+    ``use_listings_cache=False`` is needed on top of that for callers that
+    hold a single filesystem instance across multiple sync passes (e.g. the
+    periodic sync thread, created once when the annotation volume is
+    created). s3fs fills ``dircache`` on ``ls()`` and never expires it by
+    default, so that instance's first listing of ``annotation/s0`` -- taken
+    before the user has painted anything -- caches a chunk-less listing, and
+    every later sync on that same instance reuses it: ``_diff_and_sync_chunks``
+    sees no chunk keys and painted scribbles never reach disk, while
+    ``_sync_zarr_group_metadata`` keeps working because ``cat()``/``exists()``
+    address objects directly and bypass the cache. The symptom is a permanent
+    "Synced 0/N annotations" and a training run that dies with "No
+    corrections found". Listings here are small and served by a local MinIO,
+    so not caching them costs nothing.
     """
     return s3fs.S3FileSystem(
         anon=False,
@@ -617,6 +661,7 @@ def _make_s3_filesystem():
             "region_name": "us-east-1",
         },
         skip_instance_cache=True,
+        use_listings_cache=False,
     )
 
 
@@ -871,6 +916,7 @@ def sync_all_annotations_from_minio(force: bool = True):
     zarrs = s3.ls(minio_state["bucket"])
     zarr_ids = [Path(c).name.replace(".zarr", "") for c in zarrs if c.endswith(".zarr")]
     synced = 0
+    failed = 0
     for zid in zarr_ids:
         try:
             zarr_name = f"{zid}.zarr"
@@ -881,11 +927,26 @@ def sync_all_annotations_from_minio(force: bool = True):
                     if sync_annotation_volume_from_minio(zid, force=force):
                         synced += 1
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+            # Not necessarily a problem -- a crop zarr has no root .zattrs and
+            # is handled below -- but silently swallowing this hid real
+            # failures behind a count that looked like a quiet steady state.
+            logger.debug(f"Could not read root attrs for {zid}: {e}")
+            failed += 1
         if sync_annotation_from_minio(zid, force=force):
             synced += 1
-    logger.debug(f"Synced {synced}/{len(zarr_ids)} annotations")
+
+    # "Synced 0/1" counted volumes that *changed*, so the healthy idle case
+    # and a broken sync printed the same line -- which is what made a real
+    # sync failure take a day to spot. Say which of the two this is.
+    unchanged = len(zarr_ids) - synced
+    if synced:
+        summary = f"{synced} updated, {unchanged} unchanged"
+    else:
+        summary = f"no changes ({len(zarr_ids)} checked)"
+    if failed:
+        summary += f", {failed} could not be read"
+    logger.info(f"Annotation sync: {summary}")
     return synced
 
 
@@ -1209,17 +1270,15 @@ def periodic_sync_annotations():
                 continue
             if not minio_state["ip"] or not minio_state["port"]:
                 continue
-            synced = sync_all_annotations_from_minio(force=False)
-            # After each successful sync, refresh the bounding-box overlay so
-            # the user sees where they've painted without clicking a button.
-            if synced and synced > 0:
-                try:
-                    from cellmap_flow.dashboard.routes.finetune import (
-                        refresh_annotated_regions_layer,
-                    )
-                    refresh_annotated_regions_layer()
-                except Exception as e:
-                    logger.debug(f"Periodic sync: refresh_annotated_regions_layer failed: {e}")
+            # Pull annotations to disk, and stop there. This thread must
+            # never write to the viewer: python owns the whole state
+            # document, so any write makes the browser run
+            # `trackable.reset(); restoreState(...)` and rebuild every layer
+            # -- taking the draw tool out of the user's hand and dropping
+            # whatever strokes were still buffered behind the brush's commit
+            # debounce. The annotated-regions boxes are refreshed on demand
+            # instead, from the "Show Annotated Regions" button.
+            sync_all_annotations_from_minio(force=False)
         except Exception as e:
             logger.debug(f"Error in periodic sync: {e}")
 

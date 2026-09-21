@@ -8,6 +8,7 @@ Supports:
 """
 
 import os
+import re
 import subprocess
 import shlex
 import logging
@@ -15,6 +16,7 @@ import sys
 import signal
 import select
 import time
+from pathlib import Path
 from typing import Optional, List
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -29,6 +31,47 @@ DEFAULT_SECURITY = "http"
 DEFAULT_QUEUE = "gpu_h100"
 DEFAULT_CHARGE_GROUP = "cellmap"
 SERVER_COMMAND = "cellmap_flow_server"
+SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
+
+
+def _tail(path: Path, max_chars: int = 4000) -> Optional[str]:
+    """Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.
+
+    Seeks to the end rather than reading the whole file. An inference server
+    log can run to hundreds of megabytes, and this is called from the polling
+    loop in ``wait_for_host`` while the caller is blocked.
+
+    Reads 4 bytes per requested character so a multi-byte sequence split at
+    the seek boundary still leaves at least ``max_chars`` intact; the leading
+    partial character decodes to a replacement char and is sliced off.
+    """
+    try:
+        with path.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - max_chars * 4), os.SEEK_SET)
+            raw = f.read()
+    except OSError:
+        return None
+    content = raw.decode("utf-8", errors="replace").strip()
+    if not content:
+        return None
+    return content[-max_chars:]
+
+
+def _log_stem(job_name: str) -> str:
+    """A filesystem-safe stem for this job's log file.
+
+    ``job_name`` arrives from model names, YAML and HuggingFace repo ids, so
+    it can carry a path separator or ``..``. Interpolated straight into a
+    path, that writes the log outside SERVER_LOG_DIR -- or, more quietly,
+    makes the path we read back afterwards differ from the one we handed
+    bsub, so a crashed job looks like it produced no output at all.
+
+    Both the ``-o`` pattern and the path reconstructed after submission are
+    built from this one value, so they cannot drift apart.
+    """
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", job_name).strip("._-")
+    return stem or "job"
 
 
 class JobStatus(Enum):
@@ -78,6 +121,15 @@ class Job(ABC):
         """
         pass
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The tail of this job's own output, or None if it cannot be read.
+
+        Only LSF jobs can answer: a local job's output is already being
+        consumed by wait_for_host, and reading the same pipe again here would
+        block the request.
+        """
+        return None
+
     def is_running(self) -> bool:
         """Check if the job is currently running."""
         return self.status == JobStatus.RUNNING
@@ -213,12 +265,18 @@ class LSFJob(Job):
     """Job submitted to LSF cluster via bsub."""
     
     def __init__(
-        self, job_id: str, model_name: Optional[str] = None, log_file: Optional[str] = None
+        self,
+        job_id: str,
+        model_name: Optional[str] = None,
+        log_file: Optional[Path] = None,
     ):
         super().__init__(model_name)
         self.job_id = job_id
         # Resolved (%J-expanded) path of this job's bsub -o/-e file, if any.
         self.log_file = log_file
+        # Set by get_status() to say whether bjobs actually answered; see
+        # observed_status().
+        self._bjobs_answered = False
     
     def kill(self) -> None:
         """Terminate the LSF job using bkill."""
@@ -238,8 +296,40 @@ class LSFJob(Job):
         except Exception as e:
             logger.error(f"Error killing LSF job {self.job_id}: {e}")
     
+    def peek(self, max_chars: int = 4000) -> Optional[str]:
+        """The job's own output, so nobody has to ssh in and run bpeek.
+
+        A running job's output has not been flushed to the ``-o`` file yet --
+        LSF writes that at the end -- so bpeek is the only way to see it live.
+        Once the job is gone bpeek has nothing, and the file is the only
+        record. Try them in that order.
+        """
+        try:
+            result = subprocess.run(
+                ["bpeek", self.job_id], capture_output=True, text=True, timeout=10
+            )
+            output = (result.stdout or "").strip()
+            if output:
+                return output[-max_chars:]
+        except Exception as e:
+            logger.debug(f"bpeek {self.job_id} failed: {e}")
+        return self.log_file and _tail(self.log_file, max_chars)
+
+    def observed_status(self) -> Optional[JobStatus]:
+        """The status bjobs actually reported, or None if it could not say.
+
+        get_status() falls back to self.status, which starts out RUNNING. That
+        is fine for display but wrong for decisions: a job that never started
+        reads as RUNNING the moment bjobs is unreadable, so a caller asking
+        "did this actually leave the queue?" would be told yes. Callers that
+        need the difference use this instead.
+        """
+        reported = self.get_status()
+        return reported if self._bjobs_answered else None
+
     def get_status(self) -> JobStatus:
         """Query LSF for job status using bjobs."""
+        self._bjobs_answered = False
         try:
             result = subprocess.run(
                 ["bjobs", "-noheader", self.job_id],
@@ -256,6 +346,7 @@ class LSFJob(Job):
             if not output:
                 return self.status
             
+            self._bjobs_answered = True
             # Parse bjobs output (format: JOBID USER STAT QUEUE FROM_HOST EXEC_HOST JOB_NAME SUBMIT_TIME)
             fields = output.split()
             if len(fields) >= 3:
@@ -288,10 +379,20 @@ class LSFJob(Job):
             return self.host
         
         logger.info(f"Monitoring LSF job {self.job_id} for host information...")
-        
+
+        # Model load dominates this wait -- weights off /nrs, a torch.export,
+        # sometimes a HuggingFace fetch -- and it is the part people ask about
+        # when a submit "takes a while". Report it rather than leaving the gap
+        # between submission and the first chunk unaccounted for.
+        wait_started = time.time()
+
         attempts = 0
         max_attempts = timeout * 2  # Check every 0.5 seconds
         pending_time = 0
+        # pending_time is reset when the job starts, so it cannot be used to
+        # report how long the job waited. Keep a running total that is never
+        # reset -- otherwise a job that queued 5.5s reports "0s of it queued".
+        total_pending = 0.0
         warned_pending_30s = False
         warned_pending_60s = False
         
@@ -303,6 +404,7 @@ class LSFJob(Job):
                 # Track pending time and warn if too long
                 if current_status == JobStatus.PENDING:
                     pending_time += 0.5
+                    total_pending += 0.5
                     
                     if pending_time >= 30 and not warned_pending_30s:
                         logger.warning(f"Job {self.job_id} has been pending for {pending_time}s. "
@@ -343,6 +445,11 @@ class LSFJob(Job):
                 # Check if job has finished
                 if not output and result.returncode != 0:
                     logger.warning(f"Job {self.job_id} may have finished")
+                    crash_output = self.log_file and _tail(self.log_file)
+                    if crash_output:
+                        logger.error(
+                            f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
+                        )
                     break
                 
                 # Try to extract host
@@ -350,7 +457,11 @@ class LSFJob(Job):
                     host = extract_host_from_output(output)
                     if host:
                         self.host = host
-                        logger.info(f"Found host: {host}")
+                        logger.info(
+                            f"Found host: {host} "
+                            f"({time.time() - wait_started:.0f}s after submission, "
+                            f"{total_pending:.0f}s of it queued)"
+                        )
                         return host
                     
                     # Check for errors
@@ -369,6 +480,11 @@ class LSFJob(Job):
                 break
         
         logger.warning(f"Timeout waiting for host from job {self.job_id}")
+        crash_output = self.log_file and _tail(self.log_file)
+        if crash_output:
+            logger.error(
+                f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
+            )
         return None
 
 
@@ -423,6 +539,119 @@ signal.signal(signal.SIGINT, cleanup_handler)  # Handle Ctrl+C
 signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
 
 
+# How long a job may sit PENDING before we give up on that queue and try
+# another. Long enough that a queue which is merely busy still gets used,
+# short enough that nobody watches a spinner while 9000 jobs clear ahead of
+# them on a queue that was never going to start.
+# LSF's own default run limit on the GPU queues is 120 minutes, and we never
+# passed -W, so every inference server was killed two hours in -- while the
+# Fileglancer app job that spawns them asks for 8 hours, so the dashboard
+# outlived its own servers by six. Match the session: 8 hours, overridable
+# per-yaml, per-submission, or from the dashboard. The queues allow up to
+# 20160 minutes (14 days).
+DEFAULT_WALLTIME = "08:00"
+
+
+def _walltime_arg(walltime):
+    """``["-W", value]`` for bsub, or ``[]`` when there is nothing to set.
+
+    LSF accepts ``[hour:]minute``, so both "08:00" and "480" are valid and
+    mean the same thing. Anything else would make bsub reject the whole
+    submission, so an unparseable value is dropped with a warning rather than
+    taking the job down with it -- the queue default still applies.
+    """
+    if walltime in (None, "", False):
+        return []
+    text = str(walltime).strip()
+    if re.fullmatch(r"\d+(:\d{1,2})?", text):
+        return ["-W", text]
+    logger.warning(
+        f"Ignoring unusable walltime {walltime!r}; expected minutes (480) or "
+        "hours:minutes (08:00). Falling back to the queue default."
+    )
+    return []
+
+
+PENDING_FALLBACK_SECONDS = 180
+
+
+def gpu_queue_candidates(preferred, cycle=True):
+    """The queue to try first, then the others worth falling back to.
+
+    With ``cycle=False`` the requested queue is the only candidate: the job
+    waits for it however long that takes, rather than being moved to whatever
+    is free. Some work is pinned to a queue on purpose -- a benchmark that
+    must run on one GPU model, or a charge group only valid on one queue --
+    and silently landing somewhere else is worse than waiting.
+
+    Ordered by what LSF says is actually free rather than by a fixed list, so
+    the first fallback is the one most likely to start now. Fallback queues
+    that are not accepting work are dropped: they take submissions and never
+    run them, which is indistinguishable from a very slow job.
+
+    The requested queue is kept whatever LSF says about it, but demoted to
+    last if LSF says it is not accepting work, so a closed request does not
+    cost a full pending timeout before anything else is tried.
+
+    When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
+    """
+    from cellmap_flow.utils.lsf_queues import GPU_QUEUES, gpu_queue_availability
+
+    candidates = [preferred] if preferred else []
+
+    if not cycle:
+        logger.info(
+            f"Queue cycling disabled; using {preferred or 'the default queue'} "
+            f"only, and waiting for it."
+        )
+        return candidates
+    all_gpu = [q for q, _, _ in GPU_QUEUES]
+
+    try:
+        info = gpu_queue_availability()
+    except Exception as e:
+        logger.debug(f"Could not read queue availability: {e}")
+        info = {}
+
+    if not info.get("available"):
+        return candidates + [q for q in all_gpu if q != preferred]
+
+    others = [
+        q for q in info["queues"]
+        if q["queue"] != preferred and q.get("accepting")
+    ]
+    # Most free GPUs first; break ties on the shorter pending queue.
+    others.sort(key=lambda q: (-(q.get("gpus_free") or 0), q.get("pending") or 0))
+
+    # The order is not arbitrary and the reason is worth seeing -- especially
+    # now that these records reach the dashboard's log panel. A queue that was
+    # skipped is more interesting than one that was kept.
+    for q in info["queues"]:
+        state = "skipped, not accepting work" if not q.get("accepting") else (
+            "requested" if q["queue"] == preferred else "fallback"
+        )
+        logger.info(f"  {q['queue']}: {q.get('description') or 'no detail'} [{state}]")
+
+    # If LSF says the requested queue is not accepting work, try it last
+    # rather than first. Trying it first costs PENDING_FALLBACK_SECONDS of
+    # dead wait on a queue that LSF has already said will not start the job.
+    # It stays on the list -- a queue can reopen, and the request should still
+    # be honoured if nothing else works -- just not ahead of queues that can
+    # run it now. A queue LSF says nothing about (a yaml naming gpu_l4) is
+    # unknown, not closed, and keeps its place at the front.
+    requested = next(
+        (q for q in info["queues"] if q["queue"] == preferred), None
+    )
+    if requested is not None and not requested.get("accepting") and others:
+        logger.warning(
+            f"{preferred} is not accepting work ({requested.get('description')}); "
+            f"trying it last and starting with {others[0]['queue']}"
+        )
+        return [q["queue"] for q in others] + [preferred]
+
+    return candidates + [q["queue"] for q in others]
+
+
 def is_bsub_available() -> bool:
     """Check if bsub command is available in the system PATH."""
     try:
@@ -446,6 +675,7 @@ def submit_bsub_job(
     num_gpus: int = 1,
     num_cpus: int = 4,
     log_file: Optional[str] = None,
+    walltime: Optional[str] = None,
 ) -> LSFJob:
     """
     Submit a job to LSF cluster using bsub.
@@ -457,12 +687,14 @@ def submit_bsub_job(
         job_name: Name for the job
         num_gpus: Number of GPUs to request
         num_cpus: Number of CPUs to request
-        log_file: Optional path to redirect the job's stdout/stderr to via
-            bsub's `-o`/`-e`. Without this, LSF discards the job's output.
-            Use a `%J` placeholder (expanded by LSF to the job id) so each
-            job gets its own file: `-o` APPENDS, and with a shared per-model
-            file `bpeek` returns every earlier run's output as well, which
-            is how wait_for_host() used to pick up stale addresses.
+        log_file: Optional explicit path to redirect the job's stdout/stderr
+            to via bsub's `-o`/`-e`, overriding the default SERVER_LOG_DIR
+            location. Use a `%J` placeholder (expanded by LSF to the job id)
+            so each job gets its own file: `-o` APPENDS, and with a shared
+            per-model file `bpeek` returns every earlier run's output as
+            well, which is how wait_for_host() used to pick up stale
+            addresses.
+        walltime: Optional LSF wall-clock time limit for the job.
 
     Returns:
         LSFJob object for the submitted job
@@ -470,20 +702,28 @@ def submit_bsub_job(
     Raises:
         subprocess.CalledProcessError: If job submission fails
     """
-    bsub_command = ["bsub", "-J", job_name]
+    # %J is substituted by LSF with the actual job ID once assigned.
+    log_stem = _log_stem(job_name)
+    if log_file:
+        log_pattern = log_file
+    else:
+        SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_pattern = SERVER_LOG_DIR / f"{log_stem}_%J.log"
+
+    bsub_command = ["bsub", "-J", job_name, "-o", str(log_pattern)]
+    if log_file:
+        bsub_command += ["-e", str(log_file)]
 
     if charge_group:
         bsub_command += ["-P", charge_group]
-
-    if log_file:
-        bsub_command += ["-o", str(log_file), "-e", str(log_file)]
 
     bsub_command += [
         "-q", queue,
         "-gpu", f"num={num_gpus}",
         "-n", str(num_cpus),
-        "bash", "-c", command,
     ]
+    bsub_command += _walltime_arg(walltime)
+    bsub_command += ["bash", "-c", command]
 
     logger.info(f"Submitting bsub job: {' '.join(bsub_command)}")
 
@@ -495,10 +735,13 @@ def submit_bsub_job(
             check=True,
             timeout=30
         )
-        
+
         # Extract job ID from output like "Job <12345> is submitted..."
         job_id = result.stdout.split()[1].strip('<>')
-        resolved_log = str(log_file).replace("%J", job_id) if log_file else None
+        if log_file:
+            resolved_log = str(log_file).replace("%J", job_id)
+        else:
+            resolved_log = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
         logger.info(f"Job {job_id} submitted successfully (log: {resolved_log})")
 
         return LSFJob(job_id=job_id, model_name=job_name, log_file=resolved_log)
@@ -602,6 +845,8 @@ def start_hosts(
     use_https: bool = False,
     wait_for_host: bool = True,
     log_file: Optional[str] = None,
+    walltime: Optional[str] = None,
+    cycle_queues: Optional[bool] = None,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
@@ -617,6 +862,9 @@ def start_hosts(
             Passed through to `submit_bsub_job`/`run_locally` so the local
             fallback doesn't fall back to PIPE (which deadlocks once
             `wait_for_host=False` skips draining it).
+        walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
+        cycle_queues: Try other GPU queues when the requested one is busy or
+            closed. Defaults to g.cycle_gpu_queues, which defaults to True.
 
     Returns:
         Job object (LSFJob or LocalJob) with job information
@@ -624,6 +872,18 @@ def start_hosts(
     # Update global settings
     g.queue = queue
     g.charge_group = charge_group
+
+    # An explicit argument wins; otherwise whatever the dashboard or yaml set;
+    # otherwise the shared default. Never None, or the job silently inherits
+    # the queue's two hours.
+    if walltime is None:
+        walltime = getattr(g, "walltime", None) or DEFAULT_WALLTIME
+
+    # Same precedence as walltime: explicit argument, then the dashboard/yaml
+    # setting, then the default. Cycling is on by default because a job that
+    # starts on a different GPU queue beats one that never starts.
+    if cycle_queues is None:
+        cycle_queues = getattr(g, "cycle_gpu_queues", True)
 
     # Add HTTPS flags if needed
     if use_https:
@@ -633,24 +893,76 @@ def start_hosts(
 
     if is_bsub_available():
         logger.info("Using bsub for job submission")
-        try:
-            job = submit_bsub_job(
-                command,
-                queue,
-                charge_group,
-                job_name=f"{job_name}",
-                log_file=log_file,
+        candidates = gpu_queue_candidates(queue, cycle=cycle_queues)
+        logger.info(f"Queue order: {' -> '.join(candidates)}")
+        for index, candidate in enumerate(candidates):
+            try:
+                job = submit_bsub_job(
+                    command,
+                    candidate,
+                    charge_group,
+                    job_name=f"{job_name}",
+                    log_file=log_file,
+                    walltime=walltime,
+                )
+            except Exception as e:
+                logger.error(f"Failed to submit bsub job to {candidate}: {e}")
+                continue
+
+            if not wait_for_host:
+                g.queue = candidate
+                _register_job(job, job_name)
+                return job
+
+            # Give an unstarted job less patience while there is somewhere
+            # else to try, and the full wait once this is the last option.
+            more_to_try = index < len(candidates) - 1
+            host = job.wait_for_host(
+                timeout=PENDING_FALLBACK_SECONDS if more_to_try else 300
             )
+            if host:
+                if candidate != queue:
+                    logger.warning(
+                        f"Running on {candidate}, not the requested {queue}: "
+                        f"{index} earlier queue(s) did not start the job"
+                    )
+                else:
+                    logger.info(f"Running on {candidate}")
+                g.queue = candidate
+                _register_job(job, job_name)
+                return job
 
-            if wait_for_host:
-                job.wait_for_host()
+            # Only a job that never started is a queue problem. One that ran
+            # and crashed will crash the same way everywhere else, so keep it
+            # and let the caller surface the failure instead of burning
+            # through every queue reproducing it.
+            #
+            # observed_status(), not get_status(): the latter falls back to
+            # self.status, which starts out RUNNING, so an unreadable bjobs
+            # would look like "it started" and stop the fallback exactly when
+            # LSF is flaky. Unknown is treated as still queued -- the job has
+            # produced no host in PENDING_FALLBACK_SECONDS, so there is
+            # nothing to lose by trying elsewhere.
+            observed = job.observed_status()
+            if observed is not None and observed != JobStatus.PENDING:
+                g.queue = candidate
+                _register_job(job, job_name)
+                return job
 
-            _register_job(job, job_name)
-            return job
+            if more_to_try:
+                logger.warning(
+                    f"Job {job.job_id} has not started on {candidate} after "
+                    f"{PENDING_FALLBACK_SECONDS}s; killing it and trying "
+                    f"{candidates[index + 1]}"
+                )
+                job.kill()
+            else:
+                g.queue = candidate
+                _register_job(job, job_name)
+                return job
 
-        except Exception as e:
-            logger.error(f"Failed to submit bsub job: {e}")
-            logger.info("Falling back to local execution")
+        logger.error("No GPU queue accepted the job")
+        logger.info("Falling back to local execution")
     else:
         logger.info("bsub not available, running locally")
 

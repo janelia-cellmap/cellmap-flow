@@ -10,6 +10,7 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     list_existing_sessions_response,
     load_existing_volume_response,
     refresh_annotated_regions_layer,
+    refresh_annotated_regions_response,
     set_user_prefs_response,
     sync_annotations_manually_response,
 )
@@ -32,6 +33,11 @@ from cellmap_flow.dashboard.routes.finetune.training import (
     stream_job_logs_response,
     submit_finetuning_response,
 )
+from cellmap_flow.dashboard.routes.finetune.good_regions import (
+    delete_good_region_response,
+    list_good_regions_response,
+    mark_current_view_response,
+)
 from cellmap_flow.dashboard.routes.finetune.viewer import (
     add_finetuned_layer_to_viewer_response,
     add_image_layer_to_viewer_response,
@@ -46,6 +52,21 @@ from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
 )
 
 finetune_bp = Blueprint("finetune", __name__)
+
+
+@finetune_bp.route("/api/finetune/good-regions", methods=["GET"])
+def list_good_regions():
+    return list_good_regions_response()
+
+
+@finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
+def mark_current_view_good():
+    return mark_current_view_response(request.get_json(silent=True))
+
+
+@finetune_bp.route("/api/finetune/good-regions/delete", methods=["POST"])
+def delete_good_region():
+    return delete_good_region_response(request.get_json(silent=True))
 
 
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
@@ -116,6 +137,11 @@ def add_crop_to_viewer():
 @finetune_bp.route("/api/finetune/sync-annotations", methods=["POST"])
 def sync_annotations_manually():
     return sync_annotations_manually_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/finetune/refresh-annotated-regions", methods=["POST"])
+def refresh_annotated_regions():
+    return refresh_annotated_regions_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/submit", methods=["POST"])

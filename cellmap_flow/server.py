@@ -40,12 +40,20 @@ class CellMapFlowServer:
         """
 
         self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
+        # Original (model-native) channel count, so refresh_dataset() can restore
+        # it once a postprocessor that overrode num_channels (e.g. affinities) is
+        # removed again instead of leaving vol_shape/zarr_block_shape pinned.
+        self._default_zarr_block_channels = self.zarr_block_shape[-1]
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
         self.output_channels = model_config.config.output_channels
         self.output_dtype = model_config.output_dtype
         self.model_output_axes = model_config.chunk_output_axes
+
+        # Kept so /__control__/model_info can report geometry without the
+        # dashboard having to build the model itself.
+        self.model_config = model_config
 
         self.inferencer = Inferencer(model_config)
         self.restart_callback = restart_callback
@@ -101,6 +109,69 @@ class CellMapFlowServer:
         @self.app.route("/")
         def home():
             return redirect("/apidocs/")
+
+        @self.app.route("/__control__/model_info", methods=["GET"])
+        # Older name, kept so a dashboard can still talk to a server started
+        # before the geometry fields were added.
+        @self.app.route("/__control__/output_probe", methods=["GET"])
+        def control_model_info():
+            """Report the served model's geometry and output activation.
+
+            Both halves exist so the dashboard does not have to build the model
+            itself. It runs on whatever node launched the jobs -- often without
+            a usable GPU -- and instantiating a model there just to read a shape
+            is what made the finetune tab retry a full weight download and
+            torch.export on every poll.
+
+            The activation half is measured once during startup warmup (see
+            Inferencer._warmup) and lets the dashboard propose a postprocessing
+            chain, or flag one that contradicts the model -- e.g. a
+            SigmoidPostprocessor on a model that already ends in a sigmoid.
+            """
+            inferencer = self.inferencer
+            config = self.model_config.config
+
+            # Geometry comes from the validated config rather than the warmup,
+            # so it is reported even when the probe itself failed. Script-defined
+            # models expose nothing to the dashboard through to_dict(), which
+            # makes this the only place it can learn e.g. that a model has 3+
+            # channels and might be predicting affinities.
+            # Channel names, not just the count: the dashboard decides whether
+            # a model predicts affinities by looking for "_aff" in them, and a
+            # script model exposes nothing through to_dict(), so this is the
+            # only way it can learn them without building the model.
+            channels = (
+                getattr(config, "channels", None)
+                or getattr(config, "channels_names", None)
+                or getattr(config, "classes", None)
+            )
+
+            info = {
+                "output_channels": self.output_channels,
+                "channels": [str(c) for c in channels] if channels else None,
+                "write_shape": [int(v) for v in config.write_shape],
+                "read_shape": [int(v) for v in config.read_shape],
+                "output_voxel_size": [int(v) for v in config.output_voxel_size],
+                "input_voxel_size": [int(v) for v in config.input_voxel_size],
+            }
+
+            output_class = getattr(inferencer, "output_class", None)
+            if output_class is None:
+                info.update(
+                    {"available": False, "reason": "output probe did not run"}
+                )
+                return jsonify(info), HTTPStatus.OK
+
+            output_range = getattr(inferencer, "output_range", None)
+            info.update(
+                {
+                    "available": True,
+                    "output_class": output_class,
+                    "output_min": output_range[0] if output_range else None,
+                    "output_max": output_range[1] if output_range else None,
+                }
+            )
+            return jsonify(info), HTTPStatus.OK
 
         @self.app.route("/__control__/restart", methods=["POST"])
         def control_restart():
@@ -176,6 +247,13 @@ class CellMapFlowServer:
 
     def refresh_dataset(self, dataset):
         g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
+
+        if self.has_channel:
+            # Reset to the model's native channel count first so that removing a
+            # postprocessor which had overridden it (e.g. affinities -> 1 channel)
+            # actually restores the previous working state instead of staying stuck.
+            self.vol_shape[-1] = self.output_channels
+            self.zarr_block_shape[-1] = self._default_zarr_block_channels
 
         for postprocess in g.postprocess:
             if hasattr(postprocess, "num_channels") and self.has_channel:

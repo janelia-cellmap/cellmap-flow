@@ -1,5 +1,4 @@
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
-from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor
 
 import os
 import queue
@@ -12,13 +11,27 @@ import logging
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+# This is the basicConfig that actually takes effect in most processes,
+# because globals is imported before any CLI gets to configure logging.
+from cellmap_flow.utils.logging_setup import configure_logging
+
+configure_logging()
 
 SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
 
 SERVER_CONFIG_DEFAULTS = {
     "queue": "gpu_h100",
     "charge_group": "",
+    # LSF's own default on the GPU queues is 120 minutes, which killed
+    # inference servers two hours into a session. See DEFAULT_WALLTIME in
+    # bsub_utils for why this matches the Fileglancer app's own 8 hours.
+    "walltime": "08:00",
+    # Try other GPU queues when the requested one is busy or closed. On by
+    # default because a job that starts elsewhere beats one that never
+    # starts; turn it off when the queue itself matters (a benchmark pinned
+    # to one GPU model, a charge group valid on only one queue).
+    "cycle_gpu_queues": True,
     "nb_cores_master": 4,
     "nb_cores_worker": 12,
     "nb_workers": 14,
@@ -125,21 +138,17 @@ class Flow:
             with open(models_path, "r") as f:
                 cls._instance.model_catalog = yaml.safe_load(f)
 
-            # Load server config from cache or use defaults
-            cached = load_server_config_cache()
-            if cached:
-                cls._instance.queue = cached.get("queue", SERVER_CONFIG_DEFAULTS["queue"])
-                cls._instance.charge_group = cached.get("charge_group", SERVER_CONFIG_DEFAULTS["charge_group"])
-                cls._instance.nb_cores_master = cached.get("nb_cores_master", SERVER_CONFIG_DEFAULTS["nb_cores_master"])
-                cls._instance.nb_cores_worker = cached.get("nb_cores_worker", SERVER_CONFIG_DEFAULTS["nb_cores_worker"])
-                cls._instance.nb_workers = cached.get("nb_workers", SERVER_CONFIG_DEFAULTS["nb_workers"])
-            else:
-                cls._instance.queue = SERVER_CONFIG_DEFAULTS["queue"]
-                cls._instance.charge_group = SERVER_CONFIG_DEFAULTS["charge_group"]
-                cls._instance.nb_cores_master = SERVER_CONFIG_DEFAULTS["nb_cores_master"]
-                cls._instance.nb_cores_worker = SERVER_CONFIG_DEFAULTS["nb_cores_worker"]
-                cls._instance.nb_workers = SERVER_CONFIG_DEFAULTS["nb_workers"]
-            cls._instance._server_config_cached = cached is not None
+            # Load server config from cache or use defaults.
+            #
+            # Drive this from SERVER_CONFIG_DEFAULTS rather than naming each
+            # key by hand. save_server_config() already iterates the same
+            # dict, so a key listed there but missing from a hand-written
+            # assignment raised AttributeError on save -- which is how adding
+            # "walltime" killed every yaml run at startup.
+            cached = load_server_config_cache() or {}
+            for key, default in SERVER_CONFIG_DEFAULTS.items():
+                setattr(cls._instance, key, cached.get(key, default))
+            cls._instance._server_config_cached = bool(cached)
             cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
             cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
             cls._instance.neuroglancer_thread = None
@@ -225,7 +234,16 @@ class Flow:
         dtype = model_output_dtype
 
         if len(self.postprocess) > 0:
-            for postprocess in self.postprocess:
+            # Postprocessors are applied in order (see Inferencer), so the dtype
+            # that actually reaches the client is the one declared by the LAST
+            # step that declares one. Scan in reverse, matching
+            # is_output_segmentation(). Scanning forward picked e.g.
+            # SigmoidPostprocessor's float32 ahead of a trailing
+            # AffinityPostprocessor's uint64, which both advertised the wrong
+            # dtype in the zarr metadata (neuroglancer: "Data type not
+            # compatible with segmentation layer") and cast uint64 label ids
+            # through float32, corrupting any id above 2**24.
+            for postprocess in self.postprocess[::-1]:
                 if postprocess.dtype:
                     logger.info(
                         f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
@@ -339,6 +357,31 @@ def current_input_norm_config() -> dict:
         try:
             d = n.to_dict()
             name = d.pop("name", type(n).__name__)
+            derived[name] = d
+        except Exception:
+            continue
+    return derived
+
+
+def current_postprocess_config() -> dict:
+    """Return the dashboard's current postprocess chain as a JSON-serializable dict.
+
+    Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
+    populated, otherwise reconstructs the dict from the live ``g.postprocess``
+    instances via their ``.to_dict()``. The fallback matters for the same
+    reason it does for input_norm -- e.g. a yaml booted with a
+    ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
+    ``g.postprocess`` but never touches ``postprocess_config``.
+    """
+    cfg = getattr(g, "postprocess_config", None) or {}
+    if cfg:
+        return cfg
+    procs = getattr(g, "postprocess", None) or []
+    derived = {}
+    for p in procs:
+        try:
+            d = p.to_dict()
+            name = d.pop("name", type(p).__name__)
             derived[name] = d
         except Exception:
             continue

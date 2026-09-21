@@ -105,12 +105,29 @@
         >
           <div class="accordion-body" id="serverConfigContainer">
             <div class="mb-2">
-              <label class="form-label" for="cfg_queue">Queue</label>
-              <input type="text" class="form-control form-control-sm" id="cfg_queue" />
+              <label class="form-label" for="cfg_queue">GPU Queue</label>
+              <select class="form-select form-select-sm" id="cfg_queue"></select>
             </div>
             <div class="mb-2">
               <label class="form-label" for="cfg_charge_group">Charge Group</label>
               <input type="text" class="form-control form-control-sm" id="cfg_charge_group" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_walltime">Time Limit</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_walltime" placeholder="08:00" />
+              <div class="form-text">
+                LSF run limit, <code>HH:MM</code> or minutes. Jobs are killed at
+                this point. Leave blank for the queue default, which is 2 hours.
+              </div>
+            </div>
+            <div class="mb-2 form-check">
+              <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
+              <label class="form-check-label" for="cfg_cycle_gpu_queues">Try other GPU queues</label>
+              <div class="form-text">
+                If the queue above is full or closed, submit to whichever GPU
+                queue has capacity instead of waiting. Uncheck to always use
+                the queue above, however long it takes to start.
+              </div>
             </div>
             <div class="mb-2">
               <label class="form-label" for="cfg_nb_cores_worker">Cores per Worker</label>
@@ -127,14 +144,21 @@
       </div>
     </div>
 
-    <!-- Submit button -->
-    <button
-      type="button"
-      class="btn btn-primary mt-3"
-      id="submitModelsBtn"
-    >
-      Submit Models
-    </button>
+    <!-- GPU type + submit -->
+    <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
+      <div>
+        <label class="form-label mb-1" for="gpuQueueSelect">GPU</label>
+        <select
+          id="gpuQueueSelect"
+          class="form-select form-select-sm"
+          style="min-width: 20rem"
+        ></select>
+      </div>
+      <button type="button" class="btn btn-primary" id="submitModelsBtn">
+        Submit Models
+      </button>
+    </div>
+    <div id="gpuQueueHint" class="form-text mt-1"></div>
 
     <!-- Log area -->
     <div class="mt-3">
@@ -143,6 +167,30 @@
         class="form-control"
         rows="3"
         readonly
+      ></textarea>
+    </div>
+
+    <!-- Inference job output. Lives on a cluster node, so without this the
+         only way to read a server that died on startup is bpeek over ssh. -->
+    <div class="mt-3">
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="jobLogsBtn">
+          Show Job Logs
+        </button>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="jobLogsFollow" />
+          <label class="form-check-label" for="jobLogsFollow">
+            <small>Follow</small>
+          </label>
+        </div>
+        <span id="jobLogsStatus" class="text-muted" style="font-size: 0.85rem"></span>
+      </div>
+      <textarea
+        id="jobLogsArea"
+        class="form-control mt-2"
+        rows="12"
+        readonly
+        style="display: none; font-family: monospace; font-size: 0.8rem"
       ></textarea>
     </div>
   </form>
@@ -242,6 +290,169 @@
         });
       });
 
+      // Inference job output.
+      //
+      // The dashboard's own log stream only carries what this process logs.
+      // A server that dies on startup, or 500s on every chunk, writes its
+      // traceback to the LSF job's output on whichever node it landed on --
+      // so the only way to read it used to be ssh + bpeek.
+      const JOB_LOGS_POLL_MS = 5000;
+      let jobLogsTimer = null;
+
+      function renderJobLogs(data) {
+        const area = document.getElementById("jobLogsArea");
+        const statusEl = document.getElementById("jobLogsStatus");
+        const jobs = (data && data.jobs) || [];
+        if (!jobs.length) {
+          area.value = "No inference jobs have been submitted yet.";
+          statusEl.textContent = "";
+          return;
+        }
+        area.value = jobs.map(function (j) {
+          const header = [
+            j.model_name || "(unnamed)",
+            j.job_id ? "job " + j.job_id : null,
+            j.status || null,
+            j.host || null,
+          ].filter(Boolean).join("  |  ");
+          // null log means there is no way to read this job's output at all,
+          // which is worth saying plainly rather than showing as empty.
+          const body = j.log === null || j.log === undefined
+            ? "(no output available for this job)"
+            : (j.log || "(no output yet)");
+          return "=== " + header + " ===\n" + body;
+        }).join("\n\n");
+        // Keep the newest output in view.
+        area.scrollTop = area.scrollHeight;
+        statusEl.textContent = "updated " + new Date().toLocaleTimeString();
+      }
+
+      // /api/job-logs runs bpeek per job, each with its own timeout, so a
+      // refresh can outlast the 5s follow interval. Without this, Follow piles
+      // overlapping requests onto a dashboard that is already the slow part.
+      let jobLogsBusy = false;
+
+      function refreshJobLogs() {
+        if (jobLogsBusy) return Promise.resolve();
+        jobLogsBusy = true;
+        const statusEl = document.getElementById("jobLogsStatus");
+        return fetch("/api/job-logs")
+          .then(function (r) { return r.json(); })
+          .then(renderJobLogs)
+          .catch(function (e) { statusEl.textContent = "error: " + e; })
+          .then(function () { jobLogsBusy = false; });
+      }
+
+      document.getElementById("jobLogsBtn").addEventListener("click", function () {
+        const area = document.getElementById("jobLogsArea");
+        const showing = area.style.display !== "none";
+        area.style.display = showing ? "none" : "block";
+        this.textContent = showing ? "Show Job Logs" : "Hide Job Logs";
+        if (!showing) refreshJobLogs();
+      });
+
+      document.getElementById("jobLogsFollow").addEventListener("change", function () {
+        if (jobLogsTimer) { clearInterval(jobLogsTimer); jobLogsTimer = null; }
+        if (this.checked) {
+          const area = document.getElementById("jobLogsArea");
+          if (area.style.display === "none") {
+            document.getElementById("jobLogsBtn").click();
+          }
+          jobLogsTimer = setInterval(refreshJobLogs, JOB_LOGS_POLL_MS);
+        }
+      });
+
+      // GPU queue picker.
+      //
+      // LSF is the only thing that knows whether a queue is open and how far
+      // behind it is, and that changes without anyone here doing something:
+      // an admin takes nodes out for maintenance, or a thousand jobs land. So
+      // re-ask on a timer rather than only at page load. The server caches the
+      // answer, so several open dashboards don't multiply into a query storm.
+      const GPU_QUEUE_POLL_MS = 60000;
+      let gpuQueueCurrent = "";
+
+      function gpuQueueSelects() {
+        return ["gpuQueueSelect", "cfg_queue"]
+          .map(function (id) { return document.getElementById(id); })
+          .filter(Boolean);
+      }
+
+      function renderGpuQueues(data) {
+        const queues = (data && data.queues) || [];
+        const known = queues.map(function (q) { return q.queue; });
+        gpuQueueSelects().forEach(function (sel) {
+          sel.innerHTML = "";
+          queues.forEach(function (q) {
+            const opt = document.createElement("option");
+            opt.value = q.queue;
+            // textContent, not innerHTML -- this string is assembled from
+            // LSF output.
+            opt.textContent =
+              q.label + (q.description ? " — " + q.description : "");
+            // A closed queue accepts submissions and never starts them, which
+            // looks exactly like a slow job. Don't offer it.
+            opt.disabled = q.open === false;
+            sel.appendChild(opt);
+          });
+          // A yaml can name any queue, so the configured one may be outside
+          // the three we offer. Show it rather than silently moving the user
+          // onto a different GPU than the one they asked for.
+          if (gpuQueueCurrent && known.indexOf(gpuQueueCurrent) === -1) {
+            const opt = document.createElement("option");
+            opt.value = gpuQueueCurrent;
+            opt.textContent = gpuQueueCurrent + " (current)";
+            sel.appendChild(opt);
+          }
+          if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
+        });
+        const hint = document.getElementById("gpuQueueHint");
+        if (hint) {
+          hint.textContent =
+            data && data.available === false
+              ? data.reason || "Queue availability is unavailable."
+              : "";
+        }
+      }
+
+      function refreshGpuQueues() {
+        fetch("/api/gpu-queues")
+          .then(function (r) { return r.json(); })
+          .then(renderGpuQueues)
+          .catch(function () {
+            // Transient; the next poll retries. Leave the current options up
+            // rather than blanking the picker under the user.
+          });
+      }
+
+      function setGpuQueue(value) {
+        if (!value) return;
+        gpuQueueCurrent = value;
+        gpuQueueSelects().forEach(function (sel) {
+          if (sel.value !== value) sel.value = value;
+        });
+        fetch("/api/server-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ queue: value }),
+        }).catch(function () {});
+      }
+
+      gpuQueueSelects().forEach(function (sel) {
+        sel.addEventListener("change", function () { setGpuQueue(sel.value); });
+      });
+
+      // Seed from the configured queue before drawing options, so an
+      // out-of-list queue survives the first render.
+      fetch("/api/server-config")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { gpuQueueCurrent = (data && data.queue) || ""; })
+        .catch(function () {})
+        .then(function () {
+          refreshGpuQueues();
+          setInterval(refreshGpuQueues, GPU_QUEUE_POLL_MS);
+        });
+
       // Server Config: load values when accordion opens
       let serverConfigLoaded = false;
       document.getElementById("collapse_server_config").addEventListener("show.bs.collapse", function () {
@@ -253,8 +464,17 @@
         fetch("/api/server-config")
           .then((res) => res.json())
           .then((data) => {
-            document.getElementById("cfg_queue").value = data.queue || "";
+            // Go through the shared value so the accordion and the picker
+            // next to Submit cannot drift apart.
+            gpuQueueCurrent = data.queue || gpuQueueCurrent;
+            gpuQueueSelects().forEach(function (sel) {
+              if (gpuQueueCurrent) sel.value = gpuQueueCurrent;
+            });
             document.getElementById("cfg_charge_group").value = data.charge_group || "";
+            document.getElementById("cfg_walltime").value = data.walltime || "";
+            // Default to on when the server has not stored a preference.
+            document.getElementById("cfg_cycle_gpu_queues").checked =
+              data.cycle_gpu_queues !== false;
             document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
             document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
             serverConfigLoaded = true;
@@ -265,6 +485,10 @@
         const payload = {
           queue: document.getElementById("cfg_queue").value,
           charge_group: document.getElementById("cfg_charge_group").value,
+          walltime: document.getElementById("cfg_walltime").value,
+          // Send a real boolean: the server stores this verbatim, and the
+          // string "false" would read as true.
+          cycle_gpu_queues: document.getElementById("cfg_cycle_gpu_queues").checked,
           nb_cores_worker: document.getElementById("cfg_nb_cores_worker").value,
           nb_workers: document.getElementById("cfg_nb_workers").value,
         };
@@ -316,6 +540,11 @@
           .then((data) => {
             console.log("Server response:", data);
             logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+            // Loading a model is the point at which advice is most useful, and
+            // this path never goes through /api/process. The jobs start on
+            // background threads, so refreshModelAdvice polls rather than
+            // assuming the server is already up.
+            if (window.refreshModelAdvice) window.refreshModelAdvice();
           })
           .catch((err) => {
             console.error("Error:", err);

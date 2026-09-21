@@ -7,7 +7,6 @@ from typing import Optional, Sequence, Union
 
 import h5py
 import numpy as np
-import s3fs
 import tensorstore as ts
 import zarr
 from funlib.geometry import Coordinate, Roi
@@ -15,6 +14,7 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
+from cellmap_flow.utils import zarr_v3
 
 
 def generate_singlescale_metadata(
@@ -405,6 +405,7 @@ def _is_zarr_container(path: str) -> bool:
         or os.path.exists(os.path.join(path, ".zarray"))
         or os.path.exists(os.path.join(path, ".zattrs"))
         or os.path.exists(os.path.join(path, "zarr.json"))
+        or zarr_v3.is_v3_container(path)
     )
 
 
@@ -645,6 +646,15 @@ def open_ds_tensorstore(
             "driver": "file",
             "path": os.path.normpath(dataset_path),
         }
+
+    is_v3 = (
+        filetype == "zarr"
+        and isinstance(kvstore, dict)
+        and kvstore.get("driver") == "file"
+        and zarr_v3.is_v3_container(kvstore["path"])
+    )
+    if is_v3:
+        filetype = "zarr3"
 
     assume_metadata = False
     if (
@@ -1245,6 +1255,8 @@ def get_ds_info(path: str, mode: str = "r"):
         path, filename = split_dataset_path(path)
         filename, scale = filename.rsplit("/s")
         scale = int(scale)
+        import s3fs  # ~2s to import; only remote paths need it
+
         fs = s3fs.S3FileSystem(
             anon=True
         )  # Set anon=True if you don't need authentication
@@ -1559,6 +1571,10 @@ def get_ds_info(path: str, mode: str = "r"):
         roi = Roi(offset, voxel_size * shape)
         chunk_shape = ds.chunks
         return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
+
+    v3_container = zarr_v3.find_v3_container(path)
+    if v3_container is not None:
+        return zarr_v3.get_ds_info_v3(path)
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):
