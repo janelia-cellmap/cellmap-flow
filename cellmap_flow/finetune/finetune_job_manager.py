@@ -834,6 +834,103 @@ class FinetuneJobManager:
             except ValueError:
                 pass
 
+    def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
+        """
+        Add (or replace) the finetuned model's neuroglancer layer.
+
+        Mirrors run_model() from cellmap_flow/models/run.py:
+        1. Create/update Job object in g.jobs
+        2. Add neuroglancer ImageLayer with pre/post processing args
+
+        Args:
+            finetune_job: Job with inference_server_url set
+            model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
+        """
+        from cellmap_flow.globals import g
+        from cellmap_flow.utils.web_utils import get_norms_post_args, ARGS_KEY
+        import neuroglancer
+
+        server_url = finetune_job.inference_server_url
+
+        # Create a Job object for the running server
+        inference_job = LSFJob(
+            job_id=finetune_job.lsf_job.job_id if finetune_job.lsf_job else "local",
+            model_name=model_name
+        )
+        inference_job.host = server_url
+        inference_job.status = LSFJobStatus.RUNNING
+
+        # Remove any old finetuned jobs for this base model
+        g.jobs = [
+            j for j in g.jobs
+            if not (hasattr(j, 'model_name') and j.model_name
+                    and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
+        ]
+
+        # Add to g.jobs
+        g.jobs.append(inference_job)
+        self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
+
+        # Get pre/post processing args (same hash as other models)
+        st_data = get_norms_post_args(g.input_norms, g.postprocess)
+
+        if g.viewer is None:
+            self.logger.error("g.viewer is None - neuroglancer not initialized yet")
+            return
+
+        # Lie about the model's voxel size so the layer overlays the raw at
+        # the closest available scale (e.g. trained at 16nm but raw is
+        # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
+        from cellmap_flow.utils.neuroglancer_utils import (
+            build_prediction_source,
+            get_raw_closest_scale,
+        )
+        override_scales = None
+        try:
+            output_voxel_size = tuple(
+                finetune_job.params.get("output_voxel_size") or ()
+            )
+            dataset_path = getattr(g, "dataset_path", None)
+            if output_voxel_size and dataset_path:
+                closest = get_raw_closest_scale(dataset_path, output_voxel_size)
+                if closest is not None and tuple(closest) != tuple(output_voxel_size):
+                    override_scales = closest
+                    self.logger.info(
+                        f"Finetuned model '{model_name}' output_voxel_size="
+                        f"{output_voxel_size} overridden to closest raw scale "
+                        f"{closest} for viewer overlay"
+                    )
+        except Exception as e:
+            self.logger.warning(
+                f"Could not compute override scales for finetuned '{model_name}': {e}"
+            )
+
+        source_spec = build_prediction_source(
+            server_url, model_name, st_data, override_scales
+        )
+        self.logger.info(f"Adding neuroglancer layer: {model_name}")
+        self.logger.info(f"  source: {source_spec}")
+
+        with g.viewer.txn() as s:
+            # Remove old finetuned layer if it exists (exact name match)
+            old_layer_name = finetune_job.finetuned_model_name
+            if old_layer_name and old_layer_name in s.layers:
+                self.logger.info(f"Removing old finetuned layer: {old_layer_name}")
+                del s.layers[old_layer_name]
+
+            # Also remove by current name in case of re-add
+            if model_name in s.layers:
+                del s.layers[model_name]
+
+            s.layers[model_name] = neuroglancer.ImageLayer(
+                source=source_spec,
+                shader=self._finetuned_shader(server_url),
+            )
+
+        # Update the stored name
+        finetune_job.finetuned_model_name = model_name
+        self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
+
     def _finetuned_shader(self, server_url):
         """The same display range an ordinary model layer gets.
 
