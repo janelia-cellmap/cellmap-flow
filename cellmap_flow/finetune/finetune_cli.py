@@ -397,6 +397,7 @@ def _build_target_transform(args, model_config):
         BinaryTargetTransform,
         BroadcastBinaryTargetTransform,
         AffinityTargetTransform,
+        DistanceTargetTransform,
     )
 
     output_type = args.output_type
@@ -447,6 +448,25 @@ def _build_target_transform(args, model_config):
 
         logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
         return AffinityTargetTransform(offsets, num_channels=num_channels)
+
+    elif output_type == "distance":
+        if args.loss_type != "bce":
+            raise ValueError(
+                "--output-type distance produces soft targets in [0, 1]; only "
+                "--loss-type bce (BCE with logits) is defined for them. Margin and "
+                "dice assume hard labels, and mse is applied to raw logits."
+            )
+        if args.label_smoothing > 0:
+            logger.warning(
+                "Label smoothing is meaningless on a soft distance target; "
+                f"ignoring --label-smoothing {args.label_smoothing}."
+            )
+            args.label_smoothing = 0.0
+        logger.info(
+            f"Using distance target transform (sigma={args.distance_sigma} voxels, "
+            f"broadcast to {num_channels} channel(s))"
+        )
+        return DistanceTargetTransform(args.distance_sigma, num_channels=num_channels)
 
     else:
         raise ValueError(f"Unknown output type: {output_type}")
@@ -724,12 +744,21 @@ def build_arg_parser():
         "--output-type",
         type=str,
         default="binary",
-        choices=["binary", "binary_broadcast", "affinities"],
+        choices=["binary", "binary_broadcast", "affinities", "distance"],
         help="How to generate training targets from annotations. "
              "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
              "'binary_broadcast': broadcast binary target to all output channels. "
              "'affinities': compute affinity targets from instance labels (requires offsets). "
+             "'distance': soft signed-distance target (tanh(d/sigma)+1)/2 for models trained "
+             "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type bce. "
              "(default: binary)"
+    )
+    parser.add_argument(
+        "--distance-sigma",
+        type=float,
+        default=6.0,
+        help="tanh scale in output voxels for --output-type distance. The cellmap "
+             "distance models were trained with 6. (default: 6.0)"
     )
     parser.add_argument(
         "--select-channel",

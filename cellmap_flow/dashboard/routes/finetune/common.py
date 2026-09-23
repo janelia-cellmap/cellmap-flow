@@ -204,6 +204,22 @@ def autodetect_output_type(model_config, output_type, offsets):
                 )
 
         if resolved_output_type is None:
+            # The cellmap distance models announce themselves only by name
+            # (e.g. cellmap/salivary_..._nuc_mouse_distance_32nm_...): their
+            # metadata has a single plain channel name. Trained on a soft
+            # tanh-distance target, they need the matching target type, not
+            # a hard binary one that would flatten the output.
+            names = " ".join(
+                str(getattr(model_config, attr, "") or "")
+                for attr in ("repo", "name", "model_name", "script_path", "checkpoint_path")
+            ).lower()
+            if "distance" in names:
+                resolved_output_type = "distance"
+                logger.info(
+                    "Auto-detected output_type='distance' from the model name"
+                )
+
+        if resolved_output_type is None:
             resolved_output_type = "binary"
 
     if resolved_output_type == "affinities" and resolved_offsets is None:

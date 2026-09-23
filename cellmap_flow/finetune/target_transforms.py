@@ -132,3 +132,86 @@ def _offset_slices(Z, Y, X, dz, dy, dx):
     sx, dx_s = _dim_slices(X, dx)
 
     return (sz, sy, sx), (dz_s, dy_s, dx_s)
+
+
+class DistanceTargetTransform(TargetTransform):
+    """Soft signed-distance target for models trained the fly_organelles way.
+
+    The target is ``(tanh((edt(fg) - edt(not fg)) / sigma) + 1) / 2`` with
+    distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+    falling to 0 outside, saturating a few sigma away. That is exactly what
+    ``fly_organelles.utils.Distance`` fed the cellmap distance models (the
+    nuc/mito "*_distance_*" HuggingFace repos use sigma=6), so sigmoid(model
+    output) is comparable to this target voxel for voxel. Use it with a
+    BCE-with-logits loss, which accepts soft targets; margin and dice do not.
+
+    Masking: an EDT computed inside a patch only sees boundaries inside the
+    patch. For an annotated voxel the computed |d| is an upper bound on the
+    truth -- the real nearest boundary may sit just past the patch edge or
+    inside an unannotated pocket. A voxel is supervised only when its
+    computed |d| is no larger than its distance to the nearest unannotated
+    voxel or patch edge (so no unseen boundary can be closer), or when that
+    distance is already past 3*sigma, where tanh has saturated and the exact
+    value no longer matters.
+
+    Args:
+        sigma_voxels: tanh scale in output voxels (6 for the cellmap
+            distance models).
+        num_channels: model output channels; the target is broadcast to all
+            of them, as BroadcastBinaryTargetTransform does.
+    """
+
+    def __init__(self, sigma_voxels: float = 6.0, num_channels: int = 1):
+        if sigma_voxels <= 0:
+            raise ValueError(f"sigma_voxels must be positive, got {sigma_voxels}")
+        self.sigma = float(sigma_voxels)
+        self.num_channels = int(num_channels)
+
+    def _one(self, ann):
+        """(Z, Y, X) uint annotation -> (target, mask) float32 numpy arrays."""
+        import numpy as np
+        from scipy.ndimage import distance_transform_edt as edt
+
+        annotated = ann > 0
+        fg = ann >= 2
+        target = np.zeros(ann.shape, dtype=np.float32)
+        mask = np.zeros(ann.shape, dtype=np.float32)
+        if not annotated.any():
+            return target, mask
+
+        # edt(x) is the distance from each nonzero voxel of x to the nearest
+        # zero. With no zero anywhere scipy returns a large finite number for
+        # every voxel; treat that as "no boundary in this patch" explicitly.
+        d_in = edt(fg) if (~fg).any() else np.full(ann.shape, np.inf)
+        d_out = edt(~fg) if fg.any() else np.full(ann.shape, np.inf)
+        signed = np.where(fg, d_in, -d_out)
+
+        # Distance from each annotated voxel to the nearest unannotated voxel
+        # or to just outside the patch (the one-voxel pad of False).
+        known = np.pad(annotated, 1, constant_values=False)
+        trust = edt(known)[1:-1, 1:-1, 1:-1]
+
+        reliable = np.abs(signed) <= trust
+        saturated = trust >= 3.0 * self.sigma
+        mask[annotated & (reliable | saturated)] = 1.0
+        target[:] = (np.tanh(signed / self.sigma) + 1.0) / 2.0
+        return target, mask
+
+    def __call__(self, annotation: Tensor) -> Tuple[Tensor, Tensor]:
+        import numpy as np
+
+        ann = annotation.detach().cpu().numpy()
+        if ann.ndim != 5 or ann.shape[1] != 1:
+            raise ValueError(
+                f"Expected annotation of shape (B, 1, Z, Y, X), got {tuple(ann.shape)}"
+            )
+        targets = np.empty(ann.shape, dtype=np.float32)
+        masks = np.empty(ann.shape, dtype=np.float32)
+        for b in range(ann.shape[0]):
+            targets[b, 0], masks[b, 0] = self._one(ann[b, 0])
+        target = torch.from_numpy(targets).to(annotation.device)
+        mask = torch.from_numpy(masks).to(annotation.device)
+        if self.num_channels > 1:
+            target = target.expand(-1, self.num_channels, -1, -1, -1).contiguous()
+            mask = mask.expand(-1, self.num_channels, -1, -1, -1).contiguous()
+        return target, mask

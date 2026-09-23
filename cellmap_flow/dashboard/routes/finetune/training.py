@@ -263,6 +263,20 @@ def submit_finetuning_response(data):
             data.get("offsets", None),
         )
 
+        label_smoothing = data.get("label_smoothing", 0.1)
+        if output_type == "distance":
+            # The soft distance target is only defined against BCE-with-logits;
+            # margin/dice assume hard labels and smoothing would blur a target
+            # that is already soft. The CLI rejects anything else, so decide
+            # here where the user can see it in the response.
+            if loss_type != "bce" or label_smoothing:
+                logger.info(
+                    f"output_type=distance: using bce loss without label smoothing "
+                    f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
+                )
+            loss_type = "bce"
+            label_smoothing = 0.0
+
         finetune_job = g.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
@@ -277,7 +291,7 @@ def submit_finetuning_response(data):
             auto_serve=data.get("auto_serve", True),
             mask_unannotated=has_sparse,
             loss_type=loss_type,
-            label_smoothing=data.get("label_smoothing", 0.1),
+            label_smoothing=label_smoothing,
             distillation_lambda=distillation_lambda,
             distillation_scope=data.get("distillation_scope", "unlabeled"),
             margin=data.get("margin", 0.3),

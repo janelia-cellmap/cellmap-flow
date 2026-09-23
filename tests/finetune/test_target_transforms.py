@@ -198,3 +198,109 @@ if __name__ == "__main__":
     test_offset_slices()
     test_affinity_transform_extra_channels_masked()
     print("All tests passed!")
+
+
+# ---------------------------------------------------------------------------
+# DistanceTargetTransform
+# ---------------------------------------------------------------------------
+
+import math
+
+import numpy as np
+import pytest
+
+from cellmap_flow.finetune.target_transforms import DistanceTargetTransform
+
+
+def _soft(d, sigma):
+    return (math.tanh(d / sigma) + 1.0) / 2.0
+
+
+def test_distance_target_matches_fly_organelles_formula():
+    """A slab of fg in a dense bg patch: 0.5 at the boundary, tanh profile away from it."""
+    sigma = 2.0
+    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)      # all annotated bg
+    ann[..., 10:] = 2                                        # fg from x=10 on
+    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
+    line = target[0, 0, 1, 1].numpy()
+    # fg voxel at x=10 sits 1 voxel inside (nearest bg at x=9); bg at x=9 is 1 outside.
+    assert line[10] == pytest.approx(_soft(1.0, sigma), abs=1e-6)
+    assert line[9] == pytest.approx(_soft(-1.0, sigma), abs=1e-6)
+    assert line[14] == pytest.approx(_soft(5.0, sigma), abs=1e-6)
+    assert line[5] == pytest.approx(_soft(-5.0, sigma), abs=1e-6)
+    # monotone across the boundary, bounded in [0, 1]
+    assert np.all(np.diff(line) >= 0)
+    assert 0.0 <= line.min() and line.max() <= 1.0
+
+
+def test_distance_mask_drops_voxels_whose_boundary_may_lie_outside_the_patch():
+    """Along the line, |d| grows away from the boundary while the distance to
+    the patch edge shrinks; once |d| exceeds it the voxel is unsupervised."""
+    sigma = 100.0  # never saturates inside this patch
+    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)
+    ann[..., 10:] = 2
+    _, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
+    line = mask[0, 0, 1, 1].numpy()
+    # x=10: |d|=1, distance to nearest edge (y/z faces are 2 voxels away) = 2 -> kept
+    assert line[10] == 1.0
+    # x=12: |d|=3 > trust 2 -> a closer boundary could sit beyond the y/z faces
+    assert line[12] == 0.0
+    # in a thin patch nothing far from the boundary is trusted
+    assert line[0] == 0.0 and line[20] == 0.0
+
+
+def test_distance_mask_keeps_saturated_voxels_far_from_any_edge():
+    """Deep inside a big patch trust >= 3 sigma, so the value is saturated and kept."""
+    sigma = 2.0
+    ann = np.ones((1, 1, 15, 15, 15), dtype=np.float32)
+    ann[..., 8:] = 2
+    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
+    # centre voxel (7,7,7): bg, |d|=1, trust=8 -> reliable
+    assert mask[0, 0, 7, 7, 7] == 1.0
+    # (7,7,3): bg, |d|=5 > trust 4 (index 3 is 4 voxels from the padded
+    # edge), and trust < 3 sigma = 6 -> masked
+    assert mask[0, 0, 7, 7, 3] == 0.0
+    # sigma small enough that trust 4 >= 3 sigma: saturated, kept, ~0
+    target2, mask2 = DistanceTargetTransform(0.5)(torch.from_numpy(ann))
+    assert mask2[0, 0, 7, 7, 3] == 1.0
+    assert target2[0, 0, 7, 7, 3] < 1e-3
+
+
+def test_distance_unannotated_voxels_are_unknown_not_background():
+    """Zeros are neither fg nor bg: they get no target weight and shrink the
+    trust radius of their annotated neighbours."""
+    ann = np.ones((1, 1, 9, 9, 9), dtype=np.float32)
+    ann[..., 4:] = 2
+    ann[0, 0, 4, 4, 0:2] = 0                 # an unannotated pocket in the bg
+    _, mask = DistanceTargetTransform(1.0)(torch.from_numpy(ann))
+    assert mask[0, 0, 4, 4, 0] == 0.0 and mask[0, 0, 4, 4, 1] == 0.0
+    # bg voxel at x=2: |d|=2 (fg starts at 4) but the pocket is 1 away -> masked
+    assert mask[0, 0, 4, 4, 2] == 0.0
+    # the same column in a pocket-free row is fine
+    assert mask[0, 0, 2, 4, 2] == 1.0
+
+
+def test_distance_all_foreground_patch_is_saturated_only_when_deep():
+    ann = np.full((1, 1, 9, 9, 9), 2, dtype=np.float32)
+    target, mask = DistanceTargetTransform(1.0)(torch.from_numpy(ann))
+    # no boundary anywhere: target is 1 everywhere, but only voxels whose
+    # distance to the patch edge is >= 3 sigma (=3) are trusted
+    assert torch.all(target == 1.0)
+    assert mask[0, 0, 4, 4, 4] == 1.0
+    assert mask[0, 0, 0, 4, 4] == 0.0
+    # index 1 is 2 voxels from the padded edge (< 3), index 2 is 3 (>= 3)
+    assert mask[0, 0, 1, 4, 4] == 0.0 and mask[0, 0, 2, 4, 4] == 1.0
+
+
+def test_distance_broadcasts_to_model_channels_and_keeps_device():
+    ann = torch.ones((2, 1, 5, 5, 5))
+    ann[..., 2:] = 2
+    target, mask = DistanceTargetTransform(2.0, num_channels=3)(ann)
+    assert target.shape == (2, 3, 5, 5, 5) and mask.shape == (2, 3, 5, 5, 5)
+    assert torch.equal(target[:, 0], target[:, 2])
+    assert target.device == ann.device
+
+
+def test_distance_rejects_bad_sigma():
+    with pytest.raises(ValueError):
+        DistanceTargetTransform(0.0)
