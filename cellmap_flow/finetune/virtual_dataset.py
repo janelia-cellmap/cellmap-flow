@@ -141,6 +141,16 @@ class VirtualPatchDataset(Dataset):
         augment: bool = False,
     ):
         self.augment = bool(augment)
+        # Per-patch augmentation tallies. Each DataLoader worker is its own
+        # process (spawned), so these never reach the parent -- each worker
+        # reports its own, tagged, straight to the training log. Without this
+        # the only evidence augmentation ran is a flag echoed at startup,
+        # which is exactly what was untrustworthy before.
+        self._aug_n = 0
+        self._aug_flips = np.zeros(3, dtype=np.int64)
+        self._aug_rots = np.zeros(4, dtype=np.int64)
+        self._aug_scales: list = []
+        self._aug_pending: dict = {}
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
         self.input_size = np.array(input_size_voxels, dtype=int)
@@ -516,6 +526,8 @@ class VirtualPatchDataset(Dataset):
             # from ann_patch below, so the anchor mask inherits the same
             # transform rather than needing its own.
             raw_patch, ann_patch = self._augment_spatial(raw_patch, ann_patch, rng)
+            # Both halves have now recorded what they did; report together.
+            self._report_augmentation()
 
         raw_t = torch.from_numpy(raw_patch.astype(np.float32)[np.newaxis, ...])
         ann_t = torch.from_numpy(ann_patch.astype(np.float32)[np.newaxis, ...])
@@ -621,13 +633,14 @@ class VirtualPatchDataset(Dataset):
             patch = norm(patch)
         return patch
 
-    @staticmethod
-    def _augment_intensity(patch: np.ndarray, rng) -> np.ndarray:
+    def _augment_intensity(self, patch: np.ndarray, rng) -> np.ndarray:
         """Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range)."""
         value_max = _value_max(patch)
         scale = rng.uniform(0.8, 1.2)
         noise = rng.normal(0.0, 0.01 * value_max, patch.shape)
         out = np.clip(patch.astype(np.float32) * scale + noise, 0.0, value_max)
+        self._aug_pending["scale"] = float(scale)
+        self._aug_pending["value_max"] = float(value_max)
         return out.astype(np.float32)
 
     def _augment_spatial(self, raw: np.ndarray, ann: np.ndarray, rng):
@@ -646,19 +659,90 @@ class VirtualPatchDataset(Dataset):
         the model's input shape is fixed and a non-square rot90 would change
         it. Z is never rotated into -- EM is routinely anisotropic there.
         """
+        flips = [False, False, False]
         for axis in (0, 1, 2):
             if rng.random() < 0.5:
                 raw = np.flip(raw, axis=axis)
                 ann = np.flip(ann, axis=axis)
+                flips[axis] = True
 
-        if raw.shape[1] == raw.shape[2] and ann.shape[1] == ann.shape[2]:
+        k = 0
+        rotatable = raw.shape[1] == raw.shape[2] and ann.shape[1] == ann.shape[2]
+        if rotatable:
             k = int(rng.integers(0, 4))
             if k:
                 raw = np.rot90(raw, k=k, axes=(1, 2))
                 ann = np.rot90(ann, k=k, axes=(1, 2))
 
+        self._aug_pending["flips"] = flips
+        self._aug_pending["k"] = k
+        self._aug_pending["rotatable"] = rotatable
+
         # np.flip/np.rot90 return views; torch.from_numpy needs real strides.
         return np.ascontiguousarray(raw), np.ascontiguousarray(ann)
+
+    def _report_augmentation(self) -> None:
+        """Say what was actually applied: the first few patches in full, then
+        rolling summaries.
+
+        Runs inside whichever DataLoader worker produced the patch, so the
+        line is tagged with the worker id -- several workers interleave in the
+        log and otherwise the counts look contradictory.
+        """
+        p = self._aug_pending
+        if not p:
+            return
+        flips = p.get("flips", [False, False, False])
+        k = p.get("k", 0)
+        scale = p.get("scale")
+
+        self._aug_n += 1
+        self._aug_flips += np.array(flips, dtype=np.int64)
+        self._aug_rots[k] += 1
+        if scale is not None:
+            self._aug_scales.append(scale)
+
+        worker_info = torch.utils.data.get_worker_info()
+        tag = f"aug w{0 if worker_info is None else worker_info.id}"
+
+        # First few in full, so concrete values are visible immediately
+        # rather than only after a summary interval.
+        if self._aug_n <= 3:
+            applied = [f"flip{ax}" for ax, on in zip("ZYX", flips) if on]
+            if k:
+                applied.append(f"rot90_xy x{k}")
+            if scale is not None:
+                applied.append(f"brightness x{scale:.3f}")
+            applied.append("noise sigma=1% of range")
+            if not p.get("rotatable", True):
+                applied.append("(rotation skipped: YX not square)")
+            logger.info(
+                f"[{tag}] patch {self._aug_n}: " + ", ".join(applied)
+            )
+
+        # Rolling summary: proves augmentation is still running deep into a
+        # long job, and that the draws are distributed as intended.
+        if self._aug_n % 100 == 0:
+            n = self._aug_n
+            fz, fy, fx = (100.0 * self._aug_flips / n)
+            rot = ", ".join(
+                f"{i}:{100.0 * c / n:.0f}%" for i, c in enumerate(self._aug_rots)
+            )
+            if self._aug_scales:
+                s = np.array(self._aug_scales)
+                brightness = (
+                    f"brightness mean {s.mean():.3f} "
+                    f"range [{s.min():.3f}, {s.max():.3f}]"
+                )
+            else:
+                brightness = "brightness n/a"
+            logger.info(
+                f"[{tag}] {n} patches augmented: flips Z {fz:.0f}% / "
+                f"Y {fy:.0f}% / X {fx:.0f}% (expect ~50%), rot90_xy {rot} "
+                f"(expect ~25% each), {brightness}"
+            )
+
+        self._aug_pending = {}
 
     @staticmethod
     def _build_input_normalizers(input_norm_config: dict) -> list:
