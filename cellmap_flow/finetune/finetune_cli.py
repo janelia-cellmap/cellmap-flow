@@ -562,6 +562,16 @@ def build_arg_parser():
         default=0.1,
         help="LoRA dropout (default: 0.1)"
     )
+    parser.add_argument(
+        "--lora-min-channels",
+        type=int,
+        default=0,
+        help="Skip LoRA on layers narrower than this on either side. "
+             "Narrow full-resolution layers are where the adapter is expensive "
+             "and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips "
+             "7 of 19 layers (~1%% of adapter params) for a 1.7x faster step. "
+             "(default: 0, adapt every layer)"
+    )
 
     # Data arguments
     parser.add_argument(
@@ -754,7 +764,10 @@ def main():
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
-    logger.info(f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha})")
+    logger.info(
+        f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha}, "
+        f"min_channels: {args.lora_min_channels})"
+    )
     logger.info(f"Batch size: {args.batch_size}")
     logger.info(f"Epochs: {args.num_epochs}")
     logger.info(f"Learning rate: {args.learning_rate}")
@@ -844,6 +857,7 @@ def main():
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
+        lora_min_channels=args.lora_min_channels,
     )
 
     # === Training loop (supports restart via signal file) ===
@@ -965,6 +979,7 @@ def main():
                             lora_r=args.lora_r,
                             lora_alpha=args.lora_alpha,
                             lora_dropout=args.lora_dropout,
+                            lora_min_channels=args.lora_min_channels,
                         )
 
                     lora_model.train()
@@ -1043,6 +1058,7 @@ def main():
                         lora_r=args.lora_r,
                         lora_alpha=args.lora_alpha,
                         lora_dropout=args.lora_dropout,
+                        lora_min_channels=args.lora_min_channels,
                     )
 
                 lora_model.train()
