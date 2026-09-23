@@ -996,6 +996,12 @@ def main():
                     # Reset LoRA weights for fresh restart
                     logger.info("Resetting LoRA adapter weights for fresh restart...")
                     from peft import PeftModel
+                    if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
+                        # A restart cannot turn a LoRA run into a full finetune (or back):
+                        # the model object is built once. Keep the adapter and say so.
+                        logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                                       "submit a new job for that. Keeping the current adapter setup.")
+                        args.lora_r = max(1, int(lora_model.peft_config['default'].r))
                     if isinstance(lora_model, PeftModel):
                         base = lora_model.unload()
                         lora_model = wrap_model_with_lora(
@@ -1078,6 +1084,12 @@ def main():
                 # finetuned weights.
                 logger.info("Resetting LoRA adapter weights for fresh restart...")
                 from peft import PeftModel
+                if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
+                    # A restart cannot turn a LoRA run into a full finetune (or back):
+                    # the model object is built once. Keep the adapter and say so.
+                    logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                                   "submit a new job for that. Keeping the current adapter setup.")
+                    args.lora_r = max(1, int(lora_model.peft_config['default'].r))
                 if isinstance(lora_model, PeftModel):
                     base = lora_model.unload()
                     lora_model = wrap_model_with_lora(

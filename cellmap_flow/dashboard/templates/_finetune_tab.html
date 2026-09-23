@@ -273,8 +273,9 @@
             <option value="8">8 (Balanced)</option>
             <option value="16">16 (High capacity)</option>
             <option value="64" selected>64 (Very high capacity) - Recommended</option>
+            <option value="0">0 (Full finetune: every parameter, no adapter)</option>
           </select>
-          <small class="text-muted">Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change this.</small>
+          <small class="text-muted">Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change this. Rank 0 trains the whole model instead of an adapter: on the mito affinity UNet it was faster per step and lower in memory than rank 64, and exports full weights (~3 GB) rather than a ~100 MB adapter. Switching between 0 and a LoRA rank needs a new job, not a restart.</small>
         </div>
       </div>
       <div class="col-md-6">

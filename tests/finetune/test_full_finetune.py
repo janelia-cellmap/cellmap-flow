@@ -102,3 +102,15 @@ def test_generated_yaml_carries_weights_path_for_full_finetune(tmp_path):
             lora_adapter_path="/a", weights_path="/w.pt", base_model_dict=base,
             model_name="x", output_path=tmp_path / "x.yaml", data_path="/data.zarr",
         )
+
+
+def test_export_kwargs_prefer_what_is_on_disk(tmp_path):
+    from cellmap_flow.finetune.finetune_job_manager import finetune_export_kwargs
+    # nothing written yet: fall back to the job's rank
+    assert "lora_adapter_path" in finetune_export_kwargs(tmp_path, {"lora_r": 64})
+    assert "weights_path" in finetune_export_kwargs(tmp_path, {"lora_r": 0})
+    # a full-finetune export on disk wins regardless of params
+    (tmp_path / "full_finetune").mkdir()
+    (tmp_path / "full_finetune" / "model_state_dict.pt").write_bytes(b"x")
+    out = finetune_export_kwargs(tmp_path, {"lora_r": 64})
+    assert out == {"weights_path": str(tmp_path / "full_finetune" / "model_state_dict.pt")}
