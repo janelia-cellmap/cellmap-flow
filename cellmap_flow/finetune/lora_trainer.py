@@ -351,8 +351,31 @@ class LoRAFinetuner:
                 scope_str = "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
-        # Mixed precision scaler
-        self.scaler = GradScaler('cuda', enabled=use_mixed_precision)
+        # Autocast dtype. This defaulted to fp16 (autocast's CUDA default) and
+        # every run on this model NaN'd out on the startup probe and fell back
+        # to fp32 -- so "mixed precision" was never once in effect, and the
+        # tensor cores sat idle for the whole job.
+        #
+        # fp16 carries 5 exponent bits, so a UNet this deep overflows in the
+        # forward pass. bf16 has fp32's 8, which is exactly the failure mode
+        # it exists to fix, and needs no loss scaling. Ampere and newer only
+        # (H100/H200 = cc 9.0 yes; the RTX 2080 Ti workstation = cc 7.5 no),
+        # so fall back to fp16 where it is unavailable and let the existing
+        # probe demote to fp32 if that NaNs too.
+        self.amp_dtype = torch.float16
+        if self.device.type == "cuda":
+            try:
+                if torch.cuda.is_bf16_supported():
+                    self.amp_dtype = torch.bfloat16
+            except Exception as e:
+                logger.debug(f"bf16 support check failed ({e}); staying on fp16.")
+
+        # GradScaler compensates for fp16's narrow range; bf16 does not need
+        # it, and enabling it there costs a little and hides real overflows.
+        self.scaler = GradScaler(
+            'cuda',
+            enabled=use_mixed_precision and self.amp_dtype is torch.float16,
+        )
 
         # Training state
         self.current_epoch = 0
@@ -368,6 +391,9 @@ class LoRAFinetuner:
         """Disable mixed precision training."""
         self.use_mixed_precision = False
         self.scaler = GradScaler('cuda', enabled=False)
+        logger.warning(
+            f"Mixed precision disabled (was {self.amp_dtype}); training in fp32."
+        )
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -562,7 +588,14 @@ class LoRAFinetuner:
         log_message(f"Batches per epoch: {len(self.dataloader)}")
         log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
         log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
-        log_message(f"Mixed precision: {self.use_mixed_precision}")
+        if self.use_mixed_precision:
+            log_message(
+                f"Mixed precision: {self.use_mixed_precision} "
+                f"(dtype={str(self.amp_dtype).replace('torch.', '')}, "
+                f"grad_scaler={self.scaler.is_enabled()})"
+            )
+        else:
+            log_message("Mixed precision: False (fp32)")
         log_message(f"Mask unannotated regions: {self.mask_unannotated}")
         log_message(f"Log file: {log_file}")
         log_message("")
@@ -580,7 +613,9 @@ class LoRAFinetuner:
                 probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_raw = probe_raw.to(self.device)
-                with torch.no_grad(), autocast('cuda', enabled=True):
+                with torch.no_grad(), autocast(
+                    'cuda', enabled=True, dtype=self.amp_dtype
+                ):
                     probe_out = self.model(probe_raw)
                 if not torch.isfinite(probe_out).all():
                     log_message("WARNING: Model produces NaN/Inf under FP16 — falling back to FP32.")
@@ -615,7 +650,7 @@ class LoRAFinetuner:
                     device=self.device,
                 ) * 100
                 with torch.no_grad(), autocast(
-                    'cuda', enabled=self.use_mixed_precision
+                    'cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype
                 ):
                     probe_out = self.model(probe_extreme)
                     if self.select_channel is not None:
@@ -867,7 +902,10 @@ class LoRAFinetuner:
                 with torch.no_grad():
                     self.model.disable_adapter_layers()
                     try:
-                        with autocast('cuda', enabled=self.use_mixed_precision):
+                        with autocast(
+                            'cuda', enabled=self.use_mixed_precision,
+                            dtype=self.amp_dtype,
+                        ):
                             teacher_pred = self.model(raw)
                             if self.select_channel is not None:
                                 teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
@@ -878,7 +916,9 @@ class LoRAFinetuner:
                     logger.warning(f"NaN/Inf in teacher_pred! range=[{teacher_pred.min():.4f}, {teacher_pred.max():.4f}]")
 
             # Student forward pass with mixed precision
-            with autocast('cuda', enabled=self.use_mixed_precision):
+            with autocast(
+                'cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype
+            ):
                 pred = self.model(raw)
 
                 if not torch.isfinite(pred).all():
