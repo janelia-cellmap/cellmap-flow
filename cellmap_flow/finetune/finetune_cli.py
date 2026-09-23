@@ -378,7 +378,8 @@ def _generate_model_files(args, model_config, timestamp):
         )
 
     yaml_path = generate_finetuned_model_yaml(
-        lora_adapter_path=str(output_dir_path / "lora_adapter"),
+        lora_adapter_path=str(output_dir_path / "lora_adapter") if args.lora_r > 0 else None,
+        weights_path=str(output_dir_path / "full_finetune" / "model_state_dict.pt") if args.lora_r <= 0 else None,
         base_model_dict=model_config.to_dict(),
         model_name=finetuned_model_name,
         output_path=models_dir / f"{finetuned_model_name}.yaml",
@@ -548,7 +549,8 @@ def build_arg_parser():
         # correcting a model that is mostly right, so the adapter wants just
         # enough capacity to fix the bad regions and not enough to rewrite
         # the good ones.
-        help="LoRA rank (default: 8)"
+        help="LoRA rank (default: 8). 0 = full finetune: every parameter trainable, no adapter; "
+             "exports full_finetune/model_state_dict.pt instead of lora_adapter/."
     )
     parser.add_argument(
         "--lora-alpha",
@@ -857,14 +859,29 @@ def main():
             logger.warning("No CellmapModel available — LoRA may fail on TorchScript model")
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
-    logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
-    lora_model = wrap_model_with_lora(
-        base_model,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        lora_min_channels=args.lora_min_channels,
-    )
+    if args.lora_r <= 0:
+        # Full finetune. Measured against LoRA r=64 on mito-aff-unet-setup-16
+        # (2026-09-23): faster per step (0.50 vs 0.90 s), lower memory (31 vs
+        # 50 GB at batch 8), and lower training loss at every checkpoint --
+        # the adapter's savings are in parameters, which is not where this
+        # model's cost is. The export is a full state dict under
+        # full_finetune/, served via FinetuneModelConfig(weights_path=...).
+        logger.info("lora_r=0: full finetuning -- every parameter trainable, no adapter. "
+                    "Restarts reset the optimizer but not the weights.")
+        for p in base_model.parameters():
+            p.requires_grad_(True)
+        lora_model = base_model
+        n_train = sum(p.numel() for p in lora_model.parameters())
+        logger.info(f"trainable params: {n_train:,} || all params: {n_train:,} || trainable%: 100.0000")
+    else:
+        logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
+        lora_model = wrap_model_with_lora(
+            base_model,
+            lora_r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            lora_min_channels=args.lora_min_channels,
+        )
 
     # === Training loop (supports restart via signal file) ===
     server_started = False
@@ -999,14 +1016,17 @@ def main():
                 else:
                     return 1
 
-            # Save final adapter
-            logger.info("\nSaving LoRA adapter...")
+            # Save final adapter (or, for a full finetune, the full weights)
+            logger.info("\nSaving LoRA adapter..." if args.lora_r > 0 else "\nSaving full finetuned weights...")
             trainer.save_adapter()
 
             logger.info("\n" + "=" * 60)
             logger.info("Finetuning Complete!")
             logger.info(f"Best loss: {stats['best_loss']:.6f}")
-            logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            if args.lora_r > 0:
+                logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            else:
+                logger.info(f"Weights saved to: {args.output_dir}/full_finetune/model_state_dict.pt")
             logger.info("=" * 60)
 
             # Generate model files

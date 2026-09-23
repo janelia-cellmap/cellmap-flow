@@ -473,6 +473,11 @@ class LoRAFinetuner:
             for name, param in self.model.named_parameters():
                 if 'lora_' in name and param.requires_grad:
                     nn.init.zeros_(param) if 'lora_B' in name else nn.init.kaiming_uniform_(param, a=math.sqrt(5))
+        else:
+            logger.warning(
+                "Full finetune: a fresh restart resets the optimizer but NOT the "
+                "weights, which continue from where the previous run left them."
+            )
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.optimizer.defaults['lr'],
@@ -1211,6 +1216,13 @@ class LoRAFinetuner:
         self.last_supervised_loss = epoch_supervised_loss / num_batches
         return epoch_loss / num_batches
 
+    def _is_peft(self) -> bool:
+        try:
+            from peft import PeftModel
+        except ImportError:
+            return False
+        return isinstance(self.model, PeftModel)
+
     def save_checkpoint(self, is_best: bool = False):
         """
         Save training checkpoint.
@@ -1220,6 +1232,28 @@ class LoRAFinetuner:
         """
         checkpoint_name = "best_checkpoint.pth" if is_best else f"checkpoint_epoch_{self.current_epoch+1}.pth"
         checkpoint_path = self.output_dir / checkpoint_name
+        if not self._is_peft():
+            # Full finetune: every parameter is trainable, so a LoRA-style
+            # checkpoint would be the whole model plus two Adam moments --
+            # ~9.5 GB for an 800M-param UNet, twenty times per run. Keep only
+            # the best weights, without optimizer state (no resume), which is
+            # what save_adapter() exports anyway.
+            if not is_best:
+                if not getattr(self, "_warned_full_ckpt", False):
+                    logger.info("Full finetune: skipping periodic checkpoints; best_checkpoint.pth holds the full weights.")
+                    self._warned_full_ckpt = True
+                return
+            torch.save({
+                'epoch': self.current_epoch,
+                'global_step': self.global_step,
+                'model_state_dict': self.model.state_dict(),
+                'best_loss': self.best_loss,
+                'training_stats': self.training_stats,
+                'lora_only': False,
+                'full_model': True,
+            }, checkpoint_path)
+            logger.debug(f"Full-model checkpoint saved: {checkpoint_path}")
+            return
 
         # Save only trainable (LoRA) parameters to avoid writing the full
         # 800M+ param base model to disk every checkpoint.
@@ -1266,6 +1300,15 @@ class LoRAFinetuner:
         else:
             logger.warning("No best checkpoint found, saving adapter from final epoch weights")
 
+        if not self._is_peft():
+            # Full finetune: there is no adapter; export the whole state dict
+            # where FinetuneModelConfig(weights_path=...) expects it.
+            out = self.output_dir / "full_finetune"
+            out.mkdir(parents=True, exist_ok=True)
+            weights = out / "model_state_dict.pt"
+            torch.save(self.model.state_dict(), weights)
+            logger.info(f"Full finetuned weights saved to: {weights}")
+            return str(weights)
         save_lora_adapter(self.model, adapter_path)
         logger.info(f"LoRA adapter saved to: {adapter_path}")
 
@@ -1283,8 +1326,10 @@ class LoRAFinetuner:
             self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         else:
             self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        if 'optimizer_state_dict' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if 'scaler_state_dict' in checkpoint:
+            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         self.current_epoch = checkpoint['epoch']
         self.global_step = checkpoint['global_step']
