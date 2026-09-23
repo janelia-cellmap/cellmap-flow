@@ -264,7 +264,24 @@ def submit_finetuning_response(data):
         )
 
         label_smoothing = data.get("label_smoothing", 0.1)
-        if output_type == "distance":
+        if output_type == "distance" and has_sparse:
+            # A distance target needs the 3D object boundary. Scribbles are
+            # strokes with unannotated voxels all around them, so the safe
+            # radius of every painted voxel is ~1 and next to nothing would be
+            # supervised. Fall back to what sparse annotations already use:
+            # a per-voxel binary target with margin loss (only the side of 0.5
+            # is enforced, so the model's gradual field survives) and
+            # distillation to the base model elsewhere.
+            logger.info(
+                "output_type=distance with sparse annotations: using binary "
+                "target + margin loss instead (a distance transform needs dense 3D labels)"
+            )
+            output_type = "binary"
+            if loss_type not in ("margin",):
+                loss_type = "margin"
+            if distillation_lambda <= 0:
+                distillation_lambda = 0.5
+        elif output_type == "distance":
             # The soft distance target is only defined against BCE-with-logits;
             # margin/dice assume hard labels and smoothing would blur a target
             # that is already soft. The CLI rejects anything else, so decide

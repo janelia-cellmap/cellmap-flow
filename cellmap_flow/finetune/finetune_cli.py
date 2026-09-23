@@ -462,6 +462,14 @@ def _build_target_transform(args, model_config):
                 f"ignoring --label-smoothing {args.label_smoothing}."
             )
             args.label_smoothing = 0.0
+        if getattr(args, "mask_unannotated", False):
+            logger.warning(
+                "--output-type distance with --mask-unannotated (sparse/scribble "
+                "annotations): a distance transform needs dense 3D labels, and "
+                "voxels next to unannotated ones are left out of the loss, so "
+                "very little of a scribble session will be supervised. Use "
+                "--output-type binary --loss-type margin for scribbles."
+            )
         logger.info(
             f"Using distance target transform (sigma={args.distance_sigma} voxels, "
             f"broadcast to {num_channels} channel(s))"
