@@ -281,6 +281,10 @@ def submit_finetuning_response(data):
             distillation_scope=data.get("distillation_scope", "unlabeled"),
             margin=data.get("margin", 0.3),
             balance_classes=data.get("balance_classes", False),
+            # Default off: these interactive runs are a few dozen gradient
+            # steps, where augmentation adds variance without the many
+            # repeat views it needs to pay for itself.
+            augment=data.get("augment", False),
             queue=data.get("queue", "gpu_h100"),
             output_type=output_type,
             select_channel=data.get("select_channel", None),

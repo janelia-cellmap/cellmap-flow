@@ -457,6 +457,22 @@
           </div>
           <small class="text-muted">Weight fg and bg equally in loss regardless of scribble ratio. Prevents foreground overprediction.</small>
         </div>
+        <div class="mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="augment">
+            <label class="form-check-label" for="augment">
+              Augmentation
+            </label>
+          </div>
+          <small class="text-muted">
+            Random flips, XY rotations, brightness and noise, on top of the
+            patch-center jitter that is always applied. Off by default:
+            augmentation earns its keep when a run sees the same patches many
+            times over, so a short correction run mostly just gets noisier
+            gradients.
+            <span id="augmentAdvice" class="d-block mt-1"></span>
+          </small>
+        </div>
       </div>
     </div>
 
@@ -600,6 +616,7 @@ document.addEventListener("DOMContentLoaded", function () {
       distillationLambda: document.getElementById("distillationLambda").value,
       distillationScope: document.getElementById("distillationScope").value,
       balanceClasses: document.getElementById("balanceClasses").checked,
+      augment: document.getElementById("augment").checked,
       autoServe: document.getElementById("autoServeCheck").checked,
       gpuQueue: document.getElementById("gpuQueue").value,
       selectedModelName: modelSelect.value,
@@ -660,7 +677,7 @@ document.addEventListener("DOMContentLoaded", function () {
       "outputPath", "checkpointPath", "loraRank", "numEpochs",
       "batchSize", "patchesPerEpoch", "rehearsalFraction", "learningRate", "lossType", "marginValue", "labelSmoothing",
       "distillationLambda", "distillationScope",
-      "balanceClasses", "autoServeCheck", "gpuQueue", "modelSelect"
+      "balanceClasses", "augment", "autoServeCheck", "gpuQueue", "modelSelect"
     ];
     ids.forEach(id => {
       const el = document.getElementById(id);
@@ -722,6 +739,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (savedState.distillationLambda) document.getElementById("distillationLambda").value = savedState.distillationLambda;
     if (savedState.distillationScope) document.getElementById("distillationScope").value = savedState.distillationScope;
     if (savedState.balanceClasses !== undefined) document.getElementById("balanceClasses").checked = savedState.balanceClasses;
+    if (savedState.augment !== undefined) document.getElementById("augment").checked = savedState.augment;
     if (savedState.autoServe !== undefined) document.getElementById("autoServeCheck").checked = savedState.autoServe;
     if (savedState.gpuQueue) document.getElementById("gpuQueue").value = savedState.gpuQueue;
   }
@@ -1523,6 +1541,49 @@ document.addEventListener("DOMContentLoaded", function () {
     rehearsalFractionEl.addEventListener("change", updateRehearsalHint);
   }
 
+  // Whether augmentation is worth enabling depends on how many times the run
+  // revisits the same patches, which is epochs x batches-per-epoch. Static
+  // advice cannot say that, so compute it from the form as it is edited.
+  function updateAugmentAdvice() {
+    const advice = document.getElementById("augmentAdvice");
+    if (!advice) return;
+    const epochs = parseInt(document.getElementById("numEpochs")?.value, 10);
+    const batch = parseInt(document.getElementById("batchSize")?.value, 10);
+    const patchesRaw = document.getElementById("patchesPerEpoch")?.value;
+    const patches = patchesRaw === "" || patchesRaw == null
+      ? null
+      : parseInt(patchesRaw, 10);
+
+    if (!epochs || !batch || patches === null || Number.isNaN(patches) || patches <= 0) {
+      // Blank/auto patches-per-epoch resolves inside the dataset from the
+      // populated-chunk count, so the step total is not knowable here.
+      advice.textContent =
+        "Set Patches per Epoch to estimate whether augmentation is worth it.";
+      advice.className = "d-block mt-1 text-muted";
+      return;
+    }
+
+    const steps = epochs * Math.ceil(patches / batch);
+    const views = epochs; // each patch is revisited once per epoch
+    if (steps < 200) {
+      advice.textContent =
+        `~${steps} gradient steps: too few for augmentation to help. ` +
+        `Raise epochs or patches per epoch first.`;
+      advice.className = "d-block mt-1 text-warning";
+    } else {
+      advice.textContent =
+        `~${steps} gradient steps, each patch seen ~${views}x: ` +
+        `augmentation is worth enabling.`;
+      advice.className = "d-block mt-1 text-success";
+    }
+  }
+
+  ["numEpochs", "batchSize", "patchesPerEpoch"].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", updateAugmentAdvice);
+  });
+  updateAugmentAdvice();
+
   const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
   const annotatedRegionCount = document.getElementById("annotatedRegionCount");
   if (showAnnotatedRegionsBtn) {
@@ -1640,6 +1701,7 @@ document.addEventListener("DOMContentLoaded", function () {
         distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
         distillation_scope: document.getElementById("distillationScope").value,
         balance_classes: document.getElementById("balanceClasses").checked,
+        augment: document.getElementById("augment").checked,
         label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
         queue: document.getElementById("gpuQueue").value
       };
@@ -2250,6 +2312,7 @@ document.addEventListener("DOMContentLoaded", function () {
         distillation_lambda: parseFloat(document.getElementById('distillationLambda').value),
         distillation_scope: document.getElementById('distillationScope').value,
         balance_classes: document.getElementById('balanceClasses').checked,
+        augment: document.getElementById('augment').checked,
         label_smoothing: parseFloat(document.getElementById('labelSmoothing').value) || 0,
       };
       if (patchesPerEpochOverride !== undefined) {
@@ -2276,7 +2339,8 @@ document.addEventListener("DOMContentLoaded", function () {
         `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
         `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
         `  label_smoothing:${requestBody.label_smoothing}\n` +
-        `  balance_classes:${requestBody.balance_classes}\n`;
+        `  balance_classes:${requestBody.balance_classes}\n` +
+        `  augment:${requestBody.augment}\n`;
       if (!confirm(summary)) return;
 
       const originalBtnText = restartJobBtn.textContent;

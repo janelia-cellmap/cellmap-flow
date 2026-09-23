@@ -29,6 +29,7 @@ RESTART_PASSTHROUGH_KEYS = [
     "distillation_lambda",
     "margin",
     "balance_classes",
+    "augment",
     "mask_unannotated",
     "gradient_accumulation_steps",
     "num_workers",

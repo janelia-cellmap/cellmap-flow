@@ -270,6 +270,7 @@ class FinetuneJobManager:
         serve_data_path: Optional[str],
         mask_unannotated: bool,
         balance_classes: bool,
+        augment: bool,
         output_type: str,
         select_channel: Optional[int],
         offsets: Optional[str],
@@ -320,6 +321,9 @@ class FinetuneJobManager:
             command_parts.append("--mask-unannotated")
         if balance_classes:
             command_parts.append("--balance-classes")
+        # Opt-out flag: only passed when augmentation is disabled.
+        if not augment:
+            command_parts.append("--no-augment")
         if output_type != "binary":
             command_parts += ["--output-type", str(output_type)]
         if select_channel is not None:
@@ -374,6 +378,7 @@ class FinetuneJobManager:
         distillation_scope: str,
         margin: float,
         balance_classes: bool,
+        augment: bool,
         channels: List[str],
         input_voxel_size: List[int],
         output_voxel_size: List[int],
@@ -407,6 +412,7 @@ class FinetuneJobManager:
                 "distillation_scope": distillation_scope,
                 "margin": margin,
                 "balance_classes": balance_classes,
+                "augment": augment,
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,
@@ -440,6 +446,7 @@ class FinetuneJobManager:
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
         balance_classes: bool = False,
+        augment: bool = False,
         output_type: str = "binary",
         select_channel: Optional[int] = None,
         offsets: Optional[str] = None,
@@ -588,6 +595,7 @@ class FinetuneJobManager:
             serve_data_path=serve_data_path,
             mask_unannotated=mask_unannotated,
             balance_classes=balance_classes,
+            augment=augment,
             output_type=output_type,
             select_channel=select_channel,
             offsets=offsets,
@@ -614,6 +622,7 @@ class FinetuneJobManager:
             distillation_scope=distillation_scope,
             margin=margin,
             balance_classes=balance_classes,
+            augment=augment,
             channels=channels,
             input_voxel_size=input_voxel_size,
             output_voxel_size=output_voxel_size,

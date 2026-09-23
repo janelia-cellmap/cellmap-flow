@@ -580,7 +580,11 @@ def build_arg_parser():
     parser.add_argument(
         "--no-augment",
         action="store_true",
-        help="Disable data augmentation"
+        help="Disable data augmentation (random flips, XY rotations, brightness "
+             "and noise). Patch-center jitter is always applied and is not "
+             "affected. Augmentation pays off when a run revisits the same "
+             "patches many times; below a few hundred gradient steps it mostly "
+             "adds variance, which is why the dashboard defaults it off."
     )
 
     # Training arguments

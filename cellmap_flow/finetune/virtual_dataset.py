@@ -64,6 +64,19 @@ logger = logging.getLogger(__name__)
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
+def _value_max(arr: np.ndarray) -> float:
+    """Upper bound of ``arr``'s value range, for range-relative intensity augmentation.
+
+    Integer dtypes report their dtype maximum (255 for the uint8 EM this is
+    normally pointed at). Floats are assumed already normalized to [0, 1]
+    unless they visibly exceed it.
+    """
+    if np.issubdtype(arr.dtype, np.integer):
+        return float(np.iinfo(arr.dtype).max)
+    observed = float(np.nanmax(arr)) if arr.size else 1.0
+    return max(1.0, observed)
+
+
 def _voxels_inside_any_bbox(
     voxels: np.ndarray, bbox_offsets: np.ndarray, bbox_ends: np.ndarray
 ) -> np.ndarray:
@@ -125,7 +138,9 @@ class VirtualPatchDataset(Dataset):
         dense_to_sparse_ratio: Optional[float] = None,
         good_regions: Optional[list] = None,
         rehearsal_fraction: Optional[float] = None,
+        augment: bool = False,
     ):
+        self.augment = bool(augment)
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
         self.input_size = np.array(input_size_voxels, dtype=int)
@@ -494,7 +509,13 @@ class VirtualPatchDataset(Dataset):
         )
 
         ann_patch = self._read_annotation_patch(ann_center_voxels)
-        raw_patch = self._read_raw_patch(ann_center_nm)
+        raw_patch = self._read_raw_patch(ann_center_nm, rng)
+
+        if self.augment:
+            # Before the tensors are built, and before `anchor` is derived
+            # from ann_patch below, so the anchor mask inherits the same
+            # transform rather than needing its own.
+            raw_patch, ann_patch = self._augment_spatial(raw_patch, ann_patch, rng)
 
         raw_t = torch.from_numpy(raw_patch.astype(np.float32)[np.newaxis, ...])
         ann_t = torch.from_numpy(ann_patch.astype(np.float32)[np.newaxis, ...])
@@ -557,7 +578,7 @@ class VirtualPatchDataset(Dataset):
             patch[dst_slices] = arr[src_slices]
         return patch
 
-    def _read_raw_patch(self, center_nm: np.ndarray) -> np.ndarray:
+    def _read_raw_patch(self, center_nm: np.ndarray, rng=None) -> np.ndarray:
         """Read an ``input_size`` patch from the raw dataset, centered at ``center_nm``.
 
         The raw read uses ``normalize=False`` because the trainer process's
@@ -584,12 +605,60 @@ class VirtualPatchDataset(Dataset):
         )
         patch = idi.to_ndarray_ts(roi)
 
+        # Intensity augmentation goes here, before normalization: the scale
+        # and noise are expressed in the raw dtype's own units (0-255 for
+        # uint8 EM), which is what they physically describe. Doing it after
+        # the norm chain would mean scaling a [-1, 1] signal, where a
+        # multiplicative factor pulls toward mid-grey instead of changing
+        # brightness.
+        if self.augment and rng is not None:
+            patch = self._augment_intensity(patch, rng)
+
         # Apply the dashboard's normalizers locally (no global state).
         # Each normalizer is callable and returns an ndarray; the chain
         # mirrors what apply_norms() does inside the dashboard process.
         for norm in self._input_normalizers:
             patch = norm(patch)
         return patch
+
+    @staticmethod
+    def _augment_intensity(patch: np.ndarray, rng) -> np.ndarray:
+        """Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range)."""
+        value_max = _value_max(patch)
+        scale = rng.uniform(0.8, 1.2)
+        noise = rng.normal(0.0, 0.01 * value_max, patch.shape)
+        out = np.clip(patch.astype(np.float32) * scale + noise, 0.0, value_max)
+        return out.astype(np.float32)
+
+    def _augment_spatial(self, raw: np.ndarray, ann: np.ndarray, rng):
+        """Random flips, and XY rotations when the YX plane is square.
+
+        Raw and annotation are different sizes but share a center, and for
+        even-sized patches reflection about index ``(n-1)/2`` lands on the
+        same physical plane for both -- so applying the identical transform
+        to each keeps them registered. Targets (affinities, SKOOTS vectors)
+        are derived from ``ann`` downstream in the trainer, after this, so
+        they are recomputed from the transformed labels and stay consistent.
+        Move target computation into the dataset and that stops being true:
+        a flip would then need the affinity channels permuted and negated.
+
+        Rotation is skipped unless Y and X are equal in both patches, since
+        the model's input shape is fixed and a non-square rot90 would change
+        it. Z is never rotated into -- EM is routinely anisotropic there.
+        """
+        for axis in (0, 1, 2):
+            if rng.random() < 0.5:
+                raw = np.flip(raw, axis=axis)
+                ann = np.flip(ann, axis=axis)
+
+        if raw.shape[1] == raw.shape[2] and ann.shape[1] == ann.shape[2]:
+            k = int(rng.integers(0, 4))
+            if k:
+                raw = np.rot90(raw, k=k, axes=(1, 2))
+                ann = np.rot90(ann, k=k, axes=(1, 2))
+
+        # np.flip/np.rot90 return views; torch.from_numpy needs real strides.
+        return np.ascontiguousarray(raw), np.ascontiguousarray(ann)
 
     @staticmethod
     def _build_input_normalizers(input_norm_config: dict) -> list:
@@ -682,7 +751,9 @@ def load_good_regions_for(corrections_dir: Optional[str]) -> list:
 
 
 def dataset_from_manifest(
-    manifest: dict, corrections_dir: Optional[str] = None
+    manifest: dict,
+    corrections_dir: Optional[str] = None,
+    augment: Optional[bool] = None,
 ) -> VirtualPatchDataset:
     """Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
@@ -713,6 +784,11 @@ def dataset_from_manifest(
         dense_to_sparse_ratio=manifest.get("dense_to_sparse_ratio"),
         good_regions=load_good_regions_for(corrections_dir),
         rehearsal_fraction=manifest.get("rehearsal_fraction"),
+        # Explicit argument wins: at training time the CLI flag is the
+        # authority. The manifest value is the session's stored preference.
+        augment=(
+            bool(manifest.get("augment", False)) if augment is None else bool(augment)
+        ),
     )
 
 
@@ -756,15 +832,21 @@ def create_dataloader(
             "or re-import the crops, so the manifest gets written."
         )
 
-    if augment:
-        logger.warning(
-            "augment=True, but this dataset only applies patch-center jitter "
-            f"(jitter_voxels={manifest.get('jitter_voxels') or 'default'}). "
-            "Flips, rotations and intensity augmentation are not implemented "
-            "here; --no-augment therefore has no effect."
-        )
+    dataset = dataset_from_manifest(manifest, corrections_zarr_path, augment=augment)
 
-    dataset = dataset_from_manifest(manifest, corrections_zarr_path)
+    if dataset.augment:
+        logger.info(
+            "Augmentation ON: random Z/Y/X flips, XY rotations where the YX "
+            "plane is square, brightness x0.8-x1.2 and 1%-of-range noise, on "
+            f"top of patch-center jitter (jitter={dataset.jitter.tolist()}). "
+            "Worth it when the run revisits the same patches many times; at a "
+            "few dozen gradient steps it mostly just adds variance."
+        )
+    else:
+        logger.info(
+            "Augmentation OFF: patch-center jitter only "
+            f"(jitter={dataset.jitter.tolist()})."
+        )
 
     actual_batch_size = max(1, min(batch_size, len(dataset)))
     if actual_batch_size != batch_size:
