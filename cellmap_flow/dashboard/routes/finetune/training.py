@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import re
@@ -296,6 +297,8 @@ def submit_finetuning_response(data):
             "job_id": finetune_job.job_id,
             "lsf_job_id": get_lsf_job_id(finetune_job),
             "output_dir": str(finetune_job.output_dir),
+            # Over the parent so every run in the session tree overlays.
+            "tensorboard_command": f"tensorboard --logdir {os.path.dirname(str(finetune_job.output_dir))}",
             "output_type": output_type,
             "message": "Finetuning job submitted successfully",
         }

@@ -1772,6 +1772,7 @@ document.addEventListener("DOMContentLoaded", function () {
           appendLog(`Job ID: ${result.job_id}`);
           appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
           appendLog(`Output directory: ${result.output_dir}`);
+          if (result.tensorboard_command) appendLog(`TensorBoard: ${result.tensorboard_command}`);
           if (result.note) {
             appendLog(`Note: ${result.note}`);
           }

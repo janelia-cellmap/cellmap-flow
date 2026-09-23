@@ -231,6 +231,7 @@ class LoRAFinetuner:
         margin: float = 0.3,
         balance_classes: bool = False,
         target_transform=None,
+        tensorboard: bool = True,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -248,6 +249,11 @@ class LoRAFinetuner:
         self.distillation_all_voxels = distillation_all_voxels
         self.balance_classes = balance_classes
         self.target_transform = target_transform
+        # Kept for the TensorBoard config card; the loss objects below do
+        # not expose them uniformly.
+        self.loss_type = loss_type
+        self.margin = margin
+        self.learning_rate = learning_rate
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -386,6 +392,68 @@ class LoRAFinetuner:
         # loop for why the combined loss cannot rank epochs.
         self.last_supervised_loss = float('nan')
         self.training_stats = []
+
+        # TensorBoard. File-based, so it works from GPU nodes with no network
+        # and needs no service; one `tensorboard --logdir` over the training/
+        # tree overlays every run ever made. Silently off if unavailable.
+        self.tb = None
+        self.tb_dir = self.output_dir / "tensorboard"
+        self.tb_image_every = 5          # epochs between patch images
+        self._tb_step = 0                # monotonic: global_step resets on restart
+        self._tb_epoch = 0
+        if tensorboard:
+            try:
+                from torch.utils.tensorboard import SummaryWriter
+                self.tb = SummaryWriter(log_dir=str(self.tb_dir))
+            except Exception as e:  # not installed, or logdir not writable
+                logger.info(f"TensorBoard logging disabled: {e}")
+
+    def _tb_config_markdown(self) -> str:
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.model.parameters())
+        rows = [
+            ("epochs", self.num_epochs),
+            ("batch size", getattr(self.dataloader, "batch_size", "?")),
+            ("gradient accumulation", self.gradient_accumulation_steps),
+            ("learning rate", self.learning_rate),
+            ("mixed precision", f"{self.use_mixed_precision} ({self.amp_dtype})" if self.use_mixed_precision else "False"),
+            ("loss", self.loss_type),
+            ("margin", self.margin),
+            ("balance classes", self.balance_classes),
+            ("label smoothing", self.label_smoothing),
+            ("distillation lambda", self.distillation_lambda),
+            ("mask unannotated", self.mask_unannotated),
+            ("trainable params", f"{trainable:,} of {total:,} ({100 * trainable / max(total, 1):.2f}%)"),
+            ("device", str(self.device)),
+        ]
+        return "| setting | value |\n|---|---|\n" + "\n".join(f"| {k} | {v} |" for k, v in rows)
+
+    @torch.no_grad()
+    def _tb_log_images(self, raw, target, pred, mask):
+        """Mid-Z slice of one sample: raw (centre-cropped to the output), target, prediction, mask.
+
+        This is the picture that would have shown augmentation doing nothing
+        for five months, and that shows raw and labels moving together once
+        it does something. Never lets a display problem stop training.
+        """
+        try:
+            p = torch.sigmoid(pred[0, 0].detach().float()).cpu()
+            t = target[0, 0].detach().float().cpu()
+            r = raw[0, 0].detach().float().cpu()
+            # Valid-padding models emit a smaller volume than they read.
+            c = [(rs - ps) // 2 for rs, ps in zip(r.shape, p.shape)]
+            r = r[c[0]:c[0] + p.shape[0], c[1]:c[1] + p.shape[1], c[2]:c[2] + p.shape[2]]
+            z = p.shape[0] // 2
+            r2 = r[z]
+            r2 = (r2 - r2.min()) / (r2.max() - r2.min() + 1e-8)
+            step = self._tb_epoch
+            self.tb.add_image("patch/raw", r2[None], step)
+            self.tb.add_image("patch/target", t[z][None].clamp(0, 1), step)
+            self.tb.add_image("patch/prediction", p[z][None], step)
+            if mask is not None:
+                self.tb.add_image("patch/mask", mask[0, 0, z].detach().float().cpu()[None].clamp(0, 1), step)
+        except Exception as e:
+            logger.debug(f"TensorBoard image logging skipped: {e}")
 
     def _fallback_to_fp32(self):
         """Disable mixed precision training."""
@@ -606,6 +674,9 @@ class LoRAFinetuner:
             log_message("Mixed precision: False (fp32)")
         log_message(f"Mask unannotated regions: {self.mask_unannotated}")
         log_message(f"Log file: {log_file}")
+        if self.tb is not None:
+            log_message(f"TensorBoard: tensorboard --logdir {self.output_dir.parent}   (this run: {self.tb_dir})")
+            self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
         log_message("")
 
         self.model.train()
@@ -818,6 +889,19 @@ class LoRAFinetuner:
                 'best_loss': self.best_loss,
             })
 
+            if self.tb is not None:
+                self._tb_epoch += 1
+                data_wait, compute = getattr(self, "_last_epoch_timing", (0.0, 0.0))
+                e = self._tb_epoch
+                self.tb.add_scalar("epoch/loss", epoch_loss, e)
+                self.tb.add_scalar("epoch/supervised", selection_loss, e)
+                self.tb.add_scalar("epoch/best_supervised", self.best_loss, e)
+                self.tb.add_scalar("time/epoch_data_wait_s", data_wait, e)
+                self.tb.add_scalar("time/epoch_compute_s", compute, e)
+                if self.device.type == "cuda":
+                    self.tb.add_scalar("memory/peak_gb", torch.cuda.max_memory_allocated() / 1e9, e)
+                self.tb.flush()
+
         # Final checkpoint
         self.save_checkpoint(is_best=False)
 
@@ -826,6 +910,8 @@ class LoRAFinetuner:
         self._log_message("="*60)
         self._log_message("Training Complete!")
         self._log_message(f"Total time: {total_time/60:.2f} minutes")
+        if self.tb is not None:
+            self.tb.flush()
         self._log_message(f"Best loss: {self.best_loss:.6f}")
         self._log_message(f"Final loss: {epoch_loss:.6f}")
         self._log_message(f"Output directory: {self.output_dir}")
@@ -868,7 +954,17 @@ class LoRAFinetuner:
         # batch of the epoch (cumulative grad before zero_grad fires).
         diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
-        for batch_idx, batch in enumerate(self.dataloader):
+        # Fetch explicitly so the wait on the loader is measurable. That is
+        # the number that says whether prefetching keeps up, and it was lost
+        # when the loss_history.csv instrumentation fell out of the tree.
+        epoch_data_wait = 0.0
+        epoch_compute = 0.0
+        batch_iter = iter(self.dataloader)
+        for batch_idx in range(num_batches):
+            t_fetch = time.time()
+            batch = next(batch_iter)
+            t_after_fetch = time.time()
+            epoch_data_wait += t_after_fetch - t_fetch
             # The dataset yields a third tensor once the session has good
             # regions: a per-voxel mask marking where the student should be
             # held to the teacher. Older datasets yield the 2-tuple, so both
@@ -1000,6 +1096,9 @@ class LoRAFinetuner:
                 # Scale loss for gradient accumulation
                 loss = loss / self.gradient_accumulation_steps
 
+            if self.tb is not None and batch_idx == 0 and self.current_epoch % self.tb_image_every == 0:
+                self._tb_log_images(raw, target, pred, mask)
+
             # Backward pass
             self.scaler.scale(loss).backward()
 
@@ -1024,9 +1123,21 @@ class LoRAFinetuner:
                 self.scaler.update()
                 self.optimizer.zero_grad()
                 self.global_step += 1
+                if self.tb is not None:
+                    self._tb_step += 1
+                    self.tb.add_scalar("train/loss", loss.item() * self.gradient_accumulation_steps, self._tb_step)
+                    self.tb.add_scalar("train/supervised", supervised_loss.item(), self._tb_step)
+                    if self.distillation_lambda > 0:
+                        self.tb.add_scalar("train/distillation", distillation_loss.item(), self._tb_step)
+                    self.tb.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"], self._tb_step)
+                    self.tb.add_scalar("time/step_s", time.time() - t_after_fetch, self._tb_step)
+                    self.tb.add_scalar("time/data_wait_s", t_after_fetch - t_fetch, self._tb_step)
 
             # Accumulate losses (unscaled)
             batch_loss = loss.item() * self.gradient_accumulation_steps
+            # .item() above synchronised the device, so this is real compute time.
+            epoch_compute += time.time() - t_after_fetch
+            self._last_epoch_timing = (epoch_data_wait, epoch_compute)
             if not math.isfinite(batch_loss):
                 logger.warning(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}. Aborting epoch.")
                 self.last_supervised_loss = float('nan')

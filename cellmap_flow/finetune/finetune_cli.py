@@ -678,6 +678,12 @@ def build_arg_parser():
         default=4,
         help="DataLoader num_workers (default: 4)"
     )
+    parser.add_argument(
+        "--no-tensorboard",
+        action="store_true",
+        help="Do not write TensorBoard event files to <output-dir>/tensorboard "
+             "(default: write them; view with `tensorboard --logdir <training dir>`)"
+    )
 
     # Resuming
     parser.add_argument(
@@ -940,6 +946,7 @@ def main():
             margin=args.margin,
             balance_classes=args.balance_classes,
             target_transform=target_transform,
+            tensorboard=not args.no_tensorboard,
         )
 
         # Resume from checkpoint if specified (first iteration only)
