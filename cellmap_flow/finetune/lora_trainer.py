@@ -578,8 +578,16 @@ class LoRAFinetuner:
         log_file = self.output_dir / "training_log.txt"
 
         def log_message(msg):
-            """Log to console (tee handles writing to log file)."""
-            print(msg, flush=True)
+            """Log to console (tee handles writing to log file).
+
+            Timestamped like the logger's lines so epoch duration can be read
+            off the log: the 2026-09-23 A/B runs had none on the per-epoch
+            summaries, and per-arm speed had to come from LSF's start/end
+            times instead. The progress parsers in finetune_job_manager use
+            unanchored re.findall, so the prefix does not affect them.
+            """
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{stamp} {msg}" if msg else msg, flush=True)
 
         log_message("="*60)
         log_message("Starting LoRA Finetuning")
