@@ -1663,9 +1663,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       // Disable button and show loading. The submit endpoint may run a
-      // pre-submit MinIO sync (legacy CorrectionDataset path); if that
-      // takes a while, switch the spinner label to make it obvious that
-      // the dashboard is doing real work, not stuck.
+      // pre-submit MinIO sync; if that takes a while, switch the spinner
+      // label to make it obvious that the dashboard is doing real work,
+      // not stuck.
       startFinetuningBtn.disabled = true;
       startFinetuningBtn.innerHTML =
         '<span class="spinner-border spinner-border-sm"></span> Submitting...';

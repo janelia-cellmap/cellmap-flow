@@ -890,7 +890,7 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
     Extract a correction entry from a single annotated chunk in a sparse volume.
 
     Reads the annotation chunk, extracts raw data with context padding, and
-    creates a standard correction zarr entry compatible with CorrectionDataset.
+    creates a standard correction zarr entry.
 
     Args:
         volume_id: Volume identifier

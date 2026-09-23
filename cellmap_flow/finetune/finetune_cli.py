@@ -37,7 +37,7 @@ import torch
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
-from cellmap_flow.finetune.correction_dataset import create_dataloader
+from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 
 # Set up logging

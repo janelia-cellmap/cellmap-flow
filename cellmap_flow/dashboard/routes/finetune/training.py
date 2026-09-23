@@ -215,9 +215,9 @@ def submit_finetuning_response(data):
                 }
             ), 400
 
-        # Pre-training sync: only needed by the legacy CorrectionDataset path,
-        # which reads per-chunk _chunk_*.zarr extracts. The new VirtualPatchDataset
-        # reads the annotation_volume.zarr directly, so when a manifest is present
+        # Pre-training sync materialized per-chunk _chunk_*.zarr extracts for
+        # the old dataset, which has since been removed. VirtualPatchDataset
+        # reads annotation_volume.zarr directly, so when a manifest is present
         # the sync is wasted work and can hang submit for many minutes when the
         # volume contains imported YAML data.
         from cellmap_flow.finetune.virtual_dataset import read_manifest

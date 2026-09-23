@@ -43,7 +43,7 @@ Reviewer notes
 - ``len(self)`` is ``patches_per_epoch``; it has no relationship to the
   number of populated chunks. The trainer treats this as the epoch length.
 - The dataset returns ``(raw, annotation)`` tensors with shape
-  ``(1, Z, Y, X)`` matching :class:`CorrectionDataset`'s contract.
+  ``(1, Z, Y, X)``, which is the contract the trainer expects.
 """
 
 from __future__ import annotations
@@ -713,4 +713,77 @@ def dataset_from_manifest(
         dense_to_sparse_ratio=manifest.get("dense_to_sparse_ratio"),
         good_regions=load_good_regions_for(corrections_dir),
         rehearsal_fraction=manifest.get("rehearsal_fraction"),
+    )
+
+
+def create_dataloader(
+    corrections_zarr_path: str,
+    batch_size: int = 2,
+    patch_shape: Optional[Tuple[int, int, int]] = None,
+    augment: bool = True,
+    num_workers: int = 4,
+    shuffle: bool = True,
+    model_name: Optional[str] = None,
+) -> torch.utils.data.DataLoader:
+    """Build the training DataLoader for a corrections directory.
+
+    Requires a ``_virtual_sources.json`` manifest. This used to fall back to a
+    per-chunk ``CorrectionDataset`` when the manifest was absent, but that
+    dataset ignored good regions and the dense/sparse split, so the fallback
+    silently trained on the wrong thing. Every path that creates a session now
+    writes a manifest (volume creation, YAML import, training submit) and
+    restarts backfill one, so a missing manifest means something upstream
+    failed -- which is worth an exception rather than a quiet downgrade.
+
+    Args:
+        corrections_zarr_path: Session corrections directory.
+        batch_size: Clamped down to the dataset size when smaller.
+        patch_shape: Accepted for call-site compatibility; patch geometry comes
+            from the manifest, so this is unused.
+        augment: Accepted for call-site compatibility. This dataset applies
+            random patch-center jitter and nothing else; see the warning below.
+        num_workers: DataLoader workers. Spawned, not forked -- tensorstore
+            handles do not survive fork.
+        shuffle: Ignored; the dataset already samples randomly.
+        model_name: Accepted for call-site compatibility; unused.
+    """
+    manifest = read_manifest(corrections_zarr_path)
+    if manifest is None:
+        raise FileNotFoundError(
+            f"No {VIRTUAL_MANIFEST_FILENAME} in {corrections_zarr_path}. "
+            "The trainer reads annotations through a virtual-sources manifest; "
+            "without one there is nothing to train on. Re-create the session, "
+            "or re-import the crops, so the manifest gets written."
+        )
+
+    if augment:
+        logger.warning(
+            "augment=True, but this dataset only applies patch-center jitter "
+            f"(jitter_voxels={manifest.get('jitter_voxels') or 'default'}). "
+            "Flips, rotations and intensity augmentation are not implemented "
+            "here; --no-augment therefore has no effect."
+        )
+
+    dataset = dataset_from_manifest(manifest, corrections_zarr_path)
+
+    actual_batch_size = max(1, min(batch_size, len(dataset)))
+    if actual_batch_size != batch_size:
+        logger.info(
+            f"Clamped batch_size from {batch_size} to {actual_batch_size} "
+            f"({len(dataset)} patches per epoch available)"
+        )
+
+    logger.info(
+        f"Created DataLoader with {len(dataset)} patches/epoch, "
+        f"batch_size={actual_batch_size}, num_workers={num_workers}"
+    )
+
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size=actual_batch_size,
+        shuffle=False,  # the dataset samples randomly already
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=num_workers > 0,
+        multiprocessing_context="spawn" if num_workers > 0 else None,
     )
