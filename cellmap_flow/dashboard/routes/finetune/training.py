@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import re
@@ -215,9 +216,9 @@ def submit_finetuning_response(data):
                 }
             ), 400
 
-        # Pre-training sync: only needed by the legacy CorrectionDataset path,
-        # which reads per-chunk _chunk_*.zarr extracts. The new VirtualPatchDataset
-        # reads the annotation_volume.zarr directly, so when a manifest is present
+        # Pre-training sync materialized per-chunk _chunk_*.zarr extracts for
+        # the old dataset, which has since been removed. VirtualPatchDataset
+        # reads annotation_volume.zarr directly, so when a manifest is present
         # the sync is wasted work and can hang submit for many minutes when the
         # volume contains imported YAML data.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
@@ -262,6 +263,37 @@ def submit_finetuning_response(data):
             data.get("offsets", None),
         )
 
+        label_smoothing = data.get("label_smoothing", 0.1)
+        if output_type == "distance" and has_sparse:
+            # A distance target needs the 3D object boundary. Scribbles are
+            # strokes with unannotated voxels all around them, so the safe
+            # radius of every painted voxel is ~1 and next to nothing would be
+            # supervised. Fall back to what sparse annotations already use:
+            # a per-voxel binary target with margin loss (only the side of 0.5
+            # is enforced, so the model's gradual field survives) and
+            # distillation to the base model elsewhere.
+            logger.info(
+                "output_type=distance with sparse annotations: using binary "
+                "target + margin loss instead (a distance transform needs dense 3D labels)"
+            )
+            output_type = "binary"
+            if loss_type not in ("margin",):
+                loss_type = "margin"
+            if distillation_lambda <= 0:
+                distillation_lambda = 0.5
+        elif output_type == "distance":
+            # The soft distance target is only defined against BCE-with-logits;
+            # margin/dice assume hard labels and smoothing would blur a target
+            # that is already soft. The CLI rejects anything else, so decide
+            # here where the user can see it in the response.
+            if loss_type != "bce" or label_smoothing:
+                logger.info(
+                    f"output_type=distance: using bce loss without label smoothing "
+                    f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
+                )
+            loss_type = "bce"
+            label_smoothing = 0.0
+
         finetune_job = g.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
@@ -276,11 +308,15 @@ def submit_finetuning_response(data):
             auto_serve=data.get("auto_serve", True),
             mask_unannotated=has_sparse,
             loss_type=loss_type,
-            label_smoothing=data.get("label_smoothing", 0.1),
+            label_smoothing=label_smoothing,
             distillation_lambda=distillation_lambda,
             distillation_scope=data.get("distillation_scope", "unlabeled"),
             margin=data.get("margin", 0.3),
             balance_classes=data.get("balance_classes", False),
+            # Default off: these interactive runs are a few dozen gradient
+            # steps, where augmentation adds variance without the many
+            # repeat views it needs to pay for itself.
+            augment=data.get("augment", False),
             queue=data.get("queue", "gpu_h100"),
             output_type=output_type,
             select_channel=data.get("select_channel", None),
@@ -292,6 +328,8 @@ def submit_finetuning_response(data):
             "job_id": finetune_job.job_id,
             "lsf_job_id": get_lsf_job_id(finetune_job),
             "output_dir": str(finetune_job.output_dir),
+            # Over the parent so every run in the session tree overlays.
+            "tensorboard_command": f"tensorboard --logdir {os.path.dirname(str(finetune_job.output_dir))}",
             "output_type": output_type,
             "message": "Finetuning job submitted successfully",
         }

@@ -70,6 +70,28 @@ def _sh_quote(part: str) -> str:
     return f'"{escaped}"'
 
 
+def finetune_export_kwargs(output_dir, params=None) -> dict:
+    """Which artifact a finished run produced, as FinetuneModelConfig kwargs.
+
+    A LoRA run exports lora_adapter/; a full finetune (--lora-r 0) exports
+    full_finetune/model_state_dict.pt. Decided by what is on disk first --
+    the job's own record of lora_r is the fallback for a run that has not
+    written its export yet -- so the dashboard never points a viewer at an
+    adapter directory that a rank-0 run never made.
+    """
+    from pathlib import Path
+    output_dir = Path(output_dir)
+    weights = output_dir / "full_finetune" / "model_state_dict.pt"
+    adapter = output_dir / "lora_adapter"
+    if weights.exists():
+        return {"weights_path": str(weights)}
+    if adapter.exists():
+        return {"lora_adapter_path": str(adapter)}
+    if params and int(params.get("lora_r", 8) or 0) <= 0:
+        return {"weights_path": str(weights)}
+    return {"lora_adapter_path": str(adapter)}
+
+
 @dataclass
 class FinetuneJob:
     """Track a finetuning job with metadata, status, and training progress.
@@ -270,6 +292,7 @@ class FinetuneJobManager:
         serve_data_path: Optional[str],
         mask_unannotated: bool,
         balance_classes: bool,
+        augment: bool,
         output_type: str,
         select_channel: Optional[int],
         offsets: Optional[str],
@@ -320,6 +343,9 @@ class FinetuneJobManager:
             command_parts.append("--mask-unannotated")
         if balance_classes:
             command_parts.append("--balance-classes")
+        # Opt-out flag: only passed when augmentation is disabled.
+        if not augment:
+            command_parts.append("--no-augment")
         if output_type != "binary":
             command_parts += ["--output-type", str(output_type)]
         if select_channel is not None:
@@ -374,6 +400,7 @@ class FinetuneJobManager:
         distillation_scope: str,
         margin: float,
         balance_classes: bool,
+        augment: bool,
         channels: List[str],
         input_voxel_size: List[int],
         output_voxel_size: List[int],
@@ -407,6 +434,7 @@ class FinetuneJobManager:
                 "distillation_scope": distillation_scope,
                 "margin": margin,
                 "balance_classes": balance_classes,
+                "augment": augment,
                 "channels": channels,
                 "input_voxel_size": input_voxel_size,
                 "output_voxel_size": output_voxel_size,
@@ -440,6 +468,7 @@ class FinetuneJobManager:
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
         balance_classes: bool = False,
+        augment: bool = False,
         output_type: str = "binary",
         select_channel: Optional[int] = None,
         offsets: Optional[str] = None,
@@ -588,6 +617,7 @@ class FinetuneJobManager:
             serve_data_path=serve_data_path,
             mask_unannotated=mask_unannotated,
             balance_classes=balance_classes,
+            augment=augment,
             output_type=output_type,
             select_channel=select_channel,
             offsets=offsets,
@@ -614,6 +644,7 @@ class FinetuneJobManager:
             distillation_scope=distillation_scope,
             margin=margin,
             balance_classes=balance_classes,
+            augment=augment,
             channels=channels,
             input_voxel_size=input_voxel_size,
             output_voxel_size=output_voxel_size,
@@ -1016,8 +1047,8 @@ class FinetuneJobManager:
         from cellmap_flow.globals import g
         from cellmap_flow.models.models_config import FinetuneModelConfig
 
-        adapter_path = str(finetune_job.output_dir / "lora_adapter")
         params = finetune_job.params
+        export = finetune_export_kwargs(finetune_job.output_dir, params)
 
         # Find the base model's to_dict() from g.models_config
         base_model_dict = None
@@ -1037,10 +1068,10 @@ class FinetuneJobManager:
                     base_model_dict[key] = params[key]
 
         ft_config = FinetuneModelConfig(
-            lora_adapter_path=adapter_path,
             base_model=base_model_dict,
             name=finetuned_model_name,
             scale=params.get("scale"),
+            **export,
         )
 
         if not hasattr(g, "models_config"):
@@ -1142,27 +1173,37 @@ class FinetuneJobManager:
         job_id = finetune_job.job_id
         self.logger.info(f"Running post-completion for job {job_id}...")
 
-        # === Verify adapter files exist ===
+        # === Verify the training export exists ===
 
-        adapter_path = finetune_job.output_dir / "lora_adapter"
+        export = finetune_export_kwargs(finetune_job.output_dir, finetune_job.params)
+        if "weights_path" in export:
+            # Full finetune (--lora-r 0): a single state dict, no adapter dir.
+            weights_file = Path(export["weights_path"])
+            if not weights_file.exists():
+                raise RuntimeError(
+                    f"Training completed but full-finetune weights not found: {weights_file}"
+                )
+            self.logger.info(f"Verified full-finetune weights exist: {weights_file}")
+        else:
+            adapter_path = Path(export["lora_adapter_path"])
 
-        # Check for adapter model (supports both .bin and .safetensors formats)
-        adapter_model_bin = adapter_path / "adapter_model.bin"
-        adapter_model_safetensors = adapter_path / "adapter_model.safetensors"
+            # Check for adapter model (supports both .bin and .safetensors formats)
+            adapter_model_bin = adapter_path / "adapter_model.bin"
+            adapter_model_safetensors = adapter_path / "adapter_model.safetensors"
 
-        if not (adapter_model_bin.exists() or adapter_model_safetensors.exists()):
-            raise RuntimeError(
-                f"Training completed but adapter model not found. "
-                f"Checked: {adapter_model_bin} and {adapter_model_safetensors}"
-            )
+            if not (adapter_model_bin.exists() or adapter_model_safetensors.exists()):
+                raise RuntimeError(
+                    f"Training completed but adapter model not found. "
+                    f"Checked: {adapter_model_bin} and {adapter_model_safetensors}"
+                )
 
-        adapter_config_file = adapter_path / "adapter_config.json"
-        if not adapter_config_file.exists():
-            raise RuntimeError(
-                f"Training completed but adapter config not found: {adapter_config_file}"
-            )
+            adapter_config_file = adapter_path / "adapter_config.json"
+            if not adapter_config_file.exists():
+                raise RuntimeError(
+                    f"Training completed but adapter config not found: {adapter_config_file}"
+                )
 
-        self.logger.info(f"Verified LoRA adapter files exist in {adapter_path}")
+            self.logger.info(f"Verified LoRA adapter files exist in {adapter_path}")
 
         # === Generate finetuned model name ===
 
@@ -1258,8 +1299,8 @@ class FinetuneJobManager:
 
                 # Generate .yaml config
                 yaml_path = generate_finetuned_model_yaml(
-                    lora_adapter_path=str(adapter_path),
                     base_model_dict=base_model_dict,
+                    **export,
                     model_name=finetuned_model_name,
                     output_path=expected_yaml,
                     data_path=data_path,

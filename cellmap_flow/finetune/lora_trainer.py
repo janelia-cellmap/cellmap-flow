@@ -15,6 +15,28 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
+
+
+def as_probabilities(pred, model_has_sigmoid):
+    """The model's output as probabilities.
+
+    Left alone when the model already ends in a sigmoid (the cellmap
+    *_distance_* UNets do); a second sigmoid would squash [0, 1] into
+    [0.5, 0.73] and make a well-fitting prediction look like a constant.
+    """
+    return pred if model_has_sigmoid else torch.sigmoid(pred)
+
+
+def soft_target_entropy(target, eps=1e-7):
+    """Per-voxel BCE that a perfectly calibrated prediction still pays.
+
+    -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+    t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+    of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
+    model sitting on its floor. Report the loss minus this instead.
+    """
+    t = target.clamp(eps, 1 - eps)
+    return -(t * torch.log(t) + (1 - t) * torch.log(1 - t))
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -231,6 +253,7 @@ class LoRAFinetuner:
         margin: float = 0.3,
         balance_classes: bool = False,
         target_transform=None,
+        tensorboard: bool = True,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -248,6 +271,11 @@ class LoRAFinetuner:
         self.distillation_all_voxels = distillation_all_voxels
         self.balance_classes = balance_classes
         self.target_transform = target_transform
+        # Kept for the TensorBoard config card; the loss objects below do
+        # not expose them uniformly.
+        self.loss_type = loss_type
+        self.margin = margin
+        self.learning_rate = learning_rate
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -282,6 +310,11 @@ class LoRAFinetuner:
         # Loss function
         self._use_bce = False
         self._use_mse = False
+        self._model_has_sigmoid = False   # set by _apply_probability_output_mode
+        self._step_bce_metrics = None     # (entropy floor, mean |p - t|) of the last step
+        self._epoch_bce_floor_sum = 0.0
+        self._epoch_mae_sum = 0.0
+        self._epoch_bce_n = 0
         if loss_type == "dice":
             self.criterion = DiceLoss()
         elif loss_type == "bce":
@@ -351,8 +384,31 @@ class LoRAFinetuner:
                 scope_str = "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
-        # Mixed precision scaler
-        self.scaler = GradScaler('cuda', enabled=use_mixed_precision)
+        # Autocast dtype. This defaulted to fp16 (autocast's CUDA default) and
+        # every run on this model NaN'd out on the startup probe and fell back
+        # to fp32 -- so "mixed precision" was never once in effect, and the
+        # tensor cores sat idle for the whole job.
+        #
+        # fp16 carries 5 exponent bits, so a UNet this deep overflows in the
+        # forward pass. bf16 has fp32's 8, which is exactly the failure mode
+        # it exists to fix, and needs no loss scaling. Ampere and newer only
+        # (H100/H200 = cc 9.0 yes; the RTX 2080 Ti workstation = cc 7.5 no),
+        # so fall back to fp16 where it is unavailable and let the existing
+        # probe demote to fp32 if that NaNs too.
+        self.amp_dtype = torch.float16
+        if self.device.type == "cuda":
+            try:
+                if torch.cuda.is_bf16_supported():
+                    self.amp_dtype = torch.bfloat16
+            except Exception as e:
+                logger.debug(f"bf16 support check failed ({e}); staying on fp16.")
+
+        # GradScaler compensates for fp16's narrow range; bf16 does not need
+        # it, and enabling it there costs a little and hides real overflows.
+        self.scaler = GradScaler(
+            'cuda',
+            enabled=use_mixed_precision and self.amp_dtype is torch.float16,
+        )
 
         # Training state
         self.current_epoch = 0
@@ -364,10 +420,80 @@ class LoRAFinetuner:
         self.last_supervised_loss = float('nan')
         self.training_stats = []
 
+        # TensorBoard. File-based, so it works from GPU nodes with no network
+        # and needs no service; one `tensorboard --logdir` over the training/
+        # tree overlays every run ever made. Silently off if unavailable.
+        self.tb = None
+        self.tb_dir = self.output_dir / "tensorboard"
+        self.tb_image_every = 5          # epochs between patch images
+        self._tb_step = 0                # monotonic: global_step resets on restart
+        self._tb_epoch = 0
+        if tensorboard:
+            try:
+                from torch.utils.tensorboard import SummaryWriter
+                self.tb = SummaryWriter(log_dir=str(self.tb_dir))
+            except Exception as e:  # not installed, or logdir not writable
+                logger.info(f"TensorBoard logging disabled: {e}")
+
+    def _tb_config_markdown(self) -> str:
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.model.parameters())
+        rows = [
+            ("epochs", self.num_epochs),
+            ("batch size", getattr(self.dataloader, "batch_size", "?")),
+            ("gradient accumulation", self.gradient_accumulation_steps),
+            ("learning rate", self.learning_rate),
+            ("mixed precision", f"{self.use_mixed_precision} ({self.amp_dtype})" if self.use_mixed_precision else "False"),
+            ("loss", self.loss_type),
+            ("margin", self.margin),
+            ("balance classes", self.balance_classes),
+            ("label smoothing", self.label_smoothing),
+            ("distillation lambda", self.distillation_lambda),
+            ("mask unannotated", self.mask_unannotated),
+            ("trainable params", f"{trainable:,} of {total:,} ({100 * trainable / max(total, 1):.2f}%)"),
+            ("device", str(self.device)),
+        ]
+        return "| setting | value |\n|---|---|\n" + "\n".join(f"| {k} | {v} |" for k, v in rows)
+
+    @torch.no_grad()
+    def _tb_log_images(self, raw, target, pred, mask):
+        """Mid-Z slice of one sample as one strip: raw (centre-cropped to the output) | target | prediction | mask.
+
+        This is the picture that would have shown augmentation doing nothing
+        for five months, and that shows raw and labels moving together once
+        it does something. Never lets a display problem stop training.
+        """
+        try:
+            p = as_probabilities(pred[0, 0].detach().float(), self._model_has_sigmoid).cpu()
+            t = target[0, 0].detach().float().cpu()
+            r = raw[0, 0].detach().float().cpu()
+            # Valid-padding models emit a smaller volume than they read.
+            c = [(rs - ps) // 2 for rs, ps in zip(r.shape, p.shape)]
+            r = r[c[0]:c[0] + p.shape[0], c[1]:c[1] + p.shape[1], c[2]:c[2] + p.shape[2]]
+            z = p.shape[0] // 2
+            r2 = r[z]
+            r2 = (r2 - r2.min()) / (r2.max() - r2.min() + 1e-8)
+            m2 = (
+                mask[0, 0, z].detach().float().cpu().clamp(0, 1)
+                if mask is not None else torch.zeros_like(r2)
+            )
+            # One strip per epoch, raw | target | prediction | mask, separated
+            # by a white line: four tags per epoch was too much to scroll.
+            sep = torch.ones(r2.shape[0], 2)
+            strip = torch.cat(
+                [r2, sep, t[z].clamp(0, 1), sep, p[z].clamp(0, 1), sep, m2], dim=1
+            )
+            self.tb.add_image("patch/raw|target|prediction|mask", strip[None], self._tb_epoch)
+        except Exception as e:
+            logger.debug(f"TensorBoard image logging skipped: {e}")
+
     def _fallback_to_fp32(self):
         """Disable mixed precision training."""
         self.use_mixed_precision = False
         self.scaler = GradScaler('cuda', enabled=False)
+        logger.warning(
+            f"Mixed precision disabled (was {self.amp_dtype}); training in fp32."
+        )
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -379,6 +505,11 @@ class LoRAFinetuner:
             for name, param in self.model.named_parameters():
                 if 'lora_' in name and param.requires_grad:
                     nn.init.zeros_(param) if 'lora_B' in name else nn.init.kaiming_uniform_(param, a=math.sqrt(5))
+        else:
+            logger.warning(
+                "Full finetune: a fresh restart resets the optimizer but NOT the "
+                "weights, which continue from where the previous run left them."
+            )
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.optimizer.defaults['lr'],
@@ -465,6 +596,7 @@ class LoRAFinetuner:
 
     def _apply_probability_output_mode(self, log_message):
         """Configure losses for models that already emit probabilities."""
+        self._model_has_sigmoid = True
         if self._use_bce:
             log_message(
                 "Switching BCEWithLogitsLoss to BCELoss to avoid double-sigmoid"
@@ -552,8 +684,16 @@ class LoRAFinetuner:
         log_file = self.output_dir / "training_log.txt"
 
         def log_message(msg):
-            """Log to console (tee handles writing to log file)."""
-            print(msg, flush=True)
+            """Log to console (tee handles writing to log file).
+
+            Timestamped like the logger's lines so epoch duration can be read
+            off the log: the 2026-09-23 A/B runs had none on the per-epoch
+            summaries, and per-arm speed had to come from LSF's start/end
+            times instead. The progress parsers in finetune_job_manager use
+            unanchored re.findall, so the prefix does not affect them.
+            """
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{stamp} {msg}" if msg else msg, flush=True)
 
         log_message("="*60)
         log_message("Starting LoRA Finetuning")
@@ -562,9 +702,19 @@ class LoRAFinetuner:
         log_message(f"Batches per epoch: {len(self.dataloader)}")
         log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
         log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
-        log_message(f"Mixed precision: {self.use_mixed_precision}")
+        if self.use_mixed_precision:
+            log_message(
+                f"Mixed precision: {self.use_mixed_precision} "
+                f"(dtype={str(self.amp_dtype).replace('torch.', '')}, "
+                f"grad_scaler={self.scaler.is_enabled()})"
+            )
+        else:
+            log_message("Mixed precision: False (fp32)")
         log_message(f"Mask unannotated regions: {self.mask_unannotated}")
         log_message(f"Log file: {log_file}")
+        if self.tb is not None:
+            log_message(f"TensorBoard: tensorboard --logdir {self.output_dir.parent}   (this run: {self.tb_dir})")
+            self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
         log_message("")
 
         self.model.train()
@@ -580,7 +730,9 @@ class LoRAFinetuner:
                 probe_raw = next(iter(self.dataloader))[0]
                 probe_raw = probe_raw[:1]
                 probe_raw = probe_raw.to(self.device)
-                with torch.no_grad(), autocast('cuda', enabled=True):
+                with torch.no_grad(), autocast(
+                    'cuda', enabled=True, dtype=self.amp_dtype
+                ):
                     probe_out = self.model(probe_raw)
                 if not torch.isfinite(probe_out).all():
                     log_message("WARNING: Model produces NaN/Inf under FP16 — falling back to FP32.")
@@ -615,7 +767,7 @@ class LoRAFinetuner:
                     device=self.device,
                 ) * 100
                 with torch.no_grad(), autocast(
-                    'cuda', enabled=self.use_mixed_precision
+                    'cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype
                 ):
                     probe_out = self.model(probe_extreme)
                     if self.select_channel is not None:
@@ -750,12 +902,23 @@ class LoRAFinetuner:
             if not math.isfinite(selection_loss):
                 selection_loss = epoch_loss
 
-            # Log epoch results
+            # Log epoch results. On soft targets the BCE cannot go below the
+            # target's entropy, so also say how far above that floor it sits.
+            bce_extra = ""
+            epoch_floor = epoch_mae = None
+            if self._epoch_bce_n:
+                epoch_floor = self._epoch_bce_floor_sum / self._epoch_bce_n
+                epoch_mae = self._epoch_mae_sum / self._epoch_bce_n
+                bce_extra = (
+                    f" - Above floor: {selection_loss - epoch_floor:.6f}"
+                    f" - MAE: {epoch_mae:.6f}"
+                )
             self._log_message(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
                 f"Supervised: {selection_loss:.6f} - "
                 f"Best supervised: {self.best_loss:.6f}"
+                f"{bce_extra}"
             )
 
             # Save checkpoint if best
@@ -775,6 +938,23 @@ class LoRAFinetuner:
                 'best_loss': self.best_loss,
             })
 
+            if self.tb is not None:
+                self._tb_epoch += 1
+                data_wait, compute = getattr(self, "_last_epoch_timing", (0.0, 0.0))
+                e = self._tb_epoch
+                self.tb.add_scalar("epoch/loss", epoch_loss, e)
+                self.tb.add_scalar("epoch/supervised", selection_loss, e)
+                self.tb.add_scalar("epoch/best_supervised", self.best_loss, e)
+                if epoch_floor is not None:
+                    self.tb.add_scalar("epoch/bce_floor", epoch_floor, e)
+                    self.tb.add_scalar("epoch/supervised_above_floor", selection_loss - epoch_floor, e)
+                    self.tb.add_scalar("epoch/mean_abs_error", epoch_mae, e)
+                self.tb.add_scalar("time/epoch_data_wait_s", data_wait, e)
+                self.tb.add_scalar("time/epoch_compute_s", compute, e)
+                if self.device.type == "cuda":
+                    self.tb.add_scalar("memory/peak_gb", torch.cuda.max_memory_allocated() / 1e9, e)
+                self.tb.flush()
+
         # Final checkpoint
         self.save_checkpoint(is_best=False)
 
@@ -783,6 +963,8 @@ class LoRAFinetuner:
         self._log_message("="*60)
         self._log_message("Training Complete!")
         self._log_message(f"Total time: {total_time/60:.2f} minutes")
+        if self.tb is not None:
+            self.tb.flush()
         self._log_message(f"Best loss: {self.best_loss:.6f}")
         self._log_message(f"Final loss: {epoch_loss:.6f}")
         self._log_message(f"Output directory: {self.output_dir}")
@@ -802,6 +984,9 @@ class LoRAFinetuner:
         epoch_supervised_loss = 0.0
         epoch_distill_loss = 0.0
         num_batches = len(self.dataloader)
+        self._epoch_bce_floor_sum = 0.0
+        self._epoch_mae_sum = 0.0
+        self._epoch_bce_n = 0
 
         # Gradient-flow diagnostic: watch one LoRA-B param across the epoch
         # AND, at end of epoch, count how many trainable params received any
@@ -825,7 +1010,17 @@ class LoRAFinetuner:
         # batch of the epoch (cumulative grad before zero_grad fires).
         diag_param_grad_seen_nonzero: dict[str, bool] = {}
 
-        for batch_idx, batch in enumerate(self.dataloader):
+        # Fetch explicitly so the wait on the loader is measurable. That is
+        # the number that says whether prefetching keeps up, and it was lost
+        # when the loss_history.csv instrumentation fell out of the tree.
+        epoch_data_wait = 0.0
+        epoch_compute = 0.0
+        batch_iter = iter(self.dataloader)
+        for batch_idx in range(num_batches):
+            t_fetch = time.time()
+            batch = next(batch_iter)
+            t_after_fetch = time.time()
+            epoch_data_wait += t_after_fetch - t_fetch
             # The dataset yields a third tensor once the session has good
             # regions: a per-voxel mask marking where the student should be
             # held to the teacher. Older datasets yield the 2-tuple, so both
@@ -867,7 +1062,10 @@ class LoRAFinetuner:
                 with torch.no_grad():
                     self.model.disable_adapter_layers()
                     try:
-                        with autocast('cuda', enabled=self.use_mixed_precision):
+                        with autocast(
+                            'cuda', enabled=self.use_mixed_precision,
+                            dtype=self.amp_dtype,
+                        ):
                             teacher_pred = self.model(raw)
                             if self.select_channel is not None:
                                 teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
@@ -878,7 +1076,9 @@ class LoRAFinetuner:
                     logger.warning(f"NaN/Inf in teacher_pred! range=[{teacher_pred.min():.4f}, {teacher_pred.max():.4f}]")
 
             # Student forward pass with mixed precision
-            with autocast('cuda', enabled=self.use_mixed_precision):
+            with autocast(
+                'cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype
+            ):
                 pred = self.model(raw)
 
                 if not torch.isfinite(pred).all():
@@ -888,21 +1088,42 @@ class LoRAFinetuner:
                 if self.select_channel is not None:
                     pred = pred[:, self.select_channel:self.select_channel+1, :, :, :]
 
+            # Losses in fp32, outside autocast; only the forward pass runs in
+            # reduced precision. Two reasons. Models with a built-in sigmoid
+            # (the cellmap *_distance_* UNets) make the trainer swap to
+            # BCELoss on probabilities, and autocast refuses to run
+            # binary_cross_entropy at all. And a bf16 probability near 0 or 1
+            # has too few mantissa bits for log(p) / log(1-p) to mean much.
+            with autocast('cuda', enabled=False):
+                pred = pred.float()
+                if teacher_pred is not None:
+                    teacher_pred = teacher_pred.float()
+
                 # Compute supervised loss with optional mask
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
                     per_element_loss = self.criterion(pred, target)
-                    if self.balance_classes:
-                        # Average fg and bg separately so each contributes equally
-                        fg_mask = target * mask
-                        bg_mask = (1.0 - target) * mask
-                        fg_count = fg_mask.sum().clamp(min=1)
-                        bg_count = bg_mask.sum().clamp(min=1)
-                        fg_contrib = (per_element_loss * fg_mask).sum() / fg_count
-                        bg_contrib = (per_element_loss * bg_mask).sum() / bg_count
-                        supervised_loss = (fg_contrib + bg_contrib) / 2.0
-                    else:
-                        supervised_loss = (per_element_loss * mask).sum() / mask.sum().clamp(min=1)
+
+                    def _masked_mean(per_voxel):
+                        if self.balance_classes:
+                            # Average fg and bg separately so each contributes equally
+                            fg_mask = target * mask
+                            bg_mask = (1.0 - target) * mask
+                            fg_contrib = (per_voxel * fg_mask).sum() / fg_mask.sum().clamp(min=1)
+                            bg_contrib = (per_voxel * bg_mask).sum() / bg_mask.sum().clamp(min=1)
+                            return (fg_contrib + bg_contrib) / 2.0
+                        return (per_voxel * mask).sum() / mask.sum().clamp(min=1)
+
+                    supervised_loss = _masked_mean(per_element_loss)
+                    if self._use_bce:
+                        # Same weighting applied to the target's own entropy
+                        # gives the floor this batch's BCE cannot go below;
+                        # mean |p - t| is the loss-independent view of the fit.
+                        with torch.no_grad():
+                            bce_floor = _masked_mean(soft_target_entropy(target))
+                            prob = as_probabilities(pred, self._model_has_sigmoid)
+                            mae = ((prob - target).abs() * mask).sum() / mask.sum().clamp(min=1)
+                        self._step_bce_metrics = (bce_floor.item(), mae.item())
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
                     # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
                     supervised_loss = self.criterion(pred, target, mask)
@@ -952,6 +1173,9 @@ class LoRAFinetuner:
                 # Scale loss for gradient accumulation
                 loss = loss / self.gradient_accumulation_steps
 
+            if self.tb is not None and batch_idx == 0 and self.current_epoch % self.tb_image_every == 0:
+                self._tb_log_images(raw, target, pred, mask)
+
             # Backward pass
             self.scaler.scale(loss).backward()
 
@@ -976,9 +1200,26 @@ class LoRAFinetuner:
                 self.scaler.update()
                 self.optimizer.zero_grad()
                 self.global_step += 1
+                if self.tb is not None:
+                    self._tb_step += 1
+                    self.tb.add_scalar("train/loss", loss.item() * self.gradient_accumulation_steps, self._tb_step)
+                    self.tb.add_scalar("train/supervised", supervised_loss.item(), self._tb_step)
+                    if self._step_bce_metrics is not None:
+                        floor, mae = self._step_bce_metrics
+                        self.tb.add_scalar("train/bce_floor", floor, self._tb_step)
+                        self.tb.add_scalar("train/supervised_above_floor", supervised_loss.item() - floor, self._tb_step)
+                        self.tb.add_scalar("train/mean_abs_error", mae, self._tb_step)
+                    if self.distillation_lambda > 0:
+                        self.tb.add_scalar("train/distillation", distillation_loss.item(), self._tb_step)
+                    self.tb.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"], self._tb_step)
+                    self.tb.add_scalar("time/step_s", time.time() - t_after_fetch, self._tb_step)
+                    self.tb.add_scalar("time/data_wait_s", t_after_fetch - t_fetch, self._tb_step)
 
             # Accumulate losses (unscaled)
             batch_loss = loss.item() * self.gradient_accumulation_steps
+            # .item() above synchronised the device, so this is real compute time.
+            epoch_compute += time.time() - t_after_fetch
+            self._last_epoch_timing = (epoch_data_wait, epoch_compute)
             if not math.isfinite(batch_loss):
                 logger.warning(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}. Aborting epoch.")
                 self.last_supervised_loss = float('nan')
@@ -986,6 +1227,10 @@ class LoRAFinetuner:
             epoch_loss += batch_loss
             epoch_supervised_loss += supervised_loss.item()
             epoch_distill_loss += distillation_loss.item()
+            if self._step_bce_metrics is not None:
+                self._epoch_bce_floor_sum += self._step_bce_metrics[0]
+                self._epoch_mae_sum += self._step_bce_metrics[1]
+                self._epoch_bce_n += 1
 
             # Log progress every batch (since we have few batches)
             avg_loss = epoch_loss / (batch_idx + 1)
@@ -1052,6 +1297,13 @@ class LoRAFinetuner:
         self.last_supervised_loss = epoch_supervised_loss / num_batches
         return epoch_loss / num_batches
 
+    def _is_peft(self) -> bool:
+        try:
+            from peft import PeftModel
+        except ImportError:
+            return False
+        return isinstance(self.model, PeftModel)
+
     def save_checkpoint(self, is_best: bool = False):
         """
         Save training checkpoint.
@@ -1061,6 +1313,28 @@ class LoRAFinetuner:
         """
         checkpoint_name = "best_checkpoint.pth" if is_best else f"checkpoint_epoch_{self.current_epoch+1}.pth"
         checkpoint_path = self.output_dir / checkpoint_name
+        if not self._is_peft():
+            # Full finetune: every parameter is trainable, so a LoRA-style
+            # checkpoint would be the whole model plus two Adam moments --
+            # ~9.5 GB for an 800M-param UNet, twenty times per run. Keep only
+            # the best weights, without optimizer state (no resume), which is
+            # what save_adapter() exports anyway.
+            if not is_best:
+                if not getattr(self, "_warned_full_ckpt", False):
+                    logger.info("Full finetune: skipping periodic checkpoints; best_checkpoint.pth holds the full weights.")
+                    self._warned_full_ckpt = True
+                return
+            torch.save({
+                'epoch': self.current_epoch,
+                'global_step': self.global_step,
+                'model_state_dict': self.model.state_dict(),
+                'best_loss': self.best_loss,
+                'training_stats': self.training_stats,
+                'lora_only': False,
+                'full_model': True,
+            }, checkpoint_path)
+            logger.debug(f"Full-model checkpoint saved: {checkpoint_path}")
+            return
 
         # Save only trainable (LoRA) parameters to avoid writing the full
         # 800M+ param base model to disk every checkpoint.
@@ -1107,6 +1381,15 @@ class LoRAFinetuner:
         else:
             logger.warning("No best checkpoint found, saving adapter from final epoch weights")
 
+        if not self._is_peft():
+            # Full finetune: there is no adapter; export the whole state dict
+            # where FinetuneModelConfig(weights_path=...) expects it.
+            out = self.output_dir / "full_finetune"
+            out.mkdir(parents=True, exist_ok=True)
+            weights = out / "model_state_dict.pt"
+            torch.save(self.model.state_dict(), weights)
+            logger.info(f"Full finetuned weights saved to: {weights}")
+            return str(weights)
         save_lora_adapter(self.model, adapter_path)
         logger.info(f"LoRA adapter saved to: {adapter_path}")
 
@@ -1124,8 +1407,10 @@ class LoRAFinetuner:
             self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         else:
             self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        if 'optimizer_state_dict' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if 'scaler_state_dict' in checkpoint:
+            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         self.current_epoch = checkpoint['epoch']
         self.global_step = checkpoint['global_step']

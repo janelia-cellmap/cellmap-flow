@@ -18,10 +18,23 @@ import torch.nn as nn
 logger = logging.getLogger(__name__)
 
 
+def _narrowest_dim(module: nn.Module) -> Optional[int]:
+    """min(in, out) width of a conv/linear layer, or None if it has neither."""
+    if isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
+        return min(module.in_channels, module.out_channels)
+    if isinstance(module, nn.Linear):
+        return min(module.in_features, module.out_features)
+    w = getattr(module, "weight", None)
+    if isinstance(w, torch.Tensor) and w.ndim >= 2:
+        return min(w.shape[0], w.shape[1])
+    return None
+
+
 def detect_adaptable_layers(
     model: nn.Module,
     include_patterns: Optional[List[str]] = None,
     exclude_patterns: Optional[List[str]] = None,
+    min_channels: int = 0,
 ) -> List[str]:
     """
     Automatically detect layers suitable for LoRA adaptation.
@@ -40,6 +53,15 @@ def detect_adaptable_layers(
                          If None, includes all Conv/Linear layers
         exclude_patterns: List of substrings for layer names to exclude
                          Default: ['bn', 'norm']
+        min_channels: Skip layers whose narrower side (in or out) is below
+                     this. 0 adapts everything. Narrow layers are where LoRA
+                     is expensive for nothing: PEFT builds lora_A as a
+                     full-kernel conv Cin -> r, so on a 16-channel layer at
+                     full resolution the adapter is 4x the FLOPs of the layer
+                     it adapts and runs bandwidth-bound. On
+                     mito-aff-unet-setup-16 the seven layers under 96
+                     channels hold ~1% of the adapter's parameters and cost
+                     41% of every training step (0.095 -> 0.056 s at 178^3).
 
     Returns:
         List of layer names suitable for LoRA adaptation
@@ -50,6 +72,7 @@ def detect_adaptable_layers(
         exclude_patterns = ['bn', 'norm']
 
     adaptable = []
+    skipped_narrow = []
 
     for name, module in model.named_modules():
         is_adaptable = isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear))
@@ -71,9 +94,23 @@ def detect_adaptable_layers(
             logger.debug(f"Excluding layer: {name} (matched exclude pattern)")
             continue
 
+        if min_channels > 0:
+            width = _narrowest_dim(module)
+            if width is not None and width < min_channels:
+                skipped_narrow.append((name, width))
+                continue
+
         adaptable.append(name)
 
     logger.info(f"Detected {len(adaptable)} adaptable layers")
+    if skipped_narrow:
+        # Loud on purpose: a run that meant to skip these and did not is
+        # indistinguishable from the log otherwise, and costs 1.7x.
+        logger.info(
+            f"LoRA min_channels={min_channels}: skipping {len(skipped_narrow)} "
+            f"narrow layer(s), adapting {len(adaptable)}. Skipped: "
+            + ", ".join(f"{n} ({w} ch)" for n, w in skipped_narrow)
+        )
     if len(adaptable) > 0:
         logger.debug(f"Adaptable layers: {adaptable[:5]}..." if len(adaptable) > 5 else f"Adaptable layers: {adaptable}")
 
@@ -181,6 +218,7 @@ def wrap_model_with_lora(
     lora_dropout: float = 0.1,
     modules_to_save: Optional[List[str]] = None,
     task_type: Optional[str] = None,
+    lora_min_channels: int = 0,
 ) -> nn.Module:
     """
     Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
@@ -198,6 +236,9 @@ def wrap_model_with_lora(
                     Controls strength of LoRA updates
                     Typical: 2*r, default 16
         lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
+        lora_min_channels: When auto-detecting, skip layers narrower than this
+                on either side; see detect_adaptable_layers. Ignored when
+                target_modules is given explicitly. Default 0 (adapt all).
         modules_to_save: Additional modules to make trainable (e.g., final layer)
         task_type: PEFT task type. Options:
                    - "FEATURE_EXTRACTION" (default, for general models)
@@ -264,7 +305,7 @@ def wrap_model_with_lora(
 
     # Auto-detect target modules if not specified
     if target_modules is None:
-        target_modules = detect_adaptable_layers(model)
+        target_modules = detect_adaptable_layers(model, min_channels=lora_min_channels)
         if len(target_modules) == 0:
             raise ValueError(
                 "No adaptable layers found in model. "
@@ -297,7 +338,7 @@ def wrap_model_with_lora(
 
     logger.info(
         f"Creating LoRA model with r={lora_r}, alpha={lora_alpha}, "
-        f"dropout={lora_dropout}"
+        f"dropout={lora_dropout}, min_channels={lora_min_channels}"
     )
 
     # Wrap model with PEFT
