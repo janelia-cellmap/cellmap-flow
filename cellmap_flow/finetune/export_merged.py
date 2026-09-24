@@ -54,6 +54,8 @@ logger = logging.getLogger(__name__)
 POOL_FACTOR = 8      # 3 x MaxPool3d(2) in the cellmap StandardUnet / UNet
 TRAIN_TILE = 178
 CONTEXT = 122        # in - out for these valid-padded nets (178 -> 56)
+REL_TOL = 1e-5       # accepted output difference, relative to the output's own scale;
+                     # a merged adapter agrees to ~1 float32 ULP (~1e-7 relative)
 
 
 def valid_tile(tile):
@@ -142,12 +144,26 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
 
 
 def check_equivalence(module, reference, tile, seed=0):
-    """Max |diff| between ``module`` and ``reference`` at 178^3, and between the
-    centre 56^3 of ``module``'s output at ``tile`` and its own 178 output there."""
+    """Difference between ``module`` and ``reference`` at 178^3, and between the
+    centre 56^3 of ``module``'s output at ``tile`` and its own 178 output there.
+
+    Both are reported *relative to the output's own magnitude*. These models emit
+    unbounded logits whose scale varies by orders of magnitude between finetunes
+    (observed: ~5 for one mito run, ~1400 for another), so an absolute tolerance
+    is meaningless -- folding the adapter into the base weights reassociates a
+    sum over the LoRA rank channels, which perturbs the result by a float32 ULP
+    at whatever scale the output happens to live.
+    """
     torch.manual_seed(seed)
     with torch.no_grad():
         x = torch.rand(1, 1, TRAIN_TILE, TRAIN_TILE, TRAIN_TILE)
-        d_ref = (module(x) - reference(x)).abs().max().item() if reference is not None else None
+        if reference is not None:
+            ym, yr = module(x), reference(x)
+            scale = yr.abs().max().item()
+            d_ref = (ym - yr).abs().max().item()
+            r_ref = d_ref / max(scale, 1e-6)
+        else:
+            d_ref = r_ref = scale = None
         xb = torch.rand(1, 1, tile, tile, tile)
         yb = module(xb)
         c = (tile - TRAIN_TILE) // 2
@@ -155,7 +171,8 @@ def check_equivalence(module, reference, tile, seed=0):
         oc = (yb.shape[2] - ys.shape[2]) // 2
         o = ys.shape[2]
         d_tile = (yb[:, :, oc:oc + o, oc:oc + o, oc:oc + o] - ys).abs().max().item()
-    return d_ref, d_tile, tuple(yb.shape[2:])
+        r_tile = d_tile / max(ys.abs().max().item(), 1e-6)
+    return d_ref, r_ref, scale, d_tile, r_tile, tuple(yb.shape[2:])
 
 
 def export_folder(module, base_folder, output, tile, out_shape, provenance, name_suffix):
@@ -226,7 +243,7 @@ def main(argv=None):
     eager = load_eager_base(base_folder)
     merged = apply_finetune(eager, args.lora_adapter_path, args.weights_path)
 
-    d_ref = d_tile = None
+    d_ref = r_ref = scale = d_tile = r_tile = None
     if not args.skip_check:
         # reference: the export + adapter path type: finetune serves today
         reference = None
@@ -235,13 +252,17 @@ def main(argv=None):
             from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper, load_lora_adapter
             exp = BatchLoopWrapper(CellmapModel(base_folder).train()).eval()
             reference = load_lora_adapter(exp, args.lora_adapter_path, is_trainable=False).eval()
-        d_ref, d_tile, out_shape = check_equivalence(merged, reference, args.tile)
-        logger.info(f"equivalence: vs served finetune path at 178^3 max|diff|={d_ref}; "
-                    f"{args.tile}-tile centre vs 178-tile max|diff|={d_tile}")
-        if d_ref is not None and d_ref > 1e-3:
-            sys.exit(f"merged model differs from the served finetune path by {d_ref}; refusing to export")
-        if d_tile > 1e-3:
-            sys.exit(f"{args.tile}-tile output differs from the 178-tile output by {d_tile}; refusing to export")
+        d_ref, r_ref, scale, d_tile, r_tile, out_shape = check_equivalence(merged, reference, args.tile)
+        logger.info(f"equivalence: vs served finetune path at 178^3 max|diff|={d_ref} "
+                    f"(relative {r_ref}, output scale {scale}); {args.tile}-tile centre vs "
+                    f"178-tile max|diff|={d_tile} (relative {r_tile})")
+        if r_ref is not None and r_ref > REL_TOL:
+            sys.exit(f"merged model differs from the served finetune path by {d_ref} "
+                     f"= {r_ref:.2e} of the output scale ({scale:.4g}), over the {REL_TOL:.0e} "
+                     "tolerance; refusing to export")
+        if r_tile > REL_TOL:
+            sys.exit(f"{args.tile}-tile output differs from the 178-tile output by {d_tile} "
+                     f"= {r_tile:.2e} relative, over the {REL_TOL:.0e} tolerance; refusing to export")
     else:
         with torch.no_grad():
             out_shape = tuple(merged(torch.rand(1, 1, args.tile, args.tile, args.tile)).shape[2:])
@@ -252,7 +273,9 @@ def main(argv=None):
         "base_repo": args.repo, "base_folder": base_folder,
         "lora_adapter_path": args.lora_adapter_path, "weights_path": args.weights_path,
         "tile": args.tile, "output_shape": list(out_shape),
-        "equivalence_178_vs_served_path": d_ref, "tile_phase_check": d_tile,
+        "equivalence_178_vs_served_path": d_ref,
+        "equivalence_relative": r_ref, "output_scale": scale,
+        "tile_phase_check": d_tile, "tile_phase_check_relative": r_tile,
         "torch": torch.__version__,
     }
     export_folder(merged, base_folder, args.output, args.tile, out_shape, prov, suffix)
