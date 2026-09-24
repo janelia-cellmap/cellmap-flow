@@ -60,8 +60,30 @@ def create_and_run_app(neuroglancer_url=None, inference_servers=None):
     g.INFERENCE_SERVER = inference_servers
     hostname = socket.gethostname()
     port = 0
-    logger.debug(f"Host name: {hostname}")
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+    from werkzeug.serving import make_server
+
+    # threaded=True is not optional here. make_server defaults to
+    # threaded=False, processes=1 -- one request at a time -- whereas the
+    # app.run() this replaced defaulted to threaded=True. Under a single
+    # worker a long POST blocks everything behind it: a yaml crop load ran
+    # for three minutes while every /load-crops-progress poll sat queued, so
+    # the dialog froze on "Starting..." and only unblocked once the work had
+    # already finished, releasing ~40 queued polls in one second. The SSE log
+    # streams are worse -- an open stream would hold the only thread forever.
+    server = make_server("0.0.0.0", port, app, threaded=True)
+    actual_port = server.socket.getsockname()[1]
+    url = f"http://{hostname}:{actual_port}"
+    logger.info(f"Dashboard running at: {url}")
+    print(f"\n * Dashboard URL: {url}\n")
+    try:
+        service_url_path = os.environ.get("SERVICE_URL_PATH")
+        if service_url_path:
+            with open(service_url_path, "w") as f:
+                f.write(url)
+    except Exception as e:
+        logger.warning(f"Failed to write service URL to {service_url_path}: {e}")
+    server.serve_forever()
 
 
 if __name__ == "__main__":

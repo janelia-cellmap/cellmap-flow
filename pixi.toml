@@ -1,0 +1,125 @@
+[workspace]
+name = "cellmap-flow"
+version = "0.1.7"
+description = "Realtime prediction using neuroglancer"
+channels = ["nvidia", "conda-forge", "pytorch"]
+platforms = ["linux-64"]
+
+# The neuroglancer fork's C++ extension declares `uint64_t` in
+# python/ext/src/on_demand_object_mesh_generator.h while including only
+# <cstddef>/<memory>/<string>. GCC 13+ stopped pulling <cstdint> in
+# transitively and this environment resolves GCC 15, so the build fails with
+# "'uint64_t' has not been declared". Force the include instead of carrying a
+# patched fork; harmless for every other compile.
+[activation.env]
+CXXFLAGS = "-include cstdint"
+
+[dependencies]
+python = ">=3.11,<4.0"
+pip = "*"
+cuda-toolkit = ">=12.0"
+numpy = "*"
+pyyaml = "*"
+h5py = "*"
+scikit-image = "*"
+flask = "*"
+flask-cors = "*"
+gunicorn = "*"
+marshmallow = "*"
+pydantic = "*"
+s3fs = "*"
+zarr = "==2.18.4"
+numcodecs = "==0.15.0"
+xarray = "==2024.7.0"
+
+[pypi-dependencies]
+cellmap-flow = { path = ".", editable = true }
+
+[feature.dacapo.pypi-dependencies]
+dacapo-ml = "*"
+
+[feature.cellpose.dependencies]
+numpy = "<2.1"
+
+[feature.cellpose.pypi-dependencies]
+cellpose = "==3.1.1.1"
+
+[feature.bioimageio.pypi-dependencies]
+bioimageio-core = { version = "==0.7.0", extras = ["onnx", "pytorch"] }
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+
+[feature.test.pypi-dependencies]
+pytest-lazy-fixtures = "*"
+
+[feature.dev.dependencies]
+black = "*"
+mypy = "*"
+ruff = "*"
+pre-commit = "*"
+
+[feature.dev.pypi-dependencies]
+pdbpp = "*"
+rich = "*"
+
+[feature.docs.pypi-dependencies]
+sphinx-autodoc-typehints = "*"
+sphinx-autoapi = "*"
+sphinx-click = "*"
+sphinx-rtd-theme = "*"
+myst-parser = "*"
+nbsphinx = "*"
+myst-nb = "*"
+jupytext = "*"
+
+[feature.postprocess.pypi-dependencies]
+edt = "*"
+mwatershed = { git = "https://github.com/pattonw/mwatershed" }
+funlib-math = { git = "https://github.com/funkelab/funlib.math.git" }
+
+# Interactive finetuning. These land in the DEFAULT environment on purpose:
+# Fileglancer launches the tool via `pixi run`, and the training job shells out
+# to `sys.executable -m cellmap_flow.finetune.finetune_cli` -- i.e. the same
+# interpreter the dashboard runs under. A side environment would only work if
+# every launch path remembered `-e finetune`.
+#
+# minio-server/minio-client are conda-only: upstream stopped publishing
+# prebuilt server binaries (dl.min.io is 410 Gone, the GitHub releases carry no
+# assets), so conda-forge -- which still builds from source -- is the only
+# practical source.
+[feature.finetune.dependencies]
+minio-server = "*"
+minio-client = "*"
+
+# The neuroglancer fork adds the voxel-annotation painting tools and the S3
+# kvstore write support they need; upstream neuroglancer has neither, and it is
+# not on PyPI. Declared here rather than in pyproject's [project.optional-
+# dependencies] because a PEP 508 direct reference there would make the
+# published PyPI sdist/wheel unuploadable.
+[feature.finetune.pypi-dependencies]
+peft = ">=0.7.0"
+transformers = ">=4.35.0"
+accelerate = ">=0.20.0"
+requests = "*"
+neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", branch = "feature/voxel-annotation" }
+
+[environments]
+default = { features = ["finetune"], solve-group = "default" }
+dacapo = { features = ["dacapo"], solve-group = "dacapo" }
+cellpose = { features = ["cellpose"], solve-group = "cellpose" }
+bioimageio = { features = ["bioimageio"], solve-group = "bioimageio" }
+test = { features = ["test"], solve-group = "test" }
+dev = { features = ["dev", "test"], solve-group = "dev" }
+docs = { features = ["docs"], solve-group = "docs" }
+postprocess = { features = ["postprocess"], solve-group = "postprocess" }
+
+[tasks]
+cellmap_flow_view = "cellmap_flow_view"
+cellmap_flow_yaml = "cellmap_flow_yaml"
+cellmap_flow_blockwise = "cellmap_flow_blockwise"
+cellmap_flow_blockwise_multiple = "cellmap_flow_blockwise_multiple"
+cellmap_flow = "cellmap_flow"
+cellmap_flow_server = "cellmap_flow_server"
+cellmap_flow_app = "cellmap_flow_app"

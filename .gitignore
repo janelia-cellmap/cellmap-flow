@@ -177,4 +177,4 @@ ignore/
 test_corrections.zarr/
 correction_slices/
 corrections/
-output/
+output/.pixi/

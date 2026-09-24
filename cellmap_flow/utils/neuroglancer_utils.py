@@ -13,6 +13,7 @@ from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.ds import find_closest_scale, get_scale_info, _open_zarr
 from cellmap_flow.utils import zarr_v3
 from cellmap_flow.globals import g
+import os
 
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
@@ -160,7 +161,6 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     # .replace("zouinkhim-lm1", "192.168.1.167")
     print("viewer", viewer_url)
     url = create_and_run_app(neuroglancer_url=viewer_url)
-    show(url)
     return url
 
 
