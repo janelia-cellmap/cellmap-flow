@@ -31,6 +31,14 @@ Classes
    cellmap_flow.finetune.finetune_job_manager.FinetuneJobManager
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_job_manager.finetune_export_kwargs
+
+
 Module Contents
 ---------------
 
@@ -66,6 +74,17 @@ Module Contents
    .. py:attribute:: CANCELLED
       :value: 'CANCELLED'
 
+
+
+.. py:function:: finetune_export_kwargs(output_dir, params=None) -> dict
+
+   Which artifact a finished run produced, as FinetuneModelConfig kwargs.
+
+   A LoRA run exports lora_adapter/; a full finetune (--lora-r 0) exports
+   full_finetune/model_state_dict.pt. Decided by what is on disk first --
+   the job's own record of lora_r is the fallback for a run that has not
+   written its export yet -- so the dashboard never points a viewer at an
+   adapter directory that a rank-0 run never made.
 
 
 .. py:class:: FinetuneJob
@@ -192,7 +211,7 @@ Module Contents
    .. py:attribute:: logger
 
 
-   .. py:method:: submit_finetuning_job(model_config, corrections_path: pathlib.Path, lora_r: int = 8, num_epochs: int = 10, batch_size: int = 8, learning_rate: float = 0.0001, output_base: Optional[pathlib.Path] = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', checkpoint_path_override: Optional[pathlib.Path] = None, auto_serve: bool = True, mask_unannotated: bool = False, loss_type: str = 'combined', label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_scope: str = 'unlabeled', margin: float = 0.3, balance_classes: bool = False, output_type: str = 'binary', select_channel: Optional[int] = None, offsets: Optional[str] = None) -> FinetuneJob
+   .. py:method:: submit_finetuning_job(model_config, corrections_path: pathlib.Path, lora_r: int = 8, num_epochs: int = 10, batch_size: int = 8, learning_rate: float = 0.0001, output_base: Optional[pathlib.Path] = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', checkpoint_path_override: Optional[pathlib.Path] = None, auto_serve: bool = True, mask_unannotated: bool = False, loss_type: str = 'combined', label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_scope: str = 'unlabeled', margin: float = 0.3, balance_classes: bool = False, augment: bool = False, output_type: str = 'binary', select_channel: Optional[int] = None, offsets: Optional[str] = None) -> FinetuneJob
 
       Submit finetuning job to LSF cluster.
 

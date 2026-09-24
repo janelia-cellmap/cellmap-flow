@@ -1,0 +1,80 @@
+cellmap_flow.finetune.build_corrections
+=======================================
+
+.. py:module:: cellmap_flow.finetune.build_corrections
+
+.. autoapi-nested-parse::
+
+   Build a finetuning corrections directory from a crops manifest, headlessly.
+
+   The dashboard builds the same thing interactively: it creates an
+   ``annotation_volume.zarr`` covering the raw dataset at the model's output
+   voxel size, imports each crop of a YAML manifest into it at the crop's
+   physical offset, and writes the ``_virtual_sources.json`` manifest the
+   trainer reads. That path needs a running Flask session, a MinIO server and
+   the model's geometry from a live inference server. None of that is needed to
+   train from ground-truth crops on the cluster, so this module does the same
+   three steps with the same functions and nothing else::
+
+       python -m cellmap_flow.finetune.build_corrections \
+           --raw /nrs/cellmap/data/<ds>/<ds>.zarr/recon-1/em/fibsem-uint8 \
+           --repo cellmap/mito-aff-unet-setup-16 \
+           --crops finetune_yamls/<ds>/mito_group.yaml \
+           --output /nrs/.../training/<session>/corrections \
+           --patches-per-epoch 360
+
+   Geometry comes from the HuggingFace ``metadata.json`` (input/output shape
+   and voxel size), so no weights are downloaded and no GPU is touched. Pass
+   ``--input-shape/--output-shape/--input-voxel-size/--output-voxel-size`` to
+   override or to describe a model that has no metadata.
+
+   Every build leaves ``build_record.json`` next to the manifest: the crops
+   YAML verbatim, the resolved geometry, per-crop voxel counts and offsets,
+   and the git commit of this checkout. That is the provenance a run registry
+   can point at.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.build_corrections.logger
+   cellmap_flow.finetune.build_corrections.DEFAULT_INPUT_NORM
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.build_corrections.geometry_from_hf_metadata
+   cellmap_flow.finetune.build_corrections.build_corrections
+   cellmap_flow.finetune.build_corrections.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: DEFAULT_INPUT_NORM
+
+.. py:function:: geometry_from_hf_metadata(repo, revision=None)
+
+   (input_shape, output_shape, input_voxel_size, output_voxel_size,
+   out_channels, channels_names, model_name) from a repo's metadata.json.
+
+
+.. py:function:: build_corrections(*, raw_dataset_path, crops_yaml, output_dir, repo=None, revision=None, input_shape=None, output_shape=None, input_voxel_size=None, output_voxel_size=None, model_name=None, patches_per_epoch=None, jitter_voxels=None, seed=0, dense_to_sparse_ratio=None, input_norm=None, postprocess=None, extra_record=None)
+
+   Create ``output_dir`` with the annotation volume, imported crops and
+   trainer manifest. Returns the build record (also written to disk).
+
+   ``output_dir`` must not already contain a volume: this builds from
+   scratch so the record describes everything in it.
+
+
+.. py:function:: main(argv=None)
+

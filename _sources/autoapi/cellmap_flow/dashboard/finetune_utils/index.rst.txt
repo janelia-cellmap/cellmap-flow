@@ -151,7 +151,7 @@ Module Contents
    Extract a correction entry from a single annotated chunk in a sparse volume.
 
    Reads the annotation chunk, extracts raw data with context padding, and
-   creates a standard correction zarr entry compatible with CorrectionDataset.
+   creates a standard correction zarr entry.
 
    :param volume_id: Volume identifier
    :param chunk_indices: Tuple (cz, cy, cx) of chunk indices

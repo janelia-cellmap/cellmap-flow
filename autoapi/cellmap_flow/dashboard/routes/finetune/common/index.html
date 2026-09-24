@@ -245,13 +245,11 @@
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">write_volume_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest" title="Link to this definition"></a></dt>
 <dd><p>Mark a browser-painted annotation volume as trainable by the new path.</p>
-<p><code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> picks its dataset by looking for this manifest and
-nothing else: present means VirtualPatchDataset, which streams patches
-from the volume zarr and is the only dataset that honours good regions.
-Absent means the legacy CorrectionDataset, which reads whatever
-per-chunk <code class="docutils literal notranslate"><span class="pre">_chunk_*.zarr</span></code> extracts the MinIO sync happened to
-materialize – typically a handful of samples, one batch per epoch, and
-no notion of a good region at all.</p>
+<p><code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> requires this manifest: it is what points the
+trainer at the volume zarr to stream patches from, and it carries the
+good regions, the dense/sparse ratio and the patch geometry. Without
+one, training now raises rather than falling back – the old per-chunk
+dataset that used to serve that case honoured none of the above.</p>
 <p>Only the YAML crop importer used to write one, so every session where
 you painted scribbles in the browser trained on the legacy path and
 silently ignored the regions you marked. Both volume-creating routes now

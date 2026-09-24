@@ -28,6 +28,7 @@ Classes
    cellmap_flow.finetune.target_transforms.BinaryTargetTransform
    cellmap_flow.finetune.target_transforms.BroadcastBinaryTargetTransform
    cellmap_flow.finetune.target_transforms.AffinityTargetTransform
+   cellmap_flow.finetune.target_transforms.DistanceTargetTransform
 
 
 Module Contents
@@ -86,5 +87,42 @@ Module Contents
 
 
    .. py:attribute:: num_channels
+
+
+.. py:class:: DistanceTargetTransform(sigma_voxels: float = 6.0, num_channels: int = 1)
+
+
+
+   Soft signed-distance target for models trained the fly_organelles way.
+
+   The target is ``(tanh((edt(fg) - edt(not fg)) / sigma) + 1) / 2`` with
+   distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+   falling to 0 outside, saturating a few sigma away. That is exactly what
+   ``fly_organelles.utils.Distance`` fed the cellmap distance models (the
+   nuc/mito "*_distance_*" HuggingFace repos use sigma=6), so sigmoid(model
+   output) is comparable to this target voxel for voxel. Use it with a
+   BCE-with-logits loss, which accepts soft targets; margin and dice do not.
+
+   Masking: an EDT computed inside a patch only sees boundaries inside the
+   patch. For an annotated voxel the computed |d| is an upper bound on the
+   truth -- the real nearest boundary may sit just past the patch edge or
+   inside an unannotated pocket. A voxel is supervised only when its
+   computed |d| is no larger than its distance to the nearest unannotated
+   voxel or patch edge (so no unseen boundary can be closer), or when that
+   distance is already past 3*sigma, where tanh has saturated and the exact
+   value no longer matters.
+
+   :param sigma_voxels: tanh scale in output voxels (6 for the cellmap
+                        distance models).
+   :param num_channels: model output channels; the target is broadcast to all
+                        of them, as BroadcastBinaryTargetTransform does.
+
+
+   .. py:attribute:: sigma
+
+
+   .. py:attribute:: num_channels
+      :value: 1
+
 
 

@@ -135,6 +135,9 @@ mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.AffinityTargetTransform" title="cellmap_flow.finetune.target_transforms.AffinityTargetTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AffinityTargetTransform</span></code></a></p></td>
 <td><p>Compute affinity targets from instance labels.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform" title="cellmap_flow.finetune.target_transforms.DistanceTargetTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistanceTargetTransform</span></code></a></p></td>
+<td><p>Soft signed-distance target for models trained the fly_organelles way.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -198,6 +201,47 @@ to len(offsets).</p></li>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.AffinityTargetTransform.num_channels">
 <span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.AffinityTargetTransform.num_channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.DistanceTargetTransform">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.target_transforms.</span></span><span class="sig-name descname"><span class="pre">DistanceTargetTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform" title="Link to this definition"></a></dt>
+<dd><p>Soft signed-distance target for models trained the fly_organelles way.</p>
+<p>The target is <code class="docutils literal notranslate"><span class="pre">(tanh((edt(fg)</span> <span class="pre">-</span> <span class="pre">edt(not</span> <span class="pre">fg))</span> <span class="pre">/</span> <span class="pre">sigma)</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">2</span></code> with
+distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+falling to 0 outside, saturating a few sigma away. That is exactly what
+<code class="docutils literal notranslate"><span class="pre">fly_organelles.utils.Distance</span></code> fed the cellmap distance models (the
+nuc/mito “<em>_distance_</em>” HuggingFace repos use sigma=6), so sigmoid(model
+output) is comparable to this target voxel for voxel. Use it with a
+BCE-with-logits loss, which accepts soft targets; margin and dice do not.</p>
+<p>Masking: an EDT computed inside a patch only sees boundaries inside the
+patch. For an annotated voxel the computed <a href="#id1"><span class="problematic" id="id2">|d|</span></a> is an upper bound on the
+truth – the real nearest boundary may sit just past the patch edge or
+inside an unannotated pocket. A voxel is supervised only when its
+computed <a href="#id3"><span class="problematic" id="id4">|d|</span></a> is no larger than its distance to the nearest unannotated
+voxel or patch edge (so no unseen boundary can be closer), or when that
+distance is already past 3*sigma, where tanh has saturated and the exact
+value no longer matters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sigma_voxels</strong> – tanh scale in output voxels (6 for the cellmap
+distance models).</p></li>
+<li><p><strong>num_channels</strong> – model output channels; the target is broadcast to all
+of them, as BroadcastBinaryTargetTransform does.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.DistanceTargetTransform.sigma">
+<span class="sig-name descname"><span class="pre">sigma</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform.sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.DistanceTargetTransform.num_channels">
+<span class="sig-name descname"><span class="pre">num_channels</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform.num_channels" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>

@@ -1,0 +1,150 @@
+cellmap_flow.finetune.export_merged
+===================================
+
+.. py:module:: cellmap_flow.finetune.export_merged
+
+.. autoapi-nested-parse::
+
+   Fold a finetune into the base model's weights and re-export it at a larger tile.
+
+   Why this exists
+   ---------------
+   Every cellmap UNet on HuggingFace ships two inference artefacts, and both are
+   locked to the 178^3 -> 56^3 tile they were exported at: the ``.pt2``
+   (what ``type: finetune`` serves) refuses any other input, and the TorchScript
+   (what ``type: huggingface`` serves) silently crops a larger input back to
+   56^3. A valid-padding UNet spends 32 input voxels per output voxel at that
+   tile; at 306^3 -> 184^3 it spends 4.6. The eager ``model.pt`` is not shape
+   locked, so: load it, fold the LoRA adapter (or load full-finetune weights),
+   and export the plain module again at the tile you want. The result is an
+   ordinary CellmapModel folder served with ``type: cellmap`` -- no PEFT, no
+   fly_organelles, no adapter at inference time.
+
+   Tile rule: these UNets pool 2x2x2 three times, so the tile must be
+   178 + 16k (290, 306, 322, ...). Any other size shifts the pooling phase
+   and the output no longer matches what the 178 tile computes at the same
+   place (measured: 298 differs by up to 2.3 in logit space; 290/306 differ by
+   0.0). The 378 in the repos' metadata.json is NOT such a size.
+
+   Usage::
+
+       python -m cellmap_flow.finetune.export_merged \
+           --repo cellmap/mito-aff-unet-setup-16 \
+           --lora-adapter-path <run>/lora_adapter \
+           --tile 306 --output <session>/exports/<dataset>/<class>/lora_aug_tile306
+
+   then in a cellmap-flow yaml::
+
+       models:
+         - type: cellmap
+           folder_path: <that output dir>
+           name: <anything>
+
+   Requires ``fly_organelles`` importable (the eager pickle references its
+   classes) -- present in the cellmap-flow-finetune env.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.export_merged.logger
+   cellmap_flow.finetune.export_merged.POOL_FACTOR
+   cellmap_flow.finetune.export_merged.TRAIN_TILE
+   cellmap_flow.finetune.export_merged.CONTEXT
+   cellmap_flow.finetune.export_merged.REL_TOL
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.export_merged.valid_tile
+   cellmap_flow.finetune.export_merged.merge_lora_into_conv3d
+   cellmap_flow.finetune.export_merged.strip_lora_layers
+   cellmap_flow.finetune.export_merged.load_eager_base
+   cellmap_flow.finetune.export_merged.apply_finetune
+   cellmap_flow.finetune.export_merged.check_equivalence
+   cellmap_flow.finetune.export_merged.export_folder
+   cellmap_flow.finetune.export_merged.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: POOL_FACTOR
+   :value: 8
+
+
+.. py:data:: TRAIN_TILE
+   :value: 178
+
+
+.. py:data:: CONTEXT
+   :value: 122
+
+
+.. py:data:: REL_TOL
+   :value: 1e-05
+
+
+.. py:function:: valid_tile(tile)
+
+   True when ``tile`` keeps the pooling phase of the 178 training tile.
+
+
+.. py:function:: merge_lora_into_conv3d(peft_model)
+
+   Add each LoRA pair into its base Conv3d weight in place; return count.
+
+   PEFT's own ``merge_and_unload`` assumes 2-D conv kernels and fails on
+   Conv3d. For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
+   delta[o, i, z, y, x] = scale * sum_r B[o, r] A[r, i, z, y, x].
+
+
+.. py:function:: strip_lora_layers(module)
+
+   Replace every LoraLayer under ``module`` by its (now merged) base layer.
+
+
+.. py:function:: load_eager_base(folder_path)
+
+   The eager ``model.pt`` of a CellmapModel folder, eval mode, on CPU.
+
+
+.. py:function:: apply_finetune(eager, lora_adapter_path=None, weights_path=None)
+
+   Return a plain nn.Module with the finetune folded in.
+
+   Both finetune flavours were trained on ``BatchLoopWrapper(export)``, whose
+   child is named ``model``, so adapter target names and full-finetune state
+   dict keys carry a ``model.`` prefix. Wrapping the eager module the same
+   way reproduces those names exactly (checked: 38/38 adapter tensors
+   identical, 0.0 output difference at 178^3).
+
+
+.. py:function:: check_equivalence(module, reference, tile, seed=0)
+
+   Difference between ``module`` and ``reference`` at 178^3, and between the
+   centre 56^3 of ``module``'s output at ``tile`` and its own 178 output there.
+
+   Both are reported *relative to the output's own magnitude*. These models emit
+   unbounded logits whose scale varies by orders of magnitude between finetunes
+   (observed: ~5 for one mito run, ~1400 for another), so an absolute tolerance
+   is meaningless -- folding the adapter into the base weights reassociates a
+   sum over the LoRA rank channels, which perturbs the result by a float32 ULP
+   at whatever scale the output happens to live.
+
+
+.. py:function:: export_folder(module, base_folder, output, tile, out_shape, provenance, name_suffix)
+
+   Write model.pt2 + model.ts + metadata.json (+ README) for ``module`` at ``tile``.
+
+
+.. py:function:: main(argv=None)
+

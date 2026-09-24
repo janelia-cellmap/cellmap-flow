@@ -18,8 +18,9 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   /autoapi/cellmap_flow/finetune/correction_dataset/index
+   /autoapi/cellmap_flow/finetune/build_corrections/index
    /autoapi/cellmap_flow/finetune/crop_loader/index
+   /autoapi/cellmap_flow/finetune/export_merged/index
    /autoapi/cellmap_flow/finetune/finetune_cli/index
    /autoapi/cellmap_flow/finetune/finetune_job_manager/index
    /autoapi/cellmap_flow/finetune/finetuned_model_templates/index
@@ -34,7 +35,7 @@ Classes
 
 .. autoapisummary::
 
-   cellmap_flow.finetune.CorrectionDataset
+   cellmap_flow.finetune.VirtualPatchDataset
    cellmap_flow.finetune.LoRAFinetuner
    cellmap_flow.finetune.DiceLoss
    cellmap_flow.finetune.CombinedLoss
@@ -56,7 +57,7 @@ Functions
 Package Contents
 ----------------
 
-.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> List[str]
+.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None, min_channels: int = 0) -> List[str]
 
    Automatically detect layers suitable for LoRA adaptation.
 
@@ -73,11 +74,20 @@ Package Contents
                             If None, includes all Conv/Linear layers
    :param exclude_patterns: List of substrings for layer names to exclude
                             Default: ['bn', 'norm']
+   :param min_channels: Skip layers whose narrower side (in or out) is below
+                        this. 0 adapts everything. Narrow layers are where LoRA
+                        is expensive for nothing: PEFT builds lora_A as a
+                        full-kernel conv Cin -> r, so on a 16-channel layer at
+                        full resolution the adapter is 4x the FLOPs of the layer
+                        it adapts and runs bandwidth-bound. On
+                        mito-aff-unet-setup-16 the seven layers under 96
+                        channels hold ~1% of the adapter's parameters and cost
+                        41% of every training step (0.095 -> 0.056 s at 178^3).
 
    :returns: List of layer names suitable for LoRA adaptation
 
 
-.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None, lora_min_channels: int = 0) -> torch.nn.Module
 
    Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
 
@@ -93,6 +103,9 @@ Package Contents
                       Controls strength of LoRA updates
                       Typical: 2*r, default 16
    :param lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
+   :param lora_min_channels: When auto-detecting, skip layers narrower than this
+                             on either side; see detect_adaptable_layers. Ignored when
+                             target_modules is given explicitly. Default 0 (adapt all).
    :param modules_to_save: Additional modules to make trainable (e.g., final layer)
    :param task_type: PEFT task type. Options:
                      - "FEATURE_EXTRACTION" (default, for general models)
@@ -182,59 +195,129 @@ Package Contents
    ... )
 
 
-.. py:class:: CorrectionDataset(corrections_zarr_path: str, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, model_name: Optional[str] = None)
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, augment: bool = False)
 
 
 
-   PyTorch Dataset for user corrections stored in Zarr format.
+   Yield random raw+annotation patches anchored on FG voxels in a volume zarr.
 
-   Loads raw EM data and corrected masks from corrections.zarr/, with
-   optional 3D augmentation.
-
-   :param corrections_zarr_path: Path to corrections.zarr directory
-   :param patch_shape: Shape of patches to extract (Z, Y, X)
-                       If None, uses full correction size
-   :param augment: Whether to apply 3D augmentation
-   :param model_name: If specified, only load corrections for this model
-
-   .. rubric:: Examples
-
-   >>> dataset = CorrectionDataset(
-   ...     "test_corrections.zarr",
-   ...     patch_shape=(64, 64, 64),
-   ...     augment=True
-   ... )
-   >>> print(f"Dataset size: {len(dataset)}")
-   >>> raw, target = dataset[0]
-   >>> print(f"Raw shape: {raw.shape}, Target shape: {target.shape}")
-
-
-   .. py:attribute:: corrections_path
-
-
-   .. py:attribute:: patch_shape
-      :value: None
-
+   :param volume_zarr_path: path to the session's ``annotation_volume.zarr``.
+   :param raw_dataset_path: path to the raw EM zarr the volume is aligned to.
+   :param input_size_voxels: shape (Z, Y, X) of the raw patch returned per
+                             sample, in voxels at ``input_voxel_size_nm``.
+   :param output_size_voxels: shape (Z, Y, X) of the annotation patch, in
+                              voxels at ``output_voxel_size_nm``.
+   :param input_voxel_size_nm: voxel size for raw patches (the dataset's
+                               closest scale to the model's claimed input voxel size).
+   :param output_voxel_size_nm: voxel size for annotation patches.
+   :param patches_per_epoch: ``len(self)``; controls how many random patches
+                             comprise one epoch. ``None`` (the default) means "auto:
+                             substitute the total populated-chunk count" — every populated
+                             chunk gets ~one patch per epoch on average.
+   :param jitter_voxels: half-range of the random offset applied to the patch
+                         center, in **annotation voxels**. Defaults to
+                         ``output_size_voxels // 4``.
+   :param seed: RNG seed; per-worker offset added so multi-worker dataloaders
+                sample distinct streams.
+   :param dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
+                                 the dense pool (FG voxels inside any imported_crops bbox).
+                                 ``None`` (default) means auto: 0.5 if both pools have voxels,
+                                 else 1.0 (use the non-empty pool exclusively).
 
 
    .. py:attribute:: augment
-      :value: True
+      :value: False
 
 
 
-   .. py:attribute:: model_name
-      :value: None
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: raw_dataset_path
+
+
+   .. py:attribute:: input_size
+
+
+   .. py:attribute:: output_size
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  Optional[int]
+
+
+   .. py:attribute:: jitter
+
+
+   .. py:attribute:: seed
+      :value: 0
 
 
 
-   .. py:attribute:: corrections
+   .. py:attribute:: dense_to_sparse_ratio
+
+
+   .. py:attribute:: good_regions
       :value: []
 
 
 
+   .. py:attribute:: rehearsal_fraction
+
+
+   .. py:attribute:: input_norm_config
+
+
+   .. py:attribute:: dataset_offset_nm
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: volume_shape_voxels
+      :type:  numpy.ndarray
+
+
+   .. py:property:: emits_anchor
+      :type: bool
+
+
+      Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
+
+      Only once there is something to anchor on. Without good regions the
+      dataset keeps its original 2-tuple contract, so nothing about an
+      existing run changes.
+
+
 .. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, num_workers: int = 4, shuffle: bool = True, model_name: Optional[str] = None) -> torch.utils.data.DataLoader
 
-.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None)
+   Build the training DataLoader for a corrections directory.
+
+   Requires a ``_virtual_sources.json`` manifest. This used to fall back to a
+   per-chunk ``CorrectionDataset`` when the manifest was absent, but that
+   dataset ignored good regions and the dense/sparse split, so the fallback
+   silently trained on the wrong thing. Every path that creates a session now
+   writes a manifest (volume creation, YAML import, training submit) and
+   restarts backfill one, so a missing manifest means something upstream
+   failed -- which is worth an exception rather than a quiet downgrade.
+
+   :param corrections_zarr_path: Session corrections directory.
+   :param batch_size: Clamped down to the dataset size when smaller.
+   :param patch_shape: Accepted for call-site compatibility; patch geometry comes
+                       from the manifest, so this is unused.
+   :param augment: Accepted for call-site compatibility. This dataset applies
+                   random patch-center jitter and nothing else; see the warning below.
+   :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
+                       handles do not survive fork.
+   :param shuffle: Ignored; the dataset already samples randomly.
+   :param model_name: Accepted for call-site compatibility; unused.
+
+
+.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None, tensorboard: bool = True)
 
    Trainer for finetuning models with LoRA adapters.
 
@@ -335,7 +418,27 @@ Package Contents
 
 
 
+   .. py:attribute:: loss_type
+      :value: 'combined'
+
+
+
+   .. py:attribute:: margin
+      :value: 0.3
+
+
+
+   .. py:attribute:: learning_rate
+      :value: 0.0001
+
+
+
    .. py:attribute:: optimizer
+
+
+   .. py:attribute:: amp_dtype
+      :value: Ellipsis
+
 
 
    .. py:attribute:: scaler
@@ -359,6 +462,19 @@ Package Contents
 
    .. py:attribute:: training_stats
       :value: []
+
+
+
+   .. py:attribute:: tb
+      :value: None
+
+
+
+   .. py:attribute:: tb_dir
+
+
+   .. py:attribute:: tb_image_every
+      :value: 5
 
 
 

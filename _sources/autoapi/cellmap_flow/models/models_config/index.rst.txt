@@ -302,7 +302,7 @@ Module Contents
 
 
 
-.. py:class:: FinetuneModelConfig(lora_adapter_path: str, base_model: dict, name: str = None, scale=None)
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None)
 
 
 
@@ -319,9 +319,18 @@ Module Contents
 
 
    .. py:attribute:: lora_adapter_path
+      :value: None
+
+
+
+   .. py:attribute:: weights_path
+      :value: None
+
 
 
    .. py:attribute:: base_model_dict
+      :value: None
+
 
 
    .. py:attribute:: name

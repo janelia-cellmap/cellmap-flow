@@ -52,7 +52,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> List[str]
+.. py:function:: detect_adaptable_layers(model: torch.nn.Module, include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None, min_channels: int = 0) -> List[str]
 
    Automatically detect layers suitable for LoRA adaptation.
 
@@ -69,6 +69,15 @@ Module Contents
                             If None, includes all Conv/Linear layers
    :param exclude_patterns: List of substrings for layer names to exclude
                             Default: ['bn', 'norm']
+   :param min_channels: Skip layers whose narrower side (in or out) is below
+                        this. 0 adapts everything. Narrow layers are where LoRA
+                        is expensive for nothing: PEFT builds lora_A as a
+                        full-kernel conv Cin -> r, so on a 16-channel layer at
+                        full resolution the adapter is 4x the FLOPs of the layer
+                        it adapts and runs bandwidth-bound. On
+                        mito-aff-unet-setup-16 the seven layers under 96
+                        channels hold ~1% of the adapter's parameters and cost
+                        41% of every training step (0.095 -> 0.056 s at 178^3).
 
    :returns: List of layer names suitable for LoRA adaptation
 
@@ -104,7 +113,7 @@ Module Contents
    .. py:method:: forward(x=None, input_ids=None, **kwargs)
 
 
-.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None) -> torch.nn.Module
+.. py:function:: wrap_model_with_lora(model: torch.nn.Module, target_modules: Optional[List[str]] = None, lora_r: int = 64, lora_alpha: int = 128, lora_dropout: float = 0.1, modules_to_save: Optional[List[str]] = None, task_type: Optional[str] = None, lora_min_channels: int = 0) -> torch.nn.Module
 
    Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.
 
@@ -120,6 +129,9 @@ Module Contents
                       Controls strength of LoRA updates
                       Typical: 2*r, default 16
    :param lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
+   :param lora_min_channels: When auto-detecting, skip layers narrower than this
+                             on either side; see detect_adaptable_layers. Ignored when
+                             target_modules is given explicitly. Default 0 (adapt all).
    :param modules_to_save: Additional modules to make trainable (e.g., final layer)
    :param task_type: PEFT task type. Options:
                      - "FEATURE_EXTRACTION" (default, for general models)

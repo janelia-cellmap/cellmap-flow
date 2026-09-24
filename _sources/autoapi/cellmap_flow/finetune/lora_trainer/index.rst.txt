@@ -31,8 +31,36 @@ Classes
    cellmap_flow.finetune.lora_trainer.LoRAFinetuner
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.lora_trainer.as_probabilities
+   cellmap_flow.finetune.lora_trainer.soft_target_entropy
+
+
 Module Contents
 ---------------
+
+.. py:function:: as_probabilities(pred, model_has_sigmoid)
+
+   The model's output as probabilities.
+
+   Left alone when the model already ends in a sigmoid (the cellmap
+   *_distance_* UNets do); a second sigmoid would squash [0, 1] into
+   [0.5, 0.73] and make a well-fitting prediction look like a constant.
+
+
+.. py:function:: soft_target_entropy(target, eps=1e-07)
+
+   Per-voxel BCE that a perfectly calibrated prediction still pays.
+
+   -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+   t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+   of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
+   model sitting on its floor. Report the loss minus this instead.
+
 
 .. py:data:: logger
 
@@ -138,7 +166,7 @@ Module Contents
    .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
 
 
-.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None)
+.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None, tensorboard: bool = True)
 
    Trainer for finetuning models with LoRA adapters.
 
@@ -239,7 +267,27 @@ Module Contents
 
 
 
+   .. py:attribute:: loss_type
+      :value: 'combined'
+
+
+
+   .. py:attribute:: margin
+      :value: 0.3
+
+
+
+   .. py:attribute:: learning_rate
+      :value: 0.0001
+
+
+
    .. py:attribute:: optimizer
+
+
+   .. py:attribute:: amp_dtype
+      :value: Ellipsis
+
 
 
    .. py:attribute:: scaler
@@ -263,6 +311,19 @@ Module Contents
 
    .. py:attribute:: training_stats
       :value: []
+
+
+
+   .. py:attribute:: tb
+      :value: None
+
+
+
+   .. py:attribute:: tb_dir
+
+
+   .. py:attribute:: tb_image_every
+      :value: 5
 
 
 

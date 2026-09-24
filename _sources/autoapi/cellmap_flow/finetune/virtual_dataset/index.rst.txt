@@ -49,7 +49,7 @@ cellmap_flow.finetune.virtual_dataset
    - ``len(self)`` is ``patches_per_epoch``; it has no relationship to the
      number of populated chunks. The trainer treats this as the epoch length.
    - The dataset returns ``(raw, annotation)`` tensors with shape
-     ``(1, Z, Y, X)`` matching :class:`CorrectionDataset`'s contract.
+     ``(1, Z, Y, X)``, which is the contract the trainer expects.
 
 
 
@@ -80,6 +80,7 @@ Functions
    cellmap_flow.finetune.virtual_dataset.read_manifest
    cellmap_flow.finetune.virtual_dataset.load_good_regions_for
    cellmap_flow.finetune.virtual_dataset.dataset_from_manifest
+   cellmap_flow.finetune.virtual_dataset.create_dataloader
 
 
 Module Contents
@@ -87,7 +88,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None)
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, augment: bool = False)
 
 
 
@@ -115,6 +116,11 @@ Module Contents
                                  the dense pool (FG voxels inside any imported_crops bbox).
                                  ``None`` (default) means auto: 0.5 if both pools have voxels,
                                  else 1.0 (use the non-empty pool exclusively).
+
+
+   .. py:attribute:: augment
+      :value: False
+
 
 
    .. py:attribute:: volume_zarr_path
@@ -208,7 +214,7 @@ Module Contents
    time means the run uses every region marked up to the moment it started.
 
 
-.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None) -> VirtualPatchDataset
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None) -> VirtualPatchDataset
 
    Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
@@ -218,5 +224,29 @@ Module Contents
 
    ``corrections_dir`` is where the session's good regions are looked up;
    omit it and the dataset simply trains without rehearsal anchors.
+
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, patch_shape: Optional[Tuple[int, int, int]] = None, augment: bool = True, num_workers: int = 4, shuffle: bool = True, model_name: Optional[str] = None) -> torch.utils.data.DataLoader
+
+   Build the training DataLoader for a corrections directory.
+
+   Requires a ``_virtual_sources.json`` manifest. This used to fall back to a
+   per-chunk ``CorrectionDataset`` when the manifest was absent, but that
+   dataset ignored good regions and the dense/sparse split, so the fallback
+   silently trained on the wrong thing. Every path that creates a session now
+   writes a manifest (volume creation, YAML import, training submit) and
+   restarts backfill one, so a missing manifest means something upstream
+   failed -- which is worth an exception rather than a quiet downgrade.
+
+   :param corrections_zarr_path: Session corrections directory.
+   :param batch_size: Clamped down to the dataset size when smaller.
+   :param patch_shape: Accepted for call-site compatibility; patch geometry comes
+                       from the manifest, so this is unused.
+   :param augment: Accepted for call-site compatibility. This dataset applies
+                   random patch-center jitter and nothing else; see the warning below.
+   :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
+                       handles do not survive fork.
+   :param shuffle: Ignored; the dataset already samples randomly.
+   :param model_name: Accepted for call-site compatibility; unused.
 
 
