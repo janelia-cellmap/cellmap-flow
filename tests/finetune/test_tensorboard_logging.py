@@ -65,7 +65,7 @@ def test_event_file_has_step_epoch_timing_and_image_tags(tmp_path):
                 "epoch/best_supervised", "time/epoch_data_wait_s",
                 "time/epoch_compute_s"):
         assert tag in scalars, f"missing scalar {tag}; have {sorted(scalars)}"
-    assert {"patch/raw", "patch/target", "patch/prediction"} <= set(tags["images"])
+    assert "patch/raw|target|prediction|mask" in set(tags["images"])
     assert "config/text_summary" in tags["tensors"] or "config" in str(tags)
 
 

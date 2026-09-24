@@ -15,6 +15,28 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
+
+
+def as_probabilities(pred, model_has_sigmoid):
+    """The model's output as probabilities.
+
+    Left alone when the model already ends in a sigmoid (the cellmap
+    *_distance_* UNets do); a second sigmoid would squash [0, 1] into
+    [0.5, 0.73] and make a well-fitting prediction look like a constant.
+    """
+    return pred if model_has_sigmoid else torch.sigmoid(pred)
+
+
+def soft_target_entropy(target, eps=1e-7):
+    """Per-voxel BCE that a perfectly calibrated prediction still pays.
+
+    -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+    t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+    of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
+    model sitting on its floor. Report the loss minus this instead.
+    """
+    t = target.clamp(eps, 1 - eps)
+    return -(t * torch.log(t) + (1 - t) * torch.log(1 - t))
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -288,6 +310,11 @@ class LoRAFinetuner:
         # Loss function
         self._use_bce = False
         self._use_mse = False
+        self._model_has_sigmoid = False   # set by _apply_probability_output_mode
+        self._step_bce_metrics = None     # (entropy floor, mean |p - t|) of the last step
+        self._epoch_bce_floor_sum = 0.0
+        self._epoch_mae_sum = 0.0
+        self._epoch_bce_n = 0
         if loss_type == "dice":
             self.criterion = DiceLoss()
         elif loss_type == "bce":
@@ -430,14 +457,14 @@ class LoRAFinetuner:
 
     @torch.no_grad()
     def _tb_log_images(self, raw, target, pred, mask):
-        """Mid-Z slice of one sample: raw (centre-cropped to the output), target, prediction, mask.
+        """Mid-Z slice of one sample as one strip: raw (centre-cropped to the output) | target | prediction | mask.
 
         This is the picture that would have shown augmentation doing nothing
         for five months, and that shows raw and labels moving together once
         it does something. Never lets a display problem stop training.
         """
         try:
-            p = torch.sigmoid(pred[0, 0].detach().float()).cpu()
+            p = as_probabilities(pred[0, 0].detach().float(), self._model_has_sigmoid).cpu()
             t = target[0, 0].detach().float().cpu()
             r = raw[0, 0].detach().float().cpu()
             # Valid-padding models emit a smaller volume than they read.
@@ -446,12 +473,17 @@ class LoRAFinetuner:
             z = p.shape[0] // 2
             r2 = r[z]
             r2 = (r2 - r2.min()) / (r2.max() - r2.min() + 1e-8)
-            step = self._tb_epoch
-            self.tb.add_image("patch/raw", r2[None], step)
-            self.tb.add_image("patch/target", t[z][None].clamp(0, 1), step)
-            self.tb.add_image("patch/prediction", p[z][None], step)
-            if mask is not None:
-                self.tb.add_image("patch/mask", mask[0, 0, z].detach().float().cpu()[None].clamp(0, 1), step)
+            m2 = (
+                mask[0, 0, z].detach().float().cpu().clamp(0, 1)
+                if mask is not None else torch.zeros_like(r2)
+            )
+            # One strip per epoch, raw | target | prediction | mask, separated
+            # by a white line: four tags per epoch was too much to scroll.
+            sep = torch.ones(r2.shape[0], 2)
+            strip = torch.cat(
+                [r2, sep, t[z].clamp(0, 1), sep, p[z].clamp(0, 1), sep, m2], dim=1
+            )
+            self.tb.add_image("patch/raw|target|prediction|mask", strip[None], self._tb_epoch)
         except Exception as e:
             logger.debug(f"TensorBoard image logging skipped: {e}")
 
@@ -564,6 +596,7 @@ class LoRAFinetuner:
 
     def _apply_probability_output_mode(self, log_message):
         """Configure losses for models that already emit probabilities."""
+        self._model_has_sigmoid = True
         if self._use_bce:
             log_message(
                 "Switching BCEWithLogitsLoss to BCELoss to avoid double-sigmoid"
@@ -869,12 +902,23 @@ class LoRAFinetuner:
             if not math.isfinite(selection_loss):
                 selection_loss = epoch_loss
 
-            # Log epoch results
+            # Log epoch results. On soft targets the BCE cannot go below the
+            # target's entropy, so also say how far above that floor it sits.
+            bce_extra = ""
+            epoch_floor = epoch_mae = None
+            if self._epoch_bce_n:
+                epoch_floor = self._epoch_bce_floor_sum / self._epoch_bce_n
+                epoch_mae = self._epoch_mae_sum / self._epoch_bce_n
+                bce_extra = (
+                    f" - Above floor: {selection_loss - epoch_floor:.6f}"
+                    f" - MAE: {epoch_mae:.6f}"
+                )
             self._log_message(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
                 f"Supervised: {selection_loss:.6f} - "
                 f"Best supervised: {self.best_loss:.6f}"
+                f"{bce_extra}"
             )
 
             # Save checkpoint if best
@@ -901,6 +945,10 @@ class LoRAFinetuner:
                 self.tb.add_scalar("epoch/loss", epoch_loss, e)
                 self.tb.add_scalar("epoch/supervised", selection_loss, e)
                 self.tb.add_scalar("epoch/best_supervised", self.best_loss, e)
+                if epoch_floor is not None:
+                    self.tb.add_scalar("epoch/bce_floor", epoch_floor, e)
+                    self.tb.add_scalar("epoch/supervised_above_floor", selection_loss - epoch_floor, e)
+                    self.tb.add_scalar("epoch/mean_abs_error", epoch_mae, e)
                 self.tb.add_scalar("time/epoch_data_wait_s", data_wait, e)
                 self.tb.add_scalar("time/epoch_compute_s", compute, e)
                 if self.device.type == "cuda":
@@ -936,6 +984,9 @@ class LoRAFinetuner:
         epoch_supervised_loss = 0.0
         epoch_distill_loss = 0.0
         num_batches = len(self.dataloader)
+        self._epoch_bce_floor_sum = 0.0
+        self._epoch_mae_sum = 0.0
+        self._epoch_bce_n = 0
 
         # Gradient-flow diagnostic: watch one LoRA-B param across the epoch
         # AND, at end of epoch, count how many trainable params received any
@@ -1052,17 +1103,27 @@ class LoRAFinetuner:
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
                     per_element_loss = self.criterion(pred, target)
-                    if self.balance_classes:
-                        # Average fg and bg separately so each contributes equally
-                        fg_mask = target * mask
-                        bg_mask = (1.0 - target) * mask
-                        fg_count = fg_mask.sum().clamp(min=1)
-                        bg_count = bg_mask.sum().clamp(min=1)
-                        fg_contrib = (per_element_loss * fg_mask).sum() / fg_count
-                        bg_contrib = (per_element_loss * bg_mask).sum() / bg_count
-                        supervised_loss = (fg_contrib + bg_contrib) / 2.0
-                    else:
-                        supervised_loss = (per_element_loss * mask).sum() / mask.sum().clamp(min=1)
+
+                    def _masked_mean(per_voxel):
+                        if self.balance_classes:
+                            # Average fg and bg separately so each contributes equally
+                            fg_mask = target * mask
+                            bg_mask = (1.0 - target) * mask
+                            fg_contrib = (per_voxel * fg_mask).sum() / fg_mask.sum().clamp(min=1)
+                            bg_contrib = (per_voxel * bg_mask).sum() / bg_mask.sum().clamp(min=1)
+                            return (fg_contrib + bg_contrib) / 2.0
+                        return (per_voxel * mask).sum() / mask.sum().clamp(min=1)
+
+                    supervised_loss = _masked_mean(per_element_loss)
+                    if self._use_bce:
+                        # Same weighting applied to the target's own entropy
+                        # gives the floor this batch's BCE cannot go below;
+                        # mean |p - t| is the loss-independent view of the fit.
+                        with torch.no_grad():
+                            bce_floor = _masked_mean(soft_target_entropy(target))
+                            prob = as_probabilities(pred, self._model_has_sigmoid)
+                            mae = ((prob - target).abs() * mask).sum() / mask.sum().clamp(min=1)
+                        self._step_bce_metrics = (bce_floor.item(), mae.item())
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
                     # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
                     supervised_loss = self.criterion(pred, target, mask)
@@ -1143,6 +1204,11 @@ class LoRAFinetuner:
                     self._tb_step += 1
                     self.tb.add_scalar("train/loss", loss.item() * self.gradient_accumulation_steps, self._tb_step)
                     self.tb.add_scalar("train/supervised", supervised_loss.item(), self._tb_step)
+                    if self._step_bce_metrics is not None:
+                        floor, mae = self._step_bce_metrics
+                        self.tb.add_scalar("train/bce_floor", floor, self._tb_step)
+                        self.tb.add_scalar("train/supervised_above_floor", supervised_loss.item() - floor, self._tb_step)
+                        self.tb.add_scalar("train/mean_abs_error", mae, self._tb_step)
                     if self.distillation_lambda > 0:
                         self.tb.add_scalar("train/distillation", distillation_loss.item(), self._tb_step)
                     self.tb.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"], self._tb_step)
@@ -1161,6 +1227,10 @@ class LoRAFinetuner:
             epoch_loss += batch_loss
             epoch_supervised_loss += supervised_loss.item()
             epoch_distill_loss += distillation_loss.item()
+            if self._step_bce_metrics is not None:
+                self._epoch_bce_floor_sum += self._step_bce_metrics[0]
+                self._epoch_mae_sum += self._step_bce_metrics[1]
+                self._epoch_bce_n += 1
 
             # Log progress every batch (since we have few batches)
             avg_loss = epoch_loss / (batch_idx + 1)

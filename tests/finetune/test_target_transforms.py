@@ -304,3 +304,32 @@ def test_distance_broadcasts_to_model_channels_and_keeps_device():
 def test_distance_rejects_bad_sigma():
     with pytest.raises(ValueError):
         DistanceTargetTransform(0.0)
+
+
+# ---------------------------------------------------------------------------
+# BCE-on-soft-targets helpers (lora_trainer)
+# ---------------------------------------------------------------------------
+
+from cellmap_flow.finetune.lora_trainer import as_probabilities, soft_target_entropy
+
+
+def test_soft_target_entropy_is_the_bce_floor():
+    t = torch.tensor([0.0, 0.1, 0.5, 0.9, 1.0])
+    h = soft_target_entropy(t)
+    # hard targets pay nothing, t=0.5 pays log 2, symmetric
+    assert h[0] == pytest.approx(0.0, abs=1e-5) and h[4] == pytest.approx(0.0, abs=1e-5)
+    assert h[2] == pytest.approx(math.log(2), abs=1e-6)
+    assert h[1] == pytest.approx(h[3], abs=1e-6)
+    # equals BCE(t, t): a perfectly calibrated prediction cannot go lower
+    bce = torch.nn.functional.binary_cross_entropy(t.clamp(1e-7, 1 - 1e-7), t, reduction="none")
+    assert torch.allclose(h, bce, atol=1e-5)
+
+
+def test_as_probabilities_does_not_double_sigmoid():
+    logits = torch.tensor([-3.0, 0.0, 3.0])
+    probs = torch.sigmoid(logits)
+    assert torch.equal(as_probabilities(probs, model_has_sigmoid=True), probs)
+    assert torch.allclose(as_probabilities(logits, model_has_sigmoid=False), probs)
+    # the failure mode this guards: sigmoid of a probability lands in [0.5, 0.73]
+    squashed = torch.sigmoid(probs)
+    assert squashed.min() >= 0.5 and squashed.max() <= 0.732
