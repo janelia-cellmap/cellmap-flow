@@ -1037,6 +1037,17 @@ class LoRAFinetuner:
                 if self.select_channel is not None:
                     pred = pred[:, self.select_channel:self.select_channel+1, :, :, :]
 
+            # Losses in fp32, outside autocast; only the forward pass runs in
+            # reduced precision. Two reasons. Models with a built-in sigmoid
+            # (the cellmap *_distance_* UNets) make the trainer swap to
+            # BCELoss on probabilities, and autocast refuses to run
+            # binary_cross_entropy at all. And a bf16 probability near 0 or 1
+            # has too few mantissa bits for log(p) / log(1-p) to mean much.
+            with autocast('cuda', enabled=False):
+                pred = pred.float()
+                if teacher_pred is not None:
+                    teacher_pred = teacher_pred.float()
+
                 # Compute supervised loss with optional mask
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
