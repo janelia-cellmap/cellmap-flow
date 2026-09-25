@@ -225,10 +225,24 @@ def load_existing_volume_response(data):
                     "zarr directly via the manifest."
                 )
         else:
-            # Legacy session with only per-chunk extracts (no volume zarr).
-            # Copy them so the trainer's CorrectionDataset path still works.
-            zarr_entries = all_zarr_entries
-            skipped_chunk_extracts = 0
+            # Legacy session with only per-chunk extracts and no volume zarr.
+            # These were trainable only through CorrectionDataset, which is
+            # gone; VirtualPatchDataset needs the volume zarr the manifest
+            # points at. Resuming would copy the extracts and then fail at
+            # training time, so say so here instead.
+            return jsonify(
+                {
+                    "success": False,
+                    "error": (
+                        f"Session at {source_corrections} predates the "
+                        "annotation-volume format: it holds only "
+                        f"{len(all_zarr_entries)} per-chunk _chunk_*.zarr "
+                        "extracts and no volume zarr, so there is nothing for "
+                        "the trainer to read. Re-import this session's crops "
+                        "into a new session to convert it."
+                    ),
+                }
+            ), 400
         copied = []
         for idx, item in enumerate(zarr_entries):
             src = os.path.join(source_corrections, item)

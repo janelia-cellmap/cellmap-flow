@@ -12,15 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 def generate_finetuned_model_yaml(
-    lora_adapter_path: str,
-    base_model_dict: dict,
-    model_name: str,
-    output_path: Path,
-    data_path: str,
+    lora_adapter_path: str = None,
+    base_model_dict: dict = None,
+    model_name: str = None,
+    output_path: Path = None,
+    data_path: str = None,
     queue: str = "gpu_h100",
     charge_group: str = "cellmap",
     json_data: dict = None,
     scale: str = "s0",
+    weights_path: str = None,
 ) -> Path:
     """
     Generate .yaml configuration for serving a finetuned model.
@@ -31,6 +32,8 @@ def generate_finetuned_model_yaml(
 
     Args:
         lora_adapter_path: Path to the saved LoRA adapter directory
+        weights_path: Instead of an adapter, a full state dict from a
+            --lora-r 0 (full finetune) run. Exactly one of the two.
         base_model_dict: Dict describing the base model (from model_config.to_dict())
         model_name: Name of the finetuned model
         output_path: Where to write the .yaml file
@@ -52,13 +55,18 @@ def generate_finetuned_model_yaml(
         )
 
     # Build the model entry
+    if bool(lora_adapter_path) == bool(weights_path):
+        raise ValueError("generate_finetuned_model_yaml needs exactly one of lora_adapter_path / weights_path")
     model_entry = {
         "type": "finetune",
         "name": model_name,
-        "lora_adapter_path": lora_adapter_path,
         "base_model": base_model_dict,
         "scale": scale,
     }
+    if weights_path:
+        model_entry["weights_path"] = weights_path
+    else:
+        model_entry["lora_adapter_path"] = lora_adapter_path
 
     # Build the full YAML structure
     yaml_dict = {

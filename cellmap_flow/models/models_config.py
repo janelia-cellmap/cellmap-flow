@@ -780,14 +780,20 @@ class FinetuneModelConfig(ModelConfig):
 
     def __init__(
         self,
-        lora_adapter_path: str,
-        base_model: dict,
+        lora_adapter_path: str = None,
+        base_model: dict = None,
         name: str = None,
         scale=None,
+        weights_path: str = None,
     ):
         """
         Args:
             lora_adapter_path: Path to the saved LoRA adapter directory.
+            weights_path: Alternative to lora_adapter_path: a full state dict
+                (torch.save of model.state_dict()) from a full finetune, i.e.
+                a run with --lora-r 0. Loaded strictly onto the same trainable
+                module the base model config produces. Exactly one of
+                lora_adapter_path / weights_path must be given.
             base_model: Dict describing the base model (same format as a YAML
                 model entry, e.g. {"type": "fly", "checkpoint_path": "...", ...}).
                 May also be passed as a string produced by
@@ -800,6 +806,16 @@ class FinetuneModelConfig(ModelConfig):
         """
         super().__init__()
         self.lora_adapter_path = lora_adapter_path
+        self.weights_path = weights_path
+        if bool(lora_adapter_path) == bool(weights_path):
+            raise ValueError(
+                "FinetuneModelConfig needs exactly one of lora_adapter_path "
+                "(a LoRA adapter directory) or weights_path (a full state dict "
+                f"from a --lora-r 0 run); got lora_adapter_path={lora_adapter_path!r}, "
+                f"weights_path={weights_path!r}"
+            )
+        if base_model is None:
+            raise ValueError("FinetuneModelConfig requires base_model (a model entry dict)")
         if isinstance(base_model, str):
             from cellmap_flow.utils.web_utils import decode_to_json
 
@@ -821,13 +837,18 @@ class FinetuneModelConfig(ModelConfig):
             )
         return self._base_model_config
 
+    def _weights_flag(self) -> str:
+        if self.weights_path:
+            return f"--weights-path {self.weights_path}"
+        return f"--lora-adapter-path {self.lora_adapter_path}"
+
     @property
     def command(self):
         from cellmap_flow.utils.web_utils import encode_to_str
 
         encoded_base_model = encode_to_str(self.base_model_dict)
         return (
-            f"finetune --lora-adapter-path {self.lora_adapter_path} "
+            f"finetune {self._weights_flag()} "
             f"--base-model {encoded_base_model}"
         )
 
@@ -877,7 +898,21 @@ class FinetuneModelConfig(ModelConfig):
                     base_model = trainable
 
         device = next(base_model.parameters()).device
-        model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
+        if self.weights_path:
+            # Full finetune: the trained weights are the whole module, saved
+            # from the same trainable tree built above, so strict is right --
+            # a key mismatch here means the served model is not the trained one.
+            state = torch.load(self.weights_path, map_location=device, weights_only=True)
+            missing, unexpected = base_model.load_state_dict(state, strict=False)
+            if missing or unexpected:
+                raise RuntimeError(
+                    f"weights_path {self.weights_path} does not match the base model: "
+                    f"{len(missing)} missing, {len(unexpected)} unexpected keys "
+                    f"(e.g. {(missing or unexpected)[:3]})"
+                )
+            model = base_model
+        else:
+            model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
         model.to(device)
         model.eval()
 
@@ -907,6 +942,7 @@ class FinetuneModelConfig(ModelConfig):
         result = {
             "type": "finetune",
             "lora_adapter_path": self.lora_adapter_path,
+            "weights_path": self.weights_path,
             "base_model": self.base_model_dict,
         }
         if self.name is not None:

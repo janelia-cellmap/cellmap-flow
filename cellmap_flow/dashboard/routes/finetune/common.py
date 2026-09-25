@@ -29,6 +29,7 @@ RESTART_PASSTHROUGH_KEYS = [
     "distillation_lambda",
     "margin",
     "balance_classes",
+    "augment",
     "mask_unannotated",
     "gradient_accumulation_steps",
     "num_workers",
@@ -203,6 +204,22 @@ def autodetect_output_type(model_config, output_type, offsets):
                 )
 
         if resolved_output_type is None:
+            # The cellmap distance models announce themselves only by name
+            # (e.g. cellmap/salivary_..._nuc_mouse_distance_32nm_...): their
+            # metadata has a single plain channel name. Trained on a soft
+            # tanh-distance target, they need the matching target type, not
+            # a hard binary one that would flatten the output.
+            names = " ".join(
+                str(getattr(model_config, attr, "") or "")
+                for attr in ("repo", "name", "model_name", "script_path", "checkpoint_path")
+            ).lower()
+            if "distance" in names:
+                resolved_output_type = "distance"
+                logger.info(
+                    "Auto-detected output_type='distance' from the model name"
+                )
+
+        if resolved_output_type is None:
             resolved_output_type = "binary"
 
     if resolved_output_type == "affinities" and resolved_offsets is None:
@@ -299,13 +316,11 @@ _MANIFEST_REQUIRED_FIELDS = (
 def write_volume_manifest(volume):
     """Mark a browser-painted annotation volume as trainable by the new path.
 
-    ``create_dataloader`` picks its dataset by looking for this manifest and
-    nothing else: present means VirtualPatchDataset, which streams patches
-    from the volume zarr and is the only dataset that honours good regions.
-    Absent means the legacy CorrectionDataset, which reads whatever
-    per-chunk ``_chunk_*.zarr`` extracts the MinIO sync happened to
-    materialize -- typically a handful of samples, one batch per epoch, and
-    no notion of a good region at all.
+    ``create_dataloader`` requires this manifest: it is what points the
+    trainer at the volume zarr to stream patches from, and it carries the
+    good regions, the dense/sparse ratio and the patch geometry. Without
+    one, training now raises rather than falling back -- the old per-chunk
+    dataset that used to serve that case honoured none of the above.
 
     Only the YAML crop importer used to write one, so every session where
     you painted scribbles in the browser trained on the legacy path and

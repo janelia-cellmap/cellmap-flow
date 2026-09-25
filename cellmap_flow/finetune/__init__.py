@@ -13,8 +13,8 @@ from cellmap_flow.finetune.lora_wrapper import (
     save_lora_adapter,
 )
 
-from cellmap_flow.finetune.correction_dataset import (
-    CorrectionDataset,
+from cellmap_flow.finetune.virtual_dataset import (
+    VirtualPatchDataset,
     create_dataloader,
 )
 
@@ -30,7 +30,7 @@ __all__ = [
     "print_lora_parameters",
     "load_lora_adapter",
     "save_lora_adapter",
-    "CorrectionDataset",
+    "VirtualPatchDataset",
     "create_dataloader",
     "LoRAFinetuner",
     "DiceLoss",

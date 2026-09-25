@@ -37,7 +37,7 @@ import torch
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
-from cellmap_flow.finetune.correction_dataset import create_dataloader
+from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 
 # Set up logging
@@ -378,7 +378,8 @@ def _generate_model_files(args, model_config, timestamp):
         )
 
     yaml_path = generate_finetuned_model_yaml(
-        lora_adapter_path=str(output_dir_path / "lora_adapter"),
+        lora_adapter_path=str(output_dir_path / "lora_adapter") if args.lora_r > 0 else None,
+        weights_path=str(output_dir_path / "full_finetune" / "model_state_dict.pt") if args.lora_r <= 0 else None,
         base_model_dict=model_config.to_dict(),
         model_name=finetuned_model_name,
         output_path=models_dir / f"{finetuned_model_name}.yaml",
@@ -396,6 +397,7 @@ def _build_target_transform(args, model_config):
         BinaryTargetTransform,
         BroadcastBinaryTargetTransform,
         AffinityTargetTransform,
+        DistanceTargetTransform,
     )
 
     output_type = args.output_type
@@ -446,6 +448,33 @@ def _build_target_transform(args, model_config):
 
         logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
         return AffinityTargetTransform(offsets, num_channels=num_channels)
+
+    elif output_type == "distance":
+        if args.loss_type != "bce":
+            raise ValueError(
+                "--output-type distance produces soft targets in [0, 1]; only "
+                "--loss-type bce (BCE with logits) is defined for them. Margin and "
+                "dice assume hard labels, and mse is applied to raw logits."
+            )
+        if args.label_smoothing > 0:
+            logger.warning(
+                "Label smoothing is meaningless on a soft distance target; "
+                f"ignoring --label-smoothing {args.label_smoothing}."
+            )
+            args.label_smoothing = 0.0
+        if getattr(args, "mask_unannotated", False):
+            logger.warning(
+                "--output-type distance with --mask-unannotated (sparse/scribble "
+                "annotations): a distance transform needs dense 3D labels, and "
+                "voxels next to unannotated ones are left out of the loss, so "
+                "very little of a scribble session will be supervised. Use "
+                "--output-type binary --loss-type margin for scribbles."
+            )
+        logger.info(
+            f"Using distance target transform (sigma={args.distance_sigma} voxels, "
+            f"broadcast to {num_channels} channel(s))"
+        )
+        return DistanceTargetTransform(args.distance_sigma, num_channels=num_channels)
 
     else:
         raise ValueError(f"Unknown output type: {output_type}")
@@ -548,7 +577,8 @@ def build_arg_parser():
         # correcting a model that is mostly right, so the adapter wants just
         # enough capacity to fix the bad regions and not enough to rewrite
         # the good ones.
-        help="LoRA rank (default: 8)"
+        help="LoRA rank (default: 8). 0 = full finetune: every parameter trainable, no adapter; "
+             "exports full_finetune/model_state_dict.pt instead of lora_adapter/."
     )
     parser.add_argument(
         "--lora-alpha",
@@ -561,6 +591,16 @@ def build_arg_parser():
         type=float,
         default=0.1,
         help="LoRA dropout (default: 0.1)"
+    )
+    parser.add_argument(
+        "--lora-min-channels",
+        type=int,
+        default=0,
+        help="Skip LoRA on layers narrower than this on either side. "
+             "Narrow full-resolution layers are where the adapter is expensive "
+             "and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips "
+             "7 of 19 layers (~1%% of adapter params) for a 1.7x faster step. "
+             "(default: 0, adapt every layer)"
     )
 
     # Data arguments
@@ -580,7 +620,11 @@ def build_arg_parser():
     parser.add_argument(
         "--no-augment",
         action="store_true",
-        help="Disable data augmentation"
+        help="Disable data augmentation (random flips, XY rotations, brightness "
+             "and noise). Patch-center jitter is always applied and is not "
+             "affected. Augmentation pays off when a run revisits the same "
+             "patches many times; below a few hundred gradient steps it mostly "
+             "adds variance, which is why the dashboard defaults it off."
     )
 
     # Training arguments
@@ -664,6 +708,12 @@ def build_arg_parser():
         default=4,
         help="DataLoader num_workers (default: 4)"
     )
+    parser.add_argument(
+        "--no-tensorboard",
+        action="store_true",
+        help="Do not write TensorBoard event files to <output-dir>/tensorboard "
+             "(default: write them; view with `tensorboard --logdir <training dir>`)"
+    )
 
     # Resuming
     parser.add_argument(
@@ -702,12 +752,21 @@ def build_arg_parser():
         "--output-type",
         type=str,
         default="binary",
-        choices=["binary", "binary_broadcast", "affinities"],
+        choices=["binary", "binary_broadcast", "affinities", "distance"],
         help="How to generate training targets from annotations. "
              "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
              "'binary_broadcast': broadcast binary target to all output channels. "
              "'affinities': compute affinity targets from instance labels (requires offsets). "
+             "'distance': soft signed-distance target (tanh(d/sigma)+1)/2 for models trained "
+             "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type bce. "
              "(default: binary)"
+    )
+    parser.add_argument(
+        "--distance-sigma",
+        type=float,
+        default=6.0,
+        help="tanh scale in output voxels for --output-type distance. The cellmap "
+             "distance models were trained with 6. (default: 6.0)"
     )
     parser.add_argument(
         "--select-channel",
@@ -750,7 +809,10 @@ def main():
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
-    logger.info(f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha})")
+    logger.info(
+        f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha}, "
+        f"min_channels: {args.lora_min_channels})"
+    )
     logger.info(f"Batch size: {args.batch_size}")
     logger.info(f"Epochs: {args.num_epochs}")
     logger.info(f"Learning rate: {args.learning_rate}")
@@ -834,13 +896,29 @@ def main():
             logger.warning("No CellmapModel available — LoRA may fail on TorchScript model")
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
-    logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
-    lora_model = wrap_model_with_lora(
-        base_model,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-    )
+    if args.lora_r <= 0:
+        # Full finetune. Measured against LoRA r=64 on mito-aff-unet-setup-16
+        # (2026-09-23): faster per step (0.50 vs 0.90 s), lower memory (31 vs
+        # 50 GB at batch 8), and lower training loss at every checkpoint --
+        # the adapter's savings are in parameters, which is not where this
+        # model's cost is. The export is a full state dict under
+        # full_finetune/, served via FinetuneModelConfig(weights_path=...).
+        logger.info("lora_r=0: full finetuning -- every parameter trainable, no adapter. "
+                    "Restarts reset the optimizer but not the weights.")
+        for p in base_model.parameters():
+            p.requires_grad_(True)
+        lora_model = base_model
+        n_train = sum(p.numel() for p in lora_model.parameters())
+        logger.info(f"trainable params: {n_train:,} || all params: {n_train:,} || trainable%: 100.0000")
+    else:
+        logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
+        lora_model = wrap_model_with_lora(
+            base_model,
+            lora_r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            lora_min_channels=args.lora_min_channels,
+        )
 
     # === Training loop (supports restart via signal file) ===
     server_started = False
@@ -922,6 +1000,7 @@ def main():
             margin=args.margin,
             balance_classes=args.balance_classes,
             target_transform=target_transform,
+            tensorboard=not args.no_tensorboard,
         )
 
         # Resume from checkpoint if specified (first iteration only)
@@ -954,6 +1033,12 @@ def main():
                     # Reset LoRA weights for fresh restart
                     logger.info("Resetting LoRA adapter weights for fresh restart...")
                     from peft import PeftModel
+                    if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
+                        # A restart cannot turn a LoRA run into a full finetune (or back):
+                        # the model object is built once. Keep the adapter and say so.
+                        logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                                       "submit a new job for that. Keeping the current adapter setup.")
+                        args.lora_r = max(1, int(lora_model.peft_config['default'].r))
                     if isinstance(lora_model, PeftModel):
                         base = lora_model.unload()
                         lora_model = wrap_model_with_lora(
@@ -961,6 +1046,7 @@ def main():
                             lora_r=args.lora_r,
                             lora_alpha=args.lora_alpha,
                             lora_dropout=args.lora_dropout,
+                            lora_min_channels=args.lora_min_channels,
                         )
 
                     lora_model.train()
@@ -973,14 +1059,17 @@ def main():
                 else:
                     return 1
 
-            # Save final adapter
-            logger.info("\nSaving LoRA adapter...")
+            # Save final adapter (or, for a full finetune, the full weights)
+            logger.info("\nSaving LoRA adapter..." if args.lora_r > 0 else "\nSaving full finetuned weights...")
             trainer.save_adapter()
 
             logger.info("\n" + "=" * 60)
             logger.info("Finetuning Complete!")
             logger.info(f"Best loss: {stats['best_loss']:.6f}")
-            logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            if args.lora_r > 0:
+                logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
+            else:
+                logger.info(f"Weights saved to: {args.output_dir}/full_finetune/model_state_dict.pt")
             logger.info("=" * 60)
 
             # Generate model files
@@ -1032,6 +1121,12 @@ def main():
                 # finetuned weights.
                 logger.info("Resetting LoRA adapter weights for fresh restart...")
                 from peft import PeftModel
+                if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
+                    # A restart cannot turn a LoRA run into a full finetune (or back):
+                    # the model object is built once. Keep the adapter and say so.
+                    logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                                   "submit a new job for that. Keeping the current adapter setup.")
+                    args.lora_r = max(1, int(lora_model.peft_config['default'].r))
                 if isinstance(lora_model, PeftModel):
                     base = lora_model.unload()
                     lora_model = wrap_model_with_lora(
@@ -1039,6 +1134,7 @@ def main():
                         lora_r=args.lora_r,
                         lora_alpha=args.lora_alpha,
                         lora_dropout=args.lora_dropout,
+                        lora_min_channels=args.lora_min_channels,
                     )
 
                 lora_model.train()
