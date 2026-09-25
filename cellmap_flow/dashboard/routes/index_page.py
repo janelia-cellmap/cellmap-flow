@@ -8,6 +8,7 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.globals import g
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.utils.web_utils import stringify_list_values_for_template
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,21 @@ def index():
     model_mergers = get_model_mergers_list()
     model_catalog = g.model_catalog
     model_catalog["User"] = {j.model_name: "" for j in g.jobs}
-    default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
-    default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
+    # Coerce list-valued params (e.g. ChannelSelection.channels=[5]) to
+    # comma-joined strings before passing to the template. The template
+    # renders `<input value="{{ param_val }}">` which calls str() on the
+    # value; without this, str([5])="[5]" leaks into the input field,
+    # gatherPostProcessData re-submits "[5]", and /api/process 500s on
+    # int("[5]"). Mirrors list_cls_to_dict's comma-join convention used
+    # for URL args.
+    default_post_process = {
+        d.to_dict()["name"]: stringify_list_values_for_template(d.to_dict())
+        for d in g.postprocess
+    }
+    default_input_norm = {
+        d.to_dict()["name"]: stringify_list_values_for_template(d.to_dict())
+        for d in g.input_norms
+    }
     logger.debug(f"Model catalog: {model_catalog}")
     logger.debug(f"Default postprocess: {default_post_process}")
     logger.debug(f"Default input norm: {default_input_norm}")
@@ -36,9 +50,35 @@ def index():
         if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
     ]
 
+    # When the dashboard is accessed via a genuine reverse proxy (e.g. spine.med.uvm.edu
+    # forwarding to localhost:5000), rewrite the iframe URL to use the same external
+    # host. Otherwise the browser sees an HTTPS page trying to load an
+    # `http://localhost:NGPORT/v/<hash>/` iframe and blocks it as mixed-content
+    # + cross-origin. Only X-Forwarded-Host counts as "there's a proxy" -- falling back
+    # to request.host (as this used to) fires the rewrite for *any* non-localhost direct
+    # access too, pointing the iframe at the dashboard's own port where no matching proxy
+    # route actually exists (404s), when the original unrewritten neuroglancer_url -- the
+    # real embedded viewer server's own address -- would have worked fine as-is.
+    ng_url = g.NEUROGLANCER_URL
+    forwarded_host = request.headers.get("X-Forwarded-Host")
+    if forwarded_host and not forwarded_host.startswith(("localhost", "127.")):
+        from urllib.parse import urlparse
+        parsed = urlparse(ng_url) if ng_url else None
+        if parsed and parsed.netloc and parsed.netloc != forwarded_host:
+            # Honor a reverse proxy's X-Forwarded-Proto when present (e.g. spine's nginx
+            # terminates TLS and forwards plain HTTP to us, so the *client*-facing scheme
+            # is https even though request.scheme here is http). With no proxy in front
+            # (direct-ssh/direct-network access), there's no such header, so this must
+            # fall back to the current request's own actual scheme -- not a hardcoded
+            # "https", which broke plain-http direct access (browser tries to load the
+            # iframe over https, hitting our plain-HTTP werkzeug server with a TLS
+            # handshake it can't parse: "<ip> sent an invalid response").
+            proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+            ng_url = f"{proto}://{forwarded_host}{parsed.path}"
+
     return render_template(
         "index.html",
-        neuroglancer_url=g.NEUROGLANCER_URL,
+        neuroglancer_url=ng_url,
         inference_servers=g.INFERENCE_SERVER,
         input_normalizers=input_norms,
         output_postprocessors=output_postprocessors,

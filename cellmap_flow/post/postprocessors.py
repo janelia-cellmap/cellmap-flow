@@ -3,19 +3,30 @@ import numpy as np
 import inspect
 import ast
 import neuroglancer
-import pymorton
 import threading
 from scipy.ndimage import label
 import mwatershed as mws
 from scipy.ndimage import measurements
 import fastremap
 from funlib.math import cantor_number
+from scipy.special import expit
 import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 
 postprocessing_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
+
+
+def _morton_interleave(*chunk_corner):
+    try:
+        import pymorton
+    except ImportError as e:
+        raise ImportError(
+            "pymorton is required for Morton-based segmentation relabeling. "
+            "Install it with `pip install pymorton` or `pip install cellmap-flow[postprocess]`."
+        ) from e
+    return pymorton.interleave(*chunk_corner)
 
 
 class PostProcessor(SerializableInterface):
@@ -29,17 +40,6 @@ class PostProcessor(SerializableInterface):
     @property
     def is_segmentation(self):
         return None
-
-
-class SigmoidPostprocessor(PostProcessor):
-    """Apply sigmoid activation to convert logits to probabilities."""
-
-    def _process(self, data):
-        return 1.0 / (1.0 + np.exp(-data.astype(np.float32)))
-
-    @property
-    def dtype(self):
-        return np.float32
 
 
 class DefaultPostprocessor(PostProcessor):
@@ -86,6 +86,64 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
+class FillHolesPostprocessor(PostProcessor):
+    """Threshold, then fill topologically enclosed background holes inside
+    each connected foreground blob (fastmorph.fill_holes). Intended for
+    compact single-instance organelles (e.g. a nucleus) that should never
+    have interior gaps -- do not use on structures with genuine internal
+    lumens.
+
+    Runs per-chunk with no cross-chunk halo, so a hole that itself touches
+    the chunk boundary is not topologically enclosed *within the chunk* and
+    won't be filled by fill_holes alone. morphological_closing is exposed
+    for that case but defaults off: in testing, fastmorph's dilate-then-erode
+    closing pass sometimes leaves small (~2-voxel) fully-enclosed holes
+    unfilled where plain fill_holes fills them correctly -- verify before
+    relying on it.
+    """
+
+    # fastmorph builds vary: some accept morphological_closing on fill_holes,
+    # some don't (and raise TypeError). Detect once rather than pin a version.
+    _FILL_HOLES_ACCEPTS_CLOSING = (
+        "morphological_closing" in inspect.signature(fastmorph.fill_holes).parameters
+    )
+
+    def __init__(self, threshold: float = 0.0, morphological_closing: str = "False"):
+        self.threshold = float(threshold)
+        self.morphological_closing = str(morphological_closing) == "True"
+
+    def _process(self, data):
+        binary = data.astype(np.float32) > self.threshold
+        if binary.ndim == 4:
+            filled = np.stack([self._fill_volume(ch) for ch in binary], axis=0)
+        elif binary.ndim == 3:
+            filled = self._fill_volume(binary)
+        else:
+            raise ValueError(
+                f"FillHolesPostprocessor expects 3D or (c, z, y, x) data, got shape {data.shape}"
+            )
+        return filled.astype(np.uint8)
+
+    def _fill_volume(self, binary):
+        # fastmorph.fill_holes only accepts up to 3D input.
+        if not self.morphological_closing:
+            return fastmorph.fill_holes(binary, remove_enclosed=True)
+        if self._FILL_HOLES_ACCEPTS_CLOSING:
+            return fastmorph.fill_holes(
+                binary, remove_enclosed=True, morphological_closing=True
+            )
+        closed = fastmorph.closing(binary.astype(np.uint8)) > 0
+        return fastmorph.fill_holes(closed, remove_enclosed=True)
+
+    @property
+    def dtype(self):
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)
@@ -116,7 +174,7 @@ class MortonSegmentationRelabeling(PostProcessor):
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
         #        if self.use_exact:
-        morton_order_number = pymorton.interleave(*chunk_corner)
+        morton_order_number = _morton_interleave(*chunk_corner)
         unique_increment = chunk_num_voxels * morton_order_number
         if not self.use_exact:
             mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
@@ -192,7 +250,7 @@ class AffinityPostprocessor(PostProcessor):
 
         fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
         fastremap.renumber(segmentation, in_place=True)
-        unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
+        unique_increment = chunk_num_voxels * _morton_interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256
             # https://chatgpt.com/c/67c5db69-a3cc-8001-8be5-21d00cef0a8f
@@ -377,6 +435,22 @@ def get_postprocessors_list() -> list[dict]:
         )
     return postprocessors
 
+class SigmoidPostprocessor(PostProcessor):
+    """Applies a sigmoid activation, for models exported without it baked in (e.g. raw DaCapo checkpoints trained with a fused BCEWithLogitsLoss)."""
+
+    def __init__(self):
+        pass
+
+    def _process(self, data) -> np.ndarray:
+        return expit(data.astype(np.float32))
+
+    @property
+    def dtype(self):
+        return np.float32
+
+    @property
+    def is_segmentation(self):
+        return False
 
 def get_postprocessors(elms) -> list[PostProcessor]:
     """Get postprocessors from either dict or list format."""

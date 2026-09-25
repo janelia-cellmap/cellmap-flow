@@ -138,10 +138,34 @@ class Job(ABC):
 class LocalJob(Job):
     """Job running as a local subprocess."""
     
-    def __init__(self, process: subprocess.Popen, model_name: Optional[str] = None):
+    def __init__(
+        self,
+        process: subprocess.Popen,
+        model_name: Optional[str] = None,
+        log_file: Optional[str] = None,
+        log_offset: int = 0,
+    ):
         super().__init__(model_name)
         self.process = process
-    
+        self.job_id = f"local-{process.pid}" if process is not None else "local"
+        # Set when run_locally() redirected stdout/stderr to a file. In that
+        # case process.stdout is None, so wait_for_host() tails this file
+        # from log_offset (its size at launch) instead of select()ing on
+        # pipes -- and never parses content a previous run appended.
+        self.log_file = str(log_file) if log_file is not None else None
+        self._log_offset = log_offset
+
+    def _read_log_since_start(self) -> str:
+        """Return everything this launch has written to its log file so far."""
+        if not self.log_file:
+            return ""
+        try:
+            with open(self.log_file, "r", errors="replace") as fh:
+                fh.seek(self._log_offset)
+                return fh.read()
+        except OSError:
+            return ""
+
     def kill(self) -> None:
         """Terminate the local process."""
         if self.process is None or self.process.poll() is not None:
@@ -175,12 +199,12 @@ class LocalJob(Job):
         else:
             return JobStatus.FAILED
     
-    def wait_for_host(self, timeout: int = 180) -> Optional[str]:
+    def wait_for_host(self, timeout: int = 120) -> Optional[str]:
         """
         Monitor process output for host information.
 
         Args:
-            timeout: Maximum time to wait in seconds (default 180s for model loading)
+            timeout: Maximum time to wait in seconds (default 120s — model loading via pt2 can take >60s)
 
         Returns:
             Host URL if found, None otherwise
@@ -191,12 +215,20 @@ class LocalJob(Job):
         logger.info(f"Monitoring local process for host information...")
         output = ""
         waited = 0
+        # stdout/stderr are None when run_locally() redirected them to a log
+        # file; select() on None raises TypeError, so tail the file instead.
+        file_mode = self.process.stdout is None
         
         while waited < timeout:
-            # Non-blocking read with 1 second timeout
-            rlist, _, _ = select.select(
-                [self.process.stdout, self.process.stderr], [], [], 1.0
-            )
+            if file_mode:
+                time.sleep(1.0)
+                output = self._read_log_since_start()
+                rlist = []
+            else:
+                # Non-blocking read with 1 second timeout
+                rlist, _, _ = select.select(
+                    [self.process.stdout, self.process.stderr], [], [], 1.0
+                )
 
             # Read available output
             if self.process.stdout in rlist:
@@ -219,6 +251,7 @@ class LocalJob(Job):
             # Check if process died
             if self.process.poll() is not None:
                 logger.error(f"Process exited prematurely with code {self.process.returncode}")
+                logger.error(f"Process output so far: {output}")
                 self.status = JobStatus.FAILED
                 break
             
@@ -239,6 +272,7 @@ class LSFJob(Job):
     ):
         super().__init__(model_name)
         self.job_id = job_id
+        # Resolved (%J-expanded) path of this job's bsub -o/-e file, if any.
         self.log_file = log_file
         # Set by get_status() to say whether bjobs actually answered; see
         # observed_status().
@@ -469,8 +503,19 @@ def extract_host_from_output(output: str) -> Optional[str]:
     
     try:
         if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
-            host = output.split(IP_PATTERN[0])[1].split(IP_PATTERN[1])[0]
-            return host
+            # Take the LAST marker pair, never the first. When the job writes
+            # to an append-mode log shared across runs (bsub -o file), bpeek
+            # and the file itself contain every previous run's address too,
+            # and the first one is the OLDEST -- that is exactly how the
+            # viewer ended up pointing at long-dead servers. The current
+            # job's own address is always the newest occurrence.
+            tail = output.rsplit(IP_PATTERN[0], 1)[1]
+            if IP_PATTERN[1] not in tail:
+                # Closing marker not flushed yet -- wait for the full line
+                # rather than returning a truncated host.
+                return None
+            host = tail.split(IP_PATTERN[1])[0].strip()
+            return host or None
     except (IndexError, AttributeError) as e:
         logger.debug(f"Could not extract host: {e}")
     
@@ -629,11 +674,12 @@ def submit_bsub_job(
     job_name: str = "my_job",
     num_gpus: int = 1,
     num_cpus: int = 4,
+    log_file: Optional[str] = None,
     walltime: Optional[str] = None,
 ) -> LSFJob:
     """
     Submit a job to LSF cluster using bsub.
-    
+
     Args:
         command: Shell command to execute
         queue: LSF queue name
@@ -641,19 +687,32 @@ def submit_bsub_job(
         job_name: Name for the job
         num_gpus: Number of GPUs to request
         num_cpus: Number of CPUs to request
-        
+        log_file: Optional explicit path to redirect the job's stdout/stderr
+            to via bsub's `-o`/`-e`, overriding the default SERVER_LOG_DIR
+            location. Use a `%J` placeholder (expanded by LSF to the job id)
+            so each job gets its own file: `-o` APPENDS, and with a shared
+            per-model file `bpeek` returns every earlier run's output as
+            well, which is how wait_for_host() used to pick up stale
+            addresses.
+        walltime: Optional LSF wall-clock time limit for the job.
+
     Returns:
         LSFJob object for the submitted job
-        
+
     Raises:
         subprocess.CalledProcessError: If job submission fails
     """
-    SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
     # %J is substituted by LSF with the actual job ID once assigned.
     log_stem = _log_stem(job_name)
-    log_pattern = SERVER_LOG_DIR / f"{log_stem}_%J.log"
+    if log_file:
+        log_pattern = log_file
+    else:
+        SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_pattern = SERVER_LOG_DIR / f"{log_stem}_%J.log"
 
     bsub_command = ["bsub", "-J", job_name, "-o", str(log_pattern)]
+    if log_file:
+        bsub_command += ["-e", str(log_file)]
 
     if charge_group:
         bsub_command += ["-P", charge_group]
@@ -679,10 +738,13 @@ def submit_bsub_job(
 
         # Extract job ID from output like "Job <12345> is submitted..."
         job_id = result.stdout.split()[1].strip('<>')
-        logger.info(f"Job {job_id} submitted successfully")
+        if log_file:
+            resolved_log = str(log_file).replace("%J", job_id)
+        else:
+            resolved_log = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
+        logger.info(f"Job {job_id} submitted successfully (log: {resolved_log})")
 
-        log_file = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
-        return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
+        return LSFJob(job_id=job_id, model_name=job_name, log_file=resolved_log)
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Job submission failed: {e.stderr}")
@@ -694,14 +756,18 @@ def submit_bsub_job(
         raise
 
 
-def run_locally(command: str, name: str) -> LocalJob:
+def run_locally(command: str, name: str, log_file=None) -> LocalJob:
     """
     Run command locally as a subprocess (fallback when bsub unavailable).
-    
+
     Args:
         command: Shell command to execute
         name: Job name for tracking
-        
+        log_file: Optional path to a log file. When provided, stdout and
+            stderr are redirected to this file instead of to pipes. This
+            avoids a deadlock where child processes (e.g. DataLoader workers)
+            fill the 64 KB pipe buffer while the parent is blocked elsewhere.
+
     Returns:
         LocalJob object with process information
     """
@@ -713,19 +779,62 @@ def run_locally(command: str, name: str) -> LocalJob:
     args = shlex.split(command) if isinstance(command, str) else list(command)
 
     try:
-        process = subprocess.Popen(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
 
-        local_job = LocalJob(process=process, model_name=name)
+        log_offset = 0
+        if log_file is not None:
+            log_file = str(log_file)
+            if "%J" in log_file:
+                # bsub expands %J to the LSF job id (see submit_bsub_job);
+                # there is no job id here, so substitute a timestamp to keep
+                # the log unique per launch instead of a literal "%J".
+                log_file = log_file.replace("%J", time.strftime("%Y%m%d-%H%M%S"))
+            # Remember where this launch's output starts so wait_for_host()
+            # never parses content a previous run appended to the same file.
+            log_offset = os.path.getsize(log_file) if os.path.exists(log_file) else 0
+            log_fh = open(log_file, "a")
+            process = subprocess.Popen(
+                args,
+                stdout=log_fh,
+                stderr=log_fh,
+                env=env,
+            )
+        else:
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+
+        local_job = LocalJob(
+            process=process, model_name=name, log_file=log_file, log_offset=log_offset
+        )
         return local_job
 
     except Exception as e:
         logger.error(f"Error starting local process: {e}")
         raise
+
+
+def _register_job(job: "Job", job_name: str) -> None:
+    """Add `job` to g.jobs, evicting (and killing) any prior job already
+    registered under the same name first.
+
+    Without this, resubmitting/restarting a model piles up duplicate Job
+    entries with the same model_name -- a lookup by name (e.g.
+    update_run_models()'s "is this model already running" check, or the
+    viewer's own per-job loop) then resolves to whichever entry happens to
+    come first, which can be a stale, already-dead job instead of the
+    current live one.
+    """
+    stale = [j for j in g.jobs if j.model_name == job_name]
+    for j in stale:
+        j.kill()
+    g.jobs = [j for j in g.jobs if j.model_name != job_name]
+    g.jobs.append(job)
 
 
 def start_hosts(
@@ -735,12 +844,13 @@ def start_hosts(
     job_name: str = "example_job",
     use_https: bool = False,
     wait_for_host: bool = True,
+    log_file: Optional[str] = None,
     walltime: Optional[str] = None,
     cycle_queues: Optional[bool] = None,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
-    
+
     Args:
         command: Command to execute
         queue: LSF queue name (for bsub)
@@ -748,10 +858,14 @@ def start_hosts(
         job_name: Name for the job
         use_https: Whether to use HTTPS (adds cert/key flags)
         wait_for_host: Whether to wait for host information before returning
+        log_file: Optional path to redirect the job's stdout/stderr to.
+            Passed through to `submit_bsub_job`/`run_locally` so the local
+            fallback doesn't fall back to PIPE (which deadlocks once
+            `wait_for_host=False` skips draining it).
         walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
         cycle_queues: Try other GPU queues when the requested one is busy or
             closed. Defaults to g.cycle_gpu_queues, which defaults to True.
-        
+
     Returns:
         Job object (LSFJob or LocalJob) with job information
     """
@@ -770,13 +884,13 @@ def start_hosts(
     # starts on a different GPU queue beats one that never starts.
     if cycle_queues is None:
         cycle_queues = getattr(g, "cycle_gpu_queues", True)
-    
+
     # Add HTTPS flags if needed
     if use_https:
         command = f"{command} --certfile=host.cert --keyfile=host.key"
-    
+
     job: Job
-    
+
     if is_bsub_available():
         logger.info("Using bsub for job submission")
         candidates = gpu_queue_candidates(queue, cycle=cycle_queues)
@@ -788,6 +902,7 @@ def start_hosts(
                     candidate,
                     charge_group,
                     job_name=f"{job_name}",
+                    log_file=log_file,
                     walltime=walltime,
                 )
             except Exception as e:
@@ -796,7 +911,7 @@ def start_hosts(
 
             if not wait_for_host:
                 g.queue = candidate
-                g.jobs.append(job)
+                _register_job(job, job_name)
                 return job
 
             # Give an unstarted job less patience while there is somewhere
@@ -814,7 +929,7 @@ def start_hosts(
                 else:
                     logger.info(f"Running on {candidate}")
                 g.queue = candidate
-                g.jobs.append(job)
+                _register_job(job, job_name)
                 return job
 
             # Only a job that never started is a queue problem. One that ran
@@ -831,7 +946,7 @@ def start_hosts(
             observed = job.observed_status()
             if observed is not None and observed != JobStatus.PENDING:
                 g.queue = candidate
-                g.jobs.append(job)
+                _register_job(job, job_name)
                 return job
 
             if more_to_try:
@@ -843,19 +958,19 @@ def start_hosts(
                 job.kill()
             else:
                 g.queue = candidate
-                g.jobs.append(job)
+                _register_job(job, job_name)
                 return job
 
         logger.error("No GPU queue accepted the job")
         logger.info("Falling back to local execution")
     else:
         logger.info("bsub not available, running locally")
-    
+
     # Local execution (either by choice or as fallback)
-    job = run_locally(command, job_name)
-    
+    job = run_locally(command, job_name, log_file=log_file)
+
     if wait_for_host:
         job.wait_for_host()
-    
-    g.jobs.append(job)
+
+    _register_job(job, job_name)
     return job

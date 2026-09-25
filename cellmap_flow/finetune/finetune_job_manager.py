@@ -9,7 +9,6 @@ This module provides:
 import json
 import logging
 import os
-import shlex
 import re
 import string
 import sys
@@ -376,9 +375,21 @@ class FinetuneJobManager:
         # block-buffered when the destination is not a terminal -- so roughly
         # 8KB of output, five to ten epochs' worth, landed in the file at
         # once and the dashboard showed nothing in between.
+        #
+        # The trailing `>/dev/null 2>&1` discards tee's mirrored copy of its
+        # own stdout (tee already wrote the real copy to `log_file` itself).
+        # Without it, this pipeline's overall stdout -- which is what
+        # run_locally()/submit_bsub_job() would otherwise capture -- carries
+        # a full duplicate of the training output. On the LSF path that is
+        # merely wasted space in bsub's own -o file, but on the local
+        # (no-bsub) fallback run_locally() has nothing to redirect it to
+        # (log_file is intentionally not passed here, to avoid double-writing
+        # `log_file` from two independent writers) and defaults to an
+        # unconsumed subprocess.PIPE -- which deadlocks once the 64 KB kernel
+        # pipe buffer fills, hanging the training job.
         return (
             f"{loader_path}stdbuf -oL {command} 2>&1 "
-            f"| stdbuf -oL tee {_sh_quote(log_file)}"
+            f"| stdbuf -oL tee {_sh_quote(log_file)} >/dev/null 2>&1"
         )
 
     def _build_submission_metadata(
@@ -696,9 +707,16 @@ class FinetuneJobManager:
                 # this string would exec "LD_LIBRARY_PATH=..." as a program.
                 # Give it an argv list with an explicit shell instead -- the
                 # list form skips run_locally's shlex.split entirely.
+                #
+                # No log_file here: cli_command's own tee already writes the
+                # real copy to that path, and its mirrored stdout is
+                # discarded (`>/dev/null`) precisely so this call is safe to
+                # leave uncaptured -- passing log_file would both double-write
+                # `log_file` from two independent writers and race them for
+                # its current end-of-file.
                 lsf_job = run_locally(
                     command=["bash", "-c", cli_command],
-                    name=job_name
+                    name=job_name,
                 )
                 self.logger.info(f"Started local finetuning job (PID: {lsf_job.process.pid})")
             except Exception as e:
