@@ -64,17 +64,25 @@ logger = logging.getLogger(__name__)
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
-def _value_max(arr: np.ndarray) -> float:
-    """Upper bound of ``arr``'s value range, for range-relative intensity augmentation.
+def _intensity_range(arr: np.ndarray, normalizers=()) -> Tuple[Optional[float], Optional[float]]:
+    """The value range intensity augmentation keeps raw inside, as (low, high).
 
-    Integer dtypes report their dtype maximum (255 for the uint8 EM this is
-    normally pointed at). Floats are assumed already normalized to [0, 1]
-    unless they visibly exceed it.
+    The first normalizer's own window when it is a MinMaxNormalizer -- that
+    is the range the data is known to use, and the one it is clipped to next
+    anyway. Otherwise the dtype's range for integers, and no bound at all for
+    floats. Augmentation used to clip everything to [0, dtype max] (floats to
+    [0, max(1, max)]): signed and float raw lost its whole negative half, and
+    uint16 data using 0-4000 got noise of 655, a sixth of its real range.
     """
+    first = normalizers[0] if normalizers else None
+    if type(first).__name__ == "MinMaxNormalizer":
+        low, high = float(first.min_value), float(first.max_value)
+        if high > low:
+            return low, high
     if np.issubdtype(arr.dtype, np.integer):
-        return float(np.iinfo(arr.dtype).max)
-    observed = float(np.nanmax(arr)) if arr.size else 1.0
-    return max(1.0, observed)
+        info = np.iinfo(arr.dtype)
+        return float(info.min), float(info.max)
+    return None, None
 
 
 def _voxels_inside_any_bbox(
@@ -634,13 +642,24 @@ class VirtualPatchDataset(Dataset):
         return patch
 
     def _augment_intensity(self, patch: np.ndarray, rng) -> np.ndarray:
-        """Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range)."""
-        value_max = _value_max(patch)
+        """Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range).
+
+        The range is the data's own (see _intensity_range), and the result is
+        clipped to it; floats with no known range are not clipped, and their
+        noise is scaled by the patch's own magnitude.
+        """
+        low, high = _intensity_range(patch, self._input_normalizers)
+        if low is None:
+            span = max(1.0, float(np.nanmax(np.abs(patch)))) if patch.size else 1.0
+        else:
+            span = high - low
         scale = rng.uniform(0.8, 1.2)
-        noise = rng.normal(0.0, 0.01 * value_max, patch.shape)
-        out = np.clip(patch.astype(np.float32) * scale + noise, 0.0, value_max)
+        noise = rng.normal(0.0, 0.01 * span, patch.shape)
+        out = patch.astype(np.float32) * scale + noise
+        if low is not None:
+            out = np.clip(out, low, high)
         self._aug_pending["scale"] = float(scale)
-        self._aug_pending["value_max"] = float(value_max)
+        self._aug_pending["value_range"] = (low, high)
         return out.astype(np.float32)
 
     def _augment_spatial(self, raw: np.ndarray, ann: np.ndarray, rng):
