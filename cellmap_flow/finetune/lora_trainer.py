@@ -1459,7 +1459,7 @@ class LoRAFinetuner:
         torch.save(checkpoint, checkpoint_path)
         logger.debug(f"Checkpoint saved: {checkpoint_path}")
 
-    def save_adapter(self, adapter_path: Optional[str] = None):
+    def save_adapter(self, adapter_path: Optional[str] = None, export_dir: Optional[str] = None):
         """
         Save only the LoRA adapter (not the full model).
 
@@ -1468,11 +1468,19 @@ class LoRAFinetuner:
 
         Args:
             adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter
+            export_dir: Instead, the directory to export into: the adapter
+                goes to export_dir/lora_adapter, full weights to
+                export_dir/full_finetune/model_state_dict.pt. The CLI gives
+                every iteration its own.
+
+        Returns:
+            The adapter directory, or the full-finetune weights file.
         """
         from cellmap_flow.finetune.lora_wrapper import save_lora_adapter
 
-        if adapter_path is None:
-            adapter_path = str(self.output_dir / "lora_adapter")
+        base = Path(export_dir) if export_dir is not None else self.output_dir
+        if adapter_path is None or export_dir is not None:
+            adapter_path = str(base / "lora_adapter")
 
         # Load best checkpoint weights before saving
         best_ckpt = self.output_dir / "best_checkpoint.pth"
@@ -1489,7 +1497,7 @@ class LoRAFinetuner:
         if not self._is_peft():
             # Full finetune: there is no adapter; export the whole state dict
             # where FinetuneModelConfig(weights_path=...) expects it.
-            out = self.output_dir / "full_finetune"
+            out = base / "full_finetune"
             out.mkdir(parents=True, exist_ok=True)
             weights = out / "model_state_dict.pt"
             torch.save(self.model.state_dict(), weights)
@@ -1497,6 +1505,7 @@ class LoRAFinetuner:
             return str(weights)
         save_lora_adapter(self.model, adapter_path)
         logger.info(f"LoRA adapter saved to: {adapter_path}")
+        return adapter_path
 
     def load_checkpoint(self, checkpoint_path: str):
         """

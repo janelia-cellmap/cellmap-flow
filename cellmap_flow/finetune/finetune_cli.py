@@ -23,6 +23,7 @@ import argparse
 import gc
 import json
 import logging
+import os
 import socket
 import sys
 import threading
@@ -480,7 +481,51 @@ def _models_dir(args) -> Path:
     return output_dir / "models"
 
 
-def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool] = None):
+def _export_name(is_lora: bool) -> str:
+    return "lora_adapter" if is_lora else "full_finetune"
+
+
+def _point_latest_export(output_dir: Path, export_dir: Path, is_lora: bool) -> None:
+    """Make <output_dir>/lora_adapter (or full_finetune) the latest iteration's export.
+
+    Every iteration exports into its own iterations/<n>_<ts>/ directory, so
+    the YAML written for it keeps serving its weights after the next
+    restart. The old names stay, as relative symlinks to the newest export,
+    for whatever reads them: finetune_export_kwargs, the completion check,
+    and anyone who built <run>/lora_adapter by hand. A real directory there,
+    from a run before per-iteration exports, is moved into iterations/
+    first rather than deleted.
+    """
+    import shutil
+
+    output_dir = Path(output_dir)
+    name = _export_name(is_lora)
+    link = output_dir / name
+    target = Path(export_dir) / name
+    if link.exists() and not link.is_symlink():
+        keep = output_dir / "iterations" / f"000_before_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        keep.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(link), str(keep / name))
+        logger.info(f"Moved the earlier {name}/ to {keep / name}")
+    tmp = output_dir / f".{name}.latest"
+    try:
+        if tmp.is_symlink() or tmp.exists():
+            tmp.unlink()
+        os.symlink(os.path.relpath(target, output_dir), tmp, target_is_directory=True)
+        os.replace(tmp, link)
+    except OSError as e:
+        # A filesystem without symlinks: keep the old name as a copy.
+        logger.warning(f"Could not link {link} to {target} ({e}); copying it instead.")
+        if link.is_symlink():
+            link.unlink()
+        elif link.exists():
+            shutil.rmtree(link)
+        shutil.copytree(target, link)
+
+
+def _generate_model_files(
+    args, model_config, timestamp, is_lora: Optional[bool] = None, export_dir=None
+):
     """
     Generate YAML config file after training.
 
@@ -492,6 +537,9 @@ def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool]
             finetune). Pass what the model is; ``args.lora_r`` is only the
             fallback, because a restart can change it without changing the
             model.
+        export_dir: The directory this iteration exported into (see
+            _point_latest_export); the YAML points there. None points it at
+            the run's own lora_adapter/ or full_finetune/, as before.
 
     Returns:
         (finetuned_model_name, yaml_path) tuple
@@ -581,9 +629,10 @@ def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool]
             "Generated finetuned yaml will lack normalization metadata."
         )
 
+    export_root = Path(export_dir) if export_dir is not None else output_dir_path
     yaml_path = generate_finetuned_model_yaml(
-        lora_adapter_path=str(output_dir_path / "lora_adapter") if is_lora else None,
-        weights_path=None if is_lora else str(output_dir_path / "full_finetune" / "model_state_dict.pt"),
+        lora_adapter_path=str(export_root / "lora_adapter") if is_lora else None,
+        weights_path=None if is_lora else str(export_root / "full_finetune" / "model_state_dict.pt"),
         # A LoRA adapter was trained on top of the whole base, finetune
         # layers included, and is served on top of it. Full weights replace
         # every parameter, so they only need the base's module tree -- and on
@@ -1294,17 +1343,21 @@ def main():
             # which a restart can change without changing the model.
             is_lora = _is_peft_model(lora_model)
 
-            # Save final adapter (or, for a full finetune, the full weights)
+            # Save final adapter (or, for a full finetune, the full weights),
+            # into this iteration's own directory, so the YAML written for it
+            # keeps serving these weights after the next restart.
+            export_dir = Path(args.output_dir) / "iterations" / f"{iteration:03d}_{timestamp}"
             logger.info("\nSaving LoRA adapter..." if is_lora else "\nSaving full finetuned weights...")
-            trainer.save_adapter()
+            exported = trainer.save_adapter(export_dir=str(export_dir))
+            _point_latest_export(Path(args.output_dir), export_dir, is_lora)
 
             logger.info("\n" + "=" * 60)
             logger.info("Finetuning Complete!")
             logger.info(f"Best loss: {stats['best_loss']:.6f}")
-            if is_lora:
-                logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
-            else:
-                logger.info(f"Weights saved to: {args.output_dir}/full_finetune/model_state_dict.pt")
+            logger.info(
+                f"{'Adapter' if is_lora else 'Weights'} saved to: {exported} "
+                f"({Path(args.output_dir) / _export_name(is_lora)} follows the latest iteration)"
+            )
             logger.info("=" * 60)
 
             # Generate model files. The weights are saved by now, so a YAML
@@ -1313,7 +1366,7 @@ def main():
             finetuned_model_name = _finetuned_model_name(model_config, timestamp)
             try:
                 finetuned_model_name, yaml_path = _generate_model_files(
-                    args, model_config, timestamp, is_lora=is_lora
+                    args, model_config, timestamp, is_lora=is_lora, export_dir=export_dir
                 )
             except Exception as e:
                 logger.error(f"Training succeeded but the serving YAML could not be written: {e}", exc_info=True)
