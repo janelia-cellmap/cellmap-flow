@@ -20,7 +20,11 @@ def index():
     input_norms = get_input_normalizers()
     output_postprocessors = get_postprocessors_list()
     model_mergers = get_model_mergers_list()
-    model_catalog = g.model_catalog
+    # A copy: the "User" group lists this session's running models for the
+    # Models tab only. Written into g.model_catalog it outlived the request,
+    # and everything else that walks the catalog (update_run_models, the
+    # pipeline builder's palette) found entries with no path.
+    model_catalog = dict(g.model_catalog)
     model_catalog["User"] = {j.model_name: "" for j in g.jobs}
     default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
     default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
