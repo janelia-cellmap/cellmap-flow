@@ -83,6 +83,10 @@ class JobStatus(Enum):
     KILLED = "killed"
 
 
+class JobStartError(RuntimeError):
+    """A job was asked for and no usable one came of it."""
+
+
 class Job(ABC):
     """
     Abstract base class for jobs across different execution environments.
@@ -827,10 +831,16 @@ def start_hosts(
     wait_for_host: bool = True,
     walltime: Optional[str] = None,
     cycle_queues: Optional[bool] = None,
+    local: bool = False,
 ) -> Job:
     """
     Start a server job either via bsub or locally.
-    
+
+    It runs on this machine only when bsub is not installed, or when
+    ``local`` asks for it. When bsub is there and every submission fails,
+    this raises: the machine running the CLI or dashboard is often a login
+    or submit node, which is no place for a GPU server.
+
     Args:
         command: Command to execute
         queue: LSF queue name (for bsub)
@@ -841,11 +851,15 @@ def start_hosts(
         walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
         cycle_queues: Try other GPU queues when the requested one is busy or
             closed. Defaults to g.cycle_gpu_queues, which defaults to True.
-        
+        local: Run on this machine even if bsub is available.
+
     Returns:
         Job object (LSFJob or LocalJob) with job information. ``job.queue``
         is the queue it landed on. The globals are left alone: the queue the
         job fell back to is not what the next submission should ask for.
+
+    Raises:
+        JobStartError: bsub is available but no queue accepted the job.
     """
     # An explicit argument wins; otherwise whatever the dashboard or yaml set;
     # otherwise the shared default. Never None, or the job silently inherits
@@ -864,11 +878,14 @@ def start_hosts(
         command = f"{command} --certfile=host.cert --keyfile=host.key"
     
     job: Job
-    
-    if is_bsub_available():
+
+    if local:
+        logger.info("Running locally, as requested")
+    elif is_bsub_available():
         logger.info("Using bsub for job submission")
         candidates = gpu_queue_candidates(queue, cycle=cycle_queues)
         logger.info(f"Queue order: {' -> '.join(candidates)}")
+        submit_errors = []
         for index, candidate in enumerate(candidates):
             try:
                 job = submit_bsub_job(
@@ -880,6 +897,7 @@ def start_hosts(
                 )
             except Exception as e:
                 logger.error(f"Failed to submit bsub job to {candidate}: {e}")
+                submit_errors.append(f"{candidate}: {e}")
                 continue
             job.queue = candidate
 
@@ -931,12 +949,13 @@ def start_hosts(
                 g.jobs.append(job)
                 return job
 
-        logger.error("No GPU queue accepted the job")
-        logger.info("Falling back to local execution")
+        raise JobStartError(
+            f"No GPU queue accepted {job_name}: "
+            + ("; ".join(submit_errors) or "no queue to submit to")
+        )
     else:
         logger.info("bsub not available, running locally")
-    
-    # Local execution (either by choice or as fallback)
+
     job = run_locally(command, job_name)
     
     if wait_for_host:
