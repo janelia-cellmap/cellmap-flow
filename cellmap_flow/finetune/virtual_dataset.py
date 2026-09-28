@@ -12,17 +12,17 @@ parallel source list to keep in sync.
 
 Sampling rule
 -------------
-Two-pool stratified sampling. FG voxels are partitioned by membership in
-the volume's ``imported_crops`` bbox list (recorded in the volume zattrs
-when YAML crops are imported):
-  - **dense pool**: voxels inside any imported_crops bbox (abundant GT)
-  - **sparse pool**: voxels outside all bboxes (painted scribbles, by
-    construction always sparse and informative — the user paints there
-    because the base model failed)
+Two-pool stratified sampling. Annotated voxels are partitioned by
+membership in the volume's ``imported_crops`` bbox list (recorded in the
+volume zattrs when YAML crops are imported):
+  - **dense pool**: FG voxels inside any imported_crops bbox (abundant GT)
+  - **sparse pool**: annotated voxels, background as well as FG, outside
+    all bboxes (painted scribbles, by construction always sparse and
+    informative — the user paints there because the base model failed)
 
 Each ``__getitem__`` picks a pool by ``dense_to_sparse_ratio`` (default
 0.5/0.5 when both pools exist; auto-degrades to 1.0 when only one
-exists), samples a random FG voxel from that pool, jitters the patch
+exists), samples a random voxel from that pool, jitters the patch
 center, and reads raw + annotation patches around it.
 
 Without stratification, voxel-uniform sampling buries scribbles: a
@@ -316,29 +316,46 @@ class VirtualPatchDataset(Dataset):
                 "Paint annotations or import crops first."
             )
 
+        # The sparse (painted) pool holds every annotated voxel outside the
+        # crops, background as well as foreground. It used to hold
+        # foreground only, so a background-only correction -- painting 1
+        # where the model hallucinates -- further than about half a patch
+        # from any foreground was never sampled, and the false-positive fix
+        # silently did nothing; a session that painted only background
+        # could not train at all. The dense pool stays foreground-centred:
+        # crops are mostly background, and centring on it would change
+        # what they teach.
         dense_rows: List[np.ndarray] = []
         sparse_rows: List[np.ndarray] = []
-        n_fg_chunks = 0  # chunks that actually contributed FG voxels
+        n_fg_chunks = 0  # chunks that contributed voxels to a pool
         for key in chunk_keys:
             cz, cy, cx = (int(s) for s in key.split("."))
             chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
             chunk_data = arr.blocks[cz, cy, cx]
-            fg_local = np.argwhere(chunk_data >= 2).astype(np.int64)
-            if not fg_local.size:
-                # On-disk file exists (zarr writes fill chunks during slab
-                # writes) but contributes no FG; skip and don't count it.
-                continue
-            n_fg_chunks += 1
-            fg_global = fg_local + chunk_origin
             if bbox_offsets.shape[0] == 0:
                 # No imported crops → everything is sparse (painted).
-                sparse_rows.append(fg_global)
+                painted_local = np.argwhere(chunk_data >= 1).astype(np.int64)
+                if not painted_local.size:
+                    # On-disk file exists (zarr writes fill chunks during
+                    # slab writes) but holds no annotation; skip it.
+                    continue
+                n_fg_chunks += 1
+                sparse_rows.append(painted_local + chunk_origin)
                 continue
-            in_dense = _voxels_inside_any_bbox(fg_global, bbox_offsets, bbox_ends)
-            if in_dense.any():
-                dense_rows.append(fg_global[in_dense])
+            annotated_local = np.argwhere(chunk_data >= 1).astype(np.int64)
+            if not annotated_local.size:
+                continue
+            is_fg = chunk_data[tuple(annotated_local.T)] >= 2
+            annotated_global = annotated_local + chunk_origin
+            in_dense = _voxels_inside_any_bbox(annotated_global, bbox_offsets, bbox_ends)
+            contributed = False
+            if (in_dense & is_fg).any():
+                dense_rows.append(annotated_global[in_dense & is_fg])
+                contributed = True
             if (~in_dense).any():
-                sparse_rows.append(fg_global[~in_dense])
+                sparse_rows.append(annotated_global[~in_dense])
+                contributed = True
+            n_fg_chunks += int(contributed)
 
         self._fg_index_dense = (
             np.concatenate(dense_rows, axis=0) if dense_rows else np.zeros((0, 3), dtype=np.int64)
@@ -346,13 +363,20 @@ class VirtualPatchDataset(Dataset):
         self._fg_index_sparse = (
             np.concatenate(sparse_rows, axis=0) if sparse_rows else np.zeros((0, 3), dtype=np.int64)
         )
+        if self._fg_index_dense.shape[0] == 0 and self._fg_index_sparse.shape[0] == 0 and bbox_offsets.shape[0]:
+            # Imported crops that are all background, and nothing painted:
+            # centre on the crops' annotated voxels rather than refuse.
+            self._fg_index_dense = self._annotated_voxels_in_crops(
+                arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends
+            )
+            n_fg_chunks = max(n_fg_chunks, 1 if self._fg_index_dense.shape[0] else 0)
         n_dense = int(self._fg_index_dense.shape[0])
         n_sparse = int(self._fg_index_sparse.shape[0])
 
         if n_dense == 0 and n_sparse == 0:
             raise ValueError(
                 f"Volume zarr at {self.volume_zarr_path} has populated chunks "
-                "but no foreground voxels (>=2). Did you only paint background?"
+                "but no annotated voxels. Paint annotations or import crops first."
             )
 
         # Resolve dense ratio: explicit value wins, else auto-balance to
@@ -398,6 +422,20 @@ class VirtualPatchDataset(Dataset):
             f"jitter={self.jitter.tolist()}"
         )
         self._log_rehearsal_status()
+
+    @staticmethod
+    def _annotated_voxels_in_crops(arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends):
+        """Every annotated voxel inside the imported crops, as (N, 3) global indices."""
+        rows = []
+        for key in chunk_keys:
+            cz, cy, cx = (int(s) for s in key.split("."))
+            chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
+            annotated = np.argwhere(arr.blocks[cz, cy, cx] >= 1).astype(np.int64) + chunk_origin
+            if annotated.size:
+                inside = _voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends)
+                if inside.any():
+                    rows.append(annotated[inside])
+        return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=np.int64)
 
     def _log_rehearsal_status(self) -> None:
         """Say what is happening with the good regions, if there are any.
