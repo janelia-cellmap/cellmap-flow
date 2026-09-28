@@ -38,6 +38,12 @@ from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig,
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.utils.restart_token import read_or_create_restart_token
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
+from cellmap_flow.finetune.model_loading import (
+    decode_model_entry,
+    load_trainable_model,
+    model_config_from_entry,
+    root_base_model_dict,
+)
 from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 
@@ -549,7 +555,12 @@ def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool]
     yaml_path = generate_finetuned_model_yaml(
         lora_adapter_path=str(output_dir_path / "lora_adapter") if is_lora else None,
         weights_path=None if is_lora else str(output_dir_path / "full_finetune" / "model_state_dict.pt"),
-        base_model_dict=model_config.to_dict(),
+        # A LoRA adapter was trained on top of the whole base, finetune
+        # layers included, and is served on top of it. Full weights replace
+        # every parameter, so they only need the base's module tree -- and on
+        # a finetune base that tree would be a PeftModel their names no
+        # longer match.
+        base_model_dict=model_config.to_dict() if is_lora else root_base_model_dict(model_config),
         model_name=finetuned_model_name,
         output_path=models_dir / f"{finetuned_model_name}.yaml",
         data_path=data_path,
@@ -668,6 +679,66 @@ def _read_offsets_from_script(script_path):
     return None
 
 
+def _model_config_from_args(args) -> ModelConfig:
+    """The ModelConfig the command line describes."""
+    if args.model_entry:
+        # The model's own to_dict(), as the job manager passes it for the
+        # types that have no dedicated flags (cellmap, finetune).
+        entry = decode_model_entry(args.model_entry)
+        logger.info(f"Using model entry of type {entry.get('type')!r}")
+        return model_config_from_entry(entry, name=args.model_name)
+    if args.model_script:
+        from cellmap_flow.models.models_config import ScriptModelConfig
+        logger.info(f"Using script-based model: {args.model_script}")
+        return ScriptModelConfig(
+            script_path=args.model_script,
+            name=args.model_name or "script_model"
+        )
+    if args.model_type == "script":
+        raise ValueError("For script models, --model-script is required")
+    if args.model_type == "fly":
+        if not args.model_checkpoint:
+            raise ValueError(
+                "For fly models, either --model-checkpoint or --model-script must be provided"
+            )
+        return FlyModelConfig(
+            checkpoint_path=args.model_checkpoint,
+            channels=args.channels,
+            input_voxel_size=tuple(args.input_voxel_size),
+            output_voxel_size=tuple(args.output_voxel_size),
+            name=args.model_name,
+        )
+    if args.model_type == "dacapo":
+        if not args.model_checkpoint:
+            raise ValueError("For dacapo models, --model-checkpoint is required")
+        checkpoint_path = Path(args.model_checkpoint)
+        iteration = int(checkpoint_path.stem.split('_')[-1])
+        run_name = checkpoint_path.parent.name
+        return DaCapoModelConfig(
+            run_name=run_name,
+            iteration=iteration,
+        )
+    if args.model_type == "huggingface":
+        if not args.repo:
+            raise ValueError("For huggingface models, --repo is required")
+        return HuggingFaceModelConfig(
+            repo=args.repo,
+            revision=args.revision,
+            name=args.model_name,
+        )
+    if args.model_type == "cellmap":
+        if not args.model_folder:
+            raise ValueError("For cellmap models, --model-folder (or --model-entry) is required")
+        from cellmap_flow.models.models_config import CellMapModelConfig
+        return CellMapModelConfig(folder_path=args.model_folder, name=args.model_name)
+    if args.model_type == "finetune":
+        raise ValueError(
+            "For finetune models, --model-entry is required: the model's entry "
+            "(type: finetune, base_model, lora_adapter_path or weights_path) as JSON"
+        )
+    raise ValueError(f"Unknown model type: {args.model_type}")
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         description="Finetune CellMap-Flow models with LoRA using user corrections"
@@ -678,8 +749,24 @@ def build_arg_parser():
         "--model-type",
         type=str,
         default="fly",
-        choices=["fly", "dacapo", "huggingface", "script"],
-        help="Model type (fly, dacapo, huggingface, or script)"
+        choices=["fly", "dacapo", "huggingface", "script", "cellmap", "finetune"],
+        help="Model type (fly, dacapo, huggingface, script, cellmap, or finetune). "
+             "cellmap takes --model-folder; finetune (continue from a finetuned "
+             "model) takes --model-entry."
+    )
+    parser.add_argument(
+        "--model-entry",
+        type=str,
+        default=None,
+        help="The model as its model entry (what ModelConfig.to_dict() gives, "
+             "the same shape as a models: entry in a YAML), as JSON or "
+             "encode_to_str()'d JSON. Takes precedence over the other model flags."
+    )
+    parser.add_argument(
+        "--model-folder",
+        type=str,
+        default=None,
+        help="Folder of a cellmap model (for --model-type cellmap)"
     )
     parser.add_argument(
         "--model-checkpoint",
@@ -990,79 +1077,8 @@ def main():
     # === Load model (once) ===
     logger.info("Loading model...")
 
-    if args.model_script:
-        from cellmap_flow.models.models_config import ScriptModelConfig
-        logger.info(f"Using script-based model: {args.model_script}")
-        model_config = ScriptModelConfig(
-            script_path=args.model_script,
-            name=args.model_name or "script_model"
-        )
-    elif args.model_type == "script":
-        raise ValueError("For script models, --model-script is required")
-    elif args.model_type == "fly":
-        if not args.model_checkpoint:
-            raise ValueError(
-                "For fly models, either --model-checkpoint or --model-script must be provided"
-            )
-        model_config = FlyModelConfig(
-            checkpoint_path=args.model_checkpoint,
-            channels=args.channels,
-            input_voxel_size=tuple(args.input_voxel_size),
-            output_voxel_size=tuple(args.output_voxel_size),
-            name=args.model_name,
-        )
-    elif args.model_type == "dacapo":
-        if not args.model_checkpoint:
-            raise ValueError("For dacapo models, --model-checkpoint is required")
-        checkpoint_path = Path(args.model_checkpoint)
-        iteration = int(checkpoint_path.stem.split('_')[-1])
-        run_name = checkpoint_path.parent.name
-
-        model_config = DaCapoModelConfig(
-            run_name=run_name,
-            iteration=iteration,
-        )
-    elif args.model_type == "huggingface":
-        if not args.repo:
-            raise ValueError("For huggingface models, --repo is required")
-        model_config = HuggingFaceModelConfig(
-            repo=args.repo,
-            revision=args.revision,
-            name=args.model_name,
-        )
-    else:
-        raise ValueError(f"Unknown model type: {args.model_type}")
-
-    base_model = model_config.config.model
-    logger.info(f"Model loaded: {type(base_model).__name__}")
-
-    # TorchScript models (RecursiveScriptModule) can't be used with LoRA.
-    # Use cellmap_model.train() to get a trainable nn.Module via torch.export
-    # unflatten — no fly_organelles dependency needed.
-    if isinstance(base_model, torch.jit.ScriptModule):
-        logger.info("TorchScript model detected — loading trainable model via cellmap_model.train()...")
-        cellmap_model = None
-        if args.model_type == "huggingface":
-            from cellmap_models.model_export.cellmap_model import get_huggingface_model
-            cellmap_model = get_huggingface_model(args.repo, args.revision)
-        elif hasattr(model_config, 'cellmap_model'):
-            cellmap_model = model_config.cellmap_model
-
-        if cellmap_model is not None:
-            trainable = cellmap_model.train()
-            if trainable is not None:
-                # UnflattenedModule (from torch.export) often has fixed batch=1.
-                # Wrap it so the trainer can use any batch size.
-                if type(trainable).__name__ == 'UnflattenedModule':
-                    from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
-                    trainable = BatchLoopWrapper(trainable)
-                    logger.info("Wrapped UnflattenedModule with BatchLoopWrapper for variable batch sizes")
-                base_model = trainable
-                logger.info(f"Trainable model loaded: {type(base_model).__name__}")
-            else:
-                logger.warning("cellmap_model.train() returned None — LoRA may fail")
-        else:
-            logger.warning("No CellmapModel available — LoRA may fail on TorchScript model")
+    model_config = _model_config_from_args(args)
+    base_model = load_trainable_model(model_config)
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     if args.lora_r <= 0:
@@ -1074,6 +1090,11 @@ def main():
         # full_finetune/, served via FinetuneModelConfig(weights_path=...).
         logger.info("lora_r=0: full finetuning -- every parameter trainable, no adapter. "
                     "Restarts start again from the starting weights.")
+        # A finetuned model given as the base still carries its adapter; fold
+        # it into the weights, which are what a full finetune trains.
+        from cellmap_flow.finetune.lora_wrapper import _merge_existing_adapters
+
+        base_model = _merge_existing_adapters(base_model)
         for p in base_model.parameters():
             p.requires_grad_(True)
         lora_model = base_model

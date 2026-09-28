@@ -39,6 +39,13 @@ from cellmap_flow.utils.restart_token import (
 logger = logging.getLogger(__name__)
 
 
+# The --model-type values finetune_cli accepts, and the ones among them that
+# it takes as --model-entry (the model's to_dict()) because they have no
+# dedicated flags.
+TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "cellmap", "finetune"})
+MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune"})
+
+
 class JobStatus(Enum):
     """Status of a finetuning job."""
     PENDING = "PENDING"
@@ -231,6 +238,9 @@ class FinetuneJobManager:
         """
         model_type = metadata.get("model_type", "fly")
 
+        if metadata.get("model_entry"):
+            return dict(metadata["model_entry"])
+
         if model_type == "huggingface":
             result = {"type": "huggingface", "repo": metadata["repo"]}
             if metadata.get("revision"):
@@ -256,10 +266,19 @@ class FinetuneJobManager:
         return result
 
     def _resolve_model_type(self, model_config) -> str:
-        """Infer the finetuning CLI model type from the model config."""
+        """Infer the finetuning CLI model type from the model config.
+
+        Raises ValueError for a type the trainer cannot train, rather than
+        submitting a GPU job whose argparse exits with code 2.
+        """
         model_type = getattr(type(model_config), "cli_name", "fly")
         if model_type == "fly" and "dacapo" in model_config.name.lower():
             return "dacapo"
+        if model_type not in TRAINABLE_MODEL_TYPES:
+            raise ValueError(
+                f"Models of type {model_type!r} cannot be finetuned; the trainer "
+                f"supports {sorted(TRAINABLE_MODEL_TYPES)}."
+            )
         return model_type
 
     def _normalize_metadata_list(self, value, default):
@@ -310,7 +329,13 @@ class FinetuneJobManager:
             "--model-type", model_type,
         ]
 
-        if model_type == "huggingface":
+        if model_type in MODEL_ENTRY_TYPES:
+            # No dedicated flags: hand the trainer the model's own entry.
+            # encode_to_str() is URL-safe base64, so it needs no quoting.
+            from cellmap_flow.utils.web_utils import encode_to_str
+
+            command_parts += ["--model-entry", encode_to_str(model_config.to_dict())]
+        elif model_type == "huggingface":
             command_parts += ["--repo", str(model_config.repo)]
             if getattr(model_config, "revision", None):
                 command_parts += ["--revision", str(model_config.revision)]
@@ -423,6 +448,7 @@ class FinetuneJobManager:
             "model_script": str(model_config.script_path) if hasattr(model_config, "script_path") else None,
             "repo": model_config.repo if model_type == "huggingface" else None,
             "revision": getattr(model_config, "revision", None) if model_type == "huggingface" else None,
+            "model_entry": model_config.to_dict() if model_type in MODEL_ENTRY_TYPES else None,
             "corrections_path": str(corrections_path),
             "num_corrections": num_corrections,
             "output_dir": str(output_dir),
@@ -507,6 +533,10 @@ class FinetuneJobManager:
         if not model_config:
             raise ValueError("Model config is required")
 
+        # Get model type from the config class's cli_name (e.g., "fly",
+        # "dacapo", "huggingface"); refuses types the trainer cannot train.
+        model_type = self._resolve_model_type(model_config)
+
         # 2. Get checkpoint path if available (optional)
         # For script models: we'll pass the script path instead
         # For fly/dacapo models: we need the checkpoint path
@@ -569,9 +599,6 @@ class FinetuneJobManager:
         self.logger.info(f"Output directory: {output_dir}")
 
         # === Build training command ===
-
-        # Get model type from the config class's cli_name (e.g., "fly", "dacapo", "huggingface")
-        model_type = self._resolve_model_type(model_config)
 
         # Get channels - try multiple attribute names
         channels = None
