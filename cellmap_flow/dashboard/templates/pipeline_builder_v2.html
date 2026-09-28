@@ -663,6 +663,48 @@
         // Connection state
         let connectionDrag = null;
 
+        // The parameters a new normalizer, model or postprocessor node starts
+        // with, from the library this page was rendered with -- and so what the
+        // node's ↻ button resets it to. Returns fresh copies ({params, config}
+        // with config only for a model that has one), or null when the library
+        // does not list the name.
+        function nodeDefaults(type, name) {
+            const sources = {
+                normalizer: APP_CONFIG.availableNormalizers,
+                model: APP_CONFIG.availableModels,
+                postprocessor: APP_CONFIG.availablePostprocessors,
+            };
+            const source = sources[type];
+            if (!source) return null;
+            const defs = Array.isArray(source) ? source : Object.values(source);
+            const def = defs.find(d => (typeof d === 'string' ? d : d.name) === name);
+            if (!def || typeof def !== 'object') return null;
+            const copy = (value) => JSON.parse(JSON.stringify(value));
+            let config = null;
+            if (type === 'model') {
+                // Store the full config if available
+                if (def.config) {
+                    config = copy(def.config);
+                } else if (def.type) {
+                    // Models from g.models_config have to_dict() as the
+                    // entry itself (no nested .config key). Use the whole
+                    // definition as config so params auto-populate.
+                    config = copy(def);
+                }
+            }
+            if (!config) {
+                return { params: def.params ? copy(def.params) : {} };
+            }
+            // Also populate params from config for UI display (exclude 'name')
+            const params = {};
+            Object.entries(config).forEach(([key, value]) => {
+                if (key !== 'name') {
+                    params[key] = value;
+                }
+            });
+            return { params, config };
+        }
+
         async function addNode(type, name, dropPosition) {
             const id = `${type}-${Date.now()}`;
 
@@ -723,52 +765,19 @@
                     // Fallback to empty params if API fails
                     defaultParams = {};
                 }
-            } else if (type === 'normalizer') {
-                const normsArray = Array.isArray(APP_CONFIG.availableNormalizers) ?
-                    APP_CONFIG.availableNormalizers : Object.values(APP_CONFIG.availableNormalizers);
-                const normDef = normsArray.find(n => (typeof n === 'string' ? n : n.name) === name);
-                if (normDef && typeof normDef === 'object' && normDef.params) {
-                    defaultParams = { ...normDef.params };
-                }
-            } else if (type === 'model') {
-                const modelsArray = Array.isArray(APP_CONFIG.availableModels) ?
-                    APP_CONFIG.availableModels : Object.values(APP_CONFIG.availableModels);
-                const modelDef = modelsArray.find(m => (typeof m === 'string' ? m : m.name) === name);
-                if (modelDef && typeof modelDef === 'object') {
-                    if (modelDef.params) {
-                        defaultParams = { ...modelDef.params };
-                    }
-                    // Store the full config if available
-                    if (modelDef.config) {
-                        modelConfig = { ...modelDef.config };
-                    } else if (modelDef.type) {
-                        // Models from g.models_config have to_dict() as the
-                        // entry itself (no nested .config key). Use the whole
-                        // definition as config so params auto-populate.
-                        modelConfig = { ...modelDef };
-                    }
-                }
-            } else if (type === 'postprocessor') {
-                const postsArray = Array.isArray(APP_CONFIG.availablePostprocessors) ?
-                    APP_CONFIG.availablePostprocessors : Object.values(APP_CONFIG.availablePostprocessors);
-                const postDef = postsArray.find(p => (typeof p === 'string' ? p : p.name) === name);
-                if (postDef && typeof postDef === 'object' && postDef.params) {
-                    defaultParams = { ...postDef.params };
+            } else {
+                const defaults = nodeDefaults(type, name);
+                if (defaults) {
+                    defaultParams = defaults.params;
+                    modelConfig = defaults.config || null;
                 }
             }
 
             const node = { id, name, params: defaultParams, position: { x, y } };
-            
+
             // Add config for models if available
             if (type === 'model' && modelConfig) {
                 node.config = modelConfig;
-                // Also populate params from config for UI display (exclude 'name')
-                node.params = {};
-                Object.entries(modelConfig).forEach(([key, value]) => {
-                    if (key !== 'name') {
-                        node.params[key] = value;
-                    }
-                });
             }
 
             if (type === 'input') {
@@ -2005,9 +2014,29 @@
             }
         }
 
+        // ↻ on a normalizer, model or postprocessor node: put its parameters
+        // back to what a freshly added node of the same name gets. (It used to
+        // only redraw the canvas, leaving every edited value in place.)
         function resetNode(nodeId, nodeType) {
+            const lists = {
+                normalizer: pipeline.normalizers,
+                model: pipeline.models,
+                postprocessor: pipeline.postprocessors,
+            };
+            const node = (lists[nodeType] || []).find(n => n.id === nodeId);
+            if (!node) return;
+            const defaults = nodeDefaults(nodeType, node.name);
+            // A model with a config the library does not list (one imported
+            // from a YAML, say) has no defaults to go back to.
+            if (!defaults || (node.config && !defaults.config)) {
+                showMessage(`No defaults known for ${node.name}; left unchanged`, 'error');
+                return;
+            }
+            node.params = defaults.params;
+            if (defaults.config) node.config = defaults.config;
             renderCanvas();
-            showMessage('Node reset', 'success');
+            debouncedApply();
+            showMessage(`${node.name} reset to defaults`, 'success');
         }
 
         // Log streaming functionality
