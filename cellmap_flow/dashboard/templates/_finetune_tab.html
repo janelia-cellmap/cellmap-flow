@@ -1543,6 +1543,12 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   clearGoodRegionsBtn.addEventListener("click", function () {
+    // Deletes every region in the session, and there is no undo; the button
+    // sits right next to "Mark This View as Good".
+    const what = lastGoodRegionCount
+      ? `all ${lastGoodRegionCount} good region${lastGoodRegionCount === 1 ? "" : "s"}`
+      : "all good regions";
+    if (!confirm(`Remove ${what} from this session? This cannot be undone.`)) return;
     fetch("/api/finetune/good-regions/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
