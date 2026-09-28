@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 from cellmap_flow.norm.input_normalize import (
-    ChannelSelector,
     EuclideanDistance,
     InputNormalizer,
     LambdaNormalizer,

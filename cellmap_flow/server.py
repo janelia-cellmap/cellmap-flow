@@ -1,6 +1,10 @@
 import logging
 import socket
+import threading
+from collections import OrderedDict
 from http import HTTPStatus
+from typing import NamedTuple, Optional
+
 import numpy as np
 import numcodecs
 from flask import Flask, jsonify, redirect, request
@@ -13,6 +17,7 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.web_utils import (
+    ARGS_KEY,
     get_public_ip,
     IP_PATTERN,
     get_free_port,
@@ -26,6 +31,20 @@ import requests
 import time
 
 logger = logging.getLogger(__name__)
+
+# How many distinct chains (layer URLs) one server keeps built at once.
+CHAIN_CACHE_SIZE = 32
+
+
+class ServedChain(NamedTuple):
+    """The normalization/postprocessing a layer URL asks for."""
+
+    dashboard_url: Optional[str]
+    input_norms: Optional[list]  # None: the process default (g.input_norms)
+    postprocess: Optional[list]  # None: the process default (g.postprocess)
+
+    def effective_postprocess(self):
+        return g.postprocess if self.postprocess is None else self.postprocess
 
 
 class CellMapFlowServer:
@@ -51,11 +70,7 @@ class CellMapFlowServer:
         if restart_callback is not None and not restart_token:
             raise ValueError("restart_callback requires a restart_token")
 
-        self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
-        # Original (model-native) channel count, so refresh_dataset() can restore
-        # it once a postprocessor that overrode num_channels (e.g. affinities) is
-        # removed again instead of leaving vol_shape/zarr_block_shape pinned.
-        self._default_zarr_block_channels = self.zarr_block_shape[-1]
+        block_shape = [int(x) for x in model_config.config.block_shape]
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
         self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
@@ -97,16 +112,29 @@ class CellMapFlowServer:
         # Refresh rate for custom state updates
         self.refresh_rate_seconds = 5
         self.previous_refresh_time = 0
-        output_shape = (
-            np.array(self.idi_raw.shape)
-            * np.array(self.input_voxel_size)
-            / np.array(self.output_voxel_size)
+
+        # Each layer URL carries its own chain; they are built once per URL
+        # and never written to g, so layers (tabs, users) sharing this server
+        # don't get each other's normalization.
+        self._chains = OrderedDict()
+        self._chain_lock = threading.Lock()
+        self._warned_no_chain = False
+
+        n_spatial = len(self.axes)
+        # block_shape is (*spatial, channels); only the spatial part is the
+        # chunk grid. The channel count comes from the model (or the chain).
+        self._spatial_block = block_shape[:n_spatial]
+        if self.has_channel and len(block_shape) > n_spatial:
+            if block_shape[n_spatial] != self.output_channels:
+                logger.warning(
+                    f"block_shape {block_shape} ends in {block_shape[n_spatial]} "
+                    f"channels but output_channels is {self.output_channels}; "
+                    "serving output_channels"
+                )
+        self._spatial_shape = self._served_spatial_shape()
+        self.vol_shape, self.zarr_block_shape = self._zarr_geometry(
+            ServedChain(None, None, None)
         )
-        if self.has_channel:
-            self.vol_shape = [*output_shape, self.output_channels]
-        else:
-            self.vol_shape = [int(x) for x in output_shape]
-        self.vol_shape = [int(x) for x in self.vol_shape]
 
         # Chunk encoding for Zarr
         self.chunk_encoder = self._initialize_chunk_encoder()
@@ -208,12 +236,10 @@ class CellMapFlowServer:
         @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
             self.refresh_dataset(dataset)
-
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/.zarray", methods=["GET"])
         def attributes(dataset, scale):
-            self.refresh_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -254,24 +280,65 @@ class CellMapFlowServer:
         }
         self.swagger = Swagger(self.app, config=swagger_config)
 
-    def refresh_dataset(self, dataset):
-        g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
+    def _served_spatial_shape(self):
+        output_shape = (
+            np.array(self.idi_raw.shape)
+            * np.array(self.input_voxel_size)
+            / np.array(self.output_voxel_size)
+        )
+        return [int(x) for x in output_shape]
 
+    def _chain_for(self, dataset) -> ServedChain:
+        """The chain the requested layer URL carries, built once per URL.
+
+        A URL without an args block gets the process default (g's chain,
+        empty in a server started from the CLI).
+        """
+        if not dataset or ARGS_KEY not in dataset:
+            if not self._warned_no_chain:
+                self._warned_no_chain = True
+                if not (g.input_norms or g.postprocess):
+                    get_process_dataset_url(dataset or "")  # logs the warning
+            return ServedChain(None, None, None)
+
+        parts = dataset.split(ARGS_KEY)
+        key = parts[1] if len(parts) == 3 else dataset
+        with self._chain_lock:
+            chain = self._chains.get(key)
+            if chain is not None:
+                self._chains.move_to_end(key)
+                return chain
+            dashboard_url, input_norms, postprocess = get_process_dataset_url(dataset)
+            chain = ServedChain(dashboard_url, list(input_norms), list(postprocess))
+            self._chains[key] = chain
+            while len(self._chains) > CHAIN_CACHE_SIZE:
+                self._chains.popitem(last=False)
+            return chain
+
+    def refresh_dataset(self, dataset) -> ServedChain:
+        """Resolve (and cache) the chain for ``dataset``. Changes no globals."""
+        return self._chain_for(dataset)
+
+    def _num_channels(self, chain: ServedChain) -> int:
+        channels = self.output_channels
+        for step in chain.effective_postprocess():
+            if hasattr(step, "num_channels"):
+                channels = step.num_channels
+        return int(channels)
+
+    def _zarr_geometry(self, chain: ServedChain):
+        """(shape, chunks) of the served array under ``chain``."""
+        shape = list(self._spatial_shape)
+        chunks = list(self._spatial_block)
         if self.has_channel:
-            # Reset to the model's native channel count first so that removing a
-            # postprocessor which had overridden it (e.g. affinities -> 1 channel)
-            # actually restores the previous working state instead of staying stuck.
-            self.vol_shape[-1] = self.output_channels
-            self.zarr_block_shape[-1] = self._default_zarr_block_channels
+            channels = self._num_channels(chain)
+            shape.append(channels)
+            chunks.append(channels)
+        return shape, chunks
 
-        for postprocess in g.postprocess:
-            if hasattr(postprocess, "num_channels") and self.has_channel:
-                self.vol_shape[-1] = postprocess.num_channels
-                self.zarr_block_shape[-1] = postprocess.num_channels
-
-        # Update chunk encoder for Zarr
-        self.chunk_encoder = numcodecs.Blosc(
-            cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE
+    def _output_dtype(self, chain: ServedChain):
+        return np.dtype(
+            g.get_output_dtype(self.output_dtype, chain.effective_postprocess())
         )
 
     def _top_level_attributes_impl(self, dataset):
@@ -323,7 +390,9 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = g.get_output_dtype(self.output_dtype).__name__
+        chain = self._chain_for(dataset)
+        shape, chunks = self._zarr_geometry(chain)
+        dtype = self._output_dtype(chain).name
         # Map numpy dtypes to Zarr dtypes
         dtype_map = {
             "uint8": "|u1",
@@ -340,54 +409,64 @@ class CellMapFlowServer:
         zarr_dtype = dtype_map.get(dtype, dtype)
 
         attr = {
-            "chunks": list(self.zarr_block_shape),
+            "chunks": chunks,
             "compressor": {"id": "blosc", "cname": "zstd", "clevel": 5, "shuffle": 1},
             "dtype": zarr_dtype,
             "fill_value": 0,
             "filters": None,
             "order": "C",
-            "shape": self.vol_shape,
+            "shape": shape,
             "zarr_format": 2,
         }
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
     def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
-        corner = self.zarr_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, self.zarr_block_shape[:3]]) * self.output_voxel_size
+        chain = self._chain_for(dataset)
+        block = np.array(self._spatial_block)
+        corner = block * np.array([chunk_z, chunk_y, chunk_x])
+        box = np.array([corner, block]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
-        chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+        chunk_data = self.inferencer.process_chunk(
+            self.idi_raw,
+            roi,
+            input_norms=chain.input_norms,
+            postprocess=chain.postprocess,
+        )
 
         # Reorder model output axes to Zarr-expected order
         if self.has_channel:
             chunk_data = self._reorder_to_zarr_axes(chunk_data)
 
-        chunk_data = chunk_data.astype(g.get_output_dtype(self.output_dtype))
+        chunk_data = chunk_data.astype(self._output_dtype(chain))
 
         current_time = time.time()
 
         # assume only one has equivalences
-        for postprocess in g.postprocess:
+        for postprocess in chain.effective_postprocess():
             if (
-                hasattr(postprocess, "equivalences")
+                # A chain encoded outside /api/process has no dashboard to
+                # tell; concatenating None raised TypeError mid-chunk.
+                chain.dashboard_url
+                and hasattr(postprocess, "equivalences")
                 and postprocess.equivalences is not None
                 and (current_time - self.previous_refresh_time)
                 > self.refresh_rate_seconds
             ):
+                snapshot = getattr(postprocess, "equivalences_json", None)
+                pairs = snapshot() if snapshot else postprocess.equivalences.to_json()
                 equivalences = {
                     "dataset": dataset,
                     "equivalences": [
-                        [int(item) for item in sublist]
-                        for sublist in postprocess.equivalences.to_json()
+                        [int(item) for item in sublist] for sublist in pairs
                     ],
                 }
 
-                response = requests.post(
-                    g.dashboard_url + "/update/equivalences",
+                requests.post(
+                    chain.dashboard_url.rstrip("/") + "/update/equivalences",
                     json=equivalences,
                 )
                 self.previous_refresh_time = current_time
-                continue
 
         # Encode using Zarr format
         encoded = self.chunk_encoder.encode(chunk_data)

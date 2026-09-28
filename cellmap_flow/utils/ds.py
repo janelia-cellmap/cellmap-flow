@@ -274,29 +274,93 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
     )
 
 
-def apply_norms(data):
+def apply_norms(data, input_norms=None):
+    """Read ``data`` if it is a tensorstore view and run it through the chain.
+
+    ``input_norms=None`` means the process-wide ``g.input_norms``.
+    """
     if hasattr(data, "read"):
         data = data.read().result()
-    # logger.error("norm time")
-    for norm in g.input_norms:
-        # logger.error(f"applying norm: {norm}")
+    for norm in g.input_norms if input_norms is None else input_norms:
         data = norm(data)
     return data
 
 
+_CHANNEL_LABELS = ("c", "c^", "channel")
+
+
+def selected_channel(input_norms) -> int:
+    """The input channel a chain asks for: its first ChannelSelector, else 0."""
+    from cellmap_flow.norm.input_normalize import ChannelSelector
+
+    for norm in input_norms or []:
+        if isinstance(norm, ChannelSelector):
+            return norm.channel
+    return 0
+
+
+def select_channel(ts_dataset, channel=0, spatial_ndim=3):
+    """Index one channel out of a multichannel tensorstore.
+
+    The channel axis is the one labelled c/c^/channel when the store labels its
+    dimensions, and otherwise the first one (the OME-Zarr convention).
+    Arrays with no more than ``spatial_ndim`` dimensions are returned as is.
+    """
+    if ts_dataset.ndim <= spatial_ndim:
+        return ts_dataset
+    labels = list(getattr(ts_dataset.domain, "labels", None) or [])
+    axis = next((i for i, lab in enumerate(labels) if lab in _CHANNEL_LABELS), 0)
+    if axis == 0:
+        return ts_dataset[channel]
+    return ts_dataset[ts.d[axis][channel]]
+
+
 class LazyNormalization:
-    def __init__(self, ts_dataset):
+    """A tensorstore seen through the input chain, for neuroglancer to index.
+
+    The channel and the normalizers are looked up on every access rather than
+    fixed when the store was opened: a server that has already read one chunk
+    must still follow a ChannelSelector that changes afterwards.
+
+    ``input_norms=None`` follows the process-wide ``g.input_norms``.
+    ``normalize=False`` selects the channel but applies no normalizers.
+    """
+
+    def __init__(self, ts_dataset, input_norms=None, normalize=True, spatial_ndim=3):
         self.ts_dataset = ts_dataset
+        self.input_norms = input_norms
+        self.normalize = normalize
+        self.spatial_ndim = spatial_ndim
+
+    def chain(self):
+        return list(g.input_norms if self.input_norms is None else self.input_norms)
+
+    def norms_to_apply(self):
+        return self.chain() if self.normalize else []
+
+    def selected(self):
+        """The raw (unnormalized) tensorstore for the channel the chain selects."""
+        return select_channel(
+            self.ts_dataset, selected_channel(self.chain()), self.spatial_ndim
+        )
 
     def __getitem__(self, index):
-        result = self.ts_dataset[index]
-        return apply_norms(result)
+        result = self.selected()[index]
+        if not self.normalize:
+            return result
+        return apply_norms(result, self.norms_to_apply())
 
     def __getattr__(self, attr):
-        at = getattr(self.ts_dataset, attr)
+        if attr in ("ts_dataset", "input_norms", "normalize", "spatial_ndim"):
+            # Not set yet (e.g. while unpickling); don't recurse.
+            raise AttributeError(attr)
+        at = getattr(self.selected(), attr)
         if attr == "dtype":
-            if len(g.input_norms) > 0:
-                return np.dtype(g.input_norms[-1].dtype)
+            # The last step that declares a dtype decides; steps without one
+            # (ChannelSelector) pass their input's through.
+            for norm in reversed(self.norms_to_apply()):
+                if norm.dtype is not None:
+                    return np.dtype(norm.dtype)
             return np.dtype(at.numpy_dtype)
         return at
 
@@ -455,15 +519,6 @@ def open_ds_tensorstore(
 
     try:
         ts_dataset = dataset_future.result()
-        if ts_dataset.ndim > 3:
-            from cellmap_flow.norm.input_normalize import ChannelSelector
-
-            channel = 0
-            for norm in g.input_norms:
-                if isinstance(norm, ChannelSelector):
-                    channel = norm.channel
-                    break
-            ts_dataset = ts_dataset[channel]
     except ValueError as e:
         if "extra members" in str(e) and filetype == "zarr":
             # Some zarr files have extra fields (e.g. "checksum") in the
@@ -487,10 +542,11 @@ def open_ds_tensorstore(
         else:
             raise
 
-    # return ts_dataset
     if normalize:
         return LazyNormalization(ts_dataset)
-    return ts_dataset
+    # Unnormalized callers still get one spatial volume, as before; the channel
+    # comes from the current chain.
+    return select_channel(ts_dataset, selected_channel(g.input_norms))
 
 
 def to_ndarray_tensorstore(
@@ -501,20 +557,34 @@ def to_ndarray_tensorstore(
     output_voxel_size=None,
     axes_names=["z", "y", "x"],
     custom_fill_value=None,
+    input_norms=None,
 ):
     """Read a region of a tensorstore dataset and return it as a numpy array
 
     Args:
-        dataset ('tensorstore.dataset'): Tensorstore dataset
+        dataset ('tensorstore.dataset'): Tensorstore dataset, or the
+            LazyNormalization view ``open_ds_tensorstore`` returns
         roi ('funlib.geometry.Roi'): Region of interest to read
+        input_norms: normalizers to apply to what is read. ``None`` means the
+            view's own chain for a LazyNormalization, and ``g.input_norms``
+            for a bare tensorstore; pass ``[]`` for raw values.
 
     Returns:
         Numpy array of the region
     """
+    if isinstance(dataset, LazyNormalization):
+        if input_norms is None:
+            input_norms = dataset.norms_to_apply()
+        dataset = dataset.selected()
+    elif input_norms is None:
+        input_norms = g.input_norms
 
     if roi is None:
         with ts.Transaction() as txn:
-            return dataset.with_transaction(txn).read().result()
+            data = dataset.with_transaction(txn).read().result()
+        for norm in input_norms:
+            data = norm(data)
+        return data
 
     if offset is None:
         offset = Coordinate(np.zeros(roi.dims, dtype=int))
@@ -558,10 +628,8 @@ def to_ndarray_tensorstore(
         fill_value = custom_fill_value
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
-        # logger.error("norm time")
-        for norm in g.input_norms:
-            # logger.error(f"Applying norm: {norm}")
-            data = norm(data)
+    for norm in input_norms:
+        data = norm(data)
     pad_width = [
         [valid_slice.start - s.start, s.stop - valid_slice.stop]
         for s, valid_slice in zip(roi_slices, valid_slices)

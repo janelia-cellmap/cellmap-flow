@@ -283,6 +283,11 @@ class SimpleBlockwiseMerger(PostProcessor):
         self.__dict__.update(state)
         self._lock = threading.Lock()
 
+    def equivalences_json(self):
+        """The equivalences so far, read while no other chunk is adding to them."""
+        with self._lock:
+            return self.equivalences.to_json()
+
     def _process(self, data, chunk_corner):
         segmentation = data[self.channel]
         faces = {}

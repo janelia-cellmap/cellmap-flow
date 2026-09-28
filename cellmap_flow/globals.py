@@ -215,11 +215,17 @@ class Flow:
         save_server_config_cache(config)
         self._server_config_cached = True
 
-    def get_output_dtype(self, model_output_dtype):
+    def get_output_dtype(self, model_output_dtype, postprocess=None):
+        """The dtype a chain hands to the client.
 
+        ``postprocess=None`` means ``self.postprocess``; the inference server
+        passes the chain of the layer being served.
+        """
         dtype = model_output_dtype
+        if postprocess is None:
+            postprocess = self.postprocess
 
-        if len(self.postprocess) > 0:
+        if len(postprocess) > 0:
             # Postprocessors are applied in order (see Inferencer), so the dtype
             # that actually reaches the client is the one declared by the LAST
             # step that declares one. Scan in reverse, matching
@@ -229,12 +235,12 @@ class Flow:
             # dtype in the zarr metadata (neuroglancer: "Data type not
             # compatible with segmentation layer") and cast uint64 label ids
             # through float32, corrupting any id above 2**24.
-            for postprocess in self.postprocess[::-1]:
-                if postprocess.dtype:
-                    logger.info(
-                        f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
+            for step in postprocess[::-1]:
+                if step.dtype:
+                    logger.debug(
+                        f"Setting output dtype to {step.dtype} from {step} - was {dtype}"
                     )
-                    dtype = postprocess.dtype
+                    dtype = step.dtype
                     break
 
         return dtype

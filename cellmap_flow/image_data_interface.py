@@ -1,5 +1,8 @@
+import copy
+
 import zarr
 from cellmap_flow.utils.ds import (
+    LazyNormalization,
     _join_path,
     _open_zarr,
     find_closest_scale,
@@ -24,7 +27,11 @@ class ImageDataInterface:
         custom_fill_value=None,
         concurrency_limit=1,
         normalize=True,
+        input_norms=None,
     ):
+        """``input_norms``: the normalizers (and ChannelSelector) to read with.
+        ``None`` follows the process-wide ``g.input_norms`` at read time.
+        """
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
             v3_container = zarr_v3.find_v3_container(dataset_path)
@@ -53,7 +60,9 @@ class ImageDataInterface:
                 except Exception as e:
                     logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
-        self._ts = None
+        # The opened tensorstore is shared with every with_input_norms() view.
+        self._store = {"ts": None}
+        self.input_norms = None if input_norms is None else list(input_norms)
         (
             self.voxel_size,
             self.chunk_shape,
@@ -79,15 +88,42 @@ class ImageDataInterface:
         # debugging question.
         logger.debug(str(self.info))
 
-    @property
-    def ts(self):
-        if not self._ts:
-            self._ts = open_ds_tensorstore(
+    def _raw_ts(self):
+        """The dataset as opened: unnormalized, every channel."""
+        if self._store["ts"] is None:
+            self._store["ts"] = open_ds_tensorstore(
                 self.path,
                 concurrency_limit=self.concurrency_limit,
-                normalize=self.normalize,
-            )
-        return self._ts
+                normalize=True,
+            ).ts_dataset
+        return self._store["ts"]
+
+    def _view(self):
+        return LazyNormalization(
+            self._raw_ts(),
+            input_norms=self.input_norms,
+            normalize=self.normalize,
+            spatial_ndim=len(self.shape),
+        )
+
+    @property
+    def ts(self):
+        """The dataset seen through the input chain (one channel, normalized).
+
+        With ``normalize=False`` this is the plain tensorstore of the selected
+        channel, as it always was.
+        """
+        view = self._view()
+        return view if self.normalize else view.selected()
+
+    def with_input_norms(self, input_norms):
+        """This dataset, read through ``input_norms`` instead of ``g.input_norms``.
+
+        Shares the opened tensorstore, so it is cheap to make one per request.
+        """
+        view = copy.copy(self)
+        view.input_norms = list(input_norms)
+        return view
 
     @property
     def info(self):
@@ -103,14 +139,14 @@ class ImageDataInterface:
         return info
 
     def to_ndarray_ts(self, roi=None):
-        res = to_ndarray_tensorstore(
-            self.ts,
+        view = self._view()
+        return to_ndarray_tensorstore(
+            view.selected(),
             roi,
             self.voxel_size,
             self.offset,
             self.output_voxel_size,
             self.axes_names,
             self.custom_fill_value,
+            input_norms=view.norms_to_apply(),
         )
-        # logger.warning(f"Read data with shape {res.shape} from dataset {self.path} with ROI {roi} and output voxel size {self.output_voxel_size}")
-        return res

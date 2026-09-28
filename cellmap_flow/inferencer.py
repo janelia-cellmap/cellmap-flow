@@ -11,10 +11,13 @@ from cellmap_flow.globals import g
 logger = logging.getLogger(__name__)
 
 
-def apply_postprocess(data, **kwargs):
+def apply_postprocess(data, postprocess=None, **kwargs):
+    """Run ``data`` through a postprocessing chain.
 
-    for pross in g.postprocess:
-        # logger.error(f"applying postprocess: {pross}")
+    ``postprocess=None`` means the process-wide ``g.postprocess``; the server
+    passes the chain of the layer being requested instead.
+    """
+    for pross in g.postprocess if postprocess is None else postprocess:
         data = pross(data, **kwargs)
     return data
 
@@ -161,7 +164,16 @@ class Inferencer:
         except Exception as e:
             logger.info(f"Could not classify model output: {e}")
 
-    def process_chunk(self, idi, roi):
+    def process_chunk(self, idi, roi, input_norms=None, postprocess=None):
+        """Predict ``roi`` and postprocess it.
+
+        ``input_norms`` / ``postprocess``: the chain to use for this chunk.
+        ``None`` falls back to ``g.input_norms`` / ``g.postprocess``, for
+        callers (blockwise, scripts) that set the chain process-wide.
+        """
+        if input_norms is not None and hasattr(idi, "with_input_norms"):
+            idi = idi.with_input_norms(input_norms)
+
         # check if process_chunk is in self.config
         if getattr(self.model_config.config, "process_chunk", None) and callable(
             self.model_config.config.process_chunk
@@ -172,10 +184,26 @@ class Inferencer:
 
         postprocessed = apply_postprocess(
             result,
+            postprocess=postprocess,
             chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
-            chunk_num_voxels=np.prod(roi.get_shape() // idi.output_voxel_size),
+            chunk_num_voxels=self._output_voxels_in(roi, idi),
         )
         return postprocessed
+
+    def _output_voxels_in(self, roi, idi):
+        """How many output voxels ``roi`` holds, the spacing for unique label ids.
+
+        This used the IDI's output voxel size, which the server and blockwise
+        leave at the input voxel size, so a model whose output is finer than
+        its input spaced ids too closely and neighbouring chunks collided.
+        """
+        output_voxel_size = getattr(self.model_config.config, "output_voxel_size", None)
+        if output_voxel_size is None:
+            output_voxel_size = idi.output_voxel_size
+        shape = np.array(roi.get_shape(), dtype=float) / np.array(
+            output_voxel_size, dtype=float
+        )
+        return int(np.prod(np.ceil(shape)))
 
     def process_chunk_basic(self, idi, roi):
         output_roi = roi
