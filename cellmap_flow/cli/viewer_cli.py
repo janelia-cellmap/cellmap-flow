@@ -45,9 +45,12 @@ def main(dataset, log_level):
     import neuroglancer
 
     from cellmap_flow.dashboard.app import create_and_run_app
+    from cellmap_flow.utils.bsub_utils import install_cleanup_handlers
     from cellmap_flow.utils.scale_pyramid import get_raw_layer
 
     configure_logging(getattr(logging, log_level.upper()))
+    # Models picked in the dashboard are jobs too; kill them on the way out.
+    install_cleanup_handlers()
 
     logger.info(f"Starting CellMap Flow viewer with dataset: {dataset}")
 

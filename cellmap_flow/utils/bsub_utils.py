@@ -15,6 +15,7 @@ import logging
 import sys
 import signal
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Optional, List
@@ -584,18 +585,33 @@ def extract_host_from_output(output: str) -> Optional[str]:
 def cleanup_handler(signum: int, frame) -> None:
     """
     Signal handler for graceful shutdown.
-    Kills all tracked jobs before exiting.
+    Kills all tracked jobs, then exits with the conventional 128 + signal
+    status, so a stopped run does not report success.
     """
     logger.warning(f"Received signal {signum}. Cleaning up jobs...")
-    for job in g.jobs:
+    for job in list(g.jobs):
         logger.info(f"Killing job: {job.model_name}")
-        job.kill()
-    sys.exit(0)
+        try:
+            job.kill()
+        except Exception as e:
+            logger.error(f"Could not kill job {job.model_name}: {e}")
+    sys.exit(128 + signum)
 
 
-# Register signal handlers
-signal.signal(signal.SIGINT, cleanup_handler)  # Handle Ctrl+C
-signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
+def install_cleanup_handlers() -> bool:
+    """Kill the tracked jobs on Ctrl+C or SIGTERM. Returns whether installed.
+
+    For entry points that launch jobs, called from their main thread. This
+    used to happen when the module was imported, which set the handlers for
+    every importer, and raised ValueError when the first import happened off
+    the main thread (the lazy g.finetune_job_manager, a dashboard request).
+    """
+    if threading.current_thread() is not threading.main_thread():
+        logger.debug("Not on the main thread; leaving signal handlers alone")
+        return False
+    signal.signal(signal.SIGINT, cleanup_handler)  # Handle Ctrl+C
+    signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
+    return True
 
 
 # How long a job may sit PENDING before we give up on that queue and try

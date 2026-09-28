@@ -11,7 +11,12 @@ import inspect
 import sys
 from typing import Type, Dict
 from typing import Type, get_type_hints
-from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import (
+    JobStartError,
+    install_cleanup_handlers,
+    start_hosts,
+    SERVER_COMMAND,
+)
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.utils.cli_utils import (
@@ -368,6 +373,8 @@ register_all_model_commands()
 
 def main():
     """Entry point for the CLI."""
+    # Ctrl+C or SIGTERM kills the jobs this command started.
+    install_cleanup_handlers()
     cli()
 
 

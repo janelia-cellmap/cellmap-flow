@@ -14,7 +14,12 @@ import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import (
+    JobStartError,
+    install_cleanup_handlers,
+    start_hosts,
+    SERVER_COMMAND,
+)
 from cellmap_flow.utils.config_utils import load_config
 from cellmap_flow.globals import g
 
@@ -249,7 +254,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Queue: {queue}")
         return
 
-    # Run the models
+    # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
+    install_cleanup_handlers()
     try:
         run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
     except JobStartError as e:
