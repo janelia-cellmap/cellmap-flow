@@ -630,7 +630,13 @@ def _generate_model_files(
         )
 
     export_root = Path(export_dir) if export_dir is not None else output_dir_path
+    # The job's own queue and charge group, when the job manager passed them;
+    # the template's defaults otherwise.
+    scheduler = {
+        key: getattr(args, key) for key in ("queue", "charge_group") if getattr(args, key, None)
+    }
     yaml_path = generate_finetuned_model_yaml(
+        **scheduler,
         lora_adapter_path=str(export_root / "lora_adapter") if is_lora else None,
         weights_path=None if is_lora else str(export_root / "full_finetune" / "model_state_dict.pt"),
         # A LoRA adapter was trained on top of the whole base, finetune
@@ -974,6 +980,18 @@ def build_arg_parser():
         default=None,
         help="Directory for the generated serving YAMLs (default: <session>/models "
              "when --output-dir is <session>/runs/<name>, else <output-dir>/models)"
+    )
+    parser.add_argument(
+        "--queue",
+        type=str,
+        default=None,
+        help="LSF queue written into the generated serving YAMLs (default: gpu_h100)"
+    )
+    parser.add_argument(
+        "--charge-group",
+        type=str,
+        default=None,
+        help="LSF charge group written into the generated serving YAMLs (default: cellmap)"
     )
     parser.add_argument(
         "--batch-size",

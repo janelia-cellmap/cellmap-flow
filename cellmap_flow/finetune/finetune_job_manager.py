@@ -104,6 +104,43 @@ def finetune_export_kwargs(output_dir, params=None) -> dict:
     return {"lora_adapter_path": str(adapter)}
 
 
+_ITERATION_COMPLETE_RE = re.compile(r"TRAINING_ITERATION_COMPLETE:\s+(\S+)")
+_MODEL_YAML_RE = re.compile(r"^.*?FINETUNED_MODEL_YAML:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def _yaml_model_entry(yaml_path) -> Optional[dict]:
+    """The first models: entry of a serving YAML, or None if it cannot be read."""
+    if not yaml_path:
+        return None
+    try:
+        import yaml
+
+        with open(yaml_path) as f:
+            models = (yaml.safe_load(f) or {}).get("models") or []
+    except Exception:
+        return None
+    entry = models[0] if models else None
+    return entry if isinstance(entry, dict) and entry.get("base_model") else None
+
+
+def trainer_outputs_from_log(log_text: str):
+    """(model name, serving YAML path) of the last iteration the log reports.
+
+    Either is None when the log has none. The YAML is only taken when it
+    belongs to that iteration: the trainer prints it just before the
+    iteration's completion marker, and skips it when it could not write one.
+    """
+    names = list(_ITERATION_COMPLETE_RE.finditer(log_text))
+    if not names:
+        return None, None
+    last = names[-1]
+    previous_end = names[-2].end() if len(names) > 1 else 0
+    yamls = [
+        m for m in _MODEL_YAML_RE.finditer(log_text, previous_end, last.start())
+    ]
+    return last.group(1), (yamls[-1].group(1) if yamls else None)
+
+
 @dataclass
 class FinetuneJob:
     """Track a finetuning job with metadata, status, and training progress.
@@ -211,9 +248,23 @@ class FinetuneJobManager:
         return default
 
     def _extract_data_path_from_corrections(self, corrections_path: Path) -> str:
-        """Extract dataset path from corrections metadata."""
+        """Extract dataset path from corrections metadata.
+
+        The manifest's raw_dataset_path first -- it is what the trainer reads
+        -- and only then the first correction zarr's attrs, which a crop zarr
+        may not have.
+        """
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        try:
+            raw = (read_manifest(str(corrections_path)) or {}).get("raw_dataset_path")
+        except (OSError, ValueError):
+            raw = None
+        if raw:
+            return raw
+
         # Look for first .zarr directory
-        zarr_dirs = list(corrections_path.glob("*.zarr"))
+        zarr_dirs = sorted(corrections_path.glob("*.zarr"))
         if not zarr_dirs:
             raise ValueError("No .zarr directories found in corrections")
 
@@ -229,41 +280,6 @@ class FinetuneJobManager:
             raise ValueError("No 'dataset_path' found in corrections metadata")
 
         return metadata["dataset_path"]
-
-    def _build_base_model_dict(self, finetune_job: FinetuneJob, metadata: dict) -> dict:
-        """Build base_model dict for FinetuneModelConfig from job metadata.
-
-        Reconstructs the dict that would come from model_config.to_dict(),
-        based on what was stored in metadata.json at job submission time.
-        """
-        model_type = metadata.get("model_type", "fly")
-
-        if metadata.get("model_entry"):
-            return dict(metadata["model_entry"])
-
-        if model_type == "huggingface":
-            result = {"type": "huggingface", "repo": metadata["repo"]}
-            if metadata.get("revision"):
-                result["revision"] = metadata["revision"]
-            return result
-
-        if model_type == "script" or metadata.get("model_script"):
-            return {
-                "type": "script",
-                "script_path": metadata["model_script"],
-            }
-
-        # Default: fly model with checkpoint
-        result = {
-            "type": "fly",
-            "channels": finetune_job.params.get("channels", ["mito"]),
-            "input_voxel_size": finetune_job.params.get("input_voxel_size", [16, 16, 16]),
-            "output_voxel_size": finetune_job.params.get("output_voxel_size", [16, 16, 16]),
-        }
-        checkpoint = metadata.get("model_checkpoint") or finetune_job.params.get("model_checkpoint")
-        if checkpoint:
-            result["checkpoint_path"] = checkpoint
-        return result
 
     def _resolve_model_type(self, model_config) -> str:
         """Infer the finetuning CLI model type from the model config.
@@ -321,6 +337,8 @@ class FinetuneJobManager:
         select_channel: Optional[int],
         offsets: Optional[str],
         models_dir: Optional[Path] = None,
+        queue: Optional[str] = None,
+        charge_group: Optional[str] = None,
     ) -> str:
         """Build the shell command used to launch finetuning."""
         command_parts = [
@@ -385,6 +403,12 @@ class FinetuneJobManager:
             command_parts += ["--offsets", str(offsets)]
         if models_dir is not None:
             command_parts += ["--models-dir", str(models_dir)]
+        # Only written into the serving YAMLs, so a model served from one runs
+        # where this job did rather than on hard-coded defaults.
+        if queue:
+            command_parts += ["--queue", str(queue)]
+        if charge_group:
+            command_parts += ["--charge-group", str(charge_group)]
 
         command = " ".join(_sh_quote(part) for part in command_parts)
 
@@ -662,6 +686,8 @@ class FinetuneJobManager:
             select_channel=select_channel,
             offsets=offsets,
             models_dir=models_dir,
+            queue=queue,
+            charge_group=charge_group,
         )
 
         self.logger.info(f"Training command: {cli_command}")
@@ -1072,6 +1098,7 @@ class FinetuneJobManager:
                 model_name = iter_matches[-1]
             else:
                 model_name = f"{finetune_job.model_name}_finetuned"
+            self._read_trainer_outputs(finetune_job, set_name=False)
 
             self._add_finetuned_neuroglancer_layer(finetune_job, model_name)
         except Exception as e:
@@ -1091,11 +1118,23 @@ class FinetuneJobManager:
         from cellmap_flow.models.models_config import FinetuneModelConfig
 
         params = finetune_job.params
-        export = finetune_export_kwargs(finetune_job.output_dir, params)
+
+        # The trainer's own YAML for this iteration says exactly what it
+        # exported and on which base; registering from it keeps the pipeline
+        # builder's model identical to the one the YAML serves. Without one,
+        # fall back to the run's latest export and the base model's entry.
+        entry = _yaml_model_entry(finetune_job.model_yaml_path)
+        if entry is not None:
+            export = {
+                k: entry[k] for k in ("lora_adapter_path", "weights_path") if entry.get(k)
+            }
+            base_model_dict = entry.get("base_model")
+        else:
+            export = finetune_export_kwargs(finetune_job.output_dir, params)
+            base_model_dict = None
 
         # Find the base model's to_dict() from g.models_config
-        base_model_dict = None
-        if hasattr(g, "models_config") and g.models_config:
+        if base_model_dict is None and hasattr(g, "models_config") and g.models_config:
             for mc in g.models_config:
                 if getattr(mc, "name", None) == finetune_job.model_name:
                     base_model_dict = mc.to_dict()
@@ -1184,6 +1223,7 @@ class FinetuneJobManager:
                 finetune_job.inference_server_ready = True
 
             new_model_name = iter_matches[-1]
+            self._read_trainer_outputs(finetune_job, set_name=False)
             if new_model_name != finetune_job.finetuned_model_name:
                 self.logger.info(f"New training iteration complete: {new_model_name}")
                 try:
@@ -1198,14 +1238,31 @@ class FinetuneJobManager:
                 except Exception as e:
                     self.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
 
+    def _read_trainer_outputs(self, finetune_job: FinetuneJob, set_name: bool = True):
+        """Take the latest iteration's model name and serving YAML from the log.
+
+        The trainer prints "FINETUNED_MODEL_YAML: <path>" and then
+        "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it
+        finishes. ``set_name=False`` leaves finetuned_model_name alone, for the
+        monitor, which uses the old name to replace the old viewer layer.
+        """
+        try:
+            log_text = finetune_job.log_file.read_text()
+        except OSError:
+            return
+        name, yaml_path = trainer_outputs_from_log(log_text)
+        if set_name and name:
+            finetune_job.finetuned_model_name = name
+        if yaml_path:
+            finetune_job.model_yaml_path = Path(yaml_path)
+
     def complete_job(self, finetune_job: FinetuneJob):
         """
         Post-training actions after job completes successfully.
 
         1. Verify adapter files exist
-        2. Generate model script and YAML
-        3. Register in g.models_config
-        4. Update job status and metadata
+        2. Take the model name and serving YAML the trainer reported
+        3. Update job status and metadata
 
         Args:
             finetune_job: The completed job
@@ -1248,120 +1305,25 @@ class FinetuneJobManager:
 
             self.logger.info(f"Verified LoRA adapter files exist in {adapter_path}")
 
-        # === Generate finetuned model name ===
-
-        timestamp = finetune_job.created_at.strftime("%Y%m%d_%H%M%S")
-        model_basename = finetune_job.model_name.replace("/", "_").replace(" ", "_")
-        finetuned_model_name = f"{model_basename}_finetuned_{timestamp}"
-
-        finetune_job.finetuned_model_name = finetuned_model_name
-
-        self.logger.info(f"Generated finetuned model name: {finetuned_model_name}")
-
-        # === Generate model YAML ===
-
-        from cellmap_flow.finetune.finetuned_model_templates import (
-            generate_finetuned_model_yaml
-        )
-
-        # The session's models/ directory. output_dir is
-        # <session>/runs/<model>_<timestamp>, so the session is two levels up;
-        # this used to take three and wrote to <base>/models, outside the
-        # session and shared by all of them.
-        models_dir = finetune_job.output_dir.parent.parent / "models"
-
-        try:
-            models_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Models directory ready: {models_dir}")
-        except Exception as e:
-            self.logger.error(f"Failed to create models directory {models_dir}: {e}")
-            raise RuntimeError(f"Failed to create models directory: {e}")
-
-        # Check if YAML already exists (generated by CLI with auto-serve)
-        expected_yaml = models_dir / f"{finetuned_model_name}.yaml"
-
-        if expected_yaml.exists():
-            self.logger.info(f"Model YAML already generated by CLI, skipping generation")
-            finetune_job.model_yaml_path = expected_yaml
-            yaml_path = expected_yaml
+        # === The name and YAML the trainer gave the result ===
+        #
+        # This used to make up its own: the job's creation time instead of
+        # the iteration's, and a sanitized model name instead of the
+        # trainer's. So the YAML it looked for never existed, it always
+        # generated a second one (with the dashboard's current norms rather
+        # than the training ones), and metadata.json named a model that
+        # neither the viewer layer nor the registered config did. The trainer
+        # prints both, and is the only thing that knows them.
+        self._read_trainer_outputs(finetune_job)
+        finetuned_model_name = finetune_job.finetuned_model_name
+        yaml_path = finetune_job.model_yaml_path
+        if yaml_path is None:
+            self.logger.warning(
+                f"Job {job_id}: the trainer reported no serving YAML (see its "
+                f"log for why); the weights are in {finetune_job.output_dir}."
+            )
         else:
-            self.logger.info(f"Generating model config...")
-
-            # Read metadata for base model info
-            metadata_file = finetune_job.output_dir / "metadata.json"
-            metadata = {}
-            if metadata_file.exists():
-                try:
-                    with open(metadata_file, "r") as f:
-                        metadata = json.load(f)
-                except Exception as e:
-                    self.logger.warning(f"Could not read metadata: {e}")
-
-            try:
-                # Build base_model_dict from metadata
-                base_model_dict = self._build_base_model_dict(finetune_job, metadata)
-                self.logger.info(f"Base model dict: {base_model_dict}")
-
-                # === Extract configuration from base model and corrections ===
-
-                data_path = None
-                json_data = None
-                base_scale = "s0"  # Default scale (only safe default)
-
-                # 1. Get dataset_path from corrections metadata (REQUIRED)
-                corrections_dir = Path(metadata.get("corrections_path", ""))
-                try:
-                    data_path = self._extract_data_path_from_corrections(corrections_dir)
-                    self.logger.info(f"Found dataset_path from corrections: {data_path}")
-                except (ValueError, Exception) as e:
-                    self.logger.error(f"Could not extract dataset_path: {e}")
-
-                # 2. Get normalization and preprocessing from the running server's config
-                from cellmap_flow.globals import g as g_globals
-                from cellmap_flow.utils.serilization_utils import serialize_norms_posts_to_json
-                if hasattr(g_globals, 'input_norms') and g_globals.input_norms:
-                    import json as json_mod
-                    json_data = json_mod.loads(serialize_norms_posts_to_json(
-                        g_globals.input_norms, g_globals.postprocess
-                    ))
-                    self.logger.info(f"Found json_data from running server config")
-
-                # 3. Validate we have required data (NO PLACEHOLDERS!)
-                if not data_path:
-                    raise RuntimeError(
-                        "Could not determine dataset_path for finetuned model. "
-                        "Checked corrections metadata and base model YAML. "
-                        "Cannot generate model config without actual dataset path."
-                    )
-
-                if not json_data:
-                    self.logger.warning(
-                        "No json_data (normalization/postprocessing) found. "
-                        "Finetuned model may not work correctly without proper normalization. "
-                        "Consider adding json_data to base model YAML."
-                    )
-
-                # Generate .yaml config
-                yaml_path = generate_finetuned_model_yaml(
-                    base_model_dict=base_model_dict,
-                    **export,
-                    model_name=finetuned_model_name,
-                    output_path=expected_yaml,
-                    data_path=data_path,
-                    queue=metadata.get("queue", "gpu_h100"),
-                    charge_group=metadata.get("charge_group", "cellmap"),
-                    json_data=json_data,
-                    scale=base_scale,
-                )
-
-                finetune_job.model_yaml_path = yaml_path
-                self.logger.info(f"Generated model YAML: {yaml_path}")
-
-            except Exception as e:
-                import traceback
-                self.logger.error(f"Error generating model files: {e}")
-                self.logger.error(f"Traceback:\n{traceback.format_exc()}")
-                raise RuntimeError(f"Failed to generate model files: {e}")
+            self.logger.info(f"Serving YAML for {finetuned_model_name}: {yaml_path}")
 
         # === Update metadata file with completion info ===
 
@@ -1373,7 +1335,7 @@ class FinetuneJobManager:
             metadata["completed_at"] = datetime.now().isoformat()
             metadata["status"] = "COMPLETED"
             metadata["finetuned_model_name"] = finetuned_model_name
-            metadata["model_yaml_path"] = str(yaml_path)
+            metadata["model_yaml_path"] = str(yaml_path) if yaml_path else None
             metadata["final_epoch"] = finetune_job.current_epoch
             metadata["final_loss"] = finetune_job.latest_loss
 
