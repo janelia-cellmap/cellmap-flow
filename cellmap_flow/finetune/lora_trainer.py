@@ -465,6 +465,9 @@ class LoRAFinetuner:
 
         # Training state
         self.current_epoch = 0
+        # Where train() starts counting; load_checkpoint() moves it past the
+        # checkpoint's epoch.
+        self._start_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
         # Average supervised loss of the epoch just finished. Checkpoint
@@ -565,6 +568,7 @@ class LoRAFinetuner:
             lr=self.optimizer.defaults['lr'],
         )
         self.current_epoch = 0
+        self._start_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
         # Average supervised loss of the epoch just finished. Checkpoint
@@ -848,7 +852,11 @@ class LoRAFinetuner:
         except Exception:
             pass
 
-        for epoch in range(self.num_epochs):
+        # Resumed runs carry on after the checkpoint's epoch. This looped
+        # from 0 regardless, so --resume re-ran every epoch it had already
+        # done, and the checkpoint's epoch number was only ever logged.
+        epoch_loss = None
+        for epoch in range(self._start_epoch, self.num_epochs):
             self.current_epoch = epoch
             # User-requested graceful stop: drop out of the training loop so
             # the outer flow (inference server + wait for restart) kicks in.
@@ -1020,7 +1028,12 @@ class LoRAFinetuner:
         if self.tb is not None:
             self.tb.flush()
         self._log_message(f"Best loss: {self.best_loss:.6f}")
-        self._log_message(f"Final loss: {epoch_loss:.6f}")
+        # None when no epoch ran: a stop requested before the first one, or a
+        # resume from a finished run. Formatting it used to raise TypeError.
+        self._log_message(
+            f"Final loss: {epoch_loss:.6f}" if epoch_loss is not None
+            else "Final loss: n/a (no epoch ran)"
+        )
         self._log_message(f"Output directory: {self.output_dir}")
         self._log_message("="*60)
 
@@ -1527,9 +1540,10 @@ class LoRAFinetuner:
             self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         self.current_epoch = checkpoint['epoch']
+        self._start_epoch = checkpoint['epoch'] + 1
         self.global_step = checkpoint['global_step']
         self.best_loss = checkpoint['best_loss']
         self.training_stats = checkpoint.get('training_stats', [])
 
         logger.info(f"Checkpoint loaded from: {checkpoint_path}")
-        logger.info(f"Resuming from epoch {self.current_epoch+1}")
+        logger.info(f"Resuming after epoch {self.current_epoch+1}, at epoch {self._start_epoch+1}")
