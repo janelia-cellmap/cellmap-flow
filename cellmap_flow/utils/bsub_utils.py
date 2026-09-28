@@ -97,6 +97,9 @@ class Job(ABC):
         self.model_name = model_name
         self.status = JobStatus.RUNNING
         self.host: Optional[str] = None
+        # The queue the job was actually submitted to, which queue cycling
+        # can make different from the one requested. None for local jobs.
+        self.queue: Optional[str] = None
     
     @abstractmethod
     def kill(self) -> None:
@@ -840,12 +843,10 @@ def start_hosts(
             closed. Defaults to g.cycle_gpu_queues, which defaults to True.
         
     Returns:
-        Job object (LSFJob or LocalJob) with job information
+        Job object (LSFJob or LocalJob) with job information. ``job.queue``
+        is the queue it landed on. The globals are left alone: the queue the
+        job fell back to is not what the next submission should ask for.
     """
-    # Update global settings
-    g.queue = queue
-    g.charge_group = charge_group
-
     # An explicit argument wins; otherwise whatever the dashboard or yaml set;
     # otherwise the shared default. Never None, or the job silently inherits
     # the queue's two hours.
@@ -880,9 +881,9 @@ def start_hosts(
             except Exception as e:
                 logger.error(f"Failed to submit bsub job to {candidate}: {e}")
                 continue
+            job.queue = candidate
 
             if not wait_for_host:
-                g.queue = candidate
                 g.jobs.append(job)
                 return job
 
@@ -900,7 +901,6 @@ def start_hosts(
                     )
                 else:
                     logger.info(f"Running on {candidate}")
-                g.queue = candidate
                 g.jobs.append(job)
                 return job
 
@@ -917,7 +917,6 @@ def start_hosts(
             # nothing to lose by trying elsewhere.
             observed = job.observed_status()
             if observed is not None and observed != JobStatus.PENDING:
-                g.queue = candidate
                 g.jobs.append(job)
                 return job
 
@@ -929,7 +928,6 @@ def start_hosts(
                 )
                 job.kill()
             else:
-                g.queue = candidate
                 g.jobs.append(job)
                 return job
 
