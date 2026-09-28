@@ -648,17 +648,26 @@ def get_load_crops_progress_response(load_id):
 
 
 def read_yaml_file_response(path):
-    """Return the contents of a YAML file so the dashboard can preview/edit it."""
+    """Return the contents of a YAML file so the dashboard can preview/edit it.
+
+    The dashboard listens on every interface, and this used to return any
+    file the user could read, so it now serves only files that are YAML by
+    name after resolving symlinks. The name is checked before existence so
+    the route cannot be used to probe for other files either.
+    """
     if not path:
         return jsonify({"success": False, "error": "Missing 'path' query param"}), 400
-    if not os.path.exists(path):
+    real = os.path.realpath(os.path.expanduser(path))
+    if not real.lower().endswith((".yaml", ".yml")):
+        return jsonify({"success": False, "error": "Only .yaml or .yml files can be read"}), 400
+    if not os.path.exists(real):
         return jsonify({"success": False, "error": f"File not found: {path}"}), 404
-    if not os.path.isfile(path):
+    if not os.path.isfile(real):
         return jsonify({"success": False, "error": f"Not a file: {path}"}), 400
-    if os.path.getsize(path) > 1_000_000:
+    if os.path.getsize(real) > 1_000_000:
         return jsonify({"success": False, "error": "File exceeds 1 MB; paste it directly instead"}), 400
     try:
-        with open(path) as f:
+        with open(real) as f:
             text = f.read()
         return jsonify({"success": True, "text": text})
     except Exception as e:

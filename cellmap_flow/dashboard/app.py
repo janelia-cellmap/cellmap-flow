@@ -3,7 +3,6 @@ import socket
 import logging
 
 from flask import Flask
-from flask_cors import CORS
 
 from cellmap_flow.globals import g, LogHandler
 from cellmap_flow.utils.logging_setup import LOG_DATEFMT, LOG_FORMAT
@@ -22,8 +21,11 @@ logger = logging.getLogger(__name__)
 # Explicitly set template and static folder paths for package installation
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+# No CORS: the dashboard's pages call it from its own origin, and it can
+# submit LSF jobs and read files, so other sites must not be able to script
+# it through the user's browser. The inference servers keep CORS open because
+# Neuroglancer fetches their chunks cross-origin.
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
-CORS(app)
 
 # Feed the dashboard's log panel.
 #
