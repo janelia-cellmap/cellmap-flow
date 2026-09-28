@@ -4,7 +4,7 @@ import logging
 # which imports this lazily, keeps its own.
 logger = logging.getLogger(__name__)
 
-import subprocess
+import shlex
 from pathlib import Path
 import zarr
 import daisy
@@ -22,6 +22,7 @@ from cellmap_flow.utils.config_utils import build_models, load_config, resolve_d
 from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.utils.ds import generate_singlescale_metadata
 from cellmap_flow.models.model_merger import get_model_merger
+from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME, submit_bsub_job
 
 
 
@@ -77,6 +78,13 @@ class CellMapFlowBlockwiseProcessor:
         if self.workers < 1:
             raise Exception("Workers should be greater than 0.")
         self.cpu_workers = self.config.get("cpu_workers", 12)
+        # LSF run limit for each worker. Without -W the GPU queues kill a
+        # worker at two hours; see bsub_utils.DEFAULT_WALLTIME.
+        self.walltime = (
+            self.config.get("walltime")
+            or getattr(g, "walltime", None)
+            or DEFAULT_WALLTIME
+        )
         # Added and create == True to fix client error when create: True in the yaml, so when it is a client it will not be changed
         if "create" in self.config and create == True:
             create = self.config["create"]
@@ -533,6 +541,7 @@ class CellMapFlowBlockwiseProcessor:
                     self.charge_group,
                     self.queue,
                     ncpu=self.cpu_workers,
+                    walltime=self.walltime,
                 ),
                 check_function=partial(check_block, self.tmp_dir) if self.track_progress else None,
                 read_write_conflict=conflicts,
@@ -550,31 +559,34 @@ def check_block(tmp_dir, block: daisy.Block) -> bool:
     return (tmp_dir / f"{block.block_id[1]}").exists()
 
 
-def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12):
+def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None, log_dir=None):
+    """A daisy spawn function that submits one blockwise worker to LSF.
+
+    Goes through bsub_utils.submit_bsub_job, so each worker gets a run limit
+    (-W; the GPU queues' own default is two hours), its own log file named
+    after its job id, and a submission that fails loudly: a bsub error
+    raises here, and daisy stops the run, rather than the master waiting
+    forever for a worker that never started.
+
+    Logs go to ``log_dir``, by default ./daisy_logs as before, resolved now so
+    that every worker writes to the same place.
+    """
+    log_dir = Path(log_dir or "daisy_logs").resolve()
+
     def run_worker():
-        if not Path("daisy_logs").exists():
-            Path("daisy_logs").mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [
-                "bsub",
-                "-P",
-                charge_group,
-                "-J",
-                str(name),
-                "-q",
-                queue,
-                "-n",
-                str(ncpu),
-                "-gpu",
-                "num=1",
-                "-o",
-                f"daisy_logs/out.out",
-                "-e",
-                f"daisy_logs/out.err",
-                "cellmap_flow_blockwise",
-                f"{yaml_config}",
-                "--client",
-            ]
+        submit_bsub_job(
+            f"cellmap_flow_blockwise {shlex.quote(str(yaml_config))} --client",
+            queue=queue,
+            charge_group=charge_group,
+            job_name=str(name),
+            num_gpus=1,
+            num_cpus=ncpu,
+            walltime=walltime or DEFAULT_WALLTIME,
+            log_dir=log_dir,
+            # A worker asking for more cores per GPU than the queue's ratio
+            # is held by LSF for minutes before bsub returns; wait for it
+            # rather than time out and lose track of a job that still lands.
+            bsub_timeout=None,
         )
 
     return run_worker

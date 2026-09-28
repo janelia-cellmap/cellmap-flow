@@ -802,10 +802,12 @@ def submit_bsub_job(
     num_gpus: int = 1,
     num_cpus: int = 4,
     walltime: Optional[str] = None,
+    log_dir: Optional[Path] = None,
+    bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECONDS,
 ) -> LSFJob:
     """
     Submit a job to LSF cluster using bsub.
-    
+
     Args:
         command: Shell command to execute
         queue: LSF queue name
@@ -813,7 +815,14 @@ def submit_bsub_job(
         job_name: Name for the job
         num_gpus: Number of GPUs to request
         num_cpus: Number of CPUs to request
-        
+        walltime: LSF run limit ("HH:MM" or minutes); None leaves the
+            queue default
+        log_dir: Directory for the job's <name>_<jobid>.log (stdout and
+            stderr); defaults to SERVER_LOG_DIR
+        bsub_timeout: Seconds to wait for bsub to answer, or None to wait as
+            long as it takes (an over-ratio request is held for minutes
+            before bsub returns)
+
     Returns:
         LSFJob object for the submitted job
         
@@ -822,10 +831,11 @@ def submit_bsub_job(
         BsubTimeoutError: bsub did not answer and no new job with this name
             can be found. The caller must not simply submit again.
     """
-    SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_dir = Path(log_dir) if log_dir is not None else SERVER_LOG_DIR
+    log_dir.mkdir(parents=True, exist_ok=True)
     # %J is substituted by LSF with the actual job ID once assigned.
     log_stem = _log_stem(job_name)
-    log_pattern = SERVER_LOG_DIR / f"{log_stem}_%J.log"
+    log_pattern = log_dir / f"{log_stem}_%J.log"
 
     bsub_command = ["bsub", "-J", job_name, "-o", str(log_pattern)]
 
@@ -844,7 +854,7 @@ def submit_bsub_job(
 
     # Taken before submitting, so that if bsub times out the job it created
     # can be told apart from older jobs with the same name.
-    existing = _job_ids_named(job_name)
+    existing = _job_ids_named(job_name) if bsub_timeout is not None else None
 
     try:
         result = subprocess.run(
@@ -852,14 +862,14 @@ def submit_bsub_job(
             capture_output=True,
             text=True,
             check=True,
-            timeout=BSUB_TIMEOUT_SECONDS
+            timeout=bsub_timeout
         )
     except subprocess.TimeoutExpired as e:
         now = _job_ids_named(job_name)
         new_ids = (now - existing) if (now is not None and existing is not None) else set()
         if len(new_ids) != 1:
             raise BsubTimeoutError(
-                f"bsub did not answer within {BSUB_TIMEOUT_SECONDS}s and no new "
+                f"bsub did not answer within {bsub_timeout}s and no new "
                 f"job named {job_name} can be identified; LSF may still create "
                 f"it. Check `bjobs -a -J {job_name}` before submitting again."
             ) from e
@@ -881,7 +891,7 @@ def submit_bsub_job(
             )
         logger.info(f"Job {job_id} submitted successfully")
 
-    log_file = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
+    log_file = log_dir / f"{log_stem}_{job_id}.log"
     return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
 
 
