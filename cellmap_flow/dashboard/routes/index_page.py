@@ -14,11 +14,49 @@ logger = logging.getLogger(__name__)
 index_bp = Blueprint("index", __name__)
 
 
+def chain_items(available, configured):
+    """The rows of an Input/Postprocess list, in the order to render them.
+
+    The configured steps come first, in the order they run, each with its own
+    parameter values; a step configured twice is listed twice. Every other
+    available step follows, unticked, with its defaults. Submit All sends the
+    ticked rows in display order, so rendering the configured chain in
+    registry order instead would reorder it on the next submit.
+
+    ``available`` is get_input_normalizers() / get_postprocessors_list();
+    ``configured`` is the live chain (g.input_norms / g.postprocess).
+    """
+    defaults = {op["name"]: op.get("params", {}) for op in available}
+    items = []
+    configured_names = set()
+    for step in configured or []:
+        step_dict = step.to_dict()
+        name = step_dict.get("name")
+        configured_names.add(name)
+        if name in defaults:
+            # Only the constructor's parameters are editable, and to_dict can
+            # lack one the op stores under another name; fall back to its
+            # default rather than dropping the field.
+            params = {
+                key: step_dict.get(key, default)
+                for key, default in defaults[name].items()
+            }
+        else:
+            params = {k: v for k, v in step_dict.items() if k != "name"}
+        items.append({"name": name, "checked": True, "params": params})
+    for op in available:
+        if op["name"] not in configured_names:
+            items.append(
+                {"name": op["name"], "checked": False, "params": dict(op.get("params", {}))}
+            )
+    return items
+
+
 @index_bp.route("/")
 def index():
     # Render the main page with tabs
-    input_norms = get_input_normalizers()
-    output_postprocessors = get_postprocessors_list()
+    input_norm_items = chain_items(get_input_normalizers(), g.input_norms)
+    postprocess_items = chain_items(get_postprocessors_list(), g.postprocess)
     model_mergers = get_model_mergers_list()
     # A copy: the "User" group lists this session's running models for the
     # Models tab only. Written into g.model_catalog it outlived the request,
@@ -26,11 +64,9 @@ def index():
     # pipeline builder's palette) found entries with no path.
     model_catalog = dict(g.model_catalog)
     model_catalog["User"] = {j.model_name: "" for j in g.jobs}
-    default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
-    default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
     logger.debug(f"Model catalog: {model_catalog}")
-    logger.debug(f"Default postprocess: {default_post_process}")
-    logger.debug(f"Default input norm: {default_input_norm}")
+    logger.debug(f"Input norm rows: {input_norm_items}")
+    logger.debug(f"Postprocess rows: {postprocess_items}")
 
     # Collect running HF model repos
     from cellmap_flow.models.models_config import HuggingFaceModelConfig
@@ -44,11 +80,9 @@ def index():
         "index.html",
         neuroglancer_url=g.NEUROGLANCER_URL,
         inference_servers=g.INFERENCE_SERVER,
-        input_normalizers=input_norms,
-        output_postprocessors=output_postprocessors,
+        input_norm_items=input_norm_items,
+        postprocess_items=postprocess_items,
         model_mergers=model_mergers,
-        default_post_process=default_post_process,
-        default_input_norm=default_input_norm,
         model_catalog=model_catalog,
         default_models=[j.model_name for j in g.jobs],
         default_hf_repos=default_hf_repos,

@@ -265,59 +265,58 @@
       // Asks the server what activation the model's output actually has (see
       // cellmap_flow/utils/output_probe.py) and compares it against the chain
       // currently configured. Only renders when there is something to say.
-      function applyPostprocessSuggestion(names, params) {
-        const list = document.getElementById("postProcessList");
+      // Tick exactly the suggested steps, fill in their parameters, and move
+      // them to the top in the suggested order -- steps are applied top to
+      // bottom. The Input/Postprocess lists can hold the same op in two rows
+      // (a chain loaded from yaml may use it twice), so work on rows rather
+      // than looking fields up by op name: the k-th use of a name takes the
+      // k-th row for it, and every row not picked is unticked.
+      function applyChainSuggestion(listId, rowSelector, checkboxSelector, names, paramsByName) {
+        const list = document.getElementById(listId);
         if (!list) return;
-        // Tick exactly the suggested set.
-        list.querySelectorAll(".postProcessCheckbox").forEach(function (cb) {
-          const want = names.indexOf(cb.value) !== -1;
-          if (cb.checked !== want) {
+        const rows = Array.from(list.querySelectorAll(rowSelector));
+        const picked = [];
+        names.forEach(function (name) {
+          const row = rows.find(function (r) {
+            const cb = r.querySelector(checkboxSelector);
+            return cb && cb.value === name && picked.indexOf(r) === -1;
+          });
+          if (row) picked.push(row);
+        });
+        rows.forEach(function (row) {
+          const cb = row.querySelector(checkboxSelector);
+          const want = picked.indexOf(row) !== -1;
+          if (cb && cb.checked !== want) {
             cb.checked = want;
             cb.dispatchEvent(new Event("change", { bubbles: true }));
           }
         });
-        // Defaults assume each step sees the range its usual predecessor
-        // produces; where this chain differs, the server says what to use.
-        Object.keys(params || {}).forEach(function (name) {
-          const values = params[name] || {};
+        picked.forEach(function (row) {
+          const name = row.querySelector(checkboxSelector).value;
+          const values = (paramsByName || {})[name] || {};
           Object.keys(values).forEach(function (key) {
-            const inp = document.getElementById("postProcess_" + name + "_" + key);
+            if (key === "name") return;
+            const inp = row.querySelector('input[data-param="' + key + '"]');
             if (inp) inp.value = values[key];
           });
         });
-        // Order matters -- steps are applied top to bottom -- so reorder the
-        // DOM to match the suggested sequence.
-        names.slice().reverse().forEach(function (name) {
-          const item = list.querySelector('[data-postprocessor="' + name + '"]');
-          if (item) list.insertBefore(item, list.firstChild);
+        picked.slice().reverse().forEach(function (row) {
+          list.insertBefore(row, list.firstChild);
         });
+      }
+
+      // Defaults assume each step sees the range its usual predecessor
+      // produces; where this chain differs, the server says what to use.
+      function applyPostprocessSuggestion(names, params) {
+        applyChainSuggestion("postProcessList", ".postprocessor-item",
+                             ".postProcessCheckbox", names, params);
       }
 
       // Same idea for the input side. Normalizers carry parameter values, not
       // just a name, so this fills those in as well as ticking the box.
       function applyInputNormSuggestion(norms, order) {
-        const list = document.getElementById("inputNormList");
-        if (!list) return;
-        const names = order || Object.keys(norms || {});
-        list.querySelectorAll(".inputNormCheckbox").forEach(function (cb) {
-          const want = names.indexOf(cb.value) !== -1;
-          if (cb.checked !== want) {
-            cb.checked = want;
-            cb.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        });
-        names.forEach(function (name) {
-          const params = norms[name] || {};
-          Object.keys(params).forEach(function (key) {
-            if (key === "name") return;
-            const inp = document.getElementById("inputNorm_" + name + "_" + key);
-            if (inp) inp.value = params[key];
-          });
-        });
-        names.slice().reverse().forEach(function (name) {
-          const item = list.querySelector('[data-normalizer="' + name + '"]');
-          if (item) list.insertBefore(item, list.firstChild);
-        });
+        applyChainSuggestion("inputNormList", ".normalizer-item",
+                             ".inputNormCheckbox", order || Object.keys(norms || {}), norms);
       }
 
       // Model names reach this banner from HuggingFace repo ids and from user

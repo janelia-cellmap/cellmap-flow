@@ -3,41 +3,38 @@
 </div>
 <form id="inputNormForm">
   <div id="inputNormList">
-  {% for normalizer in input_normalizers %}
-    {% set is_checked = normalizer.name in default_input_norm %}
-    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="{{ normalizer.name }}">
+  {# input_norm_items: the configured chain in the order it runs (a step used
+     twice appears twice), then every other normalizer unticked. Element ids
+     carry the row index because the same normalizer can have two rows. #}
+  {% for item in input_norm_items %}
+    {% set row_id = "inputNorm" ~ loop.index0 %}
+    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="{{ item.name }}">
       <div class="form-check mb-2 d-flex align-items-center">
         <span class="drag-handle me-2">⋮⋮</span>
         <input
           class="form-check-input inputNormCheckbox"
           type="checkbox"
-          id="inputNormMethod_{{ normalizer.name }}"
-          name="inputNormMethod_{{ normalizer.name }}"
-          value="{{ normalizer.name }}"
-          {% if is_checked %}checked{% endif %}
+          id="{{ row_id }}_enabled"
+          name="{{ row_id }}_enabled"
+          value="{{ item.name }}"
+          {% if item.checked %}checked{% endif %}
         />
         <label
           class="form-check-label ms-2"
-          for="inputNormMethod_{{ normalizer.name }}"
+          for="{{ row_id }}_enabled"
         >
-          {{ normalizer.name }}
+          {{ item.name }}
         </label>
       </div>
 
     <div
-      id="inputNorm_{{ normalizer.name }}Params"
-      class="ps-4"
-      {% if is_checked %}style="display: block;"{% else %}style="display: none;"{% endif %}
+      class="ps-4 step-params"
+      {% if item.checked %}style="display: block;"{% else %}style="display: none;"{% endif %}
     >
-      {% for param_name, default_val in normalizer.params.items() %}
-        {% if is_checked and param_name in default_input_norm[normalizer.name] %}
-          {% set param_val = default_input_norm[normalizer.name][param_name] %}
-        {% else %}
-          {% set param_val = default_val %}
-        {% endif %}
+      {% for param_name, param_val in item.params.items() %}
         <div class="mb-3">
           <label
-            for="inputNorm_{{ normalizer.name }}_{{ param_name }}"
+            for="{{ row_id }}_param_{{ param_name }}"
             class="form-label"
           >
             {{ param_name }}
@@ -45,8 +42,9 @@
           <input
             type="text"
             class="form-control"
-            id="inputNorm_{{ normalizer.name }}_{{ param_name }}"
-            name="inputNorm_{{ normalizer.name }}_{{ param_name }}"
+            id="{{ row_id }}_param_{{ param_name }}"
+            name="{{ row_id }}_param_{{ param_name }}"
+            data-param="{{ param_name }}"
             value="{{ param_val }}"
           />
         </div>
@@ -77,8 +75,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const normalizerCheckboxes = document.querySelectorAll("#inputNormForm .inputNormCheckbox");
   function updateNormItemState(checkbox) {
     const item = checkbox.closest(".normalizer-item");
-    if (item) item.classList.toggle("item-checked", checkbox.checked);
-    const paramDiv = document.getElementById("inputNorm_" + checkbox.value + "Params");
+    if (!item) return;
+    item.classList.toggle("item-checked", checkbox.checked);
+    const paramDiv = item.querySelector(".step-params");
     if (paramDiv) paramDiv.style.display = checkbox.checked ? "block" : "none";
   }
   normalizerCheckboxes.forEach(function (checkbox) {
@@ -151,14 +150,10 @@ document.addEventListener("DOMContentLoaded", function () {
     orderedItems.forEach((item) => {
       const checkbox = item.querySelector(".inputNormCheckbox");
       if (checkbox && checkbox.checked) {
-        const baseName = checkbox.value;
-        const normData = { name: baseName };
-
-        const paramDiv = document.getElementById("inputNorm_" + baseName + "Params");
-        const inputs = paramDiv.querySelectorAll("input");
-        inputs.forEach((inp) => {
-          const paramName = inp.id.replace("inputNorm_" + baseName + "_", "");
-          normData[paramName] = inp.value;
+        const normData = { name: checkbox.value };
+        // Read this row's own fields: the same normalizer can have two rows.
+        item.querySelectorAll(".step-params input[data-param]").forEach((inp) => {
+          normData[inp.dataset.param] = inp.value;
         });
         
         payload.push(normData);
