@@ -238,15 +238,26 @@
           const div = document.createElement("div");
           div.className = "form-check mb-2 hf-model-item";
           div.setAttribute("data-search", searchStr);
-          const isChecked = defaultHfRepos.includes(modelId) ? ' checked' : '';
-          div.innerHTML =
-            '<input class="form-check-input hf-model-checkbox" type="checkbox" ' +
-            'name="selected_hf_models" id="chk_hf_' + displayName + '" ' +
-            'value="' + modelId + '"' + isChecked + ' />' +
-            '<label class="form-check-label" for="chk_hf_' + displayName + '">' +
-            displayName +
-            (metadata.description ? ' <small style="color: #aaa;">- ' + metadata.description + '</small>' : '') +
-            '</label>';
+          // Built from nodes rather than an HTML string: repo ids and model
+          // card descriptions come from Hugging Face, not from us.
+          const input = document.createElement("input");
+          input.className = "form-check-input hf-model-checkbox";
+          input.type = "checkbox";
+          input.name = "selected_hf_models";
+          input.id = "chk_hf_" + displayName;
+          input.value = modelId;
+          input.defaultChecked = defaultHfRepos.includes(modelId);
+          const label = document.createElement("label");
+          label.className = "form-check-label";
+          label.htmlFor = input.id;
+          label.textContent = displayName;
+          if (metadata.description) {
+            const small = document.createElement("small");
+            small.style.color = "#aaa";
+            small.textContent = "- " + metadata.description;
+            label.append(" ", small);
+          }
+          div.append(input, label);
           container.appendChild(div);
         });
       }

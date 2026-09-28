@@ -584,6 +584,13 @@
 <!-- Restart Training Modal -->
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  // Escape server-supplied text before it goes into innerHTML.
+  const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/[&<>"']/g, (c) => ESC_MAP[c]);
+  }
+
   const modelSelect = document.getElementById("modelSelect");
   const modelSelectionDiv = document.getElementById("modelSelectionDiv");
   const modelInfo = document.getElementById("modelInfo");
@@ -934,11 +941,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     modelInfoContent.innerHTML = `
       <small>
-        <strong>Name:</strong> ${model.name}<br>
-        <strong>Output Size (nm):</strong> [${model.write_shape.join(', ')}]<br>
-        <strong>Voxel Size (nm):</strong> [${model.output_voxel_size.join(', ')}]<br>
-        <strong>Crop Shape (voxels):</strong> [${voxelShape.join(', ')}]<br>
-        <strong>Channels:</strong> ${model.output_channels}
+        <strong>Name:</strong> ${esc(model.name)}<br>
+        <strong>Output Size (nm):</strong> [${esc(model.write_shape.join(', '))}]<br>
+        <strong>Voxel Size (nm):</strong> [${esc(model.output_voxel_size.join(', '))}]<br>
+        <strong>Crop Shape (voxels):</strong> [${esc(voxelShape.join(', '))}]<br>
+        <strong>Channels:</strong> ${esc(model.output_channels)}
       </small>
     `;
     modelInfo.style.display = "block";
@@ -991,7 +998,7 @@ document.addEventListener("DOMContentLoaded", function () {
           minioStatusContent.innerHTML = `
             <small>
               <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
-              <strong>URL:</strong> ${data.minio_url}
+              <strong>URL:</strong> ${esc(data.minio_url)}
             </small>
           `;
           minioStatus.style.display = "block";
@@ -1056,7 +1063,7 @@ document.addEventListener("DOMContentLoaded", function () {
           minioStatusContent.innerHTML = `
             <small>
               <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
-              <strong>URL:</strong> ${data.minio_url}
+              <strong>URL:</strong> ${esc(data.minio_url)}
             </small>
           `;
           minioStatus.style.display = "block";
@@ -1254,7 +1261,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(data => {
         existingSessionsList.innerHTML = "";
         if (!data.success) {
-          existingSessionsList.innerHTML = `<option disabled>Error: ${data.error}</option>`;
+          existingSessionsList.innerHTML = `<option disabled>Error: ${esc(data.error)}</option>`;
           return;
         }
         if (!data.sessions || data.sessions.length === 0) {
@@ -1271,7 +1278,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       })
       .catch(err => {
-        existingSessionsList.innerHTML = `<option disabled>Error: ${err}</option>`;
+        existingSessionsList.innerHTML = `<option disabled>Error: ${esc(err)}</option>`;
       });
   }
 
