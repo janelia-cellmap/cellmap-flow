@@ -268,12 +268,25 @@ def blockwise_config_api():
             'blockwise_tasks_dir': g.blockwise_tasks_dir
         })
     elif request.method == "POST":
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'expected a JSON object'}), 400
+        # Parse every number before changing anything, so a bad value is a
+        # 400 that leaves the settings as they were, not a 500 halfway through.
+        counts = {}
+        for key in ('nb_cores_master', 'nb_cores_worker', 'nb_workers'):
+            try:
+                counts[key] = int(data.get(key))
+            except (TypeError, ValueError):
+                return jsonify({
+                    'success': False,
+                    'error': f'{key} must be a whole number, got {data.get(key)!r}',
+                }), 400
         g.queue = data.get('queue')
         g.charge_group = data.get('charge_group')
-        g.nb_cores_master = int(data.get('nb_cores_master'))
-        g.nb_cores_worker = int(data.get('nb_cores_worker'))
-        g.nb_workers = int(data.get('nb_workers'))
+        g.nb_cores_master = counts['nb_cores_master']
+        g.nb_cores_worker = counts['nb_cores_worker']
+        g.nb_workers = counts['nb_workers']
         g.tmp_dir = data.get('tmp_dir')
         g.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
         logger.debug(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")

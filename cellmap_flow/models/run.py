@@ -79,6 +79,10 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
     print(f"Current catalog: {g.model_catalog}")
     with g.viewer.txn() as s:
         kill_n_remove_from_neuroglancer(to_be_killed, s)
+        # Forget them too: a killed job left in g.jobs still counts as
+        # running, so selecting that model again did nothing, and
+        # /api/process kept rebuilding layers pointing at its dead host.
+        g.jobs = [j for j in g.jobs if j not in to_be_killed]
         # Launch local catalog models
         for _, group in g.model_catalog.items():
             for name, model_path in group.items():

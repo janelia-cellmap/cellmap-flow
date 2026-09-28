@@ -198,12 +198,27 @@ def export_config():
 @models_bp.route("/api/server-config", methods=["POST"])
 def update_server_config():
     """Update server configuration and save to cache."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "expected a JSON object"}), 400
     int_fields = {"nb_cores_master", "nb_cores_worker", "nb_workers"}
+    # Validate everything first: a bad number is the client's mistake (400),
+    # and must not leave half the settings applied.
+    updates = {}
     for key in SERVER_CONFIG_KEYS:
         if key in data:
-            value = int(data[key]) if key in int_fields else data[key]
-            setattr(g, key, value)
+            value = data[key]
+            if key in int_fields:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    return jsonify({
+                        "success": False,
+                        "error": f"{key} must be a whole number, got {value!r}",
+                    }), 400
+            updates[key] = value
+    for key, value in updates.items():
+        setattr(g, key, value)
     g.save_server_config()
     logger.info(f"Server config updated and cached: { {k: getattr(g, k) for k in SERVER_CONFIG_KEYS} }")
     return jsonify({"success": True, "config": {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}})
