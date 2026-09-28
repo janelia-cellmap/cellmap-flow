@@ -19,7 +19,7 @@ from functools import partial
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.config_utils import build_models, load_config
+from cellmap_flow.utils.config_utils import build_models, load_config, resolve_data_path
 from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.utils.ds import generate_singlescale_metadata
 from cellmap_flow.models.model_merger import get_model_merger
@@ -111,6 +111,21 @@ class CellMapFlowBlockwiseProcessor:
 
         if len(models) == 0:
             raise Exception("No models found in the configuration.")
+
+        # The same data_path + scale rule as cellmap_flow and cellmap_flow_yaml.
+        # All models read through one ImageDataInterface, so the first
+        # model's scale is the one that applies.
+        scale = getattr(models[0], "scale", None)
+        other_scales = [
+            getattr(m, "scale", None) for m in models[1:] if getattr(m, "scale", None) != scale
+        ]
+        if other_scales:
+            logger.warning(
+                f"Models give different scales ({[scale] + other_scales}); blockwise "
+                f"reads one dataset, using {models[0].name!r}'s scale {scale!r}"
+            )
+        self.input_path = resolve_data_path(self.input_path, scale)
+        logger.info(f"Reading: {self.input_path}")
 
         # Support multiple models with model_mode
         self.models = models

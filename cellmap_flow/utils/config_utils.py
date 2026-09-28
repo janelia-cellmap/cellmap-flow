@@ -3,10 +3,12 @@ Smart YAML configuration utilities that dynamically discover and instantiate
 ModelConfig subclasses, similar to the CLI v2 approach.
 """
 
+import json
+import os
 import yaml
 import logging
 import inspect
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.cli_utils import get_all_subclasses, process_constructor_args
@@ -24,6 +26,61 @@ class ConfigError(ValueError):
     where SystemExit slips past ``except Exception`` and the request thread
     dies without sending a response. The CLIs catch it and exit non-zero.
     """
+
+
+def _node_kind(path) -> Optional[str]:
+    """"array" or "group" for a local zarr (v2 or v3) or N5 node, else None.
+
+    None also covers remote URLs and paths that do not exist yet: nothing
+    here can tell what they are without opening them.
+    """
+    local = str(path)
+    if local.startswith("file://"):
+        local = local[len("file://"):]
+    elif "://" in local:
+        return None
+    if os.path.isfile(os.path.join(local, ".zarray")):
+        return "array"
+    if os.path.isfile(os.path.join(local, ".zgroup")):
+        return "group"
+    for name, key, is_array in (
+        ("zarr.json", "node_type", lambda v: v == "array"),
+        ("attributes.json", "dimensions", lambda v: v is not None),  # N5
+    ):
+        meta_path = os.path.join(local, name)
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path) as f:
+                    meta = json.load(f)
+            except (OSError, ValueError):
+                return None
+            return "array" if is_array(meta.get(key)) else "group"
+    return None
+
+
+def resolve_data_path(data_path: str, scale: Optional[str]) -> str:
+    """The dataset a model reads: ``data_path``, with ``scale`` applied.
+
+    The one rule every launcher uses (cellmap_flow, cellmap_flow_yaml and
+    blockwise), so the same YAML reads the same data in each:
+
+    - ``data_path`` is an array: it is used as it is. A ``scale`` naming a
+      different level is ignored, with a warning.
+    - otherwise (a multiscale group, or a path that cannot be inspected
+      here, such as a URL): ``scale`` selects the level under it.
+    """
+    if not scale:
+        return data_path
+    scale = str(scale).strip("/")
+    if _node_kind(data_path) == "array":
+        tail = str(data_path).rstrip("/")
+        if tail != scale and not tail.endswith("/" + scale):
+            logger.warning(
+                f"data_path {data_path} is an array, so it is used as is; "
+                f"scale {scale!r}, which names a different level, is ignored"
+            )
+        return data_path
+    return os.path.join(data_path, scale)
 
 
 def get_model_type_mapping() -> Dict[str, type]:

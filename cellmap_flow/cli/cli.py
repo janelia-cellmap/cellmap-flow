@@ -3,7 +3,6 @@ Dynamic CLI generator that automatically detects ModelConfig subclasses
 and creates CLI commands based on their __init__ parameters.
 """
 
-import os
 import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
@@ -19,6 +18,7 @@ from cellmap_flow.utils.bsub_utils import (
 )
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
+from cellmap_flow.utils.config_utils import resolve_data_path
 from cellmap_flow.utils.cli_utils import (
     get_all_subclasses,
     create_click_option_from_param,
@@ -202,10 +202,8 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
                 click.echo(f"  - {param_name}", err=True)
         sys.exit(1)
 
-    # Append scale to data_path if present in model config
-    final_data_path = data_path
-    if hasattr(model_config, 'scale') and model_config.scale:
-        final_data_path = os.path.join(data_path, model_config.scale)
+    # The scale selects a level of a multiscale data_path; see resolve_data_path.
+    final_data_path = resolve_data_path(data_path, getattr(model_config, "scale", None))
 
     # Save server config to cache
     g.queue = queue
@@ -280,10 +278,10 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
 
-        # Append scale to data_path if present in model config
-        final_data_path = data_path
-        if hasattr(model_config, 'scale') and model_config.scale:
-            final_data_path = os.path.join(data_path, model_config.scale)
+        # The scale selects a level of a multiscale data_path; see resolve_data_path.
+        final_data_path = resolve_data_path(
+            data_path, getattr(model_config, "scale", None)
+        )
 
         # Save server config to cache
         g.queue = queue

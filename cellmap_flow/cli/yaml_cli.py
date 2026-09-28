@@ -6,7 +6,6 @@ This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.
 """
 
-import os
 import sys
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
@@ -20,7 +19,7 @@ from cellmap_flow.utils.bsub_utils import (
     start_hosts,
     SERVER_COMMAND,
 )
-from cellmap_flow.utils.config_utils import ConfigError, load_config
+from cellmap_flow.utils.config_utils import ConfigError, load_config, resolve_data_path
 from cellmap_flow.globals import g
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
@@ -45,10 +44,12 @@ def run_multiple(
     g.charge_group = charge_group
 
     def _submit_model(model):
-        current_data_path = dataset_path
-        if hasattr(model, "scale") and model.scale:
-            logger.warning(f"Model {getattr(model, 'name', type(model).__name__)} specifies scale {model.scale}, adjusting dataset path accordingly")
-            current_data_path = os.path.join(dataset_path, model.scale)
+        current_data_path = resolve_data_path(dataset_path, getattr(model, "scale", None))
+        if current_data_path != dataset_path:
+            logger.info(
+                f"Model {getattr(model, 'name', type(model).__name__)} specifies "
+                f"scale {model.scale}; reading {current_data_path}"
+            )
 
         command = f"{SERVER_COMMAND} {model.command} -d {current_data_path}"
         model_name = getattr(model, "name", None) or type(model).__name__
