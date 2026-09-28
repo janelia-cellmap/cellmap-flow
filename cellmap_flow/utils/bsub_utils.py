@@ -401,19 +401,29 @@ class LSFJob(Job):
             logger.debug(f"Error checking LSF job status: {e}")
             return self.status
     
+    def _log_crash_output(self) -> None:
+        crash_output = self.log_file and _tail(self.log_file)
+        if crash_output:
+            logger.error(
+                f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
+            )
+
     def wait_for_host(self, timeout: int = 300) -> Optional[str]:
         """
         Monitor LSF job output using bpeek to extract host information.
-        
+
+        ``timeout`` is wall-clock time, including however long bjobs and
+        bpeek take to answer.
+
         Args:
             timeout: Maximum time to wait in seconds
-            
+
         Returns:
             Host URL if found, None otherwise
         """
         if self.host:
             return self.host
-        
+
         logger.info(f"Monitoring LSF job {self.job_id} for host information...")
 
         # Model load dominates this wait -- weights off /nrs, a torch.export,
@@ -421,106 +431,122 @@ class LSFJob(Job):
         # when a submit "takes a while". Report it rather than leaving the gap
         # between submission and the first chunk unaccounted for.
         wait_started = time.time()
+        deadline = time.monotonic() + timeout
 
-        attempts = 0
-        max_attempts = timeout * 2  # Check every 0.5 seconds
-        pending_time = 0
-        # pending_time is reset when the job starts, so it cannot be used to
-        # report how long the job waited. Keep a running total that is never
-        # reset -- otherwise a job that queued 5.5s reports "0s of it queued".
+        # When the job entered PENDING (cleared once it leaves), and the total
+        # time it has spent pending, which is never reset -- otherwise a job
+        # that queued 5.5s reports "0s of it queued". Each warning is logged
+        # once, the first time the job has been pending that long.
+        pending_since = None
         total_pending = 0.0
-        warned_pending_30s = False
-        warned_pending_60s = False
-        
-        while attempts < max_attempts:
+        pending_warnings = [
+            (30, "Queue may be busy or resources unavailable."),
+            (60, "Consider checking queue status or resource availability."),
+            (120, f"This is unusually long. You may want to check with 'bjobs {self.job_id}'"),
+        ]
+        # bpeek returns everything the job has written so far, every time, so
+        # an error line would otherwise be re-logged on every poll.
+        reported_errors = set()
+        max_reported_errors = 20
+
+        def pause():
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(0.5, remaining))
+
+        while time.monotonic() < deadline:
             try:
-                # Check job status first
                 current_status = self.get_status()
-                
-                # Track pending time and warn if too long
+                answered = self._bjobs_answered
+                now = time.monotonic()
+
                 if current_status == JobStatus.PENDING:
-                    pending_time += 0.5
-                    total_pending += 0.5
-                    
-                    if pending_time >= 30 and not warned_pending_30s:
-                        logger.warning(f"Job {self.job_id} has been pending for {pending_time}s. "
-                                     f"Queue may be busy or resources unavailable.")
-                        warned_pending_30s = True
-                    
-                    if pending_time >= 60 and not warned_pending_60s:
-                        logger.warning(f"Job {self.job_id} still pending after {pending_time}s. "
-                                     f"Consider checking queue status or resource availability.")
-                        warned_pending_60s = True
-                    
-                    if pending_time >= 120:
-                        logger.warning(f"Job {self.job_id} pending for {pending_time}s. "
-                                     f"This is unusually long. You may want to check with 'bjobs {self.job_id}'")
-                else:
-                    # Reset pending time when job starts running
-                    if pending_time > 0:
-                        logger.info(f"Job {self.job_id} started after {pending_time}s in pending state")
-                        pending_time = 0
-                
+                    if pending_since is None:
+                        pending_since = now
+                    pending_for = now - pending_since
+                    while pending_warnings and pending_for >= pending_warnings[0][0]:
+                        _, advice = pending_warnings.pop(0)
+                        logger.warning(
+                            f"Job {self.job_id} pending for {pending_for:.0f}s. {advice}"
+                        )
+                elif pending_since is not None:
+                    total_pending += now - pending_since
+                    logger.info(
+                        f"Job {self.job_id} started after {now - pending_since:.0f}s "
+                        f"in pending state"
+                    )
+                    pending_since = None
+
+                # Only bjobs can say the job is over. An empty bpeek on its
+                # own is also what a busy mbatchd looks like.
+                if answered and current_status in (JobStatus.COMPLETED, JobStatus.FAILED):
+                    logger.warning(
+                        f"Job {self.job_id} ended ({current_status.value}) without "
+                        f"reporting a host"
+                    )
+                    self.status = current_status
+                    self._log_crash_output()
+                    return None
+
                 result = subprocess.run(
                     ["bpeek", self.job_id],
                     capture_output=True,
                     text=True,
                     timeout=5
                 )
-                
+
                 output = result.stdout
                 error = result.stderr
-                
+
                 # Check if job hasn't started yet
                 if f"Job <{self.job_id}> : Not yet started." in error:
                     logger.debug(f"Job {self.job_id} not yet started. Waiting...")
-                    attempts += 1
-                    time.sleep(0.5)  # Wait 0.5 seconds before next check
+                    pause()
                     continue
-                
-                # Check if job has finished
+
                 if not output and result.returncode != 0:
-                    logger.warning(f"Job {self.job_id} may have finished")
-                    crash_output = self.log_file and _tail(self.log_file)
-                    if crash_output:
-                        logger.error(
-                            f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
-                        )
-                    break
-                
+                    logger.debug(
+                        f"bpeek {self.job_id} gave nothing ({error.strip()}); "
+                        f"bjobs says {current_status.value}, still waiting"
+                    )
+                    pause()
+                    continue
+
                 # Try to extract host
                 if output:
                     host = extract_host_from_output(output)
                     if host:
                         self.host = host
+                        if pending_since is not None:
+                            total_pending += time.monotonic() - pending_since
                         logger.info(
                             f"Found host: {host} "
                             f"({time.time() - wait_started:.0f}s after submission, "
                             f"{total_pending:.0f}s of it queued)"
                         )
                         return host
-                    
-                    # Check for errors
-                    if "error" in output.lower():
-                        logger.error(f"Error in job output: {output}")
-                
-                attempts += 1
-                time.sleep(0.5)  # Wait 0.5 seconds before next check
-                
+
+                    # Check for errors, reporting each line once
+                    for line in output.splitlines():
+                        if (
+                            "error" in line.lower()
+                            and line not in reported_errors
+                            and len(reported_errors) < max_reported_errors
+                        ):
+                            reported_errors.add(line)
+                            logger.error(f"Error in job {self.job_id} output: {line}")
+
+                pause()
+
             except subprocess.TimeoutExpired:
                 logger.debug(f"Timeout waiting for job {self.job_id} output")
-                attempts += 1
-                time.sleep(0.5)  # Wait 0.5 seconds before next check
+                pause()
             except Exception as e:
                 logger.error(f"Error monitoring job {self.job_id}: {e}")
                 break
-        
+
         logger.warning(f"Timeout waiting for host from job {self.job_id}")
-        crash_output = self.log_file and _tail(self.log_file)
-        if crash_output:
-            logger.error(
-                f"Job {self.job_id} log output ({self.log_file}):\n{crash_output}"
-            )
+        self._log_crash_output()
         return None
 
 
