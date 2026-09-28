@@ -108,6 +108,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (item && item.classList.contains("normalizer-item")) {
       draggedItem = item;
       item.style.opacity = "0.5";
+      // getDragAfterElement skips .dragging, so the row is placed relative
+      // to the others rather than to itself.
+      item.classList.add("dragging");
     }
   });
 
@@ -115,11 +118,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const item = e.target.closest ? e.target.closest(".normalizer-item") : e.target;
     if (item && item.classList.contains("normalizer-item")) {
       item.style.opacity = "1";
+      item.classList.remove("dragging");
       item.removeAttribute("draggable");
     }
+    draggedItem = null;
   });
 
   inputNormList.addEventListener("dragover", function (e) {
+    // Only our own rows reorder. Text or a file dragged in from elsewhere has
+    // no row to move, and appendChild(null) threw.
+    if (!draggedItem) return;
     e.preventDefault();
     const afterElement = getDragAfterElement(inputNormList, e.clientY);
     if (afterElement == null) {

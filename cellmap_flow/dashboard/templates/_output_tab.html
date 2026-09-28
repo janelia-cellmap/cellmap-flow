@@ -105,6 +105,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (item && item.classList.contains("postprocessor-item")) {
       draggedPostItem = item;
       item.style.opacity = "0.5";
+      // getDragAfterElementPost skips .dragging, so the row is placed
+      // relative to the others rather than to itself.
+      item.classList.add("dragging");
     }
   });
 
@@ -112,11 +115,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const item = e.target.closest ? e.target.closest(".postprocessor-item") : e.target;
     if (item && item.classList.contains("postprocessor-item")) {
       item.style.opacity = "1";
+      item.classList.remove("dragging");
       item.removeAttribute("draggable");
     }
+    draggedPostItem = null;
   });
 
   postProcessList.addEventListener("dragover", function (e) {
+    // Only our own rows reorder. Text or a file dragged in from elsewhere has
+    // no row to move, and appendChild(null) threw.
+    if (!draggedPostItem) return;
     e.preventDefault();
     const afterElement = getDragAfterElementPost(postProcessList, e.clientY);
     if (afterElement == null) {
