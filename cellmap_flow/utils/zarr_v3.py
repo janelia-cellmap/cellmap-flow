@@ -29,6 +29,78 @@ logger = logging.getLogger(__name__)
 
 ZARR_JSON = "zarr.json"
 
+# Everything downstream works in nanometers.
+_NM_PER_UNIT = {
+    "nanometer": 1.0,
+    "nm": 1.0,
+    "micrometer": 1e3,
+    "micron": 1e3,
+    "um": 1e3,
+    "µm": 1e3,
+    "millimeter": 1e6,
+    "mm": 1e6,
+    "centimeter": 1e7,
+    "cm": 1e7,
+    "meter": 1e9,
+    "m": 1e9,
+    "angstrom": 0.1,
+    "å": 0.1,
+    "picometer": 1e-3,
+    "pm": 1e-3,
+}
+_CHANNEL_AXIS_NAMES = ("c", "c^", "channel")
+_NON_SPATIAL_AXIS_NAMES = _CHANNEL_AXIS_NAMES + ("t", "time")
+
+
+def nm_per_unit(unit) -> float:
+    """How many nanometers one ``unit`` is; 1 for a missing or unknown unit."""
+    if unit is None:
+        return 1.0
+    key = str(unit).strip().lower()
+    if key in ("", "pixel", "pixels"):
+        return 1.0
+    factor = _NM_PER_UNIT.get(key)
+    if factor is None:
+        if key not in _warned_units:
+            _warned_units.add(key)
+            logger.warning(f"Unknown spatial unit {unit!r}; treating it as nanometers")
+        return 1.0
+    return factor
+
+
+_warned_units = set()
+
+
+def spatial_axes(axes):
+    """Indices, names and units of the spatial axes of an OME ``axes`` list.
+
+    Returns ``(None, None, None)`` when there is no axes list. Axes typed
+    "space" are spatial; untyped ones are unless named like a channel or time
+    axis (OME 0.3 lists bare names).
+    """
+    if not axes:
+        return None, None, None
+    indices, names, units = [], [], []
+    for i, axis in enumerate(axes):
+        if isinstance(axis, str):
+            name, kind, unit = axis, None, None
+        else:
+            name, kind, unit = axis.get("name"), axis.get("type"), axis.get("unit")
+        if kind == "space" or (kind is None and name not in _NON_SPATIAL_AXIS_NAMES):
+            indices.append(i)
+            names.append(name)
+            units.append(unit)
+    if not indices:
+        return None, None, None
+    return indices, names, units
+
+
+def to_nm(values, units):
+    """``values`` (one per spatial axis) converted to nanometers."""
+    if units is None:
+        return list(values)
+    return [v * nm_per_unit(u) for v, u in zip(values, units)]
+
 
 def is_v3_container(path: str) -> bool:
     """True if ``path`` is a directory with a ``zarr.json`` at its root."""
@@ -135,10 +207,7 @@ def get_scale_info_v3(group_path: str) -> Tuple[dict, dict, dict]:
     if ms is None:
         raise ValueError(f"No multiscales attribute found at {group_path}")
 
-    axes = ms.get("axes", [])
-    spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
-    if not spatial_indices:
-        spatial_indices = None
+    spatial_indices, _, units = spatial_axes(ms.get("axes", []))
 
     offsets, resolutions, shapes = {}, {}, {}
     for scale in ms["datasets"]:
@@ -152,8 +221,10 @@ def get_scale_info_v3(group_path: str) -> Tuple[dict, dict, dict]:
         full_shape = read_zarr_json(array_path)["shape"]
 
         if spatial_indices is not None:
-            resolutions[scale["path"]] = [full_res[i] for i in spatial_indices]
-            offsets[scale["path"]] = [full_translation[i] for i in spatial_indices]
+            resolutions[scale["path"]] = to_nm([full_res[i] for i in spatial_indices], units)
+            offsets[scale["path"]] = to_nm(
+                [full_translation[i] for i in spatial_indices], units
+            )
             shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
         else:
             resolutions[scale["path"]] = full_res
@@ -194,10 +265,7 @@ def find_closest_scale_v3(group_path: str, target_resolution) -> Tuple[str, list
 def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
     """Build the ``get_ds_info``-contract tuple for one dataset entry of a
     multiscale group's ``datasets`` list."""
-    axes = ms.get("axes", [])
-    spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
-    if not spatial_indices:
-        spatial_indices = None
+    spatial_indices, spatial_names, units = spatial_axes(ms.get("axes", []))
 
     array_path = os.path.join(group_path, dataset_entry["path"])
     arr_meta = read_zarr_json(array_path)
@@ -208,17 +276,20 @@ def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
         (t["translation"] for t in transforms if t["type"] == "translation"),
         [0.0] * len(scale),
     )
+    chunk_shape = tuple(arr_meta["chunk_grid"]["configuration"]["chunk_shape"])
     if spatial_indices is not None:
-        voxel_size = Coordinate(scale[i] for i in spatial_indices)
-        offset = Coordinate(translation[i] for i in spatial_indices)
+        voxel_size = Coordinate(to_nm([scale[i] for i in spatial_indices], units))
+        offset = Coordinate(to_nm([translation[i] for i in spatial_indices], units))
         shape = Coordinate(arr_meta["shape"][i] for i in spatial_indices)
-        axes_names = [axes[i]["name"] for i in spatial_indices]
+        axes_names = spatial_names
+        # Spatial like the shape: a (c, z, y, x) array reported a 4-D chunk
+        # shape against a 3-D shape.
+        chunk_shape = tuple(chunk_shape[i] for i in spatial_indices)
     else:
         voxel_size = Coordinate(scale)
         offset = Coordinate(translation)
         shape = Coordinate(arr_meta["shape"])
         axes_names = ["z", "y", "x"][-len(shape):]
-    chunk_shape = tuple(arr_meta["chunk_grid"]["configuration"]["chunk_shape"])
     roi = Roi(offset, voxel_size * shape)
     return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
 

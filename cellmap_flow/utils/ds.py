@@ -5,7 +5,6 @@ import os
 import re
 from typing import Sequence, Union
 
-import h5py
 import numpy as np
 import tensorstore as ts
 import zarr
@@ -62,12 +61,9 @@ def get_scale_info(zarr_grp):
     attrs = zarr_grp.attrs
     ms = attrs["multiscales"][0]
 
-    # Determine which axes are spatial so we can skip channel axes
-    axes = ms.get("axes", [])
-    spatial_indices = [i for i, a in enumerate(axes) if a.get("type") == "space"]
-    # If no axes metadata, assume all dimensions are spatial
-    if not spatial_indices:
-        spatial_indices = None
+    # Spatial axes only (skip channel axes), in nanometers. If there is no
+    # axes metadata, assume all dimensions are spatial.
+    spatial_indices, _, units = zarr_v3.spatial_axes(ms.get("axes", []))
 
     resolutions = {}
     offsets = {}
@@ -83,8 +79,12 @@ def get_scale_info(zarr_grp):
         full_shape = zarr_grp[scale["path"]].shape
 
         if spatial_indices is not None:
-            resolutions[scale["path"]] = [full_res[i] for i in spatial_indices]
-            offsets[scale["path"]] = [full_translation[i] for i in spatial_indices]
+            resolutions[scale["path"]] = zarr_v3.to_nm(
+                [full_res[i] for i in spatial_indices], units
+            )
+            offsets[scale["path"]] = zarr_v3.to_nm(
+                [full_translation[i] for i in spatial_indices], units
+            )
             shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
         else:
             resolutions[scale["path"]] = full_res
@@ -128,6 +128,10 @@ def find_target_scale(zarr_grp_path, target_resolution):
 def find_closest_scale(zarr_grp_path, target_resolution):
     zarr_grp = _open_zarr(zarr_grp_path, mode="r")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
+    if target_resolution is None:
+        # No target: the finest (first) scale, as the v3 reader does.
+        target_scale = next(iter(resolutions))
+        return target_scale, offsets[target_scale], shapes[target_scale]
     target_scale = None
     last_scale = None
     for scale, res in resolutions.items():
@@ -173,16 +177,17 @@ def _normalize_path(path: str) -> str:
 
 
 def _is_remote_path(path: str) -> bool:
-    return path.startswith("http://") or path.startswith("https://")
+    return path.startswith(("http://", "https://", "s3://"))
 
 
 def _open_zarr(path, mode="r"):
-    """Open a zarr dataset, handling HTTP/HTTPS URLs via fsspec."""
+    """Open a zarr dataset, handling HTTP/HTTPS and (anonymous) S3 URLs via fsspec."""
     path = _normalize_path(path)
     if _is_remote_path(path):
         import fsspec
 
-        return zarr.open(fsspec.get_mapper(path), mode=mode)
+        options = {"anon": True} if path.startswith("s3://") else {}
+        return zarr.open(fsspec.get_mapper(path, **options), mode=mode)
     return zarr.open(path, mode=mode)
 
 
@@ -542,6 +547,14 @@ def open_ds_tensorstore(
         else:
             raise
 
+    if filetype in ("n5", "neuroglancer_precomputed"):
+        # Both drivers expose Fortran order (x, y, z[, channel]); everything
+        # else here -- the metadata readers, the ROI math, neuroglancer's axis
+        # names -- is C order (z, y, x). Reading an N5 dataset without this
+        # returned x/z-transposed data, and precomputed lost its x axis to the
+        # channel selection.
+        ts_dataset = ts_dataset[ts.d[:].transpose[::-1]]
+
     if normalize:
         return LazyNormalization(ts_dataset)
     # Unnormalized callers still get one spatial volume, as before; the channel
@@ -622,10 +635,10 @@ def to_ndarray_tensorstore(
     # Create an array to hold the requested data, filled with a default value (e.g., zeros)
     # output_shape = [s.stop - s.start for s in roi_slices]
 
-    if not dataset.fill_value:
-        fill_value = 0
-    if custom_fill_value:
-        fill_value = custom_fill_value
+    # Padding for the part of the ROI outside the array. It was only assigned
+    # when the array's own fill_value was falsy, so every border read of an
+    # array with, say, fill_value=255 raised UnboundLocalError.
+    fill_value = custom_fill_value if custom_fill_value else 0
     with ts.Transaction() as txn:
         data = dataset.with_transaction(txn)[valid_slices].read().result()
     for norm in input_norms:
@@ -744,6 +757,24 @@ def access_parent(node):
         return zarr.open(store=store_path, path=os.path.split(node_path)[0], mode="r")
 
 
+def _parent_or_none(node):
+    """``access_parent(node)``, or None for a node at the root of its store.
+
+    An array at the container root has no parent group, and access_parent
+    raising there made the whole attribute lookup fall back to voxel size 1
+    and offset 0, ignoring the array's own resolution/offset attrs.
+    """
+    try:
+        return access_parent(node)
+    except (RuntimeError, ValueError):
+        return None
+
+
+def _self_and_parent(array):
+    parent = _parent_or_none(array)
+    return [array] if parent is None else [array, parent]
+
+
 def check_for_multiscale(group):
     """check if multiscale attribute exists in the input group and for any parent level group
 
@@ -781,8 +812,7 @@ def check_for_voxel_size(array, order):
     """
 
     voxel_size = None
-    parent_group = access_parent(array)
-    for item in [array, parent_group]:
+    for item in _self_and_parent(array):
 
         if "resolution" in item.attrs:
             return item.attrs["resolution"]
@@ -829,8 +859,7 @@ def check_for_offset(array, order):
                 the center of the coordinate system
     """
     offset = None
-    parent_group = access_parent(array)
-    for item in [array, parent_group]:
+    for item in _self_and_parent(array):
 
         if "offset" in item.attrs:
             offset = item.attrs["offset"]
@@ -861,8 +890,7 @@ def check_for_units(array, order):
     """
 
     units = None
-    parent_group = access_parent(array)
-    for item in [array, parent_group]:
+    for item in _self_and_parent(array):
 
         if "units" in item.attrs:
             return item.attrs["units"]
@@ -922,14 +950,23 @@ def check_for_attrs_multiscale(ds, multiscale_group, multiscales):
                     return voxel_size, offset, units
         # for zarr store
         else:
-            units = [item["unit"] for item in multiscales[0]["axes"]]
+            # Spatial axes only: a channel axis has no unit (the spec allows
+            # that), and item["unit"] raising KeyError on it was swallowed
+            # into voxel size 1 and offset 0 for every multichannel dataset.
+            spatial, _, units = zarr_v3.spatial_axes(multiscales[0].get("axes", []))
+
+            def pick(values):
+                return list(values) if spatial is None else [values[i] for i in spatial]
+
             for level in multiscales[0]["datasets"]:
                 if level["path"].lstrip("/") == scale:
                     for attr in level["coordinateTransformations"]:
                         if attr["type"] == "scale":
-                            voxel_size = attr["scale"]
+                            voxel_size = pick(attr["scale"])
                         elif attr["type"] == "translation":
-                            offset = attr["translation"]
+                            offset = pick(attr["translation"])
+                    if units is None and voxel_size is not None:
+                        units = [None] * len(voxel_size)
                     return voxel_size, offset, units
 
     return voxel_size, offset, units
@@ -959,8 +996,13 @@ def _read_attrs(ds, order="C"):
             f"{os.path.join(ds.store.path, ds.path)} is not zarr.core.Array"
         )
 
-    # check recursively for multiscales attribute in the zarr store tree
-    multiscales, multiscale_group = check_for_multiscale(group=access_parent(ds))
+    # check recursively for multiscales attribute in the zarr store tree (an
+    # array at the root of its store has no group above it to look in)
+    parent = _parent_or_none(ds)
+    if parent is None:
+        multiscales, multiscale_group = None, None
+    else:
+        multiscales, multiscale_group = check_for_multiscale(group=parent)
 
     # check for attributes in .zarr group multiscale
     if not isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore)):
@@ -1045,92 +1087,104 @@ def regularize_offset(voxel_size_float, offset_float):
 def _read_voxel_size_offset(ds, order="C"):
 
     voxel_size, offset, units = _read_attrs(ds, order)
-    for idx, unit in enumerate(units):
-        if unit == "um":
-            voxel_size[idx] = voxel_size[idx] * 1000
-            offset[idx] = offset[idx] * 1000
+    if isinstance(units, str) or units is None:
+        units = [units] * len(voxel_size)
+    # Everything downstream is in nanometers. Only the literal "um" was
+    # converted, so OME-NGFF's "micrometer" came through as 0.004 "nm",
+    # truncated to 0, and a divide by zero fell back to voxel size 1.
+    voxel_size = zarr_v3.to_nm(voxel_size, units)
+    offset = zarr_v3.to_nm(offset, units)
 
     return regularize_offset(voxel_size, offset)
 
 
+def _ome_level_info(group, leaf, ds):
+    """get_ds_info for array ``ds``, the ``leaf`` dataset of OME group ``group``.
+
+    Returns None when ``group`` has no multiscales. Spatial axes only, in nm.
+    """
+    multiscales = group.attrs.get("multiscales", None)
+    if not multiscales:
+        return None
+    ms = multiscales[0]
+    spatial_indices, spatial_names, units = zarr_v3.spatial_axes(ms.get("axes", []))
+    if spatial_indices is None:
+        spatial_indices = list(range(len(ds.shape)))
+        spatial_names = ["z", "y", "x"][-len(spatial_indices):]
+        units = None
+
+    dataset_entry = next(
+        (d for d in ms["datasets"] if d["path"].strip("/") == leaf),
+        ms["datasets"][0],
+    )
+    transforms = dataset_entry["coordinateTransformations"]
+    scale_transform = next(t["scale"] for t in transforms if t["type"] == "scale")
+    translation = next(
+        (t["translation"] for t in transforms if t["type"] == "translation"),
+        [0.0] * len(scale_transform),
+    )
+    voxel_size = Coordinate(
+        zarr_v3.to_nm([scale_transform[i] for i in spatial_indices], units)
+    )
+    offset = Coordinate(zarr_v3.to_nm([translation[i] for i in spatial_indices], units))
+    shape = Coordinate(ds.shape[i] for i in spatial_indices)
+    chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
+    roi = Roi(offset, voxel_size * shape)
+    return voxel_size, chunk_shape, shape, roi, list(spatial_names), "zarr"
+
+
+def _attrs_info(ds, filetype="zarr", order=None):
+    """get_ds_info for an array described by its own (or its parent's) attrs.
+
+    ``order`` is the *axis* order of those attrs: "F" for N5. A zarr array's
+    own ``order`` is its chunk memory layout, not an axis order, so it is not
+    consulted (a Fortran-ordered array had its voxel size reversed); only an
+    explicit ``order`` attribute is.
+    """
+    if order is None:
+        order = ds.attrs.get("order", "C")
+    try:
+        voxel_size, offset = _read_voxel_size_offset(ds, order)
+    except Exception as e:
+        logger.error(
+            "failed to read voxel size and offset for %s (%s), will use default values"
+            % (getattr(ds, "path", ds), e)
+        )
+        voxel_size = Coordinate((1,) * 3)
+        offset = Coordinate((0,) * 3)
+    shape = Coordinate(ds.shape[-len(voxel_size) :])
+    chunk_shape = tuple(ds.chunks[-len(voxel_size) :])
+    roi = Roi(offset, voxel_size * shape)
+    return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"][-len(shape):], filetype
+
+
 def get_ds_info(path: str, mode: str = "r"):
-    """Open a Zarr, N5, or HDF5 dataset as an :class:`Array`. If the
-    dataset has attributes ``resolution`` and ``offset``, those will be
-    used to determine the meta-information of the returned array.
+    """Metadata of one array: ``(voxel_size, chunk_shape, shape, roi,
+    axes_names, filetype)``.
 
-    Args:
-
-        filename:
-
-            The name of the container "file" (which is a directory for zarr and
-            N5).
-
-        ds_name:
-
-            The name of the dataset to open.
-
-    Returns:
-
-        A :class:`Array` pointing to the dataset.
+    Spatial axes only, in C order (z, y, x), sizes and offsets in nanometers.
+    Reads zarr v2 and v3 (local), zarr v2 over http(s) or anonymous s3, N5,
+    and neuroglancer precomputed (local ``precomputed://`` or ``gs://``).
     """
 
     path = _normalize_path(path)
-    axes_names = ["x", "y", "z"]
-    if path.startswith("s3://"):
-        ts_info = open_ds_tensorstore(path)
-        shape = ts_info.shape
-        path, filename = split_dataset_path(path)
-        filename, scale = filename.rsplit("/s")
-        scale = int(scale)
-        import s3fs  # ~2s to import; only remote paths need it
 
-        fs = s3fs.S3FileSystem(
-            anon=True
-        )  # Set anon=True if you don't need authentication
-        store = s3fs.S3Map(root=path, s3=fs)
-        zarr_dataset = zarr.open(
-            store,
-            mode="r",
-        )
-        multiscale_attrs = zarr_dataset[filename].attrs.asdict()
-        if "multiscales" in multiscale_attrs:
-            multiscales = multiscale_attrs["multiscales"][0]
-            axes = [axis["name"] for axis in multiscales["axes"]]
-            for scale_info in multiscale_attrs["multiscales"][0]["datasets"]:
-                if scale_info["path"] == f"s{scale}":
-                    voxel_size = Coordinate(
-                        scale_info["coordinateTransformations"][0]["scale"]
-                    )
-        axes_names = axes[:3]
-
-        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-        roi = Roi((0, 0, 0), Coordinate(shape) * voxel_size)
-        return voxel_size, chunk_shape, shape, roi, axes_names
-
-    elif path.startswith("gs://"):
+    if path.startswith(("gs://", "precomputed://")):
+        # open_ds_tensorstore puts these in C order and selects one channel.
         ts_info = open_ds_tensorstore(path)
         shape = ts_info.shape
         voxel_size = Coordinate(
-            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
+            d.to_json()[0] * zarr_v3.nm_per_unit(d.to_json()[1]) if d is not None else 1
+            for d in ts_info.dimension_units
         )
-        axes_names = list(ts_info.spec().transform.input_labels[:3])
+        axes_names = list(ts_info.spec().transform.input_labels)
         chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
         roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
-        file_type = "gs"
+        file_type = "gs" if path.startswith("gs://") else "precomputed"
         return voxel_size, chunk_shape, shape, roi, axes_names, file_type
 
-    elif path.startswith("precomputed://"):
-        ts_info = open_ds_tensorstore(path)
-        shape = ts_info.shape
-        voxel_size = Coordinate(
-            (d.to_json()[0] if d is not None else 1 for d in ts_info.dimension_units)
-        )
-        axes_names = list(ts_info.spec().transform.input_labels[:3])
-        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
-        return voxel_size, chunk_shape, shape, roi, axes_names, "precomputed"
-
     if _is_remote_path(path):
+        # http(s) and s3 alike: zarr v2 over fsspec.
         ds = _open_zarr(path, mode="r")
 
         # If the URL points to a zarr Group (e.g. multiscale container),
@@ -1138,142 +1192,49 @@ def get_ds_info(path: str, mode: str = "r"):
         if isinstance(ds, zarr.hierarchy.Group):
             multiscales = ds.attrs.get("multiscales", None)
             if multiscales:
-                ms = multiscales[0]
-                first_dataset = ms["datasets"][0]
-                ds = ds[first_dataset["path"]]
+                leaf = multiscales[0]["datasets"][0]["path"]
+                return _ome_level_info(ds, leaf.strip("/"), ds[leaf])
+            for key in sorted(ds.keys()):
+                if isinstance(ds[key], zarr.core.Array):
+                    ds = ds[key]
+                    break
 
-                # Extract spatial axes info (skip channel axes)
-                axes = ms.get("axes", [])
-                spatial_indices = [
-                    i for i, a in enumerate(axes) if a.get("type") == "space"
-                ]
-                axes_names = [axes[i]["name"] for i in spatial_indices]
-
-                scale_transform = first_dataset["coordinateTransformations"][0]["scale"]
-                voxel_size = Coordinate(scale_transform[i] for i in spatial_indices)
-
-                translation = next(
-                    (
-                        t["translation"]
-                        for t in first_dataset["coordinateTransformations"]
-                        if t["type"] == "translation"
-                    ),
-                    [0.0] * len(scale_transform),
-                )
-                offset = Coordinate(translation[i] for i in spatial_indices)
-
-                shape = Coordinate(ds.shape[i] for i in spatial_indices)
-                chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
-                roi = Roi(offset, voxel_size * shape)
-                return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
-            else:
-                for key in sorted(ds.keys()):
-                    if isinstance(ds[key], zarr.core.Array):
-                        ds = ds[key]
-                        break
-
-        # The path points to a sub-array (e.g. .zarr/raw/s0). Try to read
-        # multiscale metadata from the parent zarr Group.
+        # The path points to a sub-array (e.g. .zarr/raw/s0). Its multiscales
+        # live on the group right above it (raw), not necessarily the root.
         if ".zarr" in path or ".n5" in path:
             container, sub_path = split_dataset_path(path)
             if sub_path:
-                try:
-                    parent = _open_zarr(container, mode="r")
-                    multiscales = parent.attrs.get("multiscales", None)
-                    if multiscales:
-                        ms = multiscales[0]
-                        axes = ms.get("axes", [])
-                        spatial_indices = [
-                            i
-                            for i, a in enumerate(axes)
-                            if a.get("type") == "space"
-                        ]
-                        if not spatial_indices:
-                            spatial_indices = list(range(len(ds.shape)))
-
-                        # Find the matching dataset entry
-                        dataset_entry = next(
-                            (
-                                d
-                                for d in ms["datasets"]
-                                if d["path"] == sub_path
-                            ),
-                            ms["datasets"][0],
+                sub_path = sub_path.strip("/")
+                parent_path, _, leaf = sub_path.rpartition("/")
+                candidates = [(parent_path, leaf)]
+                if parent_path:
+                    # Also a root-level multiscales naming "raw/s0" directly.
+                    candidates.append(("", sub_path))
+                for group_path, entry_path in candidates:
+                    try:
+                        group = _open_zarr(
+                            _join_path(container, group_path) if group_path else container,
+                            mode="r",
                         )
-                        scale_transform = dataset_entry[
-                            "coordinateTransformations"
-                        ][0]["scale"]
-                        voxel_size = Coordinate(
-                            scale_transform[i] for i in spatial_indices
+                        info = _ome_level_info(group, entry_path, ds)
+                    except Exception as e:
+                        logger.warning(
+                            "failed to read parent multiscale metadata for %s: %s"
+                            % (path, e)
                         )
-                        translation = next(
-                            (
-                                t["translation"]
-                                for t in dataset_entry[
-                                    "coordinateTransformations"
-                                ]
-                                if t["type"] == "translation"
-                            ),
-                            [0.0] * len(scale_transform),
-                        )
-                        offset = Coordinate(
-                            translation[i] for i in spatial_indices
-                        )
-                        axes_names = [axes[i]["name"] for i in spatial_indices] if axes else ["z", "y", "x"]
-                        shape = Coordinate(
-                            ds.shape[i] for i in spatial_indices
-                        )
-                        chunk_shape = tuple(
-                            ds.chunks[i] for i in spatial_indices
-                        )
-                        roi = Roi(offset, voxel_size * shape)
-                        return (
-                            voxel_size,
-                            chunk_shape,
-                            shape,
-                            roi,
-                            axes_names,
-                            "zarr",
-                        )
-                except Exception as e:
-                    logger.warning(
-                        "failed to read parent multiscale metadata for %s: %s"
-                        % (path, e)
-                    )
+                        continue
+                    if info is not None:
+                        return info
 
         # Fallback for remote arrays without multiscales metadata
-        try:
-            order = ds.attrs["order"]
-        except KeyError:
-            try:
-                order = ds.order
-            except Exception:
-                logger.error("no order attribute found, set default C")
-                order = "C"
-        try:
-            voxel_size, offset = _read_voxel_size_offset(ds, order)
-        except Exception:
-            logger.error(
-                "failed to read voxel size and offset for %s, Will use default values"
-                % path
-            )
-            voxel_size = Coordinate((1,) * 3)
-            offset = Coordinate((0,) * 3)
-        shape = Coordinate(ds.shape[-len(voxel_size) :])
-        roi = Roi(offset, voxel_size * shape)
-        chunk_shape = ds.chunks
-        return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
+        return _attrs_info(ds)
 
     v3_container = zarr_v3.find_v3_container(path)
     if v3_container is not None:
         return zarr_v3.get_ds_info_v3(path)
 
     filename, ds_name = split_dataset_path(path)
-    if filename.endswith(".zarr") or filename.endswith(".zip") or _is_zarr_container(filename):
-        assert (
-            not filename.endswith(".zip") or mode == "r"
-        ), "Only reading supported for zarr ZipStore"
-
+    if filename.endswith(".zarr") or _is_zarr_container(filename):
         logger.debug("opening zarr dataset %s in %s", ds_name, filename)
         try:
             ds = zarr.open(filename, mode=mode)
@@ -1282,65 +1243,18 @@ def get_ds_info(path: str, mode: str = "r"):
         except Exception as e:
             logger.error("failed to open %s/%s" % (filename, ds_name))
             raise e
-
-        try:
-            order = ds.attrs["order"]
-        except KeyError:
-            try:
-                order = ds.order
-            except Exception:
-                logger.error("no order attribute found in %s set default C" % ds_name)
-                order = "C"
-        try:
-            voxel_size, offset = _read_voxel_size_offset(ds, order)
-        except Exception as e:
-            logger.error(
-                "failed to read voxel size and offset for %s/%s, Will use default values"
-                % (filename, ds_name)
-            )
-            voxel_size = Coordinate((1,) * 3)
-            offset = Coordinate((0,) * 3)
-        shape = Coordinate(ds.shape[-len(voxel_size) :])
-        roi = Roi(offset, voxel_size * shape)
-
-        chunk_shape = ds.chunks
-
+        info = _attrs_info(ds)
         logger.debug("opened zarr dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"], "zarr"
+        return info
 
-    elif filename.endswith(".n5"):
+    if filename.endswith(".n5"):
         logger.debug("opening N5 dataset %s in %s", ds_name, filename)
         ds = zarr.open(N5FSStore(filename), mode=mode)[ds_name]
-
-        voxel_size, offset = _read_voxel_size_offset(ds, "F")
-        shape = Coordinate(ds.shape[-len(voxel_size) :])
-        roi = Roi(offset, voxel_size * shape)
-
-        chunk_shape = ds.chunks
-
+        # N5 attributes are x, y, z; the zarr view and everything returned
+        # here are z, y, x.
+        info = _attrs_info(ds, filetype="n5", order="F")
         logger.debug("opened N5 dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, axes_names, "n5"
+        return info
 
-    elif filename.endswith(".h5") or filename.endswith(".hdf"):
-        logger.debug("opening H5 dataset %s in %s", ds_name, filename)
-        ds = h5py.File(filename, mode=mode)[ds_name]
-
-        voxel_size, offset = _read_voxel_size_offset(ds, "C")
-        shape = Coordinate(ds.shape[-len(voxel_size) :])
-        roi = Roi(offset, voxel_size * shape)
-
-        chunk_shape = ds.chunks
-
-        logger.debug("opened H5 dataset %s in %s", ds_name, filename)
-        return voxel_size, chunk_shape, shape, roi, axes_names, "h5"
-
-    elif filename.endswith(".json"):
-        logger.debug("found JSON container spec")
-        with open(filename, "r") as f:
-            spec = json.load(f)
-        assert "container" in spec, "JSON spec must contain 'container' key"
-        return get_ds_info(spec["container"], ds_name, mode=mode), "json"
-
-    else:
-        logger.error("don't know data format of %s in %s", ds_name, filename)
-        raise RuntimeError("Unknown file format for %s" % filename)
+    logger.error("don't know data format of %s in %s", ds_name, filename)
+    raise RuntimeError("Unknown file format for %s" % filename)
