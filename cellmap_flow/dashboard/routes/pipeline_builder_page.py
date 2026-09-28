@@ -12,6 +12,22 @@ logger = logging.getLogger(__name__)
 
 pipeline_builder_bp = Blueprint("pipeline_builder", __name__)
 
+# What /api/pipeline/apply stores from the builder. Each starts empty; after an
+# apply at least one is set (the builder always sends its INPUT node unless
+# the user deleted it).
+_BUILDER_STATE_ATTRS = (
+    "pipeline_inputs",
+    "pipeline_outputs",
+    "pipeline_edges",
+    "pipeline_normalizers",
+    "pipeline_models",
+    "pipeline_postprocessors",
+)
+
+
+def has_saved_builder_state():
+    return any(getattr(g, attr, None) for attr in _BUILDER_STATE_ATTRS)
+
 
 @pipeline_builder_bp.route("/pipeline-builder")
 def pipeline_builder():
@@ -61,8 +77,11 @@ def pipeline_builder():
     available_models = models_with_config
     logger.debug(f"  Final available_models count: {len(available_models)}")
 
-    # Check if we have stored pipeline state from previous apply
-    if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
+    # Use the state the builder last applied, if it has applied any. Testing
+    # for normalizers alone threw away a saved pipeline that has none (the
+    # INPUT/OUTPUT nodes, output path, bounding boxes, edges, positions and
+    # models) and rebuilt it from the live objects on every reload.
+    if has_saved_builder_state():
         # Use stored pipeline state (includes IDs, positions, params)
         current_normalizers = g.pipeline_normalizers
         current_postprocessors = g.pipeline_postprocessors

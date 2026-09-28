@@ -1,5 +1,6 @@
 """What the dashboard's two server-rendered pages hand to the browser."""
 
+import json
 import re
 from types import SimpleNamespace
 
@@ -105,3 +106,60 @@ def test_with_nothing_configured_every_op_is_listed_once_unticked(client):
 
     assert [name for name, _, _ in rows] == [op["name"] for op in get_input_normalizers()]
     assert not any(checked for _, checked, _ in rows)
+
+
+# --- Pipeline builder --------------------------------------------------------
+
+
+def _builder_pipeline(html):
+    """The pipeline state the builder page starts from."""
+    state = {}
+    for key in ("inputs", "outputs", "normalizers", "models", "postprocessors", "edges"):
+        match = re.search(rf"^\s*{key}: (.*?),?$", html, re.M)
+        state[key] = json.loads(match.group(1))
+    return state
+
+
+def test_the_builder_keeps_a_saved_pipeline_that_has_no_normalizers(client):
+    # What /api/pipeline/apply stores for INPUT -> model -> OUTPUT.
+    g.pipeline_inputs = [{
+        "id": "input-1",
+        "params": {"dataset_path": "/data/raw.zarr",
+                   "bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8, 8]}]},
+        "position": {"x": 11, "y": 22},
+    }]
+    g.pipeline_outputs = [{"id": "output-1", "params": {"dataset_path": "/out.zarr"},
+                           "position": {"x": 900, "y": 22}}]
+    g.pipeline_models = [{"id": "model-1", "name": "mito", "params": {},
+                          "position": {"x": 400, "y": 22}}]
+    g.pipeline_edges = [{"id": "e1", "from": "input-1", "to": "model-1"},
+                        {"id": "e2", "from": "model-1", "to": "output-1"}]
+    g.pipeline_normalizers = []
+    g.pipeline_postprocessors = []
+    g.jobs = [_job("other_model")]
+
+    state = _builder_pipeline(client.get("/pipeline-builder").get_data(as_text=True))
+
+    assert state["inputs"] == g.pipeline_inputs
+    assert state["outputs"] == g.pipeline_outputs
+    assert state["edges"] == g.pipeline_edges
+    assert [m["id"] for m in state["models"]] == ["model-1"]
+    assert state["normalizers"] == []
+
+
+def test_the_builder_starts_from_the_live_chain_before_anything_was_applied(client):
+    from cellmap_flow.norm.input_normalize import get_normalizations
+
+    for attr in ("pipeline_inputs", "pipeline_outputs", "pipeline_edges",
+                 "pipeline_normalizers", "pipeline_models", "pipeline_postprocessors"):
+        setattr(g, attr, [])
+    g.input_norms = get_normalizations([{"name": "ZScoreNormalizer", "mean": 1, "std": 2}])
+    g.jobs = [_job("mito")]
+
+    state = _builder_pipeline(client.get("/pipeline-builder").get_data(as_text=True))
+
+    assert [(n["name"], n["params"]) for n in state["normalizers"]] == [
+        ("ZScoreNormalizer", {"mean": 1.0, "std": 2.0})
+    ]
+    assert [m["name"] for m in state["models"]] == ["mito"]
+    assert state["inputs"] == [] and state["edges"] == []
