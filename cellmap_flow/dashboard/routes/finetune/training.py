@@ -236,10 +236,18 @@ def get_job_status_response(job_id):
 
 def get_job_logs_response(job_id):
     try:
-        logs = g.finetune_job_manager.get_job_logs(job_id)
+        manager = g.finetune_job_manager
+        job = (getattr(manager, "jobs", {}) or {}).get(job_id)
+        if job is not None and Path(job.log_file).exists():
+            # Whole lines only, with the byte offset they end at: the client
+            # opens the live stream from there, rather than having the stream
+            # send the whole log again on top of this.
+            logs, offset = _read_complete_lines(job.log_file, 0)
+            return jsonify({"success": True, "logs": logs, "offset": offset})
+        logs = manager.get_job_logs(job_id)
         if logs is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify({"success": True, "logs": logs})
+        return jsonify({"success": True, "logs": logs, "offset": 0})
     except Exception as e:
         logger.error(f"Error getting job logs: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -408,19 +416,69 @@ def submit_finetuning_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _read_complete_lines(path, offset):
+    """(text of the whole lines after byte ``offset``, byte offset after them).
+
+    Byte offsets, so they can be handed to the client as SSE event ids and
+    back, and a partial last line is left for the next read -- a read can
+    land mid-line ("Epoch 7/10 - Lo"), and emitting that split the record in
+    two, neither half matching the client's "Epoch N/M - Loss:" pattern.
+    """
+    with open(path, "rb") as f:
+        f.seek(offset)
+        chunk = f.read()
+    cut = chunk.rfind(b"\n") + 1
+    return chunk[:cut].decode("utf-8", errors="replace"), offset + cut
+
+
+def _requested_offset(request):
+    """Where the client wants the log from: the SSE Last-Event-ID, else ?offset=."""
+    for raw in (request.headers.get("Last-Event-ID"), request.args.get("offset")):
+        try:
+            if raw not in (None, ""):
+                return max(0, int(raw))
+        except (TypeError, ValueError):
+            pass
+    return 0
+
+
+# Statuses in which the job can still write to its log.
+_LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
+
+
 def stream_job_logs_response(job_id):
+    """Server-sent log stream.
+
+    Every block of lines carries ``id: <byte offset>``, the position in the
+    log after it, and a (re)connection resumes from the client's
+    Last-Event-ID -- which EventSource sends by itself when it reconnects --
+    or from ``?offset=``. The stream ends with ``event: done`` once the job
+    is finished. It used to send the whole log on every connection and just
+    stop at the end, so the browser's automatic reconnect replayed the whole
+    log, plus "=== Training COMPLETED ===", every few seconds for as long as
+    the page stayed open.
+    """
+    from flask import request
+
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
+    start_offset = _requested_offset(request)
 
     def iter_visible_lines(text):
         for line in text.splitlines():
             if line and not any(pattern.search(line) for pattern in log_filters):
                 yield line
 
-    def sse_data_block(lines):
+    def sse_data_block(lines, event_id=None):
+        head = f"id: {event_id}\n" if event_id is not None else ""
         if not lines:
-            return None
+            # Nothing to show, but still say how far the log has been read,
+            # so a reconnect does not re-read it.
+            return head + "\n" if head else None
         payload = "\n".join(lines)
-        return "data: " + payload.replace("\n", "\ndata: ") + "\n\n"
+        return head + "data: " + payload.replace("\n", "\ndata: ") + "\n\n"
+
+    def sse_done(status):
+        return f"event: done\ndata: {status}\n\n"
 
     def read_bpeek_content(lsf_job_id):
         try:
@@ -447,6 +505,7 @@ def stream_job_logs_response(job_id):
         fjm = g.finetune_job_manager
         if job_id not in fjm.jobs:
             yield f"data: Job {job_id} not found\n\n"
+            yield sse_done("NOT_FOUND")
             return
 
         finetune_job = fjm.jobs[job_id]
@@ -462,38 +521,32 @@ def stream_job_logs_response(job_id):
         last_bpeek_poll = 0.0
         bpeek_poll_interval_s = 1.0
         streamed_bpeek = False
+        position = start_offset
+
+        def read_file():
+            """The new whole lines of the log as an SSE block, or None."""
+            nonlocal position
+            if not finetune_job.log_file.exists():
+                return None
+            size = finetune_job.log_file.stat().st_size
+            if size < position:
+                position = 0  # the log was replaced
+            text, new_position = _read_complete_lines(finetune_job.log_file, position)
+            if new_position == position:
+                return None
+            position = new_position
+            return sse_data_block(list(iter_visible_lines(text)), position)
+
         file_seen = finetune_job.log_file.exists()
-        last_position = 0
-        # A read can land mid-line ("Epoch 7/10 - Lo"). Emitting that as a
-        # complete line and advancing past it splits the record in two, and
-        # neither half matches the client's "Epoch N/M - Loss:" pattern, so the
-        # epoch silently vanishes from the loss plot. Hold the incomplete tail
-        # back and prepend it to the next read.
-        pending_partial = ""
-
-        def split_complete_lines(chunk):
-            """Return (complete_text, leftover_partial) for a freshly read chunk."""
-            nonlocal pending_partial
-            chunk = pending_partial + chunk
-            cut = chunk.rfind("\n")
-            if cut == -1:
-                pending_partial = chunk
-                return ""
-            pending_partial = chunk[cut + 1:]
-            return chunk[:cut]
-
         if file_seen:
             try:
-                with open(finetune_job.log_file, "r") as f:
-                    content = f.read()
-                    last_position = f.tell()
-                block = sse_data_block(list(iter_visible_lines(content)))
+                block = read_file()
                 if block:
                     yield block
             except Exception as e:
                 logger.error(f"Error reading log file: {e}")
                 file_seen = False
-        elif use_bpeek:
+        elif use_bpeek and start_offset == 0:
             initial = read_bpeek_content(lsf_job_id)
             if initial is None:
                 use_bpeek = False
@@ -504,27 +557,19 @@ def stream_job_logs_response(job_id):
                 if block:
                     yield block
 
-        while finetune_job.status.value in ["PENDING", "RUNNING", "WAITING_FOR_RESTART"]:
+        while finetune_job.status.value in _LIVE_STATUSES:
             try:
                 now = time.perf_counter()
 
                 if finetune_job.log_file.exists():
                     if not file_seen:
                         file_seen = True
-                        last_position = (
-                            finetune_job.log_file.stat().st_size
-                            if streamed_bpeek
-                            else 0
-                        )
-                    with open(finetune_job.log_file, "r") as f:
-                        f.seek(last_position)
-                        new_content = f.read()
-                        last_position = f.tell()
-                    if new_content:
-                        complete = split_complete_lines(new_content)
-                        block = sse_data_block(list(iter_visible_lines(complete)))
-                        if block:
-                            yield block
+                        if streamed_bpeek:
+                            # What bpeek showed is already on screen.
+                            position = finetune_job.log_file.stat().st_size
+                    block = read_file()
+                    if block:
+                        yield block
                 elif use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
                     last_bpeek_poll = now
                     content = read_bpeek_content(lsf_job_id)
@@ -548,26 +593,35 @@ def stream_job_logs_response(job_id):
                 logger.error(f"Error streaming logs: {e}")
                 break
 
-        # The loop above exits as soon as status leaves PENDING/RUNNING, which
-        # can happen before the last chunk of the log has been read. Without
-        # this final drain the closing epochs -- and the "Training Complete!"
-        # summary -- are never streamed, which is most likely exactly when
-        # training finished quickly.
+        # The loop above exits as soon as the job is finished, which can be
+        # before the last lines of the log have been read. Without this final
+        # drain the closing epochs -- and the "Training Complete!" summary --
+        # are never streamed. The log is final now, so a last line without
+        # its newline goes out too.
+        finished = finetune_job.status.value not in _LIVE_STATUSES
         try:
             if finetune_job.log_file.exists():
-                with open(finetune_job.log_file, "r") as f:
-                    f.seek(last_position)
-                    remaining = f.read()
-                    last_position = f.tell()
-                remaining = (pending_partial + remaining) if pending_partial else remaining
-                pending_partial = ""
-                block = sse_data_block(list(iter_visible_lines(remaining)))
+                block = read_file()
                 if block:
                     yield block
+                if finished:
+                    with open(finetune_job.log_file, "rb") as f:
+                        f.seek(position)
+                        tail = f.read()
+                    if tail:
+                        position += len(tail)
+                        block = sse_data_block(
+                            list(iter_visible_lines(tail.decode("utf-8", errors="replace"))), position
+                        )
+                        if block:
+                            yield block
         except Exception as e:
             logger.error(f"Error draining final log content: {e}")
 
-        yield f"data: === Training {finetune_job.status.value} ===\n\n"
+        if finished:
+            yield sse_done(finetune_job.status.value)
+        # Otherwise the loop broke on an error while the job still runs: end
+        # without "done", so the browser reconnects and resumes from its id.
 
     return Response(
         generate(),

@@ -1685,6 +1685,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // === FINETUNING JOB MANAGEMENT ===
 
   let eventSource = null;
+  let lastLogOffset = 0;  // byte offset in the job's log the page has shown up to
+  let logStreamCloseTimer = null;
   let statusPollingInterval = null;
   let streamConnectedOnce = false;
   let liveEpochState = null;
@@ -1833,14 +1835,23 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Log streaming via SSE
-  function startLogStreaming(jobId) {
+  // Log streaming via SSE. Every block the server sends carries its byte
+  // offset in the log as the event id; the browser sends the last one back
+  // when it reconnects, so a reconnect continues where it left off instead
+  // of replaying the whole log. `offset` starts a new stream part-way, after
+  // what the page already shows (see restoreActiveJob).
+  function startLogStreaming(jobId, offset) {
     // Close existing stream if any
     if (eventSource) {
       eventSource.close();
     }
+    clearTimeout(logStreamCloseTimer);
+    logStreamCloseTimer = null;
+    lastLogOffset = offset || 0;
 
-    eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream`);
+    const query = lastLogOffset ? `?offset=${lastLogOffset}` : '';
+    eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream${query}`);
+    const stream = eventSource;
 
     eventSource.onopen = function() {
       if (!streamConnectedOnce) {
@@ -1849,7 +1860,17 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     };
 
+    // The server's last word: the job is finished and the log complete.
+    eventSource.addEventListener("done", function(event) {
+      stream.close();
+      appendLog(`=== Training ${event.data} ===`);
+    });
+
     eventSource.onmessage = function(event) {
+      const id = parseInt(event.lastEventId, 10);
+      if (Number.isFinite(id)) {
+        lastLogOffset = id;
+      }
       appendLog(event.data);
       // One SSE event can carry several log lines: the server emits a block of
       // "data: " lines and the browser concatenates them into a single
@@ -1870,9 +1891,32 @@ document.addEventListener("DOMContentLoaded", function () {
 
     eventSource.onerror = function(error) {
       console.error("Log streaming error:", error);
-      // Do not close here - EventSource auto-reconnects by default.
-      // Closing would permanently stop log updates for this job.
+      // Do not close here - EventSource auto-reconnects by default, and
+      // resumes from the last event id. Closing would permanently stop log
+      // updates for this job.
     };
+  }
+
+  // Close the stream once the job is over. Not at once: the server sends the
+  // last lines and "done" within a moment of the job finishing, and closing
+  // first would lose them. This is the backstop for a "done" that never
+  // comes, e.g. a stream stuck reconnecting.
+  function closeLogStreamSoon() {
+    if (logStreamCloseTimer || !eventSource || eventSource.readyState === EventSource.CLOSED) {
+      return;  // already closed, or closing (the poller calls this every tick)
+    }
+    const stream = eventSource;
+    logStreamCloseTimer = setTimeout(function() {
+      logStreamCloseTimer = null;
+      stream.close();
+    }, 5000);
+  }
+
+  // Reopen the stream where it stopped, if it is not running.
+  function ensureLogStreaming(jobId) {
+    if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+      startLogStreaming(jobId, lastLogOffset);
+    }
   }
 
   function updateProgressFromLogLine(line) {
@@ -2198,10 +2242,11 @@ document.addEventListener("DOMContentLoaded", function () {
         // Handle terminal states
         if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "COMPLETED") {
           resetStopEarlyButton();
+          // The stream normally ends itself with "done"; see closeLogStreamSoon.
+          closeLogStreamSoon();
         }
         if (data.status === "FAILED" || data.status === "CANCELLED") {
           clearInterval(statusPollingInterval);
-          eventSource?.close();
 
           if (!terminalNotified) {
             terminalNotified = true;
@@ -2411,6 +2456,9 @@ document.addEventListener("DOMContentLoaded", function () {
           // restarted run never showed its progress. Start one (this
           // replaces the poller if one is already running).
           startStatusPolling(jobId);
+          // Likewise the log: reopen it where it stopped if it is not
+          // streaming, so the restarted run's lines show up.
+          ensureLogStreaming(jobId);
         } else {
           alert('Failed to restart training: ' + data.error);
         }
@@ -2484,11 +2532,15 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
 
-      // Restore logs and loss plot from the log file
+      // Restore logs and loss plot from the log file. The live stream below
+      // then starts where this ends (logData.offset), instead of sending the
+      // whole log again on top of it.
+      let restoredLogOffset = 0;
       try {
         const logResp = await fetch(`/api/finetune/job/${jobId}/logs`);
         const logData = await logResp.json();
         if (logData.success && logData.logs) {
+          restoredLogOffset = logData.offset || 0;
           document.getElementById('trainingLogs').value = logData.logs;
           // Parse existing logs for loss data to restore the plot
           for (const line of logData.logs.split('\n')) {
@@ -2517,9 +2569,12 @@ document.addEventListener("DOMContentLoaded", function () {
       // waiting for a restart
       if (activeJob.status === 'RUNNING' || activeJob.status === 'PENDING' ||
           activeJob.status === 'WAITING_FOR_RESTART') {
-        startLogStreaming(jobId);
+        startLogStreaming(jobId, restoredLogOffset);
         startStatusPolling(jobId);
       } else {
+        // Nothing more will be written, but a restart reopens the stream from
+        // here (ensureLogStreaming).
+        lastLogOffset = restoredLogOffset;
         // Finished but still serving: keep the status current, so Restart
         // (and a later training run) shows up here as it happens.
         startStatusPolling(jobId);
