@@ -256,17 +256,35 @@ class FinetuneJobManager:
             if value is not None:
                 return value
 
-        # Then try loading config and checking there
-        try:
-            config = model_config.config
-            if hasattr(config, attr_name):
-                value = getattr(config, attr_name, None)
-                if value is not None:
-                    return value
-        except Exception as e:
-            self.logger.debug(f"Could not load config to check for {attr_name}: {e}")
+        # Then the model's geometry. This used to read model_config.config,
+        # which for a script, Hugging Face or DaCapo model builds the model in
+        # the dashboard process -- weights download, torch.export, a CUDA
+        # context -- just to read two voxel sizes and the channel names.
+        # resolve_model_geometry asks the model's running server, then its
+        # cache, and builds the model only when neither can answer.
+        config = self._model_geometry(model_config)
+        if config is not None:
+            value = getattr(config, attr_name, None)
+            if value is not None:
+                return value
 
         return default
+
+    def _model_geometry(self, model_config):
+        """The model's geometry (see utils/model_geometry), looked up once per config."""
+        cache = self.__dict__.setdefault("_geometry_cache", {})
+        key = id(model_config)
+        if key not in cache:
+            from cellmap_flow.utils.model_geometry import resolve_model_geometry
+
+            try:
+                cache[key] = (model_config, resolve_model_geometry(
+                    getattr(model_config, "name", None), model_config
+                ))
+            except Exception as e:
+                self.logger.debug(f"Could not resolve the geometry of {model_config}: {e}")
+                cache[key] = (model_config, None)
+        return cache[key][1]
 
     def _extract_data_path_from_corrections(self, corrections_path: Path) -> str:
         """Extract dataset path from corrections metadata.
@@ -584,6 +602,7 @@ class FinetuneJobManager:
         # Get model type from the config class's cli_name (e.g., "fly",
         # "dacapo", "huggingface"); refuses types the trainer cannot train.
         model_type = self._resolve_model_type(model_config)
+        self._geometry_cache = {}  # looked up afresh for every submit
 
         # 2. Get checkpoint path if available (optional)
         # For script models: we'll pass the script path instead
