@@ -24,7 +24,6 @@ dependencies = [
     "flasgger",
     "numcodecs==0.15.0",
     "zarr==2.18.4",
-    "h5py",
     "s3fs",
     "torch",    
     "universal_pathlib",
