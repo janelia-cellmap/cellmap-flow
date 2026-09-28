@@ -27,10 +27,15 @@ def cli(yaml_config, client, log_level):
     # pay for the whole inference stack (~16s before this).
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
 
+    from cellmap_flow.utils.config_utils import ConfigError
+
     configure_logging(getattr(logging, log_level.upper()))
 
     is_server = not client
-    process = CellMapFlowBlockwiseProcessor(yaml_config, create=is_server)
+    try:
+        process = CellMapFlowBlockwiseProcessor(yaml_config, create=is_server)
+    except ConfigError as e:
+        raise click.ClickException(f"{yaml_config}: {e}")
     if is_server:
         process.run()
     else:

@@ -20,7 +20,7 @@ from cellmap_flow.utils.bsub_utils import (
     start_hosts,
     SERVER_COMMAND,
 )
-from cellmap_flow.utils.config_utils import load_config
+from cellmap_flow.utils.config_utils import ConfigError, load_config
 from cellmap_flow.globals import g
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
@@ -193,7 +193,10 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
 
     # Load and validate configuration
     logger.info(f"Loading configuration from: {config_path}")
-    config = load_config(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigError as e:
+        raise click.ClickException(str(e))
 
     # Handle optional json_data for normalization/postprocessing
     if "json_data" in config:
@@ -236,7 +239,10 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     if config["models"]:
         from cellmap_flow.utils.config_utils import build_models
 
-        g.models_config = build_models(config["models"])
+        try:
+            g.models_config = build_models(config["models"])
+        except ConfigError as e:
+            raise click.ClickException(str(e))
     else:
         g.models_config = []
         logger.info("No models configured — starting dashboard for interactive use")

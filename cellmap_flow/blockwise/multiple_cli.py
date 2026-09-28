@@ -8,10 +8,14 @@ logger = logging.getLogger(__name__)
 def cli(yaml_configs: tuple) -> None:
     """Process multiple YAML configuration files."""
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
+    from cellmap_flow.utils.config_utils import ConfigError
 
     for yaml_config in yaml_configs:
         logger.info(f"Processing: {yaml_config}")
-        process = CellMapFlowBlockwiseProcessor(yaml_config, create=True)
+        try:
+            process = CellMapFlowBlockwiseProcessor(yaml_config, create=True)
+        except ConfigError as e:
+            raise click.ClickException(f"{yaml_config}: {e}")
         process.run()
 
 

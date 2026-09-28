@@ -3,7 +3,6 @@ Smart YAML configuration utilities that dynamically discover and instantiate
 ModelConfig subclasses, similar to the CLI v2 approach.
 """
 
-import sys
 import yaml
 import logging
 import inspect
@@ -15,6 +14,16 @@ from cellmap_flow.utils.cli_utils import get_all_subclasses, process_constructor
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
 logger = logging.getLogger(__name__)
+
+
+class ConfigError(ValueError):
+    """The YAML configuration is not usable; the message says why.
+
+    Raised rather than calling sys.exit: this code also runs inside the
+    dashboard (the blockwise precheck, a finetuned model's base config),
+    where SystemExit slips past ``except Exception`` and the request thread
+    dies without sending a response. The CLIs catch it and exit non-zero.
+    """
 
 
 def get_model_type_mapping() -> Dict[str, type]:
@@ -37,16 +46,21 @@ def load_config(path: str) -> Dict[str, Any]:
         
     Returns:
         Validated configuration dictionary
+
+    Raises:
+        ConfigError: a required field is missing or malformed
     """
     with open(path, "r") as f:
         config = yaml.safe_load(f)
+
+    if not isinstance(config, dict):
+        raise ConfigError(f"{path} does not contain a YAML mapping")
 
     from cellmap_flow.globals import load_server_config_cache, SERVER_CONFIG_DEFAULTS
 
     # Required top-level fields
     if "data_path" not in config:
-        logger.error("Missing required field in YAML: data_path")
-        sys.exit(1)
+        raise ConfigError("Missing required field in YAML: data_path")
 
     # Fall back to cache then defaults for charge_group and queue
     cached = load_server_config_cache() or {}
@@ -57,8 +71,9 @@ def load_config(path: str) -> Dict[str, Any]:
             logger.warning(f"Missing 'charge_group' in YAML, using cached value: {fallback}")
             config["charge_group"] = fallback
         else:
-            logger.error("Missing required field in YAML: charge_group (no cache available)")
-            sys.exit(1)
+            raise ConfigError(
+                "Missing required field in YAML: charge_group (no cache available)"
+            )
 
     if "queue" not in config or not config["queue"]:
         fallback = cached.get("queue", DEFAULT_SERVER_QUEUE)
@@ -70,8 +85,7 @@ def load_config(path: str) -> Dict[str, Any]:
         config["models"] = {}
 
     if not isinstance(config["models"], (dict, list)):
-        logger.error("YAML 'models' must be either a dict or list")
-        sys.exit(1)
+        raise ConfigError("YAML 'models' must be either a dict or list")
 
     return config
 
@@ -87,11 +101,15 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
         
     Returns:
         Instantiated ModelConfig subclass
+
+    Raises:
+        ConfigError: the entry does not describe a model that can be built
     """
+    if not isinstance(entry, dict):
+        raise ConfigError(f"Model '{model_name}' must be a mapping, got {entry!r}")
     mtype = entry.get("type")
     if not mtype:
-        logger.error(f"Model '{model_name}' missing 'type' field")
-        sys.exit(1)
+        raise ConfigError(f"Model '{model_name}' missing 'type' field")
 
     # Get available model types
     model_type_mapping = get_model_type_mapping()
@@ -108,11 +126,10 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
     
     if config_class is None:
         available_types = ", ".join(sorted(model_type_mapping.keys()))
-        logger.error(
+        raise ConfigError(
             f"Model '{model_name}' has unrecognized type '{mtype}'. "
             f"Valid types are: {available_types}"
         )
-        sys.exit(1)
     
     # Get constructor signature
     sig = inspect.signature(config_class.__init__)
@@ -179,10 +196,9 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
                         break
                 
                 if not found:
-                    logger.error(
+                    raise ConfigError(
                         f"Model '{model_name}' ({mtype}) missing required parameter '{param_name}'"
                     )
-                    sys.exit(1)
     
     # Create model instance
     try:
@@ -190,10 +206,11 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
         logger.debug(f"Created model '{model_name}': {model}")
         return model
     except TypeError as e:
-        logger.error(f"Error creating model '{model_name}' ({mtype}): {e}")
-        logger.error(f"Provided parameters: {processed_kwargs}")
-        logger.error(f"Required parameters: {required_params}")
-        sys.exit(1)
+        raise ConfigError(
+            f"Error creating model '{model_name}' ({mtype}): {e}. "
+            f"Provided parameters: {processed_kwargs}. "
+            f"Required parameters: {required_params}"
+        ) from e
 
 
 def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
@@ -222,8 +239,8 @@ def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
     if isinstance(model_entries, list):
         entries = {}
         for entry in model_entries:
-            if "name" not in entry:
-                raise ValueError("Each model entry in the list must have a 'name' field.")      
+            if not isinstance(entry, dict) or "name" not in entry:
+                raise ConfigError("Each model entry in the list must have a 'name' field.")
             entries[entry["name"]] = entry
         model_entries = entries
 
