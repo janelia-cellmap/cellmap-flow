@@ -159,8 +159,42 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
     return override_given, patches_per_epoch
 
 
+def _rehydrate_jobs():
+    """Reattach to jobs a previous dashboard process left running.
+
+    Looks in every session under the base paths this dashboard knows: the
+    ones it made sessions for, and the output path saved in the user prefs,
+    which is what a freshly restarted dashboard starts with.
+    """
+    from cellmap_flow.dashboard.finetune_utils import output_sessions
+    from cellmap_flow.dashboard.routes.finetune.common import load_user_prefs
+
+    manager = g.finetune_job_manager
+    rehydrate = getattr(manager, "rehydrate_session", None)
+    if rehydrate is None:
+        return
+    bases = {os.path.expanduser(b) for b in output_sessions}
+    saved = load_user_prefs().get("outputPath")
+    if saved:
+        bases.add(os.path.expanduser(saved))
+    for base in bases:
+        try:
+            sessions = [
+                os.path.join(base, entry) for entry in os.listdir(base)
+                if re.match(r"^\d{8}_\d{6}$", entry)
+            ]
+        except OSError:
+            continue
+        for session in sessions:
+            try:
+                rehydrate(session)
+            except Exception as e:
+                logger.warning(f"Could not look for running jobs in {session}: {e}")
+
+
 def list_finetuning_jobs_response():
     try:
+        _rehydrate_jobs()
         return jsonify({"success": True, "jobs": g.finetune_job_manager.list_jobs()})
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")

@@ -59,6 +59,36 @@ def get_or_create_session_path(base_output_path: str) -> str:
     return output_sessions[base_output_path]
 
 
+_SESSION_DIR_RE = re.compile(r"^\d{8}_\d{6}$")
+
+
+def latest_session_on_disk(base_output_path: str):
+    """The newest session under ``base_output_path`` that has something to train on.
+
+    Sessions are ``<base>/<YYYYmmdd_HHMMSS>/`` directories; this takes the
+    latest one whose corrections/ holds a virtual-sources manifest. The
+    in-memory base -> session map dies with the dashboard, so after a
+    restart get_or_create_session_path hands out a new, empty session, and
+    submitting training for the base path failed with "Corrections path
+    does not exist" although the session painted before the restart was
+    right there. Returns None when there is none.
+    """
+    from cellmap_flow.finetune.virtual_dataset import VIRTUAL_MANIFEST_FILENAME
+
+    base = os.path.expanduser(str(base_output_path))
+    try:
+        entries = sorted(os.listdir(base), reverse=True)
+    except OSError:
+        return None
+    for entry in entries:
+        session = os.path.join(base, entry)
+        if _SESSION_DIR_RE.match(entry) and os.path.isfile(
+            os.path.join(session, "corrections", VIRTUAL_MANIFEST_FILENAME)
+        ):
+            return session
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Network helpers
 # ---------------------------------------------------------------------------

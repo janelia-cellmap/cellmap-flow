@@ -5,7 +5,11 @@ from pathlib import Path
 
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import get_or_create_session_path
+from cellmap_flow.dashboard.finetune_utils import (
+    get_or_create_session_path,
+    latest_session_on_disk,
+    output_sessions,
+)
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
@@ -124,6 +128,16 @@ def resolve_finetune_session(corrections_path_str):
     base_corrections_path = Path(corrections_path_str)
     if base_corrections_path.name == "corrections" and base_corrections_path.exists():
         return base_corrections_path.parent, base_corrections_path
+
+    # This dashboard's session for the base path, if it made one; else the
+    # newest one on disk, which is what a dashboard restart forgot. Only for
+    # training: creating volumes still starts a session of its own.
+    base = os.path.expanduser(str(base_corrections_path))
+    if base not in output_sessions:
+        latest = latest_session_on_disk(base)
+        if latest is not None:
+            logger.info(f"No session for {base} in this dashboard; using the latest on disk: {latest}")
+            return Path(latest), Path(latest) / "corrections"
 
     session_path = Path(get_or_create_session_path(str(base_corrections_path)))
     return session_path, session_path / "corrections"

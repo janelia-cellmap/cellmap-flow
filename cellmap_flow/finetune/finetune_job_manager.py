@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Any
 
 from cellmap_flow.utils.bsub_utils import (
@@ -812,20 +813,108 @@ class FinetuneJobManager:
         )
 
         self.jobs[job_id] = finetune_job
+        # What a dashboard started later needs to find this job again: the
+        # scheduler's id for it, and where it stands (see rehydrate_session).
+        self._update_metadata(
+            finetune_job, lsf_job_id=finetune_job.to_dict()["lsf_job_id"],
+            status=finetune_job.status.value,
+        )
 
-        # === Start monitoring thread ===
+        self._start_monitor(finetune_job)
 
+        return finetune_job
+
+    def _start_monitor(self, finetune_job: FinetuneJob):
         monitor_thread = threading.Thread(
             target=self.monitor_job,
             args=(finetune_job,),
             daemon=True
         )
         monitor_thread.start()
-        self._monitor_threads[job_id] = monitor_thread
+        self._monitor_threads[finetune_job.job_id] = monitor_thread
+        self.logger.info(f"Started monitoring thread for job {finetune_job.job_id}")
 
-        self.logger.info(f"Started monitoring thread for job {job_id}")
+    def _update_metadata(self, finetune_job: FinetuneJob, **fields):
+        """Merge ``fields`` into the job's metadata.json, replacing it atomically."""
+        path = Path(finetune_job.output_dir) / "metadata.json"
+        try:
+            metadata = json.loads(path.read_text()) if path.exists() else {}
+            metadata.update(fields)
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps(metadata, indent=2))
+            os.replace(tmp, path)
+        except Exception as e:
+            self.logger.warning(f"Could not update {path}: {e}")
 
-        return finetune_job
+    def rehydrate_session(self, session_path) -> int:
+        """Pick up the jobs of a session that are still alive on the cluster.
+
+        Jobs live only in this process's memory, so after a dashboard restart
+        a running job disappeared: it could not be seen or cancelled, and
+        with auto-serve it waited for a restart until walltime. Each job's
+        metadata.json now records its LSF job id and status; a run whose
+        recorded status is not final and that bjobs still reports as pending
+        or running is monitored again, which also brings back its viewer
+        layer once the log shows its server. Local runs (a PID, not an LSF
+        job) are not reattached. Returns how many jobs were picked up.
+        """
+        count = 0
+        for metadata_file in sorted(Path(session_path).glob("runs/*/metadata.json")):
+            try:
+                metadata = json.loads(metadata_file.read_text())
+            except (OSError, ValueError):
+                continue
+            job_id = metadata.get("job_id")
+            lsf_job_id = metadata.get("lsf_job_id")
+            if (
+                not job_id
+                or job_id in self.jobs
+                or not lsf_job_id
+                or str(lsf_job_id).startswith("PID:")
+                or metadata.get("status") in {s.value for s in TERMINAL_STATUSES}
+            ):
+                continue
+            lsf_job = LSFJob(job_id=str(lsf_job_id), model_name=metadata.get("model_name"))
+            observed = lsf_job.observed_status()
+            if observed == LSFJobStatus.COMPLETED:
+                # Finished while no dashboard was watching; say so, so it is
+                # not asked about again. complete_job does not run for it.
+                self._update_metadata(
+                    SimpleNamespace(output_dir=metadata_file.parent), status=JobStatus.COMPLETED.value
+                )
+                continue
+            if observed == LSFJobStatus.FAILED:
+                self._update_metadata(
+                    SimpleNamespace(output_dir=metadata_file.parent), status=JobStatus.FAILED.value
+                )
+                continue
+            if observed not in (LSFJobStatus.RUNNING, LSFJobStatus.PENDING):
+                continue  # bjobs cannot say; try again next time
+            params = metadata.get("params") or {}
+            output_dir = metadata_file.parent
+            try:
+                created_at = datetime.fromisoformat(metadata["created_at"])
+            except (KeyError, TypeError, ValueError):
+                created_at = datetime.now()
+            job = FinetuneJob(
+                job_id=job_id,
+                lsf_job=lsf_job,
+                model_name=metadata.get("model_name") or "",
+                output_dir=output_dir,
+                params=params,
+                status=JobStatus.RUNNING if observed == LSFJobStatus.RUNNING else JobStatus.PENDING,
+                created_at=created_at,
+                log_file=output_dir / "training_log.txt",
+                total_epochs=int(params.get("num_epochs") or 10),
+                corrections_path=(
+                    Path(metadata["corrections_path"]) if metadata.get("corrections_path") else None
+                ),
+            )
+            self.jobs[job_id] = job
+            self.logger.info(f"Reattached to job {job_id} (LSF {lsf_job_id}) from {output_dir}")
+            self._start_monitor(job)
+            count += 1
+        return count
 
     def monitor_job(self, finetune_job: FinetuneJob):
         """
@@ -842,6 +931,7 @@ class FinetuneJobManager:
 
         last_log_position = 0
         check_interval = 3  # seconds
+        persisted_status = finetune_job.status
 
         try:
             while True:
@@ -912,6 +1002,13 @@ class FinetuneJobManager:
                     except Exception as e:
                         self.logger.debug(f"Error reading log file: {e}")
 
+                if finetune_job.status != persisted_status:
+                    persisted_status = finetune_job.status
+                    self._update_metadata(
+                        finetune_job, status=persisted_status.value,
+                        inference_server_url=finetune_job.inference_server_url,
+                    )
+
                 # Sleep before next check
                 time.sleep(check_interval)
 
@@ -930,6 +1027,7 @@ class FinetuneJobManager:
                     self.logger.error(f"Error in post-completion for job {job_id}: {e}")
                     finetune_job.status = JobStatus.FAILED
 
+            self._update_metadata(finetune_job, status=finetune_job.status.value)
             self.logger.info(f"Stopped monitoring job {job_id}. Final status: {finetune_job.status.value}")
 
     def _parse_training_progress(self, finetune_job: FinetuneJob, log_content: str):
@@ -1464,7 +1562,11 @@ class FinetuneJobManager:
         Returns:
             List of job status dictionaries
         """
-        return [self.get_job_status(job_id) for job_id in self.jobs.keys()]
+        # A snapshot: monitor threads and rehydration add jobs concurrently.
+        return [
+            status for status in (self.get_job_status(job_id) for job_id in list(self.jobs))
+            if status is not None
+        ]
 
     def get_job_logs(self, job_id: str) -> Optional[str]:
         """
