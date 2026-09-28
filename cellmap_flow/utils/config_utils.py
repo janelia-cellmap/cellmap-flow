@@ -268,6 +268,10 @@ def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfi
             f"Provided parameters: {processed_kwargs}. "
             f"Required parameters: {required_params}"
         ) from e
+    except (ValueError, OSError) as e:
+        # Some constructors read files straight away (a cellmap model's
+        # metadata.json), so a wrong path shows up here.
+        raise ConfigError(f"Error creating model '{model_name}' ({mtype}): {e}") from e
 
 
 def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:

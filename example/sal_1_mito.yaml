@@ -17,6 +17,6 @@ models:
 ### blockwise
 output_path: "/nrs/cellmap/zouinkhim/salivary/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/20260703_mito_distance/s0"
 # optional output channel-if not set output all channels from model
-# output_channels:mito,ld
+# output_channels: [mito, ld]
 task_name: "20260703_mito_distance_task"
 workers: 4
