@@ -582,17 +582,14 @@ class LoRAFinetuner:
         new_bs = max(1, old_bs // 2)
         if new_bs >= old_bs:
             return False
+        from cellmap_flow.finetune.virtual_dataset import rebuild_loader
+
         old_accum = self.gradient_accumulation_steps
         self.gradient_accumulation_steps = old_accum * (old_bs // new_bs)
-        self.dataloader = DataLoader(
-            self.dataloader.dataset,
-            batch_size=new_bs,
-            shuffle=True,
-            num_workers=self.dataloader.num_workers,
-            pin_memory=self.dataloader.pin_memory,
-            multiprocessing_context=self.dataloader.multiprocessing_context,
-        )
-        self._log_message(
+        # Same workers, persistence and sampling as before, only smaller
+        # batches (see rebuild_loader).
+        self.dataloader = rebuild_loader(self.dataloader, new_bs)
+        getattr(self, "_log_message", logger.info)(
             f"Halved batch size {old_bs} → {new_bs}, "
             f"gradient accumulation {old_accum} → {self.gradient_accumulation_steps} "
             f"(effective batch size unchanged)"

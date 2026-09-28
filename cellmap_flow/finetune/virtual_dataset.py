@@ -944,12 +944,50 @@ def create_dataloader(
         f"batch_size={actual_batch_size}, num_workers={num_workers}"
     )
 
+    return make_training_loader(dataset, actual_batch_size, num_workers)
+
+
+def make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.utils.data.DataLoader:
+    """The DataLoader the trainer reads patches through.
+
+    Persistent, spawned workers: each keeps its copy of the dataset, and so its
+    RNG, from one epoch to the next. Non-persistent workers are re-spawned
+    every epoch from a fresh pickle of the dataset -- RNG unset, same seed --
+    so every epoch would draw the identical patches and augmentations.
+    """
     return torch.utils.data.DataLoader(
         dataset,
-        batch_size=actual_batch_size,
+        batch_size=batch_size,
         shuffle=False,  # the dataset samples randomly already
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=num_workers > 0,
         multiprocessing_context="spawn" if num_workers > 0 else None,
     )
+
+
+def rebuild_loader(loader: torch.utils.data.DataLoader, batch_size: int) -> torch.utils.data.DataLoader:
+    """``loader`` again with a different batch size and everything else kept.
+
+    The OOM fallback in the trainer used to rebuild its loader with only some
+    of the original arguments; losing persistent_workers made every epoch
+    after an OOM repeat the same patches (see make_training_loader).
+    """
+    from torch.utils.data import RandomSampler
+
+    kwargs = dict(
+        batch_size=batch_size,
+        shuffle=isinstance(loader.sampler, RandomSampler),
+        num_workers=loader.num_workers,
+        collate_fn=loader.collate_fn,
+        pin_memory=loader.pin_memory,
+        drop_last=loader.drop_last,
+        timeout=loader.timeout,
+        worker_init_fn=loader.worker_init_fn,
+        multiprocessing_context=loader.multiprocessing_context,
+        generator=loader.generator,
+        persistent_workers=loader.persistent_workers,
+    )
+    if loader.num_workers > 0:
+        kwargs["prefetch_factor"] = loader.prefetch_factor
+    return torch.utils.data.DataLoader(loader.dataset, **kwargs)
