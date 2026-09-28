@@ -310,7 +310,8 @@ def submit_finetuning_response(data):
             )
 
         loss_type = data.get("loss_type", "mse")
-        distillation_lambda = _number(data, "distillation_lambda", 0.0)
+        # None (not sent) leaves the weight to the trainer; 0 switches it off.
+        distillation_lambda = _number(data, "distillation_lambda", None)
         has_sparse = detect_sparse_annotations(actual_corrections_path)
         sparse_auto_switched = False
         if has_sparse and loss_type == "mse":
@@ -343,7 +344,7 @@ def submit_finetuning_response(data):
             output_type = "binary"
             if loss_type not in ("margin",):
                 loss_type = "margin"
-            if distillation_lambda <= 0:
+            if distillation_lambda is None or distillation_lambda <= 0:
                 distillation_lambda = 0.5
         elif output_type == "distance":
             # The soft distance target is only defined against BCE-with-logits;

@@ -273,7 +273,7 @@ class LoRAFinetuner:
         select_channel: Optional[int] = None,
         mask_unannotated: bool = True,
         label_smoothing: float = 0.0,
-        distillation_lambda: float = 0.0,
+        distillation_lambda: Optional[float] = None,
         distillation_all_voxels: bool = False,
         margin: float = 0.3,
         balance_classes: bool = False,
@@ -383,17 +383,28 @@ class LoRAFinetuner:
         # the supervised loss never touches an unannotated voxel, so with
         # lambda at 0 every rehearsal patch would contribute exactly nothing
         # and the regions the user marked would silently do nothing at all.
-        # Marking them is an explicit request to be held there, so honour it
-        # rather than training a no-op and looking like it worked.
+        # Marking them is an explicit request to be held there, so a lambda
+        # left unset (None) becomes 1.0 when there are any. An explicit 0 is
+        # honoured: it used to be indistinguishable from "unset" and was
+        # raised to 1.0 as well, so choosing "0 (Disabled)" in the dashboard
+        # with good regions marked gave 100x the default weight.
         self._anchors_available = bool(
             getattr(getattr(self.dataloader, "dataset", None), "emits_anchor", False)
         )
-        if self._anchors_available and self.distillation_lambda <= 0:
-            self.distillation_lambda = 1.0
+        if self.distillation_lambda is None:
+            self.distillation_lambda = 1.0 if self._anchors_available else 0.0
+            if self._anchors_available:
+                logger.warning(
+                    "Good regions are marked and no distillation weight was "
+                    "given. Using lambda=1.0 so the anchors take effect; pass "
+                    "an explicit lambda (0 to switch it off) to override."
+                )
+        elif self._anchors_available and self.distillation_lambda <= 0:
             logger.warning(
-                "Good regions are marked but distillation_lambda was 0, which "
-                "would make them inert. Setting lambda=1.0 so the anchors take "
-                "effect; pass an explicit lambda to override."
+                "Good regions are marked but distillation is switched off "
+                "(lambda=0), so their rehearsal patches contribute nothing to "
+                "the loss. Set the rehearsal fraction to 0 to skip them, or "
+                "give distillation a weight to use them."
             )
 
         if self.label_smoothing > 0:

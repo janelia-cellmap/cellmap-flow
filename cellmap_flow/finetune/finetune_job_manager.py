@@ -364,7 +364,7 @@ class FinetuneJobManager:
         learning_rate: float,
         loss_type: str,
         label_smoothing: float,
-        distillation_lambda: float,
+        distillation_lambda: Optional[float],
         distillation_scope: str,
         margin: float,
         auto_serve: bool,
@@ -419,10 +419,13 @@ class FinetuneJobManager:
 
         if label_smoothing > 0:
             command_parts += ["--label-smoothing", str(label_smoothing)]
-        if distillation_lambda > 0:
+        # Passed whenever it was chosen, 0 included: leaving the flag out means
+        # "unset", which the trainer turns into 1.0 when good regions exist,
+        # so omitting it for 0 made "0 (Disabled)" impossible to express.
+        if distillation_lambda is not None:
             command_parts += ["--distillation-lambda", str(distillation_lambda)]
-            if distillation_scope == "all":
-                command_parts.append("--distillation-all-voxels")
+        if distillation_scope == "all" and (distillation_lambda is None or distillation_lambda > 0):
+            command_parts.append("--distillation-all-voxels")
         if loss_type == "margin":
             command_parts += ["--margin", str(margin)]
         if auto_serve and serve_data_path:
@@ -492,7 +495,7 @@ class FinetuneJobManager:
         learning_rate: float,
         loss_type: str,
         label_smoothing: float,
-        distillation_lambda: float,
+        distillation_lambda: Optional[float],
         distillation_scope: str,
         margin: float,
         balance_classes: bool,
@@ -561,7 +564,8 @@ class FinetuneJobManager:
         mask_unannotated: bool = False,
         loss_type: str = "combined",
         label_smoothing: float = 0.0,
-        distillation_lambda: float = 0.0,
+        # None leaves it to the trainer: 1.0 with good regions, else 0.
+        distillation_lambda: Optional[float] = None,
         distillation_scope: str = "unlabeled",
         margin: float = 0.3,
         balance_classes: bool = False,

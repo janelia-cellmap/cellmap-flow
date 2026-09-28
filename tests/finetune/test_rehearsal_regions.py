@@ -228,15 +228,45 @@ def _trainer(tmp_path, dataset, distillation_lambda):
 
 
 def test_marked_regions_do_not_silently_train_nothing(tmp_path):
-    """lambda=0 plus good regions would make every anchor contribute zero.
+    """No lambda plus good regions would make every anchor contribute zero.
 
     The supervised loss never touches an unannotated voxel, so a rehearsal
     patch with no teacher term is a patch that does nothing at all -- the
-    run would look healthy and the regions would have had no effect.
+    run would look healthy and the regions would have had no effect. An
+    unset lambda (None) therefore becomes 1.0.
     """
-    t = _trainer(tmp_path, _AnchorDataset(emits_anchor=True), distillation_lambda=0.0)
+    t = _trainer(tmp_path, _AnchorDataset(emits_anchor=True), distillation_lambda=None)
     assert t._anchors_available is True
     assert t.distillation_lambda == 1.0
+
+
+def test_an_explicit_zero_switches_distillation_off_even_with_regions(tmp_path):
+    """0 used to be indistinguishable from "unset" and became 1.0, so
+    choosing "0 (Disabled)" with good regions marked gave 100x the default."""
+    t = _trainer(tmp_path, _AnchorDataset(emits_anchor=True), distillation_lambda=0.0)
+    assert t.distillation_lambda == 0.0
+
+
+def test_the_job_manager_passes_an_explicit_zero():
+    from types import SimpleNamespace
+
+    from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+
+    def command(distillation_lambda, scope="unlabeled"):
+        return FinetuneJobManager()._build_finetune_command(
+            model_config=SimpleNamespace(name="m", script_path="/s.py"), model_type="script",
+            checkpoint_path=None, corrections_path="/c", output_dir="/o", log_file="/o/log",
+            channels=["mito"], input_voxel_size=[8] * 3, output_voxel_size=[8] * 3, lora_r=8,
+            num_epochs=1, batch_size=1, learning_rate=1e-4, loss_type="bce", label_smoothing=0.0,
+            distillation_lambda=distillation_lambda, distillation_scope=scope, margin=0.3,
+            auto_serve=False, serve_data_path=None, mask_unannotated=False, balance_classes=False,
+            augment=False, output_type="binary", select_channel=None, offsets=None,
+        )
+
+    assert "--distillation-lambda 0.0" in command(0.0)
+    assert "--distillation-lambda" not in command(None)
+    assert "--distillation-all-voxels" not in command(0.0, scope="all")
+    assert "--distillation-all-voxels" in command(0.5, scope="all")
 
 
 def test_an_explicit_lambda_is_left_alone(tmp_path):

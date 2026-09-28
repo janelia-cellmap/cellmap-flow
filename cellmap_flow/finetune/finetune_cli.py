@@ -1065,9 +1065,10 @@ def build_arg_parser():
     parser.add_argument(
         "--distillation-lambda",
         type=float,
-        default=0.0,
+        default=None,
         help="Teacher distillation weight. Keeps model close to base on unlabeled voxels. "
-             "0.0=disabled, try 0.5-1.0 for sparse scribbles. (default: 0.0)"
+             "0.0=disabled, try 0.5-1.0 for sparse scribbles. (default: 1.0 when the "
+             "session has good regions, else 0.0; an explicit 0 disables it either way)"
     )
     parser.add_argument(
         "--distillation-all-voxels",
