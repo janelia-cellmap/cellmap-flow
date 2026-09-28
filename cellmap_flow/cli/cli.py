@@ -137,7 +137,12 @@ def list_plugins_cmd():
     help="Model type (e.g., dacapo, script, cellmap)",
 )
 @click.option("-d", "--data-path", required=True, help="Path to the dataset")
-@click.option("-q", "--queue", default="gpu_h100", help="Queue for job submission")
+@click.option(
+    "-q",
+    "--queue",
+    default=None,
+    help="Queue for job submission (default: the saved queue)",
+)
 @click.option(
     "-P", "--project", default=None, help="Project/chargeback group for billing"
 )
@@ -157,6 +162,8 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     # Fall back to cached values if not provided
     if project is None:
         project = g.charge_group
+    if queue is None:
+        queue = g.queue
 
     model_configs = get_all_model_configs()
 
@@ -247,13 +254,15 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         # Separate model config kwargs from CLI kwargs
         model_kwargs = {}
         data_path = kwargs.pop("data_path")
-        queue = kwargs.pop("queue", "gpu_h100")
+        queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
 
         # Fall back to cached values if not provided
         if project is None:
             project = g.charge_group
+        if queue is None:
+            queue = g.queue
 
         # Process kwargs for the model config
         for key, value in kwargs.items():
@@ -317,7 +326,11 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
     )(command_func)
 
     command_func = click.option(
-        "-q", "--queue", default="gpu_h100", type=str, help="Queue for job submission"
+        "-q",
+        "--queue",
+        default=None,
+        type=str,
+        help="Queue for job submission (default: the saved queue)",
     )(command_func)
 
     command_func = click.option(
