@@ -87,6 +87,14 @@ class JobStartError(RuntimeError):
     """A job was asked for and no usable one came of it."""
 
 
+class BsubTimeoutError(JobStartError):
+    """bsub did not answer in time, and the job it may yet create is unknown.
+
+    LSF does not cancel a submission when the bsub client is killed, so the
+    job can still appear minutes later. Submitting again would leave two.
+    """
+
+
 class Job(ABC):
     """
     Abstract base class for jobs across different execution environments.
@@ -723,6 +731,53 @@ def is_bsub_available() -> bool:
         return False
 
 
+# How long bsub may take to answer. It can block server-side, for example
+# while an esub delays an over-ratio request, and still create the job after
+# the client has given up; see BsubTimeoutError.
+BSUB_TIMEOUT_SECONDS = 30
+
+_BSUB_JOB_ID = re.compile(r"Job <(\d+)>")
+
+
+def parse_bsub_job_id(output: Optional[str]) -> Optional[str]:
+    """The id in bsub's "Job <12345> is submitted to queue <q>." line, or None.
+
+    Searched for rather than taken by position: an esub can print its own
+    notice first.
+    """
+    match = _BSUB_JOB_ID.search(output or "")
+    return match.group(1) if match else None
+
+
+def _job_ids_named(job_name: str) -> Optional[set]:
+    """Ids of this user's jobs called ``job_name``, in any state.
+
+    None when bjobs could not say, which is different from "there are none".
+    """
+    try:
+        result = subprocess.run(
+            ["bjobs", "-a", "-noheader", "-J", job_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as e:
+        logger.debug(f"bjobs -J {job_name} failed: {e}")
+        return None
+    # Continuation lines (a multi-host EXEC_HOST) start with a host, not an id.
+    ids = {
+        line.split()[0]
+        for line in (result.stdout or "").splitlines()
+        if line.split() and line.split()[0].isdigit()
+    }
+    if ids or result.returncode == 0:
+        return ids
+    # "Job <name> is not found" is how bjobs says there are none.
+    if "not found" in f"{result.stdout} {result.stderr}".lower():
+        return set()
+    return None
+
+
 def submit_bsub_job(
     command: str,
     queue: str = DEFAULT_QUEUE,
@@ -748,6 +803,8 @@ def submit_bsub_job(
         
     Raises:
         subprocess.CalledProcessError: If job submission fails
+        BsubTimeoutError: bsub did not answer and no new job with this name
+            can be found. The caller must not simply submit again.
     """
     SERVER_LOG_DIR.mkdir(parents=True, exist_ok=True)
     # %J is substituted by LSF with the actual job ID once assigned.
@@ -769,22 +826,29 @@ def submit_bsub_job(
 
     logger.info(f"Submitting bsub job: {' '.join(bsub_command)}")
 
+    # Taken before submitting, so that if bsub times out the job it created
+    # can be told apart from older jobs with the same name.
+    existing = _job_ids_named(job_name)
+
     try:
         result = subprocess.run(
             bsub_command,
             capture_output=True,
             text=True,
             check=True,
-            timeout=30
+            timeout=BSUB_TIMEOUT_SECONDS
         )
-
-        # Extract job ID from output like "Job <12345> is submitted..."
-        job_id = result.stdout.split()[1].strip('<>')
-        logger.info(f"Job {job_id} submitted successfully")
-
-        log_file = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
-        return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
-        
+    except subprocess.TimeoutExpired as e:
+        now = _job_ids_named(job_name)
+        new_ids = (now - existing) if (now is not None and existing is not None) else set()
+        if len(new_ids) != 1:
+            raise BsubTimeoutError(
+                f"bsub did not answer within {BSUB_TIMEOUT_SECONDS}s and no new "
+                f"job named {job_name} can be identified; LSF may still create "
+                f"it. Check `bjobs -a -J {job_name}` before submitting again."
+            ) from e
+        job_id = new_ids.pop()
+        logger.warning(f"bsub timed out, but job {job_id} ({job_name}) was submitted")
     except subprocess.CalledProcessError as e:
         logger.error(f"Job submission failed: {e.stderr}")
         if not charge_group:
@@ -793,6 +857,16 @@ def submit_bsub_job(
     except Exception as e:
         logger.error(f"Error submitting job: {e}")
         raise
+    else:
+        job_id = parse_bsub_job_id(result.stdout) or parse_bsub_job_id(result.stderr)
+        if job_id is None:
+            raise RuntimeError(
+                f"bsub exited 0 but printed no job id: {result.stdout.strip()!r}"
+            )
+        logger.info(f"Job {job_id} submitted successfully")
+
+    log_file = SERVER_LOG_DIR / f"{log_stem}_{job_id}.log"
+    return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
 
 
 def run_locally(command, name: str, log_file=None) -> LocalJob:
@@ -926,6 +1000,10 @@ def start_hosts(
                     job_name=f"{job_name}",
                     walltime=walltime,
                 )
+            except BsubTimeoutError:
+                # Not a refusal: the job may still appear on this queue, and
+                # trying the next one would leave two of it.
+                raise
             except Exception as e:
                 logger.error(f"Failed to submit bsub job to {candidate}: {e}")
                 submit_errors.append(f"{candidate}: {e}")
