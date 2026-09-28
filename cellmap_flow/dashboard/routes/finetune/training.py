@@ -566,25 +566,6 @@ def stop_training_early_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_inference_server_status_response(job_id):
-    try:
-        job = g.finetune_job_manager.get_job(job_id)
-        if not job:
-            return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify(
-            {
-                "success": True,
-                "ready": job.inference_server_ready,
-                "url": job.inference_server_url,
-                "model_name": job.finetuned_model_name,
-                "model_script_path": str(job.model_script_path) if job.model_script_path else None,
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error getting inference server status: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 def restart_finetuning_job_response(job_id, data):
     try:
         restart_t0 = time.perf_counter()

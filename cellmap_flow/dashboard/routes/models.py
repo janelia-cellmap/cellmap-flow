@@ -16,28 +16,6 @@ logger = logging.getLogger(__name__)
 models_bp = Blueprint("models", __name__)
 
 
-@models_bp.route("/api/available-models")
-def get_available_models():
-    """Get available models from the model catalog"""
-    models = {}
-
-    # Build models from catalog
-    if hasattr(g, 'model_catalog') and g.model_catalog:
-        for category, category_models in g.model_catalog.items():
-            if isinstance(category_models, dict):
-                for model_name, model_path in category_models.items():
-                    full_name = f"{category}/{model_name}"
-                    models[full_name] = {
-                        'name': full_name,
-                        'category': category,
-                        'model_name': model_name,
-                        'path': model_path
-                    }
-
-    logger.info(f"Available models: {list(models.keys())}")
-    return jsonify(models)
-
-
 @models_bp.route("/api/model-config-types")
 def get_model_config_types():
     """Get available ModelConfig subclasses and their parameter metadata"""

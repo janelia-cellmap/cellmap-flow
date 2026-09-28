@@ -254,53 +254,6 @@ def process():
     )
 
 
-@pipeline_bp.route("/api/pipeline/validate", methods=["POST"])
-def validate_pipeline():
-    """Validate a pipeline configuration"""
-    try:
-        data = request.get_json()
-
-        # Validate normalizers
-        normalizer_names = [n.get("name") for n in data.get("input_normalizers", [])]
-        available_norms = get_input_normalizers()
-        available_norm_names = [norm["name"] for norm in available_norms]
-        for norm_name in normalizer_names:
-            if norm_name not in available_norm_names:
-                return jsonify(
-                    {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
-                ), 400
-
-        # Validate postprocessors
-        processor_names = [p.get("name") for p in data.get("postprocessors", [])]
-        available_procs = get_postprocessors_list()
-        available_proc_names = [proc["name"] for proc in available_procs]
-        for proc_name in processor_names:
-            if proc_name not in available_proc_names:
-                return jsonify(
-                    {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
-                ), 400
-
-        return jsonify({"valid": True, "message": "Pipeline is valid"})
-
-    except Exception as e:
-        logger.error(f"Error validating pipeline: {e}")
-        return jsonify({"valid": False, "error": str(e)}), 500
-
-
-@pipeline_bp.route("/api/dataset-path", methods=["GET", "POST"])
-def dataset_path_api():
-    """Get or set the dataset path in globals"""
-    if request.method == "GET":
-        dataset_path = getattr(g, 'dataset_path', None) or ''
-        return jsonify({'dataset_path': dataset_path})
-    elif request.method == "POST":
-        data = request.get_json()
-        dataset_path = data.get('dataset_path', '')
-        g.dataset_path = dataset_path
-        logger.debug(f"Dataset path updated to: {dataset_path}")
-        return jsonify({'success': True, 'dataset_path': g.dataset_path})
-
-
 @pipeline_bp.route("/api/blockwise-config", methods=["GET", "POST"])
 def blockwise_config_api():
     """Get or set blockwise configuration in globals"""
@@ -419,34 +372,3 @@ def apply_pipeline():
         logger.error(f"Error applying pipeline: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@pipeline_bp.route("/api/shaders", methods=["GET", "POST"])
-def shaders_api():
-    """Get or update stored shader strings and shaderControls.
-
-    GET  -> returns current g.shaders and g.shader_controls
-    POST -> merges incoming {"shaders": {...}, "shader_controls": {...}} into globals
-           (also accepts flat {layer_name: shader_str} for backwards compat)
-    """
-    if request.method == "GET":
-        # Also sync from viewer if available
-        _save_shaders_from_viewer()
-        return jsonify({"shaders": g.shaders, "shader_controls": g.shader_controls})
-
-    data = request.get_json()
-    if not isinstance(data, dict):
-        return jsonify({"error": "Expected a JSON object"}), 400
-
-    # Support both structured and flat formats
-    if "shaders" in data or "shader_controls" in data:
-        if "shaders" in data:
-            g.shaders.update(data["shaders"])
-        if "shader_controls" in data:
-            g.shader_controls.update(data["shader_controls"])
-    else:
-        # Flat dict — treat as shaders only (backwards compat)
-        g.shaders.update(data)
-
-    logger.info(f"Shaders updated for layers: {list(g.shaders.keys())}")
-    logger.info(f"ShaderControls updated for layers: {list(g.shader_controls.keys())}")
-    return jsonify({"message": "Shaders updated", "shaders": g.shaders, "shader_controls": g.shader_controls})

@@ -159,18 +159,6 @@ def get_finetune_models_response():
         return jsonify({"error": str(e)}), 500
 
 
-def get_view_center_response():
-    try:
-        position, scales_nm = viewer_position_and_scales()
-        logger.info(f"Got view center position: {position}")
-        return jsonify({"success": True, "position": position, "scales_nm": scales_nm})
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    except Exception as e:
-        logger.error(f"Error getting view center position: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 def create_annotation_crop_response(data):
     try:
         from cellmap_flow.image_data_interface import ImageDataInterface

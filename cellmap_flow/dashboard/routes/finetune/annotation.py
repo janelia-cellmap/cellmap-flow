@@ -3,7 +3,6 @@ from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
-    get_view_center_response,
     set_user_prefs_response,
 )
 from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
@@ -23,7 +22,6 @@ __all__ = [
     "create_annotation_volume_response",
     "get_finetune_models_response",
     "get_user_prefs_response",
-    "get_view_center_response",
     "list_existing_sessions_response",
     "load_existing_volume_response",
     "refresh_annotated_regions_layer",

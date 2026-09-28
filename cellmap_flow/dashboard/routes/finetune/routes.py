@@ -6,7 +6,6 @@ from cellmap_flow.dashboard.routes.finetune.annotation import (
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
-    get_view_center_response,
     list_existing_sessions_response,
     load_existing_volume_response,
     refresh_annotated_regions_layer,
@@ -21,7 +20,6 @@ from cellmap_flow.dashboard.routes.finetune.training import (
     cancel_job_response,
     get_job_logs_response,
     get_job_status_response,
-    get_inference_server_status_response,
     list_finetuning_jobs_response,
     restart_finetuning_job_response,
     stop_training_early_response,
@@ -32,9 +30,6 @@ from cellmap_flow.dashboard.routes.finetune.good_regions import (
     delete_good_region_response,
     list_good_regions_response,
     mark_current_view_response,
-)
-from cellmap_flow.dashboard.routes.finetune.viewer import (
-    add_finetuned_layer_to_viewer_response,
 )
 from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
     get_load_crops_progress_response,
@@ -63,11 +58,6 @@ def delete_good_region():
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     return get_finetune_models_response()
-
-
-@finetune_bp.route("/api/finetune/view-center", methods=["GET"])
-def get_view_center():
-    return get_view_center_response()
 
 
 @finetune_bp.route("/api/finetune/create-crop", methods=["POST"])
@@ -168,16 +158,6 @@ def cancel_job(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
     return stop_training_early_response(job_id)
-
-
-@finetune_bp.route("/api/finetune/job/<job_id>/inference-server", methods=["GET"])
-def get_inference_server_status(job_id):
-    return get_inference_server_status_response(job_id)
-
-
-@finetune_bp.route("/api/viewer/add-finetuned-layer", methods=["POST"])
-def add_finetuned_layer_to_viewer():
-    return add_finetuned_layer_to_viewer_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
