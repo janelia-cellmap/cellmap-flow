@@ -439,6 +439,125 @@ def _require_minio_binaries():
         )
 
 
+# The mc alias for this dashboard's MinIO. It is defined per call through
+# MC_HOST_<alias> (see _mc_env), not with `mc alias set`, which writes
+# ~/.mc/config.json: that file is shared by every dashboard the user runs,
+# so two of them repointed each other's alias and one's uploads went to the
+# other's server.
+MC_ALIAS = "myserver"
+MINIO_READY_TIMEOUT = 30.0
+
+# Serializes starting MinIO: two requests arriving together could each see
+# no server and start one.
+_minio_lock = threading.Lock()
+
+
+def _mc_env(ip, port):
+    env = os.environ.copy()
+    env[f"MC_HOST_{MC_ALIAS}"] = f"http://minio:minio123@{ip}:{port}"
+    return env
+
+
+def _wait_for_minio_ready(ip, port, process, timeout=MINIO_READY_TIMEOUT) -> bool:
+    """Poll MinIO's readiness endpoint until it answers 200, the process exits, or time runs out."""
+    import urllib.request
+
+    url = f"http://{ip}:{port}/minio/health/ready"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                if response.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.2)
+    return False
+
+
+def _start_minio(output_base_dir):
+    """Start MinIO and set it up; record it in minio_state only once all of that worked.
+
+    The state used to be recorded right after the process started, before
+    the alias, bucket and policy were set up, so a failure in any of those
+    left a live process that later calls took for a working server -- no
+    bucket and no sync thread until the dashboard restarted. It waited a
+    fixed 3 s instead of asking MinIO whether it was ready, and piped its
+    output into a pipe nobody read, which blocks MinIO once it has logged
+    about 64 KB. Its log now goes to a file beside its data directory.
+    """
+    if output_base_dir:
+        minio_root = Path(output_base_dir) / ".minio"
+    else:
+        minio_root = Path("~/.minio-server").expanduser()
+    minio_root.mkdir(parents=True, exist_ok=True)
+    log_path = minio_root.parent / f"{minio_root.name}.log"
+
+    ip = get_local_ip()
+    port = find_available_port()
+
+    env = os.environ.copy()
+    env["MINIO_ROOT_USER"] = "minio"
+    env["MINIO_ROOT_PASSWORD"] = "minio123"
+    env["MINIO_API_CORS_ALLOW_ORIGIN"] = "*"
+
+    minio_cmd = [
+        "minio",
+        "server",
+        str(minio_root),
+        "--address",
+        f"{ip}:{port}",
+        "--console-address",
+        f"{ip}:{port+1}",
+    ]
+
+    logger.info(f"Starting MinIO server at {ip}:{port} (log: {log_path})")
+    with open(log_path, "ab") as log:
+        minio_proc = subprocess.Popen(minio_cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
+
+    try:
+        if not _wait_for_minio_ready(ip, port, minio_proc):
+            raise RuntimeError(
+                f"MinIO did not become ready at {ip}:{port} within "
+                f"{MINIO_READY_TIMEOUT:.0f}s; see {log_path}"
+            )
+        mc_env = _mc_env(ip, port)
+        bucket = f"{MC_ALIAS}/{minio_state['bucket']}"
+
+        # Create bucket if needed
+        result = subprocess.run(["mc", "mb", bucket], capture_output=True, text=True, env=mc_env)
+        if result.returncode != 0 and "already" not in result.stderr.lower():
+            raise RuntimeError(f"Could not create the MinIO bucket {bucket}: {result.stderr}")
+
+        # Make bucket public
+        subprocess.run(
+            ["mc", "anonymous", "set", "public", bucket],
+            check=True,
+            capture_output=True,
+            env=mc_env,
+        )
+    except Exception:
+        minio_proc.terminate()
+        try:
+            minio_proc.wait(timeout=10)
+        except Exception:
+            minio_proc.kill()
+        raise
+
+    minio_state["output_base"] = output_base_dir if output_base_dir else None
+    minio_state["minio_root"] = str(minio_root)
+    minio_state["log_path"] = str(log_path)
+    minio_state["port"] = port
+    minio_state["ip"] = ip
+    minio_state["process"] = minio_proc
+    logger.info(f"MinIO started (PID: {minio_proc.pid})")
+
+    # Start periodic sync thread
+    start_periodic_sync()
+
+
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
@@ -453,95 +572,20 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     _require_minio_binaries()
 
-    if minio_state["process"] is None or minio_state["process"].poll() is not None:
-        # Determine MinIO storage location
-        if output_base_dir:
-            minio_root = Path(output_base_dir) / ".minio"
-            minio_state["output_base"] = output_base_dir
-        else:
-            minio_root = Path("~/.minio-server").expanduser()
-            minio_state["output_base"] = None
-
-        minio_root.mkdir(parents=True, exist_ok=True)
-        minio_state["minio_root"] = str(minio_root)
-
-        ip = get_local_ip()
-        port = find_available_port()
-
-        env = os.environ.copy()
-        env["MINIO_ROOT_USER"] = "minio"
-        env["MINIO_ROOT_PASSWORD"] = "minio123"
-        env["MINIO_API_CORS_ALLOW_ORIGIN"] = "*"
-
-        minio_cmd = [
-            "minio",
-            "server",
-            str(minio_root),
-            "--address",
-            f"{ip}:{port}",
-            "--console-address",
-            f"{ip}:{port+1}",
-        ]
-
-        logger.info(f"Starting MinIO server at {ip}:{port}")
-        minio_proc = subprocess.Popen(
-            minio_cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        time.sleep(3)
-
-        if minio_proc.poll() is not None:
-            stderr = minio_proc.stderr.read().decode() if minio_proc.stderr else ""
-            raise RuntimeError(f"MinIO failed to start: {stderr}")
-
-        minio_state["process"] = minio_proc
-        minio_state["port"] = port
-        minio_state["ip"] = ip
-
-        logger.info(f"MinIO started (PID: {minio_proc.pid})")
-
-        # Configure mc client
-        subprocess.run(
-            [
-                "mc",
-                "alias",
-                "set",
-                "myserver",
-                f"http://{ip}:{port}",
-                "minio",
-                "minio123",
-            ],
-            check=True,
-            capture_output=True,
-        )
-
-        # Create bucket if needed
-        result = subprocess.run(
-            ["mc", "mb", f"myserver/{minio_state['bucket']}"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0 and "already" not in result.stderr.lower():
-            logger.warning(f"Bucket creation returned: {result.stderr}")
-
-        # Make bucket public
-        subprocess.run(
-            ["mc", "anonymous", "set", "public", f"myserver/{minio_state['bucket']}"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Start periodic sync thread
-        start_periodic_sync()
+    with _minio_lock:
+        if minio_state["process"] is None or minio_state["process"].poll() is not None:
+            _start_minio(output_base_dir)
 
     # Upload zarr file
     zarr_name = Path(zarr_path).name
-    target = f"myserver/{minio_state['bucket']}/{zarr_name}"
+    target = f"{MC_ALIAS}/{minio_state['bucket']}/{zarr_name}"
 
     logger.info(f"Uploading {zarr_name} to MinIO")
     result = subprocess.run(
         ["mc", "mirror", "--overwrite", zarr_path, target],
         capture_output=True,
         text=True,
+        env=_mc_env(minio_state["ip"], minio_state["port"]),
     )
 
     if result.returncode != 0:
