@@ -3,6 +3,9 @@
    Inspired by agentok's clean design system
    ============================================ */
 
+/* An @import is ignored unless it comes before every other rule. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 /* ---------- Design Tokens ---------- */
 :root {
   /* Background layers */
@@ -48,8 +51,6 @@
 }
 
 /* ---------- Global Reset ---------- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
 * {
   box-sizing: border-box;
 }

@@ -3,6 +3,8 @@
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
             --bg-tertiary: #334155;
+            /* Hover for buttons on --bg-primary (.action-btn, .import-btn). */
+            --bg-hover: #1e293b;
             --text-primary: #f1f5f9;
             --text-secondary: #cbd5e1;
             --border-color: #475569;
