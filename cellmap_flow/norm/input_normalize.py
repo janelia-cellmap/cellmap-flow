@@ -1,3 +1,4 @@
+import functools
 import logging
 import numpy as np
 import inspect
@@ -7,7 +8,64 @@ from cellmap_flow.utils.safe_expression import compile_expression
 logger = logging.getLogger(__name__)
 
 
+def _jsonable(value):
+    """Turn numpy scalars/arrays and tuples into plain JSON types.
+
+    Constructor arguments are kept as given, but they end up in a URL blob via
+    json.dumps, which rejects numpy types.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    return value
+
+
+def _record_init_params(init):
+    """Wrap ``__init__`` so the instance remembers the arguments it was built with.
+
+    Only the outermost ``__init__`` records: a subclass calling
+    ``super().__init__()`` must not overwrite its own arguments with the base
+    class's (usually empty) ones.
+    """
+    sig = inspect.signature(init)
+
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        if "_init_params" not in self.__dict__:
+            params = {}
+            try:
+                bound = sig.bind(self, *args, **kwargs)
+                bound.apply_defaults()
+                for pname, value in list(bound.arguments.items())[1:]:
+                    kind = sig.parameters[pname].kind
+                    if kind is inspect.Parameter.VAR_POSITIONAL:
+                        continue
+                    if kind is inspect.Parameter.VAR_KEYWORD:
+                        params.update(value)
+                    else:
+                        params[pname] = value
+            except TypeError:
+                # Let the real __init__ raise its own, clearer error.
+                params = None
+            self.__dict__["_init_params"] = params
+        return init(self, *args, **kwargs)
+
+    wrapper._records_init_params = True
+    return wrapper
+
+
 class SerializableInterface:
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get("__init__")
+        if init is not None and not getattr(init, "_records_init_params", False):
+            cls.__init__ = _record_init_params(init)
 
     @classmethod
     def name(cls):
@@ -42,13 +100,35 @@ class SerializableInterface:
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_dict(self):
-        result = {}
+        """``{"name": <class name>, **constructor arguments}``.
+
+        Exactly what ``type(self)(**params)`` needs to rebuild this step. The
+        public attributes are not that: constructors parse their arguments
+        (a neighborhood string becomes a list, "0,1" becomes [0, 1]) and add
+        state of their own, so feeding the attributes back in raised TypeError
+        or built a different step.
+
+        Each argument is reported with its real type: when the constructor
+        stored it under its own name as a plain number, bool or string, that
+        stored value is used (0.5, not the "0.5" a form sent); anything it
+        parsed into something else keeps the argument as given.
+        """
+        params = self.__dict__.get("_init_params")
+        if params is None:
+            # Built without going through __init__ (e.g. unpickled from an
+            # older version); the public attributes are the best there is.
+            params = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        else:
+            params = {k: self._stored_or_given(k, v) for k, v in params.items()}
         result = {"name": self.name()}
-        for k, v in self.__dict__.items():
-            if not k.startswith("_"):
-                result[k] = v
+        result.update({k: _jsonable(v) for k, v in params.items()})
         return result
-        # return {self.name():result}
+
+    def _stored_or_given(self, name, given):
+        stored = self.__dict__.get(name, given)
+        if isinstance(stored, (bool, int, float, str, np.generic)):
+            return stored
+        return given
 
     @property
     def dtype(self):

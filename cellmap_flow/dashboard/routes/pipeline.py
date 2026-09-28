@@ -303,24 +303,28 @@ def apply_pipeline():
         if not validation["valid"]:
             return jsonify(validation), 400
 
+        # Ordered lists, not dicts keyed by name: two steps of the same class
+        # (two LambdaNormalizers, say) collapsed into one under a dict.
         # Apply normalizers
-        input_norms_config = {
-            n["name"]: n.get("params", {}) for n in data.get("input_normalizers", [])
-        }
+        input_norms_config = [
+            {**(n.get("params") or {}), "name": n["name"]}
+            for n in data.get("input_normalizers", [])
+        ]
         logger.debug(f"\nNormalizers config dict: {input_norms_config}")
         g.input_norms = get_normalizations(input_norms_config)
         # Mirror the JSON-serializable form so finetune submit/restart can
         # propagate it to the trainer process (where g.input_norms can't be
         # easily reconstructed across the LSF process boundary).
-        g.input_norm_config = input_norms_config or {}
+        g.input_norm_config = input_norms_config or []
 
         # Apply postprocessors
-        postprocs_config = {
-            p["name"]: p.get("params", {}) for p in data.get("postprocessors", [])
-        }
+        postprocs_config = [
+            {**(p.get("params") or {}), "name": p["name"]}
+            for p in data.get("postprocessors", [])
+        ]
         logger.debug(f"Postprocessors config dict: {postprocs_config}")
         g.postprocess = get_postprocessors(postprocs_config)
-        g.postprocess_config = postprocs_config or {}
+        g.postprocess_config = postprocs_config or []
 
         # Save complete pipeline visual state to globals
         g.pipeline_inputs = data.get("inputs", [])

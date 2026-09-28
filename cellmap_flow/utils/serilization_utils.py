@@ -1,6 +1,7 @@
 import logging
 from cellmap_flow.utils.web_utils import (
     decode_to_json,
+    list_cls_to_dict,
     ARGS_KEY,
     INPUT_NORM_DICT_KEY,
     POSTPROCESS_DICT_KEY,
@@ -71,15 +72,11 @@ def get_process_dataset_url(dataset: str):
     return dashboard_url, input_norm_fns, postprocess_fns
 
 
-def serialize_norms_posts_to_json(norms=[], posts=[]):
-    norm_fns = {}
-    for n in norms:
-        elms = n.to_dict()
-        elms.pop("name", None)
-        norm_fns[n.name()] = elms
-    post_fns = {}
-    for n in posts:
-        elms = n.to_dict()
-        elms.pop("name", None)
-        post_fns[n.name()] = elms
-    return json.dumps({INPUT_NORM_DICT_KEY: norm_fns, POSTPROCESS_DICT_KEY: post_fns})
+def serialize_norms_posts_to_json(norms=(), posts=()):
+    """JSON with both chains in the ordered ``[{name, **params}]`` form."""
+    return json.dumps(
+        {
+            INPUT_NORM_DICT_KEY: list_cls_to_dict(norms),
+            POSTPROCESS_DICT_KEY: list_cls_to_dict(posts),
+        }
+    )

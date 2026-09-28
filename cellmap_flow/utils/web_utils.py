@@ -54,19 +54,22 @@ def decode_to_json(encoded_str):
 
 
 def list_cls_to_dict(ll):
-    args = {}
-    norms = {}
+    """Serialize a chain of normalizers/postprocessors as ``[{name, **params}]``.
+
+    A list, not a dict keyed by class name: two steps of the same class (e.g.
+    two LambdaPostprocessors) collapsed into one under a dict. Values keep
+    their types -- stringifying them made bool("False") read back as True.
+    Readers (``deserialize_list``) accept this and the older dict form.
+    """
+    steps = []
     for n in ll:
         name = n.name()
-        elms = n.to_dict()
-        try:
-            elms.pop("name")
-        except KeyError:
+        elms = dict(n.to_dict())
+        if "name" not in elms:
             raise ValueError(f"Normalizer {name} does not have a name key. {elms}")
-        elms = {k: str(v) for k, v in elms.items()}
-        norms[name] = elms
-
-    return norms
+        elms["name"] = name
+        steps.append(elms)
+    return steps
 
 
 def kill_n_remove_from_neuroglancer(jobs, s):

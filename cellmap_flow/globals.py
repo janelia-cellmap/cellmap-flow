@@ -324,11 +324,25 @@ class LogHandler(logging.Handler):
                 pass
 
 
-def current_input_norm_config() -> dict:
-    """Return the dashboard's current input_norm as a JSON-serializable dict.
+def _chain_config(steps) -> list:
+    """``[{name, **params}]`` for a live chain, skipping steps that can't say."""
+    derived = []
+    for step in steps or []:
+        try:
+            d = dict(step.to_dict())
+            d.setdefault("name", type(step).__name__)
+            derived.append(d)
+        except Exception:
+            continue
+    return derived
 
-    Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
-    dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
+
+def current_input_norm_config():
+    """Return the dashboard's current input_norm in a JSON-serializable form.
+
+    Reads ``g.input_norm_config`` if populated (the ordered list the dashboard
+    posts, or an older name-keyed dict); otherwise rebuilds the ordered
+    ``[{name, **params}]`` list from the live ``g.input_norms`` instances.
     The fallback matters because some startup paths (yaml_cli) populate
     ``g.input_norms`` from the YAML at server boot but never touch
     ``input_norm_config`` -- if the user submits training without first
@@ -337,41 +351,23 @@ def current_input_norm_config() -> dict:
     cfg = getattr(g, "input_norm_config", None) or {}
     if cfg:
         return cfg
-    norms = getattr(g, "input_norms", None) or []
-    derived = {}
-    for n in norms:
-        try:
-            d = n.to_dict()
-            name = d.pop("name", type(n).__name__)
-            derived[name] = d
-        except Exception:
-            continue
-    return derived
+    return _chain_config(getattr(g, "input_norms", None))
 
 
-def current_postprocess_config() -> dict:
-    """Return the dashboard's current postprocess chain as a JSON-serializable dict.
+def current_postprocess_config():
+    """Return the dashboard's current postprocess chain in a JSON-serializable form.
 
     Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
-    populated, otherwise reconstructs the dict from the live ``g.postprocess``
-    instances via their ``.to_dict()``. The fallback matters for the same
-    reason it does for input_norm -- e.g. a yaml booted with a
-    ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
-    ``g.postprocess`` but never touches ``postprocess_config``.
+    populated, otherwise rebuilds the ordered list from the live
+    ``g.postprocess`` instances. The fallback matters for the same reason it
+    does for input_norm -- e.g. a yaml booted with a ``json_data.postprocess``
+    (like ``SigmoidPostprocessor``) populates ``g.postprocess`` but never
+    touches ``postprocess_config``.
     """
     cfg = getattr(g, "postprocess_config", None) or {}
     if cfg:
         return cfg
-    procs = getattr(g, "postprocess", None) or []
-    derived = {}
-    for p in procs:
-        try:
-            d = p.to_dict()
-            name = d.pop("name", type(p).__name__)
-            derived[name] = d
-        except Exception:
-            continue
-    return derived
+    return _chain_config(getattr(g, "postprocess", None))
 
 
 def get_blockwise_tasks_dir():
