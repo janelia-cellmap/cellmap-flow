@@ -206,7 +206,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
         from cellmap_flow.server import CellMapFlowServer
 
         server = CellMapFlowServer(final_data_path, model_config)
-        server._chunk_impl(None, None, 2, 2, 2, None)
+        server._chunk_impl(None, None, 2, 2, 2)
         click.echo("Server check passed")
     else:
         command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
@@ -279,7 +279,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             from cellmap_flow.server import CellMapFlowServer
 
             server = CellMapFlowServer(final_data_path, model_config)
-            server._chunk_impl(None, None, 2, 2, 2, None)
+            server._chunk_impl(None, None, 2, 2, 2)
             click.echo("Server check passed")
         else:
             command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
