@@ -34,6 +34,15 @@ def _task_walltime():
     return getattr(g, "walltime", None) or DEFAULT_WALLTIME
 
 
+def _existing_task_paths(paths):
+    """``paths`` if it is a non-empty list of existing files, else None."""
+    if not isinstance(paths, list) or not paths:
+        return None
+    if not all(isinstance(p, str) and os.path.isfile(p) for p in paths):
+        return None
+    return list(paths)
+
+
 @blockwise_bp.route("/api/blockwise/validate", methods=["POST"])
 def validate_blockwise():
     """Validate if pipeline is ready for blockwise processing"""
@@ -324,12 +333,24 @@ def submit_blockwise_task():
         if not validation.get("valid"):
             return {"success": False, "error": validation.get("error")}
 
-        # Generate task YAML
-        gen_result = generate_blockwise_task()
-        if not gen_result.get("success"):
-            return {"success": False, "error": gen_result.get("error")}
+        # Submit the YAMLs that /api/blockwise/generate wrote and
+        # /api/blockwise/precheck checked, when the client sends them back.
+        # Regenerating writes new files under a new task name, so what ran
+        # was not what had been checked.
+        requested = data.get("yaml_paths")
+        yaml_paths = _existing_task_paths(requested)
+        if yaml_paths is not None:
+            logger.info(f"Submitting the given task YAML(s): {', '.join(yaml_paths)}")
+        else:
+            if requested:
+                logger.warning(
+                    f"Not every given task YAML exists ({requested}); generating new ones"
+                )
+            gen_result = generate_blockwise_task()
+            if not gen_result.get("success"):
+                return {"success": False, "error": gen_result.get("error")}
 
-        yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
+            yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
         blockwise_config = pipeline["blockwise_config"][0]
 
         # Build bsub command. The master is a CPU job on the default queue;

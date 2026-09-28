@@ -77,6 +77,45 @@ def test_the_master_runs_this_interpreter_with_a_walltime_and_a_log(client, bsub
     assert "-q" not in argv, "the master is a CPU job; the queue is the workers'"
 
 
+def _task_files(tmp_path):
+    return sorted((tmp_path / "tasks").glob("*.yaml"))
+
+
+def test_the_prechecked_yamls_are_submitted_as_they_are(client, bsub, tmp_path):
+    generated = client.post("/api/blockwise/generate", json={"pipeline": PIPELINE}).get_json()
+    # Under a name generate would never use, so a regenerated file cannot be
+    # mistaken for it even within the same second.
+    (original,) = generated["task_paths"]
+    checked = os.path.join(os.path.dirname(original), "prechecked_task.yaml")
+    os.rename(original, checked)
+    paths = [checked]
+    before = _task_files(tmp_path)
+
+    body = client.post(
+        "/api/blockwise/submit", json={"pipeline": PIPELINE, "yaml_paths": paths}
+    ).get_json()
+
+    assert body["success"], body
+    assert body["task_paths"] == paths
+    (argv,) = bsub
+    assert argv[-len(paths):] == paths
+    assert _task_files(tmp_path) == before, "nothing is regenerated"
+
+
+@pytest.mark.parametrize("yaml_paths", [None, [], "not-a-list", ["/no/such/task.yaml"]])
+def test_otherwise_the_task_is_generated_as_before(client, bsub, tmp_path, yaml_paths):
+    payload = {"pipeline": PIPELINE}
+    if yaml_paths is not None:
+        payload["yaml_paths"] = yaml_paths
+
+    body = client.post("/api/blockwise/submit", json=payload).get_json()
+
+    assert body["success"], body
+    (task,) = body["task_paths"]
+    assert os.path.dirname(task) == str(tmp_path / "tasks")
+    assert bsub[0][-1] == task
+
+
 def test_the_workers_get_the_same_walltime_through_the_task_yaml(client, bsub):
     body = client.post("/api/blockwise/submit", json={"pipeline": PIPELINE}).get_json()
     (task,) = body["task_paths"]
