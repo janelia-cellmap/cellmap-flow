@@ -431,9 +431,17 @@ def _reset_for_restart(lora_model, args, initial_state=None):
             lora_dropout=args.lora_dropout,
             lora_min_channels=args.lora_min_channels,
         )
-    elif initial_state is not None:
-        logger.info("Resetting the full finetune to its starting weights for a fresh restart...")
-        lora_model.load_state_dict(initial_state)
+    else:
+        if args.lora_r > 0:
+            # The mirror image of the case above. Left alone, args.lora_r > 0
+            # made the next iteration's YAML point at a lora_adapter/ this job
+            # never writes.
+            logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
+                           "submit a new job for that. Keeping the full finetune.")
+            args.lora_r = 0
+        if initial_state is not None:
+            logger.info("Resetting the full finetune to its starting weights for a fresh restart...")
+            lora_model.load_state_dict(initial_state)
 
     lora_model.train()
     if torch.cuda.is_available():
@@ -443,7 +451,7 @@ def _reset_for_restart(lora_model, args, initial_state=None):
     return lora_model
 
 
-def _generate_model_files(args, model_config, timestamp):
+def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool] = None):
     """
     Generate YAML config file after training.
 
@@ -451,10 +459,16 @@ def _generate_model_files(args, model_config, timestamp):
         args: Command-line arguments
         model_config: Model configuration
         timestamp: Timestamp string for naming
+        is_lora: Whether the trained model is a LoRA adapter (else a full
+            finetune). Pass what the model is; ``args.lora_r`` is only the
+            fallback, because a restart can change it without changing the
+            model.
 
     Returns:
         (finetuned_model_name, yaml_path) tuple
     """
+    if is_lora is None:
+        is_lora = args.lora_r > 0
     from cellmap_flow.finetune.finetuned_model_templates import (
         generate_finetuned_model_yaml
     )
@@ -533,8 +547,8 @@ def _generate_model_files(args, model_config, timestamp):
         )
 
     yaml_path = generate_finetuned_model_yaml(
-        lora_adapter_path=str(output_dir_path / "lora_adapter") if args.lora_r > 0 else None,
-        weights_path=str(output_dir_path / "full_finetune" / "model_state_dict.pt") if args.lora_r <= 0 else None,
+        lora_adapter_path=str(output_dir_path / "lora_adapter") if is_lora else None,
+        weights_path=None if is_lora else str(output_dir_path / "full_finetune" / "model_state_dict.pt"),
         base_model_dict=model_config.to_dict(),
         model_name=finetuned_model_name,
         output_path=models_dir / f"{finetuned_model_name}.yaml",
@@ -1207,14 +1221,18 @@ def main():
                 else:
                     return 1
 
+            # What was exported is decided by the model, not by args.lora_r,
+            # which a restart can change without changing the model.
+            is_lora = _is_peft_model(lora_model)
+
             # Save final adapter (or, for a full finetune, the full weights)
-            logger.info("\nSaving LoRA adapter..." if args.lora_r > 0 else "\nSaving full finetuned weights...")
+            logger.info("\nSaving LoRA adapter..." if is_lora else "\nSaving full finetuned weights...")
             trainer.save_adapter()
 
             logger.info("\n" + "=" * 60)
             logger.info("Finetuning Complete!")
             logger.info(f"Best loss: {stats['best_loss']:.6f}")
-            if args.lora_r > 0:
+            if is_lora:
                 logger.info(f"Adapter saved to: {args.output_dir}/lora_adapter")
             else:
                 logger.info(f"Weights saved to: {args.output_dir}/full_finetune/model_state_dict.pt")
@@ -1222,7 +1240,7 @@ def main():
 
             # Generate model files
             finetuned_model_name, _ = _generate_model_files(
-                args, model_config, timestamp
+                args, model_config, timestamp, is_lora=is_lora
             )
 
             # Print completion marker with timestamp (for job manager to detect)
