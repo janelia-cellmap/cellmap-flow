@@ -36,6 +36,7 @@ import torch
 
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
+from cellmap_flow.utils.restart_token import read_or_create_restart_token
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
@@ -152,7 +153,15 @@ def _start_inference_server_background(
     setup_t0 = time.perf_counter()
     logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
     restart_callback = restart_controller.request_restart if restart_controller is not None else None
-    server = CellMapFlowServer(args.serve_data_path, model_config, restart_callback=restart_callback)
+    restart_token = (
+        read_or_create_restart_token(args.output_dir) if restart_callback is not None else None
+    )
+    server = CellMapFlowServer(
+        args.serve_data_path,
+        model_config,
+        restart_callback=restart_callback,
+        restart_token=restart_token,
+    )
 
     # Get port
     port = args.serve_port if args.serve_port != 0 else get_free_port()
@@ -233,6 +242,22 @@ def _wait_for_restart_signal(
         time.sleep(check_interval)
 
 
+# What a restart may change: training settings only. The model, the data and
+# every path stay as launched, so a restart request cannot point the job at
+# other files. Matches the dashboard's RESTART_PASSTHROUGH_KEYS, plus the
+# distillation_all_voxels flag it derives from distillation_scope.
+RESTARTABLE_ARGS = frozenset(
+    {
+        "lora_r", "lora_alpha", "num_epochs", "batch_size", "learning_rate",
+        "loss_type", "label_smoothing", "distillation_lambda",
+        "distillation_all_voxels", "margin", "balance_classes", "augment",
+        "mask_unannotated", "gradient_accumulation_steps", "num_workers",
+        "no_augment", "no_mixed_precision", "patch_shape", "output_type",
+        "select_channel", "offsets",
+    }
+)
+
+
 def _apply_restart_params(args, signal_data: dict):
     """
     Update args with parameters from restart signal and persist to metadata.json.
@@ -242,6 +267,11 @@ def _apply_restart_params(args, signal_data: dict):
         signal_data: Dict from restart signal file
     """
     params = signal_data.get("params", {})
+    refused = sorted(set(params) - RESTARTABLE_ARGS)
+    if refused:
+        logger.warning(f"Ignoring restart parameters that restarts cannot change: {refused}")
+    # Filtered once here so refused keys reach neither args nor metadata.json.
+    params = {k: v for k, v in params.items() if k in RESTARTABLE_ARGS}
     changed = False
     for key, value in params.items():
         if hasattr(args, key) and value is not None:

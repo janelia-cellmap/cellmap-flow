@@ -1,5 +1,4 @@
 import logging
-import os
 import socket
 from http import HTTPStatus
 import numpy as np
@@ -18,6 +17,7 @@ from cellmap_flow.utils.web_utils import (
     IP_PATTERN,
     get_free_port,
 )
+from cellmap_flow.utils.restart_token import TOKEN_HEADER, tokens_match
 from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 
 from cellmap_flow.globals import g
@@ -34,10 +34,22 @@ class CellMapFlowServer:
     All routes are defined via Flask decorators for convenience.
     """
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, restart_callback=None):
+    def __init__(
+        self,
+        dataset_name: str,
+        model_config: ModelConfig,
+        restart_callback=None,
+        restart_token=None,
+    ):
         """
         Initialize the server and set up routes via decorators.
+
+        ``restart_callback`` enables POST /__control__/restart, which then
+        only accepts requests carrying ``restart_token`` in the
+        X-Restart-Token header.
         """
+        if restart_callback is not None and not restart_token:
+            raise ValueError("restart_callback requires a restart_token")
 
         self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
         # Original (model-native) channel count, so refresh_dataset() can restore
@@ -57,6 +69,7 @@ class CellMapFlowServer:
 
         self.inferencer = Inferencer(model_config)
         self.restart_callback = restart_callback
+        self.restart_token = restart_token
 
         # Load or initialize your dataset
         self.idi_raw = ImageDataInterface(
@@ -177,15 +190,11 @@ class CellMapFlowServer:
         def control_restart():
             if self.restart_callback is None:
                 return jsonify({"success": False, "error": "Restart control not enabled"}), HTTPStatus.NOT_IMPLEMENTED
-            # Token gate: when CFLOW_RESTART_TOKEN is set in the server's env,
-            # require the caller to present a matching X-Restart-Token header.
-            # The dashboard sets this when spawning the inference server; other
-            # callers on the same network are rejected with 401.
-            expected_token = os.environ.get("CFLOW_RESTART_TOKEN")
-            if expected_token:
-                provided = request.headers.get("X-Restart-Token", "")
-                if provided != expected_token:
-                    return jsonify({"success": False, "error": "unauthorized"}), HTTPStatus.UNAUTHORIZED
+            # A restart can change what the job trains on, and this server
+            # listens on every interface, so only the job manager that wrote
+            # the job's token may trigger one.
+            if not tokens_match(self.restart_token, request.headers.get(TOKEN_HEADER)):
+                return jsonify({"success": False, "error": "unauthorized"}), HTTPStatus.UNAUTHORIZED
             try:
                 payload = request.get_json(silent=True) or {}
                 accepted = self.restart_callback(payload)

@@ -30,6 +30,11 @@ from cellmap_flow.utils.bsub_utils import (
     LSFJob,
     JobStatus as LSFJobStatus
 )
+from cellmap_flow.utils.restart_token import (
+    TOKEN_HEADER,
+    read_restart_token,
+    write_restart_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -556,6 +561,8 @@ class FinetuneJobManager:
         run_dir_name = f"{model_basename}_{timestamp}"
         output_dir = output_base / "runs" / run_dir_name
         output_dir.mkdir(parents=True, exist_ok=True)
+        # Before submitting, so the job's server finds it and requires it.
+        write_restart_token(output_dir)
 
         log_file = output_dir / "training_log.txt"
 
@@ -1532,11 +1539,10 @@ class FinetuneJobManager:
         if job.inference_server_url:
             try:
                 control_url = job.inference_server_url.rstrip("/") + "/__control__/restart"
-                # Forward the restart token if the spawner injected one into our env.
-                headers = {}
-                restart_token = os.environ.get("CFLOW_RESTART_TOKEN")
-                if restart_token:
-                    headers["X-Restart-Token"] = restart_token
+                restart_token = read_restart_token(job.output_dir)
+                if restart_token is None:
+                    raise RuntimeError(f"No restart token in {job.output_dir}")
+                headers = {TOKEN_HEADER: restart_token}
                 response = requests.post(control_url, json=signal_data, headers=headers, timeout=5)
                 response.raise_for_status()
                 data = response.json()
