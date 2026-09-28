@@ -280,6 +280,27 @@ def test_distance_unannotated_voxels_are_unknown_not_background():
     assert mask[0, 0, 2, 4, 2] == 1.0
 
 
+def test_distance_foreground_is_not_cut_short_by_unannotated_voxels():
+    """A dense crop that cuts through an object: foreground runs up to the
+    crop edge, with unannotated voxels beyond. Measuring a foreground voxel's
+    depth to the nearest non-foreground voxel counted those as background, so
+    voxels just inside the crop edge were supervised as if the object ended
+    there. Their depth is measured to annotated background now, which is 8+
+    voxels away and cannot be trusted this close to the unknown -- so they
+    are left out, not taught a boundary that is not there."""
+    sigma = 6.0
+    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)   # bg for x < 5
+    ann[..., 5:15] = 2                                     # the object, x = 5..14
+    ann[..., 15:] = 0                                      # beyond the crop
+    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
+    line_t, line_m = target[0, 0, 1, 1].numpy(), mask[0, 0, 1, 1].numpy()
+    # x=13 is 2 from the unannotated region, 9 from real background.
+    assert line_m[13] == 0.0
+    # Next to the real boundary nothing changes: 1 voxel deep, and trusted.
+    assert line_m[5] == 1.0
+    assert line_t[5] == pytest.approx(_soft(1.0, sigma), abs=1e-6)
+
+
 def test_distance_all_foreground_patch_is_saturated_only_when_deep():
     ann = np.full((1, 1, 9, 9, 9), 2, dtype=np.float32)
     target, mask = DistanceTargetTransform(1.0)(torch.from_numpy(ann))
