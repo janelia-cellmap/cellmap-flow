@@ -1256,6 +1256,8 @@ def main():
     # The weights a full finetune starts from, on the CPU, to reset it to on
     # restart. LoRA resets by re-making its adapter and needs none.
     initial_state = None
+    # Where the next iteration's TensorBoard curves start: (step, epoch).
+    tb_position = (0, 0)
     if not _is_peft_model(lora_model):
         from cellmap_flow.finetune.lora_trainer import cpu_state_copy
 
@@ -1339,6 +1341,8 @@ def main():
             tensorboard=not args.no_tensorboard,
             teacher_model=teacher_model,
             initial_state=initial_state,
+            tb_start_step=tb_position[0],
+            tb_start_epoch=tb_position[1],
         )
 
         # Resume from checkpoint if specified (first iteration only)
@@ -1353,6 +1357,8 @@ def main():
             stats = trainer.train()
             # None again if an OOM made the trainer drop distillation.
             teacher_model = trainer.teacher_model
+            tb_position = (trainer._tb_step, trainer._tb_epoch)
+            trainer.close()
 
             # If training diverged (NaN/Inf), skip saving and wait for restart
             if stats.get('diverged'):

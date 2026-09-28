@@ -281,6 +281,8 @@ class LoRAFinetuner:
         tensorboard: bool = True,
         teacher_model: Optional[nn.Module] = None,
         initial_state: Optional[Dict[str, torch.Tensor]] = None,
+        tb_start_step: int = 0,
+        tb_start_epoch: int = 0,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -482,14 +484,27 @@ class LoRAFinetuner:
         self.tb = None
         self.tb_dir = self.output_dir / "tensorboard"
         self.tb_image_every = 5          # epochs between patch images
-        self._tb_step = 0                # monotonic: global_step resets on restart
-        self._tb_epoch = 0
+        # Monotonic across restarts: the CLI makes a new trainer for every
+        # iteration, writing to the same tensorboard/ directory, and passes
+        # the previous one's position on. Starting each at 0 drew every
+        # iteration's curves on top of each other.
+        self._tb_step = int(tb_start_step)
+        self._tb_epoch = int(tb_start_epoch)
         if tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter
                 self.tb = SummaryWriter(log_dir=str(self.tb_dir))
             except Exception as e:  # not installed, or logdir not writable
                 logger.info(f"TensorBoard logging disabled: {e}")
+
+    def close(self):
+        """Close the TensorBoard writer; the CLI calls this when an iteration is done."""
+        if self.tb is not None:
+            try:
+                self.tb.close()
+            except Exception as e:
+                logger.debug(f"Closing the TensorBoard writer failed: {e}")
+            self.tb = None
 
     def _tb_config_markdown(self) -> str:
         trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
