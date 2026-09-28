@@ -24,6 +24,28 @@ from cellmap_flow.globals import g
 logger = logging.getLogger(__name__)
 
 
+def _number(data, key, default, kind=float):
+    """A number from the request; ``default`` when it is absent or blank.
+
+    The form sends what its fields hold, so an emptied "epochs" box arrived
+    as null or "" and reached the trainer as "--num-epochs None", which
+    failed only once the job was running on the cluster. A value that is
+    not a number is a 400 here instead.
+    """
+    value = data.get(key)
+    if value is None or value == "":
+        return default
+    try:
+        number = float(value)
+        if kind is int:
+            if not number.is_integer():
+                raise ValueError
+            return int(number)
+        return number
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be {'a whole number' if kind is int else 'a number'}, got {value!r}")
+
+
 def _parse_patches_per_epoch_override(data):
     """Return ``(provided, value)`` for the optional virtual-dataset override.
 
@@ -280,7 +302,7 @@ def submit_finetuning_response(data):
             )
 
         loss_type = data.get("loss_type", "mse")
-        distillation_lambda = data.get("distillation_lambda", 0.0)
+        distillation_lambda = _number(data, "distillation_lambda", 0.0)
         has_sparse = detect_sparse_annotations(actual_corrections_path)
         sparse_auto_switched = False
         if has_sparse and loss_type == "mse":
@@ -297,7 +319,7 @@ def submit_finetuning_response(data):
             data.get("offsets", None),
         )
 
-        label_smoothing = data.get("label_smoothing", 0.1)
+        label_smoothing = _number(data, "label_smoothing", 0.1)
         if output_type == "distance" and has_sparse:
             # A distance target needs the 3D object boundary. Scribbles are
             # strokes with unannotated voxels all around them, so the safe
@@ -331,10 +353,10 @@ def submit_finetuning_response(data):
         finetune_job = g.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
-            lora_r=data.get("lora_r", 8),
-            num_epochs=data.get("num_epochs", 10),
-            batch_size=data.get("batch_size", 2),
-            learning_rate=data.get("learning_rate", 1e-4),
+            lora_r=_number(data, "lora_r", 8, int),
+            num_epochs=_number(data, "num_epochs", 10, int),
+            batch_size=_number(data, "batch_size", 2, int),
+            learning_rate=_number(data, "learning_rate", 1e-4),
             output_base=Path(session_path),
             checkpoint_path_override=(
                 Path(data["checkpoint_path"]) if data.get("checkpoint_path") else None
@@ -345,7 +367,7 @@ def submit_finetuning_response(data):
             label_smoothing=label_smoothing,
             distillation_lambda=distillation_lambda,
             distillation_scope=data.get("distillation_scope", "unlabeled"),
-            margin=data.get("margin", 0.3),
+            margin=_number(data, "margin", 0.3),
             balance_classes=data.get("balance_classes", False),
             # Default off: these interactive runs are a few dozen gradient
             # steps, where augmentation adds variance without the many
@@ -359,7 +381,7 @@ def submit_finetuning_response(data):
                 data.get("charge_group") or getattr(g, "charge_group", None) or "cellmap"
             ),
             output_type=output_type,
-            select_channel=data.get("select_channel", None),
+            select_channel=_number(data, "select_channel", None, int),
             offsets=offsets,
         )
 

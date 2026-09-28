@@ -629,20 +629,20 @@ class FinetuneJobManager:
         if not corrections_path.exists():
             raise ValueError(f"Corrections path does not exist: {corrections_path}")
 
-        # 4. Count corrections (warn if few)
+        # 4. Check there is something to train on. The trainer reads the
+        # session's virtual-sources manifest and nothing else, so a session
+        # without one failed on the GPU node with FileNotFoundError after
+        # queueing. This used to count *.zarr directories instead: always
+        # "Only 1 corrections" for a volume session, and any crop zarr passed.
+        from cellmap_flow.finetune.virtual_dataset import VIRTUAL_MANIFEST_FILENAME, read_manifest
+
+        if read_manifest(str(corrections_path)) is None:
+            raise ValueError(
+                f"No {VIRTUAL_MANIFEST_FILENAME} in {corrections_path}, so there is "
+                "nothing to train on. Create an annotation volume, or import crops, first."
+            )
         correction_dirs = list(corrections_path.glob("*/"))
         num_corrections = len([d for d in correction_dirs if (d / ".zattrs").exists()])
-
-        if num_corrections == 0:
-            raise ValueError(f"No corrections found in {corrections_path}")
-
-        if num_corrections < 5:
-            self.logger.warning(
-                f"Only {num_corrections} corrections found. "
-                "Recommend at least 5-10 for meaningful finetuning."
-            )
-
-        self.logger.info(f"Found {num_corrections} corrections for training")
 
         # === Setup output directory ===
 
@@ -952,6 +952,7 @@ class FinetuneJobManager:
         self.logger.info(f"Monitoring job {job_id}...")
 
         last_log_position = 0
+        partial_line = ""  # an incomplete last line, held back until it is whole
         check_interval = 3  # seconds
         persisted_status = finetune_job.status
 
@@ -1003,12 +1004,21 @@ class FinetuneJobManager:
                         if file_size < last_log_position:
                             self.logger.info(f"Log file truncated (size {file_size} < position {last_log_position}), resetting")
                             last_log_position = 0
+                            partial_line = ""
 
                         with open(finetune_job.log_file, "r") as f:
                             # Seek to last read position
                             f.seek(last_log_position)
                             new_content = f.read()
                             last_log_position = f.tell()
+
+                            # Only whole lines are parsed. A read can end
+                            # mid-line ("Epoch 7/10 - Lo", "TRAINING_ITERATION_COM");
+                            # parsed as it stood, the epoch's loss or the marker
+                            # was lost or cut short. Keep the tail for next time.
+                            new_content = partial_line + new_content
+                            cut = new_content.rfind("\n") + 1
+                            new_content, partial_line = new_content[:cut], new_content[cut:]
 
                             if new_content:
                                 # Parse for epoch and loss information
@@ -1048,8 +1058,17 @@ class FinetuneJobManager:
                 except Exception as e:
                     self.logger.error(f"Error in post-completion for job {job_id}: {e}")
                     finetune_job.status = JobStatus.FAILED
+            else:
+                # A job that failed after training -- its server would not
+                # start, say -- still produced a model; record what it was.
+                self._read_trainer_outputs(finetune_job)
 
-            self._update_metadata(finetune_job, status=finetune_job.status.value)
+            self._update_metadata(
+                finetune_job,
+                status=finetune_job.status.value,
+                finetuned_model_name=finetune_job.finetuned_model_name,
+                model_yaml_path=str(finetune_job.model_yaml_path) if finetune_job.model_yaml_path else None,
+            )
             self.logger.info(f"Stopped monitoring job {job_id}. Final status: {finetune_job.status.value}")
 
     def _parse_training_progress(self, finetune_job: FinetuneJob, log_content: str):
@@ -1124,15 +1143,14 @@ class FinetuneJobManager:
         inference_job.host = server_url
         inference_job.status = LSFJobStatus.RUNNING
 
-        # Remove any old finetuned jobs for this base model
+        # Replace any old finetuned jobs for this base model. One assignment
+        # of a new list, rather than filter-then-append on the shared one:
+        # this runs on the monitor thread while request threads use g.jobs.
         g.jobs = [
-            j for j in g.jobs
+            j for j in list(g.jobs)
             if not (hasattr(j, 'model_name') and j.model_name
                     and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
-        ]
-
-        # Add to g.jobs
-        g.jobs.append(inference_job)
+        ] + [inference_job]
         self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
 
         # Get pre/post processing args (same hash as other models)

@@ -137,7 +137,7 @@ def test_the_job_manager_points_the_trainer_at_the_sessions_models_dir(tmp_path)
         name = "m"
         script_path = "/s.py"
 
-    corrections = _corrections(tmp_path, zattrs={"dataset_path": "/data/raw.zarr"})
+    corrections = _corrections(tmp_path, manifest_raw="/data/raw.zarr")
 
     class _Thread:
         def __init__(self, *a, **k):

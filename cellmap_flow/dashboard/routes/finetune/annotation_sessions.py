@@ -121,6 +121,41 @@ def _register_annotation_volume(volume_id, **volume_data):
     }
 
 
+def _annotation_volume_dirs(corrections_dir):
+    """The annotation volumes in a corrections directory, the one to use first.
+
+    Only zarrs whose attrs say ``type: annotation_volume`` count: imported
+    crop zarrs and legacy _chunk_ extracts sit in the same directory and
+    were counted as volumes too. Resume used to take whichever of them
+    os.listdir() happened to return first. The first entry here is the one
+    the session's manifest trains on, else the most recently written.
+    """
+    from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+    volumes = []
+    for entry in os.listdir(corrections_dir):
+        if not entry.endswith(".zarr") or "_chunk_" in entry:
+            continue
+        attrs_file = os.path.join(corrections_dir, entry, ".zattrs")
+        try:
+            with open(attrs_file) as f:
+                if json.load(f).get("type") != "annotation_volume":
+                    continue
+        except (OSError, ValueError):
+            continue
+        volumes.append((os.path.getmtime(attrs_file), entry))
+    volumes = [entry for _, entry in sorted(volumes, reverse=True)]
+    try:
+        trained = (read_manifest(corrections_dir) or {}).get("volume_zarr_path")
+    except (OSError, ValueError):
+        trained = None
+    if trained and os.path.basename(str(trained).rstrip("/")) in volumes:
+        name = os.path.basename(str(trained).rstrip("/"))
+        volumes.remove(name)
+        volumes.insert(0, name)
+    return volumes
+
+
 def list_existing_sessions_response(data):
     try:
         output_path = data.get("output_path", "")
@@ -138,16 +173,14 @@ def list_existing_sessions_response(data):
             if not os.path.isdir(corrections_dir):
                 continue
 
-            volumes = []
-            chunks = []
-            for item in os.listdir(corrections_dir):
-                if not item.endswith(".zarr"):
-                    continue
-                full = os.path.join(corrections_dir, item)
-                if "_chunk_" in item:
-                    chunks.append(item)
-                else:
-                    volumes.append({"volume_id": item.replace(".zarr", ""), "path": full})
+            volumes = [
+                {"volume_id": item.replace(".zarr", ""), "path": os.path.join(corrections_dir, item)}
+                for item in _annotation_volume_dirs(corrections_dir)
+            ]
+            chunks = [
+                item for item in os.listdir(corrections_dir)
+                if item.endswith(".zarr") and "_chunk_" in item
+            ]
 
             if volumes or chunks:
                 sessions.append(
@@ -194,11 +227,7 @@ def load_existing_volume_response(data):
         if not os.path.isdir(source_corrections):
             return jsonify({"success": False, "error": f"No corrections found in {source_session_path}"}), 404
 
-        volume_entries = [
-            entry
-            for entry in os.listdir(source_corrections)
-            if entry.endswith(".zarr") and "_chunk_" not in entry
-        ]
+        volume_entries = _annotation_volume_dirs(source_corrections)
         if not volume_entries:
             return jsonify(
                 {"success": False, "error": f"No annotation volume found in {source_corrections}"}

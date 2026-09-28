@@ -47,6 +47,7 @@ class FinetuneJobManagerTests(unittest.TestCase):
             correction = corrections_dir / "crop_1.zarr"
             correction.mkdir(parents=True)
             (correction / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+            (corrections_dir / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
 
             fake_job = SimpleNamespace(process=SimpleNamespace(pid=1234))
 
@@ -91,6 +92,7 @@ class FinetuneJobManagerTests(unittest.TestCase):
             correction = corrections_dir / "crop_1.zarr"
             correction.mkdir(parents=True)
             (correction / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+            (corrections_dir / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
 
             with patch(
                 "cellmap_flow.finetune.finetune_job_manager.is_bsub_available",

@@ -131,6 +131,7 @@ def _submit(manager, model_config, tmp_path):
     corrections = tmp_path / "corrections"
     (corrections / "vol.zarr").mkdir(parents=True, exist_ok=True)
     (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+    (corrections / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
 
     class _Thread:
         def __init__(self, *a, **k):

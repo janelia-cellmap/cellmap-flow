@@ -1480,7 +1480,11 @@ def main():
                     except Exception as e:
                         logger.error(f"Failed to start inference server: {e}", exc_info=True)
                         print(f"INFERENCE_SERVER_FAILED: {e}", flush=True)
-                        return 0
+                        # The job was asked to train and serve, and cannot
+                        # serve. This returned 0, so it showed as COMPLETED
+                        # with nothing served and no sign why. The weights
+                        # and YAML are saved all the same.
+                        return 1
                 else:
                     # Server already running - just set model back to eval mode
                     # The server shares the same model object, so it automatically

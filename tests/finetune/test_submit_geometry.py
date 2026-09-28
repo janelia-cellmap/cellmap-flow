@@ -52,6 +52,7 @@ def test_submit_reads_geometry_without_building_the_model(tmp_path, monkeypatch)
     corrections = tmp_path / "corrections"
     (corrections / "vol.zarr").mkdir(parents=True)
     (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+    (corrections / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
 
     with patch.object(fjm, "is_bsub_available", return_value=False), \
          patch.object(fjm, "run_locally", return_value=SimpleNamespace(process=SimpleNamespace(pid=1))), \
