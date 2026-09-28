@@ -490,7 +490,9 @@ class CellMapFlowBlockwiseProcessor:
 
                     block.status = daisy.BlockStatus.SUCCESS
                     if self.track_progress:
-                        (self.tmp_dir / f"{block.block_id[1]}").touch()
+                        marker = progress_marker(self.tmp_dir, block)
+                        marker.parent.mkdir(parents=True, exist_ok=True)
+                        marker.touch()
                 except Exception as e:
                     logger.error(f"Error processing block {block}: {e}")
                     block.status = daisy.BlockStatus.FAILED
@@ -565,8 +567,25 @@ class CellMapFlowBlockwiseProcessor:
             logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
 
 
+def progress_marker(tmp_dir, block: daisy.Block) -> Path:
+    """The file that records ``block`` as done: <tmp_dir>/<task>/<write ROI>.
+
+    One directory per daisy task, and named by the block's write ROI rather
+    than its index. The index is only unique within a task -- daisy counts it
+    from each task's own total_roi, and every bounding box is its own task --
+    so with one shared directory, finishing ROI 1 marked ROI 2's blocks with
+    the same indices as done. An index also names a different region once the
+    block size changes; a write ROI does not.
+    """
+    roi = block.write_roi
+    name = "_".join(str(int(v)) for v in roi.offset) + "-" + "_".join(
+        str(int(v)) for v in roi.shape
+    )
+    return Path(tmp_dir) / str(block.task_id) / name
+
+
 def check_block(tmp_dir, block: daisy.Block) -> bool:
-    return (tmp_dir / f"{block.block_id[1]}").exists()
+    return progress_marker(tmp_dir, block).exists()
 
 
 def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None, log_dir=None):
