@@ -1258,6 +1258,8 @@ def main():
     initial_state = None
     # Where the next iteration's TensorBoard curves start: (step, epoch).
     tb_position = (0, 0)
+    # Set by a restart; the reset waits until the next iteration is set up.
+    pending_reset = False
     if not _is_peft_model(lora_model):
         from cellmap_flow.finetune.lora_trainer import cpu_state_copy
 
@@ -1273,82 +1275,114 @@ def main():
             logger.info(f"Training Iteration {iteration}")
             logger.info("=" * 60)
 
-        # Create dataloader (re-created each iteration to pick up new annotations)
-        if iteration > 1:
-            print("RESTART_STATUS: Loading corrections...", flush=True)
-        logger.info(f"Loading corrections from {args.corrections}...")
-        dataloader = create_dataloader(
-            args.corrections,
-            batch_size=args.batch_size,
-            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
-            augment=not args.no_augment,
-            num_workers=args.num_workers,
-            shuffle=True,
-            model_name=args.model_name,
-        )
-        logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
-
-        # Snapshot the active input_norm into metadata.json so any saved
-        # checkpoint in this iteration is reproducible -- you can read
-        # metadata.json next to the .pth and know exactly which
-        # normalization was applied to the training data.
+        # Set up this iteration: its data, its target and its trainer. A
+        # restart's new settings or annotations are first used here, so an
+        # error here -- an empty volume, offsets that do not fit -- used to
+        # escape main() and end the whole job, taking the served model down
+        # with it.
         try:
-            from cellmap_flow.finetune.virtual_dataset import read_manifest
+            # Create dataloader (re-created each iteration to pick up new annotations)
+            if iteration > 1:
+                print("RESTART_STATUS: Loading corrections...", flush=True)
+            logger.info(f"Loading corrections from {args.corrections}...")
+            dataloader = create_dataloader(
+                args.corrections,
+                batch_size=args.batch_size,
+                patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+                augment=not args.no_augment,
+                num_workers=args.num_workers,
+                shuffle=True,
+                model_name=args.model_name,
+            )
+            logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
 
-            manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
-            if manifest_norm is not None and args.output_dir:
-                metadata_file = Path(args.output_dir) / "metadata.json"
-                if metadata_file.exists():
-                    import json as json_mod
-                    with open(metadata_file) as f:
-                        md = json_mod.load(f)
-                    md.setdefault("params", {})["input_norm"] = manifest_norm
-                    with open(metadata_file, "w") as f:
-                        json_mod.dump(md, f, indent=2)
-                    logger.info(
-                        f"Snapshot input_norm into {metadata_file} "
-                        f"(keys: {list(manifest_norm.keys())})"
-                    )
-        except Exception as _e:
-            logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
+            # Snapshot the active input_norm into metadata.json so any saved
+            # checkpoint in this iteration is reproducible -- you can read
+            # metadata.json next to the .pth and know exactly which
+            # normalization was applied to the training data.
+            try:
+                from cellmap_flow.finetune.virtual_dataset import read_manifest
 
-        # Build target transform (re-built each iteration to pick up restart params)
-        select_channel = args.select_channel
-        target_transform = _build_target_transform(args, model_config)
-        logger.info(f"output_type={args.output_type}, select_channel={select_channel}")
+                manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
+                if manifest_norm is not None and args.output_dir:
+                    metadata_file = Path(args.output_dir) / "metadata.json"
+                    if metadata_file.exists():
+                        import json as json_mod
+                        with open(metadata_file) as f:
+                            md = json_mod.load(f)
+                        md.setdefault("params", {})["input_norm"] = manifest_norm
+                        with open(metadata_file, "w") as f:
+                            json_mod.dump(md, f, indent=2)
+                        logger.info(
+                            f"Snapshot input_norm into {metadata_file} "
+                            f"(keys: {list(manifest_norm.keys())})"
+                        )
+            except Exception as _e:
+                logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
 
-        # Create trainer (re-created each iteration for fresh optimizer/scheduler)
-        if iteration > 1:
-            print("RESTART_STATUS: Preparing trainer...", flush=True)
-        logger.info("Creating trainer...")
-        trainer = LoRAFinetuner(
-            lora_model,
-            dataloader,
-            output_dir=args.output_dir,
-            learning_rate=args.learning_rate,
-            num_epochs=args.num_epochs,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            use_mixed_precision=not args.no_mixed_precision,
-            loss_type=args.loss_type,
-            select_channel=select_channel,
-            mask_unannotated=args.mask_unannotated,
-            label_smoothing=args.label_smoothing,
-            distillation_lambda=args.distillation_lambda,
-            distillation_all_voxels=args.distillation_all_voxels,
-            margin=args.margin,
-            balance_classes=args.balance_classes,
-            target_transform=target_transform,
-            tensorboard=not args.no_tensorboard,
-            teacher_model=teacher_model,
-            initial_state=initial_state,
-            tb_start_step=tb_position[0],
-            tb_start_epoch=tb_position[1],
-        )
+            # Build target transform (re-built each iteration to pick up restart params)
+            select_channel = args.select_channel
+            target_transform = _build_target_transform(args, model_config)
+            logger.info(f"output_type={args.output_type}, select_channel={select_channel}")
 
-        # Resume from checkpoint if specified (first iteration only)
-        if args.resume and iteration == 1:
-            logger.info(f"Resuming from checkpoint: {args.resume}")
-            trainer.load_checkpoint(args.resume)
+            # Only now that the iteration can run: put the model back where
+            # training started (see _reset_for_restart). Until here it is still
+            # the previous iteration's, which the server keeps serving.
+            if pending_reset:
+                lora_model = _reset_for_restart(lora_model, args, initial_state)
+                pending_reset = False
+
+            # Create trainer (re-created each iteration for fresh optimizer/scheduler)
+            if iteration > 1:
+                print("RESTART_STATUS: Preparing trainer...", flush=True)
+            logger.info("Creating trainer...")
+            trainer = LoRAFinetuner(
+                lora_model,
+                dataloader,
+                output_dir=args.output_dir,
+                learning_rate=args.learning_rate,
+                num_epochs=args.num_epochs,
+                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                use_mixed_precision=not args.no_mixed_precision,
+                loss_type=args.loss_type,
+                select_channel=select_channel,
+                mask_unannotated=args.mask_unannotated,
+                label_smoothing=args.label_smoothing,
+                distillation_lambda=args.distillation_lambda,
+                distillation_all_voxels=args.distillation_all_voxels,
+                margin=args.margin,
+                balance_classes=args.balance_classes,
+                target_transform=target_transform,
+                tensorboard=not args.no_tensorboard,
+                teacher_model=teacher_model,
+                initial_state=initial_state,
+                tb_start_step=tb_position[0],
+                tb_start_epoch=tb_position[1],
+            )
+
+            # Resume from checkpoint if specified (first iteration only)
+            if args.resume and iteration == 1:
+                logger.info(f"Resuming from checkpoint: {args.resume}")
+                trainer.load_checkpoint(args.resume)
+
+        except Exception as e:
+            logger.error(f"Could not set up training iteration {iteration}: {e}", exc_info=True)
+            if not (args.auto_serve and server_started):
+                return 1
+            # The previous iteration's model is still loaded and served;
+            # wait for a restart with settings that work.
+            print(f"RESTART_FAILED: {e}", flush=True)
+            restart_data = _wait_for_restart_signal(
+                signal_file=Path(args.output_dir) / "restart_signal.json",
+                check_interval=1.0,
+                restart_controller=restart_controller,
+            )
+            if restart_data is None:
+                logger.error("Malformed restart signal, exiting")
+                return 1
+            _apply_restart_params(args, restart_data)
+            print("RESTARTING_TRAINING", flush=True)
+            continue
 
         # Train
         try:
@@ -1388,7 +1422,7 @@ def main():
                         return 1
                     _apply_restart_params(args, restart_data)
 
-                    lora_model = _reset_for_restart(lora_model, args, initial_state)
+                    pending_reset = True
                     print("RESTARTING_TRAINING", flush=True)
                     continue
                 else:
@@ -1470,8 +1504,9 @@ def main():
                 _apply_restart_params(args, restart_data)
 
                 # A true restart: training starts again from the model it
-                # started from, not from the previous iteration's weights.
-                lora_model = _reset_for_restart(lora_model, args, initial_state)
+                # started from, not from the previous iteration's weights --
+                # once the next iteration is set up (see pending_reset).
+                pending_reset = True
                 print("RESTARTING_TRAINING", flush=True)
                 continue  # Loop back to retrain
 
