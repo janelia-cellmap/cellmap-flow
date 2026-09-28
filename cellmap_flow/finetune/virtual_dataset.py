@@ -842,6 +842,43 @@ class VirtualPatchDataset(Dataset):
 VIRTUAL_MANIFEST_FILENAME = "_virtual_sources.json"
 
 
+def has_painted_annotations(volume_zarr_path: str) -> bool:
+    """Whether the volume holds annotations outside its imported crops.
+
+    Those are painted: scribbles, sparse by construction, with unannotated
+    voxels all around them. Chunks entirely inside a crop are not read.
+    """
+    s0_path = os.path.join(volume_zarr_path, "annotation", "s0")
+    try:
+        with open(os.path.join(volume_zarr_path, ".zattrs")) as f:
+            imported = json.load(f).get("imported_crops", []) or []
+        arr = zarr.open(s0_path, mode="r")
+        chunk_keys = [name for name in os.listdir(s0_path) if _CHUNK_KEY_RE.match(name)]
+    except (OSError, ValueError, KeyError) as e:
+        logger.debug(f"Could not look for painted annotations in {volume_zarr_path}: {e}")
+        return False
+    if imported:
+        bbox_offsets = np.array([c["annotation_offset_voxels"] for c in imported], dtype=np.int64)
+        bbox_ends = bbox_offsets + np.array([c["annotation_shape_voxels"] for c in imported], dtype=np.int64)
+    else:
+        bbox_offsets = bbox_ends = np.zeros((0, 3), dtype=np.int64)
+    chunk_shape = np.array(arr.chunks, dtype=np.int64)
+    for key in chunk_keys:
+        index = np.array([int(s) for s in key.split(".")], dtype=np.int64)
+        origin = index * chunk_shape
+        end = origin + chunk_shape
+        if bbox_offsets.shape[0] and np.any(
+            np.all(origin >= bbox_offsets, axis=1) & np.all(end <= bbox_ends, axis=1)
+        ):
+            continue  # all of it inside one crop
+        annotated = np.argwhere(arr.blocks[tuple(index)] >= 1).astype(np.int64) + origin
+        if not annotated.size:
+            continue
+        if not bbox_offsets.shape[0] or not _voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends).all():
+            return True
+    return False
+
+
 def write_manifest(corrections_dir: str, manifest: dict) -> str:
     """Persist a manifest sentinel that ``create_dataloader`` looks for."""
     os.makedirs(corrections_dir, exist_ok=True)

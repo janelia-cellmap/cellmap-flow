@@ -144,8 +144,22 @@ def resolve_finetune_session(corrections_path_str):
 
 
 def detect_sparse_annotations(corrections_path):
+    """Whether the session trains on painted (sparse) annotations.
+
+    Read from the volume the manifest points at: annotated voxels outside
+    its imported crops are painted. This looked for per-chunk extracts
+    marked source == "sparse_volume", which are only written when there is
+    no manifest -- and every session has one now -- so it was always False:
+    the margin + distillation switch and the distance-model scribble guard in
+    submit never fired, and mask_unannotated was never set.
+    """
+    from cellmap_flow.finetune.virtual_dataset import has_painted_annotations, read_manifest
+
     try:
-        for path in corrections_path.iterdir():
+        manifest = read_manifest(str(corrections_path))
+        if manifest and manifest.get("volume_zarr_path"):
+            return has_painted_annotations(manifest["volume_zarr_path"])
+        for path in Path(corrections_path).iterdir():
             if path.suffix == ".zarr" and (path / ".zattrs").exists():
                 attrs = json.loads((path / ".zattrs").read_text())
                 if attrs.get("source") == "sparse_volume":
