@@ -59,6 +59,7 @@ def _set_progress(load_id, **fields):
 from cellmap_flow.dashboard.finetune_utils import (
     create_annotation_volume_zarr,
     ensure_minio_serving,
+    sync_annotation_volume_from_minio,
 )
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
@@ -518,6 +519,15 @@ def load_crops_from_yaml_response(data):
             n_crops=n_crops,
         )
         _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))
+
+        if not created_volume:
+            # The crops are written into the local chunks and then mirrored
+            # up over MinIO's. Pull what was painted since the last sync
+            # first, or those chunks go up without the strokes.
+            try:
+                sync_annotation_volume_from_minio(volume_id)
+            except Exception as e:
+                logger.warning(f"Could not pull painted chunks of {volume_id} before the import: {e}")
 
         errors = []
         total_fg_written = 0

@@ -558,6 +558,22 @@ def _start_minio(output_base_dir):
     start_periodic_sync()
 
 
+def _pull_painted_chunks(zarr_path, volume_id):
+    """Sync the volume's chunks from MinIO into ``zarr_path``, if MinIO has any.
+
+    A fresh volume has nothing in the bucket yet; that costs one request.
+    """
+    zarr_name = Path(zarr_path).name
+    try:
+        s3 = _make_s3_filesystem()
+        if not s3.exists(f"{minio_state['bucket']}/{zarr_name}/annotation/s0"):
+            return
+    except Exception as e:
+        logger.warning(f"Could not check MinIO for painted chunks of {zarr_name}: {e}")
+        return
+    sync_annotation_volume_from_minio(volume_id, zarr_path=str(zarr_path))
+
+
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     """
     Ensure MinIO is running and upload zarr file.
@@ -575,6 +591,12 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None):
     with _minio_lock:
         if minio_state["process"] is None or minio_state["process"].poll() is not None:
             _start_minio(output_base_dir)
+
+    # `mc mirror --overwrite` pushes every local chunk over MinIO's copy, so
+    # anything painted since the last sync -- up to 30 s of strokes, or all
+    # of them for a resumed session whose .minio holds strokes never synced
+    # -- would be overwritten by a stale local chunk. Pull those first.
+    _pull_painted_chunks(zarr_path, crop_id)
 
     # Upload zarr file
     zarr_name = Path(zarr_path).name
