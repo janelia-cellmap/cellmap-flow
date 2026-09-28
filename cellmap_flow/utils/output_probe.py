@@ -52,11 +52,10 @@ def looks_like_affinities(out_channels=None, model_name="", channels_names=None)
 def suggest_affinity_chain(output_class: str) -> list:
     """The postprocessing an affinity model needs, in order.
 
-    AffinityPostprocessor divides its input by 255 -- it is written to sit
-    downstream of DefaultPostprocessor, which maps [-1,1] to uint8 0-255. Feed
-    it probabilities in [0,1] directly and the affinities come out ~250x too
-    small, so every edge reads as weakly attractive and the mutex watershed
-    degenerates. The rescale step is therefore mandatory, not cosmetic.
+    AffinityPostprocessor takes affinities in [0, 1], or the uint8 0-255 that
+    DefaultPostprocessor produces (integer input is divided by 255). The chain
+    suggested here goes through DefaultPostprocessor, the long-standing
+    convention; a sigmoid feeding AffinityPostprocessor directly works too.
     """
     chain = []
     if output_class == UNBOUNDED:
@@ -119,9 +118,9 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
             params[name] = {"threshold": threshold}
             rng = (0.0, 1.0)
         elif name == "AffinityPostprocessor":
-            # It divides by 255 internally, so it wants 0-255 in and works in
-            # [0, 1]; the mutex watershed needs the midpoint subtracted to get
-            # the signed affinities it is defined on.
+            # It works in [0, 1] (integer 0-255 input is divided by 255); the
+            # mutex watershed needs the midpoint subtracted to get the signed
+            # affinities it is defined on.
             affinity = {"bias": 0.5}
             if out_channels:
                 offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
@@ -219,14 +218,15 @@ def review_postprocess(
 
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
-            if not has_default:
+            if not (has_default or has_sigmoid or output_class == UNIT):
                 return verdict(
                     "warn",
                     (
-                        "AffinityPostprocessor divides its input by 255, so it "
-                        "needs DefaultPostprocessor ahead of it to rescale "
-                        "[0,1] to 0-255. Without that the affinities are ~250x "
-                        "too small and the watershed collapses to one segment."
+                        "AffinityPostprocessor needs affinities in [0, 1] (or "
+                        "the 0-255 that DefaultPostprocessor produces), but "
+                        "this model's output is not bounded to [0, 1] and "
+                        "nothing ahead of it rescales it, so the watershed "
+                        "works on the wrong values."
                     ),
                     suggest_affinity_chain(output_class),
                 )

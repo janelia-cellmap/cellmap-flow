@@ -92,14 +92,17 @@ class LabelPostprocessor(PostProcessor):
         self.channel = int(channel)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
-        to_process = data[self.channel]
-        to_process, num_features = label(to_process)
-        data[self.channel] = to_process
-        return data
+        # Into a new uint32 array: writing the labels back into the model's
+        # own (often uint8) array wrapped every id above 255, and the declared
+        # uint8 dtype wrapped them again on the way out.
+        labels, _ = label(data[self.channel])
+        out = data.astype(np.uint32)
+        out[self.channel] = labels
+        return out
 
     @property
     def dtype(self):
-        return np.uint8
+        return np.uint32
 
     @property
     def is_segmentation(self):
@@ -168,14 +171,23 @@ class AffinityPostprocessor(PostProcessor):
         self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
-        data = data / 255.0
+        # Integer input is the 0-255 that DefaultPostprocessor produces (the
+        # usual chain), so scale it back to [0, 1] exactly as before. Float
+        # input is already an affinity in [0, 1] (e.g. straight after a
+        # SigmoidPostprocessor); dividing that by 255 as well left every edge
+        # near zero and the watershed merged everything.
+        if np.issubdtype(data.dtype, np.integer) or data.dtype == np.bool_:
+            data = data / 255.0
+        else:
+            data = data.astype(np.float64)
         n_channels = data.shape[0]
-        self.neighborhood = self.neighborhood[:n_channels]
-        # raise Exception(data.max(), data.min(), self.neighborhood)
+        # Local, not self.neighborhood: truncating the attribute made every
+        # later call use the first chunk's channel count.
+        neighborhood = self.neighborhood[:n_channels]
 
         segmentation = mws.agglom(
             data.astype(np.float64) - self.bias,
-            self.neighborhood,
+            neighborhood,
         )
 
         # filter fragments
@@ -258,9 +270,22 @@ class SimpleBlockwiseMerger(PostProcessor):
             (0, 0, 1): (slice(None), slice(None), -1),
         }
         self.keys_to_skip = set()
+        # The server calls one instance from every Flask request thread; this
+        # guards the dict, the set and the equivalence map they all share.
+        self._lock = threading.Lock()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
 
     def _process(self, data, chunk_corner):
         segmentation = data[self.channel]
+        faces = {}
         for slice_reference, slice in self.slices.items():
             slice_data = segmentation[slice]
             if self.face_erosion_iterations > 0:
@@ -269,17 +294,17 @@ class SimpleBlockwiseMerger(PostProcessor):
                 )
             coord_0, coord_1 = np.where(slice_data > 0)
             segmented_ids = slice_data[coord_0, coord_1]
-            self.chunk_slice_position_to_coords_id_dict[
-                (chunk_corner, slice_reference)
-            ] = dict(
+            faces[(chunk_corner, slice_reference)] = dict(
                 zip(
                     zip(coord_0, coord_1),
                     segmented_ids,
                 )
             )
-        for key in self.keys_to_skip:
-            self.chunk_slice_position_to_coords_id_dict.pop(key, None)
-        self.calculate_equivalences()
+        with self._lock:
+            self.chunk_slice_position_to_coords_id_dict.update(faces)
+            for key in self.keys_to_skip:
+                self.chunk_slice_position_to_coords_id_dict.pop(key, None)
+            self.calculate_equivalences()
         # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
         return data.astype(np.uint64 if self.use_exact else np.uint16)
 
@@ -324,7 +349,12 @@ class SimpleBlockwiseMerger(PostProcessor):
 
 class ChannelSelection(PostProcessor):
     def __init__(self, channels: str = "0"):
-        self.channels = [int(channel) for channel in channels.split(",")]
+        # "0,2" from the dashboard form; YAML may also give 2 or [0, 2].
+        if isinstance(channels, str):
+            channels = channels.split(",")
+        elif not isinstance(channels, (list, tuple)):
+            channels = [channels]
+        self.channels = [int(channel) for channel in channels]
 
     def _process(self, data):
         data = data[self.channels, :, :, :]

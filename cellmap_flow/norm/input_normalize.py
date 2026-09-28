@@ -94,7 +94,11 @@ class SerializableInterface:
         sig = inspect.signature(self._process)
         [kwargs.pop(k) for k in list(kwargs.keys()) if k not in sig.parameters]
         data = self._process(data, **kwargs)
-        return data.astype(self.dtype)
+        if self.dtype is None:
+            # No declared dtype means "whatever _process returned";
+            # astype(None) would silently promote it to float64.
+            return np.asarray(data)
+        return np.asarray(data).astype(self.dtype, copy=False)
 
     def _process(self, data):
         raise NotImplementedError("Subclasses must implement this method")
@@ -171,6 +175,7 @@ class EuclideanDistance(InputNormalizer):
 
         if type not in ["edt", "sdf"]:
             raise ValueError("type must be either 'edt' or 'sdf'")
+        self.type = type
         self.anisotropy = tuple((int(anisotropy), int(anisotropy), int(anisotropy)))
         if type == "edt":
             self._func = edt.edt
@@ -178,8 +183,15 @@ class EuclideanDistance(InputNormalizer):
             self._func = edt.sdf
         else:
             raise ValueError("type must be either 'edt' or 'sdf'")
-        self.black_border = bool(black_border)
+        # The dashboard forms send every value as a string, and bool("False")
+        # is True.
+        if isinstance(black_border, str):
+            self.black_border = black_border.strip().lower() == "true"
+        else:
+            self.black_border = bool(black_border)
         self.parallel = int(parallel)
+        if activation in ("", "None", "none"):
+            activation = None
         self.activation = (
             lambda x: x
         )  # default to identity if no activation is specified
@@ -196,12 +208,9 @@ class EuclideanDistance(InputNormalizer):
                 )
 
     def _process(self, data):
-        from edt import edt, sdf
-
         if not isinstance(data, np.ndarray):
             raise TypeError("Input data must be a numpy array.")
 
-        # Ensure the data is in uint8 format for distance transform
         result = self._func(
             data,
             anisotropy=self.anisotropy,
@@ -213,22 +222,6 @@ class EuclideanDistance(InputNormalizer):
     @property
     def dtype(self):
         return np.float32
-
-    # Removed redundant dtype property definition.
-
-    def _process(self, data: np.ndarray, **kwargs) -> np.ndarray:
-
-        if not isinstance(data, np.ndarray):
-            raise TypeError("Input data must be a numpy array.")
-
-        from edt import edt
-
-        return edt(
-            data.astype(np.uint8),
-            anisotropy=self.anisotropy,
-            black_border=True,
-            parallel=5,
-        )
 
 
 class MinMaxNormalizer(InputNormalizer):
