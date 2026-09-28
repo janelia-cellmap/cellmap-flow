@@ -320,6 +320,7 @@ class FinetuneJobManager:
         output_type: str,
         select_channel: Optional[int],
         offsets: Optional[str],
+        models_dir: Optional[Path] = None,
     ) -> str:
         """Build the shell command used to launch finetuning."""
         command_parts = [
@@ -382,6 +383,8 @@ class FinetuneJobManager:
             command_parts += ["--select-channel", str(select_channel)]
         if offsets is not None:
             command_parts += ["--offsets", str(offsets)]
+        if models_dir is not None:
+            command_parts += ["--models-dir", str(models_dir)]
 
         command = " ".join(_sh_quote(part) for part in command_parts)
 
@@ -595,6 +598,9 @@ class FinetuneJobManager:
         write_restart_token(output_dir)
 
         log_file = output_dir / "training_log.txt"
+        # The session's models/, next to runs/, where every iteration's
+        # serving YAML goes.
+        models_dir = output_base / "models"
 
         self.logger.info(f"Output directory: {output_dir}")
 
@@ -655,6 +661,7 @@ class FinetuneJobManager:
             output_type=output_type,
             select_channel=select_channel,
             offsets=offsets,
+            models_dir=models_dir,
         )
 
         self.logger.info(f"Training command: {cli_command}")
@@ -687,6 +694,8 @@ class FinetuneJobManager:
             charge_group=charge_group,
             command=cli_command,
         )
+
+        metadata["models_dir"] = str(models_dir)
 
         metadata_file = output_dir / "metadata.json"
         with open(metadata_file, "w") as f:
@@ -1255,10 +1264,11 @@ class FinetuneJobManager:
             generate_finetuned_model_yaml
         )
 
-        # Models output directory (at session level, not in finetuning subdirectory)
-        # output_dir structure: session_path/finetuning/runs/model_timestamp/
-        # So parent.parent.parent gets us to session_path
-        models_dir = finetune_job.output_dir.parent.parent.parent / "models"
+        # The session's models/ directory. output_dir is
+        # <session>/runs/<model>_<timestamp>, so the session is two levels up;
+        # this used to take three and wrote to <base>/models, outside the
+        # session and shared by all of them.
+        models_dir = finetune_job.output_dir.parent.parent / "models"
 
         try:
             models_dir.mkdir(parents=True, exist_ok=True)

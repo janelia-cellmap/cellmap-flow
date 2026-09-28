@@ -37,6 +37,7 @@ import torch
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.utils.restart_token import read_or_create_restart_token
+from cellmap_flow.finetune.finetuned_model_templates import FINETUNED_MODEL_YAML_MARKER
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 from cellmap_flow.finetune.model_loading import (
     decode_model_entry,
@@ -457,6 +458,28 @@ def _reset_for_restart(lora_model, args, initial_state=None):
     return lora_model
 
 
+def _finetuned_model_name(model_config, timestamp) -> str:
+    return f"{model_config.name}_finetuned_{timestamp}"
+
+
+def _models_dir(args) -> Path:
+    """Where the served-model YAMLs go: --models-dir, else the session's models/.
+
+    A dashboard run's output directory is <session>/runs/<name>, so the
+    session is two levels up. This used to take three, which put the YAMLs in
+    <base>/models, outside the session and shared by all of them, and turned
+    a headless --output-dir /nrs/x/run into /models: a permission error after
+    training had succeeded, reported as "Training failed". A run that is not
+    under a runs/ directory keeps its YAMLs in its own models/.
+    """
+    if getattr(args, "models_dir", None):
+        return Path(args.models_dir)
+    output_dir = Path(args.output_dir)
+    if output_dir.parent.name == "runs":
+        return output_dir.parent.parent / "models"
+    return output_dir / "models"
+
+
 def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool] = None):
     """
     Generate YAML config file after training.
@@ -479,23 +502,29 @@ def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool]
         generate_finetuned_model_yaml
     )
 
-    model_basename = model_config.name
-    finetuned_model_name = f"{model_basename}_finetuned_{timestamp}"
+    finetuned_model_name = _finetuned_model_name(model_config, timestamp)
 
-    # Create models directory in output
     output_dir_path = Path(args.output_dir)
-    session_path = output_dir_path.parent.parent.parent
-    models_dir = session_path / "models"
+    models_dir = _models_dir(args)
     models_dir.mkdir(exist_ok=True, parents=True)
 
-    logger.info(f"Generating model config for {finetuned_model_name}...")
+    logger.info(f"Generating model config for {finetuned_model_name} in {models_dir}...")
 
-    # Extract data path (and, as a fallback source of normalization/
-    # postprocessing metadata below) from the first correction zarr's own
-    # attrs.
+    # The raw data the model is served on: the manifest's, which is what it
+    # was trained on; else the first correction zarr's attrs (which are also
+    # a fallback source of normalization/postprocessing metadata below); else
+    # the path the job serves. There is no placeholder: a YAML pointing at a
+    # made-up path is worse than none, and generate_finetuned_model_yaml
+    # refuses to write one.
     corrections_path = Path(args.corrections)
-    zarr_dirs = list(corrections_path.glob("*.zarr"))
     data_path = None
+    try:
+        from cellmap_flow.finetune.virtual_dataset import read_manifest
+
+        data_path = (read_manifest(str(corrections_path)) or {}).get("raw_dataset_path")
+    except Exception as _e:
+        logger.warning(f"Could not read the manifest in {corrections_path}: {_e}")
+    zarr_dirs = sorted(corrections_path.glob("*.zarr"))
     zattrs_input_norm = None
     zattrs_postprocess = None
     if zarr_dirs:
@@ -503,13 +532,13 @@ def _generate_model_files(args, model_config, timestamp, is_lora: Optional[bool]
         if zattrs_file.exists():
             with open(zattrs_file) as f:
                 metadata = json.load(f)
-                data_path = metadata.get("dataset_path")
+                data_path = data_path or metadata.get("dataset_path")
                 zattrs_input_norm = metadata.get("input_norm")
                 zattrs_postprocess = metadata.get("postprocess")
 
     if not data_path:
         logger.warning("Could not extract data_path from corrections, using serve_data_path")
-        data_path = args.serve_data_path if args.auto_serve else "/path/to/data.zarr"
+        data_path = getattr(args, "serve_data_path", None)
 
     # Bake the training-time input_norm/postprocess into the generated yaml
     # so the served finetuned model gets queried with the same normalization
@@ -889,6 +918,13 @@ def build_arg_parser():
         type=str,
         required=True,
         help="Output directory for checkpoints and adapter"
+    )
+    parser.add_argument(
+        "--models-dir",
+        type=str,
+        default=None,
+        help="Directory for the generated serving YAMLs (default: <session>/models "
+             "when --output-dir is <session>/runs/<name>, else <output-dir>/models)"
     )
     parser.add_argument(
         "--batch-size",
@@ -1271,10 +1307,21 @@ def main():
                 logger.info(f"Weights saved to: {args.output_dir}/full_finetune/model_state_dict.pt")
             logger.info("=" * 60)
 
-            # Generate model files
-            finetuned_model_name, _ = _generate_model_files(
-                args, model_config, timestamp, is_lora=is_lora
-            )
+            # Generate model files. The weights are saved by now, so a YAML
+            # that cannot be written is reported, not treated as a failed
+            # training run.
+            finetuned_model_name = _finetuned_model_name(model_config, timestamp)
+            try:
+                finetuned_model_name, yaml_path = _generate_model_files(
+                    args, model_config, timestamp, is_lora=is_lora
+                )
+            except Exception as e:
+                logger.error(f"Training succeeded but the serving YAML could not be written: {e}", exc_info=True)
+            else:
+                # The job manager takes the YAML from here rather than
+                # guessing where it went. Printed before the completion
+                # marker so both are in the log when that is seen.
+                print(f"{FINETUNED_MODEL_YAML_MARKER} {yaml_path}", flush=True)
 
             # Print completion marker with timestamp (for job manager to detect)
             print(f"TRAINING_ITERATION_COMPLETE: {finetuned_model_name}", flush=True)

@@ -10,6 +10,17 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# The finetune CLI prints this with the path of each serving YAML it writes,
+# just before TRAINING_ITERATION_COMPLETE; the job manager reads the YAML
+# from there. Here, rather than in either of them, so both can import it
+# without importing the other.
+FINETUNED_MODEL_YAML_MARKER = "FINETUNED_MODEL_YAML:"
+
+# Stand-ins for a data path that are not one. The CLI used to fall back to
+# the second while this check only knew the first, so YAMLs pointing at
+# /path/to/data.zarr were written without complaint.
+PLACEHOLDER_DATA_PATHS = frozenset({"/path/to/your/data.zarr", "/path/to/data.zarr"})
+
 
 def generate_finetuned_model_yaml(
     lora_adapter_path: str = None,
@@ -48,7 +59,7 @@ def generate_finetuned_model_yaml(
     """
     import yaml as yaml_lib
 
-    if not data_path or data_path == "/path/to/your/data.zarr":
+    if not data_path or str(data_path) in PLACEHOLDER_DATA_PATHS:
         raise ValueError(
             "data_path is required and cannot be a placeholder. "
             "Must provide actual dataset path from training corrections."
