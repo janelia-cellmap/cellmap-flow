@@ -905,72 +905,64 @@
             document.getElementById('output-channels-modal').style.display = 'block';
         }
 
-        function detectAvailableChannels() {
-            outputChannelsModalState.availableChannels = [];
-
-            // Get all connected models (traverse edges to find which models connect to OUTPUT)
-            const outputNodeId = outputChannelsModalState.outputNodeId;
-            const connectedModelIds = new Set();
-
-            // Find edges that connect TO the output node
-            pipeline.edges.forEach(edge => {
-                if (edge.to === outputNodeId) {
-                    // This edge connects FROM something TO the output
-                    const sourceNode = [
-                        ...pipeline.models,
-                        ...pipeline.postprocessors,
-                        ...pipeline.normalizers
-                    ].find(n => n.id === edge.from);
-
-                    if (sourceNode && sourceNode.type === 'model') {
-                        connectedModelIds.add(edge.from);
-                    }
+        // A model node's channel names as an array: config.channels (FlyModel
+        // etc.) or config.channels_names (HuggingFace), either of which may
+        // still be a JSON string after an import.
+        function modelChannels(model) {
+            const config = (model && model.config) || {};
+            const channels = config.channels || config.channels_names;
+            if (Array.isArray(channels)) return channels;
+            if (typeof channels === 'string') {
+                try {
+                    const parsed = JSON.parse(channels);
+                    return Array.isArray(parsed) ? parsed : [channels];
+                } catch {
+                    return [channels];
                 }
-            });
+            }
+            return [];
+        }
 
-            // If no edges, use all models in pipeline
-            if (connectedModelIds.size === 0) {
-                pipeline.models.forEach(model => {
-                    if (model.config?.channels || model.config?.channels_names) {
-                        const channels = model.config.channels || model.config.channels_names;
-                        // Ensure channels is an array
-                        if (Array.isArray(channels)) {
-                            outputChannelsModalState.availableChannels = [...channels];
-                        } else if (typeof channels === 'string') {
-                            // If it's a string (from parsing), try to parse it as JSON array
-                            try {
-                                const parsed = JSON.parse(channels);
-                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
-                            } catch {
-                                outputChannelsModalState.availableChannels = [channels];
-                            }
-                        }
-                    }
-                });
-            } else {
-                // Use channels from connected models
-                connectedModelIds.forEach(modelId => {
-                    const model = pipeline.models.find(m => m.id === modelId);
-                    if (model && model.config?.channels || model.config?.channels_names) {
-                        const channels = model.config.channels || model.config.channels_names;
-                        // Ensure channels is an array
-                        if (Array.isArray(channels)) {
-                            outputChannelsModalState.availableChannels = [...channels];
-                        } else if (typeof channels === 'string') {
-                            // If it's a string (from parsing), try to parse it as JSON array
-                            try {
-                                const parsed = JSON.parse(channels);
-                                outputChannelsModalState.availableChannels = Array.isArray(parsed) ? parsed : [channels];
-                            } catch {
-                                outputChannelsModalState.availableChannels = [channels];
-                            }
-                        }
-                    }
+        function detectAvailableChannels() {
+            const outputNodeId = outputChannelsModalState.outputNodeId;
+
+            // The models that feed this OUTPUT. The usual path is model ->
+            // postprocessors -> OUTPUT, so walk the edges back from it rather
+            // than only looking at the nodes wired straight into it. (The old
+            // check, sourceNode.type === 'model', never matched: the nodes in
+            // pipeline.* carry no type.)
+            const modelIds = new Set(pipeline.models.map(m => m.id));
+            const upstreamModels = new Set();
+            const seen = new Set([outputNodeId]);
+            const queue = [outputNodeId];
+            while (queue.length > 0) {
+                const nodeId = queue.shift();
+                pipeline.edges.forEach(edge => {
+                    if (edge.to !== nodeId || seen.has(edge.from)) return;
+                    seen.add(edge.from);
+                    queue.push(edge.from);
+                    if (modelIds.has(edge.from)) upstreamModels.add(edge.from);
                 });
             }
 
+            // Not wired to any model yet: offer every model's channels.
+            const models = upstreamModels.size > 0
+                ? pipeline.models.filter(m => upstreamModels.has(m.id))
+                : pipeline.models;
+
+            // Every channel of every such model, in first-seen order. Each
+            // model used to replace the list, so only the last one's were
+            // offered.
+            const channels = [];
+            models.forEach(model => {
+                modelChannels(model).forEach(channel => {
+                    if (!channels.includes(channel)) channels.push(channel);
+                });
+            });
+            outputChannelsModalState.availableChannels = channels;
+
             // If no channels found, show error and return
-            if (outputChannelsModalState.availableChannels.length === 0) {
+            if (channels.length === 0) {
                 console.warn('No model channels found');
                 const body = document.getElementById('output-channels-body');
                 body.innerHTML = '<p style="color: #f87171; margin: 16px 0;">No channels detected from connected models. Make sure your models have channel information in their configuration.</p>';
@@ -1040,11 +1032,13 @@
             if (outputNode) {
                 outputNode.params = outputNode.params || {};
                 outputNode.params.output_channels = selectedChannels;
-                outputNode.classList?.add('dirty');
             }
 
             closeOutputChannelsModal();
             renderCanvas();
+            // Apply it like any other edit; it used to reach the backend
+            // only with the next edit or the unload beacon.
+            debouncedApply();
             showMessage(`✓ Output channels configured: ${selectedChannels.join(', ')}`, 'success');
         }
 
