@@ -145,9 +145,32 @@ def _describe(entry):
     return ", ".join(parts) if parts else "available"
 
 
+def _query_bqueues():
+    """{queue: {status, pending, running}} for GPU_QUEUES, or None if LSF is unreachable.
+
+    One call for all of them first. bqueues exits non-zero when any named
+    queue does not exist, so a single retired or renamed queue used to make
+    the whole picker say LSF was unreachable; on failure, ask per queue and
+    keep whichever answer.
+    """
+    names = [q for q, _, _ in GPU_QUEUES]
+    out = _run(["bqueues"] + names)
+    if out is not None:
+        return _parse_bqueues(out)
+    parsed = {}
+    answered = False
+    for name in names:
+        out = _run(["bqueues", name])
+        if out is None:
+            continue
+        answered = True
+        parsed.update(_parse_bqueues(out))
+    return parsed if answered else None
+
+
 def _collect():
-    bqueues_out = _run(["bqueues"] + [q for q, _, _ in GPU_QUEUES])
-    if bqueues_out is None:
+    parsed = _query_bqueues()
+    if parsed is None:
         return {
             "available": False,
             "reason": "LSF is not reachable from the dashboard host",
@@ -157,7 +180,6 @@ def _collect():
             ],
         }
 
-    parsed = _parse_bqueues(bqueues_out)
     queues = []
     for queue, label, host_group in GPU_QUEUES:
         info = parsed.get(queue, {})
