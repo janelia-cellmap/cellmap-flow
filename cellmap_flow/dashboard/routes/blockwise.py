@@ -3,6 +3,7 @@ import re
 import ast
 import logging
 import subprocess
+import sys
 import time
 from datetime import datetime
 
@@ -10,12 +11,27 @@ import yaml
 from flask import Blueprint, request
 
 from cellmap_flow.globals import g
+from cellmap_flow.utils.bsub_utils import (
+    DEFAULT_WALLTIME,
+    _log_stem,
+    _walltime_arg,
+    parse_bsub_job_id,
+)
 from cellmap_flow.utils.web_utils import INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
 from cellmap_flow.globals import get_blockwise_tasks_dir
 
 logger = logging.getLogger(__name__)
 
 blockwise_bp = Blueprint("blockwise", __name__)
+
+
+def _task_walltime():
+    """The LSF run limit for a blockwise task's master and its workers.
+
+    The dashboard's walltime setting, as for inference servers. Without -W a
+    GPU worker is killed at the queue's two-hour default.
+    """
+    return getattr(g, "walltime", None) or DEFAULT_WALLTIME
 
 
 @blockwise_bp.route("/api/blockwise/validate", methods=["POST"])
@@ -94,6 +110,8 @@ def generate_blockwise_task():
             "workers": blockwise_config["params"]["nb_workers"],
             "cpu_workers": blockwise_config["params"]["nb_cores_worker"],
             "tmp_dir": blockwise_config["params"]["tmp_dir"],
+            # Each worker's -W; the master gets the same (see submit).
+            "walltime": _task_walltime(),
             "models": []
         }
 
@@ -314,19 +332,28 @@ def submit_blockwise_task():
         yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
         blockwise_config = pipeline["blockwise_config"][0]
 
-        # Build bsub command
+        # Build bsub command. The master is a CPU job on the default queue;
+        # the configured queue is for the workers and travels in the YAML.
         cores_master = blockwise_config["params"]["nb_cores_master"]
         charge_group = blockwise_config["params"]["charge_group"]
-        queue = blockwise_config["params"]["queue"]
+        log_pattern = os.path.join(get_blockwise_tasks_dir(), f"{_log_stem(job_name)}_%J.log")
 
-        bsub_cmd = [
-            "bsub",
-            "-J", job_name,
-            "-n", str(cores_master),
-            "-P", charge_group,
-            # "-q", queue,
-            "python", "-m", "cellmap_flow.blockwise.multiple_cli",
-        ] + yaml_paths
+        bsub_cmd = (
+            [
+                "bsub",
+                "-J", job_name,
+                "-n", str(cores_master),
+                "-P", charge_group,
+            ]
+            + _walltime_arg(_task_walltime())
+            + [
+                "-o", log_pattern,
+                # This interpreter, not whatever "python" is first on the PATH
+                # the job inherits: that is the environment cellmap_flow is in.
+                sys.executable, "-m", "cellmap_flow.blockwise.multiple_cli",
+            ]
+            + yaml_paths
+        )
 
         logger.info(f"Submitting LSF job: {' '.join(bsub_cmd)}")
 
@@ -338,13 +365,13 @@ def submit_blockwise_task():
             logger.info(f"Job submitted successfully: {output}")
 
             # Extract job ID from bsub output (format: "Job <12345> is submitted")
-            match = re.search(r'<(\d+)>', output)
-            job_id = match.group(1) if match else "unknown"
+            job_id = parse_bsub_job_id(output) or "unknown"
 
             return {
                 "success": True,
                 "job_id": job_id,
                 "task_paths": yaml_paths,
+                "log_path": log_pattern.replace("%J", job_id),
                 "command": " ".join(bsub_cmd),
                 "message": f"Task submitted as job {job_id}"
                 }
