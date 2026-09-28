@@ -748,8 +748,8 @@ def _build_target_transform(args, model_config):
         if args.loss_type != "bce":
             raise ValueError(
                 "--output-type distance produces soft targets in [0, 1]; only "
-                "--loss-type bce (BCE with logits) is defined for them. Margin and "
-                "dice assume hard labels, and mse is applied to raw logits."
+                "--loss-type bce (BCE with logits) is supported for them. Margin and "
+                "dice assume hard labels."
             )
         if args.label_smoothing > 0:
             logger.warning(

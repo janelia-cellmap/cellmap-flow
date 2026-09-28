@@ -1211,9 +1211,14 @@ class LoRAFinetuner:
                     teacher_pred = teacher_pred.float()
 
                 # Compute supervised loss with optional mask
+                # MSE compares probabilities with the 0/1 target, as dice and
+                # margin do. On a logit model it used to compare the raw
+                # logits, training them toward 0 and 1 -- which the served
+                # sigmoid turns into 0.5 and 0.73, wrecking any threshold.
+                loss_pred = as_probabilities(pred, self._model_has_sigmoid) if self._use_mse else pred
                 if (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
-                    per_element_loss = self.criterion(pred, target)
+                    per_element_loss = self.criterion(loss_pred, target)
 
                     def _masked_mean(per_voxel):
                         if self.balance_classes:
@@ -1240,7 +1245,7 @@ class LoRAFinetuner:
                     supervised_loss = self.criterion(pred, target, mask)
                 else:
                     # No masking needed
-                    supervised_loss = self.criterion(pred, target)
+                    supervised_loss = self.criterion(loss_pred, target)
                     if self._use_bce or self._use_mse:
                         supervised_loss = supervised_loss.mean()
 
