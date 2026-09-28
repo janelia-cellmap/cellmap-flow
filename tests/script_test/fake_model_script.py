@@ -28,4 +28,10 @@ classes = ["mito", "er", "nuc", "pm", "ves", "ld"]
 
 output_channels = 8
 block_shape = np.array((10, 10, 10, output_channels))
-model = FakeModel(expected_output=torch.ones(1, *block_shape))
+# Models return (batch, channel, z, y, x). Channel c is filled with c + 1 so a
+# test can tell whether the server moved the channel axis last for zarr.
+model = FakeModel(
+    expected_output=torch.arange(1, output_channels + 1, dtype=torch.float32)
+    .view(1, output_channels, 1, 1, 1)
+    .expand(1, output_channels, 10, 10, 10)
+)

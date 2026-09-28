@@ -22,6 +22,7 @@ Tiny synthetic models so everything runs in seconds on CPU.
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -80,6 +81,7 @@ def test_min_channels_applies_to_linear_layers_too():
     assert detect_adaptable_layers(model, min_channels=16) == ["2"]
 
 
+@pytest.mark.finetune
 def test_wrap_honours_min_channels_and_the_survivor_trains():
     model = wrap_model_with_lora(
         _mixed_width_convs(), lora_r=4, lora_alpha=8, lora_dropout=0.0,
@@ -96,6 +98,7 @@ def test_wrap_honours_min_channels_and_the_survivor_trains():
     assert lora_b[0].grad is not None and lora_b[0].grad.abs().sum() > 0
 
 
+@pytest.mark.finetune
 def test_explicit_target_modules_bypass_the_filter():
     model = wrap_model_with_lora(
         _mixed_width_convs(), target_modules=["2"], lora_r=4, lora_alpha=8,

@@ -18,7 +18,9 @@ import torch.nn as nn
 
 from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
 
-peft = pytest.importorskip("peft")
+# ImportError, not just ModuleNotFoundError: an installed peft whose
+# transformers/huggingface-hub pins don't match raises on import.
+peft = pytest.importorskip("peft", exc_type=ImportError)
 
 
 class _Net(nn.Module):

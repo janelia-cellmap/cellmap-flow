@@ -97,6 +97,21 @@ version = { attr = "cellmap_flow.__version__" }
 "cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
 "cellmap_flow.models" = ["*.yaml"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# napari's auto-loaded pytest plugin crashes collection in some envs; blocking
+# it is harmless where napari isn't installed.
+addopts = "-ra -p no:napari"
+markers = [
+    "finetune: needs peft (skipped when it can't be imported)",
+    "gpu: needs a CUDA device (skipped without one)",
+    "lsf: submits real LSF jobs (skipped without bsub)",
+    "minio: needs the minio and mc binaries (skipped without them)",
+    "network: needs internet access (opt in with CELLMAP_FLOW_NETWORK_TESTS=1)",
+    "slow: takes more than a few seconds",
+]
+
+
 [project.scripts]
 cellmap_flow = "cellmap_flow.cli.cli:main"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"

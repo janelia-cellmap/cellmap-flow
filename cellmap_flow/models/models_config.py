@@ -80,6 +80,10 @@ class ModelConfig:
             return
 
         model = config.model
+        if not isinstance(model, torch.nn.Module):
+            # TensorFlow/ONNX/cellpose scripts set model to None or a non-torch
+            # object and run through process_chunk; there is nothing to forward.
+            return
         input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
         declared_output_size = np.array(config.write_shape) // np.array(
             config.output_voxel_size
@@ -87,7 +91,8 @@ class ModelConfig:
         declared_block_spatial = np.array(config.block_shape)[:3]
 
         try:
-            device = next(model.parameters()).device
+            first_param = next(model.parameters(), None)
+            device = first_param.device if first_param is not None else "cpu"
             dummy = torch.zeros(
                 (1, 1, *[int(s) for s in input_size]), device=device
             )

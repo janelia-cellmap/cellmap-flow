@@ -26,6 +26,7 @@ class TinyNet(nn.Module):
         return self.c2(torch.relu(self.c1(x)))
 
 
+@pytest.mark.finetune
 def test_manual_merge_matches_unmerged_adapter_and_strips_lora():
     torch.manual_seed(0)
     net = BatchLoopWrapper(TinyNet()).eval()

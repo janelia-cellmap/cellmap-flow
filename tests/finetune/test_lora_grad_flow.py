@@ -81,6 +81,7 @@ def _assert_lora_b_grads_nonzero(model: nn.Module) -> None:
     )
 
 
+@pytest.mark.finetune
 def test_basic_lora_wrap_grad_flow():
     """One fwd+bwd through a tiny PEFT-wrapped Sequential should give every
     lora_B nonzero gradient."""
@@ -98,6 +99,7 @@ def test_basic_lora_wrap_grad_flow():
     _assert_lora_b_grads_nonzero(peft)
 
 
+@pytest.mark.finetune
 def test_lora_wrap_grad_flow_after_disable_enable_toggle():
     """The trainer's distillation pass calls ``disable_adapter_layers()``
     before the teacher forward and ``enable_adapter_layers()`` after.
@@ -129,6 +131,7 @@ def test_lora_wrap_grad_flow_after_disable_enable_toggle():
     _assert_lora_b_grads_nonzero(peft)
 
 
+@pytest.mark.finetune
 def test_lora_wrap_grad_flow_with_batch_loop_wrapper():
     """The trainer wraps UnflattenedModule with BatchLoopWrapper *before*
     PEFT, so PEFT sees ``BatchLoopWrapper(model)``. Verify gradient flows

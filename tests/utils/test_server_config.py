@@ -8,27 +8,24 @@ carried, and every `cellmap_flow_yaml` run died on AttributeError at
 startup. These tests fail on that shape rather than on the specific key.
 """
 
-import importlib
-
 import pytest
 import yaml
 
 
 @pytest.fixture
 def globals_module(tmp_path, monkeypatch):
-    """A freshly imported globals with its config cache pointed at tmp_path.
+    """globals with its config cache pointed at tmp_path and no Flow built yet.
 
-    Flow is a singleton, so the tests must not touch the developer's real
-    ~/.cellmap_flow/server_config.yaml, nor inherit an instance built by an
-    earlier test.
+    SERVER_CONFIG_PATH is read at call time, so patching it is enough. The
+    singleton is emptied for the test and monkeypatch puts the shared instance
+    back afterwards. Reloading the module instead would leave every module
+    that already imported `g` holding a different Flow than later tests see.
     """
     import cellmap_flow.globals as G
 
-    G = importlib.reload(G)
     monkeypatch.setattr(G, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
-    G.Flow._instance = None
+    monkeypatch.setattr(G.Flow, "_instance", None)
     yield G
-    G.Flow._instance = None
 
 
 def test_every_declared_key_exists_on_a_fresh_instance(globals_module):

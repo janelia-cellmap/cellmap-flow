@@ -16,11 +16,16 @@ These tests pin down that a short real training loop on CPU:
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+
+# The trainer skips logging silently without tensorboard, so these would fail
+# rather than skip in an env that lacks it.
+pytest.importorskip("tensorboard")
 
 
 def _make_trainer(tmp_path, tensorboard):
