@@ -1,12 +1,14 @@
 import click
 import logging
-logging.basicConfig(level=logging.INFO)
+from cellmap_flow.utils.logging_setup import configure_logging
+
 logger = logging.getLogger(__name__)
 
 @click.command()
 @click.argument("yaml_configs", nargs=-1, required=True, type=click.Path(exists=True))
 def cli(yaml_configs: tuple) -> None:
     """Process multiple YAML configuration files."""
+    configure_logging(logging.INFO)
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
     from cellmap_flow.utils.config_utils import ConfigError
 

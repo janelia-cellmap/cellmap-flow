@@ -1,9 +1,6 @@
 import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
-import logging
-logging.getLogger().setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
 
 
 @click.command()

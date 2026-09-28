@@ -1,9 +1,8 @@
 import logging
-logging.getLogger().setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
+
+# No logging configuration here: the CLIs set it up, and the dashboard,
+# which imports this lazily, keeps its own.
 logger = logging.getLogger(__name__)
-logging.getLogger().setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
 
 import subprocess
 from pathlib import Path
