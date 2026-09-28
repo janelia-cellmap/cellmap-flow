@@ -805,6 +805,7 @@
             setupNodeDragging(nodeEl, nodeWithType);
             renderConnections();
             debouncedApply();
+            invalidateBlockwiseSteps();
             showMessage(`Added ${name}`, 'success');
         }
 
@@ -871,6 +872,7 @@
             if (nodeEl) nodeEl.remove();
             renderConnections();
             debouncedApply();
+            invalidateBlockwiseSteps();
             showMessage('Node removed', 'success');
         }
 
@@ -1039,6 +1041,7 @@
             // Apply it like any other edit; it used to reach the backend
             // only with the next edit or the unload beacon.
             debouncedApply();
+            invalidateBlockwiseSteps();
             showMessage(`✓ Output channels configured: ${selectedChannels.join(', ')}`, 'success');
         }
 
@@ -1143,6 +1146,7 @@
                         inputNode.params = inputNode.params || {};
                         inputNode.params.bounding_boxes = bboxes;
                         renderCanvas();
+                        invalidateBlockwiseSteps();
                         showMessage(`✓ Loaded ${bboxes.length} bounding box(es) from file`, 'success');
                     }
                 } catch (err) {
@@ -1335,7 +1339,7 @@
                     if (inputNode) {
                         inputNode.params = inputNode.params || {};
                         inputNode.params.bounding_boxes = bboxes;
-                        
+                        invalidateBlockwiseSteps();
                         showMessage(`✓ Saved ${bboxes.length} bounding box(es)`, 'success');
                     }
 
@@ -1355,6 +1359,7 @@
                 inputNode.params = inputNode.params || {};
                 inputNode.params[paramName] = paramValue;
                 renderCanvas();
+                invalidateBlockwiseSteps();
             }
         }
 
@@ -1910,6 +1915,7 @@
                 }
             }
             debouncedApply();
+            invalidateBlockwiseSteps();
         }
 
         function saveNode(nodeId, nodeType) {
@@ -2030,6 +2036,7 @@
             if (defaults.config) node.config = defaults.config;
             renderCanvas();
             debouncedApply();
+            invalidateBlockwiseSteps();
             showMessage(`${node.name} reset to defaults`, 'success');
         }
 
@@ -2421,6 +2428,7 @@
                         }
                     }
                     
+                    invalidateBlockwiseSteps();
                     showMessage('Pipeline imported successfully', 'success');
                     document.getElementById('import-file').value = '';
                 } catch (err) {
@@ -2752,6 +2760,7 @@
                         });
                         renderConnections();
                         debouncedApply();
+                        invalidateBlockwiseSteps();
                         showMessage('Connection created', 'success');
                     } else {
                         showMessage('Connection already exists', 'info');
@@ -2844,6 +2853,7 @@
             pipeline.edges = pipeline.edges.filter(e => e.id !== edgeId);
             renderConnections();
             debouncedApply();
+            invalidateBlockwiseSteps();
             showMessage('Connection deleted', 'success');
         }
 
@@ -2967,6 +2977,44 @@
             model_mode: ""  // Stores the selected model merge mode
         };
 
+        // Submit sends the task YAMLs that Generate wrote and Precheck
+        // checked, so the steps only hold while the pipeline they were run on
+        // is unchanged. Any edit to it -- a node, a parameter, an edge, the
+        // bounding boxes, output channels, the blockwise node or the merge
+        // mode -- sends the user back to Validate. (Before, the steps stayed
+        // unlocked after an edit, and Submit regenerated the YAMLs anyway, so
+        // what ran was never the thing that had been prechecked.)
+        // blockwiseEdits lets a step that was in flight during an edit tell
+        // that its answer is about a pipeline that no longer exists.
+        let blockwiseEdits = 0;
+        function invalidateBlockwiseSteps() {
+            blockwiseEdits += 1;
+            const started = blockwiseState.validated || blockwiseState.generated || blockwiseState.prechecked;
+            blockwiseState.validated = false;
+            blockwiseState.generated = false;
+            blockwiseState.prechecked = false;
+            blockwiseState.yaml_paths = null;
+            ['btn-generate', 'btn-precheck', 'btn-submit'].forEach(id => {
+                document.getElementById(id).disabled = true;
+            });
+            if (started) {
+                const status = document.getElementById('blockwise-status');
+                status.textContent = 'Pipeline changed: validate again';
+                status.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        // True, after telling the user, when the pipeline was edited while a
+        // step started at edit count `editsAtStart` was waiting on the server.
+        function blockwiseEditedSince(editsAtStart) {
+            if (editsAtStart === blockwiseEdits) return false;
+            const status = document.getElementById('blockwise-status');
+            status.textContent = 'Pipeline changed: validate again';
+            status.style.color = 'var(--text-secondary)';
+            showMessage('Pipeline changed during that step; validate again', 'info');
+            return true;
+        }
+
         // Initialize Model Merger dropdown
         function initializeModelMergerDropdown() {
             const dropdown = document.getElementById('model-merge-mode');
@@ -2989,6 +3037,7 @@
             dropdown.addEventListener('change', (e) => {
                 blockwiseState.model_mode = e.target.value;
                 console.log('Selected model merge mode:', blockwiseState.model_mode);
+                invalidateBlockwiseSteps();
             });
         }
         
@@ -2999,6 +3048,7 @@
         async function validateBlockwise() {
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Validating...';
+            const editsAtStart = blockwiseEdits;
             
             try {
                 // Add model_mode to pipeline
@@ -3014,6 +3064,7 @@
                 });
                 
                 const data = await response.json();
+                if (blockwiseEditedSince(editsAtStart)) return;
                 if (data.valid) {
                     showMessage('✓ Pipeline valid for blockwise processing', 'success');
                     status.textContent = '✓ Step 1: Validated';
@@ -3054,6 +3105,7 @@
             }
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Generating...';
+            const editsAtStart = blockwiseEdits;
             
             try {
                 // Add model_mode to pipeline if multiple models are present
@@ -3069,6 +3121,7 @@
                 });
                 
                 const data = await response.json();
+                if (blockwiseEditedSince(editsAtStart)) return;
                 if (data.success) {
                     const taskPath = (data.task_paths && data.task_paths[0]) || data.task_name || 'Task';
                     showMessage(`✓ Task generated: ${taskPath}`, 'success');
@@ -3076,7 +3129,8 @@
                     status.style.color = 'var(--accent-green)';
                     blockwiseState.generated = true;
                     blockwiseState.prechecked = false;
-                    blockwiseState.yaml_paths = data.task_paths;  // Store yaml_paths for precheck
+                    // The YAMLs precheck checks and submit runs.
+                    blockwiseState.yaml_paths = data.task_paths;
                     // Enable precheck
                     document.getElementById('btn-precheck').disabled = false;
                     // Disable submit until prechecked
@@ -3110,6 +3164,7 @@
             }
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Prechecking...';
+            const editsAtStart = blockwiseEdits;
             
             try {
                 const response = await fetch('/api/blockwise/precheck', {
@@ -3119,6 +3174,7 @@
                 });
                 
                 const data = await response.json();
+                if (blockwiseEditedSince(editsAtStart)) return;
                 if (data.success) {
                     showMessage(`✓ Precheck passed: ${data.message}`, 'success');
                     status.textContent = `✓ Step 3: Prechecked`;
@@ -3146,10 +3202,12 @@
         }
 
         async function submitBlockwiseTask() {
-            if (!blockwiseState.prechecked) {
+            if (!blockwiseState.prechecked || !(blockwiseState.yaml_paths || []).length) {
                 showMessage('⚠️ Please precheck first', 'info');
                 return;
             }
+            // Captured before the prompt: these are the files Precheck passed.
+            const yamlPaths = blockwiseState.yaml_paths.slice();
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Submitting...';
             
@@ -3169,7 +3227,9 @@
                 const response = await fetch('/api/blockwise/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName })
+                    // yaml_paths: run the prechecked task files rather than
+                    // having the server generate new ones.
+                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName, yaml_paths: yamlPaths })
                 });
                 
                 const data = await response.json();
