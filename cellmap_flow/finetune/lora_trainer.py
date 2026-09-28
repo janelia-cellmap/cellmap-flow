@@ -39,6 +39,11 @@ def soft_target_entropy(target, eps=1e-7):
     return -(t * torch.log(t) + (1 - t) * torch.log(1 - t))
 
 
+def cpu_state_copy(model: nn.Module) -> Dict[str, torch.Tensor]:
+    """A CPU copy of ``model``'s state dict, to reset a full finetune to."""
+    return {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()}
+
+
 def frozen_teacher_copy(model: nn.Module) -> nn.Module:
     """A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune."""
     import copy
@@ -275,6 +280,7 @@ class LoRAFinetuner:
         target_transform=None,
         tensorboard: bool = True,
         teacher_model: Optional[nn.Module] = None,
+        initial_state: Optional[Dict[str, torch.Tensor]] = None,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -321,6 +327,15 @@ class LoRAFinetuner:
 
         # Move model to device
         self.model = self.model.to(self.device)
+
+        # A full finetune changes the weights themselves, so resetting it --
+        # after a NaN, or for a restart -- needs the weights it started from.
+        # Kept on the CPU. LoRA resets by re-initialising its adapter instead.
+        self.initial_state = None
+        if not self._is_peft():
+            self.initial_state = (
+                initial_state if initial_state is not None else cpu_state_copy(self.model)
+            )
 
         # Optimizer (only LoRA parameters)
         self.optimizer = AdamW(
@@ -537,17 +552,14 @@ class LoRAFinetuner:
 
     def _reset_training_state(self):
         """Reset LoRA weights, optimizer, and training counters for a fresh start."""
-        from peft import PeftModel
-        if isinstance(self.model, PeftModel):
+        if self._is_peft():
             # Reset LoRA adapter weights to zero (equivalent to base model)
             for name, param in self.model.named_parameters():
                 if 'lora_' in name and param.requires_grad:
                     nn.init.zeros_(param) if 'lora_B' in name else nn.init.kaiming_uniform_(param, a=math.sqrt(5))
-        else:
-            logger.warning(
-                "Full finetune: a fresh restart resets the optimizer but NOT the "
-                "weights, which continue from where the previous run left them."
-            )
+        elif self.initial_state is not None:
+            self.model.load_state_dict(self.initial_state)
+            logger.info("Full finetune: weights reset to the ones training started from.")
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.optimizer.defaults['lr'],
@@ -1020,6 +1032,20 @@ class LoRAFinetuner:
         }
 
     @torch.no_grad()
+    def _gradients_finite(self) -> bool:
+        """Whether every accumulated gradient is finite.
+
+        With fp16 the GradScaler already skips a step whose gradients
+        overflowed, and it must see them scaled, so leave that case to it.
+        """
+        if self.scaler.is_enabled():
+            return True
+        grads = [p.grad for p in self.model.parameters() if p.grad is not None]
+        if not grads:
+            return True
+        return bool(torch.isfinite(torch.stack([g.float().norm() for g in grads])).all())
+
+    @torch.no_grad()
     def _teacher_forward(self, raw):
         """The starting model's prediction on ``raw``, for the distillation term.
 
@@ -1226,6 +1252,21 @@ class LoRAFinetuner:
             if self.tb is not None and batch_idx == 0 and self.current_epoch % self.tb_image_every == 0:
                 self._tb_log_images(raw, target, pred, mask)
 
+            # A non-finite loss must never reach the optimizer. This check used
+            # to run after scaler.step(), and under bf16 or fp32 -- where the
+            # scaler is off and so does not skip inf/NaN steps itself -- AdamW
+            # had already written NaN into every trainable weight. LoRA
+            # recovered on restart by re-making its adapter; a full finetune
+            # kept NaN weights, served them, and trained on from them.
+            if not torch.isfinite(loss):
+                logger.warning(
+                    f"NaN/Inf loss at epoch {self.current_epoch+1}, batch "
+                    f"{batch_idx+1}; skipping the update and aborting the epoch."
+                )
+                self.optimizer.zero_grad(set_to_none=True)
+                self.last_supervised_loss = float('nan')
+                return float('nan')
+
             # Backward pass
             self.scaler.scale(loss).backward()
 
@@ -1246,6 +1287,14 @@ class LoRAFinetuner:
 
             # Update weights after accumulation
             if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+                if not self._gradients_finite():
+                    logger.warning(
+                        f"NaN/Inf gradient at epoch {self.current_epoch+1}, batch "
+                        f"{batch_idx+1}; skipping the update and aborting the epoch."
+                    )
+                    self.optimizer.zero_grad(set_to_none=True)
+                    self.last_supervised_loss = float('nan')
+                    return float('nan')
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad()
@@ -1306,6 +1355,11 @@ class LoRAFinetuner:
         # Handle leftover accumulated gradients at end of epoch
         # (in case num_batches is not divisible by gradient_accumulation_steps)
         if num_batches % self.gradient_accumulation_steps != 0:
+            if not self._gradients_finite():
+                logger.warning("NaN/Inf gradient in the last accumulation step; skipping the update.")
+                self.optimizer.zero_grad(set_to_none=True)
+                self.last_supervised_loss = float('nan')
+                return float('nan')
             self.scaler.step(self.optimizer)
             self.scaler.update()
             self.optimizer.zero_grad()

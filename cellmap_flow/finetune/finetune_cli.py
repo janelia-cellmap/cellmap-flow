@@ -318,6 +318,52 @@ def _apply_restart_params(args, signal_data: dict):
                 logger.warning(f"Failed to update metadata.json: {e}")
 
 
+def _is_peft_model(model) -> bool:
+    try:
+        from peft import PeftModel
+    except ImportError:
+        return False
+    return isinstance(model, PeftModel)
+
+
+def _reset_for_restart(lora_model, args, initial_state=None):
+    """Put the model back where training started, for the next iteration.
+
+    LoRA: unload the adapter and wrap a fresh one around the base (which is
+    how the rank can change on restart). Full finetune: load the starting
+    weights back; before, the weights carried on from the previous iteration,
+    NaNs included when it had diverged, so a full finetune never really
+    restarted. The model object -- which the inference server shares -- is
+    built once, so a restart cannot switch between the two kinds.
+
+    Returns the model to train next.
+    """
+    if _is_peft_model(lora_model):
+        logger.info("Resetting LoRA adapter weights for fresh restart...")
+        if args.lora_r <= 0:
+            logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                           "submit a new job for that. Keeping the current adapter setup.")
+            args.lora_r = max(1, int(lora_model.peft_config['default'].r))
+        base = lora_model.unload()
+        lora_model = wrap_model_with_lora(
+            base,
+            lora_r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            lora_min_channels=args.lora_min_channels,
+        )
+    elif initial_state is not None:
+        logger.info("Resetting the full finetune to its starting weights for a fresh restart...")
+        lora_model.load_state_dict(initial_state)
+
+    lora_model.train()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    logger.info("Restarting training from the starting weights...")
+    return lora_model
+
+
 def _generate_model_files(args, model_config, timestamp):
     """
     Generate YAML config file after training.
@@ -934,7 +980,7 @@ def main():
         # model's cost is. The export is a full state dict under
         # full_finetune/, served via FinetuneModelConfig(weights_path=...).
         logger.info("lora_r=0: full finetuning -- every parameter trainable, no adapter. "
-                    "Restarts reset the optimizer but not the weights.")
+                    "Restarts start again from the starting weights.")
         for p in base_model.parameters():
             p.requires_grad_(True)
         lora_model = base_model
@@ -959,6 +1005,13 @@ def main():
     # restart neither copies the model again nor distils toward weights an
     # earlier iteration already changed.
     teacher_model = None
+    # The weights a full finetune starts from, on the CPU, to reset it to on
+    # restart. LoRA resets by re-making its adapter and needs none.
+    initial_state = None
+    if not _is_peft_model(lora_model):
+        from cellmap_flow.finetune.lora_trainer import cpu_state_copy
+
+        initial_state = cpu_state_copy(lora_model)
 
     while True:
         iteration += 1
@@ -1037,6 +1090,7 @@ def main():
             target_transform=target_transform,
             tensorboard=not args.no_tensorboard,
             teacher_model=teacher_model,
+            initial_state=initial_state,
         )
 
         # Resume from checkpoint if specified (first iteration only)
@@ -1068,30 +1122,7 @@ def main():
                         return 1
                     _apply_restart_params(args, restart_data)
 
-                    # Reset LoRA weights for fresh restart
-                    logger.info("Resetting LoRA adapter weights for fresh restart...")
-                    from peft import PeftModel
-                    if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
-                        # A restart cannot turn a LoRA run into a full finetune (or back):
-                        # the model object is built once. Keep the adapter and say so.
-                        logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
-                                       "submit a new job for that. Keeping the current adapter setup.")
-                        args.lora_r = max(1, int(lora_model.peft_config['default'].r))
-                    if isinstance(lora_model, PeftModel):
-                        base = lora_model.unload()
-                        lora_model = wrap_model_with_lora(
-                            base,
-                            lora_r=args.lora_r,
-                            lora_alpha=args.lora_alpha,
-                            lora_dropout=args.lora_dropout,
-                            lora_min_channels=args.lora_min_channels,
-                        )
-
-                    lora_model.train()
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    gc.collect()
-                    logger.info("Restarting training with fresh LoRA weights...")
+                    lora_model = _reset_for_restart(lora_model, args, initial_state)
                     print("RESTARTING_TRAINING", flush=True)
                     continue
                 else:
@@ -1153,33 +1184,9 @@ def main():
                 # Apply updated parameters
                 _apply_restart_params(args, restart_data)
 
-                # Reset LoRA weights to initial state for a true restart.
-                # Delete the current adapter and re-create it so training
-                # starts from the frozen base model, not from the previous
-                # finetuned weights.
-                logger.info("Resetting LoRA adapter weights for fresh restart...")
-                from peft import PeftModel
-                if isinstance(lora_model, PeftModel) and args.lora_r <= 0:
-                    # A restart cannot turn a LoRA run into a full finetune (or back):
-                    # the model object is built once. Keep the adapter and say so.
-                    logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
-                                   "submit a new job for that. Keeping the current adapter setup.")
-                    args.lora_r = max(1, int(lora_model.peft_config['default'].r))
-                if isinstance(lora_model, PeftModel):
-                    base = lora_model.unload()
-                    lora_model = wrap_model_with_lora(
-                        base,
-                        lora_r=args.lora_r,
-                        lora_alpha=args.lora_alpha,
-                        lora_dropout=args.lora_dropout,
-                        lora_min_channels=args.lora_min_channels,
-                    )
-
-                lora_model.train()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                gc.collect()
-                logger.info("Restarting training with fresh LoRA weights...")
+                # A true restart: training starts again from the model it
+                # started from, not from the previous iteration's weights.
+                lora_model = _reset_for_restart(lora_model, args, initial_state)
                 print("RESTARTING_TRAINING", flush=True)
                 continue  # Loop back to retrain
 
