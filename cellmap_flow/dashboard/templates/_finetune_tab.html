@@ -2366,8 +2366,8 @@ document.addEventListener("DOMContentLoaded", function () {
       restartJobBtn.disabled = true;
       restartJobBtn.textContent = 'Restarting...';
 
+      const jobId = document.getElementById('jobId').textContent;
       try {
-        const jobId = document.getElementById('jobId').textContent;
         const response = await fetch(`/api/finetune/job/${jobId}/restart`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2392,6 +2392,10 @@ document.addEventListener("DOMContentLoaded", function () {
           progressBar.textContent = '0%';
 
           restartJobBtn.style.display = 'none';
+          // A card restored after a reload had no poller running, so the
+          // restarted run never showed its progress. Start one (this
+          // replaces the poller if one is already running).
+          startStatusPolling(jobId);
         } else {
           alert('Failed to restart training: ' + data.error);
         }
@@ -2413,11 +2417,18 @@ document.addEventListener("DOMContentLoaded", function () {
       const data = await response.json();
       if (!data.success || !data.jobs || data.jobs.length === 0) return;
 
-      // Find the most recent active job (RUNNING, or COMPLETED/serving)
-      const activeJob = data.jobs.find(j =>
-        j.status === 'RUNNING' ||
-        (j.status === 'COMPLETED' && j.inference_server_ready)
-      );
+      // Find the most recent live job: queued, running, or finished and
+      // still serving (it can be restarted). A queued job needs its card
+      // too, or it cannot be cancelled after a reload. The list comes back
+      // oldest first.
+      const activeJob = data.jobs
+        .slice()
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .find(j =>
+          j.status === 'PENDING' ||
+          j.status === 'RUNNING' ||
+          (j.status === 'COMPLETED' && j.inference_server_ready)
+        );
       if (!activeJob) return;
 
       const jobId = activeJob.job_id;
@@ -2483,9 +2494,13 @@ document.addEventListener("DOMContentLoaded", function () {
       // Store latest status data for restart modal
       latestJobStatusData = activeJob;
 
-      // Resume polling and streaming if job is still running
-      if (activeJob.status === 'RUNNING') {
+      // Resume polling and streaming if job is still queued or running
+      if (activeJob.status === 'RUNNING' || activeJob.status === 'PENDING') {
         startLogStreaming(jobId);
+        startStatusPolling(jobId);
+      } else {
+        // Finished but still serving: keep the status current, so Restart
+        // (and a later training run) shows up here as it happens.
         startStatusPolling(jobId);
       }
 
