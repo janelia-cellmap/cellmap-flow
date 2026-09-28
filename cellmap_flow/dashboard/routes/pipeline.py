@@ -20,7 +20,7 @@ from cellmap_flow.utils.scale_pyramid import (
     prediction_shader,
 )
 from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.utils.web_utils import encode_to_str, ARGS_KEY
+from cellmap_flow.utils.web_utils import encode_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,33 @@ def _default_prediction_shader(model, host, previous_shader=None):
     return prediction_shader(color, value_range)
 
 
+def _prediction_source(model, host, st_data):
+    """The layer source for a prediction, overlaid on the raw's closest scale.
+
+    The same voxel-size override the initial layers (neuroglancer_utils) and
+    the finetune layers use. Without it, after a Submit every model whose
+    voxel size is not in the raw pyramid was drawn at the wrong scale.
+    """
+    # Imported here: neuroglancer_utils imports the dashboard app, which
+    # imports this module.
+    from cellmap_flow.utils.neuroglancer_utils import (
+        build_prediction_source,
+        get_raw_closest_scale,
+    )
+
+    override_scales = None
+    try:
+        output_voxel_size = fetch_model_info(host).get("output_voxel_size")
+        if output_voxel_size and g.dataset_path:
+            output_voxel_size = tuple(output_voxel_size)
+            closest = get_raw_closest_scale(g.dataset_path, output_voxel_size)
+            if closest is not None and tuple(closest) != output_voxel_size:
+                override_scales = closest
+    except Exception as e:
+        logger.warning(f"Could not compute override scales for '{model}': {e}")
+    return build_prediction_source(host, model, st_data, override_scales)
+
+
 @pipeline_bp.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
     equivalences_info = request.get_json()
@@ -229,12 +256,11 @@ def process():
             previous_shader = dropped_shaders.get(model)
             shader = g.shaders.get(model)
 
+            source = _prediction_source(model, host, st_data)
             if is_output_segmentation():
-                s.layers[model] = neuroglancer.SegmentationLayer(
-                    source=f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}",
-                )
+                s.layers[model] = neuroglancer.SegmentationLayer(source=source)
             else:
-                kwargs = {"source": f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"}
+                kwargs = {"source": source}
                 if not shader:
                     shader = _default_prediction_shader(model, host, previous_shader)
                 if shader:

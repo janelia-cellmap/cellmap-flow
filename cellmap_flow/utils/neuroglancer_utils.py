@@ -53,11 +53,14 @@ def build_prediction_source(host, model, st_data, override_scales):
 
     The prediction zarr is 4D (z, y, x, c). We override the spatial scales
     and leave the channel dim as a unitless dimension.
+
+    ``override_scales`` is in z, y, x order, as get_raw_closest_scale
+    returns it.
     """
     url = f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"
     if override_scales is None:
         return url
-    sx, sy, sz = override_scales[0], override_scales[1], override_scales[2]
+    sz, sy, sx = override_scales[0], override_scales[1], override_scales[2]
     # Use a dict form so we can supply matching input/output dimensions
     # of the same rank (neuroglancer requires equal rank on both sides).
     return {
