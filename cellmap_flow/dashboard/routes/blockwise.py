@@ -182,35 +182,21 @@ def generate_blockwise_task():
         normalizers_list = pipeline.get("normalizers", [])
         postprocessors_list = pipeline.get("postprocessors", [])
 
-        # Create json_data for blockwise processor - maintain order by using list iteration order
+        # Create json_data for the blockwise processor in the ordered list form
+        # [{name, **params}]. A dict keyed by name kept only the last of two
+        # steps with the same name, silently changing the chain.
         if normalizers_list or postprocessors_list:
             try:
-                # Build normalizers dict - preserve insertion order from normalizers_list
-                norm_fns = {}
-                for norm in normalizers_list:
-                    if isinstance(norm, dict):
-                        norm_name = norm.get("name")
-                        norm_params = norm.get("params", {})
-                    else:
-                        continue
-                    if norm_name:
-                        norm_fns[norm_name] = norm_params
+                def chain_steps(steps):
+                    return [
+                        {"name": step["name"], **(step.get("params") or {})}
+                        for step in steps
+                        if isinstance(step, dict) and step.get("name")
+                    ]
 
-                # Build postprocessors dict - preserve insertion order from postprocessors_list
-                post_fns = {}
-                for post in postprocessors_list:
-                    if isinstance(post, dict):
-                        post_name = post.get("name")
-                        post_params = post.get("params", {})
-                    else:
-                        continue
-                    if post_name:
-                        post_fns[post_name] = post_params
-
-                # Create json_data as dict (not JSON string) using the correct key constants
                 json_data_dict = {
-                    INPUT_NORM_DICT_KEY: norm_fns,
-                    POSTPROCESS_DICT_KEY: post_fns
+                    INPUT_NORM_DICT_KEY: chain_steps(normalizers_list),
+                    POSTPROCESS_DICT_KEY: chain_steps(postprocessors_list),
                 }
                 # Store as dict (YAML will handle it properly)
                 task_yaml["json_data"] = json_data_dict
