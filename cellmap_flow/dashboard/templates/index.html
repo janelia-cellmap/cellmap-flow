@@ -249,12 +249,22 @@
   <script src="{{ url_for('static', filename='js/dashboard_script.js') }}"></script>
   <!-- shared_submit.js or inside a <script> tag in your base layout -->
   <script>
+    // Enter in a parameter field of the Input or Postprocess list submits the
+    // pipeline, like Submit All. Only there: every submit rebuilds all the
+    // viewer's layers, so Enter anywhere else -- a newline in a textarea, the
+    // output path, a search box, a modal -- must not trigger one, and Enter
+    // on a focused button already clicks it.
+    const SUBMIT_ON_ENTER_SKIP_TYPES = ["checkbox", "radio", "button", "submit", "reset", "file"];
     document.addEventListener('keydown', function (event) {
-      // Check if the key pressed is "Enter"
-      if (event.key === "Enter") {
-        // Trigger a click event on the button
-        document.getElementById("submitAll").click();
-      }
+      if (event.key !== "Enter" || event.isComposing) return;
+      const target = event.target;
+      if (!target || target.tagName !== "INPUT") return;
+      if (SUBMIT_ON_ENTER_SKIP_TYPES.indexOf(target.type) !== -1) return;
+      const form = target.closest("#inputNormForm, #postProcessForm");
+      if (!form) return;
+      event.preventDefault();
+      const button = form.querySelector("#submitAll");
+      if (button) button.click();
     });
     document.addEventListener("DOMContentLoaded", function () {
       // Find all elements with id="submitAll" (there could be 2 if both partials exist)
