@@ -669,8 +669,37 @@ def _build_target_transform(args, model_config):
     output_type = args.output_type
     num_channels = model_config.config.output_channels
 
+    # --select-channel slices the prediction to one channel, so the target
+    # must have one too. Distance and binary_broadcast built theirs with every
+    # channel, and the first batch failed on the size mismatch.
+    select_channel = getattr(args, "select_channel", None)
+    if select_channel is not None:
+        if not 0 <= int(select_channel) < num_channels:
+            raise ValueError(
+                f"--select-channel {select_channel} is out of range for a model with "
+                f"{num_channels} output channel(s)."
+            )
+        if output_type == "affinities":
+            raise ValueError(
+                "--select-channel cannot be combined with --output-type affinities: the "
+                "affinity target has one channel per offset. Drop --select-channel, or "
+                "train that channel with --output-type binary."
+            )
+        num_channels = 1
+
     if output_type == "binary":
-        if num_channels > 1 and args.select_channel is None:
+        if num_channels > 1:
+            if getattr(args, "loss_type", None) in ("bce", "mse", "combined"):
+                # BCE compares shapes exactly: this failed on the first batch
+                # with "Target size [2, 1, ...] must be the same as input size
+                # [2, 3, ...]". Dice and margin broadcast the one-channel
+                # target over the channels, and keep doing so.
+                raise ValueError(
+                    f"The model has {num_channels} output channels but --output-type "
+                    f"binary makes a one-channel target, which --loss-type "
+                    f"{args.loss_type} cannot compare with. Train one channel with "
+                    f"--select-channel, or all of them with --output-type binary_broadcast."
+                )
             logger.warning(
                 f"Model has {num_channels} output channels but --output-type is 'binary' "
                 f"and --select-channel is not set. Consider using --select-channel or "
