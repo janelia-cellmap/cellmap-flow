@@ -252,6 +252,11 @@ def process():
         for job in g.jobs:
             model = job.model_name
             host = job.host
+            if not host:
+                # Submitted without waiting for a host (wait_for_host=False)
+                # and not up yet: there is no URL to point a layer at.
+                logger.info(f"Skipping layer for {model}: its job has no host yet")
+                continue
             st_data = encode_to_str(data)
             previous_shader = dropped_shaders.get(model)
             shader = g.shaders.get(model)

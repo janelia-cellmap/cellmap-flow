@@ -1,7 +1,7 @@
 from cellmap_flow.globals import g
 
 
-from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     kill_n_remove_from_neuroglancer,
@@ -23,6 +23,21 @@ def _sanitize_job_name(name: str) -> str:
     return re.sub(r"[\s\-]+", "_", name)
 
 
+def _start(command, name):
+    """start_hosts(), or None after logging why the job did not start.
+
+    These run in the dashboard's launch threads: an uncaught JobStartError
+    (including a bsub timeout) only reached stderr, never the log panel.
+    """
+    try:
+        return start_hosts(
+            command, job_name=name, queue=g.queue, charge_group=g.charge_group
+        )
+    except JobStartError as e:
+        logger.error(f"Could not start model '{name}': {e}")
+        return None
+
+
 def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
@@ -32,9 +47,9 @@ def run_model(model_path, name, st_data):
          "-d", str(g.dataset_path)]
     )
     logger.info(f"To be submitted command : {command}")
-    job = start_hosts(
-        command, job_name=name, queue=g.queue, charge_group=g.charge_group
-    )
+    job = _start(command, name)
+    if job is None:
+        return
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(
             source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
@@ -52,9 +67,9 @@ def run_hf_model(repo, name, st_data):
          "-d", str(g.dataset_path)]
     )
     logger.info(f"To be submitted HF command : {command}")
-    job = start_hosts(
-        command, job_name=name, queue=g.queue, charge_group=g.charge_group
-    )
+    job = _start(command, name)
+    if job is None:
+        return
     with g.viewer.txn() as s:
         s.layers[job.model_name] = neuroglancer.ImageLayer(
             source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
