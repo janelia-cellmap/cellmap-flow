@@ -123,6 +123,16 @@ def test_failed_submissions_raise_instead_of_running_on_this_host(lsf):
     assert g.jobs == []
 
 
+def test_the_reason_is_logged_as_well_as_raised(lsf, caplog):
+    # The dashboard starts models on threads whose exceptions only reach
+    # stderr; its log panel shows log records.
+    lsf.jobs = {q: FakeLSFJob(q, status=JobStatus.FAILED) for q in ("gpu_h100", "gpu_a100", "gpu_h200")}
+    with caplog.at_level("ERROR", logger=bsub_utils.logger.name):
+        with pytest.raises(bsub_utils.JobStartError) as exc:
+            start_hosts("serve", queue="gpu_h100", job_name="m")
+    assert str(exc.value) in caplog.text
+
+
 def test_runs_locally_when_there_is_no_bsub(lsf, monkeypatch):
     monkeypatch.setattr(bsub_utils, "is_bsub_available", lambda: False)
     local = FakeLocalJob()

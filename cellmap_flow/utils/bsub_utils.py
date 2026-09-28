@@ -88,6 +88,16 @@ class JobStartError(RuntimeError):
     """A job was asked for and no usable one came of it."""
 
 
+def _logged(error: Exception) -> Exception:
+    """Log ``error`` and hand it back to be raised.
+
+    start_hosts often runs on a dashboard thread whose exceptions reach only
+    stderr, while log records also reach the dashboard's log panel.
+    """
+    logger.error(str(error))
+    return error
+
+
 class BsubTimeoutError(JobStartError):
     """bsub did not answer in time, and the job it may yet create is unknown.
 
@@ -868,11 +878,11 @@ def submit_bsub_job(
         now = _job_ids_named(job_name)
         new_ids = (now - existing) if (now is not None and existing is not None) else set()
         if len(new_ids) != 1:
-            raise BsubTimeoutError(
+            raise _logged(BsubTimeoutError(
                 f"bsub did not answer within {bsub_timeout}s and no new "
                 f"job named {job_name} can be identified; LSF may still create "
                 f"it. Check `bjobs -a -J {job_name}` before submitting again."
-            ) from e
+            )) from e
         job_id = new_ids.pop()
         logger.warning(f"bsub timed out, but job {job_id} ({job_name}) was submitted")
     except subprocess.CalledProcessError as e:
@@ -1081,17 +1091,17 @@ def start_hosts(
             # may still be alive is killed rather than left to bill.
             if observed == JobStatus.RUNNING:
                 job.kill()
-                raise JobStartError(
+                raise _logged(JobStartError(
                     f"Job {job.job_id} for {job_name} on {candidate} ran for "
                     f"{STARTUP_TIMEOUT_SECONDS}s without reporting a server "
                     f"address and has been killed; see {job.log_file}"
-                )
+                ))
             if observed is not None and observed != JobStatus.PENDING:
-                raise JobStartError(
+                raise _logged(JobStartError(
                     f"Job {job.job_id} for {job_name} on {candidate} ended "
                     f"({observed.value}) without reporting a server address; "
                     f"see {job.log_file}"
-                )
+                ))
 
             if more_to_try:
                 logger.warning(
@@ -1102,15 +1112,15 @@ def start_hosts(
                 job.kill()
             else:
                 job.kill()
-                raise JobStartError(
+                raise _logged(JobStartError(
                     f"Job {job.job_id} for {job_name} did not start on "
                     f"{' or '.join(candidates)}; it has been killed"
-                )
+                ))
 
-        raise JobStartError(
+        raise _logged(JobStartError(
             f"No GPU queue accepted {job_name}: "
             + ("; ".join(submit_errors) or "no queue to submit to")
-        )
+        ))
     else:
         logger.info("bsub not available, running locally")
 
@@ -1118,10 +1128,10 @@ def start_hosts(
 
     if wait_for_host and not job.wait_for_host():
         job.kill()
-        raise JobStartError(
+        raise _logged(JobStartError(
             f"The local server for {job_name} did not report its address; "
             f"see {getattr(job, 'log_file', None)}"
-        )
+        ))
 
     g.jobs.append(job)
     return job
