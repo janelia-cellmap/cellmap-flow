@@ -8,7 +8,7 @@ from typing import Sequence, Union
 import numpy as np
 import tensorstore as ts
 import zarr
-from funlib.geometry import Coordinate, Roi
+from funlib.geometry import Coordinate
 from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
@@ -116,7 +116,7 @@ def find_target_scale(zarr_grp_path, target_resolution):
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
     target_scale = None
     for scale, res in resolutions.items():
-        if Coordinate(res) == Coordinate(target_resolution):
+        if zarr_v3.same_voxel_size(res, target_resolution):
             target_scale = scale
             break
     if target_scale is None:
@@ -137,10 +137,10 @@ def find_closest_scale(zarr_grp_path, target_resolution):
     for scale, res in resolutions.items():
         if last_scale is None:
             last_scale = scale
-        if Coordinate(res) == Coordinate(target_resolution):
+        if zarr_v3.same_voxel_size(res, target_resolution):
             target_scale = scale
             break
-        elif any((r > t for r, t in zip(res, target_resolution))):
+        elif zarr_v3.coarser_anywhere(res, target_resolution):
             target_scale = last_scale
             break
         last_scale = scale
@@ -600,14 +600,16 @@ def to_ndarray_tensorstore(
         return data
 
     if offset is None:
-        offset = Coordinate(np.zeros(roi.dims, dtype=int))
+        offset = np.zeros(roi.dims)
 
     if output_voxel_size is None:
         output_voxel_size = voxel_size
 
     rescale_factor = 1
-    if voxel_size != output_voxel_size:
+    if not zarr_v3.same_voxel_size(voxel_size, output_voxel_size):
         # in the case where there is a mismatch in voxel sizes, we may need to extra pad to ensure that the output is a multiple of the output voxel size
+        voxel_size = Coordinate(voxel_size)
+        output_voxel_size = Coordinate(output_voxel_size)
         original_roi = roi
         roi = original_roi.snap_to_grid(voxel_size)
         rescale_factor = voxel_size[0] / output_voxel_size[0]
@@ -617,11 +619,20 @@ def to_ndarray_tensorstore(
             slice(snapped_offset[i], snapped_end[i]) for i in range(3)
         )
 
-    roi -= offset
-    roi /= voxel_size
+    # World nm -> voxel indices, in floats: dividing a Roi by a Coordinate
+    # first truncated a 5.24 nm voxel size to 5. Rounding is unchanged for
+    # integer sizes (truncation, except that float noise like 9.9999999 is 10).
+    voxel_size_f = np.asarray(voxel_size, dtype=float)
+    begin = np.trunc(
+        zarr_v3.snap_integral(
+            (np.asarray(roi.begin, dtype=float) - np.asarray(offset, dtype=float))
+            / voxel_size_f
+        )
+    )
+    size = np.trunc(zarr_v3.snap_integral(np.asarray(roi.shape, dtype=float) / voxel_size_f))
 
     # Specify the range
-    roi_slices = roi.to_slices()
+    roi_slices = tuple(slice(int(b), int(b + s)) for b, s in zip(begin, size))
 
     domain = dataset.domain
     # Compute the valid range
@@ -1067,9 +1078,21 @@ def regularize_offset(voxel_size_float, offset_float):
         voxel_size_float ([float]): float voxel size list
         offset_float ([float]): float offset list
     Returns:
-        (Coordinate, Coordinate)): returned offset size that is multiple of voxel size
+        (Coordinate, Coordinate)): returned offset size that is multiple of voxel size.
+        For a non-integer voxel size, two tuples of floats instead (the same
+        rounding, without truncating the voxel size to an integer first).
     """
-    voxel_size, offset = Coordinate(voxel_size_float), Coordinate(offset_float)
+    snapped_voxel_size = zarr_v3.snap_integral(voxel_size_float)
+    if not zarr_v3.is_integral(snapped_voxel_size):
+        vs = snapped_voxel_size
+        off = zarr_v3.snap_integral(offset_float)
+        if not np.allclose(np.round(off / vs) * vs, off):
+            logger.debug(f"Offset: {off} being rounded to nearest voxel size: {vs}")
+            off = zarr_v3.snap_integral(np.trunc((off + vs / 2) / vs) * vs)
+        return tuple(float(v) for v in vs), tuple(float(v) for v in off)
+
+    voxel_size = Coordinate(int(v) for v in snapped_voxel_size)
+    offset = Coordinate(offset_float)
 
     if voxel_size is not None and (offset / voxel_size) * voxel_size != offset:
 
@@ -1099,9 +1122,11 @@ def _read_voxel_size_offset(ds, order="C"):
 
 
 def _ome_level_info(group, leaf, ds):
-    """get_ds_info for array ``ds``, the ``leaf`` dataset of OME group ``group``.
+    """Metadata of array ``ds``, the ``leaf`` dataset of OME group ``group``.
 
-    Returns None when ``group`` has no multiscales. Spatial axes only, in nm.
+    ``(voxel_size, offset, chunk_shape, shape, axes_names, "zarr")`` with
+    nanometer floats, spatial axes only; None when ``group`` has no
+    multiscales.
     """
     multiscales = group.attrs.get("multiscales", None)
     if not multiscales:
@@ -1123,18 +1148,15 @@ def _ome_level_info(group, leaf, ds):
         (t["translation"] for t in transforms if t["type"] == "translation"),
         [0.0] * len(scale_transform),
     )
-    voxel_size = Coordinate(
-        zarr_v3.to_nm([scale_transform[i] for i in spatial_indices], units)
-    )
-    offset = Coordinate(zarr_v3.to_nm([translation[i] for i in spatial_indices], units))
-    shape = Coordinate(ds.shape[i] for i in spatial_indices)
+    voxel_size = zarr_v3.to_nm([scale_transform[i] for i in spatial_indices], units)
+    offset = zarr_v3.to_nm([translation[i] for i in spatial_indices], units)
+    shape = tuple(ds.shape[i] for i in spatial_indices)
     chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
-    roi = Roi(offset, voxel_size * shape)
-    return voxel_size, chunk_shape, shape, roi, list(spatial_names), "zarr"
+    return voxel_size, offset, chunk_shape, shape, list(spatial_names), "zarr"
 
 
 def _attrs_info(ds, filetype="zarr", order=None):
-    """get_ds_info for an array described by its own (or its parent's) attrs.
+    """Metadata of an array described by its own (or its parent's) attrs.
 
     ``order`` is the *axis* order of those attrs: "F" for N5. A zarr array's
     own ``order`` is its chunk memory layout, not an axis order, so it is not
@@ -1150,12 +1172,16 @@ def _attrs_info(ds, filetype="zarr", order=None):
             "failed to read voxel size and offset for %s (%s), will use default values"
             % (getattr(ds, "path", ds), e)
         )
-        voxel_size = Coordinate((1,) * 3)
-        offset = Coordinate((0,) * 3)
-    shape = Coordinate(ds.shape[-len(voxel_size) :])
-    chunk_shape = tuple(ds.chunks[-len(voxel_size) :])
-    roi = Roi(offset, voxel_size * shape)
-    return voxel_size, chunk_shape, shape, roi, ["z", "y", "x"][-len(shape):], filetype
+        voxel_size, offset = (1,) * 3, (0,) * 3
+    n = len(voxel_size)
+    return (
+        [float(v) for v in voxel_size],
+        [float(v) for v in offset],
+        tuple(ds.chunks[-n:]),
+        tuple(ds.shape[-n:]),
+        ["z", "y", "x"][-n:],
+        filetype,
+    )
 
 
 def get_ds_info(path: str, mode: str = "r"):
@@ -1165,23 +1191,33 @@ def get_ds_info(path: str, mode: str = "r"):
     Spatial axes only, in C order (z, y, x), sizes and offsets in nanometers.
     Reads zarr v2 and v3 (local), zarr v2 over http(s) or anonymous s3, N5,
     and neuroglancer precomputed (local ``precomputed://`` or ``gs://``).
+
+    ``voxel_size`` is a Coordinate when it is a whole number of nanometers
+    and a tuple of floats otherwise (Coordinate would truncate 5.24 to 5);
+    ``roi`` is the integer-nm box covering the array. read_ds_meta() has the
+    exact float offset.
     """
+    return zarr_v3.legacy_ds_info(read_ds_meta(path, mode), path)
+
+
+def read_ds_meta(path: str, mode: str = "r"):
+    """``(voxel_size, offset, chunk_shape, shape, axes_names, filetype)`` for
+    one array, voxel size and offset as nanometer floats (see get_ds_info)."""
 
     path = _normalize_path(path)
 
     if path.startswith(("gs://", "precomputed://")):
         # open_ds_tensorstore puts these in C order and selects one channel.
         ts_info = open_ds_tensorstore(path)
-        shape = ts_info.shape
-        voxel_size = Coordinate(
-            d.to_json()[0] * zarr_v3.nm_per_unit(d.to_json()[1]) if d is not None else 1
+        shape = tuple(ts_info.shape)
+        voxel_size = [
+            d.to_json()[0] * zarr_v3.nm_per_unit(d.to_json()[1]) if d is not None else 1.0
             for d in ts_info.dimension_units
-        )
+        ]
         axes_names = list(ts_info.spec().transform.input_labels)
-        chunk_shape = Coordinate(ts_info.chunk_layout.read_chunk.shape)
-        roi = Roi([0] * len(shape), Coordinate(shape) * voxel_size)
+        chunk_shape = tuple(ts_info.chunk_layout.read_chunk.shape)
         file_type = "gs" if path.startswith("gs://") else "precomputed"
-        return voxel_size, chunk_shape, shape, roi, axes_names, file_type
+        return voxel_size, [0.0] * len(shape), chunk_shape, shape, axes_names, file_type
 
     if _is_remote_path(path):
         # http(s) and s3 alike: zarr v2 over fsspec.
@@ -1231,7 +1267,7 @@ def get_ds_info(path: str, mode: str = "r"):
 
     v3_container = zarr_v3.find_v3_container(path)
     if v3_container is not None:
-        return zarr_v3.get_ds_info_v3(path)
+        return zarr_v3.read_ds_meta_v3(path)
 
     filename, ds_name = split_dataset_path(path)
     if filename.endswith(".zarr") or _is_zarr_container(filename):

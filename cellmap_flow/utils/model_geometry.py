@@ -106,6 +106,12 @@ def _write_cache(data):
         logger.debug(f"Could not write the model geometry cache: {e}")
 
 
+def _json_number(value):
+    """An int when ``value`` is whole, else a float."""
+    value = float(value)
+    return int(value) if value.is_integer() else value
+
+
 def load_cached_geometry(model_config):
     """Geometry remembered for this exact model, or None."""
     key = cache_key(model_config)
@@ -134,9 +140,12 @@ def store_geometry(model_config, config):
         for field in GEOMETRY_FIELDS:
             value = getattr(config, field)
             # Coordinate and ndarray are both common here and neither is
-            # JSON-serializable; output_channels is a plain int.
+            # JSON-serializable; output_channels is a plain int. int() would
+            # also truncate a 5.24 nm voxel size to 5.
             entry[field] = (
-                [int(v) for v in value] if hasattr(value, "__iter__") else int(value)
+                [_json_number(v) for v in value]
+                if hasattr(value, "__iter__")
+                else int(value)
             )
     except (AttributeError, TypeError, ValueError) as e:
         logger.debug(f"Not caching geometry for {key}: {e}")

@@ -98,8 +98,76 @@ def spatial_axes(axes):
 def to_nm(values, units):
     """``values`` (one per spatial axis) converted to nanometers."""
     if units is None:
-        return list(values)
-    return [v * nm_per_unit(u) for v, u in zip(values, units)]
+        return [float(v) for v in values]
+    return [float(v) * nm_per_unit(u) for v, u in zip(values, units)]
+
+
+# Unit conversion leaves float noise (0.009 um -> 8.999999999999998 nm);
+# anything this close to a whole number is that number.
+_INTEGRAL_TOLERANCE = 1e-6
+
+_warned_non_integral = set()
+
+
+def snap_integral(values):
+    """``values`` as floats, with near-whole numbers made exactly whole."""
+    arr = np.asarray(values, dtype=float)
+    rounded = np.round(arr)
+    close = np.abs(arr - rounded) <= _INTEGRAL_TOLERANCE * np.maximum(1.0, np.abs(arr))
+    return np.where(close, rounded, arr)
+
+
+def is_integral(values) -> bool:
+    arr = np.asarray(values, dtype=float)
+    return bool(np.all(snap_integral(arr) == np.round(arr)))
+
+
+def coordinate_or_floats(values, what="voxel size", where=""):
+    """A Coordinate when every value is a whole number, else a tuple of floats.
+
+    Coordinate truncates: Coordinate(5.24) is 5, and a dataset at 5.24 nm
+    then read 5% of the wrong voxels. Non-integer values are kept as floats
+    (with a one-time warning) instead.
+    """
+    if values is None:
+        return None
+    snapped = snap_integral(values)
+    if is_integral(snapped):
+        return Coordinate(int(v) for v in snapped)
+    key = (what, where, tuple(snapped.tolist()))
+    if key not in _warned_non_integral:
+        _warned_non_integral.add(key)
+        logger.warning(
+            f"{where or 'dataset'}: {what} {tuple(snapped.tolist())} is not a whole "
+            "number of nanometers; keeping it as floats"
+        )
+    return tuple(float(v) for v in snapped)
+
+
+def same_voxel_size(a, b) -> bool:
+    """Equal as nanometer floats. Coordinate() truncated both sides, so a
+    target of (10, 8, 8) matched an actual (10.48, 8, 8)."""
+    a, b = snap_integral(a), snap_integral(b)
+    return a.shape == b.shape and bool(np.allclose(a, b, rtol=1e-6, atol=1e-9))
+
+
+def coarser_anywhere(resolution, target) -> bool:
+    """``resolution`` is coarser than ``target`` along some axis."""
+    return any(
+        r > t and not np.isclose(r, t, rtol=1e-6, atol=1e-9)
+        for r, t in zip(snap_integral(resolution), snap_integral(target))
+    )
+
+
+def covering_roi(offset, voxel_size, shape):
+    """The integer-nm Roi covering ``shape`` voxels at ``offset``.
+
+    Exactly Roi(offset, voxel_size * shape) when everything is integral.
+    """
+    begin = snap_integral(offset)
+    end = snap_integral(begin + snap_integral(voxel_size) * np.asarray(shape, dtype=float))
+    begin, end = np.floor(begin).astype(int), np.ceil(end).astype(int)
+    return Roi(Coordinate(begin), Coordinate(end - begin))
 
 
 def is_v3_container(path: str) -> bool:
@@ -250,10 +318,10 @@ def find_closest_scale_v3(group_path: str, target_resolution) -> Tuple[str, list
     for scale, res in resolutions.items():
         if last_scale is None:
             last_scale = scale
-        if Coordinate(res) == Coordinate(target_resolution):
+        if same_voxel_size(res, target_resolution):
             target_scale = scale
             break
-        elif any(r > t for r, t in zip(res, target_resolution)):
+        elif coarser_anywhere(res, target_resolution):
             target_scale = last_scale
             break
         last_scale = scale
@@ -263,8 +331,9 @@ def find_closest_scale_v3(group_path: str, target_resolution) -> Tuple[str, list
 
 
 def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
-    """Build the ``get_ds_info``-contract tuple for one dataset entry of a
-    multiscale group's ``datasets`` list."""
+    """Metadata of one dataset entry of a multiscale group's ``datasets`` list:
+    ``(voxel_size, offset, chunk_shape, shape, axes_names, "zarr")`` with
+    voxel size and offset as nanometer floats."""
     spatial_indices, spatial_names, units = spatial_axes(ms.get("axes", []))
 
     array_path = os.path.join(group_path, dataset_entry["path"])
@@ -278,50 +347,75 @@ def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
     )
     chunk_shape = tuple(arr_meta["chunk_grid"]["configuration"]["chunk_shape"])
     if spatial_indices is not None:
-        voxel_size = Coordinate(to_nm([scale[i] for i in spatial_indices], units))
-        offset = Coordinate(to_nm([translation[i] for i in spatial_indices], units))
-        shape = Coordinate(arr_meta["shape"][i] for i in spatial_indices)
+        voxel_size = to_nm([scale[i] for i in spatial_indices], units)
+        offset = to_nm([translation[i] for i in spatial_indices], units)
+        shape = tuple(arr_meta["shape"][i] for i in spatial_indices)
         axes_names = spatial_names
         # Spatial like the shape: a (c, z, y, x) array reported a 4-D chunk
         # shape against a 3-D shape.
         chunk_shape = tuple(chunk_shape[i] for i in spatial_indices)
     else:
-        voxel_size = Coordinate(scale)
-        offset = Coordinate(translation)
-        shape = Coordinate(arr_meta["shape"])
+        voxel_size = [float(v) for v in scale]
+        offset = [float(v) for v in translation]
+        shape = tuple(arr_meta["shape"])
         axes_names = ["z", "y", "x"][-len(shape):]
-    roi = Roi(offset, voxel_size * shape)
-    return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
+    return voxel_size, offset, chunk_shape, shape, axes_names, "zarr"
 
 
 def _ds_info_from_plain_array(meta: dict):
-    """Build the ``get_ds_info``-contract tuple for an array with no
-    ancestor multiscale group referencing it: look for `transform`/
-    `resolution` attrs, default to unit scale/zero offset otherwise (mirrors
-    crop_loader.py's array handling)."""
+    """Metadata of an array with no ancestor multiscale group referencing it:
+    look for `transform`/`resolution` attrs, default to unit scale/zero
+    offset otherwise (mirrors crop_loader.py's array handling)."""
     attrs = attrs_from_meta(meta)
-    shape = Coordinate(meta["shape"])
+    shape = tuple(meta["shape"])
     if "transform" in attrs:
         tx = attrs["transform"]
-        voxel_size = Coordinate(tx.get("scale", [1] * len(shape)))
-        offset = Coordinate(tx.get("translate", [0] * len(shape)))
+        voxel_size = tx.get("scale", [1] * len(shape))
+        offset = tx.get("translate", [0] * len(shape))
     elif "resolution" in attrs:
-        voxel_size = Coordinate(attrs["resolution"])
-        offset = Coordinate(attrs.get("offset", [0] * len(shape)))
+        voxel_size = attrs["resolution"]
+        offset = attrs.get("offset", [0] * len(shape))
     else:
-        voxel_size = Coordinate([1] * len(shape))
-        offset = Coordinate([0] * len(shape))
+        voxel_size = [1] * len(shape)
+        offset = [0] * len(shape)
 
     chunk_shape = tuple(meta["chunk_grid"]["configuration"]["chunk_shape"])
-    roi = Roi(offset, voxel_size * shape)
     axes_names = ["z", "y", "x"][-len(shape):]
-    return voxel_size, chunk_shape, shape, roi, axes_names, "zarr"
+    return (
+        [float(v) for v in voxel_size],
+        [float(v) for v in offset],
+        chunk_shape,
+        shape,
+        axes_names,
+        "zarr",
+    )
+
+
+def legacy_ds_info(meta, where=""):
+    """``get_ds_info``'s ``(voxel_size, chunk_shape, shape, roi, axes_names,
+    filetype)`` from a ``(voxel_size, offset, chunk_shape, shape, axes_names,
+    filetype)`` metadata tuple with float voxel size and offset."""
+    voxel_size, offset, chunk_shape, shape, axes_names, filetype = meta
+    return (
+        coordinate_or_floats(voxel_size, "voxel size", where),
+        chunk_shape,
+        Coordinate(shape),
+        covering_roi(offset, voxel_size, shape),
+        axes_names,
+        filetype,
+    )
 
 
 def get_ds_info_v3(path: str):
     """Mirror of ``ds.py``'s ``get_ds_info`` return contract for a local v3
     store: ``(voxel_size, chunk_shape, shape, roi, axes_names, "zarr")``.
     """
+    return legacy_ds_info(read_ds_meta_v3(path), path)
+
+
+def read_ds_meta_v3(path: str):
+    """``(voxel_size, offset, chunk_shape, shape, axes_names, "zarr")`` for a
+    local v3 store, voxel size and offset as nanometer floats."""
     container = find_v3_container(path)
     if container is None:
         raise RuntimeError(f"Could not find a Zarr v3 container in path: {path}")
@@ -366,5 +460,5 @@ def get_ds_info_v3(path: str):
     for name in children:
         child_meta = read_zarr_json(os.path.join(container, name))
         if child_meta.get("node_type") == "array":
-            return get_ds_info_v3(os.path.join(container, name))
+            return read_ds_meta_v3(os.path.join(container, name))
     raise RuntimeError(f"No array found under Zarr v3 group: {container}")

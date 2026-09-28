@@ -187,13 +187,19 @@ class CellMapFlowServer:
                 or getattr(config, "classes", None)
             )
 
+            def numbers(values):
+                # Whole numbers as ints; int() truncated 5.24 nm to 5.
+                return [
+                    int(v) if float(v).is_integer() else float(v) for v in values
+                ]
+
             info = {
                 "output_channels": self.output_channels,
                 "channels": [str(c) for c in channels] if channels else None,
-                "write_shape": [int(v) for v in config.write_shape],
-                "read_shape": [int(v) for v in config.read_shape],
-                "output_voxel_size": [int(v) for v in config.output_voxel_size],
-                "input_voxel_size": [int(v) for v in config.input_voxel_size],
+                "write_shape": numbers(config.write_shape),
+                "read_shape": numbers(config.read_shape),
+                "output_voxel_size": numbers(config.output_voxel_size),
+                "input_voxel_size": numbers(config.input_voxel_size),
             }
 
             output_class = getattr(inferencer, "output_class", None)

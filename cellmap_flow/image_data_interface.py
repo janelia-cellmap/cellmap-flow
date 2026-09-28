@@ -6,8 +6,8 @@ from cellmap_flow.utils.ds import (
     _join_path,
     _open_zarr,
     find_closest_scale,
-    get_ds_info,
     open_ds_tensorstore,
+    read_ds_meta,
     to_ndarray_tensorstore,
 )
 from cellmap_flow.utils import zarr_v3
@@ -15,6 +15,10 @@ import logging
 from funlib.geometry import Coordinate
 
 logger = logging.getLogger(__name__)
+
+# (path, requested voxel size) pairs already warned about; one of these is
+# built per extracted chunk in some paths.
+_warned_relabel = set()
 
 
 class ImageDataInterface:
@@ -28,9 +32,17 @@ class ImageDataInterface:
         concurrency_limit=1,
         normalize=True,
         input_norms=None,
+        on_voxel_size_mismatch="relabel",
     ):
         """``input_norms``: the normalizers (and ChannelSelector) to read with.
         ``None`` follows the process-wide ``g.input_norms`` at read time.
+
+        ``voxel_size`` picks the scale of a multiscale group (the finest one
+        not coarser than it). When the array opened is at a different voxel
+        size, ``on_voxel_size_mismatch`` decides: "relabel" (the default,
+        with a warning) reads it as if it were at ``voxel_size``, voxel for
+        voxel; "error" raises. ``actual_voxel_size`` and
+        ``requested_voxel_size`` record both.
         """
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
@@ -64,16 +76,62 @@ class ImageDataInterface:
         self._store = {"ts": None}
         self.input_norms = None if input_norms is None else list(input_norms)
         (
-            self.voxel_size,
+            actual_voxel_size,
+            actual_offset,
             self.chunk_shape,
-            self.shape,
-            self.roi,
+            shape,
             self.axes_names,
             self.filetype,
-        ) = get_ds_info(dataset_path)
+        ) = read_ds_meta(dataset_path)
+        self.shape = Coordinate(shape)
+        actual_voxel_size = zarr_v3.snap_integral(actual_voxel_size)
+        actual_offset = zarr_v3.snap_integral(actual_offset)
+        # What the data really is, and what the caller asked for; voxel_size
+        # below is the one reads are done in.
+        self.actual_voxel_size = zarr_v3.coordinate_or_floats(
+            actual_voxel_size, "voxel size", dataset_path
+        )
+        self.requested_voxel_size = (
+            None
+            if voxel_size is None
+            else zarr_v3.coordinate_or_floats(voxel_size, "voxel size", dataset_path)
+        )
+        voxel_size_f, offset_f = actual_voxel_size, actual_offset
         if voxel_size is not None:
-            self.voxel_size = Coordinate(voxel_size)
-        self.offset = self.roi.offset
+            requested = zarr_v3.snap_integral(voxel_size)
+            if not zarr_v3.same_voxel_size(requested, actual_voxel_size):
+                message = (
+                    f"{dataset_path} is at {tuple(actual_voxel_size.tolist())} nm "
+                    f"but {tuple(requested.tolist())} nm was requested"
+                )
+                if on_voxel_size_mismatch == "error":
+                    raise ValueError(message)
+                if on_voxel_size_mismatch != "relabel":
+                    raise ValueError(
+                        f"on_voxel_size_mismatch must be 'relabel' or 'error', "
+                        f"got {on_voxel_size_mismatch!r}"
+                    )
+                key = (dataset_path, tuple(requested.tolist()))
+                if key not in _warned_relabel:
+                    _warned_relabel.add(key)
+                    logger.warning(
+                        f"{message}; reading it as if it were "
+                        f"{tuple(requested.tolist())} nm (the data is not resampled)"
+                    )
+                # Relabel on the real grid: voxel i stays voxel i and only its
+                # size changes, so the offset scales with it. Keeping the real
+                # offset against the requested voxel size mixed two unit
+                # systems in (roi - offset) / voxel_size and shifted every read
+                # of an offset dataset.
+                offset_f = actual_offset / actual_voxel_size * requested
+            voxel_size_f = requested
+        self._voxel_size_f = voxel_size_f
+        self._offset_f = offset_f
+        self.voxel_size = zarr_v3.coordinate_or_floats(
+            voxel_size_f, "voxel size", dataset_path
+        )
+        self.offset = zarr_v3.coordinate_or_floats(offset_f, "offset", dataset_path)
+        self.roi = zarr_v3.covering_roi(offset_f, voxel_size_f, shape)
         self.custom_fill_value = custom_fill_value
         self.concurrency_limit = concurrency_limit
         if output_voxel_size is not None:
@@ -143,8 +201,8 @@ class ImageDataInterface:
         return to_ndarray_tensorstore(
             view.selected(),
             roi,
-            self.voxel_size,
-            self.offset,
+            self._voxel_size_f,
+            self._offset_f,
             self.output_voxel_size,
             self.axes_names,
             self.custom_fill_value,
