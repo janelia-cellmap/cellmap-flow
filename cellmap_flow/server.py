@@ -281,12 +281,15 @@ class CellMapFlowServer:
         self.swagger = Swagger(self.app, config=swagger_config)
 
     def _served_spatial_shape(self):
-        output_shape = (
-            np.array(self.idi_raw.shape)
-            * np.array(self.input_voxel_size)
-            / np.array(self.output_voxel_size)
-        )
-        return [int(x) for x in output_shape]
+        """Output voxels from world 0 to the end of the raw data.
+
+        The served array has translation 0, so it has to reach roi.end, not
+        just roi.shape: for raw data with a non-zero offset, the far end of
+        the dataset was never requested at all.
+        """
+        roi_end = np.array(self.idi_raw.roi.end, dtype=float)
+        output_voxel_size = np.array(self.output_voxel_size, dtype=float)
+        return [int(v) for v in np.ceil(roi_end / output_voxel_size)]
 
     def _chain_for(self, dataset) -> ServedChain:
         """The chain the requested layer URL carries, built once per URL.
@@ -392,26 +395,12 @@ class CellMapFlowServer:
     def _attributes_impl(self, dataset, scale):
         chain = self._chain_for(dataset)
         shape, chunks = self._zarr_geometry(chain)
-        dtype = self._output_dtype(chain).name
-        # Map numpy dtypes to Zarr dtypes
-        dtype_map = {
-            "uint8": "|u1",
-            "uint16": "<u2",
-            "uint32": "<u4",
-            "uint64": "<u8",
-            "int8": "<i1",
-            "int16": "<i2",
-            "int32": "<i4",
-            "int64": "<i8",
-            "float32": "<f4",
-            "float64": "<f8",
-        }
-        zarr_dtype = dtype_map.get(dtype, dtype)
-
         attr = {
             "chunks": chunks,
             "compressor": {"id": "blosc", "cname": "zstd", "clevel": 5, "shuffle": 1},
-            "dtype": zarr_dtype,
+            # The zarr v2 typestr of whatever the model or the chain declares
+            # (a numpy class, an np.dtype or a string): "<f2", "|b1", "|i1"...
+            "dtype": self._output_dtype(chain).str,
             "fill_value": 0,
             "filters": None,
             "order": "C",
