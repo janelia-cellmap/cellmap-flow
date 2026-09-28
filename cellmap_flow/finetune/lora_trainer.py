@@ -1099,6 +1099,12 @@ class LoRAFinetuner:
         """Train for one epoch and return average loss."""
         epoch_loss = 0.0
         epoch_supervised_loss = 0.0
+        # Batches that had any supervised voxel. The supervised mean ranks
+        # epochs for the best checkpoint; a batch made only of rehearsal
+        # patches has nothing supervised and a supervised loss of exactly 0,
+        # so averaging over every batch made "best epoch" partly track how
+        # many rehearsal draws an epoch happened to get.
+        supervised_batches = 0
         epoch_distill_loss = 0.0
         num_batches = len(self.dataloader)
         self._epoch_bce_floor_sum = 0.0
@@ -1364,18 +1370,20 @@ class LoRAFinetuner:
                 self.last_supervised_loss = float('nan')
                 return float('nan')
             epoch_loss += batch_loss
-            epoch_supervised_loss += supervised_loss.item()
             epoch_distill_loss += distillation_loss.item()
-            if self._step_bce_metrics is not None:
-                self._epoch_bce_floor_sum += self._step_bce_metrics[0]
-                self._epoch_mae_sum += self._step_bce_metrics[1]
-                self._epoch_bce_n += 1
+            if mask is None or bool(mask.sum() > 0):
+                supervised_batches += 1
+                epoch_supervised_loss += supervised_loss.item()
+                if self._step_bce_metrics is not None:
+                    self._epoch_bce_floor_sum += self._step_bce_metrics[0]
+                    self._epoch_mae_sum += self._step_bce_metrics[1]
+                    self._epoch_bce_n += 1
 
             # Log progress every batch (since we have few batches)
             avg_loss = epoch_loss / (batch_idx + 1)
             if hasattr(self, '_log_message'):
                 if self.distillation_lambda > 0:
-                    avg_sup = epoch_supervised_loss / (batch_idx + 1)
+                    avg_sup = epoch_supervised_loss / max(supervised_batches, 1)
                     avg_distill = epoch_distill_loss / (batch_idx + 1)
                     self._log_message(
                         f"  Batch {batch_idx+1}/{num_batches} - "
@@ -1438,7 +1446,11 @@ class LoRAFinetuner:
                 f"First 5 dead: {dead_names[:5]}"
             )
 
-        self.last_supervised_loss = epoch_supervised_loss / num_batches
+        # NaN when nothing in the epoch was supervised: train() then ranks
+        # the epoch by its total loss instead.
+        self.last_supervised_loss = (
+            epoch_supervised_loss / supervised_batches if supervised_batches else float('nan')
+        )
         return epoch_loss / num_batches
 
     def _is_peft(self) -> bool:
