@@ -807,7 +807,10 @@ class FinetuneJobManager:
                 # list form skips run_locally's shlex.split entirely.
                 lsf_job = run_locally(
                     command=["bash", "-c", cli_command],
-                    name=job_name
+                    name=job_name,
+                    # The command tees its own output to training_log.txt;
+                    # a second copy under ~/.cellmap_flow/server_logs is noise.
+                    log_file=os.devnull,
                 )
                 self.logger.info(f"Started local finetuning job (PID: {lsf_job.process.pid})")
             except Exception as e:

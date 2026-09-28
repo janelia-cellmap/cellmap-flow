@@ -175,3 +175,19 @@ def test_the_dashboards_charge_group_is_billed(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def _quiet_viewer_shader(monkeypatch):
     monkeypatch.setattr(FinetuneJobManager, "_finetuned_shader", lambda self, url: "")
+
+
+def test_a_local_run_does_not_keep_a_second_copy_of_its_log(tmp_path):
+    """The command tees to training_log.txt; run_locally's own log is not needed."""
+    import os
+    from unittest.mock import MagicMock
+
+    local = MagicMock(return_value=SimpleNamespace(process=SimpleNamespace(pid=1)))
+    with patch.object(fjm, "is_bsub_available", return_value=False), \
+         patch.object(fjm, "run_locally", local), \
+         patch.object(fjm.threading, "Thread", _Thread):
+        FinetuneJobManager().submit_finetuning_job(
+            model_config=_Script(), corrections_path=_corrections(tmp_path),
+            output_base=tmp_path / "session",
+        )
+    assert local.call_args.kwargs["log_file"] == os.devnull
