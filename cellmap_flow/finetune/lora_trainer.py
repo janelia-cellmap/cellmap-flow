@@ -783,7 +783,7 @@ class LoRAFinetuner:
             self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
         log_message("")
 
-        self.model.train()
+        self._set_train_mode()
         start_time = time.time()
 
         # Store log function for use in _train_epoch and helpers
@@ -1060,6 +1060,27 @@ class LoRAFinetuner:
             'training_time': total_time,
         }
 
+    def _set_train_mode(self):
+        """Train mode, except for the frozen base's norm layers under LoRA.
+
+        LoRA freezes the base, but model.train() also put its BatchNorm
+        layers in train mode: they normalized by each (tiny) batch and kept
+        updating running statistics that are not part of the adapter, so the
+        model served in this process drifted from adapter + fresh base, and
+        the base was not frozen after all. They stay in eval mode, as they are
+        served. A full finetune trains its norm layers, so it keeps them in
+        train mode.
+        """
+        self.model.train()
+        if not self._is_peft():
+            return
+        norm_types = (nn.modules.batchnorm._BatchNorm, nn.modules.instancenorm._InstanceNorm)
+        for module in self.model.modules():
+            if isinstance(module, norm_types) and not any(
+                p.requires_grad for p in module.parameters(recurse=False)
+            ):
+                module.eval()
+
     @torch.no_grad()
     def _gradients_finite(self) -> bool:
         """Whether every accumulated gradient is finite.
@@ -1085,12 +1106,19 @@ class LoRAFinetuner:
             with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
                 teacher_pred = self.teacher_model(raw)
         else:
+            # The teacher runs in eval mode, as the model is served: in train
+            # mode the base's dropout made its targets noisy, and its norm
+            # layers normalized by the batch.
+            was_training = self.model.training
+            self.model.eval()
             self.model.disable_adapter_layers()
             try:
                 with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
                     teacher_pred = self.model(raw)
             finally:
                 self.model.enable_adapter_layers()
+                if was_training:
+                    self._set_train_mode()
         if self.select_channel is not None:
             teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
         return teacher_pred.detach()
