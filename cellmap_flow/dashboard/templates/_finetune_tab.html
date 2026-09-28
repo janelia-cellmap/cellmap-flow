@@ -697,8 +697,12 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Server-side prefs override port-scoped localStorage so output path
-  // survives dashboard restarts (which use a random port -> new origin).
+  // localStorage is per origin and the dashboard takes a random port each
+  // time it starts, so the form state restored from it below is gone after a
+  // restart. The output path alone is also kept server-side. This reply
+  // arrives after that restore has run, and fills the field only if it is
+  // still empty -- so localStorage wins when it has a value, and the server
+  // copy covers a fresh origin.
   fetch("/api/finetune/user-prefs")
     .then(r => r.json())
     .then(d => {
