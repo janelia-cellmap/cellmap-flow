@@ -7,6 +7,7 @@ import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
+import shlex
 import sys
 from typing import Type, Dict
 from typing import Type, get_type_hints
@@ -219,7 +220,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
         server._chunk_impl(None, None, 2, 2, 2)
         click.echo("Server check passed")
     else:
-        command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
+        command = f"{SERVER_COMMAND} {model_config.command} -d {shlex.quote(final_data_path)}"
         logger.info(f"Executing command: {command}")
         try:
             start_hosts(command, queue, project, model_config.name or model_type)
@@ -297,7 +298,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             server._chunk_impl(None, None, 2, 2, 2)
             click.echo("Server check passed")
         else:
-            command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
+            command = f"{SERVER_COMMAND} {model_config.command} -d {shlex.quote(final_data_path)}"
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             try:

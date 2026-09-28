@@ -72,3 +72,25 @@ def test_cellmap_flow_yaml_does_not_double_the_scale(v2, monkeypatch):
 
     assert len(commands) == 1
     assert commands[0].endswith(f"-d {v2}/s3"), commands[0]
+
+
+def test_a_data_path_with_a_space_survives_the_command_line(tmp_path, monkeypatch):
+    # The launch command is split back into argv (shlex / bash -c), so an
+    # unquoted "-d /x/my data.zarr/s0" handed the server two arguments.
+    import shlex
+
+    root = zarr.open_group(str(tmp_path / "my data.zarr"), mode="w")
+    root.create_dataset("s0", shape=(4, 4, 4), dtype="u1")
+    path = str(tmp_path / "my data.zarr" / "s0")
+    commands = []
+    monkeypatch.setattr(
+        yaml_cli, "start_hosts", lambda command, **kwargs: commands.append(command)
+    )
+    from cellmap_flow.utils import neuroglancer_utils
+
+    monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda *a, **k: None)
+
+    yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], path, "grp", "gpu_h100")
+
+    argv = shlex.split(commands[0])
+    assert argv[argv.index("-d") + 1] == path
