@@ -77,11 +77,24 @@ def detect_adaptable_layers(
     for name, module in model.named_modules():
         is_adaptable = isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear))
 
-        # Fallback: detect by parameter shape (e.g. InterpreterModule from torch.export)
-        if not is_adaptable and hasattr(module, 'weight') and isinstance(module.weight, torch.Tensor):
-            is_adaptable = module.weight.ndim >= 2
+        # An unflattened (torch.export) conv/linear, which wrap_model_with_lora
+        # turns into a real one before PEFT sees it. Not "anything with a 2D+
+        # weight": a transposed conv has one too, and PEFT cannot adapt it.
+        if not is_adaptable:
+            is_adaptable = _interpreter_layer_spec(module) is not None
 
         if not is_adaptable:
+            continue
+
+        # PEFT builds lora_A with the base conv's kernel, stride and padding
+        # but not its dilation, so on a dilated conv the adapter's output is a
+        # different size from the layer's and the first forward pass fails.
+        dilation = getattr(module, "dilation", None)
+        if dilation is None:
+            spec = _interpreter_layer_spec(module)
+            dilation = spec[1].get("dilation") if spec else None
+        if dilation is not None and any(d != 1 for d in _as_tuple(dilation)):
+            logger.info(f"Not adapting {name}: PEFT's LoRA does not support dilated convolutions")
             continue
 
         # Apply include patterns if specified
@@ -117,8 +130,84 @@ def detect_adaptable_layers(
     return adaptable
 
 
+_CONV_CLASSES = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}
+
+
+def _tupled(value):
+    return tuple(value) if isinstance(value, (list, tuple)) else value
+
+
+def _as_tuple(value):
+    return tuple(value) if isinstance(value, (list, tuple)) else (value,)
+
+
+def _interpreter_layer_spec(module: nn.Module):
+    """How to rebuild an unflattened leaf as a real layer, or None.
+
+    torch.export's unflatten turns every nn.Conv3d/nn.Linear into an
+    InterpreterModule that holds the weight and a one-op FX graph, e.g.
+    ``aten.conv3d.default(x, weight, bias, stride, padding, dilation,
+    groups)``. The stride, padding, dilation and groups live only in that
+    call, so they are read from it. Anything else -- a transposed conv, which
+    PEFT cannot adapt, or a module whose graph does more than one op -- gives
+    None and is left as it is.
+
+    Returns ``(layer_class, kwargs)``.
+    """
+    import re
+
+    if type(module).__name__ != "InterpreterModule":
+        return None
+    weight = getattr(module, "weight", None)
+    graph = getattr(module, "graph", None)
+    if not isinstance(weight, torch.Tensor) or graph is None:
+        return None
+    calls = [node for node in graph.nodes if node.op == "call_function"]
+    if len(calls) != 1:
+        return None
+    call = calls[0]
+    args = list(call.args)
+    target = str(call.target)
+    has_bias = isinstance(getattr(module, "bias", None), torch.Tensor)
+
+    if re.match(r"aten\.linear\.", target) and weight.ndim == 2:
+        return nn.Linear, dict(in_features=weight.shape[1], out_features=weight.shape[0], bias=has_bias)
+
+    if re.match(r"aten\.convolution\.", target):
+        # convolution(input, weight, bias, stride, padding, dilation,
+        #             transposed, output_padding, groups)
+        if len(args) < 9 or args[6]:
+            return None
+        stride, padding, dilation, groups = args[3], args[4], args[5], args[8]
+    else:
+        # conv{N}d(input, weight, bias=None, stride=1, padding=0, dilation=1,
+        # groups=1). conv_transpose{N}d does not match, and is left alone.
+        match = re.match(r"aten\.conv([123])d\.", target)
+        if match is None or weight.ndim != int(match.group(1)) + 2:
+            return None
+        values = args + [None, None, None, 1, 0, 1, 1][len(args):]
+        for key, index in (("stride", 3), ("padding", 4), ("dilation", 5), ("groups", 6)):
+            if key in call.kwargs:
+                values[index] = call.kwargs[key]
+        stride, padding, dilation, groups = values[3:7]
+    dims = weight.ndim - 2
+    if dims not in _CONV_CLASSES:
+        return None
+    groups = int(groups)
+    return _CONV_CLASSES[dims], dict(
+        in_channels=weight.shape[1] * groups,
+        out_channels=weight.shape[0],
+        kernel_size=tuple(weight.shape[2:]),
+        stride=_tupled(stride),
+        padding=_tupled(padding),
+        dilation=_tupled(dilation),
+        groups=groups,
+        bias=has_bias,
+    )
+
+
 def _replace_interpreter_modules(model: nn.Module) -> int:
-    """Replace non-standard leaf modules (e.g. InterpreterModule from torch.export
+    """Replace unflattened conv/linear leaves (InterpreterModule from torch.export
     unflatten) with real nn.Conv*/nn.Linear that share the same weight/bias tensors.
 
     PEFT's dispatch only accepts nn.Conv1d/2d/3d, nn.Linear, etc., so unflattened
@@ -126,37 +215,27 @@ def _replace_interpreter_modules(model: nn.Module) -> int:
     will invoke whatever module is registered under the name, so the swap doesn't
     break the forward pass.
 
+    Only InterpreterModule leaves whose graph is a single convolution or linear
+    call are replaced, with that call's stride, padding, dilation and groups.
+    This used to replace any module with a weight by a stride-1, unpadded
+    conv built from the weight's shape alone: a real nn.ConvTranspose3d became
+    a Conv3d with its channels swapped, and an unflattened strided or padded
+    conv lost its stride and padding, so LoRA on a UNet with transposed-conv
+    upsampling died at the first forward pass.
+
     Returns the number of modules replaced.
     """
     count = 0
     for name, module in list(model.named_modules()):
-        if isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)):
+        spec = _interpreter_layer_spec(module)
+        if spec is None:
             continue
-        if not hasattr(module, 'weight') or not isinstance(module.weight, torch.Tensor):
-            continue
-
+        layer_class, kwargs = spec
         w = module.weight
         b = getattr(module, 'bias', None)
-        if b is not None and not isinstance(b, torch.Tensor):
-            b = None
-
-        if w.ndim == 5:
-            out_c, in_c, kz, ky, kx = w.shape
-            new_mod = nn.Conv3d(in_c, out_c, (kz, ky, kx), padding=0, bias=(b is not None))
-        elif w.ndim == 4:
-            out_c, in_c, ky, kx = w.shape
-            new_mod = nn.Conv2d(in_c, out_c, (ky, kx), padding=0, bias=(b is not None))
-        elif w.ndim == 3:
-            out_c, in_c, k = w.shape
-            new_mod = nn.Conv1d(in_c, out_c, k, padding=0, bias=(b is not None))
-        elif w.ndim == 2:
-            out_f, in_f = w.shape
-            new_mod = nn.Linear(in_f, out_f, bias=(b is not None))
-        else:
-            continue
-
+        new_mod = layer_class(**kwargs)
         new_mod.weight = nn.Parameter(w)
-        if b is not None:
+        if kwargs["bias"]:
             new_mod.bias = nn.Parameter(b)
 
         parts = name.split('.')
