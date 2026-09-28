@@ -115,7 +115,7 @@ def unregister_plugin(name: str) -> None:
     if not name.endswith(".py"):
         name = f"{name}.py"
 
-    target = get_plugins_dir() / name
+    target = PLUGINS_DIR / name
     if not target.exists():
         raise FileNotFoundError(f"Plugin not found: {name}")
 
@@ -124,9 +124,14 @@ def unregister_plugin(name: str) -> None:
 
 
 def list_plugins() -> List[Path]:
-    """Return a sorted list of all registered plugin file paths."""
-    plugins_dir = get_plugins_dir()
-    return sorted(plugins_dir.glob("*.py"))
+    """Return a sorted list of all registered plugin file paths.
+
+    Does not create the plugins directory: this runs on every package import,
+    including inside each LSF job, and only registering a plugin needs it.
+    """
+    if not PLUGINS_DIR.is_dir():
+        return []
+    return sorted(PLUGINS_DIR.glob("*.py"))
 
 
 def load_plugins() -> int:

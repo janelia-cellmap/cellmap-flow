@@ -219,14 +219,14 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     # explicit false pins submissions to `queue`.
     cycle_gpu_queues = config.get("cycle_gpu_queues")
 
-    # Update globals and save to cache
+    # Update globals; they are saved to the cache below, once this is a real
+    # run rather than a --validate-only check.
     g.queue = queue
     g.charge_group = charge_group
     if walltime:
         g.walltime = walltime
     if cycle_gpu_queues is not None:
         g.cycle_gpu_queues = bool(cycle_gpu_queues)
-    g.save_server_config()
 
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
@@ -259,6 +259,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Data path: {data_path}")
         click.echo(f"  - Queue: {queue}")
         return
+
+    g.save_server_config()
 
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()
