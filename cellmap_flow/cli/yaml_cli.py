@@ -9,13 +9,12 @@ making it easy to add new model types without modifying this file.
 import os
 import sys
 import logging
-import threading
 from cellmap_flow.utils.logging_setup import configure_logging
 import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
 from cellmap_flow.utils.config_utils import load_config
 from cellmap_flow.globals import g
 
@@ -56,6 +55,7 @@ def run_multiple(
         )
         return model_name
 
+    failed = []
     if models:
         with ThreadPoolExecutor(max_workers=len(models)) as executor:
             futures = {executor.submit(_submit_model, model): model for model in models}
@@ -67,22 +67,19 @@ def run_multiple(
                     model = futures[future]
                     model_name = getattr(model, "name", None) or type(model).__name__
                     logger.error(f"Failed to start job for {model_name}: {e}")
+                    failed.append(model_name)
+
+    # Some models starting is worth a dashboard; none of them is a failed
+    # run, not an empty viewer to leave running.
+    if models and len(failed) == len(models):
+        raise JobStartError(f"No model server started ({', '.join(failed)})")
 
     # Imported here so --help and config errors do not pay for the viewer
     # stack (~16s before this).
     from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
+    # Serves the dashboard; does not return.
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
-
-    logger.info("All jobs submitted. Monitoring...")
-
-    # Block, do not spin. This thread has nothing left to do -- the dashboard
-    # and the jobs run on other threads -- but `while True: pass` kept a core
-    # pinned and, worse, fought every one of those threads for the GIL.
-    # Measured against a threaded Flask server: median request latency went
-    # from 2.3ms to 74ms, a 16x increase in the mean, on every request the
-    # dashboard serves.
-    threading.Event().wait()
 
 
 @click.command()
@@ -253,7 +250,10 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         return
 
     # Run the models
-    run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
+    try:
+        run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
+    except JobStartError as e:
+        raise click.ClickException(str(e))
 
 
 if __name__ == "__main__":

@@ -135,6 +135,112 @@ def test_runs_locally_when_there_is_no_bsub(lsf, monkeypatch):
     assert g.jobs == [local]
 
 
+def test_a_job_still_queued_on_the_last_queue_is_a_failure(lsf):
+    jobs = {q: FakeLSFJob(q, status=JobStatus.PENDING) for q in ("gpu_h100", "gpu_a100", "gpu_h200")}
+    lsf.jobs = jobs
+
+    with pytest.raises(bsub_utils.JobStartError, match="did not start"):
+        start_hosts("serve", queue="gpu_h100", job_name="m")
+
+    # Nothing will ever point a layer at it, so it must not sit in the queue
+    # waiting to bill for eight hours, and it is not a job the viewer can use.
+    assert all(job.killed for job in jobs.values())
+    assert g.jobs == []
+
+
+def test_a_job_that_crashed_is_a_failure_and_other_queues_are_not_tried(lsf):
+    crashed = FakeLSFJob("1", status=JobStatus.FAILED)
+    lsf.jobs = {"gpu_h100": crashed, "gpu_a100": FakeLSFJob("2", host="http://x:1")}
+
+    with pytest.raises(bsub_utils.JobStartError, match="1"):
+        start_hosts("serve", queue="gpu_h100", job_name="m")
+
+    assert lsf.submitted == ["gpu_h100"], "a crash reproduces on every queue"
+    assert g.jobs == []
+
+
+def test_a_running_job_gets_time_to_load_its_model(lsf):
+    slow = FakeLSFJob("1", status=JobStatus.RUNNING, late_host="http://node:2")
+    lsf.jobs = {"gpu_h100": slow}
+
+    job = start_hosts("serve", queue="gpu_h100", job_name="m")
+
+    assert job is slow and job.host == "http://node:2"
+    assert lsf.submitted == ["gpu_h100"]
+    assert len(slow.waits) == 2
+    assert g.jobs == [slow]
+
+
+def test_a_running_job_that_never_reports_a_host_is_killed(lsf):
+    stuck = FakeLSFJob("1", status=JobStatus.RUNNING)
+    lsf.jobs = {"gpu_h100": stuck}
+
+    with pytest.raises(bsub_utils.JobStartError):
+        start_hosts("serve", queue="gpu_h100", job_name="m")
+
+    assert stuck.killed
+    assert g.jobs == []
+
+
+def test_a_local_server_that_reports_no_host_is_a_failure(lsf, monkeypatch):
+    monkeypatch.setattr(bsub_utils, "is_bsub_available", lambda: False)
+    local = FakeLocalJob(host=None)
+    monkeypatch.setattr(bsub_utils, "run_locally", lambda command, name, log_file=None: local)
+
+    with pytest.raises(bsub_utils.JobStartError):
+        start_hosts("serve", job_name="m")
+
+    assert local.killed
+    assert g.jobs == []
+
+
+def test_the_viewer_gets_no_layer_for_a_job_without_a_host(monkeypatch):
+    import neuroglancer
+
+    from cellmap_flow.utils import neuroglancer_utils
+
+    class Hostless:
+        model_name = "ghost"
+        host = None
+
+    class Served:
+        model_name = "real"
+        host = "http://node:3"
+
+    g.jobs = [Hostless(), Served()]
+    g.models_config = []
+    g.input_norms, g.postprocess = [], []
+    layers = {}
+
+    class FakeTxn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        @property
+        def layers(self):
+            return layers
+
+    class FakeViewer:
+        def txn(self):
+            return FakeTxn()
+
+        def __str__(self):
+            return "http://viewer"
+
+    monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
+    monkeypatch.setattr(neuroglancer_utils, "get_raw_layer", lambda *a, **k: "raw")
+    monkeypatch.setattr(neuroglancer_utils, "fetch_model_info", lambda host: {})
+    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: "url")
+
+    neuroglancer_utils.generate_neuroglancer_url("/data.zarr")
+
+    assert "real" in layers
+    assert "ghost" not in layers, "zarr://None/... is never going to load"
+
+
 def test_runs_locally_when_asked_even_with_bsub(lsf, monkeypatch):
     local = FakeLocalJob()
     monkeypatch.setattr(bsub_utils, "run_locally", lambda command, name, log_file=None: local)

@@ -97,6 +97,11 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
         for job in g.jobs:
             model = job.model_name
             host = job.host
+            if not host:
+                # A zarr://None/... source never loads and nothing replaces
+                # it later, so leave the layer out rather than add a dead one.
+                logger.warning(f"No server address for '{model}'; not adding a layer")
+                continue
             color = next(color_cycle)
             # Over the range the postprocessing chain actually produces. The
             # previous default was range=[0.5, 0.5]: lo == hi turns invlerp

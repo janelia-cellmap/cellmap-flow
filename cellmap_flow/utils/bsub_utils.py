@@ -599,6 +599,11 @@ def _walltime_arg(walltime):
 
 PENDING_FALLBACK_SECONDS = 180
 
+# Once a job is running, how long it gets to report its host. Loading the
+# model dominates this -- weights off /nrs, a torch.export, sometimes a
+# HuggingFace download -- and none of it is a reason to try another queue.
+STARTUP_TIMEOUT_SECONDS = 300
+
 
 def gpu_queue_candidates(preferred, cycle=True):
     """The queue to try first, then the others worth falling back to.
@@ -911,6 +916,20 @@ def start_hosts(
             host = job.wait_for_host(
                 timeout=PENDING_FALLBACK_SECONDS if more_to_try else 300
             )
+            # observed_status(), not get_status(): the latter falls back to
+            # self.status, which starts out RUNNING, so an unreadable bjobs
+            # would look like "it started" and stop the fallback exactly when
+            # LSF is flaky. Unknown is treated as still queued -- the job has
+            # produced no host in PENDING_FALLBACK_SECONDS, so there is
+            # nothing to lose by trying elsewhere.
+            observed = None if host else job.observed_status()
+
+            # Started but still loading its model: that is not a queue
+            # problem, so wait on this job rather than trying elsewhere.
+            if observed == JobStatus.RUNNING:
+                host = job.wait_for_host(timeout=STARTUP_TIMEOUT_SECONDS)
+                observed = None if host else job.observed_status()
+
             if host:
                 if candidate != queue:
                     logger.warning(
@@ -923,20 +942,26 @@ def start_hosts(
                 return job
 
             # Only a job that never started is a queue problem. One that ran
-            # and crashed will crash the same way everywhere else, so keep it
-            # and let the caller surface the failure instead of burning
-            # through every queue reproducing it.
+            # and crashed will crash the same way everywhere else, so fail
+            # now instead of burning through every queue reproducing it.
             #
-            # observed_status(), not get_status(): the latter falls back to
-            # self.status, which starts out RUNNING, so an unreadable bjobs
-            # would look like "it started" and stop the fallback exactly when
-            # LSF is flaky. Unknown is treated as still queued -- the job has
-            # produced no host in PENDING_FALLBACK_SECONDS, so there is
-            # nothing to lose by trying elsewhere.
-            observed = job.observed_status()
+            # A job with no host is not returned as if it were ready: there
+            # is no server for the viewer to point at (it would build a
+            # zarr://None/... layer), and nothing updates it later. One that
+            # may still be alive is killed rather than left to bill.
+            if observed == JobStatus.RUNNING:
+                job.kill()
+                raise JobStartError(
+                    f"Job {job.job_id} for {job_name} on {candidate} ran for "
+                    f"{STARTUP_TIMEOUT_SECONDS}s without reporting a server "
+                    f"address and has been killed; see {job.log_file}"
+                )
             if observed is not None and observed != JobStatus.PENDING:
-                g.jobs.append(job)
-                return job
+                raise JobStartError(
+                    f"Job {job.job_id} for {job_name} on {candidate} ended "
+                    f"({observed.value}) without reporting a server address; "
+                    f"see {job.log_file}"
+                )
 
             if more_to_try:
                 logger.warning(
@@ -946,8 +971,11 @@ def start_hosts(
                 )
                 job.kill()
             else:
-                g.jobs.append(job)
-                return job
+                job.kill()
+                raise JobStartError(
+                    f"Job {job.job_id} for {job_name} did not start on "
+                    f"{' or '.join(candidates)}; it has been killed"
+                )
 
         raise JobStartError(
             f"No GPU queue accepted {job_name}: "
@@ -957,9 +985,13 @@ def start_hosts(
         logger.info("bsub not available, running locally")
 
     job = run_locally(command, job_name)
-    
-    if wait_for_host:
-        job.wait_for_host()
-    
+
+    if wait_for_host and not job.wait_for_host():
+        job.kill()
+        raise JobStartError(
+            f"The local server for {job_name} did not report its address; "
+            f"see {getattr(job, 'log_file', None)}"
+        )
+
     g.jobs.append(job)
     return job

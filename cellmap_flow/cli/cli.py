@@ -11,7 +11,7 @@ import inspect
 import sys
 from typing import Type, Dict
 from typing import Type, get_type_hints
-from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
+from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.utils.cli_utils import (
@@ -211,11 +211,14 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
     else:
         command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
         logger.info(f"Executing command: {command}")
-        start_hosts(command, queue, project, model_config.name or model_type)
+        try:
+            start_hosts(command, queue, project, model_config.name or model_type)
+        except JobStartError as e:
+            raise click.ClickException(str(e))
         from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
-        neuroglancer_url = generate_neuroglancer_url(final_data_path)
-        click.echo(f"Neuroglancer URL: {neuroglancer_url}")
+        # Serves the dashboard; does not return.
+        generate_neuroglancer_url(final_data_path)
 
 
 def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
@@ -285,13 +288,16 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             command = f"{SERVER_COMMAND} {model_config.command} -d {final_data_path}"
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
-            start_hosts(command, queue, project, base_name)
+            try:
+                start_hosts(command, queue, project, base_name)
+            except JobStartError as e:
+                raise click.ClickException(str(e))
             from cellmap_flow.utils.neuroglancer_utils import (
                 generate_neuroglancer_url,
             )
 
-            neuroglancer_url = generate_neuroglancer_url(final_data_path)
-            click.echo(f"Neuroglancer URL: {neuroglancer_url}")
+            # Serves the dashboard; does not return.
+            generate_neuroglancer_url(final_data_path)
 
     # Add docstring
     command_func.__doc__ = f"""
