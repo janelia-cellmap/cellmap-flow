@@ -258,6 +258,74 @@ RESTARTABLE_ARGS = frozenset(
 )
 
 
+def _as_bool(value):
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off", ""):
+            return False
+        raise ValueError(f"not a boolean: {value!r}")
+    return bool(value)
+
+
+def _as_offsets(value):
+    # --offsets is a JSON string. A restart may carry the list itself, which
+    # _build_target_transform's json.loads() would then reject.
+    if isinstance(value, str):
+        json.loads(value)
+        return value
+    return json.dumps(value)
+
+
+def _as_shape(value):
+    shape = [int(v) for v in value]
+    if len(shape) != 3:
+        raise ValueError(f"expected three values, got {value!r}")
+    return shape
+
+
+def _one_of(*choices):
+    def convert(value):
+        if value not in choices:
+            raise ValueError(f"{value!r} is not one of {list(choices)}")
+        return value
+    return convert
+
+
+# How each restartable setting is read: the argparse destination it sets and
+# the conversion applied to the requested value. Most keys are the
+# destination itself. The dashboard's "augment" is the inverse of the CLI's
+# --no-augment, and used to be dropped by a hasattr(args, key) filter, so a
+# restart could never switch augmentation on or off.
+_RESTART_ARG_CONVERTERS = {
+    "lora_r": ("lora_r", int),
+    "lora_alpha": ("lora_alpha", int),
+    "num_epochs": ("num_epochs", int),
+    "batch_size": ("batch_size", int),
+    "learning_rate": ("learning_rate", float),
+    "loss_type": ("loss_type", _one_of("dice", "bce", "combined", "mse", "margin")),
+    "label_smoothing": ("label_smoothing", float),
+    "distillation_lambda": ("distillation_lambda", float),
+    "distillation_all_voxels": ("distillation_all_voxels", _as_bool),
+    "margin": ("margin", float),
+    "balance_classes": ("balance_classes", _as_bool),
+    "augment": ("no_augment", lambda value: not _as_bool(value)),
+    "mask_unannotated": ("mask_unannotated", _as_bool),
+    "gradient_accumulation_steps": ("gradient_accumulation_steps", int),
+    "num_workers": ("num_workers", int),
+    "no_augment": ("no_augment", _as_bool),
+    "no_mixed_precision": ("no_mixed_precision", _as_bool),
+    "patch_shape": ("patch_shape", _as_shape),
+    "output_type": (
+        "output_type", _one_of("binary", "binary_broadcast", "affinities", "distance")
+    ),
+    "select_channel": ("select_channel", int),
+    "offsets": ("offsets", _as_offsets),
+}
+assert set(_RESTART_ARG_CONVERTERS) == RESTARTABLE_ARGS
+
+
 def _apply_restart_params(args, signal_data: dict):
     """
     Update args with parameters from restart signal and persist to metadata.json.
@@ -266,28 +334,40 @@ def _apply_restart_params(args, signal_data: dict):
         args: argparse Namespace to update
         signal_data: Dict from restart signal file
     """
-    params = signal_data.get("params", {})
+    params = signal_data.get("params", {}) or {}
     refused = sorted(set(params) - RESTARTABLE_ARGS)
     if refused:
         logger.warning(f"Ignoring restart parameters that restarts cannot change: {refused}")
-    # Filtered once here so refused keys reach neither args nor metadata.json.
-    params = {k: v for k, v in params.items() if k in RESTARTABLE_ARGS}
     changed = False
+    # What was applied, under the name the request used, for metadata.json.
+    # Refused keys reach neither args nor metadata.json.
+    recorded = {}
     for key, value in params.items():
-        if hasattr(args, key) and value is not None:
-            old_value = getattr(args, key)
-            setattr(args, key, value)
-            if old_value != value:
-                logger.info(f"Updated {key}: {old_value} -> {value}")
-                changed = True
+        if key not in RESTARTABLE_ARGS or value is None:
+            continue
+        dest, convert = _RESTART_ARG_CONVERTERS[key]
+        if not hasattr(args, dest):
+            logger.warning(f"Restart parameter {key!r} has no matching training setting; ignoring it.")
+            continue
+        try:
+            new_value = convert(value)
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Ignoring restart parameter {key}={value!r}: {e}")
+            continue
+        old_value = getattr(args, dest)
+        setattr(args, dest, new_value)
+        recorded[key] = _as_bool(value) if key == "augment" else new_value
+        if old_value != new_value:
+            logger.info(f"Updated {dest}: {old_value} -> {new_value}")
+            changed = True
 
     # alpha is what sets LoRA's step size: peft scales the adapter by
     # lora_alpha / r. Submit derives alpha = 2 * r, but a restart only carries
     # lora_r -- so raising the rank from 8 to 64 while alpha stayed at 16 cut
     # the effective update to an eighth, and produced a loss curve that looks
     # reassuringly smooth because very little is happening per step.
-    if params.get("lora_r") is not None and params.get("lora_alpha") is None:
-        derived = int(params["lora_r"]) * 2
+    if "lora_r" in recorded and "lora_alpha" not in recorded:
+        derived = int(recorded["lora_r"]) * 2
         if getattr(args, "lora_alpha", None) != derived:
             logger.info(
                 f"Updated lora_alpha: {getattr(args, 'lora_alpha', None)} -> "
@@ -295,7 +375,7 @@ def _apply_restart_params(args, signal_data: dict):
                 f"change when you change the rank)"
             )
             args.lora_alpha = derived
-            params["lora_alpha"] = derived
+            recorded["lora_alpha"] = derived
             changed = True
 
     # Persist updated params to metadata.json
@@ -303,17 +383,16 @@ def _apply_restart_params(args, signal_data: dict):
         metadata_file = Path(args.output_dir) / "metadata.json"
         if metadata_file.exists():
             try:
-                import json as json_mod
                 with open(metadata_file, "r") as f:
-                    metadata = json_mod.load(f)
+                    metadata = json.load(f)
                 if "params" in metadata:
-                    for key, value in params.items():
+                    for key, value in recorded.items():
                         if key in metadata["params"]:
                             metadata["params"][key] = value
                 metadata["last_restart_at"] = signal_data.get("timestamp")
                 with open(metadata_file, "w") as f:
-                    json_mod.dump(metadata, f, indent=2)
-                logger.info(f"Updated metadata.json with restart params")
+                    json.dump(metadata, f, indent=2)
+                logger.info("Updated metadata.json with restart params")
             except Exception as e:
                 logger.warning(f"Failed to update metadata.json: {e}")
 

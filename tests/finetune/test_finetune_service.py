@@ -25,7 +25,8 @@ class FinetuneServiceHelperTests(unittest.TestCase):
         self.assertEqual(params["batch_size"], 4)
         self.assertEqual(params["loss_type"], "margin")
         self.assertEqual(params["distillation_all_voxels"], True)
-        self.assertEqual(params["offsets"], [[1, 0, 0]])
+        # JSON, as --offsets is: a list made the trainer's json.loads() fail.
+        self.assertEqual(params["offsets"], "[[1, 0, 0]]")
 
     def test_autodetect_output_type_reads_script_offsets(self):
         with tempfile.TemporaryDirectory() as tmpdir:

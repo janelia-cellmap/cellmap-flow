@@ -245,6 +245,20 @@ def build_restart_params(data):
         if key in data and data[key] is not None:
             updated_params[key] = data[key]
 
+    # The trainer's flag is --no-augment. Send it alongside "augment" so a job
+    # started before the trainer learned to map "augment" -- which it used to
+    # drop -- still gets the toggle.
+    if "augment" in updated_params and "no_augment" not in updated_params:
+        augment = updated_params["augment"]
+        if isinstance(augment, str):
+            augment = augment.strip().lower() in ("true", "1", "yes", "on")
+        updated_params["no_augment"] = not bool(augment)
+
+    # --offsets is a JSON string on the trainer's side; a list would make its
+    # json.loads() fail and kill the restart.
+    if isinstance(updated_params.get("offsets"), (list, tuple)):
+        updated_params["offsets"] = json.dumps(updated_params["offsets"])
+
     if "distillation_scope" in data and data["distillation_scope"] is not None:
         scope = str(data["distillation_scope"]).lower()
         if scope in {"all", "unlabeled"}:
