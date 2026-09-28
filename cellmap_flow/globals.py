@@ -7,7 +7,7 @@ import logging
 import threading
 import numpy as np
 from collections import deque
-import logging
+from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -128,15 +128,8 @@ class Flow:
             cls._instance.postprocess_config = {}
             cls._instance.viewer = None
             cls._instance.dataset_path = None
-            cls._instance.model_catalog = {}
-            # Uncomment and adjust if you want to load the model catalog:
-            models_path = os.path.normpath(
-                os.path.join(
-                    os.path.dirname(__file__), os.pardir, "models", "models.yaml"
-                )
-            )
-            with open(models_path, "r") as f:
-                cls._instance.model_catalog = yaml.safe_load(f)
+            catalog = files("cellmap_flow.models").joinpath("models.yaml").read_text()
+            cls._instance.model_catalog = yaml.safe_load(catalog) or {}
 
             # Load server config from cache or use defaults.
             #
