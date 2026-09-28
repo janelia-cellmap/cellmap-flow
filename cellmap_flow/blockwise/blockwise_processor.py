@@ -208,6 +208,14 @@ class CellMapFlowBlockwiseProcessor:
         )
         self.output_arrays = []
 
+        # The raw extent in the frame the reader uses: its offset, and its
+        # shape at the model's input voxel size.
+        raw_roi = daisy.Roi(
+            self.idi_raw.roi.offset,
+            Coordinate(self.idi_raw.shape) * self.input_voxel_size,
+        )
+        self.full_output_roi = raw_roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+
         self.bounding_boxes = self.config.get("bounding_boxes", None)
         self.separate_zarrs = self.config.get("separate_bounding_boxes_zarrs", False)
 
@@ -229,12 +237,14 @@ class CellMapFlowBlockwiseProcessor:
                     #   /np.array(self.output_voxel_size)
                       ).astype(int)
         else:
+            # Cover the raw data where it actually is: its offset (a corner)
+            # and extent, snapped inward to the output voxel grid. The whole-
+            # volume task in run() uses the same ROI, so its blocks start on
+            # the output's chunk grid instead of straddling chunks.
             output_shape = (
-                np.array(self.idi_raw.shape)
-                * np.array(self.input_voxel_size)
-                / np.array(self.output_voxel_size)
+                np.array(self.full_output_roi.shape) / np.array(self.output_voxel_size)
             ).astype(int)
-            offset = (0, 0, 0)
+            offset = tuple(int(o) for o in self.full_output_roi.offset)
 
         logger.info(f"output_shape: {output_shape}")
         logger.info(f"type: {self.dtype}")
@@ -517,8 +527,8 @@ class CellMapFlowBlockwiseProcessor:
                 rois_to_process.append(roi)
                 logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
         else:
-            # Process entire dataset
-            total_write_roi = self.idi_raw.roi
+            # Process entire dataset: the extent of the output array.
+            total_write_roi = self.full_output_roi
             rois_to_process = [total_write_roi]
             logger.info(f"Processing entire dataset: {total_write_roi}")
 
