@@ -19,6 +19,12 @@ class Config:
             if ["model","checkpoint"].__contains__(k):
                 elms.append(f"{k}")
                 continue
+            if inspect.ismethod(v) or inspect.isfunction(v):
+                # A method bound to this Config (BioModelConfig's
+                # process_chunk) reprs as "<bound method ... of Config(...)>",
+                # which recursed until RecursionError.
+                elms.append(f"{k}: <function {getattr(v, '__name__', '?')}>")
+                continue
             # if isinstance(v, np.ndarray):
             #     elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
             # elif inspect.ismodule(v):

@@ -12,6 +12,7 @@ import neuroglancer
 import threading
 from typing import List
 import re
+import shlex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,9 @@ def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
         return
-    command = (
-        f"{SERVER_COMMAND} cellmap --folder-path {model_path} --name {name} -d {g.dataset_path}"
+    command = shlex.join(
+        [SERVER_COMMAND, "cellmap", "--folder-path", model_path, "--name", name,
+         "-d", str(g.dataset_path)]
     )
     logger.info(f"To be submitted command : {command}")
     job = start_hosts(
@@ -45,8 +47,9 @@ def run_model(model_path, name, st_data):
 def run_hf_model(repo, name, st_data):
     """Run a Hugging Face model by repo ID."""
     name = _sanitize_job_name(name)
-    command = (
-        f"{SERVER_COMMAND} huggingface --repo {repo} --name {name} -d {g.dataset_path}"
+    command = shlex.join(
+        [SERVER_COMMAND, "huggingface", "--repo", repo, "--name", name,
+         "-d", str(g.dataset_path)]
     )
     logger.info(f"To be submitted HF command : {command}")
     job = start_hosts(

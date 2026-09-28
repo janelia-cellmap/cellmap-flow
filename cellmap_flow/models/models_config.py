@@ -1,4 +1,6 @@
+import inspect
 import logging
+import shlex
 import warnings
 import copy
 
@@ -20,6 +22,35 @@ def _get_device():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
     return device
+
+
+def _as_int_tuple(value):
+    """(178, 178, 178) from 178, "178,178,178", [178, 178, 178] or a Coordinate.
+
+    The server CLI hands unannotated constructor arguments over as strings.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        parts = [p for p in value.replace("(", "").replace(")", "").split(",") if p.strip()]
+        value = [float(p) for p in parts]
+        if len(value) == 1:
+            value = value[0]
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return (int(value),) * 3
+    return tuple(int(v) for v in value)
+
+
+def _cli_value(value):
+    """One constructor argument as the server CLI parses it back."""
+    if isinstance(value, dict):
+        # FinetuneModelConfig decodes this back into the dict.
+        from cellmap_flow.utils.web_utils import encode_to_str
+
+        return encode_to_str(value)
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return ",".join(str(v) for v in value)
+    return str(value)
 
 
 class ModelConfig:
@@ -187,6 +218,34 @@ class ModelConfig:
         """
         raise NotImplementedError("Subclasses must implement to_dict()")
 
+    def _launch_params(self) -> dict:
+        """The constructor arguments a launched server needs; to_dict() by default."""
+        return self.to_dict()
+
+    @property
+    def command(self) -> str:
+        """``cellmap_flow_server`` arguments that rebuild this exact config.
+
+        Generated from to_dict() so no constructor argument is left behind
+        (hand-written commands dropped Fly's input/output size, which then
+        silently fell back to 178/56, and Bio's required voxel size), with
+        every token shell-quoted: bsub runs it through ``bash -c`` and local
+        launches through ``shlex.split``.
+        """
+        params = self._launch_params()
+        # A plugin subclass without cli_name is registered under its class
+        # name minus "ModelConfig", lower-cased (cli_utils.get_all_subclasses).
+        cli_name = getattr(type(self), "cli_name", None) or (
+            type(self).__name__.replace("ModelConfig", "").lower()
+        )
+        parts = [cli_name]
+        for name in list(inspect.signature(type(self).__init__).parameters)[1:]:
+            value = params.get(name)
+            if value is None:
+                continue
+            parts += [f"--{name.replace('_', '-')}", _cli_value(value)]
+        return " ".join(shlex.quote(str(p)) for p in parts)
+
 
 class ScriptModelConfig(ModelConfig):
 
@@ -197,10 +256,6 @@ class ScriptModelConfig(ModelConfig):
         self.script_path = script_path
         self.name = name
         self.scale = scale
-
-    @property
-    def command(self):
-        return f"script --script-path {self.script_path}"
 
     def _get_config(self):
         from cellmap_flow.utils.load_py import load_safe_config
@@ -262,10 +317,6 @@ class DaCapoModelConfig(ModelConfig):
         self.name = name
         self.scale = scale
 
-    @property
-    def command(self):
-        return f"dacapo --run-name {self.run_name} --iteration {self.iteration}"
-
     def _get_config(self):
         from dacapo.experiments import Run
         from dacapo.store.create_store import create_config_store, create_weights_store
@@ -278,14 +329,17 @@ class DaCapoModelConfig(ModelConfig):
         config.model = run.model
 
         in_shape = run.model.eval_input_shape
-        out_shape = run.model.compute_output_shape(in_shape)[1]
+        # (number of output channels, spatial output shape)
+        out_channels, out_shape = run.model.compute_output_shape(in_shape)
         voxel_size = run.datasplit.train[0].raw.voxel_size
 
         config.input_voxel_size = Coordinate(voxel_size)
         config.output_voxel_size = Coordinate(run.model.scale(voxel_size))
         config.read_shape = Coordinate(in_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(out_shape) * config.input_voxel_size
-        config.channels = self._get_channels(run.task)
+        # Output voxels are output_voxel_size wide (run.model.scale may make
+        # them differ from the input's).
+        config.write_shape = Coordinate(out_shape) * config.output_voxel_size
+        config.channels = self._get_channels(run.task, out_channels)
         config.output_channels = len(config.channels)
         config.block_shape = np.array(tuple(out_shape) + (config.output_channels,))
         return config
@@ -306,13 +360,29 @@ class DaCapoModelConfig(ModelConfig):
         return run
 
     @staticmethod
-    def _get_channels(task):
-        """Extract channel names from task."""
+    def _get_channels(task, num_channels=None):
+        """Channel names for the task, one per channel the model outputs.
+
+        Tasks without names get the old guesses (x/y/z for affinities,
+        "membrane" otherwise) only when those have the right length; an
+        affinity task with 9 offsets outputs 9 channels, not 3.
+        """
         if hasattr(task, "channels"):
-            return task.channels
+            names = list(task.channels)
         elif type(task).__name__ == "AffinitiesTask":
-            return ["x", "y", "z"]
-        return ["membrane"]
+            names = ["x", "y", "z"]
+        else:
+            names = ["membrane"]
+        if num_channels is not None and len(names) != int(num_channels):
+            neighborhood = getattr(getattr(task, "predictor", None), "neighborhood", None)
+            if neighborhood is not None and len(neighborhood) == int(num_channels):
+                names = [
+                    "aff_" + "_".join(str(int(v)) for v in offset)
+                    for offset in neighborhood
+                ]
+            else:
+                names = [f"channel_{i}" for i in range(int(num_channels))]
+        return names
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
@@ -346,7 +416,13 @@ class FlyModelConfig(ModelConfig):
         super().__init__()
         self.name = name
         self.checkpoint_path = checkpoint_path
+        if isinstance(channels, str):
+            channels = [c.strip() for c in channels.split(",") if c.strip()]
         self.channels = channels
+        if isinstance(input_voxel_size, str):
+            input_voxel_size = _as_int_tuple(input_voxel_size)
+        if isinstance(output_voxel_size, str):
+            output_voxel_size = _as_int_tuple(output_voxel_size)
         self.input_voxel_size = input_voxel_size
         self.output_voxel_size = output_voxel_size
         self.scale = scale
@@ -357,12 +433,9 @@ class FlyModelConfig(ModelConfig):
             logger.warning(
                 "Input and output size not provided, defaulting to (178, 178, 178) and (56, 56, 56)"
             )
-        self.input_size = input_size
-        self.output_size = output_size
-
-    @property
-    def command(self):
-        return f"fly --checkpoint-path {self.checkpoint_path} --channels {','.join(self.channels)} --input-voxel-size {','.join(map(str,self.input_voxel_size))} --output-voxel-size {','.join(map(str,self.output_voxel_size))}"
+        # The server CLI passes these as "178,178,178" strings.
+        self.input_size = _as_int_tuple(input_size)
+        self.output_size = _as_int_tuple(output_size)
 
     def load_eval_model(self, num_channels, checkpoint_path):
         """Load evaluation model from checkpoint (TorchScript or PyTorch)."""
@@ -418,7 +491,9 @@ class FlyModelConfig(ModelConfig):
         config.input_voxel_size = Coordinate(self.input_voxel_size)
         config.output_voxel_size = Coordinate(self.output_voxel_size)
         config.read_shape = Coordinate(self.input_size) * config.input_voxel_size
-        config.write_shape = Coordinate(self.output_size) * config.input_voxel_size
+        # Output voxels are output_voxel_size wide; using the input voxel size
+        # here made the context and the shape check wrong whenever they differ.
+        config.write_shape = Coordinate(self.output_size) * config.output_voxel_size
         config.channels = self.channels
         config.output_channels = len(self.channels)
         config.block_shape = np.array(
@@ -462,16 +537,15 @@ class BioModelConfig(ModelConfig):
     ):
         super().__init__()
         self.model_name = model_name
-        self.voxel_size = voxel_size
+        # The server CLI passes both of these as strings ("8,8,8", "64").
+        self.voxel_size = (
+            _as_int_tuple(voxel_size) if isinstance(voxel_size, str) else voxel_size
+        )
         self.name = name
         self.scale = scale
         self.voxels_to_process = None
         if edge_length_to_process:
-            self.voxels_to_process = edge_length_to_process**3
-
-    @property
-    def command(self):
-        return f"bioimage --model-name {self.model_name}"
+            self.voxels_to_process = int(edge_length_to_process) ** 3
 
     def _get_config(self):
         from bioimageio.core import load_description
@@ -516,6 +590,9 @@ class BioModelConfig(ModelConfig):
             Coordinate(config.output_spatial_dims) * config.output_voxel_size
         )
         config.context = (config.read_shape - config.write_shape) / 2
+        # format_output_bioimage clips to [0, 1] and scales to uint8; saying so
+        # stops the server advertising (and casting to) float32.
+        config.output_dtype = np.uint8
         config.process_chunk = MethodType(process_chunk_bioimage, config)
         config.format_output_bioimage = MethodType(format_output_bioimage, config)
         return config
@@ -724,10 +801,6 @@ class CellMapModelConfig(ModelConfig):
         self.name = name
         self.scale = scale
 
-    @property
-    def command(self) -> str:
-        return f"cellmap --folder-path {self.cellmap_model.folder_path} --name {self.name}"
-
     def _get_config(self) -> Config:
         config = Config()
         metadata = self.cellmap_model.metadata
@@ -837,21 +910,6 @@ class FinetuneModelConfig(ModelConfig):
                 self.base_model_dict, model_name=base_name
             )
         return self._base_model_config
-
-    def _weights_flag(self) -> str:
-        if self.weights_path:
-            return f"--weights-path {self.weights_path}"
-        return f"--lora-adapter-path {self.lora_adapter_path}"
-
-    @property
-    def command(self):
-        from cellmap_flow.utils.web_utils import encode_to_str
-
-        encoded_base_model = encode_to_str(self.base_model_dict)
-        return (
-            f"finetune {self._weights_flag()} "
-            f"--base-model {encoded_base_model}"
-        )
 
     def _get_config(self):
         # Imported here rather than at module scope: importing torch costs
@@ -999,12 +1057,15 @@ class HuggingFaceModelConfig(ModelConfig):
             self._metadata = {}
         return self._metadata
 
-    @property
-    def command(self) -> str:
-        cmd = f"huggingface --repo {self.repo}"
-        if self.revision:
-            cmd += f" --revision {self.revision}"
-        return cmd
+    def _launch_params(self) -> dict:
+        # Not to_dict(): that downloads metadata.json for the pipeline builder,
+        # and launching a server needs only the constructor arguments.
+        return {
+            "repo": self.repo,
+            "revision": self.revision,
+            "name": self.name,
+            "scale": self.scale,
+        }
 
     def _get_config(self) -> Config:
         from cellmap_models.model_export.cellmap_model import get_huggingface_model

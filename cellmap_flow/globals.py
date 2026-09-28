@@ -2,6 +2,7 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 
 import os
 import queue
+import shlex
 import yaml
 import logging
 import threading
@@ -278,7 +279,7 @@ class Flow:
 
         for model_config in instance.models_config:
             model_command = model_config.command
-            command = f"{SERVER_COMMAND} {model_command} -d {instance.dataset_path}"
+            command = f"{SERVER_COMMAND} {model_command} -d {shlex.quote(instance.dataset_path)}"
             print(f"Starting server with command: {command}")
             thread = threading.Thread(
                 target=start_hosts,
