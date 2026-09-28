@@ -489,40 +489,94 @@
             document.getElementById("cfg_nb_cores_worker").value = data.nb_cores_worker || "";
             document.getElementById("cfg_nb_workers").value = data.nb_workers || "";
             serverConfigLoaded = true;
+          })
+          .catch(function (err) {
+            const statusEl = document.getElementById("serverConfigStatus");
+            statusEl.style.color = "#f87171";
+            statusEl.textContent = "Could not load the server config: " + err;
           });
       }
 
+      // /api/server-config stores what it is sent. The count fields arrive as
+      // strings from <input type="number">, and a blank one ("" before the
+      // accordion has loaded, or cleared by hand) reached int("") and a 500.
+      // Send whole numbers as numbers, leave a blank count out so the server
+      // keeps its value, and say what is wrong instead of posting it.
+      function readCount(id, label) {
+        const raw = document.getElementById(id).value.trim();
+        if (raw === "") return undefined;
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 1) {
+          throw new Error(label + " must be a whole number of at least 1.");
+        }
+        return n;
+      }
+
+      // Same rule bsub_utils applies before passing -W to bsub, which drops a
+      // value it cannot parse and falls back to the queue default.
+      const WALLTIME_RE = /^\d+(:\d{1,2})?$/;
+
       document.getElementById("updateServerConfigBtn").addEventListener("click", function () {
+        const statusEl = document.getElementById("serverConfigStatus");
+        function fail(message) {
+          statusEl.style.color = "#f87171";
+          statusEl.textContent = message;
+        }
+        // The text fields are sent even when blank (blank walltime means the
+        // queue default), so before they hold the server's values an Update
+        // would wipe the charge group and time limit.
+        if (!serverConfigLoaded) {
+          fail("Still loading the current config, try again.");
+          loadServerConfig();
+          return;
+        }
+        const walltime = document.getElementById("cfg_walltime").value.trim();
+        if (walltime && !WALLTIME_RE.test(walltime)) {
+          fail("Time Limit must be HH:MM or a number of minutes.");
+          return;
+        }
         const payload = {
-          queue: document.getElementById("cfg_queue").value,
-          charge_group: document.getElementById("cfg_charge_group").value,
-          walltime: document.getElementById("cfg_walltime").value,
+          charge_group: document.getElementById("cfg_charge_group").value.trim(),
+          walltime: walltime,
           // Send a real boolean: the server stores this verbatim, and the
           // string "false" would read as true.
           cycle_gpu_queues: document.getElementById("cfg_cycle_gpu_queues").checked,
-          nb_cores_worker: document.getElementById("cfg_nb_cores_worker").value,
-          nb_workers: document.getElementById("cfg_nb_workers").value,
         };
-        const statusEl = document.getElementById("serverConfigStatus");
+        // Empty until LSF has listed the queues; don't send that as a queue.
+        const queue = document.getElementById("cfg_queue").value;
+        if (queue) payload.queue = queue;
+        try {
+          const cores = readCount("cfg_nb_cores_worker", "Cores per Worker");
+          const workers = readCount("cfg_nb_workers", "Number of Workers");
+          if (cores !== undefined) payload.nb_cores_worker = cores;
+          if (workers !== undefined) payload.nb_workers = workers;
+        } catch (err) {
+          fail(err.message);
+          return;
+        }
         fetch("/api/server-config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success) {
+          .then(function (res) {
+            // An error page is not JSON; report its status rather than a
+            // SyntaxError from parsing it.
+            return res.json()
+              .catch(function () { return {}; })
+              .then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+          })
+          .then(function (r) {
+            if (r.ok && r.data.success) {
               statusEl.style.color = "#4ade80";
               statusEl.textContent = "Saved!";
+              setTimeout(function () { statusEl.textContent = ""; }, 3000);
             } else {
-              statusEl.style.color = "#f87171";
-              statusEl.textContent = "Error";
+              fail("Error: " + (r.data.error || "HTTP " + r.status));
             }
-            setTimeout(function () { statusEl.textContent = ""; }, 3000);
           })
           .catch((err) => {
-            statusEl.style.color = "#f87171";
-            statusEl.textContent = "Error: " + err;
+            fail("Error: " + err);
           });
       });
 

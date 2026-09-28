@@ -629,32 +629,54 @@
       modal.show();
 
       document.getElementById("modalSaveConfigBtn").addEventListener("click", function () {
-        const payload = {
-          queue: document.getElementById("modal_queue").value,
-          charge_group: document.getElementById("modal_charge_group").value,
-          nb_cores_worker: document.getElementById("modal_nb_cores_worker").value,
-          nb_workers: document.getElementById("modal_nb_workers").value,
-        };
         const statusEl = document.getElementById("modalConfigStatus");
+        function fail(message) {
+          statusEl.style.color = "#f87171";
+          statusEl.textContent = message;
+        }
+        // Counts go as numbers (the inputs hold strings, and "" reached
+        // int("") on the server); a blank one or a blank queue is left out
+        // so the server keeps its default.
+        const payload = {
+          charge_group: document.getElementById("modal_charge_group").value.trim(),
+        };
+        const queue = document.getElementById("modal_queue").value.trim();
+        if (queue) payload.queue = queue;
+        const counts = [
+          ["modal_nb_cores_worker", "nb_cores_worker", "Cores per Worker"],
+          ["modal_nb_workers", "nb_workers", "Number of Workers"],
+        ];
+        for (const [id, key, label] of counts) {
+          const raw = document.getElementById(id).value.trim();
+          if (raw === "") continue;
+          const n = Number(raw);
+          if (!Number.isInteger(n) || n < 1) {
+            fail(label + " must be a whole number of at least 1.");
+            return;
+          }
+          payload[key] = n;
+        }
         fetch("/api/server-config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success) {
+          .then(function (res) {
+            return res.json()
+              .catch(function () { return {}; })
+              .then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+          })
+          .then(function (r) {
+            if (r.ok && r.data.success) {
               statusEl.style.color = "#4ade80";
               statusEl.textContent = "Saved!";
               setTimeout(function () { modal.hide(); }, 500);
             } else {
-              statusEl.style.color = "#f87171";
-              statusEl.textContent = "Error saving config.";
+              fail("Error saving config: " + (r.data.error || "HTTP " + r.status));
             }
           })
           .catch((err) => {
-            statusEl.style.color = "#f87171";
-            statusEl.textContent = "Error: " + err;
+            fail("Error: " + err);
           });
       });
     });
