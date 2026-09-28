@@ -118,4 +118,6 @@ LambdaPostprocessor
 
 Applies a user-defined lambda expression to each data point.
 
-- `expression`: Python expression to apply to the data (e.g., `"x * 2"`)
+- `expression`: A numpy expression in `x` (e.g., `"x * 2"`, `"np.clip(x, 0, 1)"`). Arithmetic, comparisons,
+  indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods such as `astype` and `clip`
+  are allowed. Anything else is rejected, because expressions arrive in layer URLs.

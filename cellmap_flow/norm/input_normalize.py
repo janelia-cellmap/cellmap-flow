@@ -2,6 +2,8 @@ import logging
 import numpy as np
 import inspect
 
+from cellmap_flow.utils.safe_expression import compile_expression
+
 logger = logging.getLogger(__name__)
 
 
@@ -173,16 +175,17 @@ class MinMaxNormalizer(InputNormalizer):
 class LambdaNormalizer(InputNormalizer):
     def __init__(self, expression: str):
         self.expression = expression
-        # ``_lambda`` is a Python ``lambda`` and not picklable, which breaks
-        # multiprocessing workers (e.g. PyTorch DataLoader with spawn). Don't
-        # store it on the instance; build it lazily in ``_process`` so it
-        # lives only in the worker that needs it. ``__getstate__``/
-        # ``__setstate__`` further guarantee any older pickled instances
-        # don't try to round-trip the lambda.
+        # Reject anything outside the safe subset now, not on the first chunk.
+        compile_expression(expression)
+        # The compiled function is not picklable, which breaks multiprocessing
+        # workers (e.g. PyTorch DataLoader with spawn). Don't store it on the
+        # instance; build it lazily in ``_process`` so it lives only in the
+        # worker that needs it. ``__getstate__``/``__setstate__`` further
+        # guarantee older pickled instances don't try to round-trip it.
 
     def _get_lambda(self):
         if not hasattr(self, "_lambda") or self._lambda is None:
-            self._lambda = eval(f"lambda x: {self.expression}")
+            self._lambda = compile_expression(self.expression)
         return self._lambda
 
     def __getstate__(self):

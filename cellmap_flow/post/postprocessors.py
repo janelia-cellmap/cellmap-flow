@@ -12,6 +12,7 @@ import fastremap
 from funlib.math import cantor_number
 import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
+from cellmap_flow.utils.safe_expression import compile_expression
 
 postprocessing_lock = threading.Lock()
 
@@ -340,7 +341,7 @@ class ChannelSelection(PostProcessor):
 class LambdaPostprocessor(PostProcessor):
     def __init__(self, expression: str):
         self.expression = expression
-        self._lambda = eval(f"lambda x: {expression}")
+        self._lambda = compile_expression(expression)
 
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))

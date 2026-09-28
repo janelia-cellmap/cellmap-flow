@@ -179,7 +179,7 @@ def output_display_range(postprocess_steps, output_class):
         elif name == "ChannelSelection":
             pass  # picks channels, does not rescale
         else:
-            # LambdaPostprocessor evaluates arbitrary code; the segmentation
+            # LambdaPostprocessor can compute any range; the segmentation
             # ones produce label ids that get a SegmentationLayer anyway.
             rng = None
 
