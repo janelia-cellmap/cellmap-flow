@@ -1202,6 +1202,18 @@ def main():
             # If training diverged (NaN/Inf), skip saving and wait for restart
             if stats.get('diverged'):
                 logger.warning("Training diverged — skipping model save.")
+                if args.auto_serve and not server_started:
+                    # Nothing can restart this job: the dashboard sends a
+                    # restart to the job's inference server, which only starts
+                    # after an iteration completes. Waiting here held the GPU
+                    # until walltime. Exit so the job shows as failed and the
+                    # GPU is freed; resubmit with other settings.
+                    logger.error(
+                        "The first training iteration diverged, so no inference "
+                        "server is running to receive a restart. Exiting; "
+                        "resubmit with other settings (e.g. a lower learning rate)."
+                    )
+                    return 1
                 if args.auto_serve:
                     # Still wait for restart so the user can adjust params
                     signal_file = Path(args.output_dir) / "restart_signal.json"

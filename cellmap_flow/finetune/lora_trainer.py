@@ -897,6 +897,10 @@ class LoRAFinetuner:
                         mitigated = True
                     if not mitigated:
                         log_message("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
+                        # Every diverged return says so: the job manager
+                        # watches for this marker, and without it this path
+                        # looked like training that simply went quiet.
+                        print("TRAINING_DIVERGED", flush=True)
                         return {
                             'final_loss': float('nan'),
                             'best_loss': self.best_loss,
