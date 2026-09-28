@@ -448,7 +448,7 @@ def stream_job_logs_response(job_id):
                 if block:
                     yield block
 
-        while finetune_job.status.value in ["PENDING", "RUNNING"]:
+        while finetune_job.status.value in ["PENDING", "RUNNING", "WAITING_FOR_RESTART"]:
             try:
                 now = time.perf_counter()
 

@@ -224,6 +224,8 @@ def _wait_for_restart_signal(
         Dict with restart parameters, or None if signal file is malformed
     """
     logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
+    # The job manager's cue that this job is idle and can take a restart.
+    print("WAITING_FOR_RESTART", flush=True)
 
     while True:
         if restart_controller is not None:

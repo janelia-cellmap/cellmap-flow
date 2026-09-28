@@ -2164,9 +2164,10 @@ document.addEventListener("DOMContentLoaded", function () {
           }
         }
 
-        // Show restart button when inference server is ready (model is serving)
+        // Show restart button when the model is serving, or the trainer is
+        // waiting for a restart (an iteration finished, or diverged)
         const restartBtn = document.getElementById("restartJobBtn");
-        if (data.inference_server_ready) {
+        if (data.inference_server_ready || data.status === "WAITING_FOR_RESTART") {
           restartBtn.style.display = "inline-block";
         }
 
@@ -2225,7 +2226,8 @@ document.addEventListener("DOMContentLoaded", function () {
       "RUNNING": "primary",
       "COMPLETED": "success",
       "FAILED": "danger",
-      "CANCELLED": "secondary"
+      "CANCELLED": "secondary",
+      "WAITING_FOR_RESTART": "info"
     };
     return colors[status] || "secondary";
   }
@@ -2430,16 +2432,17 @@ document.addEventListener("DOMContentLoaded", function () {
       const data = await response.json();
       if (!data.success || !data.jobs || data.jobs.length === 0) return;
 
-      // Find the most recent live job: queued, running, or finished and
-      // still serving (it can be restarted). A queued job needs its card
-      // too, or it cannot be cancelled after a reload. The list comes back
-      // oldest first.
+      // Find the most recent live job: queued, running, waiting for a
+      // restart, or finished and still serving (it can be restarted). A
+      // queued job needs its card too, or it cannot be cancelled after a
+      // reload. The list comes back oldest first.
       const activeJob = data.jobs
         .slice()
         .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
         .find(j =>
           j.status === 'PENDING' ||
           j.status === 'RUNNING' ||
+          j.status === 'WAITING_FOR_RESTART' ||
           (j.status === 'COMPLETED' && j.inference_server_ready)
         );
       if (!activeJob) return;
@@ -2468,6 +2471,9 @@ document.addEventListener("DOMContentLoaded", function () {
           (activeJob.loss ? ` - Loss: ${activeJob.loss.toFixed(4)}` : '');
       }
 
+      if (activeJob.status === 'WAITING_FOR_RESTART') {
+        document.getElementById('restartJobBtn').style.display = 'inline-block';
+      }
       // Restore inference server ready state
       if (activeJob.inference_server_ready) {
         renderServingReadyProgress();
@@ -2507,8 +2513,10 @@ document.addEventListener("DOMContentLoaded", function () {
       // Store latest status data for restart modal
       latestJobStatusData = activeJob;
 
-      // Resume polling and streaming if job is still queued or running
-      if (activeJob.status === 'RUNNING' || activeJob.status === 'PENDING') {
+      // Resume polling and streaming if job is still queued, running, or
+      // waiting for a restart
+      if (activeJob.status === 'RUNNING' || activeJob.status === 'PENDING' ||
+          activeJob.status === 'WAITING_FOR_RESTART') {
         startLogStreaming(jobId);
         startStatusPolling(jobId);
       } else {

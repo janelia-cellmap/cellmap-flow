@@ -53,6 +53,14 @@ class JobStatus(Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    # Alive and idle: an iteration finished (and is being served) or
+    # diverged, and the trainer is waiting for a restart request.
+    WAITING_FOR_RESTART = "WAITING_FOR_RESTART"
+
+
+# Status markers the trainer prints, in the order they matter: the last one
+# in a chunk of log decides.
+_STATUS_MARKER_RE = re.compile(r"TRAINING_DIVERGED|RESTARTING_TRAINING|WAITING_FOR_RESTART")
 
 
 TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
@@ -1223,19 +1231,26 @@ class FinetuneJobManager:
             finetune_job: Job to update
             log_content: New log content to parse
         """
-        # Check for diverged marker - training produced NaN/Inf loss
-        if "TRAINING_DIVERGED" in log_content:
-            self.logger.warning(f"Training diverged for job {finetune_job.job_id}")
-            finetune_job.status = JobStatus.RUNNING  # still alive, waiting for restart
-            finetune_job.latest_loss = None
-
-        # Check for restart marker - reset progress
-        if "RESTARTING_TRAINING" in log_content:
-            self.logger.info(f"Training restart detected for job {finetune_job.job_id}")
-            finetune_job.current_epoch = 0
-            finetune_job.latest_loss = None
-            finetune_job.status = JobStatus.RUNNING
-            finetune_job.inference_server_ready = False
+        # Status markers, in the order they were printed: a restart that
+        # follows a divergence in the same chunk leaves the job running, and
+        # the reverse leaves it waiting.
+        for marker in _STATUS_MARKER_RE.findall(log_content):
+            if finetune_job.status in TERMINAL_STATUSES:
+                break
+            if marker == "TRAINING_DIVERGED":
+                # Training produced NaN/Inf loss. The trainer then waits for a
+                # restart, or exits if nothing is served yet (LSF then says so).
+                self.logger.warning(f"Training diverged for job {finetune_job.job_id}")
+                finetune_job.status = JobStatus.WAITING_FOR_RESTART
+                finetune_job.latest_loss = None
+            elif marker == "WAITING_FOR_RESTART":
+                finetune_job.status = JobStatus.WAITING_FOR_RESTART
+            else:  # RESTARTING_TRAINING: reset progress
+                self.logger.info(f"Training restart detected for job {finetune_job.job_id}")
+                finetune_job.current_epoch = 0
+                finetune_job.latest_loss = None
+                finetune_job.status = JobStatus.RUNNING
+                finetune_job.inference_server_ready = False
 
         # Check for iteration complete marker - update neuroglancer layer.
         # Read full log in case the marker was in a previous chunk.
@@ -1546,17 +1561,20 @@ class FinetuneJobManager:
 
         job = self.jobs[job_id]
 
-        # Only allow restart if the job is running (serving after training)
-        if job.status not in [JobStatus.RUNNING, JobStatus.COMPLETED]:
+        # Only a trainer that is alive and waiting can take a restart. A
+        # COMPLETED job has exited: nothing reads the request, and the monitor
+        # that would have seen it through has stopped, so it used to sit at
+        # RUNNING forever. WAITING_FOR_RESTART also covers a later iteration
+        # that diverged: its server is up but not marked ready, and the
+        # restart the user needed was refused. A RUNNING job whose server is
+        # up is a trainer that predates the WAITING_FOR_RESTART marker.
+        waiting = job.status == JobStatus.WAITING_FOR_RESTART
+        serving = job.status == JobStatus.RUNNING and job.inference_server_ready
+        if not (waiting or serving):
             raise ValueError(
-                f"Job {job_id} is in state {job.status.value} - "
-                f"can only restart jobs that are RUNNING (serving) or COMPLETED"
-            )
-
-        if not job.inference_server_ready:
-            raise ValueError(
-                f"Job {job_id} inference server not ready - "
-                f"training must complete and server must start before restarting"
+                f"Job {job_id} is in state {job.status.value} - can only restart a "
+                f"job that is waiting for a restart (its training iteration has "
+                f"finished or diverged)"
             )
 
         # 1. Archive current logs
