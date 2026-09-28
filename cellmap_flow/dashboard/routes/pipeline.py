@@ -1,9 +1,7 @@
-import os
 import json
 import logging
 import re
 import time
-from datetime import datetime
 
 import neuroglancer
 import numpy as np
@@ -15,7 +13,6 @@ from cellmap_flow.norm.input_normalize import (
     get_normalizations,
 )
 from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
-from cellmap_flow.utils.load_py import load_safe_config
 from cellmap_flow.utils.output_probe import output_display_range
 from cellmap_flow.utils.scale_pyramid import (
     PREDICTION_COLORS,
@@ -161,10 +158,6 @@ def process():
     # we want to set the time such that each request is unique
     data["time"] = time.time()
 
-    logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
-    custom_code = data.get("custom_code", None)
-    if "custom_code" in data:
-        del data["custom_code"]
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
     previous_norm_signature = _chain_signature(getattr(g, "input_norms", None))
@@ -253,29 +246,10 @@ def process():
 
     logger.debug(f"Input normalizers: {g.input_norms}")
 
-    if custom_code:
-        try:
-            # Save custom code to a file with date and time
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"custom_code_{timestamp}.py"
-            filepath = os.path.join(g.CUSTOM_CODE_FOLDER, filename)
-
-            with open(filepath, "w") as file:
-                file.write(custom_code)
-
-            config = load_safe_config(filepath)
-            logger.debug(f"Custom code loaded successfully: {config}")
-
-            logger.debug(get_input_normalizers())
-
-        except Exception as e:
-            logger.warning(f"Error executing custom code: {e}")
-
     return jsonify(
         {
             "message": "Data received successfully",
             "received_data": data,
-            "found_custom_normalizer": get_input_normalizers(),
         }
     )
 

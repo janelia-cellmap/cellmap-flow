@@ -5,7 +5,7 @@
   <div id="postProcessList">
   {% for normalizer in output_postprocessors %}
     {# Check if this post-processor is in the default_post_process dict #}
-    {% set is_checked = normalizer.name in default_post_process and normalizer.name != 'custom_code' %}
+    {% set is_checked = normalizer.name in default_post_process %}
 
     <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ normalizer.name }}">
       <div class="form-check mb-2 d-flex align-items-center">
@@ -55,35 +55,6 @@
   {% endfor %}
   </div>
 
-  <!-- Handle custom code checkbox and editor -->
-  {% set is_custom_code_checked = 'custom_code' in default_post_process %}
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value="custom_code"
-      id="customCodeCheckbox_postProcess"
-      {% if is_custom_code_checked %}checked{% endif %}
-    />
-    <label class="form-check-label" for="customCodeCheckbox_postProcess">
-      Custom Code (PostProcess)
-    </label>
-  </div>
-
-  <div
-    id="customCodeParams_postProcess"
-    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
-  >
-    <h5 style="text-transform: none; letter-spacing: 0;">Code Editor</h5>
-    <textarea
-      id="pythonEditor_postProcess"
-      class="form-control"
-      rows="5"
-      placeholder="Enter Python code here..."
-    >{% if is_custom_code_checked %}{{ default_post_process['custom_code'] }}{% endif %}</textarea>
-    <div id="errorMsg_postProcess" class="text-danger mt-2"></div>
-  </div>
-
   <!-- "Submit All" button -->
   <button type="button" class="btn btn-primary mt-3" id="submitAll">
     Submit All
@@ -115,39 +86,6 @@ document.addEventListener("DOMContentLoaded", function () {
     updatePostItemState(checkbox);
     checkbox.addEventListener("change", function () { updatePostItemState(this); });
   });
-
-  // Toggle custom code
-  const customCodeCheckbox = document.getElementById("customCodeCheckbox_postProcess");
-  const customCodeParams = document.getElementById("customCodeParams_postProcess");
-  customCodeCheckbox.addEventListener("change", function () {
-    customCodeParams.style.display = this.checked ? "block" : "none";
-  });
-
-  // Optional Skulpt-based syntax checking
-  const editor = document.getElementById("pythonEditor_postProcess");
-  const errorMsg = document.getElementById("errorMsg_postProcess");
-
-  function checkSyntax() {
-    if (typeof Sk === "undefined") {
-      return;
-    }
-    try {
-      Sk.parse("user_code.py", editor.value);
-      errorMsg.textContent = "";
-    } catch (err) {
-      errorMsg.textContent = err.toString();
-    }
-  }
-
-  function debounce(func, delay) {
-    let timeout;
-    return function () {
-      clearTimeout(timeout);
-      timeout = setTimeout(func, delay);
-    };
-  }
-
-  editor.addEventListener("input", debounce(checkSyntax, 500));
 
   // Drag and drop functionality — only via the drag handle
   const postProcessList = document.getElementById("postProcessList");
@@ -227,11 +165,6 @@ document.addEventListener("DOMContentLoaded", function () {
         payload.push(postData);
       }
     });
-
-    // If custom code is checked
-    if (customCodeCheckbox.checked) {
-      payload.push({ name: "custom_code", code: editor.value });
-    }
 
     return payload;
   };
