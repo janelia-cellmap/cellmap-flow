@@ -1166,6 +1166,12 @@ class LoRAFinetuner:
 
             self._warn_if_single_class(target, mask)
 
+            # Class balancing splits voxels into fg and bg by the target as
+            # annotated, before smoothing. Split by the smoothed target, every
+            # bg voxel carried s/2 of fg weight: with 100 fg voxels against
+            # 100k bg at s = 0.1, 98% of the "fg" half of the loss was bg.
+            hard_target = target
+
             # Apply label smoothing: 0 -> s/2, 1 -> 1-s/2
             # This prevents the model from being pushed to extreme 0/1 outputs,
             # preserving gradual distance-like predictions
@@ -1212,8 +1218,8 @@ class LoRAFinetuner:
                     def _masked_mean(per_voxel):
                         if self.balance_classes:
                             # Average fg and bg separately so each contributes equally
-                            fg_mask = target * mask
-                            bg_mask = (1.0 - target) * mask
+                            fg_mask = hard_target * mask
+                            bg_mask = (1.0 - hard_target) * mask
                             fg_contrib = (per_voxel * fg_mask).sum() / fg_mask.sum().clamp(min=1)
                             bg_contrib = (per_voxel * bg_mask).sum() / bg_mask.sum().clamp(min=1)
                             return (fg_contrib + bg_contrib) / 2.0
