@@ -12,13 +12,21 @@ def cli(yaml_configs: tuple) -> None:
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
     from cellmap_flow.utils.config_utils import ConfigError
 
+    incomplete = []
     for yaml_config in yaml_configs:
         logger.info(f"Processing: {yaml_config}")
         try:
             process = CellMapFlowBlockwiseProcessor(yaml_config, create=True)
         except ConfigError as e:
             raise click.ClickException(f"{yaml_config}: {e}")
-        process.run()
+        # Later configs are independent of this one, so carry on.
+        if not process.run():
+            incomplete.append(yaml_config)
+
+    if incomplete:
+        raise click.ClickException(
+            f"Some blocks were not processed for: {', '.join(incomplete)}"
+        )
 
 
 if __name__ == "__main__":

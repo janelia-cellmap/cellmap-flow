@@ -34,7 +34,8 @@ def cli(yaml_config, client, log_level):
     except ConfigError as e:
         raise click.ClickException(f"{yaml_config}: {e}")
     if is_server:
-        process.run()
+        if not process.run():
+            raise click.ClickException(f"{yaml_config}: some blocks were not processed")
     else:
         process.client()
 

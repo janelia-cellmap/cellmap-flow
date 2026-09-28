@@ -493,11 +493,12 @@ class CellMapFlowBlockwiseProcessor:
                         marker = progress_marker(self.tmp_dir, block)
                         marker.parent.mkdir(parents=True, exist_ok=True)
                         marker.touch()
-                except Exception as e:
-                    logger.error(f"Error processing block {block}: {e}")
+                except Exception:
+                    logger.exception(f"Error processing block {block}")
                     block.status = daisy.BlockStatus.FAILED
 
-    def run(self):
+    def run(self) -> bool:
+        """Process every ROI; True only if every block of every ROI succeeded."""
 
         read_shape = self.model_config.config.read_shape
         write_shape = self.model_config.config.write_shape
@@ -535,6 +536,7 @@ class CellMapFlowBlockwiseProcessor:
             logger.info(f"Processing entire dataset: {total_write_roi}")
 
         # Process each ROI
+        failures = []
         for roi_idx, total_write_roi in enumerate(rois_to_process):
             total_read_roi = total_write_roi.grow(context, context)
             
@@ -563,8 +565,67 @@ class CellMapFlowBlockwiseProcessor:
                 num_workers=self.workers,
             )
 
-            task_state = daisy.run_blockwise([task])
+            task_state = _run_blockwise([task]).get(task.task_id)
             logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
+            unfinished = _blocks_not_done(task_state)
+            if unfinished:
+                failures.append(f"{name}: {unfinished}")
+
+        if failures:
+            logger.error(
+                "Blocks failed or were never processed -- "
+                + "; ".join(failures)
+                + ". Their errors are in the worker logs."
+            )
+            return False
+        return True
+
+
+def _run_blockwise(tasks, server_factory=None):
+    """daisy.run_blockwise, but returning each task's TaskState.
+
+    daisy.run_blockwise returns ``all(state.is_done())``, and is_done() counts
+    failed blocks as done, so it said True however many blocks failed and the
+    master exited 0. This runs the same sequence -- a server in a worker
+    thread so Ctrl+C can stop it, with daisy's progress monitor -- and keeps
+    the states.
+    """
+    from multiprocessing import Event
+    from multiprocessing.pool import ThreadPool
+
+    from daisy.cl_monitor import CLMonitor
+    from daisy.tcp import IOLooper
+
+    if server_factory is None:
+        server_factory = daisy.Server
+    stop_event = Event()
+
+    def run():
+        server = server_factory(stop_event=stop_event)
+        CLMonitor(server)
+        return server.run_blockwise(tasks)
+
+    IOLooper.clear()
+    with ThreadPool(processes=1) as pool:
+        result = pool.apply_async(run)
+        try:
+            return result.get()
+        except KeyboardInterrupt:
+            stop_event.set()
+            return result.get()
+
+
+def _blocks_not_done(task_state) -> int:
+    """Blocks of a task that failed, were orphaned, or never ran."""
+    if task_state is None:
+        return 1
+    never_ran = (
+        task_state.total_block_count
+        - task_state.completed_count
+        - task_state.failed_count
+        - task_state.orphaned_count
+    )
+    return task_state.failed_count + task_state.orphaned_count + max(never_ran, 0)
 
 
 def progress_marker(tmp_dir, block: daisy.Block) -> Path:
