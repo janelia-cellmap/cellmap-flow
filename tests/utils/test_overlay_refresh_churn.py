@@ -184,7 +184,10 @@ def test_the_periodic_sync_never_writes_to_the_viewer(monkeypatch):
 
     from cellmap_flow.dashboard import finetune_utils
 
-    body = inspect.getsource(finetune_utils.periodic_sync_annotations)
+    # The loop runs each round through _periodic_sync_once.
+    body = inspect.getsource(finetune_utils.periodic_sync_annotations) + inspect.getsource(
+        finetune_utils._periodic_sync_once
+    )
     # Comments in there explain at length why it must not touch the viewer,
     # so look at the code only.
     code = "\n".join(

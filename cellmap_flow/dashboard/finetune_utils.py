@@ -14,6 +14,7 @@ import subprocess
 import time
 import logging
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -574,6 +575,23 @@ def _safe_epoch_timestamp(value) -> float:
         return 0.0
 
 
+def _chunk_version(entry) -> str:
+    """What identifies one version of a remote chunk: its ETag, from a listing.
+
+    Change detection used LastModified from a HEAD per chunk, which has
+    one-second resolution: two brush strokes to the same chunk within a
+    second, with a sync between them, left the second stroke unsynced for
+    good. The ETag changes with the content. LastModified and size are the
+    fallback for a store that lists no ETag.
+    """
+    if not isinstance(entry, dict):
+        return ""
+    etag = entry.get("ETag") or entry.get("etag")
+    if etag:
+        return str(etag).strip('"')
+    return f"{_safe_epoch_timestamp(entry.get('LastModified'))}:{entry.get('size')}"
+
+
 def _get_sync_worker_count() -> int:
     """
     Determine thread count for chunk sync.
@@ -609,28 +627,48 @@ def _copy_chunks_parallel(s3, copy_pairs):
     """
     Copy chunk files from MinIO in parallel.
 
+    Each chunk is downloaded to a temporary file beside its destination and
+    moved into place with os.replace, so a reader -- the trainer on its LSF
+    node reads this same volume -- sees the old chunk or the new one, never
+    a half-written file (which blosc rejects).
+
     Args:
         s3: s3fs filesystem instance
         copy_pairs: list of (src_chunk_path, dst_chunk_path_str)
+
+    Returns:
+        The source paths that could not be copied. Their chunks keep what
+        was on disk, and the caller must not record them as synced.
     """
     if not copy_pairs:
-        return
+        return set()
 
     available_workers = _get_sync_worker_count()
     workers = max(1, min(len(copy_pairs), available_workers))
 
     def _copy_one(src_dst):
         src_chunk_path, dst_chunk_path = src_dst
-        s3.get(src_chunk_path, dst_chunk_path)
+        dst = Path(dst_chunk_path)
+        # Dot-prefixed, so nothing that lists chunk keys (z.y.x) sees it.
+        tmp = dst.with_name(f".{dst.name}.{uuid.uuid4().hex}.part")
+        try:
+            s3.get(src_chunk_path, str(tmp))
+            os.replace(tmp, dst)
+        finally:
+            if tmp.exists():
+                tmp.unlink()
         return src_chunk_path
 
+    failed = set()
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(_copy_one, pair) for pair in copy_pairs]
+        futures = {executor.submit(_copy_one, pair): pair[0] for pair in copy_pairs}
         for fut in as_completed(futures):
             try:
                 fut.result()
             except Exception as e:
-                logger.debug(f"Error syncing chunk in parallel copy: {e}")
+                failed.add(futures[fut])
+                logger.warning(f"Could not sync chunk {futures[fut]}: {e}; will retry next sync.")
+    return failed
 
 
 def _make_s3_filesystem():
@@ -670,7 +708,16 @@ def _make_s3_filesystem():
 def _sync_zarr_group_metadata(s3, src_path, dst_path):
     """Sync zarr group structure and metadata from S3 to local disk.
 
-    Ensures destination arrays exist with correct shape/dtype and copies attrs.
+    Creates destination arrays that do not exist yet, and copies attrs.
+    An array that exists locally with a different shape, chunking or dtype
+    is left alone and reported: re-creating it with overwrite=True -- as
+    this used to -- deletes every local chunk of that array, which the
+    "never delete on-disk chunks" rule in _diff_and_sync_chunks exists to
+    prevent.
+
+    Returns:
+        The keys of arrays whose local layout does not match MinIO's. The
+        caller must not copy chunks into those, since they would not fit.
     """
     src_store = s3fs.S3Map(root=src_path, s3=s3)
     src_group = zarr.open_group(store=src_store, mode="r")
@@ -678,29 +725,36 @@ def _sync_zarr_group_metadata(s3, src_path, dst_path):
     dst_store = zarr.DirectoryStore(str(dst_path))
     dst_group = zarr.open_group(store=dst_store, mode="a")
 
+    mismatched = set()
     for key in src_group.array_keys():
         src_array = src_group[key]
         if key in dst_group:
             dst_array = dst_group[key]
-            shape_mismatch = (
+            if (
                 tuple(dst_array.shape) != tuple(src_array.shape)
                 or tuple(dst_array.chunks) != tuple(src_array.chunks)
                 or dst_array.dtype != src_array.dtype
-            )
+            ):
+                logger.error(
+                    f"Local array {dst_path}/{key} ({dst_array.shape}, chunks "
+                    f"{dst_array.chunks}, {dst_array.dtype}) does not match MinIO's "
+                    f"({src_array.shape}, chunks {src_array.chunks}, {src_array.dtype}); "
+                    "leaving the local array and its chunks as they are, and not syncing it."
+                )
+                mismatched.add(key)
+                continue
         else:
-            shape_mismatch = True
-        if shape_mismatch:
             dst_group.create_dataset(
                 key,
                 shape=src_array.shape,
                 chunks=src_array.chunks,
                 dtype=src_array.dtype,
                 fill_value=0,
-                overwrite=True,
             )
         dst_group[key].attrs.update(src_array.attrs)
 
     dst_group.attrs.update(src_group.attrs)
+    return mismatched
 
 
 def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=False):
@@ -723,7 +777,8 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
         callers' tuple-unpacking keeps working.
     """
     try:
-        chunk_files = s3.ls(s0_path)
+        # One listing, with each object's ETag: no per-chunk HEAD request.
+        chunk_files = s3.ls(s0_path, detail=True)
     except FileNotFoundError:
         # Remote bucket has no annotation/s0 yet (just created) — keep
         # whatever we have locally and try again next cycle.
@@ -734,15 +789,15 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
         return [], [], dict(known_chunk_state)
 
     remote_chunk_state = {}
-    for chunk_file in chunk_files:
-        chunk_key = Path(chunk_file).name
+    for entry in chunk_files:
+        if isinstance(entry, dict):
+            name = entry.get("name") or entry.get("Key") or ""
+        else:
+            name = str(entry)
+        chunk_key = Path(name).name
         if not re.match(r"^\d+\.\d+\.\d+$", chunk_key):
             continue
-        try:
-            info = s3.info(chunk_file)
-            remote_chunk_state[chunk_key] = _safe_epoch_timestamp(info.get("LastModified"))
-        except Exception:
-            remote_chunk_state[chunk_key] = 0.0
+        remote_chunk_state[chunk_key] = _chunk_version(entry)
 
     if force:
         changed_keys = list(remote_chunk_state.keys())
@@ -757,7 +812,19 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
     dst_s0_path = Path(dst_s0_path)
     dst_s0_path.mkdir(parents=True, exist_ok=True)
     copy_pairs = [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed_keys]
-    _copy_chunks_parallel(s3, copy_pairs)
+    failed = _copy_chunks_parallel(s3, copy_pairs)
+
+    # A chunk that failed to copy keeps its previous state (or none), so the
+    # next sync tries it again. It used to be recorded as synced along with
+    # the rest, and so was never retried: its strokes were silently missing
+    # from training until someone forced a full resync.
+    failed_keys = {Path(src).name for src in failed}
+    for key in failed_keys:
+        if key in known_chunk_state:
+            remote_chunk_state[key] = known_chunk_state[key]
+        else:
+            remote_chunk_state.pop(key, None)
+    changed_keys = [k for k in changed_keys if k not in failed_keys]
 
     return changed_keys, [], remote_chunk_state
 
@@ -823,12 +890,24 @@ def sync_annotation_from_minio(crop_id, force=False):
 # Annotation sync (full-dataset sync)
 # ---------------------------------------------------------------------------
 
+# One sync at a time. The periodic thread, the Save button, submit and
+# restart all call these, and two of them diffing the same chunk state and
+# downloading the same chunks at once raced each other over both. Reentrant,
+# since a full sync syncs each volume.
+_sync_lock = threading.RLock()
+
+
 def sync_all_annotations_from_minio(force: bool = True):
     """Sync all annotations from MinIO to local disk.
 
     Returns:
         Number of annotations synced, or -1 if MinIO is not initialized.
     """
+    with _sync_lock:
+        return _sync_all_annotations_from_minio(force)
+
+
+def _sync_all_annotations_from_minio(force):
     if not minio_state.get("ip") or not minio_state.get("port"):
         logger.info("MinIO not initialized, skipping annotation sync")
         return -1
@@ -1034,7 +1113,7 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
 # Annotation volume sync
 # ---------------------------------------------------------------------------
 
-def sync_annotation_volume_from_minio(volume_id, force=False):
+def sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None):
     """
     Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.
 
@@ -1043,16 +1122,35 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
     2. List chunk files in MinIO to find annotated chunks
     3. For each new annotated chunk, extract raw data and create correction entry
 
+    The chunks go to the volume's own zarr_path. They used to go to
+    <output_base>/<volume>.zarr, where output_base is fixed by the first
+    ensure_minio_serving call of the dashboard's life -- so the strokes of a
+    volume created under another output path (or resumed into one) landed
+    in the first session's directory, and the trainer, reading the volume's
+    own manifest, never saw them. ``zarr_path`` overrides the destination
+    (a resumed copy); output_base is only the fallback for a volume this
+    dashboard has no record of.
+
     Returns:
         bool: True if any corrections were created
     """
-    if not minio_state["ip"] or not minio_state["port"] or not minio_state["output_base"]:
+    with _sync_lock:
+        return _sync_annotation_volume_from_minio(volume_id, force, zarr_path)
+
+
+def _sync_annotation_volume_from_minio(volume_id, force, zarr_path):
+    if not minio_state["ip"] or not minio_state["port"]:
         logger.warning("MinIO not initialized, skipping volume sync")
         return False
 
     try:
         zarr_name = f"{volume_id}.zarr"
-        local_zarr_path = os.path.join(minio_state["output_base"], zarr_name)
+        local_zarr_path = zarr_path or (annotation_volumes.get(volume_id) or {}).get("zarr_path")
+        if not local_zarr_path:
+            if not minio_state.get("output_base"):
+                logger.warning(f"No local path for volume {volume_id}, skipping")
+                return False
+            local_zarr_path = os.path.join(minio_state["output_base"], zarr_name)
         volume_meta = _get_volume_metadata(volume_id, local_zarr_path)
 
         if volume_meta is None:
@@ -1070,7 +1168,9 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
         # Sync zarr group metadata
         dst_annotation_path = Path(local_zarr_path) / "annotation"
         dst_annotation_path.mkdir(parents=True, exist_ok=True)
-        _sync_zarr_group_metadata(s3, src_annotation_path, dst_annotation_path)
+        mismatched = _sync_zarr_group_metadata(s3, src_annotation_path, dst_annotation_path)
+        if "s0" in mismatched:
+            return False
 
         # Diff and sync chunks
         s0_path = f"{bucket}/{zarr_name}/annotation/s0"
@@ -1151,26 +1251,50 @@ def sync_annotation_volume_from_minio(volume_id, force=False):
 # Periodic sync
 # ---------------------------------------------------------------------------
 
+# How often a periodic sync that keeps failing says so, in seconds.
+SYNC_FAILURE_WARNING_INTERVAL = 300
+_sync_failures = {"count": 0, "last_warned": None}
+
+
+def _periodic_sync_once():
+    """One round of the periodic sync; failures are warned about, not hidden."""
+    try:
+        if not minio_state["output_base"]:
+            return
+        if not minio_state["ip"] or not minio_state["port"]:
+            return
+        # Pull annotations to disk, and stop there. This thread must
+        # never write to the viewer: python owns the whole state
+        # document, so any write makes the browser run
+        # `trackable.reset(); restoreState(...)` and rebuild every layer
+        # -- taking the draw tool out of the user's hand and dropping
+        # whatever strokes were still buffered behind the brush's commit
+        # debounce. The annotated-regions boxes are refreshed on demand
+        # instead, from the "Show Annotated Regions" button.
+        sync_all_annotations_from_minio(force=False)
+        if _sync_failures["count"]:
+            logger.info(f"Periodic annotation sync recovered after {_sync_failures['count']} failure(s)")
+        _sync_failures.update(count=0, last_warned=None)
+    except Exception as e:
+        # This was logged at DEBUG, which hid a sync outage -- the very
+        # failure that once took a day to spot -- until training ran on
+        # stale annotations. Warn, once per interval rather than every 30s.
+        _sync_failures["count"] += 1
+        now = time.monotonic()
+        last = _sync_failures["last_warned"]
+        if last is None or now - last >= SYNC_FAILURE_WARNING_INTERVAL:
+            _sync_failures["last_warned"] = now
+            logger.warning(
+                f"Periodic annotation sync failed ({_sync_failures['count']} time(s) in a row): {e}. "
+                "Painted annotations are not reaching disk until it recovers."
+            )
+
+
 def periodic_sync_annotations():
     """Background thread function to periodically sync annotations from MinIO."""
     while True:
-        try:
-            time.sleep(30)
-            if not minio_state["output_base"]:
-                continue
-            if not minio_state["ip"] or not minio_state["port"]:
-                continue
-            # Pull annotations to disk, and stop there. This thread must
-            # never write to the viewer: python owns the whole state
-            # document, so any write makes the browser run
-            # `trackable.reset(); restoreState(...)` and rebuild every layer
-            # -- taking the draw tool out of the user's hand and dropping
-            # whatever strokes were still buffered behind the brush's commit
-            # debounce. The annotated-regions boxes are refreshed on demand
-            # instead, from the "Show Annotated Regions" button.
-            sync_all_annotations_from_minio(force=False)
-        except Exception as e:
-            logger.debug(f"Error in periodic sync: {e}")
+        time.sleep(30)
+        _periodic_sync_once()
 
 
 def start_periodic_sync():
