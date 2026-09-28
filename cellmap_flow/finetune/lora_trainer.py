@@ -37,6 +37,26 @@ def soft_target_entropy(target, eps=1e-7):
     """
     t = target.clamp(eps, 1 - eps)
     return -(t * torch.log(t) + (1 - t) * torch.log(1 - t))
+
+
+def frozen_teacher_copy(model: nn.Module) -> nn.Module:
+    """A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune."""
+    import copy
+
+    try:
+        teacher = copy.deepcopy(model)
+    except Exception as e:
+        raise ValueError(
+            "Distillation on a full finetune (--lora-r 0) needs a frozen copy "
+            f"of the model as its teacher, and this model could not be copied "
+            f"({e}). Set the distillation weight to 0, or train a LoRA adapter "
+            "(rank > 0), whose teacher is the base model itself."
+        ) from e
+    for p in teacher.parameters():
+        p.requires_grad_(False)
+    return teacher.eval()
+
+
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -254,6 +274,7 @@ class LoRAFinetuner:
         balance_classes: bool = False,
         target_transform=None,
         tensorboard: bool = True,
+        teacher_model: Optional[nn.Module] = None,
     ):
         self.model = model
         self.dataloader = dataloader
@@ -383,6 +404,23 @@ class LoRAFinetuner:
             else:
                 scope_str = "unlabeled voxels only"
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
+
+        # The distillation teacher is the model as it was before this run
+        # changed it. With LoRA that is the same module with its adapters
+        # switched off, so it costs nothing. A full finetune has no adapters
+        # to switch off -- it used to call disable_adapter_layers() anyway and
+        # die on the first batch -- so it gets a frozen copy of the starting
+        # weights instead: one extra set of parameters on the device, and no
+        # activations kept, since the teacher runs under no_grad.
+        self.teacher_model = None
+        if self.distillation_lambda > 0 and not self._is_peft():
+            self.teacher_model = (
+                teacher_model if teacher_model is not None else frozen_teacher_copy(self.model)
+            ).to(self.device)
+            logger.info(
+                "Full finetune with distillation: the teacher is a frozen copy "
+                "of the starting weights."
+            )
 
         # Autocast dtype. This defaulted to fp16 (autocast's CUDA default) and
         # every run on this model NaN'd out on the startup probe and fell back
@@ -841,6 +879,9 @@ class LoRAFinetuner:
                             f"disabling distillation (was lambda={self.distillation_lambda}) and retrying."
                         )
                         self.distillation_lambda = 0
+                        # A full finetune's frozen teacher is a whole second
+                        # copy of the weights; free it with the term it served.
+                        self.teacher_model = None
                         mitigated = True
                     if not mitigated:
                         log_message("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
@@ -978,6 +1019,27 @@ class LoRAFinetuner:
             'training_time': total_time,
         }
 
+    @torch.no_grad()
+    def _teacher_forward(self, raw):
+        """The starting model's prediction on ``raw``, for the distillation term.
+
+        LoRA: the model itself with its adapters switched off. Full finetune:
+        the frozen copy taken before training (see ``frozen_teacher_copy``).
+        """
+        if self.teacher_model is not None:
+            with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
+                teacher_pred = self.teacher_model(raw)
+        else:
+            self.model.disable_adapter_layers()
+            try:
+                with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
+                    teacher_pred = self.model(raw)
+            finally:
+                self.model.enable_adapter_layers()
+        if self.select_channel is not None:
+            teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
+        return teacher_pred.detach()
+
     def _train_epoch(self) -> float:
         """Train for one epoch and return average loss."""
         epoch_loss = 0.0
@@ -1059,19 +1121,7 @@ class LoRAFinetuner:
             # Uses the base model without LoRA adapters as the teacher
             teacher_pred = None
             if self.distillation_lambda > 0:
-                with torch.no_grad():
-                    self.model.disable_adapter_layers()
-                    try:
-                        with autocast(
-                            'cuda', enabled=self.use_mixed_precision,
-                            dtype=self.amp_dtype,
-                        ):
-                            teacher_pred = self.model(raw)
-                            if self.select_channel is not None:
-                                teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
-                        teacher_pred = teacher_pred.detach()
-                    finally:
-                        self.model.enable_adapter_layers()
+                teacher_pred = self._teacher_forward(raw)
                 if not torch.isfinite(teacher_pred).all():
                     logger.warning(f"NaN/Inf in teacher_pred! range=[{teacher_pred.min():.4f}, {teacher_pred.max():.4f}]")
 

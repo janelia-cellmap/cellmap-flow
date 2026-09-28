@@ -954,6 +954,11 @@ def main():
     server_started = False
     restart_controller = RestartController()
     iteration = 0
+    # A full finetune's distillation teacher: a frozen copy of the starting
+    # weights, made by the first trainer that needs one and reused after, so a
+    # restart neither copies the model again nor distils toward weights an
+    # earlier iteration already changed.
+    teacher_model = None
 
     while True:
         iteration += 1
@@ -1031,6 +1036,7 @@ def main():
             balance_classes=args.balance_classes,
             target_transform=target_transform,
             tensorboard=not args.no_tensorboard,
+            teacher_model=teacher_model,
         )
 
         # Resume from checkpoint if specified (first iteration only)
@@ -1043,6 +1049,8 @@ def main():
             if iteration > 1:
                 print("RESTART_STATUS: Starting training...", flush=True)
             stats = trainer.train()
+            # None again if an OOM made the trainer drop distillation.
+            teacher_model = trainer.teacher_model
 
             # If training diverged (NaN/Inf), skip saving and wait for restart
             if stats.get('diverged'):
