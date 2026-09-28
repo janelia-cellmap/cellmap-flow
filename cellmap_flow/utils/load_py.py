@@ -1,11 +1,14 @@
 # copied from https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/6e9d842b9a90b0df22aa07946a4d1deed5c27504/src/cellmap_segmentation_challenge/utils/security.py
 import ast
+import logging
 import os
 from cellmap_flow.utils.serialize_config import Config
 
 
 from upath import UPath
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Define restricted imports and functions
 DISALLOWED_IMPORTS = {"os", "subprocess", "sys"}
@@ -62,11 +65,36 @@ def analyze_script(filepath):
     return is_safe, issues
 
 
-def load_safe_config(config_path, force_safe=os.getenv("FORCE_SAFE_CONFIG", False)):
+_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"", "0", "false", "no", "off"}
+
+
+def _force_safe_from_env() -> bool:
+    """FORCE_SAFE_CONFIG as a boolean, read now rather than at import.
+
+    Unset, empty, 0/false/no/off mean false; 1/true/yes/on mean true. Anything
+    else is treated as true, since this switch exists to refuse scripts.
+    """
+    value = os.environ.get("FORCE_SAFE_CONFIG", "").strip().lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    logger.warning(
+        f"FORCE_SAFE_CONFIG={os.environ['FORCE_SAFE_CONFIG']!r} is not a boolean; "
+        "treating it as true"
+    )
+    return True
+
+
+def load_safe_config(config_path, force_safe=None):
     """
     Loads the configuration script at `config_path` after verifying its safety.
     If `force_safe` is True, raises an error if the script is deemed unsafe.
+    When it is None, the FORCE_SAFE_CONFIG environment variable decides.
     """
+    if force_safe is None:
+        force_safe = _force_safe_from_env()
     # print(f"Analyzing script for obvious security liabilities:\n\t{config_path}")
     # print(
     #     "Keep in mind that this is not a foolproof security measure. Use caution using code from untrusted sources."
