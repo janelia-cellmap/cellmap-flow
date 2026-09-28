@@ -811,6 +811,13 @@ document.addEventListener("DOMContentLoaded", function () {
   refreshFinetuneGpuQueues();
   setInterval(refreshFinetuneGpuQueues, FINETUNE_GPU_QUEUE_POLL_MS);
 
+  // Bound once here: loadModels runs on every refresh and poll, and binding
+  // it there added another listener each time.
+  modelSelect.addEventListener("change", function() {
+    selectedModel = models.find(m => m.name === this.value);
+    displayModelInfo(selectedModel);
+  });
+
   // Load models on page load
   loadModels();
 
@@ -819,9 +826,10 @@ document.addEventListener("DOMContentLoaded", function () {
   if (refreshModelsBtn) {
     refreshModelsBtn.addEventListener("click", function() {
       finetuneLog.value += "Refreshing model list...\n";
+      // The options are left in place so loadModels can keep the current
+      // pick; it rebuilds them from the response.
       models = [];
       selectedModel = null;
-      modelSelect.innerHTML = "";
       cancelModelPoll();
       modelPollAttempts = 0;
       loadModels();
@@ -876,44 +884,42 @@ document.addEventListener("DOMContentLoaded", function () {
             finetuneLog.value += "No models available for finetuning yet\n";
             finetuneLog.value += "  \u2192 Submit a model from the main tab; this list updates automatically\n";
           }
+          modelSelect.innerHTML = "";
           createCropBtn.disabled = true;
           lastLoadedCount = 0;
           scheduleModelPoll();
           return;
         }
-        // If only one model, hide dropdown and auto-select
-        if (models.length === 1) {
-          modelSelectionDiv.style.display = "none";
-          selectedModel = models[0];
-          displayModelInfo(selectedModel);
-        } else {
-          // Populate dropdown
-          models.forEach(model => {
-            const option = document.createElement("option");
-            option.value = model.name;
-            option.textContent = model.name;
-            modelSelect.appendChild(option);
-          });
+        // Rebuild the options from this response alone. A background poll and
+        // a Refresh click can both be in flight, and appending to what was
+        // there gave every model twice.
+        const previousName = modelSelect.value;
+        modelSelect.innerHTML = "";
+        models.forEach(model => {
+          const option = document.createElement("option");
+          option.value = model.name;
+          option.textContent = model.name;
+          modelSelect.appendChild(option);
+        });
 
-          // Set initial selection (prefer saved state, fall back to server)
-          const savedModelName = savedState && savedState.selectedModelName;
-          if (savedModelName && models.find(m => m.name === savedModelName)) {
-            modelSelect.value = savedModelName;
-          } else if (data.selected_model) {
-            modelSelect.value = data.selected_model;
-          }
-
-          // Update on selection change
-          modelSelect.addEventListener("change", function() {
-            const modelName = this.value;
-            selectedModel = models.find(m => m.name === modelName);
-            displayModelInfo(selectedModel);
-          });
-
-          // Display initial model
-          selectedModel = models.find(m => m.name === modelSelect.value);
-          displayModelInfo(selectedModel);
+        // Keep the current pick when the list is reloaded (Refresh); on the
+        // first load prefer the saved state, then the server's choice.
+        const savedModelName = savedState && savedState.selectedModelName;
+        const has = (name) => name && models.some(m => m.name === name);
+        if (has(previousName)) {
+          modelSelect.value = previousName;
+        } else if (has(savedModelName)) {
+          modelSelect.value = savedModelName;
+        } else if (has(data.selected_model)) {
+          modelSelect.value = data.selected_model;
         }
+
+        // Only one model: nothing to choose, so hide the picker. Show it
+        // again when a later load finds more -- it used to stay hidden, and
+        // the list was filled into an invisible select.
+        modelSelectionDiv.style.display = models.length === 1 ? "none" : "";
+        selectedModel = models.find(m => m.name === modelSelect.value) || models[0];
+        displayModelInfo(selectedModel);
 
         // Enable create button if we have models
         createCropBtn.disabled = false;
