@@ -4,6 +4,7 @@ import logging
 # which imports this lazily, keeps its own.
 logger = logging.getLogger(__name__)
 
+import os
 import shlex
 from pathlib import Path
 import zarr
@@ -18,13 +19,108 @@ from functools import partial
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.utils.config_utils import build_models, load_config, resolve_data_path
+from cellmap_flow.utils.config_utils import (
+    ConfigError,
+    build_models,
+    load_config,
+    resolve_data_path,
+)
 from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.utils.ds import generate_singlescale_metadata
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME, submit_bsub_job
 
 
+def _validate_settings(config):
+    """The checks on a task YAML that need neither the model nor the data.
+
+    Shared by the processor and precheck(), so both reject the same files
+    with the same messages.
+    """
+    if "output_path" not in config:
+        raise ConfigError("Missing required field in YAML: output_path")
+    if ".zarr" not in str(config["output_path"]):
+        raise ConfigError("output_path should be a zarr with .zarr on it")
+    if "task_name" not in config:
+        raise ConfigError("Missing required field in YAML: task_name")
+    if "workers" not in config:
+        raise ConfigError("Missing required field in YAML: workers")
+    if not isinstance(config["workers"], int) or config["workers"] < 1:
+        raise ConfigError(
+            f"workers should be an integer greater than 0, got {config['workers']!r}"
+        )
+    if config.get("track_progress", False) and "tmp_dir" not in config:
+        raise ConfigError(
+            "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
+        )
+    bounding_boxes = config.get("bounding_boxes", None)
+    if (
+        bounding_boxes
+        and config.get("separate_bounding_boxes_zarrs", False)
+        and len(bounding_boxes) > 1
+    ):
+        raise ConfigError(
+            "separate_bounding_boxes_zarrs can only be used with one bounding box"
+        )
+    try:
+        get_model_merger(str(config.get("model_mode", "AND")).upper())
+    except ValueError as e:
+        raise ConfigError(str(e))
+    if config.get("cross_channels"):
+        try:
+            get_model_merger(str(config["cross_channels"]).upper())
+        except ValueError as e:
+            raise ConfigError(f"Invalid cross_channels setting: {e}")
+    output_channels = config.get("output_channels")
+    if output_channels:
+        names = list(output_channels) if isinstance(output_channels, (dict, list)) else [output_channels]
+        if len(names) != len(set(names)):
+            raise ConfigError(
+                f"output_channels has duplicated channel names. channels: {names}"
+            )
+
+
+def precheck(yaml_config: str) -> dict:
+    """Check a blockwise task YAML without side effects.
+
+    Loads no model, writes nothing, and leaves ``g`` alone -- unlike
+    constructing CellMapFlowBlockwiseProcessor, which the dashboard used to
+    do for this: that created the output arrays, loaded every model's weights
+    into the dashboard process (onto its GPU, if it had one), and replaced the
+    dashboard's live normalization and postprocessing with the task's.
+
+    Checks the settings, that every model entry builds a model config, that
+    json_data builds its normalizers and postprocessors, and that a local
+    data_path exists. What needs the model's geometry (output shapes, the
+    channels) is left to the run itself.
+
+    Raises:
+        ConfigError: with the reason, when the file is not usable.
+    """
+    config = load_config(yaml_config)
+    _validate_settings(config)
+
+    # Constructing a ModelConfig does not load the model; that happens when
+    # .config is first read, which nothing here does.
+    models = build_models(config["models"])
+    if len(models) == 0:
+        raise ConfigError("No models found in the configuration.")
+
+    data_path = resolve_data_path(config["data_path"], getattr(models[0], "scale", None))
+    if "://" not in str(data_path) and not os.path.exists(data_path):
+        raise ConfigError(f"data_path does not exist: {data_path}")
+
+    if config.get("json_data"):
+        try:
+            get_process_dataset(config["json_data"])  # built and discarded
+        except Exception as e:
+            raise ConfigError(f"Invalid json_data: {e}") from e
+
+    return {
+        "data_path": data_path,
+        "output_path": str(config["output_path"]),
+        "models": [getattr(m, "name", None) or type(m).__name__ for m in models],
+    }
 
 
 class CellMapFlowBlockwiseProcessor:
@@ -32,6 +128,7 @@ class CellMapFlowBlockwiseProcessor:
     def __init__(self, yaml_config: str, create=False):
         """Run the CellMapFlow server with a Fly model."""
         self.config = load_config(yaml_config)
+        _validate_settings(self.config)
         self.yaml_config = yaml_config
 
         self.input_path = self.config["data_path"]
@@ -40,11 +137,7 @@ class CellMapFlowBlockwiseProcessor:
 
         logger.info(f"Data path: {self.input_path}")
 
-        if "output_path" not in self.config:
-            raise Exception("Missing required field in YAML: output_path")
         self.output_path = self.config["output_path"]
-        if ".zarr" not in str(self.output_path):
-            raise Exception("output_path should be a zarr with .zarr on it")
         z_con = self.output_path.split(".zarr")[0]+".zarr"
         zarr.open(z_con,mode="a")  # this is to create the zarr if it does not exist
         self.output_path = Path(self.output_path)
@@ -56,11 +149,6 @@ class CellMapFlowBlockwiseProcessor:
         json_data = None
         if "json_data" in self.config:
             json_data = self.config["json_data"]
-
-        if "task_name" not in self.config:
-            raise Exception("Missing required field in YAML: task_name")
-        if "workers" not in self.config:
-            raise Exception("Missing required field in YAML: workers")
 
         task_name = self.config["task_name"]
         self.workers = self.config["workers"]
@@ -75,8 +163,6 @@ class CellMapFlowBlockwiseProcessor:
         else:
             self.output_channel_names = output_channels if output_channels else None
             self.output_channel_indices = None
-        if self.workers < 1:
-            raise Exception("Workers should be greater than 0.")
         self.cpu_workers = self.config.get("cpu_workers", 12)
         # LSF run limit for each worker. Without -W the GPU queues kill a
         # worker at two hours; see bsub_utils.DEFAULT_WALLTIME.
@@ -97,11 +183,6 @@ class CellMapFlowBlockwiseProcessor:
         self.track_progress = self.config.get("track_progress", False)
 
         if self.track_progress:
-            if "tmp_dir" not in self.config:
-                raise Exception(
-                    "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
-                )
-
             self.tmp_dir = (
                 Path(self.config["tmp_dir"]) / f"tmp_flow_daisy_progress_{task_name}"
             )
@@ -117,7 +198,7 @@ class CellMapFlowBlockwiseProcessor:
             logger.info(str(model))
 
         if len(models) == 0:
-            raise Exception("No models found in the configuration.")
+            raise ConfigError("No models found in the configuration.")
 
         # The same data_path + scale rule as cellmap_flow and cellmap_flow_yaml.
         # All models read through one ImageDataInterface, so the first
@@ -137,10 +218,7 @@ class CellMapFlowBlockwiseProcessor:
         # Support multiple models with model_mode
         self.models = models
         self.model_mode_str = self.config.get("model_mode", "AND").upper()
-        try:
-            self.model_merger = get_model_merger(self.model_mode_str)
-        except ValueError as e:
-            raise Exception(str(e))
+        self.model_merger = get_model_merger(self.model_mode_str)
 
         if len(models) > 1:
             logger.info(
@@ -153,10 +231,7 @@ class CellMapFlowBlockwiseProcessor:
         
         if self.cross_channels_mode:
             self.cross_channels_mode = self.cross_channels_mode.upper()
-            try:
-                self.cross_channels_merger = get_model_merger(self.cross_channels_mode)
-            except ValueError as e:
-                raise Exception(f"Invalid cross_channels setting: {e}")
+            self.cross_channels_merger = get_model_merger(self.cross_channels_mode)
         else:
             self.cross_channels_merger = None
         
@@ -220,8 +295,6 @@ class CellMapFlowBlockwiseProcessor:
         self.separate_zarrs = self.config.get("separate_bounding_boxes_zarrs", False)
 
         if self.bounding_boxes and self.separate_zarrs:
-            if len(self.bounding_boxes)>1:
-                raise Exception("separate_bounding_boxes_zarrs can only be used with one bounding box")
             bounding_box = self.bounding_boxes[0]
             offset = tuple(bounding_box.get("offset", [0, 0, 0]))
             shape = tuple(bounding_box.get("shape", [0, 0, 0]))

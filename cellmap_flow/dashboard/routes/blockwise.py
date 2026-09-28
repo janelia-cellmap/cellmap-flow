@@ -265,7 +265,10 @@ def generate_blockwise_task():
 def precheck_blockwise_task():
     """Precheck blockwise task configuration using already-generated YAML"""
     try:
-        from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
+        # precheck() rather than constructing the processor: that created the
+        # output arrays, loaded every model into this process, and replaced
+        # the dashboard's live g.input_norms and g.postprocess.
+        from cellmap_flow.blockwise.blockwise_processor import precheck
 
         data = request.get_json()
         yaml_paths = data.get("yaml_paths", [])
@@ -273,10 +276,10 @@ def precheck_blockwise_task():
         if not yaml_paths:
             return {"success": False, "error": "No YAML paths provided. Please generate task first."}
 
-        # Try to instantiate the processor to validate configuration with the first YAML
         try:
-            _ = CellMapFlowBlockwiseProcessor(yaml_paths[0], create=True)
-            logger.info(f"Blockwise precheck passed for: {yaml_paths[0]}")
+            for yaml_path in yaml_paths:
+                precheck(yaml_path)
+            logger.info(f"Blockwise precheck passed for: {', '.join(yaml_paths)}")
             return {
                 "success": True,
                 "message": "success"
