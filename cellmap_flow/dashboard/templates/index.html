@@ -206,6 +206,7 @@
               return;
             }
             const btn = this;
+            const label = btn.textContent;  // restored if this fails
             btn.disabled = true;
             btn.textContent = "Loading...";
             document.getElementById("setDataStatus").textContent = "Setting up neuroglancer viewer...";
@@ -221,7 +222,7 @@
                   document.getElementById("setDataStatus").style.color = "#f87171";
                   document.getElementById("setDataStatus").textContent = "Error: " + data.error;
                   btn.disabled = false;
-                  btn.textContent = "Set Data";
+                  btn.textContent = label;
                 } else {
                   document.getElementById("setDataStatus").style.color = "#4ade80";
                   document.getElementById("setDataStatus").textContent = "Success! Reloading...";
@@ -232,7 +233,7 @@
                 document.getElementById("setDataStatus").style.color = "#f87171";
                 document.getElementById("setDataStatus").textContent = "Error: " + err;
                 btn.disabled = false;
-                btn.textContent = "Set Data";
+                btn.textContent = label;
               });
           });
         </script>

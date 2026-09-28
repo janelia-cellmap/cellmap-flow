@@ -1027,6 +1027,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Create annotation volume (sparse, full dataset)
   const createVolumeBtn = document.getElementById("createVolumeBtn");
+  // Restored after each attempt; a hard-coded label here had drifted from
+  // the markup's ("Create Annotation Volume" instead of "New Volume").
+  const createVolumeBtnLabel = createVolumeBtn.textContent.trim();
   createVolumeBtn.addEventListener("click", function() {
     if (!selectedModel) {
       alert("No model selected");
@@ -1079,13 +1082,13 @@ document.addEventListener("DOMContentLoaded", function () {
           finetuneLog.value += `✗ Error: ${data.error}\n`;
         }
         createVolumeBtn.disabled = false;
-        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+        createVolumeBtn.textContent = createVolumeBtnLabel;
       })
       .catch(err => {
         finetuneLog.value += `✗ Error: ${err}\n`;
         console.error(err);
         createVolumeBtn.disabled = false;
-        createVolumeBtn.innerHTML = 'Create Annotation Volume';
+        createVolumeBtn.textContent = createVolumeBtnLabel;
       });
   });
 
