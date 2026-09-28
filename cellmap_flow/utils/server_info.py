@@ -63,10 +63,17 @@ def model_geometry(info: dict):
     """
     if not info or not info.get("write_shape"):
         return None
+
+    def number(v):
+        # Whole numbers stay ints, as before; a 5.24 nm voxel size used to be
+        # truncated to 5 here, which put finetune crops on the wrong grid.
+        f = float(v)
+        return int(f) if f.is_integer() else f
+
     try:
         return {
-            "write_shape": [int(v) for v in info["write_shape"]],
-            "output_voxel_size": [int(v) for v in info["output_voxel_size"]],
+            "write_shape": [number(v) for v in info["write_shape"]],
+            "output_voxel_size": [number(v) for v in info["output_voxel_size"]],
             "output_channels": int(info.get("output_channels", 1)),
         }
     except Exception as e:
