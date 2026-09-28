@@ -55,6 +55,9 @@ class JobStatus(Enum):
     CANCELLED = "CANCELLED"
 
 
+TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
+
+
 # Values in this command survive two rounds of shell quoting: the one bsub
 # starts on the exec host, and LSF's own handling, which re-wraps the whole
 # `bash -c` argument in single quotes. A single quote of ours therefore closes
@@ -166,6 +169,14 @@ class FinetuneJob:
     inference_server_ready: bool = False
     previous_job_id: Optional[str] = None
     next_job_id: Optional[str] = None
+    # The corrections directory the job trains on. The restart route reads it
+    # to refresh the manifest; it was never set, so a restart silently kept
+    # the old patches_per_epoch, rehearsal fraction, input norm and
+    # postprocessing even though the confirm dialog showed the new ones.
+    corrections_path: Optional[Path] = None
+    # Set by cancel_job before it kills the job, so the monitor reports the
+    # exit that follows as CANCELLED rather than FAILED.
+    cancel_requested: bool = False
     _processed_iteration_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -197,6 +208,7 @@ class FinetuneJob:
             "inference_server_ready": self.inference_server_ready,
             "previous_job_id": self.previous_job_id,
             "next_job_id": self.next_job_id,
+            "corrections_path": str(self.corrections_path) if self.corrections_path else None,
         }
 
 
@@ -787,7 +799,8 @@ class FinetuneJobManager:
             status=JobStatus.PENDING,
             created_at=datetime.now(),
             log_file=log_file,
-            total_epochs=num_epochs
+            total_epochs=num_epochs,
+            corrections_path=corrections_path,
         )
 
         self.jobs[job_id] = finetune_job
@@ -824,16 +837,28 @@ class FinetuneJobManager:
 
         try:
             while True:
+                # A cancel (or anything else that ended the job) is final. The
+                # poll below used to overwrite it: after cancel_job set
+                # CANCELLED, LSF reported the kill as EXIT (a local job as
+                # return code -15) and the job ended up FAILED.
+                if finetune_job.status in TERMINAL_STATUSES:
+                    break
+
                 # === Check LSF job status ===
 
                 if finetune_job.lsf_job:
                     lsf_status = finetune_job.lsf_job.get_status()
 
                     # Map LSF status to FinetuneJob status
+                    if finetune_job.cancel_requested and lsf_status in (
+                        LSFJobStatus.COMPLETED, LSFJobStatus.FAILED, LSFJobStatus.KILLED
+                    ):
+                        finetune_job.status = JobStatus.CANCELLED
+                        break
                     if lsf_status == LSFJobStatus.RUNNING:
                         if finetune_job.status == JobStatus.PENDING:
                             self.logger.info(f"Job {job_id} started running")
-                        finetune_job.status = JobStatus.RUNNING
+                            finetune_job.status = JobStatus.RUNNING
                     elif lsf_status == LSFJobStatus.PENDING:
                         finetune_job.status = JobStatus.PENDING
                     elif lsf_status == LSFJobStatus.COMPLETED:
@@ -884,7 +909,8 @@ class FinetuneJobManager:
 
         except Exception as e:
             self.logger.error(f"Error monitoring job {job_id}: {e}")
-            finetune_job.status = JobStatus.FAILED
+            if finetune_job.status not in TERMINAL_STATUSES:
+                finetune_job.status = JobStatus.FAILED
 
         finally:
             # === Post-completion actions ===
@@ -951,10 +977,20 @@ class FinetuneJobManager:
         import neuroglancer
 
         server_url = finetune_job.inference_server_url
+        if not server_url:
+            # The trainer prints its completion marker before it starts the
+            # server, and with auto-serve off never starts one. A layer made
+            # now had the source zarr://None/..., and came with a g.jobs entry
+            # whose host was None -- permanently, without auto-serve.
+            self.logger.info(
+                f"No inference server for {model_name} yet; the layer is added once it is up."
+            )
+            return
 
         # Create a Job object for the running server
+        # A local run is a LocalJob, which has a process and no job_id.
         inference_job = LSFJob(
-            job_id=finetune_job.lsf_job.job_id if finetune_job.lsf_job else "local",
+            job_id=getattr(finetune_job.lsf_job, "job_id", None) or "local",
             model_name=model_name
         )
         inference_job.host = server_url
@@ -1228,6 +1264,9 @@ class FinetuneJobManager:
                 self.logger.info(f"New training iteration complete: {new_model_name}")
                 try:
                     self._add_finetuned_neuroglancer_layer(finetune_job, new_model_name)
+                    # Without a server no layer was added; still show the
+                    # new name, and don't retry every poll.
+                    finetune_job.finetuned_model_name = new_model_name
                 except Exception as e:
                     self.logger.error(f"Failed to update neuroglancer layer: {e}", exc_info=True)
                     # Still update the stored name so the frontend reflects the new model
@@ -1370,6 +1409,7 @@ class FinetuneJobManager:
 
         if finetune_job.lsf_job:
             try:
+                finetune_job.cancel_requested = True
                 finetune_job.lsf_job.kill()
                 finetune_job.status = JobStatus.CANCELLED
                 self.logger.info(f"Successfully cancelled job {job_id}")

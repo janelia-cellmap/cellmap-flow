@@ -318,6 +318,12 @@ def submit_finetuning_response(data):
             # repeat views it needs to pay for itself.
             augment=data.get("augment", False),
             queue=data.get("queue", "gpu_h100"),
+            # The request's, else the dashboard's own; every finetune job used
+            # to bill "cellmap", the job manager's default, whatever the
+            # dashboard was started with.
+            charge_group=(
+                data.get("charge_group") or getattr(g, "charge_group", None) or "cellmap"
+            ),
             output_type=output_type,
             select_channel=data.get("select_channel", None),
             offsets=offsets,
