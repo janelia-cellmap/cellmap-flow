@@ -136,6 +136,23 @@ def _yaml_model_entry(yaml_path) -> Optional[dict]:
     return entry if isinstance(entry, dict) and entry.get("base_model") else None
 
 
+def _finished_iterations(log_file):
+    """(how many iterations the log says finished, the last one's model name).
+
+    Read a line at a time, since the log is everything the run printed. A log
+    that is missing or cannot be read is no evidence: (0, None).
+    """
+    count, last = 0, None
+    try:
+        with open(log_file, errors="replace") as f:
+            for line in f:
+                for name in markers.ITERATION_COMPLETE_RE.findall(line):
+                    count, last = count + 1, name
+    except OSError:
+        return 0, None
+    return count, last
+
+
 def trainer_outputs_from_log(log_text: str):
     """(model name, serving YAML path) of the last iteration the log reports.
 
@@ -1006,16 +1023,26 @@ class FinetuneJobManager:
             record = SimpleNamespace(output_dir=metadata_file.parent)
             if observed is None:
                 # LSF has forgotten it: it ended long enough ago to be purged,
-                # while no dashboard was watching, and how it ended is not
-                # known. Asked about again, it never answers.
-                self._update_metadata(
-                    record,
-                    status=JobStatus.FAILED.value,
-                    status_detail=(
+                # while no dashboard was watching. Asked about again, it never
+                # answers. The trainer never prints "done" -- after an
+                # iteration it waits for restarts until it is stopped or runs
+                # out of walltime -- so a run whose log shows a finished
+                # iteration delivered a model, and that is what it is recorded
+                # as having done.
+                iterations, last = _finished_iterations(metadata_file.parent / "training_log.txt")
+                if iterations:
+                    status = JobStatus.COMPLETED
+                    detail = (
+                        f"LSF no longer knows job {lsf_job_id}; it had finished "
+                        f"{iterations} iteration(s), the last {last}"
+                    )
+                else:
+                    status = JobStatus.FAILED
+                    detail = (
                         f"LSF no longer knows job {lsf_job_id}; it ended while no "
                         "dashboard was watching, and how is not known"
-                    ),
-                )
+                    )
+                self._update_metadata(record, status=status.value, status_detail=detail)
                 continue
             if observed == LSFJobStatus.COMPLETED:
                 # Finished while no dashboard was watching; say so, so it is

@@ -115,6 +115,27 @@ def test_jobs_still_on_the_cluster_are_picked_up_again(tmp_path, monkeypatch):
     assert len(asked) == 1
 
 
+@pytest.mark.parametrize("log, status, detail", [
+    ("TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\nTRAINING_ITERATION_COMPLETE: m_2\n",
+     "COMPLETED", "finished 2 iteration(s), the last m_2"),
+    ("Starting epoch 1 of 5...\nTraceback (most recent call last):\n", "FAILED", "how is not known"),
+    (None, "FAILED", "how is not known"),  # no log at all
+])
+def test_a_job_lsf_has_forgotten_is_judged_by_its_log(tmp_path, monkeypatch, log, status, detail):
+    # The trainer never says "done": it waits for restarts until stopped or out
+    # of walltime, so a finished iteration is the evidence a model was delivered.
+    run = _run(_session(tmp_path), "purged", lsf_job_id="501", status="WAITING_FOR_RESTART")
+    if log is not None:
+        (run / "training_log.txt").write_text(log)
+    monkeypatch.setattr(jobs_lsf, "statuses", lambda ids: {"501": None})
+
+    assert FinetuneJobManager().rehydrate_session(run.parent.parent) == 0
+
+    metadata = json.loads((run / "metadata.json").read_text())
+    assert metadata["status"] == status
+    assert detail in metadata["status_detail"] and "501" in metadata["status_detail"]
+
+
 def test_the_jobs_list_looks_in_the_saved_output_path(tmp_path, monkeypatch):
     from cellmap_flow.dashboard.app import app
     from cellmap_flow.dashboard.routes.finetune import common, training
