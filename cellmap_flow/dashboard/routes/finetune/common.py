@@ -153,7 +153,7 @@ def detect_sparse_annotations(corrections_path):
     submit never fired, and mask_unannotated was never set. A session
     without a manifest cannot be trained, so it is not sparse either.
     """
-    from cellmap_flow.finetune.virtual_dataset import has_painted_annotations, read_manifest
+    from cellmap_flow.finetune.session.manifest import has_painted_annotations, read_manifest
 
     try:
         manifest = read_manifest(str(corrections_path))
@@ -346,8 +346,8 @@ def write_volume_manifest(volume):
     incomplete to describe (a resumed session whose .zattrs predates these
     fields, say). Such a session cannot be trained: submit refuses it.
     """
+    from cellmap_flow.finetune.session.manifest import write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
     from cellmap_flow.globals import (
         current_input_norm_config,
         current_postprocess_config,

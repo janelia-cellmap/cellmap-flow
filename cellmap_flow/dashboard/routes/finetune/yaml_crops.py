@@ -76,7 +76,7 @@ from cellmap_flow.finetune.session.volume import (
 from cellmap_flow.finetune.session.volume import (  # noqa: F401  (kept name)
     majority_vote_downsample as _majority_vote_downsample,
 )
-from cellmap_flow.finetune.virtual_dataset import write_manifest
+from cellmap_flow.finetune.session.manifest import write_manifest
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)

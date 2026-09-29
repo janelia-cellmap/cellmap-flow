@@ -1,19 +1,17 @@
 import json
 import logging
 import os
-import re
 
 import neuroglancer
 import numpy as np
 from flask import jsonify
 
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
-from cellmap_flow.finetune.virtual_dataset import volume_corner_nm
+from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
+from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
-
-_CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 # What refresh_annotated_regions_layer() last wrote into the viewer.
 #

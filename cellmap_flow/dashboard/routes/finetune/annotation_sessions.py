@@ -15,6 +15,9 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.finetune.session import sync as session_sync
+from cellmap_flow.finetune.session.manifest import read_manifest
+from cellmap_flow.finetune.session.volume import read_volume
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
@@ -85,9 +88,7 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     # affinity). No artificial ceiling — going above the slot count means
     # using cores LSF didn't give us; going below leaves throughput on the
     # table.
-    from cellmap_flow.dashboard.finetune_utils import _get_sync_worker_count
-
-    workers = max(1, min(_get_sync_worker_count(), files_in_src))
+    workers = max(1, min(session_sync.worker_count(), files_in_src))
 
     def _copy_one(pair):
         s, d = pair
@@ -126,8 +127,6 @@ def _annotation_volume_dirs(corrections_dir):
     beside the volume, often thousands of them; they are skipped by name,
     without opening their attrs.
     """
-    from cellmap_flow.finetune.virtual_dataset import read_manifest
-
     volumes = []
     for entry in os.listdir(corrections_dir):
         if not entry.endswith(".zarr") or "_chunk_" in entry:
@@ -332,18 +331,10 @@ def load_existing_volume_response(data):
 
         minio_url = ensure_minio_serving(new_volume_path, volume_id, output_base_dir=new_corrections)
         minio_url = rewrite_minio_url_for_proxy(minio_url)
-        _register_annotation_volume(
-            volume_id,
-            zarr_path=new_volume_path,
-            model_name=volume_meta.get("model_name"),
-            output_size=volume_meta.get("chunk_size"),
-            input_size=volume_meta.get("input_size"),
-            input_voxel_size=volume_meta.get("input_voxel_size"),
-            output_voxel_size=volume_meta.get("output_voxel_size"),
-            dataset_path=volume_meta.get("dataset_path"),
-            dataset_offset_nm=volume_meta.get("dataset_offset_nm"),
-            corrections_dir=new_corrections,
-        )
+        # Whatever geometry the copied .zattrs has; what it lacks stays None.
+        record = read_volume(new_volume_path, require_geometry=False)
+        record.pop("chunk_sync_state")
+        _register_annotation_volume(volume_id, **record)
         # A resumed session is trained the same way a fresh one is. The
         # geometry comes from the copied .zattrs, so a volume written before
         # those keys existed gets no manifest and cannot be trained --
