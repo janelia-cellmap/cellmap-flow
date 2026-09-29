@@ -88,6 +88,8 @@ jobs:
                    if os.path.isfile(p)]
           missing = sorted(p for p in files if p not in names)
           assert files and not missing, f"dashboard files missing from the wheel: {missing}"
+          assert any(n.startswith("cellmap_flow/dashboard/static/js/lib/") for n in names), \
+              "static/js/lib/*.js missing from the wheel"
           print(len(files), "dashboard files ok")
           EOF
       - name: Installed wheel imports
