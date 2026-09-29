@@ -25,13 +25,14 @@ from typing import Dict, List, Optional, Any
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_log import LogTailer
 from cellmap_flow.jobs import lsf as jobs_lsf
-from cellmap_flow.utils.bsub_utils import (
-    submit_bsub_job,
-    run_locally,
-    is_bsub_available,
-    LSFJob,
-    JobStatus as LSFJobStatus
-)
+from cellmap_flow.jobs.site import current_site
+from cellmap_flow.jobs.spec import JobSpec
+from cellmap_flow.jobs.spec import JobStatus as LSFJobStatus
+from cellmap_flow.jobs.lsf import LSFJob
+# Module globals, looked up when a job is submitted, so tests can replace
+# them here.
+from cellmap_flow.jobs.lsf import available as is_bsub_available
+from cellmap_flow.jobs.local import run as run_locally
 from cellmap_flow.utils.restart_token import (
     TOKEN_HEADER,
     read_restart_token,
@@ -849,17 +850,17 @@ class FinetuneJobManager:
                 # Training runs epochs, not chunks, so it is the likeliest
                 # thing here to outlive the queue's 120-minute default.
                 from cellmap_flow.globals import g as _g
-                from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME
 
-                lsf_job = submit_bsub_job(
-                    command=cli_command,
+                lsf_job = jobs_lsf.submit(JobSpec(
+                    name=job_name,
+                    # A shell line: it sets LD_LIBRARY_PATH and pipes through tee.
+                    shell=cli_command,
                     queue=queue,
                     charge_group=charge_group,
-                    job_name=job_name,
-                    num_gpus=1,
-                    num_cpus=4,
-                    walltime=getattr(_g, "walltime", None) or DEFAULT_WALLTIME,
-                )
+                    gpus=1,
+                    cpus=4,
+                    walltime=getattr(_g, "walltime", None) or current_site().default_walltime,
+                ))
                 self.logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
             except Exception as e:
                 self.logger.error(f"Failed to submit job to LSF: {e}")
