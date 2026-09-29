@@ -83,8 +83,15 @@ def _name_from_class(cls, base_name: str = "ModelConfig") -> str:
 
 
 def cli_name_of(cls: type) -> str:
-    """The name ``cls`` is registered under: its ``cli_name``, else one from its class name."""
-    name = getattr(cls, "cli_name", None)
+    """The name ``cls`` is registered under: its own ``cli_name``, else one from its class name.
+
+    Only a ``cli_name`` the class sets itself counts. A plugin's
+    ``class MyScript(ScriptModelConfig)`` inherits ``cli_name = "script"``;
+    taking that as its name would either replace the script type or lose
+    the name clash and leave MyScript without a type, and its ``command``
+    would ask the server for a plain ScriptModelConfig. It is "myscript".
+    """
+    name = cls.__dict__.get("cli_name")
     return name if name else _name_from_class(cls)
 
 

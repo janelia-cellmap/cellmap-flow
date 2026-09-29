@@ -232,13 +232,12 @@ class ModelConfig:
         every token shell-quoted: bsub runs it through ``bash -c`` and local
         launches through ``shlex.split``.
         """
+        from cellmap_flow.models.registry import cli_name_of
+
         params = self._launch_params()
-        # A plugin subclass without cli_name is registered under its class
-        # name minus "ModelConfig", lower-cased (cli_utils.get_all_subclasses).
-        cli_name = getattr(type(self), "cli_name", None) or (
-            type(self).__name__.replace("ModelConfig", "").lower()
-        )
-        parts = [cli_name]
+        # The name the server CLI registers this class under, so it rebuilds
+        # this class and not a parent it inherited cli_name from.
+        parts = [cli_name_of(type(self))]
         for name in list(inspect.signature(type(self).__init__).parameters)[1:]:
             value = params.get(name)
             if value is None:

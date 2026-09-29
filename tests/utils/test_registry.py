@@ -253,3 +253,24 @@ def test_model_config_classes_is_a_live_mapping():
 
     assert MODEL_CONFIG_CLASSES["LaterModelConfig"] is LaterModelConfig
     assert dict(MODEL_CONFIG_CLASSES.items())["LaterModelConfig"] is LaterModelConfig
+
+
+def test_a_subclass_without_its_own_cli_name_does_not_take_its_parents(caplog):
+    """A recursive walk that read cli_name through inheritance would register
+    MyScriptModelConfig as "script" too: replacing the script type, or losing
+    to it and leaving this class with no type while its command asked the
+    server for a plain ScriptModelConfig."""
+    import shlex
+
+    class MyScriptModelConfig(ScriptModelConfig):
+        pass
+
+    with caplog.at_level(logging.WARNING, logger="cellmap_flow.models.registry"):
+        types = registry.model_types()
+
+    assert types["script"] is ScriptModelConfig
+    assert types["myscript"] is MyScriptModelConfig
+    assert registry.model_type("MyScript") is MyScriptModelConfig
+    assert "is not registered under it" not in caplog.text
+    assert shlex.split(MyScriptModelConfig("/s.py").command) == ["myscript", "--script-path", "/s.py"]
+    assert ScriptModelConfig("/s.py").command == "script --script-path /s.py"
