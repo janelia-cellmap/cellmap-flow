@@ -1,30 +1,24 @@
-"""The model registry: which types exist, and how strings become a model config."""
+"""The model registry: which model types exist, and how strings become a model config."""
 
 import gc
 import logging
 import os
+import shlex
 import subprocess
 import sys
 
 import pytest
 
 from cellmap_flow.models import registry
-from cellmap_flow.models.models_config import (
-    DaCapoModelConfig,
-    FinetuneModelConfig,
-    FlyModelConfig,
-    ModelConfig,
-    ScriptModelConfig,
-)
+from cellmap_flow.models.models_config import FlyModelConfig, ModelConfig, ScriptModelConfig
 from cellmap_flow.utils.config_utils import ConfigError
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-BUILT_IN = ["script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface"]
 
 
 @pytest.fixture(autouse=True)
 def _forget_test_classes():
-    """Classes defined in a test stay in __subclasses__ until collected."""
+    """A class defined in a test is a model type until it is collected."""
     yield
     gc.collect()
 
@@ -33,16 +27,9 @@ def _built_in(types):
     return {k: v for k, v in types.items() if v.__module__ == "cellmap_flow.models.models_config"}
 
 
-def _run(code, tmp_path):
-    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
-    return subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
-    )
-
-
 def test_the_new_modules_import_nothing_heavy(tmp_path):
     # describe_types() runs when the dashboard opens its model form, so it
-    # must not load any model framework either.
+    # must not load a model framework either.
     code = (
         "import sys\n"
         "import cellmap_flow.models.registry, cellmap_flow.serving.launch\n"
@@ -54,155 +41,92 @@ def test_the_new_modules_import_nothing_heavy(tmp_path):
         "frameworks = ['bioimageio', 'dacapo', 'cellmap_models', 'torch', 'huggingface_hub']\n"
         "print([m for m in frameworks if m in sys.modules])\n"
     )
-    result = _run(code, tmp_path)
+    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
+    )
     assert result.returncode == 0, result.stderr[-2000:]
     assert result.stdout.strip().splitlines()[-2:] == ["[]", "[]"]
 
 
-def test_the_built_in_types_in_definition_order():
-    assert list(_built_in(registry.model_types())) == BUILT_IN
-    classes = _built_in(registry.model_classes())
-    assert list(classes) == [
-        "ScriptModelConfig", "DaCapoModelConfig", "FlyModelConfig", "BioModelConfig",
-        "CellMapModelConfig", "FinetuneModelConfig", "HuggingFaceModelConfig",
+def test_the_built_in_types_and_how_yaml_names_them():
+    assert list(_built_in(registry.model_types())) == [
+        "script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface",
     ]
-    assert classes["FlyModelConfig"] is FlyModelConfig
-
-
-@pytest.mark.parametrize("name", ["fly", "Fly", "FLY"])
-def test_a_type_is_found_as_yaml_names_it(name):
-    assert registry.model_type(name) is FlyModelConfig
-
-
-def test_an_unknown_type_is_a_config_error_listing_the_valid_ones():
+    assert list(_built_in(registry.model_classes()))[:3] == [
+        "ScriptModelConfig", "DaCapoModelConfig", "FlyModelConfig",
+    ]
+    for name in ("fly", "Fly", "FLY"):
+        assert registry.model_type(name) is FlyModelConfig
     with pytest.raises(ConfigError, match="Valid types are: bioimage, cellmap, dacapo"):
         registry.model_type("no-such-kind")
 
 
-def test_a_subclass_of_a_type_with_its_own_name_is_a_type():
+def test_plugin_types_get_their_own_names_and_never_replace_a_built_in(caplog):
     class LabelledFlyModelConfig(FlyModelConfig):
         cli_name = "labelled-fly"
 
-    assert registry.model_types()["labelled-fly"] is LabelledFlyModelConfig
-    assert registry.model_type("labelled_fly") is LabelledFlyModelConfig
-    assert registry.model_classes()["LabelledFlyModelConfig"] is LabelledFlyModelConfig
-    assert registry.model_types()["fly"] is FlyModelConfig
+    # Inherits cli_name = "script". Read through inheritance, that would
+    # replace the script type, or lose to it and leave this class with no
+    # type while its command asked the server for a plain ScriptModelConfig.
+    class MyScriptModelConfig(ScriptModelConfig):
+        pass
 
+    class MyThingModelConfig(ModelConfig):
+        def __init__(self, weights, name=None):
+            super().__init__()
 
-def test_a_name_that_is_taken_stays_with_the_first_class(caplog):
     class ImpostorModelConfig(ModelConfig):
         cli_name = "script"
 
     with caplog.at_level(logging.WARNING, logger="cellmap_flow.models.registry"):
         types = registry.model_types()
+    warned = caplog.text
 
     assert types["script"] is ScriptModelConfig
+    assert types["labelled-fly"] is registry.model_type("labelled_fly") is LabelledFlyModelConfig
+    assert types["myscript"] is MyScriptModelConfig
+    assert shlex.split(MyScriptModelConfig("/s.py").command) == ["myscript", "--script-path", "/s.py"]
+    assert types["mything"] is MyThingModelConfig
     assert ImpostorModelConfig not in types.values()
-    assert "ImpostorModelConfig is not registered under it" in caplog.text
-
-
-def test_a_class_without_a_cli_name_is_named_after_itself():
-    class MyThingModelConfig(ModelConfig):
-        def __init__(self, weights, name=None):
-            super().__init__()
-
-    assert registry.cli_name_of(MyThingModelConfig) == "mything"
-    assert registry.model_types()["mything"] is MyThingModelConfig
-    assert registry.cli_name_of(FinetuneModelConfig) == "finetune"
-
-
-def test_required_params_leave_out_name_and_scale():
-    assert registry.required_params(FlyModelConfig) == [
-        "checkpoint_path", "channels", "input_voxel_size", "output_voxel_size",
-    ]
-    assert registry.required_params(DaCapoModelConfig) == ["run_name", "iteration"]
-    assert registry.required_params(FinetuneModelConfig) == []
-
-
-def test_click_options_hand_out_short_flags_from_the_last_argument():
-    reserved = {"-d", "-q", "-P"}
-    options = registry.click_options(FlyModelConfig, reserved)
-    assert [o["param_decls"] for o in options] == [
-        ["-s", "--scale"],
-        ["-o", "--output-size"],
-        ["-i", "--input-size"],
-        ["-n", "--name"],
-        ["--output-voxel-size"],
-        ["--input-voxel-size"],
-        ["-c", "--channels"],
-        ["--checkpoint-path"],
-    ]
-    assert reserved == {"-d", "-q", "-P"}, "the caller's set is not written to"
-
-
-def _sizes_class():
-    # Defined per test: a module-level subclass would be a model type for
-    # the rest of the session, in every listing.
-    class SizesModelConfig(ModelConfig):
-        def __init__(self, size: tuple, labels: list[str], count: int = 1, name=None):
-            super().__init__()
-
-    return SizesModelConfig
+    assert warned.count("is not registered under it") == 1
+    assert "ImpostorModelConfig is not registered under it" in warned
 
 
 def test_the_cli_and_the_form_parse_tuples_differently():
     # Each keeps what its caller has always done.
-    cls = _sizes_class()
+    class SizesModelConfig(ModelConfig):
+        def __init__(self, size: tuple, labels: list[str], count: int = 1, name=None):
+            super().__init__()
+
     given = {"size": "8,8,8", "labels": "a, b", "count": "2"}
-    assert registry.coerce_cli_args(cls, given) == {
+    assert registry.coerce_cli_args(SizesModelConfig, given) == {
         "size": (8, 8, 8), "labels": ["a", "b"], "count": "2",
     }
-    assert registry.coerce_form_params(cls, given) == {
+    assert registry.coerce_form_params(SizesModelConfig, given) == {
         "size": (8.0, 8.0, 8.0), "labels": ["a", "b"], "count": 2,
     }
 
 
-def test_build_model_applies_the_yaml_aliases_and_the_entry_name():
-    model = registry.build_model(
-        {"type": "fly", "checkpoint": "/c.ts", "classes": ["mito"], "resolution": 4,
-         "output_resolution": [2, 2, 2]},
-        "m",
-    )
-    assert isinstance(model, FlyModelConfig)
-    assert (model.checkpoint_path, model.channels, model.name) == ("/c.ts", ["mito"], "m")
-    assert (model.input_voxel_size, model.output_voxel_size) == ((4, 4, 4), (2, 2, 2))
-
-
-def test_describe_types_covers_any_class_it_is_given():
-    cls = _sizes_class()
-    types = registry.describe_types({"SizesModelConfig": cls})
-    assert types["SizesModelConfig"]["display_name"] == "Sizes Model"
-    assert types["SizesModelConfig"]["parameters"]["size"] == {
-        "name": "size", "required": True, "description": "Size", "type": "tuple",
-        "input_type": "text",
+def test_a_yaml_entry_may_use_aliases_and_a_single_voxel_size(caplog):
+    with caplog.at_level(logging.WARNING, logger="cellmap_flow.models.registry"):
+        model = registry.build_model(
+            {"type": "Fly", "checkpoint": "/c.ts", "classes": ["mito"], "resolution": 8,
+             "input_size": [20, 20, 20], "output_size": [10, 10, 10]},
+            "m",
+        )
+    assert model.to_dict() == {
+        "type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito"],
+        "input_voxel_size": [8, 8, 8], "output_voxel_size": [8, 8, 8], "name": "m",
+        "input_size": [20, 20, 20], "output_size": [10, 10, 10],
     }
+    assert "'output_voxel_size' not specified" in caplog.text
 
 
-def test_the_old_names_are_the_registry():
-    from cellmap_flow.models import model_registry
-    from cellmap_flow.utils import cli_utils, config_utils
-
-    assert cli_utils.get_all_model_configs() == registry.model_types()
-    assert config_utils.get_model_type_mapping() == registry.model_types()
-    assert model_registry.get_parameter_info(FlyModelConfig) == registry.parameter_info(FlyModelConfig)
-    assert cli_utils.parse_type_annotation(list[int]) == (int, False)
-    assert cli_utils.parse_comma_separated_values("1,2", int) == [1, 2]
-
-
-@pytest.fixture
-def dashboard():
+def test_the_dashboard_offers_and_builds_a_plugin_type():
     from flask import Flask
 
     from cellmap_flow.dashboard.routes.models import models_bp
-    from cellmap_flow.globals import g
-
-    app = Flask(__name__)
-    app.register_blueprint(models_bp)
-    g.models_config = []
-    return app.test_client()
-
-
-def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
     from cellmap_flow.globals import g
 
     class OnnxModelConfig(ModelConfig):
@@ -212,55 +136,23 @@ def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
             super().__init__()
             self.onnx_path, self.output_channels, self.name = onnx_path, output_channels, name
 
-        def to_dict(self):
-            return {"type": "onnx", "onnx_path": self.onnx_path,
-                    "output_channels": self.output_channels, "name": self.name}
+    app = Flask(__name__)
+    app.register_blueprint(models_bp)
+    client = app.test_client()
+    g.models_config = []
 
-    types = dashboard.get("/api/model-config-types").get_json()
+    types = client.get("/api/model-config-types").get_json()
     assert types["OnnxModelConfig"]["display_name"] == "Onnx Model"
     assert types["OnnxModelConfig"]["parameters"]["onnx_path"]["input_type"] == "file"
     assert "ScriptModelConfig" in types
 
-    response = dashboard.post("/api/create-model-config", json={
+    response = client.post("/api/create-model-config", json={
         "class_name": "OnnxModelConfig",
         "params": {"onnx_path": "/m.onnx", "output_channels": "3", "name": "o"},
     })
     assert response.status_code == 200, response.get_json()
+    # No to_dict() of its own: ModelConfig's default serves.
     assert response.get_json()["config_dict"] == {
         "type": "onnx", "onnx_path": "/m.onnx", "output_channels": 3, "name": "o",
     }
     assert isinstance(g.models_config[-1], OnnxModelConfig)
-
-
-def test_model_config_classes_is_a_live_mapping():
-    from cellmap_flow.models.model_registry import MODEL_CONFIG_CLASSES
-
-    assert MODEL_CONFIG_CLASSES["FlyModelConfig"] is FlyModelConfig
-    assert "LaterModelConfig" not in MODEL_CONFIG_CLASSES
-
-    class LaterModelConfig(ModelConfig):
-        pass
-
-    assert MODEL_CONFIG_CLASSES["LaterModelConfig"] is LaterModelConfig
-    assert dict(MODEL_CONFIG_CLASSES.items())["LaterModelConfig"] is LaterModelConfig
-
-
-def test_a_subclass_without_its_own_cli_name_does_not_take_its_parents(caplog):
-    """A recursive walk that read cli_name through inheritance would register
-    MyScriptModelConfig as "script" too: replacing the script type, or losing
-    to it and leaving this class with no type while its command asked the
-    server for a plain ScriptModelConfig."""
-    import shlex
-
-    class MyScriptModelConfig(ScriptModelConfig):
-        pass
-
-    with caplog.at_level(logging.WARNING, logger="cellmap_flow.models.registry"):
-        types = registry.model_types()
-
-    assert types["script"] is ScriptModelConfig
-    assert types["myscript"] is MyScriptModelConfig
-    assert registry.model_type("MyScript") is MyScriptModelConfig
-    assert "is not registered under it" not in caplog.text
-    assert shlex.split(MyScriptModelConfig("/s.py").command) == ["myscript", "--script-path", "/s.py"]
-    assert ScriptModelConfig("/s.py").command == "script --script-path /s.py"

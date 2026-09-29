@@ -2,8 +2,7 @@
 
 SERVER_COMMAND is read when a command is built and split into words, so a
 deploy's override (fileglancer's "pixi run cellmap_flow_server") reaches
-every launcher. cellmap_flow and cellmap_flow_yaml copied it at import; the
-dashboard's launchers are checked in test_dashboard_launch_failures.
+every launcher. cellmap_flow and cellmap_flow_yaml used to copy it at import.
 """
 
 import shlex
@@ -14,11 +13,42 @@ from click.testing import CliRunner
 from cellmap_flow.cli import cli as cli_module
 from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
+from cellmap_flow.models import run
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.serving import launch
 from cellmap_flow.utils import bsub_utils
+from cellmap_flow.utils.bsub_utils import JobStartError
 
 DATA = "/d/my raw.zarr"
+
+
+def _cli(*argv):
+    result = CliRunner().invoke(cli_module.cli, list(argv))
+    assert result.exit_code == 0, result.output + repr(result.exception)
+
+
+LAUNCHERS = {
+    "cellmap_flow-type": (
+        lambda: _cli("script", "--script-path", "/s.py", "--name", "m", "-d", DATA),
+        ["script", "--script-path", "/s.py", "--name", "m"],
+    ),
+    "cellmap_flow-run": (
+        lambda: _cli("run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", DATA),
+        ["script", "--script-path", "/s.py", "--name", "m"],
+    ),
+    "cellmap_flow_yaml": (
+        lambda: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], DATA, "grp", "q"),
+        ["script", "--script-path", "/s.py", "--name", "m"],
+    ),
+    "dashboard-catalog": (
+        lambda: run.run_model("/models/mito v2", "mito", "blob"),
+        ["cellmap", "--folder-path", "/models/mito v2", "--name", "mito"],
+    ),
+    "dashboard-huggingface": (
+        lambda: run.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
+        ["huggingface", "--repo", "cellmap/mito-v1", "--name", "mito_v1"],
+    ),
+}
 
 
 @pytest.fixture
@@ -27,38 +57,33 @@ def launched(monkeypatch):
 
     commands = []
 
-    def record(command, *args, **kwargs):
+    def started(command, *args, **kwargs):
         commands.append(command)
         return object()
 
+    def refused(command, *args, **kwargs):
+        # The dashboard launchers log this and stop before touching the viewer.
+        commands.append(command)
+        raise JobStartError("recorded")
+
     monkeypatch.setattr(bsub_utils, "SERVER_COMMAND", "pixi run cellmap_flow_server")
-    monkeypatch.setattr(cli_module, "start_hosts", record)
-    monkeypatch.setattr(yaml_cli, "start_hosts", record)
+    monkeypatch.setattr(cli_module, "start_hosts", started)
+    monkeypatch.setattr(yaml_cli, "start_hosts", started)
+    monkeypatch.setattr(run, "start_hosts", refused)
     monkeypatch.setattr(
         neuroglancer_utils, "generate_neuroglancer_url", lambda path, wrap_raw=True: None
     )
     monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
+    g.dataset_path = DATA
     return commands
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["script", "--script-path", "/s.py", "--name", "m", "-d", DATA],
-        ["run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", DATA],
-        None,  # cellmap_flow_yaml
-    ],
-    ids=["cellmap_flow-type", "cellmap_flow-run", "cellmap_flow_yaml"],
-)
-def test_a_multi_word_server_command_reaches_every_launcher(launched, argv):
-    if argv is None:
-        yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], DATA, "grp", "q")
-    else:
-        result = CliRunner().invoke(cli_module.cli, argv)
-        assert result.exit_code == 0, result.output + repr(result.exception)
-
+@pytest.mark.parametrize("launcher", list(LAUNCHERS))
+def test_every_launcher_submits_the_split_server_command(launched, launcher):
+    launch_it, model_argv = LAUNCHERS[launcher]
+    launch_it()
     assert [shlex.split(c) for c in launched] == [
-        ["pixi", "run", "cellmap_flow_server", "script", "--script-path", "/s.py", "--name", "m", "-d", DATA]
+        ["pixi", "run", "cellmap_flow_server", *model_argv, "-d", DATA]
     ]
 
 
