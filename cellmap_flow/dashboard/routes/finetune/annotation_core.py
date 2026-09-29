@@ -49,7 +49,6 @@ def _register_annotation_volume(volume_id, **volume_data):
         g.annotation_volumes = {}
     g.annotation_volumes[volume_id] = {
         **volume_data,
-        "extracted_chunks": set(),
         "chunk_sync_state": {},
     }
 
@@ -240,8 +239,7 @@ def create_annotation_volume_response(data):
             dataset_offset_nm=dataset_offset_nm.tolist(),
             corrections_dir=corrections_dir,
         )
-        # Without this the trainer falls back to the legacy per-chunk dataset
-        # and any good regions marked in this session are ignored.
+        # The trainer finds the volume only through this manifest.
         write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 

@@ -116,7 +116,6 @@ def _register_annotation_volume(volume_id, **volume_data):
         g.annotation_volumes = {}
     g.annotation_volumes[volume_id] = {
         **volume_data,
-        "extracted_chunks": set(),
         "chunk_sync_state": {},
     }
 
@@ -129,6 +128,10 @@ def _annotation_volume_dirs(corrections_dir):
     were counted as volumes too. Resume used to take whichever of them
     os.listdir() happened to return first. The first entry here is the one
     the session's manifest trains on, else the most recently written.
+
+    The _chunk_ extracts are per-chunk copies that older dashboards wrote
+    beside the volume, often thousands of them; they are skipped by name,
+    without opening their attrs.
     """
     from cellmap_flow.finetune.virtual_dataset import read_manifest
 
@@ -156,6 +159,15 @@ def _annotation_volume_dirs(corrections_dir):
     return volumes
 
 
+def _populated_chunk_count(volume_path):
+    """How many chunks of a volume's annotation/s0 are on disk, painted or imported."""
+    s0_dir = os.path.join(volume_path, "annotation", "s0")
+    try:
+        return sum(1 for entry in os.listdir(s0_dir) if not entry.startswith("."))
+    except OSError:
+        return 0
+
+
 def list_existing_sessions_response(data):
     try:
         output_path = data.get("output_path", "")
@@ -177,18 +189,16 @@ def list_existing_sessions_response(data):
                 {"volume_id": item.replace(".zarr", ""), "path": os.path.join(corrections_dir, item)}
                 for item in _annotation_volume_dirs(corrections_dir)
             ]
-            chunks = [
-                item for item in os.listdir(corrections_dir)
-                if item.endswith(".zarr") and "_chunk_" in item
-            ]
-
-            if volumes or chunks:
+            if volumes:
                 sessions.append(
                     {
                         "session_id": entry,
                         "session_path": session_dir,
                         "volumes": volumes,
-                        "chunk_count": len(chunks),
+                        # The volumes' populated chunks. This used to count
+                        # legacy per-chunk extracts, which no session gets
+                        # any more, so it said 0 for most sessions.
+                        "chunk_count": sum(_populated_chunk_count(v["path"]) for v in volumes),
                     }
                 )
 
@@ -238,39 +248,17 @@ def load_existing_volume_response(data):
         new_session_path, new_corrections = ensure_corrections_storage(output_path)
 
         all_zarr_entries = [item for item in os.listdir(source_corrections) if item.endswith(".zarr")]
-        has_volume_zarr = any("_chunk_" not in e for e in all_zarr_entries)
-        if has_volume_zarr:
-            # New unified flow: trainer reads the volume zarr directly via
-            # VirtualPatchDataset; the per-chunk _chunk_*.zarr extracts from
-            # the legacy materialize pipeline are dead weight (and on big
-            # sessions can be thousands of files).
-            zarr_entries = [e for e in all_zarr_entries if "_chunk_" not in e]
-            skipped_chunk_extracts = len(all_zarr_entries) - len(zarr_entries)
-            if skipped_chunk_extracts:
-                logger.info(
-                    f"Resume: skipping {skipped_chunk_extracts} legacy "
-                    f"_chunk_*.zarr extracts; trainer will read the volume "
-                    "zarr directly via the manifest."
-                )
-        else:
-            # Legacy session with only per-chunk extracts and no volume zarr.
-            # These were trainable only through CorrectionDataset, which is
-            # gone; VirtualPatchDataset needs the volume zarr the manifest
-            # points at. Resuming would copy the extracts and then fail at
-            # training time, so say so here instead.
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        f"Session at {source_corrections} predates the "
-                        "annotation-volume format: it holds only "
-                        f"{len(all_zarr_entries)} per-chunk _chunk_*.zarr "
-                        "extracts and no volume zarr, so there is nothing for "
-                        "the trainer to read. Re-import this session's crops "
-                        "into a new session to convert it."
-                    ),
-                }
-            ), 400
+        # The trainer reads the volume zarr through the manifest. The
+        # per-chunk _chunk_*.zarr extracts that older dashboards wrote beside
+        # it are dead weight, and a big session has thousands of them.
+        zarr_entries = [e for e in all_zarr_entries if "_chunk_" not in e]
+        skipped_chunk_extracts = len(all_zarr_entries) - len(zarr_entries)
+        if skipped_chunk_extracts:
+            logger.info(
+                f"Resume: skipping {skipped_chunk_extracts} legacy "
+                f"_chunk_*.zarr extracts; trainer will read the volume "
+                "zarr directly via the manifest."
+            )
         copied = []
         for idx, item in enumerate(zarr_entries):
             src = os.path.join(source_corrections, item)
@@ -349,10 +337,7 @@ def load_existing_volume_response(data):
             with open(zattrs_file) as f:
                 volume_meta = json.load(f)
 
-        s0_dir = os.path.join(new_volume_path, "annotation", "s0")
-        s0_count = 0
-        if os.path.isdir(s0_dir):
-            s0_count = sum(1 for entry in os.listdir(s0_dir) if not entry.startswith("."))
+        s0_count = _populated_chunk_count(new_volume_path)
 
         minio_url = ensure_minio_serving(new_volume_path, volume_id, output_base_dir=new_corrections)
         _register_annotation_volume(
@@ -369,8 +354,8 @@ def load_existing_volume_response(data):
         )
         # A resumed session is trained the same way a fresh one is. The
         # geometry comes from the copied .zattrs, so a volume written before
-        # those keys existed simply gets no manifest and stays on the legacy
-        # path -- write_volume_manifest says so in the log.
+        # those keys existed gets no manifest and cannot be trained --
+        # write_volume_manifest says so in the log.
         write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 

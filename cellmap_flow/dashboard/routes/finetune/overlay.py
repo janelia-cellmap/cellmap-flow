@@ -146,7 +146,9 @@ def refresh_annotated_regions_layer(corrections_path=None):
         if not os.path.isdir(corrections_dir):
             continue
         for entry in sorted(os.listdir(corrections_dir)):
-            # Per-painted-chunk small boxes (the existing behavior).
+            # A legacy per-chunk extract (<volume>_chunk_z_y_x.zarr): one small
+            # box from its roi attrs. Nothing writes these any more; the
+            # volume's own painted chunks get their boxes below.
             if "_chunk_" in entry and entry.endswith(".zarr"):
                 zattrs_file = os.path.join(corrections_dir, entry, ".zattrs")
                 if not os.path.exists(zattrs_file):

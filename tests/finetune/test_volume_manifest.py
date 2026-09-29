@@ -1,11 +1,9 @@
-"""A browser-painted annotation volume must be trainable by the new path.
+"""A browser-painted annotation volume must be trainable.
 
-create_dataloader chooses its dataset solely by whether _virtual_sources.json
-exists in the corrections dir: present means VirtualPatchDataset, which is the
-only dataset that honours good regions; absent means the legacy per-chunk
-CorrectionDataset, which ignores them entirely. Only the YAML importer used to
-write that sentinel, so painting scribbles in the browser and marking regions
-good produced a run that quietly trained on neither.
+create_dataloader reads a session through the _virtual_sources.json in its
+corrections dir, and has nothing to train on without one. Only the YAML
+importer used to write that sentinel, so a session painted in the browser
+trained on a per-chunk dataset (since removed) that ignored its good regions.
 """
 
 import json
@@ -57,8 +55,8 @@ def test_a_volume_record_yields_a_loadable_manifest(corrections):
     # None means "one patch per populated chunk" -- cover what was painted.
     assert manifest["patches_per_epoch"] is None
 
-    # dataset_from_manifest reads these by name; a rename here would silently
-    # put the trainer back on the legacy path.
+    # dataset_from_manifest reads these by name; a rename here would leave the
+    # trainer unable to read the manifest.
     for key in (
         "volume_zarr_path",
         "raw_dataset_path",
@@ -75,7 +73,7 @@ def test_a_volume_record_yields_a_loadable_manifest(corrections):
     ["zarr_path", "dataset_path", "input_size", "output_size", "output_voxel_size"],
 )
 def test_an_incomplete_volume_writes_nothing(corrections, missing):
-    """Better the old path than a manifest the trainer chokes on."""
+    """Better no manifest than one the trainer chokes on."""
     volume = _volume(corrections)
     volume[missing] = None
     assert common.write_volume_manifest(volume) is None

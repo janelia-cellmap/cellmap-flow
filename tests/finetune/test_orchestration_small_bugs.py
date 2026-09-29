@@ -1,6 +1,8 @@
 """Smaller orchestration bugs, each of which lost something quietly.
 
 - Resume took whichever zarr os.listdir() gave first, crop zarrs included.
+- The resume dialog's "N chunks" counted legacy per-chunk extracts, so it
+  said 0 for a painted session.
 - The monitor parsed partial lines, so a loss or marker split across two reads
   was lost.
 - A server that would not start ended the job with status 0: COMPLETED.
@@ -46,6 +48,30 @@ def test_resume_picks_the_volume_the_session_trains_on(tmp_path):
     assert _annotation_volume_dirs(str(corrections)) == ["vol-old.zarr", "vol-new.zarr"]
     (corrections / "_virtual_sources.json").unlink()
     assert _annotation_volume_dirs(str(corrections))[0] == "vol-new.zarr"
+
+
+def test_existing_sessions_count_the_volumes_chunks(tmp_path):
+    from cellmap_flow.dashboard.app import app
+    from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
+        list_existing_sessions_response,
+    )
+
+    base = tmp_path / "out"
+    painted = base / "20260101_000000" / "corrections"
+    _zarr(painted / "vol-a.zarr", type="annotation_volume")
+    s0 = painted / "vol-a.zarr" / "annotation" / "s0"
+    s0.mkdir(parents=True)
+    for key in (".zarray", "0.0.0", "0.0.1"):
+        (s0 / key).write_bytes(b"x")
+    _zarr(painted / "vol-a_chunk_0_0_0.zarr", source="sparse_volume")
+    # Only legacy extracts, no volume: nothing that can be loaded.
+    _zarr(base / "20250101_000000" / "corrections" / "vol-b_chunk_0_0_0.zarr", source="sparse_volume")
+
+    with app.test_request_context():
+        sessions = list_existing_sessions_response({"output_path": str(base)}).get_json()["sessions"]
+
+    assert [s["session_id"] for s in sessions] == ["20260101_000000"]
+    assert sessions[0]["chunk_count"] == 2
 
 
 def test_a_line_split_across_two_reads_is_still_parsed(tmp_path, monkeypatch):

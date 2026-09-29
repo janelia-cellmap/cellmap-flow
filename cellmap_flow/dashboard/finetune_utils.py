@@ -19,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import s3fs
 import zarr
 
@@ -123,156 +122,6 @@ def find_available_port(start_port=9000):
 # ---------------------------------------------------------------------------
 # Zarr creation
 # ---------------------------------------------------------------------------
-
-def create_correction_zarr(
-    zarr_path,
-    raw_crop_shape,
-    raw_voxel_size,
-    raw_offset,
-    annotation_crop_shape,
-    annotation_voxel_size,
-    annotation_offset,
-    dataset_path,
-    model_name,
-    output_channels,
-    raw_dtype="uint8",
-    create_mask=False,
-):
-    """
-    Create a correction zarr with OME-NGFF v0.4 metadata.
-
-    Structure:
-        crop_id.zarr/
-            raw/s0/          (uint8, shape=raw_crop_shape)
-            annotation/s0/   (uint8, shape=annotation_crop_shape)
-            mask/s0/         (optional, uint8, shape=annotation_crop_shape)
-            .zattrs          (metadata)
-
-    Returns:
-        (success: bool, info: str)
-    """
-    try:
-        def add_ome_ngff_metadata(group, name, voxel_size, translation_offset=None):
-            """Add OME-NGFF v0.4 metadata."""
-            if translation_offset is not None:
-                physical_translation = [
-                    float(o * v) for o, v in zip(translation_offset, voxel_size)
-                ]
-            else:
-                physical_translation = [0.0, 0.0, 0.0]
-
-            transforms = [{"type": "scale", "scale": [float(v) for v in voxel_size]}]
-
-            if translation_offset is not None:
-                transforms.append(
-                    {"type": "translation", "translation": physical_translation}
-                )
-
-            group.attrs["multiscales"] = [
-                {
-                    "version": "0.4",
-                    "name": name,
-                    "axes": [
-                        {"name": "z", "type": "space", "unit": "nanometer"},
-                        {"name": "y", "type": "space", "unit": "nanometer"},
-                        {"name": "x", "type": "space", "unit": "nanometer"},
-                    ],
-                    "datasets": [
-                        {"path": "s0", "coordinateTransformations": transforms}
-                    ],
-                }
-            ]
-
-        root = zarr.open(zarr_path, mode="w")
-
-        # Raw group
-        raw_group = root.create_group("raw")
-        raw_group.create_dataset(
-            "s0",
-            shape=tuple(raw_crop_shape),
-            chunks=(64, 64, 64),
-            dtype=raw_dtype,
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
-            fill_value=0,
-        )
-        add_ome_ngff_metadata(raw_group, "raw", raw_voxel_size, raw_offset)
-
-        # Annotation group
-        annotation_group = root.create_group("annotation")
-        annotation_group.create_dataset(
-            "s0",
-            shape=tuple(annotation_crop_shape),
-            chunks=(64, 64, 64),
-            dtype="uint8",
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
-            fill_value=0,
-        )
-        add_ome_ngff_metadata(
-            annotation_group, "annotation", annotation_voxel_size, annotation_offset
-        )
-
-        # Optional mask group
-        if create_mask:
-            mask_group = root.create_group("mask")
-            mask_group.create_dataset(
-                "s0",
-                shape=tuple(annotation_crop_shape),
-                chunks=(64, 64, 64),
-                dtype="uint8",
-                compressor=zarr.Blosc(
-                    cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE
-                ),
-                fill_value=0,
-            )
-            add_ome_ngff_metadata(
-                mask_group, "mask", annotation_voxel_size, annotation_offset
-            )
-
-        # Root metadata
-        root.attrs["roi"] = {
-            "raw_offset": (
-                raw_offset.tolist()
-                if hasattr(raw_offset, "tolist")
-                else list(raw_offset)
-            ),
-            "raw_shape": (
-                raw_crop_shape.tolist()
-                if hasattr(raw_crop_shape, "tolist")
-                else list(raw_crop_shape)
-            ),
-            "annotation_offset": (
-                annotation_offset.tolist()
-                if hasattr(annotation_offset, "tolist")
-                else list(annotation_offset)
-            ),
-            "annotation_shape": (
-                annotation_crop_shape.tolist()
-                if hasattr(annotation_crop_shape, "tolist")
-                else list(annotation_crop_shape)
-            ),
-        }
-        root.attrs["raw_voxel_size"] = (
-            raw_voxel_size.tolist()
-            if hasattr(raw_voxel_size, "tolist")
-            else list(raw_voxel_size)
-        )
-        root.attrs["annotation_voxel_size"] = (
-            annotation_voxel_size.tolist()
-            if hasattr(annotation_voxel_size, "tolist")
-            else list(annotation_voxel_size)
-        )
-        root.attrs["model_name"] = model_name
-        root.attrs["dataset_path"] = dataset_path
-        root.attrs["created_at"] = datetime.now().isoformat()
-
-        logger.info(f"Created correction zarr at {zarr_path}")
-
-        return True, zarr_path
-
-    except Exception as e:
-        logger.error(f"Error creating zarr: {e}")
-        return False, str(e)
-
 
 def create_annotation_volume_zarr(
     zarr_path,
@@ -999,7 +848,6 @@ def _get_volume_metadata(volume_id, zarr_path=None):
             "dataset_path": attrs.get("dataset_path", ""),
             "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
             "corrections_dir": str(Path(zarr_path).parent),
-            "extracted_chunks": set(),
             "chunk_sync_state": {},
         }
         annotation_volumes[volume_id] = metadata
@@ -1009,134 +857,17 @@ def _get_volume_metadata(volume_id, zarr_path=None):
         return None
 
 
-def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
-    """
-    Extract a correction entry from a single annotated chunk in a sparse volume.
-
-    Reads the annotation chunk, extracts raw data with context padding, and
-    creates a standard correction zarr entry.
-
-    Args:
-        volume_id: Volume identifier
-        chunk_indices: Tuple (cz, cy, cx) of chunk indices
-        volume_metadata: Volume metadata dict
-
-    Returns:
-        bool: True if correction was created (chunk had annotations)
-    """
-    from cellmap_flow.finetune.virtual_dataset import volume_corner_nm
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from funlib.geometry import Roi, Coordinate
-
-    cz, cy, cx = chunk_indices
-    chunk_size = np.array(volume_metadata["output_size"])
-    output_voxel_size = np.array(volume_metadata["output_voxel_size"])
-    input_size = np.array(volume_metadata["input_size"])
-    input_voxel_size = np.array(volume_metadata["input_voxel_size"])
-    volume_corner = volume_corner_nm(volume_metadata["dataset_offset_nm"], output_voxel_size)
-    corrections_dir = volume_metadata["corrections_dir"]
-
-    vol_zarr_path = volume_metadata["zarr_path"]
-    vol = zarr.open(vol_zarr_path, mode="r")
-
-    z_start = cz * chunk_size[0]
-    y_start = cy * chunk_size[1]
-    x_start = cx * chunk_size[2]
-
-    annotation_data = vol["annotation/s0"][
-        z_start : z_start + chunk_size[0],
-        y_start : y_start + chunk_size[1],
-        x_start : x_start + chunk_size[2],
-    ]
-
-    # Skip if all zeros (unannotated or erased)
-    if not np.any(annotation_data):
-        return False
-
-    # Compute physical position of this chunk's center
-    chunk_offset_nm = volume_corner + np.array(
-        [z_start, y_start, x_start]
-    ) * output_voxel_size
-    chunk_center_nm = chunk_offset_nm + (chunk_size * output_voxel_size) / 2
-
-    # Extract raw data with full context padding
-    read_shape_nm = input_size * input_voxel_size
-    raw_roi = Roi(
-        offset=Coordinate(chunk_center_nm - read_shape_nm / 2),
-        shape=Coordinate(read_shape_nm),
-    )
-
-    logger.info(
-        f"Extracting raw for chunk ({cz},{cy},{cx}): "
-        f"ROI offset={raw_roi.offset}, shape={raw_roi.shape}"
-    )
-
-    idi = ImageDataInterface(
-        volume_metadata["dataset_path"], voxel_size=input_voxel_size
-    )
-    raw_data = idi.to_ndarray_ts(raw_roi)
-
-    # Create correction entry
-    correction_id = f"{volume_id}_chunk_{cz}_{cy}_{cx}"
-    correction_zarr_path = os.path.join(corrections_dir, f"{correction_id}.zarr")
-
-    # If a stale zarr exists (e.g. copied in during Resume Existing Volume),
-    # wipe it before recreating. zarr's mode="w" only overwrites top-level
-    # metadata and can leave stale subarrays behind, causing
-    # KeyError: 'annotation/s0' when we later index into the group.
-    if os.path.isdir(correction_zarr_path):
-        import shutil
-        shutil.rmtree(correction_zarr_path, ignore_errors=True)
-
-    raw_offset_voxels = (
-        (chunk_center_nm - read_shape_nm / 2) / input_voxel_size
-    ).astype(int)
-    annotation_offset_voxels = (chunk_offset_nm / output_voxel_size).astype(int)
-
-    success, zarr_info = create_correction_zarr(
-        zarr_path=correction_zarr_path,
-        raw_crop_shape=input_size,
-        raw_voxel_size=input_voxel_size,
-        raw_offset=raw_offset_voxels,
-        annotation_crop_shape=chunk_size,
-        annotation_voxel_size=output_voxel_size,
-        annotation_offset=annotation_offset_voxels,
-        dataset_path=volume_metadata["dataset_path"],
-        model_name=volume_metadata["model_name"],
-        output_channels=1,
-        raw_dtype=str(raw_data.dtype),
-        create_mask=False,
-    )
-
-    if not success:
-        logger.error(f"Failed to create correction zarr for chunk ({cz},{cy},{cx})")
-        return False
-
-    # Write data
-    corr_zarr = zarr.open(correction_zarr_path, mode="r+")
-    corr_zarr["raw/s0"][:] = raw_data
-    corr_zarr["annotation/s0"][:] = annotation_data
-
-    corr_zarr.attrs["source"] = "sparse_volume"
-    corr_zarr.attrs["volume_id"] = volume_id
-    corr_zarr.attrs["chunk_indices"] = [cz, cy, cx]
-
-    logger.info(f"Created correction {correction_id} from chunk ({cz},{cy},{cx})")
-    return True
-
-
 # ---------------------------------------------------------------------------
 # Annotation volume sync
 # ---------------------------------------------------------------------------
 
 def sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None):
     """
-    Sync an annotation volume from MinIO, detect annotated chunks, extract corrections.
+    Pull an annotation volume's changed chunks from MinIO to local disk.
 
-    Steps:
-    1. Sync the full annotation zarr from MinIO to local disk
-    2. List chunk files in MinIO to find annotated chunks
-    3. For each new annotated chunk, extract raw data and create correction entry
+    Syncs the annotation group's metadata, then diffs MinIO's chunk listing
+    against what was last synced and copies the chunks that changed. The
+    trainer reads the volume itself, through the session's manifest.
 
     The chunks go to the volume's own zarr_path. They used to go to
     <output_base>/<volume>.zarr, where output_base is fixed by the first
@@ -1148,7 +879,7 @@ def sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None):
     dashboard has no record of.
 
     Returns:
-        bool: True if any corrections were created
+        bool: True if any chunk was pulled
     """
     with _sync_lock:
         return _sync_annotation_volume_from_minio(volume_id, force, zarr_path)
@@ -1202,59 +933,9 @@ def _sync_annotation_volume_from_minio(volume_id, force, zarr_path):
         logger.info(
             f"Synced {len(changed_chunk_keys)} changed chunks for volume {volume_id}"
         )
-
-        # Extract corrections for changed chunks. Skip entirely when a
-        # virtual-sources manifest is present: the trainer reads the volume
-        # zarr directly via VirtualPatchDataset and never touches per-chunk
-        # extracts, so this loop just slowly fills disk with thousands of
-        # 178**3 raw cubes that nothing reads. (See
-        # cellmap_flow/finetune/virtual_dataset.py for the manifest format.)
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
-
-        corrections_dir = volume_meta.get("corrections_dir") or os.path.dirname(
-            local_zarr_path
-        )
-        manifest = read_manifest(corrections_dir) if corrections_dir else None
-
-        extracted_chunks = volume_meta.get("extracted_chunks", set())
-        changed_chunk_indices = [
-            tuple(map(int, k.split(".")))
-            for k in changed_chunk_keys
-        ]
-        created_any = False
-
-        if manifest is not None:
-            logger.debug(
-                f"Volume {volume_id}: skipping per-chunk extract (manifest present); "
-                f"{len(changed_chunk_indices)} changed chunks ignored."
-            )
-        else:
-            for chunk_idx in changed_chunk_indices:
-                try:
-                    created = extract_correction_from_chunk(
-                        volume_id, chunk_idx, volume_meta
-                    )
-                    if created:
-                        extracted_chunks.add(chunk_idx)
-                        created_any = True
-                    else:
-                        extracted_chunks.discard(chunk_idx)
-                except Exception as e:
-                    logger.error(f"Error extracting correction for chunk {chunk_idx}: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
-        # Update tracked state
-        volume_meta["extracted_chunks"] = extracted_chunks
         volume_meta["chunk_sync_state"] = remote_chunk_state
         minio_state["last_sync"][volume_id] = datetime.now()
-
-        if created_any or changed_chunk_keys or removed_chunk_keys:
-            logger.info(
-                f"Volume {volume_id}: {len(extracted_chunks)} total chunks extracted"
-            )
-
-        return bool(created_any or changed_chunk_keys or removed_chunk_keys)
+        return True
 
     except Exception as e:
         logger.error(f"Error syncing annotation volume {volume_id}: {e}")

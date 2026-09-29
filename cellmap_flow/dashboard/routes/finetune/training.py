@@ -107,8 +107,8 @@ def _step_names(config):
 def _backfill_manifest(corrections_dir):
     """Write a manifest for a session that predates the volume routes writing one.
 
-    Returns the manifest if one could be written, else None (leaving the
-    caller on the legacy correction-chunk path, as before).
+    Returns the manifest if one could be written, else None: the session
+    then has nothing the trainer can read, and submit refuses it.
     """
     from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
     from cellmap_flow.finetune.virtual_dataset import read_manifest
@@ -122,8 +122,8 @@ def _backfill_manifest(corrections_dir):
         return read_manifest(str(corrections_dir))
 
     logger.info(
-        f"No annotation volume registered for {corrections_dir}; "
-        "training on the legacy correction-chunk dataset."
+        f"No annotation volume registered for {corrections_dir}, so no "
+        "manifest to backfill; the session cannot be trained without one."
     )
     return None
 
@@ -280,33 +280,25 @@ def submit_finetuning_response(data):
                 }
             ), 400
 
-        # Pre-training sync materialized per-chunk _chunk_*.zarr extracts for
-        # the old dataset, which has since been removed. VirtualPatchDataset
-        # reads annotation_volume.zarr directly, so when a manifest is present
-        # the sync is wasted work and can hang submit for many minutes when the
-        # volume contains imported YAML data.
+        # No pre-training sync: VirtualPatchDataset reads annotation_volume.zarr
+        # directly, which the periodic sync keeps up to date, and a sync can
+        # hang submit for many minutes when the volume holds imported YAML
+        # data. Only a session without a manifest was synced here, to
+        # materialize the per-chunk extracts of the removed legacy dataset;
+        # without a manifest the job manager refuses the submit anyway.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
         if existing_manifest is None:
             # Sessions started before the volume routes wrote a manifest have
             # a perfectly trainable volume zarr and no sentinel pointing at
-            # it, so they would silently train on the legacy per-chunk
-            # dataset and ignore any good regions marked. Backfill from the
-            # registered volume rather than making the user start over.
+            # it. Backfill from the registered volume rather than making the
+            # user start over.
             existing_manifest = _backfill_manifest(actual_corrections_path)
 
-        if existing_manifest is None:
-            try:
-                sync_all_annotations_from_minio(force=False)
-            except Exception as e:
-                logger.warning(f"Error syncing annotations before training: {e}")
-        else:
+        if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
                 actual_corrections_path, existing_manifest, data, "submit"
-            )
-            logger.info(
-                "Virtual sources manifest present; skipping pre-training MinIO sync."
             )
 
         loss_type = data.get("loss_type", "mse")
@@ -699,9 +691,8 @@ def restart_finetuning_job_response(job_id, data):
         #
         # This used to be skipped whenever a manifest was present, because the
         # sync also materialized per-chunk raw extracts the virtual dataset
-        # never reads, which on a big session took minutes. That extraction is
-        # now skipped inside the sync itself when a manifest exists (see
-        # sync_annotation_volume_from_minio), leaving just the chunk diff.
+        # never reads, which on a big session took minutes. The sync is just
+        # the chunk diff now.
         from cellmap_flow.finetune.virtual_dataset import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
@@ -716,8 +707,8 @@ def restart_finetuning_job_response(job_id, data):
             read_manifest(corrections_dir) if corrections_dir else None
         )
         if existing_manifest is None and corrections_dir:
-            # Same backfill as submit: a restart must not quietly drop to the
-            # legacy dataset just because the session predates the manifest.
+            # Same backfill as submit: the trainer rebuilds its dataset from
+            # the manifest on every restart.
             existing_manifest = _backfill_manifest(corrections_dir)
 
         if existing_manifest is not None:

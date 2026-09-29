@@ -151,7 +151,8 @@ def detect_sparse_annotations(corrections_path):
     marked source == "sparse_volume", which are only written when there is
     no manifest -- and every session has one now -- so it was always False:
     the margin + distillation switch and the distance-model scribble guard in
-    submit never fired, and mask_unannotated was never set.
+    submit never fired, and mask_unannotated was never set. A session
+    without a manifest cannot be trained, so it is not sparse either.
     """
     from cellmap_flow.finetune.virtual_dataset import has_painted_annotations, read_manifest
 
@@ -159,11 +160,6 @@ def detect_sparse_annotations(corrections_path):
         manifest = read_manifest(str(corrections_path))
         if manifest and manifest.get("volume_zarr_path"):
             return has_painted_annotations(manifest["volume_zarr_path"])
-        for path in Path(corrections_path).iterdir():
-            if path.suffix == ".zarr" and (path / ".zattrs").exists():
-                attrs = json.loads((path / ".zattrs").read_text())
-                if attrs.get("source") == "sparse_volume":
-                    return True
     except Exception as e:
         logger.warning(f"Error checking for sparse annotations: {e}")
     return False
@@ -318,7 +314,7 @@ _MANIFEST_REQUIRED_FIELDS = (
 
 
 def write_volume_manifest(volume):
-    """Mark a browser-painted annotation volume as trainable by the new path.
+    """Mark a browser-painted annotation volume as trainable.
 
     ``create_dataloader`` requires this manifest: it is what points the
     trainer at the volume zarr to stream patches from, and it carries the
@@ -333,7 +329,7 @@ def write_volume_manifest(volume):
 
     Returns the manifest path, or None when the volume record is too
     incomplete to describe (a resumed session whose .zattrs predates these
-    fields, say) -- in which case the legacy path still applies, as before.
+    fields, say). Such a session cannot be trained: submit refuses it.
     """
     from cellmap_flow.finetune.virtual_dataset import write_manifest
     from cellmap_flow.globals import (
@@ -346,8 +342,8 @@ def write_volume_manifest(volume):
     if missing or not corrections_dir:
         logger.warning(
             "Not writing a virtual-sources manifest: volume record is missing "
-            f"{missing or ['corrections_dir']}. Training will fall back to the "
-            "legacy correction-chunk dataset, which ignores good regions."
+            f"{missing or ['corrections_dir']}. The session cannot be trained "
+            "without one."
         )
         return None
 
