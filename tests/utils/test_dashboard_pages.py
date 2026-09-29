@@ -32,6 +32,20 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(client):
     assert g.model_catalog == catalog_before
 
 
+@pytest.mark.parametrize("headers, expected", [
+    ({}, "http://node7:8765/v/abc/"),
+    ({"X-Forwarded-Host": "proxy.example.org"}, "http://proxy.example.org/v/abc/"),
+    (
+        {"X-Forwarded-Host": "proxy.example.org", "X-Forwarded-Proto": "https"},
+        "https://proxy.example.org/v/abc/",
+    ),
+])
+def test_behind_a_reverse_proxy_the_viewer_is_loaded_through_it(client, headers, expected):
+    g.NEUROGLANCER_URL = "http://node7:8765/v/abc/"
+    html = client.get("/", headers=headers).get_data(as_text=True)
+    assert f'<iframe src="{expected}"' in html
+
+
 # --- Input / Postprocess lists ---------------------------------------------
 
 

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, request, jsonify
 import neuroglancer
@@ -12,6 +13,26 @@ from cellmap_flow.utils.scale_pyramid import get_raw_layer
 logger = logging.getLogger(__name__)
 
 index_bp = Blueprint("index", __name__)
+
+
+def viewer_url_for(viewer_url, headers, scheme):
+    """The address the browser should load the neuroglancer viewer from.
+
+    Behind a reverse proxy (the request carries X-Forwarded-Host), the browser
+    can reach only the proxy, and an https page cannot embed the viewer's own
+    http://<node>:<port> address; so it asks for the viewer at the same path
+    on the proxy's host, which the proxy must route to the viewer. The scheme
+    is the proxy's X-Forwarded-Proto, else this request's own. Without the
+    header (direct access) the viewer's own address is returned unchanged.
+    """
+    forwarded_host = (headers.get("X-Forwarded-Host") or "").split(",")[0].strip()
+    if not viewer_url or not forwarded_host or forwarded_host.startswith(("localhost", "127.")):
+        return viewer_url
+    parsed = urlparse(viewer_url)
+    if not parsed.netloc or parsed.netloc == forwarded_host:
+        return viewer_url
+    proto = (headers.get("X-Forwarded-Proto") or scheme).split(",")[0].strip()
+    return parsed._replace(scheme=proto, netloc=forwarded_host).geturl()
 
 
 def _form_value(value):
@@ -92,7 +113,7 @@ def index():
 
     return render_template(
         "index.html",
-        neuroglancer_url=g.NEUROGLANCER_URL,
+        neuroglancer_url=viewer_url_for(g.NEUROGLANCER_URL, request.headers, request.scheme),
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
         model_mergers=model_mergers,
@@ -132,7 +153,9 @@ def set_data():
 
         return jsonify({
             "success": True,
-            "neuroglancer_url": g.NEUROGLANCER_URL,
+            "neuroglancer_url": viewer_url_for(
+                g.NEUROGLANCER_URL, request.headers, request.scheme
+            ),
         })
     except Exception as e:
         logger.error(f"Error setting data: {str(e)}")
