@@ -417,6 +417,3 @@ def get_postprocessors_list() -> list[dict]:
 def get_postprocessors(elms) -> list[PostProcessor]:
     """Get postprocessors from either dict or list format."""
     return deserialize_list(elms, PostProcessor)
-
-
-PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]
