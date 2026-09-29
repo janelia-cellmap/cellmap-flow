@@ -53,13 +53,6 @@ def save_server_config_cache(config: Dict[str, Any]) -> None:
     with open(SERVER_CONFIG_PATH, "w") as f:
         yaml.dump(config, f, default_flow_style=False)
 
-# input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
-# postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
-
-input_norms = []
-postprocess = []
-viewer = None
-
 
 class Flow:
     _instance: Optional["Flow"] = None
@@ -67,7 +60,6 @@ class Flow:
     # Class-level type annotations for all instance attributes
     jobs: List[Any]
     models_config: List[Any]
-    servers: List[Any]
     raw: Optional[Any]
     input_norms: List[Any]
     postprocess: List[Any]
@@ -106,9 +98,8 @@ class Flow:
             cls._instance = super(Flow, cls).__new__(cls)
             cls._instance.jobs = []
             cls._instance.models_config = []
-            cls._instance.servers = []
             cls._instance.raw = None
-            cls._instance.input_norms = input_norms
+            cls._instance.input_norms = []
             # Raw JSON-serializable form of the dashboard's input_norm config.
             # Populated by /api/run from the request payload; used by the
             # finetune submit/restart flow so the trainer process applies the
@@ -120,7 +111,7 @@ class Flow:
             # but never touch ``input_norm_config``. The helper falls back to
             # reconstructing the dict from the live normalizer instances.
             cls._instance.input_norm_config = {}
-            cls._instance.postprocess = postprocess
+            cls._instance.postprocess = []
             cls._instance.postprocess_config = {}
             cls._instance.viewer = None
             cls._instance.dataset_path = None
