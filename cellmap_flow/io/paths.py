@@ -10,6 +10,7 @@ Only the local filesystem is probed (for ``.zgroup``/``.zarray``/
 """
 
 import os
+import re
 from typing import Literal, Optional, Tuple
 
 ZARR_JSON = "zarr.json"
@@ -129,6 +130,30 @@ def split_container(path: str) -> Tuple[str, str]:
     """
     container, inner, _ = _split_container(path)
     return container, inner
+
+
+def ends_with_scale(path: str) -> bool:
+    """``path`` ends in a level name such as ``s0``."""
+    return bool(re.search(r"s\d+$", path))
+
+
+def precomputed_kvstore(path: str) -> Tuple[object, int]:
+    """``(kvstore, scale_index)`` for a ``precomputed://`` or ``gs://`` path.
+
+    A trailing ``/s<N>`` names the scale; ``precomputed://`` is a local
+    directory and ``gs://`` is handed to tensorstore as a URL.
+    """
+    if path.startswith("precomputed://"):
+        location = "/" + path[len("precomputed://"):].lstrip("/")
+    else:
+        location = path
+    scale_index = 0
+    if ends_with_scale(location):
+        scale_index = int(location.rsplit("/s")[1])
+        location = location.rsplit("/s")[0]
+    if path.startswith("precomputed://"):
+        return {"driver": "file", "path": os.path.normpath(location)}, scale_index
+    return location, scale_index
 
 
 def detect_format(path: str) -> Literal["zarr2", "zarr3", "n5", "precomputed"]:

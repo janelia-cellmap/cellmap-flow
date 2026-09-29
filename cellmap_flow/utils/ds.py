@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import re
 from typing import Sequence, Union
 
 import numpy as np
@@ -13,8 +12,13 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
-from cellmap_flow.io import paths
+from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metadata)
+    open_zarr as _open_zarr,
+    regularize_offset,
+)
 from cellmap_flow.io.paths import (  # noqa: F401  (kept names; see io.paths)
+    ends_with_scale,
     is_remote as _is_remote_path,
     is_zarr_container as _is_zarr_container,
     join as _join_path,
@@ -76,40 +80,10 @@ def generate_singlescale_metadata(
 
 
 def get_scale_info(zarr_grp):
-    attrs = zarr_grp.attrs
-    ms = attrs["multiscales"][0]
-
-    # Spatial axes only (skip channel axes), in nanometers. If there is no
-    # axes metadata, assume all dimensions are spatial.
-    spatial_indices, _, units = zarr_v3.spatial_axes(ms.get("axes", []))
-
-    resolutions = {}
-    offsets = {}
-    shapes = {}
-    for scale in ms["datasets"]:
-        transforms = scale["coordinateTransformations"]
-        full_res = transforms[0]["scale"]
-        # Translation is optional (e.g. s0 often has only scale)
-        full_translation = next(
-            (t["translation"] for t in transforms if t["type"] == "translation"),
-            [0.0] * len(full_res),
-        )
-        full_shape = zarr_grp[scale["path"]].shape
-
-        if spatial_indices is not None:
-            resolutions[scale["path"]] = zarr_v3.to_nm(
-                [full_res[i] for i in spatial_indices], units
-            )
-            offsets[scale["path"]] = zarr_v3.ome_corner(
-                zarr_v3.to_nm([full_translation[i] for i in spatial_indices], units),
-                resolutions[scale["path"]],
-            )
-            shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
-        else:
-            resolutions[scale["path"]] = full_res
-            offsets[scale["path"]] = zarr_v3.ome_corner(full_translation, full_res)
-            shapes[scale["path"]] = full_shape
-    return offsets, resolutions, shapes
+    """``(offsets, resolutions, shapes)`` of an opened OME-Zarr v2 group,
+    keyed by level path: spatial axes only, nanometers, offsets the corner
+    of voxel 0 (see io.metadata)."""
+    return zarr_v3.scale_info(metadata.levels_from_zarr_group(zarr_grp))
 
 
 def find_closest_scale(zarr_grp_path, target_resolution):
@@ -142,24 +116,6 @@ os.environ["GCE_METADATA_ROOT"] = "metadata.google.internal.invalid"
 # Much below taken from flyemflows: https://github.com/janelia-flyem/flyemflows/blob/master/flyemflows/util/util.py
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def ends_with_scale(string):
-    pattern = (
-        r"s\d+$"  # Matches 's' followed by one or more digits at the end of the string
-    )
-    return bool(re.search(pattern, string))
-
-
-def _open_zarr(path, mode="r"):
-    """Open a zarr dataset, handling HTTP/HTTPS and (anonymous) S3 URLs via fsspec."""
-    path = _normalize_path(path)
-    if _is_remote_path(path):
-        import fsspec
-
-        options = {"anon": True} if path.startswith("s3://") else {}
-        return zarr.open(fsspec.get_mapper(path, **options), mode=mode)
-    return zarr.open(path, mode=mode)
 
 
 def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
@@ -321,19 +277,11 @@ def open_ds_tensorstore(
     filetype = _detect_filetype(dataset_path)
     extra_args = {}
 
-    if dataset_path.startswith("precomputed://"):
-        # precomputed:// URLs point to neuroglancer precomputed format
-        raw_path = "/" + dataset_path[len("precomputed://"):].lstrip("/")
-        if ends_with_scale(raw_path):
-            scale_index = int(raw_path.rsplit("/s")[1])
-            raw_path = raw_path.rsplit("/s")[0]
-        else:
-            scale_index = 0
+    if paths.is_precomputed(dataset_path):
+        # precomputed:// (a local directory) and gs:// URLs are neuroglancer
+        # precomputed volumes; a trailing /s<N> picks the scale.
+        kvstore, scale_index = paths.precomputed_kvstore(dataset_path)
         filetype = "neuroglancer_precomputed"
-        kvstore = {
-            "driver": "file",
-            "path": os.path.normpath(raw_path),
-        }
         extra_args = {"scale_index": scale_index}
     elif dataset_path.startswith("http://") or dataset_path.startswith("https://"):
         kvstore = {
@@ -350,16 +298,6 @@ def open_ds_tensorstore(
                 "anonymous": True,
             },
         }
-    elif dataset_path.startswith("gs://"):
-        # check if path ends with s#int
-        if ends_with_scale(dataset_path):
-            scale_index = int(dataset_path.rsplit("/s")[1])
-            dataset_path = dataset_path.rsplit("/s")[0]
-        else:
-            scale_index = 0
-        filetype = "neuroglancer_precomputed"
-        kvstore = dataset_path
-        extra_args = {"scale_index": scale_index}
     else:
         kvstore = {
             "driver": "file",
@@ -668,402 +606,27 @@ def check_for_multiscale(group):
     return check_for_multiscale(access_parent(group))
 
 
-# check if voxel_size value is present in .zatts other than in multiscale attribute
+def _items(array):
+    """The attributes of ``array`` and of its parent group, if it has one."""
+    return [dict(item.attrs) for item in _self_and_parent(array)]
+
+
 def check_for_voxel_size(array, order):
-    """checks specific attributes(resolution, scale,
-        pixelResolution["dimensions"], transform["scale"]) for voxel size
-        value in the parent directory of the input array
-
-    Args:
-        array (zarr.core.Array): array to check
-        order (string): colexicographical/lexicographical order
-    Raises:
-        ValueError: raises value error if no voxel_size value is found
-
-    Returns:
-       [float] : returns physical size of the voxel (unitless)
-    """
-
-    voxel_size = None
-    for item in _self_and_parent(array):
-
-        if "resolution" in item.attrs:
-            return item.attrs["resolution"]
-        elif "scale" in item.attrs:
-            return item.attrs["scale"]
-        elif "pixelResolution" in item.attrs:
-            downsampling_factors = [1, 1, 1]
-            if "downsamplingFactors" in item.attrs:
-                downsampling_factors = item.attrs["downsamplingFactors"]
-            if "dimensions" not in item.attrs["pixelResolution"]:
-                base_resolution = item.attrs["pixelResolution"]
-            else:
-                base_resolution = item.attrs["pixelResolution"]["dimensions"]
-            final_resolution = list(
-                np.array(base_resolution) * np.array(downsampling_factors)
-            )
-            return final_resolution
-        elif "transform" in item.attrs:
-            # Davis saves transforms in C order regardless of underlying
-            # memory format (i.e. n5 or zarr). May be explicitly provided
-            # as transform.ordering
-            transform_order = item.attrs["transform"].get("ordering", "C")
-            voxel_size = item.attrs["transform"]["scale"]
-            if transform_order != order:
-                voxel_size = voxel_size[::-1]
-            return voxel_size
-
-    return voxel_size
+    """The voxel size in ``array``'s own or its parent's attributes (see
+    io.metadata.n5_voxel_size), or None."""
+    return metadata.n5_voxel_size(_items(array), order)
 
 
-# check if offset value is present in .zatts other than in multiscales
 def check_for_offset(array, order):
-    """checks specific attributes(offset, transform["translate"]) for offset
-        value in the parent directory of the input array
-
-    Args:
-        array (zarr.core.Array): array to check
-        order (string): colexicographical/lexicographical order
-    Raises:
-        ValueError: raises value error if no offset value is found
-
-    Returns:
-       [float] : returns offset of the voxel (unitless) in respect to
-                the center of the coordinate system
-    """
-    offset = None
-    for item in _self_and_parent(array):
-
-        if "offset" in item.attrs:
-            offset = item.attrs["offset"]
-            return offset
-
-        elif "transform" in item.attrs:
-            transform_order = item.attrs["transform"].get("ordering", "C")
-            offset = item.attrs["transform"]["translate"]
-            if transform_order != order:
-                offset = offset[::-1]
-            return offset
-
-    return offset
+    """The offset in ``array``'s own or its parent's attributes (see
+    io.metadata.n5_offset), or None."""
+    return metadata.n5_offset(_items(array), order)
 
 
 def check_for_units(array, order):
-    """checks specific attributes(units, pixelResolution["unit"] transform["units"])
-        for units(nm, cm, etc.) value in the parent directory of the input array
-
-    Args:
-        array (zarr.core.Array): array to check
-        order (string): colexicographical/lexicographical order
-    Raises:
-        ValueError: raises value error if no units value is found
-
-    Returns:
-       [string] : returns units for the voxel_size
-    """
-
-    units = None
-    for item in _self_and_parent(array):
-
-        if "units" in item.attrs:
-            return item.attrs["units"]
-        elif (
-            "pixelResolution" in item.attrs and "unit" in item.attrs["pixelResolution"]
-        ):
-            unit = item.attrs["pixelResolution"]["unit"]
-            return [unit for _ in range(len(array.shape))]
-        elif "transform" in item.attrs:
-            # Davis saves transforms in C order regardless of underlying
-            # memory format (i.e. n5 or zarr). May be explicitly provided
-            # as transform.ordering
-            transform_order = item.attrs["transform"].get("ordering", "C")
-            units = item.attrs["transform"]["units"]
-            if transform_order != order:
-                units = units[::-1]
-            return units
-
-    if units is None:
-        Warning(
-            f"No units attribute was found for {type(array.store)} store. Using pixels."
-        )
-        return "pixels"
-
-
-def check_for_attrs_multiscale(ds, multiscale_group, multiscales):
-    """checks multiscale attribute of the .zarr or .n5 group
-        for voxel_size(scale), offset(translation) and units values
-
-    Args:
-        ds (zarr.core.Array): input zarr Array
-        multiscale_group (zarr.hierarchy.Group): the group attrs
-                                                that contains multiscale
-        multiscales ({}): dictionary that contains all the info necessary
-                            to create multiscale resolution pyramid
-
-    Returns:
-        ([float],[float],[string]): returns (voxel_size, offset, physical units)
-    """
-
-    voxel_size = None
-    offset = None
-    units = None
-
-    if multiscales is not None:
-        logger.info("Found multiscales attributes")
-        scale = os.path.relpath(
-            separate_store_path(get_url(ds), ds.path)[1], multiscale_group.path
-        )
-        if isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore)):
-            for level in multiscales[0]["datasets"]:
-                if level["path"] == scale:
-
-                    voxel_size = level["transform"]["scale"]
-                    offset = level["transform"]["translate"]
-                    units = level["transform"]["units"]
-                    return voxel_size, offset, units
-        # for zarr store
-        else:
-            # Spatial axes only: a channel axis has no unit (the spec allows
-            # that), and item["unit"] raising KeyError on it was swallowed
-            # into voxel size 1 and offset 0 for every multichannel dataset.
-            spatial, _, units = zarr_v3.spatial_axes(multiscales[0].get("axes", []))
-
-            def pick(values):
-                return list(values) if spatial is None else [values[i] for i in spatial]
-
-            for level in multiscales[0]["datasets"]:
-                if level["path"].lstrip("/") == scale:
-                    for attr in level["coordinateTransformations"]:
-                        if attr["type"] == "scale":
-                            voxel_size = pick(attr["scale"])
-                        elif attr["type"] == "translation":
-                            offset = pick(attr["translation"])
-                    if units is None and voxel_size is not None:
-                        units = [None] * len(voxel_size)
-                    if voxel_size is not None:
-                        # translation is voxel 0's centre, and 0 when absent.
-                        offset = zarr_v3.ome_corner(
-                            offset if offset is not None else [0.0] * len(voxel_size),
-                            voxel_size,
-                        )
-                    return voxel_size, offset, units
-
-    return voxel_size, offset, units
-
-
-def _read_attrs(ds, order="C"):
-    """check n5/zarr metadata and returns voxel_size, offset, physical units,
-        for the input zarr array(ds)
-
-    Args:
-        ds (zarr.core.Array): input zarr array
-        order (str, optional): _description_. Defaults to "C".
-
-    Raises:
-        TypeError: incorrect data type of the input(ds) array.
-        ValueError: returns value error if no multiscale attribute was found
-    Returns:
-        (voxel_size, offset, units, offset_is_ome_corner). The last is True when
-        the offset is a corner converted from an OME translation, which is
-        exact and must not be rounded onto the voxel grid.
-    """
-    voxel_size = None
-    offset = None
-    units = None
-    multiscales = None
-    from_ome = False
-
-    if not isinstance(ds, zarr.core.Array):
-        raise TypeError(
-            f"{os.path.join(ds.store.path, ds.path)} is not zarr.core.Array"
-        )
-
-    # check recursively for multiscales attribute in the zarr store tree (an
-    # array at the root of its store has no group above it to look in)
-    parent = _parent_or_none(ds)
-    if parent is None:
-        multiscales, multiscale_group = None, None
-    else:
-        multiscales, multiscale_group = check_for_multiscale(group=parent)
-
-    # check for attributes in .zarr group multiscale
-    if not isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore)):
-        if multiscales:
-            voxel_size, offset, units = check_for_attrs_multiscale(
-                ds, multiscale_group, multiscales
-            )
-            from_ome = voxel_size is not None
-
-    # if multiscale attribute is missing
-    if voxel_size is None:
-        voxel_size = check_for_voxel_size(ds, order)
-    if offset is None:
-        offset = check_for_offset(ds, order)
-    if units is None:
-        units = check_for_units(ds, order)
-
-    dims = len(ds.shape)
-    dims = dims if dims <= 3 else 3
-
-    if voxel_size is not None and offset is not None and units is not None:
-        if order == "F" or isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore)):
-            return voxel_size[::-1], offset[::-1], units[::-1], from_ome
-        else:
-            return voxel_size, offset, units, from_ome
-
-    # if no voxel offset are found in transform, offset or scale, check in n5 multiscale attribute:
-    if (
-        isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore))
-        and multiscales != False
-    ):
-
-        voxel_size, offset, units = check_for_attrs_multiscale(
-            ds, multiscale_group, multiscales
-        )
-
-    # return default value if an attribute was not found
-    if voxel_size is None:
-        voxel_size = (1,) * dims
-        Warning(f"No voxel_size attribute was found. Using {voxel_size} as default.")
-    if offset is None:
-        offset = (0,) * dims
-        Warning(f"No offset attribute was found. Using {offset} as default.")
-    if units is None:
-        units = "pixels"
-        Warning(f"No units attribute was found. Using {units} as default.")
-
-    if order == "F":
-        return voxel_size[::-1], offset[::-1], units[::-1], from_ome
-    else:
-        return voxel_size, offset, units, from_ome
-
-
-def regularize_offset(voxel_size_float, offset_float):
-    """
-        offset is not a multiple of voxel_size. This is often due to someone defining
-        offset to the point source of each array element i.e. the center of the rendered
-        voxel, vs the offset to the corner of the voxel.
-        apparently this can be a heated discussion. See here for arguments against
-        the convention we are using: http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf
-
-    Args:
-        voxel_size_float ([float]): float voxel size list
-        offset_float ([float]): float offset list
-    Returns:
-        (Coordinate, Coordinate)): returned offset size that is multiple of voxel size.
-        For a non-integer voxel size, two tuples of floats instead (the same
-        rounding, without truncating the voxel size to an integer first).
-    """
-    snapped_voxel_size = zarr_v3.snap_integral(voxel_size_float)
-    if not zarr_v3.is_integral(snapped_voxel_size):
-        vs = snapped_voxel_size
-        off = zarr_v3.snap_integral(offset_float)
-        if not np.allclose(np.round(off / vs) * vs, off):
-            logger.debug(f"Offset: {off} being rounded to nearest voxel size: {vs}")
-            off = zarr_v3.snap_integral(np.trunc((off + vs / 2) / vs) * vs)
-        return tuple(float(v) for v in vs), tuple(float(v) for v in off)
-
-    voxel_size = Coordinate(int(v) for v in snapped_voxel_size)
-    offset = Coordinate(offset_float)
-
-    if voxel_size is not None and (offset / voxel_size) * voxel_size != offset:
-
-        logger.debug(
-            f"Offset: {offset} being rounded to nearest voxel size: {voxel_size}"
-        )
-        offset = (
-            (Coordinate(offset) + (Coordinate(voxel_size) / 2)) / Coordinate(voxel_size)
-        ) * Coordinate(voxel_size)
-        logger.debug(f"Rounded offset: {offset}")
-
-    return Coordinate(voxel_size), Coordinate(offset)
-
-
-def _read_voxel_size_offset(ds, order="C"):
-
-    voxel_size, offset, units, from_ome = _read_attrs(ds, order)
-    if isinstance(units, str) or units is None:
-        units = [units] * len(voxel_size)
-    # Everything downstream is in nanometers. Only the literal "um" was
-    # converted, so OME-NGFF's "micrometer" came through as 0.004 "nm",
-    # truncated to 0, and a divide by zero fell back to voxel size 1.
-    voxel_size = zarr_v3.to_nm(voxel_size, units)
-    offset = zarr_v3.to_nm(offset, units)
-
-    if from_ome:
-        # An OME corner is exact, and usually not a multiple of the voxel size
-        # (-4 nm at 8 nm for Janelia data); rounding it onto the voxel grid
-        # would undo the centre-to-corner conversion.
-        return (
-            tuple(float(v) for v in zarr_v3.snap_integral(voxel_size)),
-            tuple(float(v) for v in zarr_v3.snap_integral(offset)),
-        )
-    return regularize_offset(voxel_size, offset)
-
-
-def _ome_level_info(group, leaf, ds):
-    """Metadata of array ``ds``, the ``leaf`` dataset of OME group ``group``.
-
-    ``(voxel_size, offset, chunk_shape, shape, axes_names, "zarr")`` with
-    nanometer floats, spatial axes only; None when ``group`` has no
-    multiscales.
-    """
-    multiscales = group.attrs.get("multiscales", None)
-    if not multiscales:
-        return None
-    ms = multiscales[0]
-    spatial_indices, spatial_names, units = zarr_v3.spatial_axes(ms.get("axes", []))
-    if spatial_indices is None:
-        spatial_indices = list(range(len(ds.shape)))
-        spatial_names = ["z", "y", "x"][-len(spatial_indices):]
-        units = None
-
-    dataset_entry = next(
-        (d for d in ms["datasets"] if d["path"].strip("/") == leaf),
-        ms["datasets"][0],
-    )
-    transforms = dataset_entry["coordinateTransformations"]
-    scale_transform = next(t["scale"] for t in transforms if t["type"] == "scale")
-    translation = next(
-        (t["translation"] for t in transforms if t["type"] == "translation"),
-        [0.0] * len(scale_transform),
-    )
-    voxel_size = zarr_v3.to_nm([scale_transform[i] for i in spatial_indices], units)
-    offset = zarr_v3.ome_corner(
-        zarr_v3.to_nm([translation[i] for i in spatial_indices], units), voxel_size
-    )
-    shape = tuple(ds.shape[i] for i in spatial_indices)
-    chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
-    return voxel_size, offset, chunk_shape, shape, list(spatial_names), "zarr"
-
-
-def _attrs_info(ds, filetype="zarr", order=None):
-    """Metadata of an array described by its own (or its parent's) attrs.
-
-    ``order`` is the *axis* order of those attrs: "F" for N5. A zarr array's
-    own ``order`` is its chunk memory layout, not an axis order, so it is not
-    consulted (a Fortran-ordered array had its voxel size reversed); only an
-    explicit ``order`` attribute is.
-    """
-    if order is None:
-        order = ds.attrs.get("order", "C")
-    try:
-        voxel_size, offset = _read_voxel_size_offset(ds, order)
-    except Exception as e:
-        logger.error(
-            "failed to read voxel size and offset for %s (%s), will use default values"
-            % (getattr(ds, "path", ds), e)
-        )
-        voxel_size, offset = (1,) * 3, (0,) * 3
-    n = len(voxel_size)
-    return (
-        [float(v) for v in voxel_size],
-        [float(v) for v in offset],
-        tuple(ds.chunks[-n:]),
-        tuple(ds.shape[-n:]),
-        ["z", "y", "x"][-n:],
-        filetype,
-    )
+    """The units in ``array``'s own or its parent's attributes, "pixels"
+    without any (see io.metadata.n5_units)."""
+    return metadata.n5_units(_items(array), order, len(array.shape))
 
 
 def get_ds_info(path: str, mode: str = "r"):
@@ -1084,95 +647,8 @@ def get_ds_info(path: str, mode: str = "r"):
 
 def read_ds_meta(path: str, mode: str = "r"):
     """``(voxel_size, offset, chunk_shape, shape, axes_names, filetype)`` for
-    one array, voxel size and offset as nanometer floats (see get_ds_info)."""
+    one array, voxel size and offset as nanometer floats (see get_ds_info).
 
-    path = _normalize_path(path)
-
-    if path.startswith(("gs://", "precomputed://")):
-        # open_ds_tensorstore puts these in C order and selects one channel.
-        ts_info = open_ds_tensorstore(path)
-        shape = tuple(ts_info.shape)
-        voxel_size = [
-            d.to_json()[0] * zarr_v3.nm_per_unit(d.to_json()[1]) if d is not None else 1.0
-            for d in ts_info.dimension_units
-        ]
-        axes_names = list(ts_info.spec().transform.input_labels)
-        chunk_shape = tuple(ts_info.chunk_layout.read_chunk.shape)
-        file_type = "gs" if path.startswith("gs://") else "precomputed"
-        return voxel_size, [0.0] * len(shape), chunk_shape, shape, axes_names, file_type
-
-    if _is_remote_path(path):
-        # http(s) and s3 alike: zarr v2 over fsspec.
-        ds = _open_zarr(path, mode="r")
-
-        # If the URL points to a zarr Group (e.g. multiscale container),
-        # read OME-Zarr multiscales metadata and navigate into the first array.
-        if isinstance(ds, zarr.hierarchy.Group):
-            multiscales = ds.attrs.get("multiscales", None)
-            if multiscales:
-                leaf = multiscales[0]["datasets"][0]["path"]
-                return _ome_level_info(ds, leaf.strip("/"), ds[leaf])
-            for key in sorted(ds.keys()):
-                if isinstance(ds[key], zarr.core.Array):
-                    ds = ds[key]
-                    break
-
-        # The path points to a sub-array (e.g. .zarr/raw/s0). Its multiscales
-        # live on the group right above it (raw), not necessarily the root.
-        if ".zarr" in path or ".n5" in path:
-            container, sub_path = split_dataset_path(path)
-            if sub_path:
-                sub_path = sub_path.strip("/")
-                parent_path, _, leaf = sub_path.rpartition("/")
-                candidates = [(parent_path, leaf)]
-                if parent_path:
-                    # Also a root-level multiscales naming "raw/s0" directly.
-                    candidates.append(("", sub_path))
-                for group_path, entry_path in candidates:
-                    try:
-                        group = _open_zarr(
-                            _join_path(container, group_path) if group_path else container,
-                            mode="r",
-                        )
-                        info = _ome_level_info(group, entry_path, ds)
-                    except Exception as e:
-                        logger.warning(
-                            "failed to read parent multiscale metadata for %s: %s"
-                            % (path, e)
-                        )
-                        continue
-                    if info is not None:
-                        return info
-
-        # Fallback for remote arrays without multiscales metadata
-        return _attrs_info(ds)
-
-    v3_container = zarr_v3.find_v3_container(path)
-    if v3_container is not None:
-        return zarr_v3.read_ds_meta_v3(path)
-
-    filename, ds_name = split_dataset_path(path)
-    if filename.endswith(".zarr") or _is_zarr_container(filename):
-        logger.debug("opening zarr dataset %s in %s", ds_name, filename)
-        try:
-            ds = zarr.open(filename, mode=mode)
-            if ds_name:
-                ds = ds[ds_name]
-        except Exception as e:
-            logger.error("failed to open %s/%s" % (filename, ds_name))
-            raise e
-        info = _attrs_info(ds)
-        logger.debug("opened zarr dataset %s in %s", ds_name, filename)
-        return info
-
-    if filename.endswith(".n5"):
-        logger.debug("opening N5 dataset %s in %s", ds_name, filename)
-        ds = zarr.open(N5FSStore(filename), mode=mode)[ds_name]
-        # N5 attributes are x, y, z; the zarr view and everything returned
-        # here are z, y, x.
-        info = _attrs_info(ds, filetype="n5", order="F")
-        logger.debug("opened N5 dataset %s in %s", ds_name, filename)
-        return info
-
-    logger.error("don't know data format of %s in %s", ds_name, filename)
-    raise RuntimeError("Unknown file format for %s" % filename)
+    ``mode`` is ignored: metadata is only ever read.
+    """
+    return zarr_v3.legacy_meta(metadata.read_array_meta(path))

@@ -9,6 +9,7 @@ import zarr
 from funlib.geometry import Roi
 
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io import metadata
 from cellmap_flow.utils import ds
 from cellmap_flow.utils.ds import get_ds_info
 
@@ -120,13 +121,16 @@ def test_s3_goes_through_the_generic_remote_reader(tmp_path, monkeypatch):
         _space(),
         [_level("s0", [4, 4, 4], [8, 8, 8]), _level("s1", [8, 8, 8], [10, 10, 10])],
     )
-    monkeypatch.setattr(
-        ds,
-        "_open_zarr",
-        lambda p, mode="r": zarr.open(p.replace("s3://bucket", str(tmp_path)), mode=mode),
-    )
+    opened = []
+
+    def open_locally(p, mode="r"):
+        opened.append(p)
+        return zarr.open(p.replace("s3://bucket", str(tmp_path)), mode=mode)
+
+    monkeypatch.setattr(metadata, "open_zarr", open_locally)
 
     info = get_ds_info("s3://bucket/data.zarr/raw/s1")
+    assert "s3://bucket/data.zarr/raw/s1" in opened
     assert len(info) == 6
     voxel_size, chunk_shape, shape, roi, axes, filetype = info
     assert tuple(voxel_size) == (8, 8, 8)
