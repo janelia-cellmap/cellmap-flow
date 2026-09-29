@@ -338,3 +338,32 @@ def test_a_local_finetune_run(monkeypatch, tmp_path, log_dir):
     assert not log_dir.exists() or not list(log_dir.iterdir())
     metadata = json.loads((job.output_dir / "metadata.json").read_text())
     assert metadata["lsf_job_id"] == "PID:31337"
+
+
+# --- the jobs package itself --------------------------------------------------
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+JOBS_MODULES = [
+    "cellmap_flow.jobs.spec",
+    "cellmap_flow.jobs.site",
+    "cellmap_flow.jobs.lsf",
+    "cellmap_flow.jobs.local",
+]
+
+
+def test_the_jobs_package_imports_nothing_heavy(tmp_path):
+    """Launching a job must not pull in the dashboard, a viewer or a model."""
+    code = (
+        "import sys\n"
+        + "".join(f"import {m}\n" for m in JOBS_MODULES)
+        + "heavy = ('cellmap_flow.globals', 'flask', 'neuroglancer', 'huggingface_hub', 'peft', 'torch')\n"
+        "loaded = [m for m in heavy if m in sys.modules]\n"
+        "assert not loaded, loaded\n"
+        "print('ok')\n"
+    )
+    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.strip() == "ok"
