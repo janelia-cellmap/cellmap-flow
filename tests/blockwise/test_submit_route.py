@@ -75,6 +75,8 @@ def test_the_master_runs_this_interpreter_with_a_walltime_and_a_log(client, bsub
     assert log == os.path.join(str(tmp_path / "tasks"), "my_run_%J.log")
     assert body["log_path"] == log.replace("%J", "5150")
     assert "-q" not in argv, "the master is a CPU job; the queue is the workers'"
+    assert "-gpu" not in argv
+    assert "bash" not in argv, "run directly: nothing in the command needs a shell"
 
 
 def _task_files(tmp_path):
@@ -120,3 +122,38 @@ def test_the_workers_get_the_same_walltime_through_the_task_yaml(client, bsub):
     body = client.post("/api/blockwise/submit", json={"pipeline": PIPELINE}).get_json()
     (task,) = body["task_paths"]
     assert yaml.safe_load(open(task))["walltime"] == "12:00"
+
+
+def _answer(monkeypatch, returncode, stdout, stderr=""):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(list(argv))
+        if kwargs.get("check") and returncode:
+            raise subprocess.CalledProcessError(returncode, argv, stdout, stderr)
+        return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+    monkeypatch.setattr(route.subprocess, "run", run)
+    return calls
+
+
+def test_a_refused_submission_reports_lsf_s_reason(client, monkeypatch):
+    calls = _answer(monkeypatch, 255, "", "Project grp is not valid\n")
+
+    body = client.post("/api/blockwise/submit", json={"pipeline": PIPELINE}).get_json()
+
+    assert len(calls) == 1
+    assert body == {"success": False, "error": "LSF error: Project grp is not valid\n"}
+
+
+def test_a_submission_without_a_job_id_still_reports_success(client, monkeypatch):
+    # As before the move: bsub said yes, so the task is taken to be queued.
+    calls = _answer(monkeypatch, 0, "Your request was accepted.\n")
+
+    body = client.post(
+        "/api/blockwise/submit", json={"pipeline": PIPELINE, "job_name": "run"}
+    ).get_json()
+
+    assert len(calls) == 1
+    assert body["success"] and body["job_id"] == "unknown"
+    assert body["log_path"].endswith("run_unknown.log")

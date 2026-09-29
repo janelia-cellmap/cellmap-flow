@@ -38,6 +38,14 @@ class BsubTimeoutError(JobStartError):
     """
 
 
+class JobIdMissingError(RuntimeError):
+    """bsub exited 0, but its output has no job id in it."""
+
+    def __init__(self, output: str):
+        super().__init__(f"bsub exited 0 but printed no job id: {output!r}")
+        self.output = output
+
+
 class LSFJob(Job):
     """Job submitted to LSF cluster via bsub."""
 
@@ -415,6 +423,7 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
         subprocess.CalledProcessError: If job submission fails
         BsubTimeoutError: bsub did not answer and no new job with this name
             can be found. The caller must not simply submit again.
+        JobIdMissingError: bsub said it succeeded but gave no job id.
     """
     log_dir = _log_dir(spec)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -465,9 +474,7 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
     else:
         job_id = parse_job_id(result.stdout) or parse_job_id(result.stderr)
         if job_id is None:
-            raise RuntimeError(
-                f"bsub exited 0 but printed no job id: {result.stdout.strip()!r}"
-            )
+            raise JobIdMissingError(result.stdout.strip())
         logger.info(f"Job {job_id} submitted successfully")
 
     log_file = log_dir / f"{log_stem(job_name)}_{job_id}.log"
