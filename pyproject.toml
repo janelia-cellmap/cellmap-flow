@@ -27,7 +27,6 @@ dependencies = [
     "torch",    
     "universal_pathlib",
     "mwatershed",
-    "funlib.math",
     "neuroglancer",
     "pydantic",
     "funlib.persistence==0.6.1",
@@ -63,7 +62,7 @@ docs = [
     "myst-parser",
 ]
 
-# mwatershed and funlib.math are core dependencies; edt is only needed by the
+# mwatershed is a core dependency; edt is only needed by the
 # distance-transform normalizers.
 postprocess = ["edt"]
 
