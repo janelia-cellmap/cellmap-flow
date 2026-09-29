@@ -6,7 +6,7 @@ dashboard), the JSON the YAML and blockwise paths read, and what
 ``current_input_norm_config()`` / ``current_postprocess_config()`` hand the
 finetune manifest and the exported YAML. The chain code is being folded into
 one PipelineSpec; these must keep passing across that, except the one
-assertion marked as a deliberate change.
+assertion marked as a deliberate change (the blob's "time" became a digest).
 """
 
 import base64
@@ -303,8 +303,8 @@ def test_process_layer_blob_keys(dashboard):
         {"input_norm": POSTED_NORMS, "postprocess": POSTED_POSTS},
     )
     blob = _layer_blob(g.viewer.state.layers["mito"])
-    # Deliberately changes when the blob swaps its "time" for a digest.
-    assert set(blob) == {"input_norm", "postprocess", "dashboard_url", "time"}
+    # A digest of the chains, where there used to be the time of the request.
+    assert set(blob) == {"input_norm", "postprocess", "dashboard_url", "digest"}
 
 
 def test_after_apply_the_config_puts_the_name_last(dashboard):

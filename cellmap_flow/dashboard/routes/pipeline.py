@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-import time
 
 import neuroglancer
 import numpy as np
@@ -18,7 +17,6 @@ from cellmap_flow.utils.scale_pyramid import (
     prediction_shader,
 )
 from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.utils.web_utils import encode_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +178,6 @@ def process():
     # add dashboard url to data so we can update the state from the server
     data["dashboard_url"] = request.host_url
 
-    # we want to set the time such that each request is unique
-    data["time"] = time.time()
-
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
     previous_norm_signature = _chain_signature(getattr(g, "input_norms", None))
@@ -195,6 +190,14 @@ def process():
     # inference normalizes to the model's expected range.
     spec = PipelineSpec.from_json_data(data, strict=True)
     g.set_pipeline(spec)
+    # Named by content rather than stamped with the time: resubmitting the
+    # same settings gives the same layer source, so neuroglancer keeps the
+    # chunks it has and each server reuses the chain it already built (with
+    # any merger state in it). Changed settings still give a new source.
+    data["digest"] = spec.digest()
+    st_data = spec.to_url_blob(
+        dashboard_url=data["dashboard_url"], digest=data["digest"]
+    )
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
@@ -251,7 +254,6 @@ def process():
                 # and not up yet: there is no URL to point a layer at.
                 logger.info(f"Skipping layer for {model}: its job has no host yet")
                 continue
-            st_data = encode_to_str(data)
             previous_shader = dropped_shaders.get(model)
             shader = g.shaders.get(model)
 

@@ -412,3 +412,31 @@ def test_process_still_refuses_a_request_without_both_chains(dashboard, chains):
     assert response.status_code == 500
     assert written == [PipelineSpec([MINMAX], [])], "nothing new was written"
     assert g.input_norm_config == [MINMAX]
+
+
+def test_resubmitting_the_same_chain_gives_the_same_layer_source(dashboard):
+    from cellmap_flow.globals import g
+
+    client, _ = dashboard
+    g.jobs = [type("Job", (), {"model_name": "mito", "host": "http://gpu:8000"})()]
+
+    def submit(threshold):
+        chain = {"input_norm": [MINMAX], "postprocess": [dict(THRESHOLD, threshold=threshold)]}
+        response = client.post("/api/process", json=chain)
+        assert response.status_code == 200
+        source = g.viewer.state.layers["mito"].to_json()["source"]
+        return source, response.get_json()["received_data"]
+
+    first, received = submit("0.5")
+    again, _ = submit("0.5")
+    changed, _ = submit("0.6")
+    assert again == first
+    assert changed != first
+    assert "time" not in received
+    assert received["digest"] == PipelineSpec(
+        [MINMAX], [dict(THRESHOLD, threshold="0.5")]
+    ).digest()
+    url = first[0] if isinstance(first, list) else first
+    url = url["url"] if isinstance(url, dict) else url
+    blob = url.split(ARGS_KEY)[1]
+    assert PipelineSpec.from_url_blob(blob)[1]["digest"] == received["digest"]
