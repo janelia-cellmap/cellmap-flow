@@ -35,6 +35,34 @@ def get_raw_closest_scale(dataset_path, target_resolution):
     return closest_raw_scale(dataset_path, target_resolution)
 
 
+def raw_dimensions(dataset_path):
+    """The viewer's dimensions for ``dataset_path``: the axes and voxel size
+    of the finest level of its pyramid (of the array itself, if it is none).
+
+    Set before any layer is added, so that the raw data decides the viewer's
+    coordinate space rather than whichever layer neuroglancer takes it from,
+    such as an extra layer at another voxel size. None if it cannot be read.
+    """
+    from cellmap_flow.io import metadata
+
+    try:
+        group = dataset_path
+        last = dataset_path.rstrip("/").rsplit("/", 1)[-1]
+        if last.startswith("s") and last[1:].isdigit():  # one level, as get_raw_layer reads it
+            group = dataset_path.rstrip("/").rsplit("/", 1)[0]
+        try:
+            levels = [meta for _, meta in metadata.list_levels(group)]
+        except Exception:
+            levels = [metadata.read_array_meta(dataset_path)]
+        finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
+        # The names and sizes ImageDataInterface gives the raw layer's volume.
+        voxel_size, _, _, _, names, _ = zarr_v3.legacy_meta(finest)
+        return neuroglancer.CoordinateSpace(names=names, units="nm", scales=voxel_size)
+    except Exception as e:
+        logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")
+        return None
+
+
 def build_prediction_source(host, model, st_data, override_scales):
     """Build a source spec for the prediction zarr that overrides the
     source dimensions' scales so the layer overlays the raw at its native
@@ -82,7 +110,10 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
         model_configs_by_name[mc.name] = mc
 
     # Add a layer to the viewer
+    dimensions = raw_dimensions(dataset_path)
     with g.viewer.txn() as s:
+        if dimensions is not None:
+            s.dimensions = dimensions
         g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
         s.layers["data"] = g.raw
         color_cycle = itertools.cycle(PREDICTION_COLORS)

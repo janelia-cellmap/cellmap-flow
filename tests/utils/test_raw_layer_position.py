@@ -6,7 +6,11 @@ and an OME corner such as -4 nm could not be expressed at all. The position
 now goes in the source transform, in voxels of the layer's own dimensions.
 """
 
+import contextlib
+import types
+
 import numpy as np
+import pytest
 import zarr
 
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
@@ -23,7 +27,8 @@ def _translation(layer):
     return matrix[:, -1].tolist()
 
 
-def test_a_janelia_pyramid_is_drawn_from_its_corner(tmp_path):
+def _janelia_pyramid(tmp_path):
+    """raw.zarr/em: s0 at 8 nm and s1 at 16 nm, both with their corner at -4 nm."""
     group = zarr.open_group(str(tmp_path / "raw.zarr"), mode="w").create_group("em")
     levels = [("s0", 8.0, 0.0), ("s1", 16.0, 4.0)]
     for i, (name, _, _) in enumerate(levels):
@@ -44,8 +49,11 @@ def test_a_janelia_pyramid_is_drawn_from_its_corner(tmp_path):
             ],
         }
     ]
+    return str(tmp_path / "raw.zarr" / "em")
 
-    layer = get_raw_layer(str(tmp_path / "raw.zarr" / "em"), normalize=False)
+
+def test_a_janelia_pyramid_is_drawn_from_its_corner(tmp_path):
+    layer = get_raw_layer(_janelia_pyramid(tmp_path), normalize=False)
     # Every level's corner is -4 nm: half an 8 nm voxel below the origin.
     assert _source(layer)["transform"]["outputDimensions"]["z"] == [8e-9, "m"]
     assert _translation(layer) == [-0.5] * 3
@@ -79,3 +87,21 @@ def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(tmp_path):
     assert _source(layer)["subsources"] == {"meshes": False}
     np.testing.assert_array_equal(np.asarray(layer.source[0].url.data[...]), ids)
     assert "subsources" not in _source(get_raw_layer(path, segmentation=True))
+
+
+@pytest.mark.parametrize("level", ["", "/s1"])
+def test_the_viewer_takes_its_dimensions_from_the_finest_raw_level(tmp_path, monkeypatch, level):
+    from cellmap_flow.utils import neuroglancer_utils
+
+    state = types.SimpleNamespace(layers={}, dimensions=None)
+
+    class FakeViewer:
+        def txn(self):
+            return contextlib.nullcontext(state)
+
+    monkeypatch.setattr(neuroglancer_utils.neuroglancer, "Viewer", FakeViewer)
+    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: "url")
+
+    neuroglancer_utils.generate_neuroglancer_url(_janelia_pyramid(tmp_path) + level)
+
+    assert state.dimensions.to_json() == {axis: [8e-9, "m"] for axis in "zyx"}
