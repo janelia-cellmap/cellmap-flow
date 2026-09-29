@@ -268,3 +268,147 @@ def test_importing_the_module_stays_light():
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- Flow.pipeline_spec and Flow.set_pipeline ---------------------------------------
+
+
+def test_the_flow_spec_prefers_the_configured_steps():
+    from cellmap_flow.globals import g
+    from cellmap_flow.norm.input_normalize import ZScoreNormalizer
+
+    g.input_norms = [ZScoreNormalizer(mean=1)]
+    g.input_norm_config = [dict(SHIFT, expression="x*5")]
+    g.postprocess, g.postprocess_config = [], []
+    assert g.pipeline_spec == PipelineSpec([dict(SHIFT, expression="x*5")], [])
+
+
+def test_the_flow_spec_falls_back_to_the_live_chain_per_chain():
+    from cellmap_flow.globals import g
+    from cellmap_flow.post.postprocessors import SigmoidPostprocessor
+
+    g.input_norms, g.input_norm_config = [], [MINMAX]
+    g.postprocess, g.postprocess_config = [SigmoidPostprocessor()], {}
+    spec = g.pipeline_spec
+    assert spec.input_norm == (MINMAX,)
+    assert spec.postprocess == ({"name": "SigmoidPostprocessor"},)
+    # An old name-keyed config reads as steps.
+    g.input_norm_config = {"LambdaNormalizer": {"expression": "x*2-1"}}
+    assert g.pipeline_spec.input_norm == (SHIFT,)
+
+
+def test_the_flow_spec_is_derived_not_stored():
+    from cellmap_flow.globals import g
+
+    assert "pipeline_spec" not in vars(g)
+    with pytest.raises(AttributeError):
+        g.pipeline_spec = PipelineSpec()
+
+
+def test_set_pipeline_writes_all_four_attributes():
+    from cellmap_flow.globals import g
+
+    spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
+    g.set_pipeline(spec)
+    assert [type(n).__name__ for n in g.input_norms] == [
+        "MinMaxNormalizer", "LambdaNormalizer",
+    ]
+    assert [type(p).__name__ for p in g.postprocess] == ["ThresholdPostprocessor"]
+    assert g.input_norm_config == [MINMAX, SHIFT]
+    assert g.postprocess_config == [THRESHOLD]
+    assert g.pipeline_spec == spec
+
+
+def test_set_pipeline_keeps_the_instances_it_is_given():
+    from cellmap_flow.globals import g
+    from cellmap_flow.post.postprocessors import SimpleBlockwiseMerger
+
+    merger = SimpleBlockwiseMerger()
+    spec = PipelineSpec.from_steps([], [merger])
+    g.set_pipeline(spec, built=([], [merger]))
+    assert g.postprocess[0] is merger
+
+
+def test_a_chain_that_fails_to_build_changes_nothing():
+    from cellmap_flow.globals import g
+
+    g.set_pipeline(PipelineSpec([MINMAX], []))
+    before = (list(g.input_norms), g.input_norm_config, g.postprocess_config)
+    with pytest.raises(ValueError):
+        g.set_pipeline(
+            PipelineSpec([SHIFT], [{"name": "ThresholdPostprocessor", "threshold": "high"}])
+        )
+    assert (g.input_norms, g.input_norm_config, g.postprocess_config) == before
+
+
+@pytest.fixture
+def dashboard(monkeypatch):
+    from flask import Flask
+
+    import cellmap_flow.dashboard.routes.pipeline as pipeline
+    from cellmap_flow.globals import g
+
+    monkeypatch.setattr(
+        pipeline, "get_raw_layer", lambda path: type("Raw", (), {"shader": None})()
+    )
+    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {})
+
+    class Viewer:
+        state = type("State", (), {"layers": {}})()
+
+        def txn(self):
+            import contextlib
+
+            return contextlib.nullcontext(self.state)
+
+    g.viewer, g.jobs, g.dataset_path = Viewer(), [], "/data/raw.zarr"
+    g.shaders, g.shader_controls = {}, {}
+
+    written = []
+    real = type(g).set_pipeline
+
+    def spy(spec, built=None):
+        written.append(spec)
+        real(g, spec, built)
+
+    monkeypatch.setattr(g, "set_pipeline", spy)
+    app = Flask(__name__)
+    app.register_blueprint(pipeline.pipeline_bp)
+    return app.test_client(), written
+
+
+def test_process_writes_through_set_pipeline(dashboard):
+    client, written = dashboard
+    response = client.post(
+        "/api/process", json={"input_norm": [MINMAX], "postprocess": [THRESHOLD]}
+    )
+    assert response.status_code == 200
+    assert written == [PipelineSpec([MINMAX], [THRESHOLD])]
+
+
+def test_apply_writes_through_set_pipeline(dashboard):
+    client, written = dashboard
+    response = client.post(
+        "/api/pipeline/apply",
+        json={
+            "input_normalizers": [{"name": "LambdaNormalizer", "params": {"expression": "x+1"}}],
+            "postprocessors": [],
+        },
+    )
+    assert response.status_code == 200
+    assert written == [PipelineSpec([{"expression": "x+1", "name": "LambdaNormalizer"}])]
+
+
+@pytest.mark.parametrize(
+    "chains", [{"input_norm": []}, {"input_norm": None, "postprocess": []}]
+)
+def test_process_still_refuses_a_request_without_both_chains(dashboard, chains):
+    from cellmap_flow.globals import g
+
+    client, written = dashboard
+    g.set_pipeline(PipelineSpec([MINMAX], []))
+    client.application.config["PROPAGATE_EXCEPTIONS"] = False
+    response = client.post("/api/process", json=chains)
+    assert response.status_code == 500
+    assert written == [PipelineSpec([MINMAX], [])], "nothing new was written"
+    assert g.input_norm_config == [MINMAX]

@@ -8,11 +8,9 @@ import numpy as np
 from flask import Blueprint, request, jsonify
 
 from cellmap_flow.globals import g
-from cellmap_flow.norm.input_normalize import (
-    get_input_normalizers,
-    get_normalizations,
-)
-from cellmap_flow.post.postprocessors import get_postprocessors_list, get_postprocessors
+from cellmap_flow.norm.input_normalize import get_input_normalizers
+from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.utils.output_probe import output_display_range
 from cellmap_flow.utils.scale_pyramid import (
     PREDICTION_COLORS,
@@ -191,16 +189,12 @@ def process():
     previous_post_signature = _chain_signature(getattr(g, "postprocess", None))
 
     logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
-    g.input_norms = get_normalizations(data["input_norm"])
-    # Keep the raw, JSON-serializable input_norm dict around so downstream
-    # components (finetune submit/restart, manifest, generated yaml) can
-    # propagate the same normalization to the trainer process. Without this
-    # the trainer reads raw uint8 from /nrs while inference normalizes to
-    # the model's expected range -> trained model never sees inference-scale
-    # inputs.
-    g.input_norm_config = data.get("input_norm", {}) or {}
-    g.postprocess = get_postprocessors(data["postprocess"])
-    g.postprocess_config = data.get("postprocess", {}) or {}
+    # The posted steps are kept as the config, so finetune submit/restart,
+    # the manifest and the exported YAML hand the trainer the normalization
+    # inference uses. Without it the trainer reads raw uint8 from /nrs while
+    # inference normalizes to the model's expected range.
+    spec = PipelineSpec.from_json_data(data, strict=True)
+    g.set_pipeline(spec)
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
@@ -349,26 +343,12 @@ def apply_pipeline():
 
         # Ordered lists, not dicts keyed by name: two steps of the same class
         # (two LambdaNormalizers, say) collapsed into one under a dict.
-        # Apply normalizers
-        input_norms_config = [
-            {**(n.get("params") or {}), "name": n["name"]}
-            for n in data.get("input_normalizers", [])
-        ]
-        logger.debug(f"\nNormalizers config dict: {input_norms_config}")
-        g.input_norms = get_normalizations(input_norms_config)
-        # Mirror the JSON-serializable form so finetune submit/restart can
-        # propagate it to the trainer process (where g.input_norms can't be
-        # easily reconstructed across the LSF process boundary).
-        g.input_norm_config = input_norms_config or []
-
-        # Apply postprocessors
-        postprocs_config = [
-            {**(p.get("params") or {}), "name": p["name"]}
-            for p in data.get("postprocessors", [])
-        ]
-        logger.debug(f"Postprocessors config dict: {postprocs_config}")
-        g.postprocess = get_postprocessors(postprocs_config)
-        g.postprocess_config = postprocs_config or []
+        spec = PipelineSpec.from_builder(
+            data.get("input_normalizers", []), data.get("postprocessors", [])
+        )
+        logger.debug(f"\nNormalizers config dict: {list(spec.input_norm)}")
+        logger.debug(f"Postprocessors config dict: {list(spec.postprocess)}")
+        g.set_pipeline(spec)
 
         # Save complete pipeline visual state to globals
         g.pipeline_inputs = data.get("inputs", [])

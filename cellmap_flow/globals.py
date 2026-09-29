@@ -6,6 +6,8 @@ from collections import deque
 from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
+from cellmap_flow.pipeline_spec import PipelineSpec, normalize_steps
+
 logger = logging.getLogger(__name__)
 
 # This is the basicConfig that actually takes effect in most processes,
@@ -60,6 +62,8 @@ class Flow:
     raw: Optional[Any]
     input_norms: List[Any]
     postprocess: List[Any]
+    input_norm_config: Any
+    postprocess_config: Any
     viewer: Optional[Any]
     dataset_path: Optional[str]
     model_catalog: dict
@@ -97,16 +101,12 @@ class Flow:
             cls._instance.models_config = []
             cls._instance.raw = None
             cls._instance.input_norms = []
-            # Raw JSON-serializable form of the dashboard's input_norm config.
-            # Populated by /api/run from the request payload; used by the
-            # finetune submit/restart flow so the trainer process applies the
-            # same normalization the dashboard uses at inference.
-            #
-            # NOTE: prefer ``current_input_norm_config()`` over reading this
-            # directly. Some startup paths (e.g. yaml_cli.py at server boot)
-            # populate ``input_norms`` from a YAML's ``json_data.input_norm``
-            # but never touch ``input_norm_config``. The helper falls back to
-            # reconstructing the dict from the live normalizer instances.
+            # The chain's steps as the dashboard received them, which the
+            # finetune submit/restart flow hands the trainer so it normalizes
+            # as inference does. Written only by set_pipeline(); read them
+            # through pipeline_spec, which falls back to the live instances
+            # when these are empty (yaml_cli and blockwise set input_norms
+            # and postprocess from a YAML without touching them).
             cls._instance.input_norm_config = {}
             cls._instance.postprocess = []
             cls._instance.postprocess_config = {}
@@ -192,6 +192,39 @@ class Flow:
         save_server_config_cache(config)
         self._server_config_cached = True
 
+    @property
+    def pipeline_spec(self) -> PipelineSpec:
+        """The chain currently configured, as data. Derived on every read.
+
+        Per chain: the ``*_config`` steps when set, otherwise the live
+        instances' to_dict(). Never rebuilds the live instances, which can
+        hold state (SimpleBlockwiseMerger's equivalences).
+        """
+        return PipelineSpec(
+            _configured_steps(
+                getattr(self, "input_norm_config", None),
+                getattr(self, "input_norms", None),
+            ),
+            _configured_steps(
+                getattr(self, "postprocess_config", None),
+                getattr(self, "postprocess", None),
+            ),
+        )
+
+    def set_pipeline(self, spec: PipelineSpec, built=None) -> None:
+        """Replace the configured chain: both live chains and both configs.
+
+        ``built`` is the ``(input_norms, postprocess)`` instances for
+        ``spec`` when the caller already has them; otherwise they are built
+        here. Everything is built before anything is assigned, so a chain
+        that fails to build leaves the previous one in place.
+        """
+        input_norms, postprocess = spec.build() if built is None else built
+        self.input_norms = list(input_norms)
+        self.postprocess = list(postprocess)
+        self.input_norm_config = list(spec.input_norm)
+        self.postprocess_config = list(spec.postprocess)
+
     def get_output_dtype(self, model_output_dtype, postprocess=None):
         """The dtype a chain hands to the client.
 
@@ -252,37 +285,27 @@ def _chain_config(steps) -> list:
     return derived
 
 
-def current_input_norm_config():
-    """Return the dashboard's current input_norm in a JSON-serializable form.
+def _configured_steps(config, live):
+    """The configured steps, or the live chain's when none are configured.
 
-    Reads ``g.input_norm_config`` if populated (the ordered list the dashboard
-    posts, or an older name-keyed dict); otherwise rebuilds the ordered
-    ``[{name, **params}]`` list from the live ``g.input_norms`` instances.
-    The fallback matters because some startup paths (yaml_cli) populate
-    ``g.input_norms`` from the YAML at server boot but never touch
-    ``input_norm_config`` -- if the user submits training without first
-    hitting /api/run, the manifest would otherwise be written empty.
+    The fallback matters because some startup paths (yaml_cli) populate the
+    live chain from the YAML at server boot but never touch the config -- if
+    the user submits training without first pressing Submit, the manifest
+    would otherwise be written empty.
     """
-    cfg = getattr(g, "input_norm_config", None) or {}
-    if cfg:
-        return cfg
-    return _chain_config(getattr(g, "input_norms", None))
+    if config:
+        return normalize_steps(config)
+    return _chain_config(live)
+
+
+def current_input_norm_config():
+    """The dashboard's current input_norm as an ordered ``[{name, **params}]``."""
+    return list(g.pipeline_spec.input_norm)
 
 
 def current_postprocess_config():
-    """Return the dashboard's current postprocess chain in a JSON-serializable form.
-
-    Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
-    populated, otherwise rebuilds the ordered list from the live
-    ``g.postprocess`` instances. The fallback matters for the same reason it
-    does for input_norm -- e.g. a yaml booted with a ``json_data.postprocess``
-    (like ``SigmoidPostprocessor``) populates ``g.postprocess`` but never
-    touches ``postprocess_config``.
-    """
-    cfg = getattr(g, "postprocess_config", None) or {}
-    if cfg:
-        return cfg
-    return _chain_config(getattr(g, "postprocess", None))
+    """The dashboard's current postprocess chain as an ordered ``[{name, **params}]``."""
+    return list(g.pipeline_spec.postprocess)
 
 
 def get_blockwise_tasks_dir():
