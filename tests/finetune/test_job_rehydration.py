@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from cellmap_flow.finetune import finetune_job_manager as fjm
+from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJob, FinetuneJobManager, JobStatus
 from cellmap_flow.utils.bsub_utils import JobStatus as LSFJobStatus, LSFJob
 
@@ -89,28 +90,29 @@ def test_jobs_still_on_the_cluster_are_picked_up_again(tmp_path, monkeypatch):
     _run(session, "finished", lsf_job_id="103", status="COMPLETED")
     _run(session, "local", lsf_job_id="PID:4", status="RUNNING")
     _run(session, "before_this_change", status="RUNNING")  # no lsf_job_id recorded
-    observed = {"101": LSFJobStatus.RUNNING, "102": LSFJobStatus.FAILED}
     asked = []
 
-    def fake_observed(self):
-        asked.append(self.job_id)
-        return observed.get(self.job_id)
+    def fake_statuses(job_ids):
+        asked.append(sorted(job_ids))
+        return {"101": LSFJobStatus.RUNNING, "102": LSFJobStatus.FAILED}
 
-    monkeypatch.setattr(LSFJob, "observed_status", fake_observed)
+    monkeypatch.setattr(jobs_lsf, "statuses", fake_statuses)
     manager = FinetuneJobManager()
     monkeypatch.setattr(manager, "_start_monitor", lambda job: None)
 
     assert manager.rehydrate_session(session) == 1
 
     job = manager.jobs["alive"]
-    assert job.lsf_job.job_id == "101"
+    assert isinstance(job.lsf_job, LSFJob) and job.lsf_job.job_id == "101"
     assert job.status == JobStatus.RUNNING
     assert job.corrections_path == session / "corrections"
     assert job.total_epochs == 5
-    assert sorted(asked) == ["101", "102"], "finished and local runs are not asked about"
+    assert asked == [["101", "102"]], "one bjobs call; finished and local runs are not asked about"
     assert json.loads((done / "metadata.json").read_text())["status"] == "FAILED"
-    # Idempotent: a job already known is not attached twice.
+    # Idempotent: a job already known is not attached twice, and with the
+    # other one recorded as final there is nothing left to ask about.
     assert manager.rehydrate_session(session) == 0
+    assert len(asked) == 1
 
 
 def test_the_jobs_list_looks_in_the_saved_output_path(tmp_path, monkeypatch):

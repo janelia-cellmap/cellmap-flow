@@ -23,6 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Any
 
+from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.utils.bsub_utils import (
     submit_bsub_job,
     run_locally,
@@ -874,8 +875,13 @@ class FinetuneJobManager:
         or running is monitored again, which also brings back its viewer
         layer once the log shows its server. Local runs (a PID, not an LSF
         job) are not reattached. Returns how many jobs were picked up.
+
+        All the session's candidates are asked about in one bjobs call, and
+        whatever bjobs says has ended -- including a job it no longer knows
+        at all -- is recorded as final, so it is not asked about again. This
+        runs on every load of the finetune tab.
         """
-        count = 0
+        candidates = []
         for metadata_file in sorted(Path(session_path).glob("runs/*/metadata.json")):
             try:
                 metadata = json.loads(metadata_file.read_text())
@@ -891,22 +897,41 @@ class FinetuneJobManager:
                 or metadata.get("status") in {s.value for s in TERMINAL_STATUSES}
             ):
                 continue
-            lsf_job = LSFJob(job_id=str(lsf_job_id), model_name=metadata.get("model_name"))
-            observed = lsf_job.observed_status()
+            candidates.append((metadata_file, metadata, job_id, str(lsf_job_id)))
+        if not candidates:
+            return 0
+
+        reported = jobs_lsf.statuses([lsf_job_id for *_, lsf_job_id in candidates])
+        count = 0
+        for metadata_file, metadata, job_id, lsf_job_id in candidates:
+            if lsf_job_id not in reported:
+                continue  # bjobs cannot say; try again next time
+            observed = reported[lsf_job_id]
+            record = SimpleNamespace(output_dir=metadata_file.parent)
+            if observed is None:
+                # LSF has forgotten it: it ended long enough ago to be purged,
+                # while no dashboard was watching, and how it ended is not
+                # known. Asked about again, it never answers.
+                self._update_metadata(
+                    record,
+                    status=JobStatus.FAILED.value,
+                    status_detail=(
+                        f"LSF no longer knows job {lsf_job_id}; it ended while no "
+                        "dashboard was watching, and how is not known"
+                    ),
+                )
+                continue
             if observed == LSFJobStatus.COMPLETED:
                 # Finished while no dashboard was watching; say so, so it is
                 # not asked about again. complete_job does not run for it.
-                self._update_metadata(
-                    SimpleNamespace(output_dir=metadata_file.parent), status=JobStatus.COMPLETED.value
-                )
+                self._update_metadata(record, status=JobStatus.COMPLETED.value)
                 continue
             if observed == LSFJobStatus.FAILED:
-                self._update_metadata(
-                    SimpleNamespace(output_dir=metadata_file.parent), status=JobStatus.FAILED.value
-                )
+                self._update_metadata(record, status=JobStatus.FAILED.value)
                 continue
             if observed not in (LSFJobStatus.RUNNING, LSFJobStatus.PENDING):
-                continue  # bjobs cannot say; try again next time
+                continue
+            lsf_job = LSFJob(job_id=lsf_job_id, model_name=metadata.get("model_name"))
             params = metadata.get("params") or {}
             output_dir = metadata_file.parent
             try:

@@ -542,3 +542,43 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
     return LSFJob(
         job_id=job_id, model_name=job_name, log_file=log_file, ready_file=ready_file
     )
+
+
+_NOT_FOUND = re.compile(r"Job <(\d+)> is not found")
+
+
+def statuses(job_ids) -> dict:
+    """What LSF says about each of ``job_ids``, from a single bjobs call.
+
+    Maps each id bjobs reports to its JobStatus, and each id bjobs says it
+    does not know ("Job <id> is not found": it ended long enough ago that
+    LSF has forgotten it) to None. An id bjobs said nothing about is left
+    out, as is every id when bjobs could not be run at all: that is "could
+    not ask", which is not the same as "not found".
+
+    A state with no JobStatus of its own (suspended, say) reads as RUNNING,
+    the same as LSFJob.get_status reads it for a new job: alive.
+    """
+    wanted = list(dict.fromkeys(str(job_id) for job_id in job_ids))
+    if not wanted:
+        return {}
+    try:
+        result = subprocess.run(
+            ["bjobs", "-noheader", *wanted],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as e:
+        logger.debug(f"bjobs for {len(wanted)} job(s) failed: {e}")
+        return {}
+    reported = {}
+    for line in (result.stdout or "").splitlines():
+        fields = line.split()
+        # Continuation lines (a multi-host EXEC_HOST) start with a host.
+        if len(fields) >= 3 and fields[0] in wanted:
+            reported[fields[0]] = _STATUS_BY_STAT.get(fields[2], JobStatus.RUNNING)
+    for match in _NOT_FOUND.finditer(f"{result.stdout}\n{result.stderr}"):
+        if match.group(1) in wanted:
+            reported.setdefault(match.group(1), None)
+    return reported
