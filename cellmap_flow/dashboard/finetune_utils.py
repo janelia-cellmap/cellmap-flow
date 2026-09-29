@@ -19,10 +19,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import s3fs
 import zarr
 
+from cellmap_flow.finetune.session import sync as session_sync
+from cellmap_flow.finetune.session.instance import seed_instance_volume
+from cellmap_flow.finetune.session.volume import (
+    NotAnAnnotationVolume,
+    VolumeGeometry,
+    create_volume_zarr,
+    read_volume,
+)
 from cellmap_flow.globals import g
 
 minio_state = g.minio_state
@@ -141,131 +148,34 @@ def create_annotation_volume_zarr(
     annotation_dtype="uint8",
     annotation_type="annotation_volume",
 ):
-    """
-    Create a sparse annotation volume zarr covering the full dataset extent.
+    """``session.volume.create_volume_zarr``, with the geometry spelled out.
 
-    The volume has chunk_size = model output_size so each chunk maps to one
-    training sample. Only metadata files are created (no chunk data), so the
-    zarr is tiny regardless of dataset size.
-
-    Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.
-
-    Args:
-        dataset_offset_nm: the world position of voxel 0's *centre*, which is
-            also written as the OME translation (new_volume_geometry gives it).
-        output_voxel_size, input_voxel_size: the EFFECTIVE voxel sizes used
-            for the actual grid alignment (typically the dataset's closest
-            available scale to the model's claimed voxel size).
-        claimed_output_voxel_size, claimed_input_voxel_size: optional —
-            the model's originally-declared voxel sizes, recorded for
-            provenance.
-        annotation_dtype: the label dtype; uint8 unless the labels are
-            instance ids, which need uint16 or uint32.
-        annotation_type: the root ``type`` attribute.
+    ``dataset_offset_nm`` is voxel 0's centre (the OME translation).
 
     Returns:
-        (success: bool, info: str)
+        (success: bool, info: str): the zarr path, or the error.
     """
     try:
-        root = zarr.open(zarr_path, mode="w")
-
-        annotation_group = root.create_group("annotation")
-        annotation_group.create_dataset(
-            "s0",
-            shape=tuple(dataset_shape_voxels),
-            chunks=tuple(chunk_size),
-            dtype=annotation_dtype,
-            compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
-            fill_value=0,
+        geometry = VolumeGeometry(
+            output_voxel_size=output_voxel_size,
+            input_voxel_size=input_voxel_size,
+            claimed_output_voxel_size=claimed_output_voxel_size,
+            claimed_input_voxel_size=claimed_input_voxel_size,
+            chunk_size=chunk_size,
+            input_size=input_size,
+            dataset_offset_nm=dataset_offset_nm,
+            dataset_shape_voxels=dataset_shape_voxels,
         )
-
-        # dataset_offset_nm is voxel 0's centre, so it is the OME translation
-        # as it stands (see virtual_dataset.volume_corner_nm).
-        physical_translation = [float(o) for o in dataset_offset_nm]
-        transforms = [
-            {"type": "scale", "scale": [float(v) for v in output_voxel_size]},
-            {"type": "translation", "translation": physical_translation},
-        ]
-        annotation_group.attrs["multiscales"] = [
-            {
-                "version": "0.4",
-                "name": "annotation",
-                "axes": [
-                    {"name": "z", "type": "space", "unit": "nanometer"},
-                    {"name": "y", "type": "space", "unit": "nanometer"},
-                    {"name": "x", "type": "space", "unit": "nanometer"},
-                ],
-                "datasets": [
-                    {"path": "s0", "coordinateTransformations": transforms}
-                ],
-            }
-        ]
-
-        # Root metadata
-        root.attrs["type"] = annotation_type
-        root.attrs["model_name"] = model_name
-        root.attrs["dataset_path"] = dataset_path
-        root.attrs["chunk_size"] = (
-            chunk_size.tolist() if hasattr(chunk_size, "tolist") else list(chunk_size)
+        return True, create_volume_zarr(
+            zarr_path,
+            geometry,
+            dataset_path=dataset_path,
+            model_name=model_name,
+            input_norm=input_norm_config,
+            postprocess=postprocess_config,
+            annotation_dtype=annotation_dtype,
+            annotation_type=annotation_type,
         )
-        root.attrs["output_voxel_size"] = (
-            output_voxel_size.tolist()
-            if hasattr(output_voxel_size, "tolist")
-            else list(output_voxel_size)
-        )
-        root.attrs["input_size"] = (
-            input_size.tolist() if hasattr(input_size, "tolist") else list(input_size)
-        )
-        root.attrs["input_voxel_size"] = (
-            input_voxel_size.tolist()
-            if hasattr(input_voxel_size, "tolist")
-            else list(input_voxel_size)
-        )
-        root.attrs["dataset_offset_nm"] = (
-            dataset_offset_nm.tolist()
-            if hasattr(dataset_offset_nm, "tolist")
-            else list(dataset_offset_nm)
-        )
-        root.attrs["dataset_shape_voxels"] = (
-            dataset_shape_voxels.tolist()
-            if hasattr(dataset_shape_voxels, "tolist")
-            else list(dataset_shape_voxels)
-        )
-        # Record the model's originally-declared voxel sizes for provenance.
-        # These may differ from the active output_voxel_size/input_voxel_size
-        # above when we've snapped to the dataset's closest available scale.
-        if claimed_output_voxel_size is not None:
-            root.attrs["claimed_output_voxel_size"] = (
-                claimed_output_voxel_size.tolist()
-                if hasattr(claimed_output_voxel_size, "tolist")
-                else list(claimed_output_voxel_size)
-            )
-        if claimed_input_voxel_size is not None:
-            root.attrs["claimed_input_voxel_size"] = (
-                claimed_input_voxel_size.tolist()
-                if hasattr(claimed_input_voxel_size, "tolist")
-                else list(claimed_input_voxel_size)
-            )
-        # Snapshot of the dashboard's input_norm at volume-creation time.
-        # Used as the baseline for Resume Existing (the new session inherits
-        # this normalization). Stored as the raw YAML-style dict so it round-
-        # trips via json.load / yaml.safe_load without any extra parsing.
-        if input_norm_config is not None:
-            root.attrs["input_norm"] = input_norm_config
-        # Same rationale as input_norm above: without this, a served
-        # finetuned model generated from this correction data has no way to
-        # know it needs e.g. a SigmoidPostprocessor on its output.
-        if postprocess_config is not None:
-            root.attrs["postprocess"] = postprocess_config
-        root.attrs["created_at"] = datetime.now().isoformat()
-
-        logger.info(
-            f"Created annotation volume zarr at {zarr_path} "
-            f"(shape={dataset_shape_voxels}, chunks={chunk_size})"
-        )
-
-        return True, zarr_path
-
     except Exception as e:
         logger.error(f"Error creating annotation volume zarr: {e}")
         return False, str(e)
@@ -526,34 +436,8 @@ def _chunk_version(entry) -> str:
 
 
 def _get_sync_worker_count() -> int:
-    """
-    Determine thread count for chunk sync.
-
-    Prefer scheduler-provided CPU counts (e.g., LSF bsub -n), then fall back
-    to process CPU affinity / system CPU count.
-    """
-    env_candidates = [
-        "LSB_DJOB_NUMPROC",
-        "LSB_MAX_NUM_PROCESSORS",
-        "NSLOTS",
-        "SLURM_CPUS_PER_TASK",
-        "OMP_NUM_THREADS",
-    ]
-    for key in env_candidates:
-        raw = os.environ.get(key)
-        if not raw:
-            continue
-        try:
-            value = int(raw)
-            if value > 0:
-                return value
-        except ValueError:
-            continue
-
-    try:
-        return max(1, len(os.sched_getaffinity(0)))
-    except Exception:
-        return max(1, os.cpu_count() or 1)
+    """How many threads chunk copies may use; see ``session.sync.worker_count``."""
+    return session_sync.worker_count()
 
 
 def _copy_chunks_parallel(s3, copy_pairs):
@@ -849,28 +733,14 @@ def _get_volume_metadata(volume_id, zarr_path=None):
         return None
 
     try:
-        root = zarr.open(zarr_path, mode="r")
-        attrs = dict(root.attrs)
-        if attrs.get("type") != "annotation_volume":
-            return None
-
-        metadata = {
-            "zarr_path": zarr_path,
-            "model_name": attrs.get("model_name", ""),
-            "output_size": attrs.get("chunk_size", [56, 56, 56]),
-            "input_size": attrs.get("input_size", [178, 178, 178]),
-            "input_voxel_size": attrs.get("input_voxel_size", [16, 16, 16]),
-            "output_voxel_size": attrs.get("output_voxel_size", [16, 16, 16]),
-            "dataset_path": attrs.get("dataset_path", ""),
-            "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
-            "corrections_dir": str(Path(zarr_path).parent),
-            "chunk_sync_state": {},
-        }
-        annotation_volumes[volume_id] = metadata
-        return metadata
+        metadata = read_volume(zarr_path)
+    except NotAnAnnotationVolume:
+        return None
     except Exception as e:
         logger.error(f"Error reconstructing volume metadata for {volume_id}: {e}")
         return None
+    annotation_volumes[volume_id] = metadata
+    return metadata
 
 
 # ---------------------------------------------------------------------------
@@ -1022,163 +892,9 @@ def start_periodic_sync():
 # Instance-correction helpers
 # ---------------------------------------------------------------------------
 
-def create_instance_annotation_volume_from_seg(
-    output_zarr_path,
-    instance_zarr_path,
-    dataset_path,
-    model_name,
-    input_size,
-    input_voxel_size,
-    dilation_radius_voxels=5,
-    chunk_size=None,
-    annotation_dtype="uint16",
-    **volume_attrs,
-):
-    """Seed a paintable annotation volume from an existing instance zarr.
-
-    Produces a writable annotation zarr (uint16/uint32) in cellmap-flow's
-    `target_transforms.AffinityTargetTransform` label scheme:
-      0 = unannotated (ignored in loss)
-      1 = background (confident — the dilation shell around each instance)
-      2+ = instance IDs (one distinct label per mitochondrion)
-
-    The volume lies on the instance zarr's grid (shape, voxel size and
-    position), so neuroglancer draws it over the segmentation it came from.
-    It is an ordinary ``annotation_volume``, only with instance-id labels
-    and a wider dtype, so the periodic sync, the pull before a mirror,
-    session listing and the overlay all treat it like any other volume.
-
-    Args:
-        output_zarr_path: Where to write the new annotation zarr.
-        instance_zarr_path: A zarr group whose ``s0`` holds the instance ids,
-            with OME multiscales or ``resolution``/``offset`` attributes.
-        dataset_path: The raw dataset the volume annotates.
-        model_name: The model the volume is for.
-        input_size: The model's input shape, in voxels.
-        input_voxel_size: The model's input voxel size in nm.
-        dilation_radius_voxels: Number of voxels to dilate each instance by
-            to form the background shell. 5 @ 16nm output = 80 nm shell.
-        chunk_size: Annotation chunks z,y,x; defaults to the instance
-            array's own chunks. Each chunk is one training sample, so the
-            dashboard passes the model's output shape.
-        annotation_dtype: "uint16" (up to 65534 instances) or "uint32".
-        volume_attrs: passed on to create_annotation_volume_zarr
-            (claimed voxel sizes, input_norm_config, postprocess_config).
-
-    Returns:
-        (success: bool, zarr_path_or_error: str)
-    """
-    from scipy.ndimage import binary_dilation
-
-    from cellmap_flow.io.metadata import read_array_meta
-    from cellmap_flow.io.ome import ome_translation
-
-    s0_path = os.path.join(instance_zarr_path, "s0")
-    try:
-        # OME multiscales or resolution/offset attributes alike; the
-        # translation it gives is voxel 0's lower corner, in nm.
-        meta = read_array_meta(s0_path).spatial()
-        src_s0 = zarr.open(s0_path, mode="r")
-    except Exception as e:
-        return False, f"Failed to open instance zarr s0: {e}"
-    source_voxel_size = [float(v) for v in meta.voxel_size]
-    if all(v == 1.0 for v in source_voxel_size):
-        # read_array_meta's fallback when the array says nothing.
-        return False, f"{s0_path} has no voxel size in its metadata"
-    # dataset_offset_nm is voxel 0's centre, the OME translation (see
-    # virtual_dataset.volume_corner_nm). The corner put the seeded labels
-    # half a voxel off the segmentation they were seeded from.
-    source_offset_nm = ome_translation(meta.translation, source_voxel_size)
-    source_shape = tuple(src_s0.shape)
-    if chunk_size is None:
-        chunk_size = list(src_s0.chunks)
-    logger.info(
-        f"Seeding annotation volume from {instance_zarr_path}: "
-        f"shape={source_shape}, offset_nm={source_offset_nm}, "
-        f"voxel_nm={source_voxel_size}, dilation_r={dilation_radius_voxels} vox"
-    )
-
-    # Load the instance array fully (ROI-sized, fits in memory — ~300 MB uint32).
-    instances = src_s0[:].astype(np.uint32)
-    n_source_instances = int(instances.max())
-    if n_source_instances + 1 > np.iinfo(np.dtype(annotation_dtype)).max:
-        return False, (
-            f"instance count {n_source_instances} + shell label 1 exceeds "
-            f"{annotation_dtype} max {np.iinfo(np.dtype(annotation_dtype)).max}; "
-            "use annotation_dtype='uint32'"
-        )
-
-    fg_mask = instances > 0
-    # Dilation shell: grow each instance by R voxels and subtract the original.
-    # iterate a face-connected 3D structuring element R times for a ball-ish shell.
-    logger.info(
-        f"Computing dilation shell (radius={dilation_radius_voxels} voxels)..."
-    )
-    dilated = binary_dilation(
-        fg_mask, iterations=int(dilation_radius_voxels)
-    )
-    shell_mask = dilated & (~fg_mask)
-
-    # Build annotation: shell=1, instance voxels=(id+1) to reserve label 1 for
-    # background. Unannotated stays 0. Everything done in the target dtype.
-    annotation = np.zeros(source_shape, dtype=annotation_dtype)
-    annotation[shell_mask] = 1
-    annotation[fg_mask] = (instances[fg_mask] + 1).astype(annotation_dtype)
-
-    n_shell = int(shell_mask.sum())
-    n_fg = int(fg_mask.sum())
-    logger.info(
-        f"annotation labels: {n_fg} fg voxels ({n_source_instances} instances), "
-        f"{n_shell} shell (bg) voxels, "
-        f"{int((annotation == 0).sum())} unannotated"
-    )
-
-    # Create the zarr skeleton via the existing helper.
-    success, info = create_annotation_volume_zarr(
-        zarr_path=output_zarr_path,
-        dataset_shape_voxels=list(source_shape),
-        output_voxel_size=list(source_voxel_size),
-        dataset_offset_nm=list(source_offset_nm),
-        chunk_size=list(chunk_size),
-        dataset_path=dataset_path,
-        model_name=model_name,
-        input_size=list(input_size),
-        input_voxel_size=list(input_voxel_size),
-        annotation_dtype=annotation_dtype,
-        **volume_attrs,
-    )
-    if not success:
-        return False, info
-
-    # Write the seeded annotation into annotation/s0.
-    try:
-        root = zarr.open(output_zarr_path, mode="r+")
-        # Chunks with no labels stay unwritten, as in any volume: the
-        # trainer and the overlay count the chunks on disk as annotated.
-        s0 = zarr.open_array(
-            os.path.join(output_zarr_path, "annotation", "s0"),
-            mode="r+",
-            write_empty_chunks=False,
-        )
-        s0[:] = annotation
-        # Record the seed source + parameters so we can re-seed later
-        # without losing track of what this zarr was made from.
-        root.attrs["seed_source_instance_zarr"] = str(instance_zarr_path)
-        root.attrs["seed_dilation_radius_voxels"] = int(dilation_radius_voxels)
-        root.attrs["seed_n_instances"] = n_source_instances
-    except Exception as e:
-        return False, f"Failed to write seeded annotation: {e}"
-
-    # Explicitly drop the large intermediate arrays before returning to the
-    # Flask request handler — Python's refcount GC should free them at the
-    # function's frame pop anyway, but under a tight SLURM cgroup (e.g.
-    # --mem=128G shared with the dashboard + base inference + LoRA serves)
-    # we want to minimize overlap with any subsequent in-request allocations.
-    import gc
-    del instances, fg_mask, dilated, shell_mask, annotation
-    gc.collect()
-
-    return True, output_zarr_path
+def create_instance_annotation_volume_from_seg(*args, **kwargs):
+    """``session.instance.seed_instance_volume``: returns (success, path or error)."""
+    return seed_instance_volume(*args, **kwargs)
 
 
 

@@ -21,11 +21,8 @@ import os
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-import numpy as np
-import zarr
 from flask import jsonify
 from pydantic import ValidationError
 
@@ -57,7 +54,6 @@ def _set_progress(load_id, **fields):
 
 
 from cellmap_flow.dashboard.finetune_utils import (
-    create_annotation_volume_zarr,
     ensure_minio_serving,
     sync_annotation_volume_from_minio,
 )
@@ -70,13 +66,17 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     rewrite_minio_url_for_proxy,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.finetune.crop_loader import (
-    _open_array,
-    _read_voxel_size_and_offset,
-    parse_crops_yaml,
-    remap_labels,
+from cellmap_flow.finetune.crop_loader import parse_crops_yaml
+from cellmap_flow.finetune.session.volume import (
+    build_manifest,
+    create_volume_zarr,
+    plan_volume,
+    write_crop_into_volume,
 )
-from cellmap_flow.finetune.virtual_dataset import new_volume_geometry, volume_corner_nm, write_manifest
+from cellmap_flow.finetune.session.volume import (  # noqa: F401  (kept name)
+    majority_vote_downsample as _majority_vote_downsample,
+)
+from cellmap_flow.finetune.virtual_dataset import write_manifest
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)
@@ -107,57 +107,22 @@ def _create_session_annotation_volume(
     Mirrors the body of ``create_annotation_volume_response`` minus the
     HTTP-shaped response wrapping; returns the freshly-built ``(volume_id, meta)``.
     """
-    from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
-
-    read_shape = np.array(config.read_shape)
-    write_shape = np.array(config.write_shape)
-    claimed_input_voxel_size = np.array(config.input_voxel_size)
-    claimed_output_voxel_size = np.array(config.output_voxel_size)
-    output_size = (write_shape / claimed_output_voxel_size).astype(int)
-    input_size = (read_shape / claimed_input_voxel_size).astype(int)
-
-    try:
-        eff_output_vs = np.array(
-            get_raw_closest_scale(raw_dataset_path, tuple(claimed_output_voxel_size))
-            or claimed_output_voxel_size
-        )
-        eff_input_vs = np.array(
-            get_raw_closest_scale(raw_dataset_path, tuple(claimed_input_voxel_size))
-            or claimed_input_voxel_size
-        )
-    except Exception:
-        eff_output_vs = claimed_output_voxel_size
-        eff_input_vs = claimed_input_voxel_size
-
-    dataset_offset_nm, dataset_shape_voxels = new_volume_geometry(
-        raw_dataset_path, eff_output_vs, output_size
-    )
-
+    geometry = plan_volume(raw_dataset_path, config, rounding="legacy_floor")
     volume_id = (
         f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     )
     zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
-
-    success, info = create_annotation_volume_zarr(
-        zarr_path=zarr_path,
-        dataset_shape_voxels=dataset_shape_voxels,
-        output_voxel_size=eff_output_vs,
-        dataset_offset_nm=dataset_offset_nm,
-        chunk_size=output_size,
+    # Snapshot whatever input_norm/postprocess the dashboard is currently
+    # using so the trainer can reproduce inference-side normalization and
+    # the generated finetuned yaml can reproduce output postprocessing.
+    create_volume_zarr(
+        zarr_path,
+        geometry,
         dataset_path=raw_dataset_path,
         model_name=model_name,
-        input_size=input_size,
-        input_voxel_size=eff_input_vs,
-        claimed_output_voxel_size=claimed_output_voxel_size,
-        claimed_input_voxel_size=claimed_input_voxel_size,
-        # Snapshot whatever input_norm/postprocess the dashboard is currently
-        # using so the trainer can reproduce inference-side normalization and
-        # the generated finetuned yaml can reproduce output postprocessing.
-        input_norm_config=current_input_norm_config(),
-        postprocess_config=current_postprocess_config(),
+        input_norm=current_input_norm_config(),
+        postprocess=current_postprocess_config(),
     )
-    if not success:
-        raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
 
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     minio_url = rewrite_minio_url_for_proxy(minio_url)
@@ -165,14 +130,14 @@ def _create_session_annotation_volume(
         volume_id,
         zarr_path=zarr_path,
         model_name=model_name,
-        output_size=output_size.tolist(),
-        input_size=input_size.tolist(),
-        input_voxel_size=eff_input_vs.tolist(),
-        output_voxel_size=eff_output_vs.tolist(),
-        claimed_input_voxel_size=claimed_input_voxel_size.tolist(),
-        claimed_output_voxel_size=claimed_output_voxel_size.tolist(),
+        output_size=list(geometry.chunk_size),
+        input_size=list(geometry.input_size),
+        input_voxel_size=list(geometry.input_voxel_size),
+        output_voxel_size=list(geometry.output_voxel_size),
+        claimed_input_voxel_size=list(geometry.claimed_input_voxel_size),
+        claimed_output_voxel_size=list(geometry.claimed_output_voxel_size),
         dataset_path=raw_dataset_path,
-        dataset_offset_nm=dataset_offset_nm.tolist(),
+        dataset_offset_nm=list(geometry.dataset_offset_nm),
         corrections_dir=corrections_dir,
         minio_url=minio_url,
     )
@@ -204,195 +169,11 @@ def _ensure_editable_layer(volume_id, minio_url):
 # Crop -> volume write
 # ---------------------------------------------------------------------------
 
-def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
-    """Downsample integer label data by exact per-axis block factors using
-    majority vote (mode) over each block.
-
-    Unlike single-point nearest-neighbor sampling (which always picks one
-    fixed corner of each block, e.g. scipy.ndimage.zoom's grid_mode=True
-    deterministically picks the block's *last* voxel on every axis), this
-    represents each output voxel by the value most common across its whole
-    footprint -- no systematic corner-bias, and fewer boundary voxels
-    flipped by picking an unrepresentative single sample.
-    """
-    factors = tuple(int(round(f)) for f in factors)
-    shape = labels.shape
-    trimmed_shape = tuple((s // f) * f for s, f in zip(shape, factors))
-    trimmed = labels[tuple(slice(0, s) for s in trimmed_shape)]
-    block_dims = tuple(s // f for s, f in zip(trimmed_shape, factors))
-    reshaped = trimmed.reshape(
-        block_dims[0], factors[0], block_dims[1], factors[1], block_dims[2], factors[2]
-    )
-    reshaped = reshaped.transpose(0, 2, 4, 1, 3, 5)
-    flat_blocks = reshaped.reshape(block_dims[0], block_dims[1], block_dims[2], -1)
-
-    best_count = np.zeros(block_dims, dtype=np.int32)
-    result = np.zeros(block_dims, dtype=labels.dtype)
-    for val in np.unique(labels):
-        count = (flat_blocks == val).sum(axis=-1)
-        better = count > best_count
-        result[better] = val
-        best_count[better] = count[better]
-    return result
-
-
 def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
-    """Read a YAML crop's annotation, remap, and write it into volume[s0] at the
-    crop's physical offset. Returns the number of FG voxels written."""
-    t0 = time.time()
-    sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
-    t_meta = time.time() - t0
-    t1 = time.time()
-    src_arr = _open_array(entry.path, sub)
-    src_data = src_arr[:]
-    t_read = time.time() - t1
-    if src_data.ndim != 3:
-        raise ValueError(
-            f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}"
-        )
-
-    eff_output_vs = np.array(volume_meta["output_voxel_size"], dtype=float)
-
-    t2 = time.time()
-    remapped = remap_labels(
-        src_data,
-        fg_ids=entry.fg_ids,
-        bg_ids=list(entry.bg_ids),
-        mode=entry.mode,
-        connected_components=entry.connected_components,
-    )
-    t_remap = time.time() - t2
-
-    if not np.allclose(src_voxel_size_nm, eff_output_vs):
-        scale_ratio = src_voxel_size_nm / eff_output_vs
-        logger.info(
-            f"Crop {entry.path} voxel size {tuple(src_voxel_size_nm)} != "
-            f"volume voxel size {tuple(eff_output_vs)}. Resampling by "
-            f"{tuple(scale_ratio)} before writing so the written data "
-            "occupies its true physical extent."
-        )
-
-        integer_factors = eff_output_vs / src_voxel_size_nm
-        if np.all(scale_ratio <= 1.0) and np.allclose(
-            integer_factors, np.round(integer_factors), atol=1e-6
-        ):
-            # Exact integer downsample: majority-vote (mode) over each
-            # block, rather than picking one arbitrary corner sample.
-            remapped = _majority_vote_downsample(remapped, integer_factors)
-        else:
-            from scipy.ndimage import zoom
-
-            # grid_mode=True aligns to pixel *centers* rather than the
-            # default's array-endpoint alignment (wrong, and increasingly
-            # so toward the edges) -- but it still samples a single fixed
-            # corner of each block, used here only as a fallback for
-            # non-integer ratios / upsampling where block-voting doesn't
-            # apply.
-            remapped = zoom(remapped, scale_ratio, order=0, grid_mode=True, mode="nearest")
-
-    t3 = time.time()
-    n_fg = int(np.count_nonzero(remapped >= 2))
-    t_count = time.time() - t3
-    logger.info(
-        f"Crop {entry.path} prep: meta={t_meta:.2f}s read={t_read:.2f}s "
-        f"({src_data.nbytes/1e6:.1f} MB, dtype={src_data.dtype}, shape={src_data.shape}) "
-        f"remap={t_remap:.2f}s count_fg={t_count:.2f}s"
-    )
-
-    # Corner to corner: resampling keeps the crop's lower corner where it
-    # was (block voting and grid_mode zoom both align the grids' edges), so
-    # no per-factor shift is needed. Comparing centres needed one, and the
-    # fixed +fine/2 used for it was only right for a factor of 2.
-    volume_corner = volume_corner_nm(volume_meta["dataset_offset_nm"], eff_output_vs)
-    write_voxel_offset = np.round(
-        (src_offset_nm - volume_corner) / eff_output_vs
-    ).astype(int)
-    z0, y0, x0 = write_voxel_offset.tolist()
-    sz, sy, sx = remapped.shape
-
-    vol = zarr.open(volume_meta["zarr_path"], mode="r+")
-    arr = vol["annotation/s0"]
-    if (
-        z0 < 0 or y0 < 0 or x0 < 0
-        or z0 + sz > arr.shape[0]
-        or y0 + sy > arr.shape[1]
-        or x0 + sx > arr.shape[2]
-    ):
-        # The usual cause is not a bad translation but a crop belonging to a
-        # different dataset than the session: a crop annotated on a larger
-        # volume lands past the end of a smaller one, with everything about
-        # it internally consistent. Name the dataset this volume was built
-        # over so that is the first thing checked, since the path in the
-        # manifest often makes the mismatch obvious once it is put next to it.
-        raise ValueError(
-            f"Crop {entry.path} write region "
-            f"[{z0}:{z0+sz}, {y0}:{y0+sy}, {x0}:{x0+sx}] is outside the "
-            f"annotation volume, whose shape is {tuple(arr.shape)}. This "
-            f"volume was built over {volume_meta.get('dataset_path', 'an unknown dataset')}. "
-            "Check that the crop was annotated on that same dataset -- a crop "
-            "from a different one is the most common cause -- and otherwise "
-            "check its OME-NGFF translation against the dataset offset."
-        )
-
-    # Slice the crop into Z-aligned slabs and write them in parallel. Slabs
-    # are aligned to the underlying zarr chunk size so two slabs never
-    # touch the same chunk, making concurrent writes safe (zarr's chunk
-    # writes are per-chunk-file, no shared mutable state).
-    #
-    # Slab count tracks the LSF slot allocation so we always fully use what
-    # bsub gave us — capped by the number of chunk-aligned slabs we can
-    # actually produce.
-    from cellmap_flow.dashboard.finetune_utils import _get_sync_worker_count
-
-    chunk_z = max(int(arr.chunks[0]), 1)
-    max_chunk_slabs = int(np.ceil(sz / chunk_z))
-    n_slabs = max(1, min(_get_sync_worker_count(), max_chunk_slabs))
-    slab_size = int(np.ceil(sz / n_slabs / chunk_z) * chunk_z)
-    slabs = []
-    for s in range(n_slabs):
-        a = s * slab_size
-        b = min((s + 1) * slab_size, sz)
-        if a < b:
-            slabs.append((a, b))
-    n_slabs = len(slabs)
-
-    def _write_one(slab):
-        a, b = slab
-        arr[z0 + a : z0 + b, y0 : y0 + sy, x0 : x0 + sx] = remapped[a:b, :, :]
-
-    t4 = time.time()
-    written = 0
-    n_workers = max(1, n_slabs)
-    with ThreadPoolExecutor(max_workers=n_workers) as ex:
-        futures = [ex.submit(_write_one, s) for s in slabs]
-        for fut in as_completed(futures):
-            fut.result()  # surface any per-slab exception
-            written += 1
-            if progress_callback is not None:
-                progress_callback(written, n_slabs)
-    t_write = time.time() - t4
-    logger.info(
-        f"Crop {entry.path} write: {n_slabs} slabs, {n_workers} workers, "
-        f"{t_write:.2f}s total wall"
-    )
-
-    # Record this import in the volume's root attrs so the bounding-box
-    # overlay can surface it as a single yellow box per crop (vs. the
-    # per-chunk small boxes from painted scribbles).
-    vol_root = zarr.open(volume_meta["zarr_path"], mode="r+")
-    imported = list(vol_root.attrs.get("imported_crops", []))
-    imported.append(
-        {
-            "path": entry.path,
-            "name": entry.name,
-            "annotation_offset_voxels": [int(z0), int(y0), int(x0)],
-            "annotation_shape_voxels": [int(sz), int(sy), int(sx)],
-            "n_fg_voxels": int(n_fg),
-        }
-    )
-    vol_root.attrs["imported_crops"] = imported
-
-    return n_fg
+    """Write a YAML crop into the volume (``session.volume.write_crop_into_volume``);
+    returns the number of FG voxels written."""
+    record = write_crop_into_volume(volume_meta, entry, progress_callback=progress_callback)
+    return record["n_fg_voxels"]
 
 
 # ---------------------------------------------------------------------------
@@ -576,26 +357,21 @@ def load_crops_from_yaml_response(data):
         # dashboard does at inference time. Without this the trainer feeds
         # the model raw uint8 while inference feeds it [-1, 1] -- the
         # trained adapter is then nonsense at inference time.
-        manifest = {
-            "kind": "volume_zarr_v1",
-            "volume_zarr_path": volume_meta["zarr_path"],
-            "raw_dataset_path": raw_dataset_path,
-            "input_size_voxels": list(volume_meta["input_size"]),
-            "output_size_voxels": list(volume_meta["output_size"]),
-            "input_voxel_size_nm": list(volume_meta["input_voxel_size"]),
-            "output_voxel_size_nm": list(volume_meta["output_voxel_size"]),
-            # patches_per_epoch=None tells VirtualPatchDataset to default to
-            # "one patch per populated chunk" (full coverage). Explicit ints
-            # in the YAML pass through verbatim.
-            "patches_per_epoch": crops_config.patches_per_epoch,
-            "jitter_voxels": crops_config.jitter_voxels,
-            "seed": crops_config.seed,
-            "input_norm": current_input_norm_config(),
-            "postprocess": current_postprocess_config(),
-            # None → auto-balance dense vs sparse pools (50/50 when both
-            # exist, else use the surviving pool).
-            "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
-        }
+        manifest = build_manifest(
+            volume_meta,
+            input_norm=current_input_norm_config(),
+            postprocess=current_postprocess_config(),
+            overrides={
+                "raw_dataset_path": raw_dataset_path,
+                # None tells VirtualPatchDataset "one patch per populated
+                # chunk" (full coverage); explicit ints pass through.
+                "patches_per_epoch": crops_config.patches_per_epoch,
+                "jitter_voxels": crops_config.jitter_voxels,
+                "seed": crops_config.seed,
+                # None -> auto-balance dense vs sparse pools.
+                "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
+            },
+        )
         write_manifest(corrections_dir, manifest)
 
         try:

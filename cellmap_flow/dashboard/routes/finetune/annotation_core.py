@@ -4,13 +4,9 @@ import time
 import uuid
 from datetime import datetime
 
-import numpy as np
 from flask import jsonify
 
-from cellmap_flow.dashboard.finetune_utils import (
-    create_annotation_volume_zarr,
-    ensure_minio_serving,
-)
+from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     find_model_config,
@@ -20,6 +16,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 from cellmap_flow.utils.server_info import (
@@ -158,9 +155,6 @@ def get_finetune_models_response():
 
 def create_annotation_volume_response(data):
     try:
-        from cellmap_flow.finetune.virtual_dataset import new_volume_geometry
-        from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
-
         model_name = data.get("model_name")
         output_path = data.get("output_path")
 
@@ -175,55 +169,24 @@ def create_annotation_volume_response(data):
         # annotation volume" feel slow. model_config.config stays as the
         # fallback for when no server is up.
         config = resolve_model_geometry(model_name, model_config)
-        read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
-        claimed_input_voxel_size = np.array(config.input_voxel_size)
-        claimed_output_voxel_size = np.array(config.output_voxel_size)
-        output_size = (write_shape / claimed_output_voxel_size).astype(int)
-        input_size = (read_shape / claimed_input_voxel_size).astype(int)
 
         dataset_path = getattr(g, "dataset_path", None)
         if not dataset_path:
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
 
-        try:
-            effective_output_voxel_size = np.array(
-                get_raw_closest_scale(dataset_path, tuple(claimed_output_voxel_size))
-                or claimed_output_voxel_size
-            )
-            effective_input_voxel_size = np.array(
-                get_raw_closest_scale(dataset_path, tuple(claimed_input_voxel_size))
-                or claimed_input_voxel_size
-            )
-        except Exception:
-            effective_output_voxel_size = claimed_output_voxel_size
-            effective_input_voxel_size = claimed_input_voxel_size
-
-        dataset_offset_nm, dataset_shape_voxels = new_volume_geometry(
-            dataset_path, effective_output_voxel_size, output_size
-        )
+        geometry = plan_volume(dataset_path, config, rounding="legacy_floor")
 
         volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         _, corrections_dir = ensure_corrections_storage(output_path)
         zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
-
-        success, zarr_info = create_annotation_volume_zarr(
-            zarr_path=zarr_path,
-            dataset_shape_voxels=dataset_shape_voxels,
-            output_voxel_size=effective_output_voxel_size,
-            dataset_offset_nm=dataset_offset_nm,
-            chunk_size=output_size,
+        create_volume_zarr(
+            zarr_path,
+            geometry,
             dataset_path=dataset_path,
             model_name=model_name,
-            input_size=input_size,
-            input_voxel_size=effective_input_voxel_size,
-            claimed_output_voxel_size=claimed_output_voxel_size,
-            claimed_input_voxel_size=claimed_input_voxel_size,
-            input_norm_config=current_input_norm_config(),
-            postprocess_config=current_postprocess_config(),
+            input_norm=current_input_norm_config(),
+            postprocess=current_postprocess_config(),
         )
-        if not success:
-            return jsonify({"success": False, "error": zarr_info}), 500
 
         minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
         minio_url = rewrite_minio_url_for_proxy(minio_url)
@@ -231,14 +194,14 @@ def create_annotation_volume_response(data):
             volume_id,
             zarr_path=zarr_path,
             model_name=model_name,
-            output_size=output_size.tolist(),
-            input_size=input_size.tolist(),
-            input_voxel_size=effective_input_voxel_size.tolist(),
-            output_voxel_size=effective_output_voxel_size.tolist(),
-            claimed_input_voxel_size=claimed_input_voxel_size.tolist(),
-            claimed_output_voxel_size=claimed_output_voxel_size.tolist(),
+            output_size=list(geometry.chunk_size),
+            input_size=list(geometry.input_size),
+            input_voxel_size=list(geometry.input_voxel_size),
+            output_voxel_size=list(geometry.output_voxel_size),
+            claimed_input_voxel_size=list(geometry.claimed_input_voxel_size),
+            claimed_output_voxel_size=list(geometry.claimed_output_voxel_size),
             dataset_path=dataset_path,
-            dataset_offset_nm=dataset_offset_nm.tolist(),
+            dataset_offset_nm=list(geometry.dataset_offset_nm),
             corrections_dir=corrections_dir,
         )
         # The trainer finds the volume only through this manifest.
@@ -253,11 +216,11 @@ def create_annotation_volume_response(data):
                 "minio_url": minio_url,
                 "neuroglancer_url": f"{minio_url}/annotation",
                 "metadata": {
-                    "dataset_shape_voxels": dataset_shape_voxels.tolist(),
-                    "chunk_size": output_size.tolist(),
-                    "output_voxel_size": effective_output_voxel_size.tolist(),
-                    "claimed_output_voxel_size": claimed_output_voxel_size.tolist(),
-                    "dataset_offset_nm": dataset_offset_nm.tolist(),
+                    "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
+                    "chunk_size": list(geometry.chunk_size),
+                    "output_voxel_size": list(geometry.output_voxel_size),
+                    "claimed_output_voxel_size": list(geometry.claimed_output_voxel_size),
+                    "dataset_offset_nm": list(geometry.dataset_offset_nm),
                 },
             }
         )

@@ -33,6 +33,7 @@ from cellmap_flow.dashboard.finetune_utils import (
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
@@ -111,21 +112,16 @@ def _seed_geometry(model_name, dataset_path):
     cache) and the same snapping of the input voxel size to a raw scale.
     Returns ``(kwargs, None)`` or ``(None, error_response)``.
     """
-    from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
-
     model_config, error_response = _get_selected_model_config(model_name)
     if error_response is not None:
         return None, error_response
     config = resolve_model_geometry(model_name, model_config)
     claimed_input_voxel_size = np.array(config.input_voxel_size, dtype=float)
     claimed_output_voxel_size = np.array(config.output_voxel_size, dtype=float)
-    try:
-        input_voxel_size = np.array(
-            get_raw_closest_scale(dataset_path, tuple(claimed_input_voxel_size))
-            or claimed_input_voxel_size
-        )
-    except Exception:
-        input_voxel_size = claimed_input_voxel_size
+    input_voxel_size = np.array(
+        closest_raw_scale(dataset_path, tuple(claimed_input_voxel_size))
+        or claimed_input_voxel_size
+    )
     return {
         "input_size": (np.array(config.read_shape) / claimed_input_voxel_size).astype(int).tolist(),
         "input_voxel_size": input_voxel_size.tolist(),

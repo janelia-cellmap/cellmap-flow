@@ -372,6 +372,7 @@ def write_volume_manifest(volume):
     incomplete to describe (a resumed session whose .zattrs predates these
     fields, say). Such a session cannot be trained: submit refuses it.
     """
+    from cellmap_flow.finetune.session.volume import build_manifest
     from cellmap_flow.finetune.virtual_dataset import write_manifest
     from cellmap_flow.globals import (
         current_input_norm_config,
@@ -388,28 +389,13 @@ def write_volume_manifest(volume):
         )
         return None
 
-    manifest = {
-        "kind": "volume_zarr_v1",
-        "volume_zarr_path": volume["zarr_path"],
-        "raw_dataset_path": volume["dataset_path"],
-        "input_size_voxels": list(volume["input_size"]),
-        "output_size_voxels": list(volume["output_size"]),
-        "input_voxel_size_nm": list(volume["input_voxel_size"]),
-        "output_voxel_size_nm": list(volume["output_voxel_size"]),
-        # None means "one patch per populated chunk" -- full coverage of what
-        # the user actually painted, rather than a fixed count.
-        "patches_per_epoch": None,
-        "jitter_voxels": None,
-        "seed": 0,
-        # The trainer runs on LSF where g.input_norms is empty, so the
-        # normalization has to travel in the manifest. Without it the trainer
-        # feeds the model raw uint8 while inference feeds it [-1, 1], and the
-        # adapter is nonsense at inference time.
-        "input_norm": current_input_norm_config(),
-        "postprocess": current_postprocess_config(),
-        # None -> auto-balance the dense and sparse pools.
-        "dense_to_sparse_ratio": None,
-    }
+    # The trainer runs on LSF where g.input_norms is empty, so the chains
+    # travel in the manifest (see build_manifest).
+    manifest = build_manifest(
+        volume,
+        input_norm=current_input_norm_config(),
+        postprocess=current_postprocess_config(),
+    )
     path = write_manifest(str(corrections_dir), manifest)
     logger.info(
         f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}; "
