@@ -112,10 +112,6 @@ You can change the paint value in the Draw tab by editing the **Paint Value** fi
 
 Annotate as many chunks as you like across the dataset. Only chunks with non-zero annotations will be used for training.
 
-### Deprecated dense crop workflow
-
-The **Create Annotation Crop** button is still available under the advanced section, but it is deprecated. It creates a small dense crop at the current view center and is rarely needed compared with the sparse full-volume workflow above.
-
 ## 5. Training
 
 Switch to the **Training** tab in the Finetune section.
