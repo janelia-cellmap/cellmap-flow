@@ -472,6 +472,9 @@ def open_ds_tensorstore(
     if is_v3:
         filetype = "zarr3"
 
+    # tensorstore rejects compressor fields it doesn't know ("extra
+    # members", e.g. numcodecs' zstd checksum), so such arrays are opened
+    # with their metadata minus those fields.
     assume_metadata = False
     if (
         filetype == "zarr"
@@ -501,31 +504,7 @@ def open_ds_tensorstore(
         dataset_future = ts.open(spec, read=True, write=False, **open_kwargs)
     else:
         dataset_future = ts.open(spec, read=False, write=True, **open_kwargs)
-
-    try:
-        ts_dataset = dataset_future.result()
-    except ValueError as e:
-        if "extra members" in str(e) and filetype == "zarr":
-            # Some zarr files have extra fields (e.g. "checksum") in the
-            # compressor metadata that tensorstore doesn't recognize.
-            # Fix by providing the metadata explicitly without the extra fields.
-            cleaned_metadata = None
-            if isinstance(kvstore, dict) and kvstore.get("driver") == "file":
-                cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
-            if cleaned_metadata is None:
-                raise
-            spec["metadata"] = cleaned_metadata
-            if mode == "r":
-                dataset_future = ts.open(
-                    spec, read=True, write=False, assume_metadata=True
-                )
-            else:
-                dataset_future = ts.open(
-                    spec, read=False, write=True, assume_metadata=True
-                )
-            ts_dataset = dataset_future.result()
-        else:
-            raise
+    ts_dataset = dataset_future.result()
 
     if filetype in ("n5", "neuroglancer_precomputed"):
         # Both drivers expose Fortran order (x, y, z[, channel]); everything

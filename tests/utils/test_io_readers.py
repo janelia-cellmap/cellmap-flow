@@ -88,6 +88,29 @@ def test_border_reads_of_an_array_with_a_fill_value(tmp_path):
     assert got.ravel().tolist() == [0, 1]
 
 
+def test_compressor_fields_tensorstore_rejects_do_not_stop_the_read(tmp_path):
+    """Newer numcodecs write compressor fields, such as zstd's checksum, that
+    tensorstore's zarr driver rejects as "extra members"."""
+    import numcodecs
+
+    path = str(tmp_path / "c.zarr" / "raw")
+    data = np.arange(4 * 4 * 4, dtype=np.uint8).reshape(4, 4, 4)
+    arr = zarr.open(
+        path, mode="w", shape=data.shape, chunks=(2, 2, 2), dtype=data.dtype,
+        compressor=numcodecs.Zstd(level=1),
+    )
+    arr[:] = data
+    zarray = os.path.join(path, ".zarray")
+    with open(zarray) as f:
+        meta = json.load(f)
+    meta["compressor"]["checksum"] = False
+    with open(zarray, "w") as f:
+        json.dump(meta, f)
+
+    got = ds.open_ds_tensorstore(path, normalize=False).read().result()
+    np.testing.assert_array_equal(got, data)
+
+
 def test_s3_goes_through_the_generic_remote_reader(tmp_path, monkeypatch):
     local = str(tmp_path / "data.zarr")
     group = zarr.open(local, mode="w").create_group("raw")
