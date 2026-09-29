@@ -995,7 +995,9 @@ class FinetuneJobManager:
 
                 if finetune_job.log_file.exists():
                     try:
-                        # Check if file was truncated (e.g., during restart archival)
+                        # tee writes this one log for the job's whole life,
+                        # restarts included, so it only grows; start over if
+                        # something replaced it.
                         file_size = finetune_job.log_file.stat().st_size
                         if file_size < last_log_position:
                             self.logger.info(f"Log file truncated (size {file_size} < position {last_log_position}), resetting")
@@ -1641,35 +1643,6 @@ class FinetuneJobManager:
         """
         return self.jobs.get(job_id)
 
-    def _archive_job_logs(self, job: FinetuneJob):
-        """
-        Archive logs before restart.
-
-        Args:
-            job: The job whose logs to archive
-        """
-        log_file = job.log_file
-        metadata_file = job.output_dir / "metadata.json"
-
-        # Find next archive number
-        archive_num = 1
-        while (job.output_dir / f"training_log_{archive_num}.txt").exists():
-            archive_num += 1
-
-        # Archive log (copy only - do NOT truncate, as tee still has an open file descriptor)
-        if log_file.exists():
-            import shutil
-            archive_log = job.output_dir / f"training_log_{archive_num}.txt"
-            shutil.copy(log_file, archive_log)
-            self.logger.info(f"Archived log to {archive_log}")
-
-        # Archive metadata
-        if metadata_file.exists():
-            import shutil
-            archive_meta = job.output_dir / f"metadata_{archive_num}.json"
-            shutil.copy(metadata_file, archive_meta)
-            self.logger.info(f"Archived metadata to {archive_meta}")
-
     def restart_finetuning_job(
         self,
         job_id: str,
@@ -1715,19 +1688,13 @@ class FinetuneJobManager:
                 f"finished or diverged)"
             )
 
-        # 1. Archive current logs
-        self.logger.info(f"Archiving logs for job {job_id}...")
-        archive_t0 = time.perf_counter()
-        self._archive_job_logs(job)
-        archive_elapsed = time.perf_counter() - archive_t0
-
         signal_data = {
             "restart": True,
             "timestamp": datetime.now().isoformat(),
             "params": updated_params or {}
         }
 
-        # 2. Send restart request to running inference server (primary path)
+        # 1. Send restart request to running inference server (primary path)
         signal_write_mode = "http_control"
         write_t0 = time.perf_counter()
         http_error = None
@@ -1750,7 +1717,7 @@ class FinetuneJobManager:
         else:
             http_error = RuntimeError("No inference_server_url for HTTP restart control")
 
-        # 3. Fallback to signal file if HTTP control endpoint is unavailable
+        # 2. Fallback to signal file if HTTP control endpoint is unavailable
         if http_error is not None:
             signal_write_mode = "file_signal_fallback"
             signal_file = job.output_dir / "restart_signal.json"
@@ -1759,20 +1726,20 @@ class FinetuneJobManager:
             self.logger.info(f"Wrote fallback restart signal to {signal_file}")
         write_elapsed = time.perf_counter() - write_t0
 
-        # 4. Reset training progress (keep inference server info)
+        # 3. Reset training progress (keep inference server info)
         job.current_epoch = 0
         job.latest_loss = None
         job.status = JobStatus.RUNNING
         job.inference_server_ready = False
 
-        # 5. Update stored params
+        # 4. Update stored params
         if updated_params:
             job.params.update(updated_params)
 
         total_elapsed = time.perf_counter() - restart_t0
         self.logger.info(
             f"Restart signal timings for job {job_id}: "
-            f"archive={archive_elapsed:.2f}s write={write_elapsed:.2f}s "
+            f"write={write_elapsed:.2f}s "
             f"mode={signal_write_mode} total={total_elapsed:.2f}s"
         )
         self.logger.info(f"Job {job_id} restart request sent, waiting for CLI to pick it up")
