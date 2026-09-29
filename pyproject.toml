@@ -61,9 +61,6 @@ docs = [
     "sphinx-click",
     "sphinx-rtd-theme",
     "myst-parser",
-    "nbsphinx",
-    "myst_nb",
-    "jupytext",
 ]
 
 # mwatershed and funlib.math are core dependencies; edt is only needed by the
