@@ -45,29 +45,6 @@ class Config:
         """
         return self.kwargs
 
-    def serialize(self):
-        """
-        Serializes the configuration to a string representation.
-        """
-        serialized = {}
-        for key, value in self.kwargs.items():
-            if (
-                inspect.ismodule(value)
-                or inspect.isclass(value)
-                or inspect.isfunction(value)
-                or inspect.isbuiltin(value)
-            ):
-                # Skip modules, classes, and functions
-                continue
-            elif "__" in key:
-                # Skip private attributes
-                continue
-            elif not isinstance(value, (int, float, str, bool)):
-                serialized[key] = str(value)
-            else:
-                serialized[key] = value
-        return serialized
-
     def get(self, key: str, default: Any = None) -> Any:
         """
         Gets the value of a configuration key.
