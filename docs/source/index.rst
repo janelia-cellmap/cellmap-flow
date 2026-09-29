@@ -11,6 +11,7 @@
    post
    plugins
    review
+   viewer_api
    autoapi/index
    
 
