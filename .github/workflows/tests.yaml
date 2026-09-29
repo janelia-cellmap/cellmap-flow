@@ -39,6 +39,19 @@ jobs:
       # Syntax errors, undefined names and similar outright bugs only; style is
       # not enforced.
       - run: ruff check --select E9,F63,F7,F82 cellmap_flow tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # The dashboard's scripts are ES modules, served as they are. Plain
+      # `node --check file.js` passes a file with import/export in it even
+      # when it has a syntax error, so each one goes in as a module on stdin.
+      - name: Dashboard JavaScript syntax
+        run: |
+          status=0
+          for f in $(find cellmap_flow/dashboard/static/js -name '*.js' | sort); do
+            node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; status=1; }
+          done
+          exit $status
 
   package:
     runs-on: ubuntu-latest
@@ -61,6 +74,21 @@ jobs:
           assert not stray, f"wheel installs stray top-level entries: {sorted(stray)}"
           assert "cellmap_flow/models/models.yaml" in names, "model catalog missing from wheel"
           print(wheel, "ok")
+          EOF
+      # The pages load their templates' scripts and styles from the package
+      # as they are, so a file the package data misses breaks a page silently.
+      - name: Wheel ships every dashboard template and static file
+        run: |
+          python - <<'EOF'
+          import glob, os, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          names = set(zipfile.ZipFile(wheel).namelist())
+          files = [p for d in ("templates", "static")
+                   for p in glob.glob(f"cellmap_flow/dashboard/{d}/**/*", recursive=True)
+                   if os.path.isfile(p)]
+          missing = sorted(p for p in files if p not in names)
+          assert files and not missing, f"dashboard files missing from the wheel: {missing}"
+          print(len(files), "dashboard files ok")
           EOF
       - name: Installed wheel imports
         run: |

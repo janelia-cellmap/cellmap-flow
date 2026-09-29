@@ -88,7 +88,7 @@ include = ["cellmap_flow*"]
 version = { attr = "cellmap_flow.__version__" }
 
 [tool.setuptools.package-data]
-"cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/*.js", "static/img/*"]
+"cellmap_flow.dashboard" = ["templates/*.html", "templates/_*.html", "static/css/*.css", "static/js/**/*.js", "static/img/*"]
 "cellmap_flow.models" = ["*.yaml"]
 
 [tool.pytest.ini_options]
