@@ -64,20 +64,26 @@ class _FakeViewer:
         return _Txn()
 
 
-def _write_chunk(corrections_dir, name="vol_chunk_0.zarr", offset=(0, 0, 0)):
-    chunk_dir = os.path.join(corrections_dir, name)
-    os.makedirs(chunk_dir, exist_ok=True)
-    with open(os.path.join(chunk_dir, ".zattrs"), "w") as f:
+def _write_chunk(corrections_dir, offset=(0, 0, 0)):
+    """A painted chunk of the session's annotation volume: one box each.
+
+    ``offset`` is the chunk's first voxel; the volume's chunks are 56^3.
+    """
+    volume = os.path.join(corrections_dir, "vol.zarr")
+    s0 = os.path.join(volume, "annotation", "s0")
+    os.makedirs(s0, exist_ok=True)
+    with open(os.path.join(volume, ".zattrs"), "w") as f:
         json.dump(
             {
-                "roi": {
-                    "annotation_offset": list(offset),
-                    "annotation_shape": [56, 56, 56],
-                },
-                "annotation_voxel_size": [16, 16, 16],
+                "type": "annotation_volume",
+                "output_voxel_size": [16, 16, 16],
+                "chunk_size": [56, 56, 56],
+                "dataset_offset_nm": [8, 8, 8],
             },
             f,
         )
+    key = ".".join(str(o // 56) for o in offset)
+    open(os.path.join(s0, key), "wb").close()
 
 
 @pytest.fixture
@@ -114,7 +120,7 @@ def test_a_new_box_does_push(corrections, monkeypatch):
     overlay.refresh_annotated_regions_layer(str(corrections))
     assert viewer.txn_count == 1
 
-    _write_chunk(str(corrections), name="vol_chunk_1.zarr", offset=(56, 0, 0))
+    _write_chunk(str(corrections), offset=(56, 0, 0))
     assert overlay.refresh_annotated_regions_layer(str(corrections)) == 2
     assert viewer.txn_count == 2, "a real change must reach the viewer"
 
@@ -213,7 +219,7 @@ def test_the_button_endpoint_refreshes_and_reports_the_count(
     from cellmap_flow.dashboard.app import app
 
     _write_chunk(str(corrections))
-    _write_chunk(str(corrections), name="vol_chunk_1.zarr", offset=(56, 0, 0))
+    _write_chunk(str(corrections), offset=(56, 0, 0))
     viewer = _FakeViewer()
     monkeypatch.setattr(overlay.g, "viewer", viewer, raising=False)
 

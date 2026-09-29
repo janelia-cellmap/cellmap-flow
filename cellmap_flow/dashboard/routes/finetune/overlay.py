@@ -146,30 +146,6 @@ def refresh_annotated_regions_layer(corrections_path=None):
         if not os.path.isdir(corrections_dir):
             continue
         for entry in sorted(os.listdir(corrections_dir)):
-            # A legacy per-chunk extract (<volume>_chunk_z_y_x.zarr): one small
-            # box from its roi attrs. Nothing writes these any more; the
-            # volume's own painted chunks get their boxes below.
-            if "_chunk_" in entry and entry.endswith(".zarr"):
-                zattrs_file = os.path.join(corrections_dir, entry, ".zattrs")
-                if not os.path.exists(zattrs_file):
-                    continue
-                try:
-                    with open(zattrs_file) as f:
-                        meta = json.load(f)
-                    roi = meta.get("roi", {})
-                    offset_vox = roi.get("annotation_offset")
-                    shape_vox = roi.get("annotation_shape")
-                    voxel = meta.get("annotation_voxel_size")
-                    if not (offset_vox and shape_vox and voxel):
-                        continue
-                    voxel_arr = np.array(voxel, dtype=np.float64)
-                    lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
-                    hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
-                    boxes.append({"label": entry, "lo": lo.tolist(), "hi": hi.tolist()})
-                except Exception as e:
-                    logger.warning(f"Could not read chunk metadata for {entry}: {e}")
-                continue
-
             # Per-imported-YAML-crop large boxes (one per crop, read from the
             # annotation_volume.zarr's root attrs that the YAML loader writes)
             # plus per-painted-chunk small boxes for any populated chunk that
