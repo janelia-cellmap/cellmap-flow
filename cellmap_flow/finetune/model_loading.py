@@ -41,15 +41,15 @@ def model_config_from_entry(entry: dict, name=None):
     some for display (FinetuneModelConfig copies its base model's channels
     and voxel sizes up, say), and the constructor would reject them.
     """
-    from cellmap_flow.utils.config_utils import build_model_from_entry, get_model_type_mapping
+    from cellmap_flow.models import registry
+    from cellmap_flow.utils.config_utils import ConfigError
 
     entry = dict(entry)
-    mtype = str(entry.get("type", "")).lower()
-    config_class = None
-    for type_name, cls in get_model_type_mapping().items():
-        if type_name == mtype.replace("_", "-") or type_name.replace("-", "") == mtype:
-            config_class = cls
-            break
+    try:
+        config_class = registry.model_type(str(entry.get("type", "")))
+    except ConfigError:
+        # No such type, or none given: build_model reports it, naming the model.
+        config_class = None
     if config_class is not None:
         accepted = set(inspect.signature(config_class.__init__).parameters) - {"self"}
         dropped = sorted(k for k in entry if k != "type" and k not in accepted)
@@ -58,7 +58,7 @@ def model_config_from_entry(entry: dict, name=None):
         entry = {k: v for k, v in entry.items() if k == "type" or k in accepted}
     if name and not entry.get("name"):
         entry["name"] = name
-    return build_model_from_entry(entry, model_name=entry.get("name") or name or "model")
+    return registry.build_model(entry, entry.get("name") or name or "model")
 
 
 def _cellmap_model_for(model_config):
