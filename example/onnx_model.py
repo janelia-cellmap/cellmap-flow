@@ -1,10 +1,8 @@
-# pip install onnxruntime
 # pip install onnx2torch
 
 #%%
 import numpy as np
 from funlib.geometry import Coordinate
-# import onnxruntime as ort
 from onnx2torch import convert
 import torch
 
