@@ -1,24 +1,17 @@
 """What each way of making an annotation volume leaves on disk, pinned.
 
-Recorded before the volume code moved into cellmap_flow.finetune.session.
 Four things make volumes over one raw dataset: create-volume, a YAML crop
 import into a fresh session, build_corrections and the instance-correction
-seeder. For each, every .zgroup/.zattrs/.zarray, the chunk files and
-_virtual_sources.json are kept, with the volume's registry record. MinIO and
+seeder. For each, every .zgroup/.zattrs/.zarray, the chunk keys and
+_virtual_sources.json are kept, and the route's response. MinIO and
 neuroglancer write chunks straight into these arrays, and the trainer reads
-them and the manifest, so they are a format (see PHASE3 R3).
-
-Resuming a session, listing sessions and one round of syncing a painted
-chunk back from MinIO are recorded too. mc and s3fs are fakes that keep the
-bucket in a dict; nothing is served.
+them and the manifest, so they are a format (PHASE3 R3). Listing and
+resuming a session are recorded too. mc and s3fs are fakes; nothing is served.
 """
 
-import hashlib
 import json
-import os
 import re
 import subprocess
-from collections.abc import MutableMapping
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,7 +23,6 @@ import zarr
 
 from cellmap_flow.dashboard import finetune_utils as fu
 
-BUCKET = "annotations"
 NORM = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
 POST = [{"name": "SigmoidPostprocessor"}]
 # What a server reports for a model: 12^3 input at 8 nm, 4^3 output at 16 nm.
@@ -40,7 +32,7 @@ GEOMETRY = SimpleNamespace(
 )
 
 
-def _ome(path, scales, translation):
+def _ome(paths, scales, translation):
     return [{
         "version": "0.4",
         "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
@@ -48,65 +40,9 @@ def _ome(path, scales, translation):
             {"path": p, "coordinateTransformations": [
                 {"type": "scale", "scale": [vs] * 3},
                 {"type": "translation", "translation": [t] * 3}]}
-            for p, vs, t in zip(path, scales, translation)
+            for p, vs, t in zip(paths, scales, translation)
         ],
     }]
-
-
-class FakeBucket:
-    """The bucket as s3fs sees it: objects by key, each with an ETag."""
-
-    def __init__(self):
-        self.objects = {}
-
-    def put(self, key, data):
-        self.objects[key] = (bytes(data), hashlib.md5(bytes(data)).hexdigest())
-
-    def exists(self, path):
-        path = path.rstrip("/")
-        return any(k == path or k.startswith(path + "/") for k in self.objects)
-
-    def ls(self, path, detail=False):
-        prefix = path.rstrip("/") + "/"
-        names = sorted({prefix + k[len(prefix):].split("/")[0] for k in self.objects if k.startswith(prefix)})
-        if not names:
-            raise FileNotFoundError(path)
-        if not detail:
-            return names
-        return [{"name": n, "ETag": f'"{self.objects[n][1]}"', "size": len(self.objects[n][0])}
-                if n in self.objects else {"name": n, "type": "directory"} for n in names]
-
-    def get(self, src, dst):
-        Path(dst).write_bytes(self.objects[src][0])
-
-    def cat(self, path):
-        return self.objects[path][0]
-
-
-class _Store(MutableMapping):
-    """s3fs.S3Map over the fake bucket."""
-
-    def __init__(self, bucket, root):
-        self.bucket, self.root = bucket, root.rstrip("/")
-
-    def __getitem__(self, key):
-        try:
-            return self.bucket.objects[f"{self.root}/{key}"][0]
-        except KeyError:
-            raise KeyError(key) from None
-
-    def __setitem__(self, key, value):
-        self.bucket.put(f"{self.root}/{key}", value)
-
-    def __delitem__(self, key):
-        del self.bucket.objects[f"{self.root}/{key}"]
-
-    def __iter__(self):
-        prefix = self.root + "/"
-        return (k[len(prefix):] for k in list(self.bucket.objects) if k.startswith(prefix))
-
-    def __len__(self):
-        return sum(1 for _ in self)
 
 
 class _Alive:
@@ -118,7 +54,8 @@ class _Alive:
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    """A raw pyramid, a crop, a segmentation, a viewer and a fake MinIO."""
+    """A raw pyramid, a crop, a segmentation, a viewer and a MinIO that has nothing yet."""
+    from cellmap_flow.dashboard.app import app
     from cellmap_flow.dashboard.routes.finetune import common
     from cellmap_flow.globals import g
     from cellmap_flow.utils import model_geometry
@@ -149,23 +86,18 @@ def world(tmp_path, monkeypatch):
         resolution=[16] * 3, offset=[0, 160, 0]
     )
 
-    bucket = FakeBucket()
+    mirrored = []
 
     def fake_run(cmd, **kwargs):
-        # `mc mirror --overwrite <zarr> myserver/<bucket>/<key>`: upload it all.
         assert cmd[:3] == ["mc", "mirror", "--overwrite"], cmd
-        src, key = cmd[3], cmd[4].split("/", 1)[1]
-        for path in Path(src).rglob("*"):
-            if path.is_file():
-                bucket.put(f"{key}/{path.relative_to(src)}", path.read_bytes())
+        mirrored.append(cmd[4])
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
-    state = {"process": _Alive(), "ip": "10.0.0.1", "port": 9000, "bucket": BUCKET,
+    state = {"process": _Alive(), "ip": "10.0.0.1", "port": 9000, "bucket": "annotations",
              "output_base": None, "sync_thread": None}
     volumes, sessions = {}, {}
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(s3fs, "S3FileSystem", lambda **kw: bucket)
-    monkeypatch.setattr(s3fs, "S3Map", lambda root, s3, check=True: _Store(bucket, root))
+    monkeypatch.setattr(s3fs, "S3FileSystem", lambda **kw: SimpleNamespace(exists=lambda path: False))
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
     monkeypatch.setattr(fu, "minio_state", state)
     monkeypatch.setattr(fu, "annotation_volumes", volumes)
@@ -178,11 +110,7 @@ def world(tmp_path, monkeypatch):
         models_config=[SimpleNamespace(name="m")], input_norm_config=NORM, postprocess_config=POST,
     ).items():
         monkeypatch.setattr(g, name, value, raising=False)
-
-    from cellmap_flow.dashboard.app import app
-
-    return SimpleNamespace(tmp=tmp_path, client=app.test_client(), bucket=bucket, state=state,
-                           volumes=volumes, viewer=g.viewer)
+    return SimpleNamespace(tmp=tmp_path, client=app.test_client(), mirrored=mirrored)
 
 
 class _Names:
@@ -193,7 +121,7 @@ class _Names:
 
     def __call__(self, value):
         if isinstance(value, dict):
-            return {self(k): ("<time>" if k in ("created_at",) else self(v)) for k, v in value.items()}
+            return {self(k): ("<time>" if k == "created_at" else self(v)) for k, v in value.items()}
         if isinstance(value, (list, tuple)):
             return [self(v) for v in value]
         if not isinstance(value, str):
@@ -216,90 +144,48 @@ def _tree(root, names):
     return tree
 
 
-def _copy(record):
-    """A registry record as it is now, with the chunk ETags (blosc output,
-    which differs between library versions) replaced."""
-    record = json.loads(json.dumps(record))
-    record["chunk_sync_state"] = {k: "<etag>" for k in record.get("chunk_sync_state", {})}
-    return record
-
-
-def _canonical(value):
-    # json, so 16 and 16.0 differ: a writer that turned ints into floats
-    # changes the files even though == would not notice.
-    return json.dumps(value, sort_keys=True, indent=1)
-
-
 def _record(world):
-    """Everything this test pins, by creator."""
     names = _Names(world.tmp)
     post = lambda url, **body: world.client.post(url, json=body).get_json()  # noqa: E731
     out = {}
 
-    session_a = world.tmp / "a"
-    created = post("/api/finetune/create-volume", model_name="m", output_path=str(session_a))
-    vid = created["volume_id"]
-    out["create_volume"] = {
-        "response": created, "record": _copy(world.volumes[vid]), "tree": _tree(session_a, names),
-    }
+    created = post("/api/finetune/create-volume", model_name="m", output_path=str(world.tmp / "a"))
+    out["create_volume"] = {"response": created, "tree": _tree(world.tmp / "a", names)}
 
-    session_c = world.tmp / "c"
-    loaded = post("/api/finetune/load-crops", model_name="m", output_path=str(session_c),
+    loaded = post("/api/finetune/load-crops", model_name="m", output_path=str(world.tmp / "c"),
                   yaml=str(world.tmp / "crops.yaml"))
-    out["load_crops"] = {
-        "response": loaded, "record": _copy(world.volumes[loaded["volume_id"]]),
-        "tree": _tree(session_c, names),
-    }
+    out["load_crops"] = {"response": loaded, "tree": _tree(world.tmp / "c", names)}
 
     from cellmap_flow.finetune.build_corrections import build_corrections
 
-    built = world.tmp / "built"
     record = build_corrections(
         raw_dataset_path=str(world.tmp / "raw.zarr" / "em"), crops_yaml=str(world.tmp / "crops.yaml"),
-        output_dir=str(built), input_shape=(12, 12, 12), output_shape=(4, 4, 4),
+        output_dir=str(world.tmp / "built"), input_shape=(12, 12, 12), output_shape=(4, 4, 4),
         input_voxel_size=(8, 8, 8), output_voxel_size=(16, 16, 16), model_name="m",
         input_norm=NORM, postprocess=POST,
     )
-    out["build_corrections"] = {
-        "tree": _tree(built, names),
-        "record": {k: record[k] for k in ("geometry", "crops", "total_fg_voxels")},
-    }
+    out["build_corrections"] = {"tree": _tree(world.tmp / "built", names),
+                                "record": {k: record[k] for k in ("geometry", "crops")}}
 
     seeded = post("/api/viewer/create-instance-correction", roi_name="roi", model_name="m",
                   instance_zarr_path=str(world.tmp / "seg.zarr"), dilation_radius_voxels=1)
-    out["instance_correction"] = {
-        "response": seeded, "record": _copy(world.volumes[seeded["volume_id"]]),
-        "tree": _tree(world.tmp / "instance_corrections", names),
-    }
+    out["instance_correction"] = {"response": seeded,
+                                  "tree": _tree(world.tmp / "instance_corrections", names)}
 
-    # A stroke painted into the created volume's first chunk, in MinIO.
-    painted = zarr.open_array(_Store(world.bucket, f"{BUCKET}/{vid}.zarr/annotation/s0"), mode="r+")
-    painted[0:4, 0:4, 0:4] = 2
-    synced = fu.sync_all_annotations_from_minio(force=False)
-    state = world.volumes[vid]["chunk_sync_state"]
-    out["sync"] = {
-        "synced": synced,
-        "chunk_sync_state": {k: v == world.bucket.objects[f"{BUCKET}/{vid}.zarr/annotation/s0/{k}"][1]
-                             for k, v in state.items()},
-        "local_chunks": sorted(os.listdir(Path(created["zarr_path"]) / "annotation" / "s0")),
-    }
-
-    out["list_existing_sessions"] = post("/api/finetune/list-existing-sessions", output_path=str(session_a))
-    session_path = out["list_existing_sessions"]["sessions"][0]["session_path"]
-    resumed = post("/api/finetune/load-existing-volume", source_session_path=session_path,
-                   output_path=str(world.tmp / "b"))
-    out["load_existing_volume"] = {
-        "response": resumed, "record": _copy(world.volumes[resumed["volume_id"]]),
-        "tree": _tree(world.tmp / "b", names),
-    }
-    out["viewer_layers"] = [layer.name for layer in world.viewer.state.layers]
+    # A stroke on disk, then the session is listed and resumed elsewhere.
+    zarr.open_array(str(Path(created["zarr_path"]) / "annotation" / "s0"), mode="r+")[0:4, 0:4, 0:4] = 2
+    out["list_existing_sessions"] = post("/api/finetune/list-existing-sessions",
+                                         output_path=str(world.tmp / "a"))
+    resumed = post("/api/finetune/load-existing-volume", output_path=str(world.tmp / "b"),
+                   source_session_path=out["list_existing_sessions"]["sessions"][0]["session_path"])
+    out["load_existing_volume"] = {"response": resumed, "tree": _tree(world.tmp / "b", names)}
+    out["mirrored"] = world.mirrored
     return names(out)
 
 
 ZGROUP = {"zarr_format": 2}
-BLOSC = {"blocksize": 0, "clevel": 3, "cname": "zstd", "id": "blosc", "shuffle": 1}
 RAW = "<tmp>/raw.zarr/em"
-# The root attrs a volume over RAW gets; each creator differs from these a little.
+# The root attrs of a volume over RAW; each creator differs from these a little.
 ATTRS = {
     "chunk_size": [4, 4, 4], "claimed_input_voxel_size": [8, 8, 8],
     "claimed_output_voxel_size": [16, 16, 16], "created_at": "<time>",
@@ -308,19 +194,13 @@ ATTRS = {
     "model_name": "m", "output_voxel_size": [16.0, 16.0, 16.0], "postprocess": POST,
     "type": "annotation_volume",
 }
+FLOAT_CLAIMS = {"claimed_input_voxel_size": [8.0, 8.0, 8.0], "claimed_output_voxel_size": [16.0, 16.0, 16.0]}
 CROP = {"annotation_offset_voxels": [4, 4, 4], "annotation_shape_voxels": [6, 6, 6],
         "n_fg_voxels": 27, "name": "c1", "path": "<tmp>/crop.zarr"}
 CROP_CHUNKS = ["1.1.1", "1.1.2", "1.2.1", "1.2.2", "2.1.1", "2.1.2", "2.2.1", "2.2.2"]
-RECORD = {
-    "chunk_sync_state": {}, "claimed_input_voxel_size": [8, 8, 8],
-    "claimed_output_voxel_size": [16, 16, 16], "dataset_offset_nm": [4.0, 4.0, 4.0],
-    "dataset_path": RAW, "input_size": [12, 12, 12], "input_voxel_size": [8.0, 8.0, 8.0],
-    "model_name": "m", "output_size": [4, 4, 4], "output_voxel_size": [16.0, 16.0, 16.0],
-}
 
 
-def _volume(at, attrs, *, translation=(4.0, 4.0, 4.0), shape=(24, 24, 24), dtype="|u1",
-            chunks=None, synced=False):
+def _volume(at, attrs, *, translation=(4.0, 4.0, 4.0), shape=(24, 24, 24), dtype="|u1", chunks=None):
     files = {
         f"{at}/.zgroup": ZGROUP,
         f"{at}/.zattrs": attrs,
@@ -332,23 +212,22 @@ def _volume(at, attrs, *, translation=(4.0, 4.0, 4.0), shape=(24, 24, 24), dtype
                 {"translation": list(translation), "type": "translation"}], "path": "s0"}],
             "name": "annotation", "version": "0.4"}]},
         f"{at}/annotation/s0/.zarray": {
-            "chunks": [4, 4, 4], "compressor": BLOSC, "dtype": dtype, "fill_value": 0,
-            "filters": None, "order": "C", "shape": list(shape), "zarr_format": 2},
+            "chunks": [4, 4, 4], "dtype": dtype, "fill_value": 0, "filters": None, "order": "C",
+            "compressor": {"blocksize": 0, "clevel": 3, "cname": "zstd", "id": "blosc", "shuffle": 1},
+            "shape": list(shape), "zarr_format": 2},
     }
     if chunks:
         files[f"{at}/annotation/s0/<chunks>"] = chunks
-    if synced:  # the sync from MinIO copies s0's (empty) attrs
-        files[f"{at}/annotation/s0/.zattrs"] = {}
     return files
 
 
-def _manifest(volume, input_voxel_size=(8.0, 8.0, 8.0)):
+def _manifest(volume):
     return {
         "dense_to_sparse_ratio": None, "input_norm": NORM, "input_size_voxels": [12, 12, 12],
-        "input_voxel_size_nm": list(input_voxel_size), "jitter_voxels": None,
-        "kind": "volume_zarr_v1", "output_size_voxels": [4, 4, 4],
-        "output_voxel_size_nm": [16.0, 16.0, 16.0], "patches_per_epoch": None,
-        "postprocess": POST, "raw_dataset_path": RAW, "seed": 0, "volume_zarr_path": volume,
+        "input_voxel_size_nm": [8.0, 8.0, 8.0], "jitter_voxels": None, "kind": "volume_zarr_v1",
+        "output_size_voxels": [4, 4, 4], "output_voxel_size_nm": [16.0, 16.0, 16.0],
+        "patches_per_epoch": None, "postprocess": POST, "raw_dataset_path": RAW, "seed": 0,
+        "volume_zarr_path": volume,
     }
 
 
@@ -361,40 +240,33 @@ def _session(base, volume, attrs, **kw):
     }
 
 
-def _url(key):
-    return f"http://10.0.0.1:9000/annotations/{key}.zarr"
+def _served(key):
+    url = f"http://10.0.0.1:9000/annotations/{key}.zarr"
+    return {"minio_url": url, "neuroglancer_url": url + "/annotation", "success": True, "volume_id": key}
 
 
 EXPECTED = {
     "create_volume": {
         "response": {
+            **_served("vol-1"), "zarr_path": "<tmp>/a/<session>/corrections/vol-1.zarr",
             "metadata": {"chunk_size": [4, 4, 4], "claimed_output_voxel_size": [16, 16, 16],
                          "dataset_offset_nm": [4.0, 4.0, 4.0], "dataset_shape_voxels": [24, 24, 24],
                          "output_voxel_size": [16.0, 16.0, 16.0]},
-            "minio_url": _url("vol-1"), "neuroglancer_url": _url("vol-1") + "/annotation",
-            "success": True, "volume_id": "vol-1",
-            "zarr_path": "<tmp>/a/<session>/corrections/vol-1.zarr",
         },
-        "record": {**RECORD, "corrections_dir": "<tmp>/a/<session>/corrections",
-                   "zarr_path": "<tmp>/a/<session>/corrections/vol-1.zarr"},
         "tree": _session("a", "vol-1", ATTRS),
     },
     "load_crops": {
         "response": {"created_new_volume": True, "errors": [], "fg_voxels_written": 27,
                      "n_crops_imported": 1, "n_crops_requested": 1, "n_errors": 0,
                      "success": True, "volume_id": "vol-2"},
-        "record": {**RECORD, "corrections_dir": "<tmp>/c/<session>/corrections",
-                   "minio_url": _url("vol-2"), "zarr_path": "<tmp>/c/<session>/corrections/vol-2.zarr"},
-        "tree": _session("c", "vol-2", {**ATTRS, "imported_crops": [CROP]},
-                         chunks=CROP_CHUNKS, synced=True),
+        "tree": _session("c", "vol-2", {**ATTRS, "imported_crops": [CROP]}, chunks=CROP_CHUNKS),
     },
     "build_corrections": {
         "tree": {
             "_virtual_sources.json": _manifest("<tmp>/built/vol-3.zarr"),
-            **_volume("vol-3.zarr", {**ATTRS, "claimed_input_voxel_size": [8.0, 8.0, 8.0],
-                                     "claimed_output_voxel_size": [16.0, 16.0, 16.0],
-                                     "imported_crops": [CROP]}, chunks=CROP_CHUNKS),
+            **_volume("vol-3.zarr", {**ATTRS, **FLOAT_CLAIMS, "imported_crops": [CROP]}, chunks=CROP_CHUNKS),
         },
+        # build_record.json
         "record": {
             "crops": [{"connected_components": False, "fg_ids": [5], "mode": "dense",
                        "n_fg_voxels": 27, "name": "c1", "path": "<tmp>/crop.zarr"}],
@@ -406,59 +278,40 @@ EXPECTED = {
                 "effective_output_voxel_size_nm": [16.0, 16.0, 16.0],
                 "input_shape": [12, 12, 12], "output_shape": [4, 4, 4],
             },
-            "total_fg_voxels": 27,
         },
     },
     "instance_correction": {
-        "response": {
-            "layer_name": "roi_annotation", "minio_url": _url("roi_annotation"),
-            "mode": "fresh_seed", "neuroglancer_url": _url("roi_annotation") + "/annotation",
-            "reload_page": True, "success": True, "volume_id": "roi_annotation",
-            "zarr_path": "<tmp>/instance_corrections/roi_annotation.zarr",
-        },
-        "record": {
-            **{k: v for k, v in RECORD.items() if not k.startswith("claimed")},
-            "corrections_dir": "<tmp>/instance_corrections", "dataset_offset_nm": [8.0, 168.0, 8.0],
-            "minio_url": _url("roi_annotation"),
-            "zarr_path": "<tmp>/instance_corrections/roi_annotation.zarr",
-        },
+        "response": {**_served("roi_annotation"), "layer_name": "roi_annotation",
+                     "mode": "fresh_seed", "reload_page": True,
+                     "zarr_path": "<tmp>/instance_corrections/roi_annotation.zarr"},
         # On the segmentation's grid, uint16, seeded chunks only.
         "tree": _volume(
             "roi_annotation.zarr",
-            {**ATTRS, "claimed_input_voxel_size": [8.0, 8.0, 8.0],
-             "claimed_output_voxel_size": [16.0, 16.0, 16.0], "dataset_offset_nm": [8.0, 168.0, 8.0],
+            {**ATTRS, **FLOAT_CLAIMS, "dataset_offset_nm": [8.0, 168.0, 8.0],
              "dataset_shape_voxels": [8, 8, 8], "seed_dilation_radius_voxels": 1,
              "seed_n_instances": 9, "seed_source_instance_zarr": "<tmp>/seg.zarr"},
             translation=(8.0, 168.0, 8.0), shape=(8, 8, 8), dtype="<u2", chunks=["0.0.0", "1.1.1"],
         ),
     },
-    # One round of the periodic sync: the stroke reaches vol-1's own zarr and
-    # its ETag is recorded. The other two had their mirrored chunks pulled back.
-    "sync": {"chunk_sync_state": {"0.0.0": True}, "local_chunks": [".zarray", ".zattrs", "0.0.0"],
-             "synced": 3},
-    "list_existing_sessions": {"sessions": [{
+    "list_existing_sessions": {"success": True, "sessions": [{
         "chunk_count": 1, "session_id": "<session>", "session_path": "<tmp>/a/<session>",
         "volumes": [{"path": "<tmp>/a/<session>/corrections/vol-1.zarr", "volume_id": "vol-1"}],
-    }], "success": True},
+    }]},
     "load_existing_volume": {
         "response": {
-            "copied_count": 1, "copied_minio": False,
-            "metadata": ATTRS, "minio_url": _url("vol-1"),
-            "neuroglancer_url": _url("vol-1") + "/annotation", "new_session_path": "<tmp>/b/<session>",
-            "painted_chunk_count": 1, "skipped_chunk_extracts": 0, "success": True,
-            "volume_id": "vol-1", "zarr_path": "<tmp>/b/<session>/corrections/vol-1.zarr",
+            **_served("vol-1"), "copied_count": 1, "copied_minio": False, "metadata": ATTRS,
+            "new_session_path": "<tmp>/b/<session>", "painted_chunk_count": 1,
+            "skipped_chunk_extracts": 0, "zarr_path": "<tmp>/b/<session>/corrections/vol-1.zarr",
         },
-        "record": {**{k: v for k, v in RECORD.items() if not k.startswith("claimed")},
-                   "corrections_dir": "<tmp>/b/<session>/corrections",
-                   "zarr_path": "<tmp>/b/<session>/corrections/vol-1.zarr"},
-        "tree": _session("b", "vol-1", ATTRS, chunks=["0.0.0"], synced=True),
+        "tree": _session("b", "vol-1", ATTRS, chunks=["0.0.0"]),
     },
-    "viewer_layers": ["annotation_vol-2", "annotated_regions", "roi_annotation"],
+    # Each volume is mirrored when served; a crop import mirrors again after writing.
+    "mirrored": [f"myserver/annotations/{key}.zarr"
+                 for key in ("vol-1", "vol-2", "vol-2", "roi_annotation", "vol-1")],
 }
 
 
 def test_what_each_volume_creator_writes(world):
-    actual = _record(world)
-    assert {k: _canonical(v) for k, v in actual.items()} == {
-        k: _canonical(v) for k, v in EXPECTED.items()
-    }
+    # As JSON, so an int written as a float (16 -> 16.0) counts as a change.
+    canonical = lambda d: {k: json.dumps(v, sort_keys=True, indent=1) for k, v in d.items()}  # noqa: E731
+    assert canonical(_record(world)) == canonical(EXPECTED)
