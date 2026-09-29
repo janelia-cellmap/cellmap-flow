@@ -634,7 +634,8 @@ class CellMapFlowBlockwiseProcessor:
         for roi_idx, total_write_roi in enumerate(rois_to_process):
             total_read_roi = total_write_roi.grow(context, context)
             
-            name = f"predict_{self.model_config.name}{self.task_name}"
+            # The daisy task id, and so each worker's LSF job name and log.
+            name = f"predict_{self.model_config.name}_{self.task_name}"
             if len(rois_to_process) > 1:
                 name = f"{name}_roi{roi_idx+1}"
 

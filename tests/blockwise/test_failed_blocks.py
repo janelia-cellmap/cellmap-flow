@@ -80,7 +80,7 @@ def test_run_reports_failure_when_blocks_failed(master, monkeypatch, caplog):
     )
     with caplog.at_level(logging.ERROR, logger=blockwise_processor.logger.name):
         assert master.run() is False
-    assert "predict_mt: 2" in caplog.text
+    assert "predict_m_t: 2" in caplog.text
 
 
 def test_run_reports_success_when_every_block_ran(master, monkeypatch):
