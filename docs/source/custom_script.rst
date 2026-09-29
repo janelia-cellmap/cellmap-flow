@@ -45,9 +45,11 @@ You can test your script locally using:
 
 .. code-block:: bash
 
-    cellmap_flow script-server-check -s /path/to/your_script.py -d /path/to/input.zarr
+    cellmap_flow script --script-path /path/to/your_script.py -d /path/to/input.zarr --server-check
 
-This will simulate a small 2x2x2 chunk to ensure your setup works correctly.
+This loads the script and runs the model on a single output chunk (chunk index
+2, 2, 2) in the current process, without submitting a job, and prints
+``Server check passed`` when the chunk comes back.
 
 
 
