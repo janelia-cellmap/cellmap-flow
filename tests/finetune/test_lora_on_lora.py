@@ -200,7 +200,8 @@ def test_train_save_serve_roundtrip_reproduces_the_trained_model():
     )
 
 
-def test_a_1x1x1_affinity_head_can_be_merged_at_all():
+@pytest.mark.parametrize("merge_name", ["_merge_existing_adapters", "merge_lora_into_base"])
+def test_a_1x1x1_affinity_head_can_be_merged_at_all(merge_name):
     """The shape peft cannot merge by itself.
 
     A real run died here. The head is a 1x1x1 Conv3d with 3 outputs and the
@@ -208,10 +209,14 @@ def test_a_1x1x1_affinity_head_can_be_merged_at_all():
     the matmul became a batched one, and it reported "size of tensor a (3)
     must match the size of tensor b (64)". Merging is how the existing
     adapter is kept, so a failure to merge is a failure to finetune at all.
+    merge_lora_into_base, which called merge_and_unload() itself, died the
+    same way until it became LoraStrategy.merge.
     """
     from peft import LoraConfig, get_peft_model
 
-    from cellmap_flow.finetune.lora_wrapper import _merge_existing_adapters
+    from cellmap_flow.finetune import lora_wrapper
+
+    merge = getattr(lora_wrapper, merge_name)
 
     torch.manual_seed(0)
     x = torch.randn(1, 1, 4, 4, 4)
@@ -224,7 +229,7 @@ def test_a_1x1x1_affinity_head_can_be_merged_at_all():
     adapted.eval()
     expected = adapted(x).detach().clone()
 
-    merged = _merge_existing_adapters(adapted).eval()
+    merged = merge(adapted).eval()
 
     # Folding the adapter into the weights must not move the outputs, for the
     # 3x3x3 conv peft handles and the 1x1x1 head it does not.

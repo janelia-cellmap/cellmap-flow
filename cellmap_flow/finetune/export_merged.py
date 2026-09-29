@@ -65,9 +65,13 @@ def valid_tile(tile):
 def merge_lora_into_conv3d(peft_model):
     """Add each LoRA pair into its base Conv3d weight in place; return count.
 
-    PEFT's own ``merge_and_unload`` assumes 2-D conv kernels and fails on
-    Conv3d. For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
+    For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
     delta[o, i, z, y, x] = scale * sum_r B[o, r] A[r, i, z, y, x].
+
+    No longer what apply_finetune uses: it handles Conv3d only, so an
+    adapter on a Conv2d or Linear layer was silently left out of the merged
+    model. PEFT's own ``merge_and_unload`` fails only on 1x1x1 Conv3d
+    kernels, which ``adaptation.LoraStrategy.merge`` computes itself.
     """
     from peft.tuners.lora import LoraLayer
 
@@ -119,7 +123,12 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
     dict keys carry a ``model.`` prefix. Wrapping the eager module the same
     way reproduces those names exactly (checked: 38/38 adapter tensors
     identical, 0.0 output difference at 178^3).
+
+    The adapter is folded in by ``LoraStrategy.merge``, the merge training
+    uses to continue from a finetuned model: every adapted layer, Conv3d,
+    Conv2d or Linear, to within float rounding of the adapter's output.
     """
+    from cellmap_flow.finetune.adaptation import LoraStrategy
     from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
 
     if bool(lora_adapter_path) == bool(weights_path):
@@ -129,11 +138,7 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 
         peft = load_lora_adapter(wrapped, lora_adapter_path, is_trainable=False).eval()
-        n = merge_lora_into_conv3d(peft)
-        base = peft.get_base_model()          # the BatchLoopWrapper
-        strip_lora_layers(base)
-        logger.info(f"Merged {n} LoRA conv pairs into the base weights")
-        merged = base.model
+        merged = LoraStrategy.merge(peft).model   # merge gives back the BatchLoopWrapper
     else:
         state = torch.load(weights_path, map_location="cpu", weights_only=True)
         missing, unexpected = wrapped.load_state_dict(state, strict=True)

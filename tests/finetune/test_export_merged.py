@@ -1,11 +1,12 @@
-"""export_merged folds a LoRA adapter into Conv3d weights exactly and only
-accepts tiles that keep the 178-tile pooling phase."""
+"""export_merged folds a LoRA adapter into the weights, to within float
+rounding, and only accepts tiles that keep the 178-tile pooling phase."""
 
 import pytest
 import torch
 from torch import nn
 
 from cellmap_flow.finetune.export_merged import (
+    apply_finetune,
     merge_lora_into_conv3d,
     strip_lora_layers,
     valid_tile,
@@ -49,6 +50,39 @@ def test_manual_merge_matches_unmerged_adapter_and_strips_lora():
     # and it is a different function from the un-finetuned net
     with torch.no_grad():
         assert (y_merged - TinyNet().eval()(x)).abs().max() > 0
+
+
+class Mixed(nn.Module):
+    """Conv3d layers, a 1x1x1 head among them, and a Linear: LoRA adapts all three."""
+
+    def __init__(self):
+        super().__init__()
+        torch.manual_seed(0)
+        self.c1 = nn.Conv3d(1, 8, 3)
+        self.c2 = nn.Conv3d(8, 2, 1)
+        self.fc = nn.Linear(6, 6)  # over the last axis
+
+    def forward(self, x):
+        return self.fc(self.c2(torch.relu(self.c1(x))))
+
+
+@pytest.mark.finetune
+def test_apply_finetune_folds_in_every_adapted_layer(tmp_path):
+    """Merging only the Conv3d pairs silently dropped the Linear's adapter."""
+    peft = wrap_model_with_lora(BatchLoopWrapper(Mixed()), lora_r=4, lora_alpha=8, lora_dropout=0.0)
+    for n, p in peft.named_parameters():
+        if "lora_" in n:
+            p.data.normal_(0, 0.1)
+    peft.save_pretrained(str(tmp_path / "adapter"))
+    x = torch.rand(1, 1, 8, 8, 8)
+    with torch.no_grad():
+        y_adapter = peft.eval()(x)
+        y_merged = apply_finetune(Mixed().eval(), lora_adapter_path=str(tmp_path / "adapter"))(x)
+        merge_lora_into_conv3d(peft)  # the Conv3d-only merge export_merged used to do
+        y_conv3d_only = strip_lora_layers(peft.get_base_model()).model(x)
+    scale = y_adapter.abs().max()
+    assert (y_merged - y_adapter).abs().max() <= 1e-6 * scale
+    assert (y_conv3d_only - y_adapter).abs().max() > 1e-3 * scale
 
 
 def test_valid_tile_keeps_pooling_phase():
