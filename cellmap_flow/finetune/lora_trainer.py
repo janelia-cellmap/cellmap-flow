@@ -16,27 +16,17 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
 
-
-def as_probabilities(pred, model_has_sigmoid):
-    """The model's output as probabilities.
-
-    Left alone when the model already ends in a sigmoid (the cellmap
-    *_distance_* UNets do); a second sigmoid would squash [0, 1] into
-    [0.5, 0.73] and make a well-fitting prediction look like a constant.
-    """
-    return pred if model_has_sigmoid else torch.sigmoid(pred)
-
-
-def soft_target_entropy(target, eps=1e-7):
-    """Per-voxel BCE that a perfectly calibrated prediction still pays.
-
-    -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
-    t = 0.5. On soft targets (distance, smoothed labels) this is the floor
-    of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
-    model sitting on its floor. Report the loss minus this instead.
-    """
-    t = target.clamp(eps, 1 - eps)
-    return -(t * torch.log(t) + (1 - t) * torch.log(1 - t))
+# The losses live in losses.py; these names stay importable from here.
+from cellmap_flow.finetune.losses import (  # noqa: F401
+    CombinedLoss,
+    DiceLoss,
+    MarginLoss,
+    as_probabilities,
+    balanced_mean,
+    distillation_loss,
+    masked_mean,
+    soft_target_entropy,
+)
 
 
 def cpu_state_copy(model: nn.Module) -> Dict[str, torch.Tensor]:
@@ -65,156 +55,6 @@ def frozen_teacher_copy(model: nn.Module) -> nn.Module:
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
-
-
-class DiceLoss(nn.Module):
-    """
-    Dice Loss for segmentation tasks.
-
-    Dice loss is effective for imbalanced datasets where the target class
-    may be sparse (e.g., mitochondria in EM images).
-
-    Formula: 1 - (2 * |X ∩ Y| + smooth) / (|X| + |Y| + smooth)
-    """
-
-    def __init__(self, smooth: float = 1.0):
-        """
-        Args:
-            smooth: Smoothing factor to avoid division by zero (default: 1.0)
-        """
-        super().__init__()
-        self.smooth = smooth
-        self.apply_sigmoid = True
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Compute Dice loss.
-
-        Args:
-            pred: Predictions (B, C, Z, Y, X) - raw logits or probabilities
-            target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-        Returns:
-            Dice loss value (scalar)
-        """
-        # Flatten spatial dimensions
-        pred = pred.reshape(pred.size(0), pred.size(1), -1)  # (B, C, N)
-        target = target.reshape(target.size(0), target.size(1), -1)  # (B, C, N)
-
-        if self.apply_sigmoid:
-            pred = torch.sigmoid(pred)
-
-        # Apply mask if provided. Mask may be (B, 1, ...) for a shared mask
-        # or (B, C, ...) for a per-channel mask (e.g. AffinityTargetTransform
-        # produces one mask per affinity offset).
-        if mask is not None:
-            mask = mask.reshape(mask.size(0), mask.size(1), -1)  # (B, Cmask, N)
-            pred = pred * mask
-            target = target * mask
-
-        # Compute intersection and union
-        intersection = (pred * target).sum(dim=2)  # (B, C)
-        union = pred.sum(dim=2) + target.sum(dim=2)  # (B, C)
-
-        # Dice coefficient
-        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
-
-        # Dice loss (1 - dice)
-        return 1.0 - dice.mean()
-
-
-class CombinedLoss(nn.Module):
-    """
-    Combined Dice + BCE loss for better convergence.
-
-    Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).
-    """
-
-    def __init__(self, dice_weight: float = 0.5, bce_weight: float = 0.5):
-        """
-        Args:
-            dice_weight: Weight for Dice loss
-            bce_weight: Weight for BCE loss
-        """
-        super().__init__()
-        self.dice_loss = DiceLoss()
-        self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
-        self.dice_weight = dice_weight
-        self.bce_weight = bce_weight
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Compute combined loss.
-
-        Args:
-            pred: Predictions (B, C, Z, Y, X) - raw logits
-            target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-        Returns:
-            Combined loss value (scalar)
-        """
-        dice = self.dice_loss(pred, target, mask)
-
-        # For BCE, manually apply mask if provided
-        bce = self.bce_loss(pred, target)
-        if mask is not None:
-            bce = bce * mask
-            bce = bce.sum() / mask.sum().clamp(min=1)  # Average over masked regions
-        else:
-            bce = bce.mean()
-
-        return self.dice_weight * dice + self.bce_weight * bce
-
-
-class MarginLoss(nn.Module):
-    """
-    Margin-based loss for sparse/scribble annotations.
-
-    Only penalizes predictions on the wrong side of a margin threshold.
-    For post-sigmoid outputs in [0, 1]:
-    - Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
-    - Background (target=0): loss = relu(pred - margin)^2
-    - No loss when prediction is already correct with sufficient confidence.
-    """
-
-    def __init__(self, margin: float = 0.3, balance_classes: bool = False):
-        super().__init__()
-        self.margin = margin
-        self.balance_classes = balance_classes
-        self.apply_sigmoid = True
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if self.apply_sigmoid:
-            pred = torch.sigmoid(pred)
-
-        threshold_high = 1.0 - self.margin  # e.g., 0.7
-        threshold_low = self.margin          # e.g., 0.3
-
-        # Foreground loss: penalize if pred < threshold_high
-        fg_loss = torch.relu(threshold_high - pred) ** 2
-        # Background loss: penalize if pred > threshold_low
-        bg_loss = torch.relu(pred - threshold_low) ** 2
-
-        if self.balance_classes and mask is not None:
-            # Average each class separately so fg/bg contribute equally
-            # regardless of how many scribble voxels each has
-            fg_mask = target * mask
-            bg_mask = (1.0 - target) * mask
-            fg_count = fg_mask.sum().clamp(min=1)
-            bg_count = bg_mask.sum().clamp(min=1)
-            fg_contrib = (fg_loss * fg_mask).sum() / fg_count
-            bg_contrib = (bg_loss * bg_mask).sum() / bg_count
-            return (fg_contrib + bg_contrib) / 2.0
-
-        # Blend by target: target=1 -> fg_loss, target=0 -> bg_loss
-        loss = target * fg_loss + (1.0 - target) * bg_loss
-
-        if mask is not None:
-            loss = loss * mask
-            return loss.sum() / mask.sum().clamp(min=1)
-        return loss.mean()
 
 
 class LoRAFinetuner:
@@ -1268,12 +1108,8 @@ class LoRAFinetuner:
                     def _masked_mean(per_voxel):
                         if self.balance_classes:
                             # Average fg and bg separately so each contributes equally
-                            fg_mask = hard_target * mask
-                            bg_mask = (1.0 - hard_target) * mask
-                            fg_contrib = (per_voxel * fg_mask).sum() / fg_mask.sum().clamp(min=1)
-                            bg_contrib = (per_voxel * bg_mask).sum() / bg_mask.sum().clamp(min=1)
-                            return (fg_contrib + bg_contrib) / 2.0
-                        return (per_voxel * mask).sum() / mask.sum().clamp(min=1)
+                            return balanced_mean(per_voxel, hard_target, mask)
+                        return masked_mean(per_voxel, mask)
 
                     supervised_loss = _masked_mean(per_element_loss)
                     if self._use_bce:
@@ -1283,7 +1119,7 @@ class LoRAFinetuner:
                         with torch.no_grad():
                             bce_floor = _masked_mean(soft_target_entropy(target))
                             prob = as_probabilities(pred, self._model_has_sigmoid)
-                            mae = ((prob - target).abs() * mask).sum() / mask.sum().clamp(min=1)
+                            mae = masked_mean((prob - target).abs(), mask)
                         self._step_bce_metrics = (bce_floor.item(), mae.item())
                 elif hasattr(self.criterion, 'forward') and 'mask' in self.criterion.forward.__code__.co_varnames:
                     # For custom losses that support masking (DiceLoss, CombinedLoss, MarginLoss)
@@ -1300,36 +1136,28 @@ class LoRAFinetuner:
                     logger.warning(f"NaN/Inf supervised_loss: {supervised_loss.item()}")
 
                 # Compute distillation loss
-                distillation_loss = torch.tensor(0.0, device=self.device)
+                distill_loss = torch.tensor(0.0, device=self.device)
                 if self.distillation_lambda > 0 and teacher_pred is not None:
-                    distill_loss_map = (pred - teacher_pred) ** 2  # per-element MSE
                     if anchor is not None:
                         # Good regions decide where the teacher is worth
                         # copying. Distilling on every unlabeled voxel
-                        # instead -- the branch below -- anchors hardest
+                        # instead -- the scope below -- anchors hardest
                         # right beside the scribbles, which is the one place
                         # the teacher is known to be wrong, so it partly
                         # fights the correction being made. Restrict it to
                         # the regions the user actually vouched for.
-                        #
-                        # Broadcast over channels: the mask is single-channel
-                        # (it is about location) while pred may not be.
-                        anchor_mask = anchor.float().expand_as(distill_loss_map)
-                        distillation_loss = (
-                            distill_loss_map.float() * anchor_mask
-                        ).sum() / anchor_mask.sum().clamp(min=1)
+                        scope = "anchor"
                     elif self.distillation_all_voxels or mask is None:
-                        # Apply on all voxels
-                        distillation_loss = distill_loss_map.mean()
+                        scope = "all"
                     else:
-                        # Apply only on unlabeled voxels.
-                        # Cast to float32 before multiply/sum to avoid FP16 overflow
-                        # when summing over many voxels (e.g., 13-channel models).
-                        unlabeled_mask = (1.0 - mask).float()
-                        distillation_loss = (distill_loss_map.float() * unlabeled_mask).sum() / unlabeled_mask.sum().clamp(min=1)
-                    if not torch.isfinite(distillation_loss):
-                        logger.warning(f"NaN/Inf distillation_loss: {distillation_loss.item()}")
-                    loss = loss + self.distillation_lambda * distillation_loss
+                        scope = "unlabeled"
+                    distill_loss = distillation_loss(
+                        pred, teacher_pred, scope, anchor_mask=anchor,
+                        unlabeled_mask=None if mask is None else 1.0 - mask,
+                    )
+                    if not torch.isfinite(distill_loss):
+                        logger.warning(f"NaN/Inf distillation_loss: {distill_loss.item()}")
+                    loss = loss + self.distillation_lambda * distill_loss
 
                 # Scale loss for gradient accumulation
                 loss = loss / self.gradient_accumulation_steps
@@ -1394,7 +1222,7 @@ class LoRAFinetuner:
                         self.tb.add_scalar("train/supervised_above_floor", supervised_loss.item() - floor, self._tb_step)
                         self.tb.add_scalar("train/mean_abs_error", mae, self._tb_step)
                     if self.distillation_lambda > 0:
-                        self.tb.add_scalar("train/distillation", distillation_loss.item(), self._tb_step)
+                        self.tb.add_scalar("train/distillation", distill_loss.item(), self._tb_step)
                     self.tb.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"], self._tb_step)
                     self.tb.add_scalar("time/step_s", time.time() - t_after_fetch, self._tb_step)
                     self.tb.add_scalar("time/data_wait_s", t_after_fetch - t_fetch, self._tb_step)
@@ -1409,7 +1237,7 @@ class LoRAFinetuner:
                 self.last_supervised_loss = float('nan')
                 return float('nan')
             epoch_loss += batch_loss
-            epoch_distill_loss += distillation_loss.item()
+            epoch_distill_loss += distill_loss.item()
             if mask is None or bool(mask.sum() > 0):
                 supervised_batches += 1
                 epoch_supervised_loss += supervised_loss.item()
