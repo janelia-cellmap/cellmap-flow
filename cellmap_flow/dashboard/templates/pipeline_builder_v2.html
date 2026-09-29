@@ -2772,43 +2772,6 @@
 
         initializeLibrary();
 
-        // Track if blockwise config has been loaded
-        let blockwiseConfigLoaded = false;
-
-        // Load blockwise configuration from globals on page load
-        async function loadBlockwiseConfig() {
-            if (blockwiseConfigLoaded) return;
-            blockwiseConfigLoaded = true;
-            
-            try {
-                const response = await fetch('/api/blockwise-config');
-                const config = await response.json();
-                
-                // Update existing blockwise config nodes with fetched values from globals
-                if (pipeline.blockwise_config.length > 0) {
-                    pipeline.blockwise_config.forEach(node => {
-                        if (!node.params) {
-                            node.params = {};
-                        }
-                        node.params.queue = config.queue;
-                        node.params.charge_group = config.charge_group;
-                        node.params.nb_cores_master = config.nb_cores_master;
-                        node.params.nb_cores_worker = config.nb_cores_worker;
-                        node.params.nb_workers = config.nb_workers;
-                        node.params.tmp_dir = config.tmp_dir;
-                        node.params.blockwise_tasks_dir = config.blockwise_tasks_dir;
-                    });
-                    renderCanvas();
-                    canvas.appendChild(svg);
-                    
-                }
-            } catch (error) {
-                console.error('Error loading blockwise config:', error);
-            }
-        }
-        
-        loadBlockwiseConfig();
-
         // Blockwise workflow state tracking
         let blockwiseState = {
             validated: false,
