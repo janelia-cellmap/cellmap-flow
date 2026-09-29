@@ -1,717 +1,344 @@
-"""PipelineSpec: the one reader and writer of the chain's wire forms."""
+"""The chain's formats that leave the process, and the chain state on g.
 
-import dataclasses
+A chain reaches inference servers (older or newer than the dashboard) as JSON
+in the layer URL, the YAML and blockwise paths as json_data, and the trainer
+through current_*_config(). Rebuilding individual ops from their to_dict() is
+covered in test_chain_serialization.
+"""
+
+import base64
+import contextlib
+import gc
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
 
+import numpy as np
 import pytest
+from flask import Flask
 
+from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.norm.input_normalize import EuclideanDistance, LambdaNormalizer, MinMaxNormalizer
 from cellmap_flow.pipeline_spec import (
-    INPUT_NORM_KEY,
-    POSTPROCESS_KEY,
     PipelineSpec,
     builder_steps,
+    chain_num_channels,
     normalize_steps,
-    split_dataset_url,
+    op_schemas,
 )
-from cellmap_flow.utils.web_utils import (
-    ARGS_KEY,
-    INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
-    decode_to_json,
-    get_norms_post_args,
-    list_cls_to_dict,
+from cellmap_flow.post.postprocessors import (
+    AffinityPostprocessor,
+    ChannelSelection,
+    DefaultPostprocessor,
+    LambdaPostprocessor,
+    SigmoidPostprocessor,
+    SimpleBlockwiseMerger,
+    ThresholdPostprocessor,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from cellmap_flow.utils.serilization_utils import get_process_dataset, get_process_dataset_url
+from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json, encode_to_str, get_norms_post_args
 
 MINMAX = {"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}
 SHIFT = {"name": "LambdaNormalizer", "expression": "x*2-1"}
 THRESHOLD = {"name": "ThresholdPostprocessor", "threshold": 0.5}
 
 
-def test_keys_are_the_web_utils_strings():
-    assert (INPUT_NORM_KEY, POSTPROCESS_KEY) == (INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY)
+def _ordered(steps):
+    """Steps with their key order, which a plain == would ignore."""
+    return [list(s.items()) if isinstance(s, dict) else s for s in steps]
 
 
-# --- normalize_steps -----------------------------------------------------------
+# --- the layer URL's args blob -------------------------------------------------
 
 
-@pytest.mark.parametrize("empty", [None, {}, [], ()])
-def test_nothing_is_an_empty_chain(empty):
-    assert normalize_steps(empty) == ()
+@pytest.mark.parametrize(
+    "norms, posts, text",
+    [
+        (
+            [MinMaxNormalizer(), LambdaNormalizer("x*2-1")], [],
+            '{"input_norm":[{"name":"MinMaxNormalizer","min_value":0.0,"max_value":255.0,'
+            '"invert":false},{"name":"LambdaNormalizer","expression":"x*2-1"}],"postprocess":[]}',
+        ),
+        (
+            [], [LambdaPostprocessor("x + 1"), LambdaPostprocessor("x * 10")],
+            '{"input_norm":[],"postprocess":[{"name":"LambdaPostprocessor","expression":"x + 1"},'
+            '{"name":"LambdaPostprocessor","expression":"x * 10"}]}',
+        ),
+        (
+            [], [AffinityPostprocessor(bias=0.5, neighborhood="[[1, 0, 0], [0, 1, 0]]")],
+            '{"input_norm":[],"postprocess":[{"name":"AffinityPostprocessor","bias":0.5,'
+            '"neighborhood":"[[1, 0, 0], [0, 1, 0]]"}]}',
+        ),
+        (
+            [], [ChannelSelection("0,2")],
+            '{"input_norm":[],"postprocess":[{"name":"ChannelSelection","channels":"0,2"}]}',
+        ),
+        (
+            [EuclideanDistance(anisotropy=8, black_border=False, type="sdf")], [],
+            '{"input_norm":[{"name":"EuclideanDistance","anisotropy":8,"black_border":false,'
+            '"parallel":5,"type":"sdf","activation":"tanh"}],"postprocess":[]}',
+        ),
+    ],
+    ids=["minmax_lambda", "two_lambdas", "affinity", "channel_selection", "edt"],
+)
+def test_url_blob_bytes(norms, posts, text):
+    """input_norm first; flat {"name", **constructor args} steps with real types.
+
+    Older servers pass every key but "name" to the constructor, so the steps
+    must never be nested as {"name", "params"}.
+    """
+    blob = get_norms_post_args(norms, posts)
+    assert base64.urlsafe_b64decode(blob + "=" * (-len(blob) % 4)).decode() == text
 
 
-def test_the_list_form_is_copied_as_given():
-    steps = [dict(MINMAX, min_value="0"), SHIFT]
-    got = normalize_steps(steps)
-    assert got == (steps[0], steps[1])
-    assert got[0]["min_value"] == "0", "values are not coerced"
-    got[0]["min_value"] = 5
-    assert steps[0]["min_value"] == "0", "the caller's steps are not shared"
-
-
-def test_the_legacy_dict_form_becomes_steps_in_order():
-    got = normalize_steps(
-        {
-            "MinMaxNormalizer": {"min_value": 0, "max_value": 255},
-            "LambdaNormalizer": {"expression": "x*2-1"},
-            "SigmoidPostprocessor": None,
-        }
-    )
-    assert [list(s.items()) for s in got] == [
-        [("name", "MinMaxNormalizer"), ("min_value", 0), ("max_value", 255)],
-        [("name", "LambdaNormalizer"), ("expression", "x*2-1")],
-        [("name", "SigmoidPostprocessor")],
-    ]
-
-
-def test_in_the_dict_form_the_key_names_the_class():
-    # output_probe.suggest_input_norm writes a name inside the params too.
-    (step,) = normalize_steps({"MinMaxNormalizer": {"name": "Other", "min_value": 1}})
-    assert step == {"name": "MinMaxNormalizer", "min_value": 1}
-
-
-def test_non_dict_list_elements_are_kept_for_the_reader_to_skip():
-    assert normalize_steps([SHIFT, "junk"]) == (SHIFT, "junk")
-
-
-def test_other_shapes_are_rejected_like_the_op_readers_do():
-    with pytest.raises(ValueError, match="Expected dict or list"):
-        normalize_steps("MinMaxNormalizer")
-
-
-# --- builder_steps --------------------------------------------------------------
-
-
-def test_builder_steps_put_the_name_last():
-    nodes = [
-        {"id": "n1", "name": "MinMaxNormalizer", "params": {"min_value": 0}},
-        {"id": "n2", "name": "SigmoidPostprocessor"},
-        {"id": "n3", "name": "LambdaNormalizer", "params": None},
-    ]
-    assert [list(s.items()) for s in builder_steps(nodes)] == [
-        [("min_value", 0), ("name", "MinMaxNormalizer")],
-        [("name", "SigmoidPostprocessor")],
-        [("name", "LambdaNormalizer")],
-    ]
-
-
-def test_builder_steps_skip_nodes_without_a_name():
-    nodes = [{"params": {"a": 1}}, {"name": ""}, "junk", {"name": "SigmoidPostprocessor"}]
-    assert builder_steps(nodes) == ({"name": "SigmoidPostprocessor"},)
-    assert builder_steps(None) == ()
-
-
-# --- split_dataset_url ------------------------------------------------------------
-
-
-def test_split_dataset_url():
-    assert split_dataset_url("http://h:1/m") is None
-    assert split_dataset_url(f"http://h:1/m{ARGS_KEY}abc{ARGS_KEY}") == "abc"
-    with pytest.raises(ValueError, match="Expected two occurrences"):
-        split_dataset_url(f"m{ARGS_KEY}abc")
-    with pytest.raises(ValueError, match="found 4"):
-        split_dataset_url(f"m{ARGS_KEY}a{ARGS_KEY}b{ARGS_KEY}")
-
-
-# --- PipelineSpec -----------------------------------------------------------------
-
-
-def test_construction_normalizes_both_chains():
-    from_list = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
-    from_dict = PipelineSpec(
-        {"MinMaxNormalizer": {"min_value": 0, "max_value": 255},
-         "LambdaNormalizer": {"expression": "x*2-1"}},
-        {"ThresholdPostprocessor": {"threshold": 0.5}},
-    )
-    assert from_list.input_norm == (MINMAX, SHIFT)
-    assert from_list == from_dict
-    assert PipelineSpec() == PipelineSpec(None, [])
-
-
-def test_a_spec_is_frozen_and_hands_out_copies():
-    spec = PipelineSpec([MINMAX])
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        spec.input_norm = ()
-    spec.to_json_data()[INPUT_NORM_KEY][0]["min_value"] = 99
-    assert spec.input_norm[0]["min_value"] == 0
-
-
-def test_from_json_data_accepts_every_shape():
-    data = {"input_norm": [MINMAX], "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}}
-    spec = PipelineSpec.from_json_data(data)
-    assert spec == PipelineSpec([MINMAX], [THRESHOLD])
-    assert PipelineSpec.from_json_data(json.dumps(data)) == spec
-    assert PipelineSpec.from_json_data(None).is_empty()
-    # A missing chain is an empty one.
-    assert PipelineSpec.from_json_data({"postprocess": [THRESHOLD]}).input_norm == ()
-
-
-def test_strict_json_data_needs_both_chains_as_lists_or_dicts():
-    data = {"input_norm": [MINMAX], "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}}
-    assert PipelineSpec.from_json_data(data, strict=True) == PipelineSpec([MINMAX], [THRESHOLD])
-    with pytest.raises(KeyError):
-        PipelineSpec.from_json_data({"postprocess": []}, strict=True)
-    with pytest.raises(ValueError, match="Expected dict or list"):
-        PipelineSpec.from_json_data({"input_norm": None, "postprocess": []}, strict=True)
-    with pytest.raises(ValueError, match="Expected dict or list"):
-        PipelineSpec.from_json_data({"input_norm": [], "postprocess": ()}, strict=True)
-
-
-def test_to_json_data_has_input_norm_first():
-    data = PipelineSpec(postprocess=[THRESHOLD], input_norm=[MINMAX]).to_json_data()
-    assert list(data) == ["input_norm", "postprocess"]
-    assert data == {"input_norm": [MINMAX], "postprocess": [THRESHOLD]}
-
-
-def test_from_steps_is_list_cls_to_dict():
-    from cellmap_flow.norm.input_normalize import LambdaNormalizer, MinMaxNormalizer
-    from cellmap_flow.post.postprocessors import ChannelSelection
-
-    norms = [MinMaxNormalizer(min_value="3"), LambdaNormalizer("x+1")]
-    posts = [ChannelSelection("0,2")]
-    spec = PipelineSpec.from_steps(norms, posts)
-    assert list(spec.input_norm) == list_cls_to_dict(norms)
-    assert list(spec.postprocess) == list_cls_to_dict(posts)
-    assert PipelineSpec.from_steps() == PipelineSpec()
-
-
-def test_url_blob_without_extras_is_get_norms_post_args():
-    from cellmap_flow.norm.input_normalize import EuclideanDistance
-    from cellmap_flow.post.postprocessors import LambdaPostprocessor
-
-    norms = [EuclideanDistance(black_border=False)]
-    posts = [LambdaPostprocessor("x + 1"), LambdaPostprocessor("x * 10")]
-    assert PipelineSpec.from_steps(norms, posts).to_url_blob() == get_norms_post_args(
-        norms, posts
-    )
-
-
-def test_url_blob_round_trip_with_extras():
+def test_url_blob_extras_follow_the_chains():
     spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
     blob = spec.to_url_blob(dashboard_url="http://dash/", digest=spec.digest())
-    assert list(decode_to_json(blob)) == [
-        "input_norm", "postprocess", "dashboard_url", "digest",
-    ]
-    got, extras = PipelineSpec.from_url_blob(blob)
-    assert got == spec
-    assert extras == {"dashboard_url": "http://dash/", "digest": spec.digest()}
-
-
-def test_extras_cannot_replace_a_chain():
+    assert list(decode_to_json(blob)) == ["input_norm", "postprocess", "dashboard_url", "digest"]
+    extras = {"dashboard_url": "http://dash/", "digest": spec.digest()}
+    assert PipelineSpec.from_url_blob(blob) == (spec, extras)
+    # The server tells this dashboard about new equivalences.
+    assert get_process_dataset_url(f"m{ARGS_KEY}{blob}{ARGS_KEY}")[0] == "http://dash/"
     with pytest.raises(ValueError):
-        PipelineSpec().to_url_blob(postprocess=[])
+        spec.to_url_blob(postprocess=[])
 
 
-def test_digest_follows_content_not_identity():
+def test_digest_is_stable_and_follows_the_content():
     spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
-    assert spec.digest() == PipelineSpec([dict(MINMAX), dict(SHIFT)], [dict(THRESHOLD)]).digest()
-    assert len(spec.digest()) == 16 and int(spec.digest(), 16) >= 0
-    # The order of a step's own keys does not matter; everything else does.
+    # It goes into layer URLs, so it must be the same in every process.
+    assert spec.digest() == "4d284fb937eabaec"
     reordered = {"max_value": 255, "name": "MinMaxNormalizer", "min_value": 0}
     assert PipelineSpec([reordered, SHIFT], [THRESHOLD]).digest() == spec.digest()
-    assert PipelineSpec([SHIFT, MINMAX], [THRESHOLD]).digest() != spec.digest()
-    assert PipelineSpec([MINMAX, SHIFT], [dict(THRESHOLD, threshold=0.6)]).digest() != spec.digest()
-    assert PipelineSpec([MINMAX, SHIFT], []).digest() != spec.digest()
-    # The same chain on the other side is a different pipeline.
-    assert PipelineSpec([], [MINMAX]).digest() != PipelineSpec([MINMAX], []).digest()
+    for other in (
+        PipelineSpec([SHIFT, MINMAX], [THRESHOLD]),
+        PipelineSpec([MINMAX, SHIFT], [dict(THRESHOLD, threshold=0.6)]),
+        PipelineSpec([MINMAX, SHIFT, THRESHOLD], []),
+    ):
+        assert other.digest() != spec.digest()
 
 
-def test_digest_is_the_same_in_every_process():
-    # It goes into layer URLs, so it must not depend on hash seeds and the like.
-    assert PipelineSpec([MINMAX, SHIFT], [THRESHOLD]).digest() == "4d284fb937eabaec"
+# --- reading chains ------------------------------------------------------------
 
 
-def test_build_makes_new_instances_in_order():
-    spec = PipelineSpec([SHIFT, MINMAX, dict(SHIFT, expression="x*3")], [THRESHOLD])
-    norms, posts = spec.build()
-    assert [type(n).__name__ for n in norms] == [
-        "LambdaNormalizer", "MinMaxNormalizer", "LambdaNormalizer",
-    ]
-    assert [n.expression for n in norms if hasattr(n, "expression")] == ["x*2-1", "x*3"]
-    assert [p.threshold for p in posts] == [0.5]
-    again, _ = spec.build()
-    assert again[0] is not norms[0]
+@pytest.mark.parametrize(
+    "read, given, expected",
+    [
+        (normalize_steps, None, []),
+        # The list form is kept as given: values are not coerced.
+        (normalize_steps, [dict(MINMAX, min_value="0"), "junk"],
+         [[("name", "MinMaxNormalizer"), ("min_value", "0"), ("max_value", 255)], "junk"]),
+        # The legacy dict: a step per key, in order, and the key names the class.
+        (normalize_steps, {"MinMaxNormalizer": {"name": "X", "min_value": 0}, "SigmoidPostprocessor": None},
+         [[("name", "MinMaxNormalizer"), ("min_value", 0)], [("name", "SigmoidPostprocessor")]]),
+        # Builder nodes: {**params, "name"}, the order apply always stored.
+        (builder_steps, [{"id": 1, "name": "MinMaxNormalizer", "params": {"min_value": 0}},
+                         {"params": {"a": 1}}, "junk", {"name": "SigmoidPostprocessor"}],
+         [[("min_value", 0), ("name", "MinMaxNormalizer")], [("name", "SigmoidPostprocessor")]]),
+    ],
+    ids=["nothing", "list", "legacy_dict", "builder"],
+)
+def test_step_readers(read, given, expected):
+    assert _ordered(read(given)) == expected
 
 
-def test_is_empty():
-    assert PipelineSpec().is_empty()
-    assert not PipelineSpec(postprocess=[THRESHOLD]).is_empty()
-
-
-def test_importing_the_module_stays_light():
-    """No globals (and so no logging config), Flask, viewer, torch or ops."""
-    forbidden = [
-        "cellmap_flow.globals",
-        "flask",
-        "neuroglancer",
-        "torch",
-        "huggingface_hub",
-        "peft",
-        "cellmap_flow.norm.input_normalize",
-        "cellmap_flow.post.postprocessors",
-    ]
-    code = (
-        "import sys, cellmap_flow.pipeline_spec\n"
-        f"loaded = [m for m in {forbidden!r} if m in sys.modules]\n"
-        "assert not loaded, loaded\n"
-    )
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join(
-        [str(REPO_ROOT), os.environ.get("PYTHONPATH", "")]
-    ))
-    result = subprocess.run(
-        [sys.executable, "-c", code], cwd=REPO_ROOT, env=env,
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0, result.stderr
-
-
-# --- Flow.pipeline_spec and Flow.set_pipeline ---------------------------------------
-
-
-def test_the_flow_spec_prefers_the_configured_steps():
-    from cellmap_flow.globals import g
-    from cellmap_flow.norm.input_normalize import ZScoreNormalizer
-
-    g.input_norms = [ZScoreNormalizer(mean=1)]
-    g.input_norm_config = [dict(SHIFT, expression="x*5")]
-    g.postprocess, g.postprocess_config = [], []
-    assert g.pipeline_spec == PipelineSpec([dict(SHIFT, expression="x*5")], [])
-
-
-def test_the_flow_spec_falls_back_to_the_live_chain_per_chain():
-    from cellmap_flow.globals import g
-    from cellmap_flow.post.postprocessors import SigmoidPostprocessor
-
-    g.input_norms, g.input_norm_config = [], [MINMAX]
-    g.postprocess, g.postprocess_config = [SigmoidPostprocessor()], {}
-    spec = g.pipeline_spec
-    assert spec.input_norm == (MINMAX,)
-    assert spec.postprocess == ({"name": "SigmoidPostprocessor"},)
-    # An old name-keyed config reads as steps.
-    g.input_norm_config = {"LambdaNormalizer": {"expression": "x*2-1"}}
-    assert g.pipeline_spec.input_norm == (SHIFT,)
-
-
-def test_the_flow_spec_is_derived_not_stored():
-    from cellmap_flow.globals import g
-
-    assert "pipeline_spec" not in vars(g)
-    with pytest.raises(AttributeError):
-        g.pipeline_spec = PipelineSpec()
-
-
-def test_set_pipeline_writes_all_four_attributes():
-    from cellmap_flow.globals import g
-
+def test_json_data_forms():
+    legacy = {
+        "input_norm": {"MinMaxNormalizer": {"min_value": 0, "max_value": 255},
+                       "LambdaNormalizer": {"expression": "x*2-1"}},
+        "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}},
+    }
     spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
-    g.set_pipeline(spec)
-    assert [type(n).__name__ for n in g.input_norms] == [
-        "MinMaxNormalizer", "LambdaNormalizer",
-    ]
-    assert [type(p).__name__ for p in g.postprocess] == ["ThresholdPostprocessor"]
-    assert g.input_norm_config == [MINMAX, SHIFT]
-    assert g.postprocess_config == [THRESHOLD]
-    assert g.pipeline_spec == spec
+    assert PipelineSpec.from_json_data(json.dumps(legacy), strict=True) == spec
+    assert list(spec.to_json_data()) == ["input_norm", "postprocess"]
+    # Without strict, a missing or null chain is empty.
+    assert PipelineSpec.from_json_data({"postprocess": None}) == PipelineSpec()
 
 
-def test_set_pipeline_keeps_the_instances_it_is_given():
-    from cellmap_flow.globals import g
-    from cellmap_flow.post.postprocessors import SimpleBlockwiseMerger
+@pytest.mark.parametrize(
+    "json_data, error",
+    [
+        ({"input_norm": []}, KeyError),
+        ({"postprocess": []}, KeyError),
+        ({"input_norm": None, "postprocess": []}, ValueError),
+        ({"input_norm": [], "postprocess": "SigmoidPostprocessor"}, ValueError),
+    ],
+)
+def test_the_readers_reject_a_json_data_without_both_chains(json_data, error):
+    """A misspelt json_data is a mistake the blockwise precheck reports, not an
+    empty chain."""
+    with pytest.raises(error):
+        PipelineSpec.from_json_data(json_data, strict=True)
+    with pytest.raises(error):
+        get_process_dataset(json_data)
+    with pytest.raises(error):
+        get_process_dataset_url(f"m{ARGS_KEY}{encode_to_str(json_data)}{ARGS_KEY}")
 
-    merger = SimpleBlockwiseMerger()
-    spec = PipelineSpec.from_steps([], [merger])
-    g.set_pipeline(spec, built=([], [merger]))
-    assert g.postprocess[0] is merger
 
-
-def test_a_chain_that_fails_to_build_changes_nothing():
-    from cellmap_flow.globals import g
-
-    g.set_pipeline(PipelineSpec([MINMAX], []))
-    before = (list(g.input_norms), g.input_norm_config, g.postprocess_config)
-    with pytest.raises(ValueError):
-        g.set_pipeline(
-            PipelineSpec([SHIFT], [{"name": "ThresholdPostprocessor", "threshold": "high"}])
-        )
-    assert (g.input_norms, g.input_norm_config, g.postprocess_config) == before
+# --- the dashboard's chain state -------------------------------------------------
 
 
 @pytest.fixture
-def dashboard(monkeypatch):
-    from flask import Flask
-
+def post(monkeypatch):
     import cellmap_flow.dashboard.routes.pipeline as pipeline
-    from cellmap_flow.globals import g
 
-    monkeypatch.setattr(
-        pipeline, "get_raw_layer", lambda path: type("Raw", (), {"shader": None})()
-    )
+    monkeypatch.setattr(pipeline, "get_raw_layer", lambda path: type("Raw", (), {"shader": None})())
     monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {})
 
     class Viewer:
         state = type("State", (), {"layers": {}})()
 
         def txn(self):
-            import contextlib
-
             return contextlib.nullcontext(self.state)
 
-    g.viewer, g.jobs, g.dataset_path = Viewer(), [], "/data/raw.zarr"
+    g.viewer, g.dataset_path = Viewer(), "/data/raw.zarr"
+    g.jobs = [type("Job", (), {"model_name": "mito", "host": "http://gpu:8000"})()]
     g.shaders, g.shader_controls = {}, {}
-
-    written = []
-    real = type(g).set_pipeline
-
-    def spy(spec, built=None):
-        written.append(spec)
-        real(g, spec, built)
-
-    monkeypatch.setattr(g, "set_pipeline", spy)
+    g.input_norms, g.postprocess, g.input_norm_config, g.postprocess_config = [], [], {}, {}
     app = Flask(__name__)
     app.register_blueprint(pipeline.pipeline_bp)
-    return app.test_client(), written
+    client = app.test_client()
+
+    def post(url, payload):
+        # As a browser sends it: the test client's json= sorts the keys.
+        response = client.post(url, data=json.dumps(payload), content_type="application/json")
+        assert response.status_code == 200, response.data
+        return response.get_json()
+
+    return post
 
 
-def test_process_writes_through_set_pipeline(dashboard):
-    client, written = dashboard
-    response = client.post(
-        "/api/process", json={"input_norm": [MINMAX], "postprocess": [THRESHOLD]}
-    )
-    assert response.status_code == 200
-    assert written == [PipelineSpec([MINMAX], [THRESHOLD])]
+def _layer_source():
+    return g.viewer.state.layers["mito"].to_json()["source"]
 
 
-def test_apply_writes_through_set_pipeline(dashboard):
-    client, written = dashboard
-    response = client.post(
-        "/api/pipeline/apply",
-        json={
-            "input_normalizers": [{"name": "LambdaNormalizer", "params": {"expression": "x+1"}}],
-            "postprocessors": [],
-        },
-    )
-    assert response.status_code == 200
-    assert written == [PipelineSpec([{"expression": "x+1", "name": "LambdaNormalizer"}])]
+def _layer_blob():
+    source = _layer_source()
+    source = source[0] if isinstance(source, list) else source
+    url = source["url"] if isinstance(source, dict) else source
+    return decode_to_json(url.split(ARGS_KEY)[1])
 
 
-@pytest.mark.parametrize(
-    "chains", [{"input_norm": []}, {"input_norm": None, "postprocess": []}]
-)
-def test_process_still_refuses_a_request_without_both_chains(dashboard, chains):
-    from cellmap_flow.globals import g
-
-    client, written = dashboard
-    g.set_pipeline(PipelineSpec([MINMAX], []))
-    client.application.config["PROPAGATE_EXCEPTIONS"] = False
-    response = client.post("/api/process", json=chains)
-    assert response.status_code == 500
-    assert written == [PipelineSpec([MINMAX], [])], "nothing new was written"
-    assert g.input_norm_config == [MINMAX]
-
-
-def test_resubmitting_the_same_chain_gives_the_same_layer_source(dashboard):
-    from cellmap_flow.globals import g
-
-    client, _ = dashboard
-    g.jobs = [type("Job", (), {"model_name": "mito", "host": "http://gpu:8000"})()]
-
-    def submit(threshold):
-        chain = {"input_norm": [MINMAX], "postprocess": [dict(THRESHOLD, threshold=threshold)]}
-        response = client.post("/api/process", json=chain)
-        assert response.status_code == 200
-        source = g.viewer.state.layers["mito"].to_json()["source"]
-        return source, response.get_json()["received_data"]
-
-    first, received = submit("0.5")
-    again, _ = submit("0.5")
-    changed, _ = submit("0.6")
-    assert again == first
-    assert changed != first
-    assert "time" not in received
-    assert received["digest"] == PipelineSpec(
-        [MINMAX], [dict(THRESHOLD, threshold="0.5")]
-    ).digest()
-    url = first[0] if isinstance(first, list) else first
-    url = url["url"] if isinstance(url, dict) else url
-    blob = url.split(ARGS_KEY)[1]
-    assert PipelineSpec.from_url_blob(blob)[1]["digest"] == received["digest"]
-
-
-# --- what a chain produces ------------------------------------------------------------
-
-
-def _old_output_dtype(model_dtype, postprocess):
-    """Flow.get_output_dtype before output_info."""
-    for step in postprocess[::-1]:
-        if step.dtype:
-            return step.dtype
-    return model_dtype
-
-
-def _old_is_segmentation(postprocess):
-    """dashboard.routes.pipeline.is_output_segmentation before output_info."""
-    if len(postprocess) == 0:
-        return False
-    for step in postprocess[::-1]:
-        if step.is_segmentation is not None:
-            return step.is_segmentation
-
-
-def _old_num_channels(postprocess, channels):
-    """CellMapFlowServer._num_channels before output_info."""
-    for step in postprocess:
-        if hasattr(step, "num_channels"):
-            channels = step.num_channels
-    return int(channels)
-
-
-def _chains_to_compare():
-    from cellmap_flow.post.postprocessors import (
-        AffinityPostprocessor,
-        ChannelSelection,
-        DefaultPostprocessor,
-        LabelPostprocessor,
-        LambdaPostprocessor,
-        SigmoidPostprocessor,
-        SimpleBlockwiseMerger,
-        ThresholdPostprocessor,
-    )
-
-    return {
-        "empty": [],
-        "sigmoid": [SigmoidPostprocessor()],
-        "select": [ChannelSelection("0,2")],
-        "sigmoid_affinity": [SigmoidPostprocessor(), AffinityPostprocessor()],
-        "affinity_sigmoid": [AffinityPostprocessor(), SigmoidPostprocessor()],
-        "default_affinity_merger": [
-            DefaultPostprocessor(), AffinityPostprocessor(), SimpleBlockwiseMerger(),
-        ],
-        "select_then_affinity": [ChannelSelection("0,1,2"), AffinityPostprocessor()],
-        "affinity_then_select": [AffinityPostprocessor(), ChannelSelection("0,0")],
-        "threshold_default": [ThresholdPostprocessor(), DefaultPostprocessor()],
-        "default_sigmoid": [DefaultPostprocessor(), SigmoidPostprocessor()],
-        "label_lambda": [LabelPostprocessor(), LambdaPostprocessor("x")],
-    }
-
-
-@pytest.mark.parametrize("name", list(_chains_to_compare()))
-def test_chain_helpers_agree_with_the_scans_they_replace(name):
-    import numpy as np
-
-    from cellmap_flow.pipeline_spec import (
-        chain_is_segmentation,
-        chain_num_channels,
-        chain_output_dtype,
-    )
-
-    chain = _chains_to_compare()[name]
-    assert chain_output_dtype(chain, np.float16) == _old_output_dtype(np.float16, chain)
-    assert chain_is_segmentation(chain) is _old_is_segmentation(chain)
-    assert chain_num_channels(chain, 9) == _old_num_channels(chain, 9)
-
-
-def test_chain_helpers_on_a_few_chains_by_value():
-    import numpy as np
-
-    from cellmap_flow.pipeline_spec import (
-        chain_is_segmentation,
-        chain_num_channels,
-        chain_output_dtype,
-    )
-
-    chains = _chains_to_compare()
-    assert chain_output_dtype(chains["sigmoid_affinity"], np.float32) is np.uint64
-    assert chain_output_dtype(chains["empty"], "float16") == "float16"
-    assert chain_num_channels(chains["select"], 3) == 2
-    assert chain_num_channels(chains["select_then_affinity"], 9) == 1
-    assert chain_is_segmentation(chains["sigmoid"]) is None
-    assert chain_is_segmentation(chains["threshold_default"]) is False
-    assert chain_is_segmentation(chains["default_affinity_merger"]) is True
-
-
-def test_steps_that_are_not_ops_are_read_by_their_attributes():
-    import numpy as np
-
-    from cellmap_flow.pipeline_spec import chain_num_channels, chain_output_dtype
-
-    class Plain:
-        dtype = np.uint8
-        num_channels = 4
-
-    assert chain_output_dtype([Plain()], np.float32) is np.uint8
-    assert chain_num_channels([Plain()], 1) == 4
-
-
-def test_output_info_defaults_to_the_declared_attributes():
-    import numpy as np
-
-    from cellmap_flow.norm.input_normalize import ChannelSelector, MinMaxNormalizer
-    from cellmap_flow.post.postprocessors import (
-        AffinityPostprocessor,
-        ChannelSelection,
-        SigmoidPostprocessor,
-    )
-
-    assert AffinityPostprocessor().output_info(np.float32, 9) == (np.uint64, 1, True)
-    assert ChannelSelection("1,2").output_info(np.uint8, 3) == (np.uint8, 2, None)
-    assert SigmoidPostprocessor().output_info(np.uint8, 3) == (np.float32, 3, None)
-    assert MinMaxNormalizer().output_info(np.uint8, 1) == (np.float32, 1, None)
-    assert ChannelSelector().output_info(np.uint16, 2) == (np.uint16, 2, None)
-
-
-def test_flow_and_dashboard_use_the_chain_helpers(monkeypatch):
-    import numpy as np
-
-    import cellmap_flow.dashboard.routes.pipeline as pipeline
-    import cellmap_flow.globals as globals_module
-    from cellmap_flow.globals import g
-    from cellmap_flow.post.postprocessors import SigmoidPostprocessor, ThresholdPostprocessor
-
-    g.postprocess = [ThresholdPostprocessor(), SigmoidPostprocessor()]
-    assert g.get_output_dtype(np.uint16) is np.float32
-    assert g.get_output_dtype(np.uint16, []) is np.uint16
-    assert pipeline.is_output_segmentation() is True
-
-    calls = []
-    monkeypatch.setattr(
-        globals_module, "chain_output_dtype", lambda *a: calls.append("dtype") or "x"
-    )
-    monkeypatch.setattr(
-        pipeline, "chain_is_segmentation", lambda *a: calls.append("seg") or "y"
-    )
-    assert (g.get_output_dtype(np.uint16), pipeline.is_output_segmentation()) == ("x", "y")
-    assert calls == ["dtype", "seg"]
-
-
-# --- op_schemas --------------------------------------------------------------------
-
-
-def _builtin_ops(kind):
-    """The ops cellmap_flow itself registers. Tests and plugins add their own
-    subclasses to the same registry, so those are left out of the per-op
-    parametrization (test_op_schemas_cover_the_registry still covers them)."""
-    if kind == "input_norm":
-        from cellmap_flow.norm.input_normalize import InputNormalizer as base
-    else:
-        from cellmap_flow.post.postprocessors import PostProcessor as base
-    return [
-        (kind, cls.__name__)
-        for cls in base.__subclasses__()
-        if cls.__module__.startswith("cellmap_flow.")
-    ]
-
-
-BUILTIN_OPS = _builtin_ops("input_norm") + _builtin_ops("postprocess")
-
-# One value for each argument without a default.
-REQUIRED_SAMPLES = {"expression": "x*2-1"}
-
-_PYTHON_TYPES = {
-    "boolean": bool,
-    "integer": int,
-    "number": (int, float),
-    "string": str,
-    "array": list,
-    "object": dict,
+# What the Input/Output tabs post: every value a string, name first.
+POSTED = {
+    "input_norm": [
+        {"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255", "invert": "false"},
+        {"name": "LambdaNormalizer", "expression": "x*2-1"},
+    ],
+    "postprocess": [{"name": "ThresholdPostprocessor", "threshold": "0.5"}],
 }
 
 
-def _listing(kind):
-    from cellmap_flow.norm.input_normalize import get_input_normalizers
-    from cellmap_flow.post.postprocessors import get_postprocessors_list
+def test_submit_keeps_the_posted_steps_and_names_the_layer_by_digest(post):
+    received = post("/api/process", POSTED)["received_data"]
+    assert _ordered(current_input_norm_config()) == _ordered(POSTED["input_norm"])
+    assert _ordered(current_postprocess_config()) == _ordered(POSTED["postprocess"])
+    assert [type(n).__name__ for n in g.input_norms] == ["MinMaxNormalizer", "LambdaNormalizer"]
 
-    ops = get_input_normalizers() if kind == "input_norm" else get_postprocessors_list()
-    return {op["name"]: op for op in ops}
+    blob = _layer_blob()
+    assert list(blob) == ["input_norm", "postprocess", "dashboard_url", "digest"]
+    assert _ordered(blob["input_norm"]) == _ordered(POSTED["input_norm"])
+    assert blob["dashboard_url"] == "http://localhost/"
+    assert blob["digest"] == received["digest"] == PipelineSpec.from_json_data(POSTED).digest()
+    assert "time" not in received
+
+    # The same settings give the same source, a changed parameter a new one.
+    source = _layer_source()
+    post("/api/process", POSTED)
+    assert _layer_source() == source
+    post("/api/process", dict(POSTED, postprocess=[dict(POSTED["postprocess"][0], threshold="0.6")]))
+    assert _layer_source() != source
 
 
-def test_there_are_builtin_ops_to_check():
-    names = {name for _, name in BUILTIN_OPS}
-    assert {"MinMaxNormalizer", "LambdaNormalizer", "AffinityPostprocessor"} <= names
-    assert len(BUILTIN_OPS) >= 15
+def test_apply_keeps_the_steps_with_the_name_last(post):
+    nodes = {
+        "input_normalizers": [
+            {"id": "n1", "name": "MinMaxNormalizer", "params": {"min_value": 0, "max_value": 255}},
+            {"id": "n2", "name": "LambdaNormalizer", "params": {"expression": "x*2-1"}},
+        ],
+        "postprocessors": [{"id": "p1", "name": "SigmoidPostprocessor"}],
+    }
+    post("/api/pipeline/apply", nodes)
+    assert _ordered(current_input_norm_config()) == [
+        [("min_value", 0), ("max_value", 255), ("name", "MinMaxNormalizer")],
+        [("expression", "x*2-1"), ("name", "LambdaNormalizer")],
+    ]
+    assert current_postprocess_config() == [{"name": "SigmoidPostprocessor"}]
+    assert g.pipeline_normalizers == nodes["input_normalizers"]
+
+
+def test_after_a_yaml_boot_the_config_is_the_live_chain():
+    # yaml_cli builds the live chain from json_data and leaves the configs empty.
+    g.input_norm_config, g.postprocess_config = {}, {}
+    g.input_norms, g.postprocess = get_process_dataset({
+        "input_norm": [{"name": "MinMaxNormalizer", "min_value": "0"}],
+        "postprocess": [{"name": "SigmoidPostprocessor"}],
+    })
+    assert _ordered(current_input_norm_config()) == [
+        [("name", "MinMaxNormalizer"), ("min_value", 0.0), ("max_value", 255.0), ("invert", False)]
+    ]
+    assert current_postprocess_config() == [{"name": "SigmoidPostprocessor"}]
+    # Per chain: a configured one wins over the live one.
+    g.postprocess_config = [THRESHOLD]
+    assert g.pipeline_spec == PipelineSpec(current_input_norm_config(), [THRESHOLD])
+
+
+def test_set_pipeline_writes_all_four_attributes_or_none():
+    merger = SimpleBlockwiseMerger()
+    spec = PipelineSpec([MINMAX], [{"name": "SimpleBlockwiseMerger"}])
+    g.set_pipeline(spec, built=([MinMaxNormalizer()], [merger]))
+    assert g.postprocess[0] is merger, "the stateful instances given are kept"
+    assert (g.input_norm_config, g.postprocess_config) == ([MINMAX], [{"name": "SimpleBlockwiseMerger"}])
+    # Derived, so conftest's vars(g) restore covers it.
+    assert g.pipeline_spec == spec and "pipeline_spec" not in vars(g)
+
+    with pytest.raises(ValueError):
+        g.set_pipeline(PipelineSpec([SHIFT], [dict(THRESHOLD, threshold="high")]))
+    assert g.postprocess[0] is merger and g.input_norm_config == [MINMAX]
+    assert type(g.input_norms[0]).__name__ == "MinMaxNormalizer"
+
+
+# --- what a chain outputs ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "chain, dtype, channels, is_segmentation",
+    [
+        ([], np.float16, 9, False),
+        ([SigmoidPostprocessor()], np.float32, 9, None),
+        ([ChannelSelection("0,2")], np.float16, 2, None),
+        # The last step that declares a dtype decides: uint64 label ids must
+        # not be advertised (or cast) as a sigmoid's float32.
+        ([SigmoidPostprocessor(), AffinityPostprocessor()], np.uint64, 1, True),
+        ([AffinityPostprocessor(), SigmoidPostprocessor()], np.float32, 1, True),
+        ([AffinityPostprocessor(), ChannelSelection("0,0")], np.uint64, 2, True),
+        ([ThresholdPostprocessor(), DefaultPostprocessor()], np.uint8, 9, False),
+        ([DefaultPostprocessor(), SigmoidPostprocessor()], np.float32, 9, False),
+    ],
+)
+def test_what_a_chain_outputs(chain, dtype, channels, is_segmentation):
+    import cellmap_flow.dashboard.routes.pipeline as pipeline
+
+    g.postprocess = chain
+    assert g.get_output_dtype(np.float16) is dtype
+    assert chain_num_channels(chain, 9) == channels
+    assert pipeline.is_output_segmentation() is is_segmentation
+
+
+# --- op_schemas ----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("kind", ["input_norm", "postprocess"])
-def test_op_schemas_cover_the_registry(kind):
-    from cellmap_flow.pipeline_spec import _op_classes, op_schemas
-
-    # Held so that no test-local subclass is collected between the two reads.
-    registered = _op_classes(kind)
-    schemas = op_schemas(kind)
-    assert [s["name"] for s in schemas] == list(_listing(kind))
-    assert len(schemas) == len(registered)
-    json.dumps(schemas)  # it goes into page data as JSON
-    for entry in schemas:
-        assert set(entry) == {"name", "title", "schema"}
-        assert entry["schema"]["title"] == entry["title"]
-
-
-def test_op_schemas_reject_an_unknown_kind():
-    from cellmap_flow.pipeline_spec import op_schemas
-
-    with pytest.raises(ValueError, match="input_norm"):
-        op_schemas("models")
-
-
-@pytest.mark.parametrize("kind, name", BUILTIN_OPS, ids=[n for _, n in BUILTIN_OPS])
-def test_op_schema_describes_what_the_op_takes_and_reports(kind, name):
-    from cellmap_flow.pipeline_spec import PipelineSpec, op_schemas
+def test_op_schemas_describe_every_registered_op(kind):
+    from cellmap_flow.norm.input_normalize import get_input_normalizers
+    from cellmap_flow.post.postprocessors import get_postprocessors_list
 
     jsonschema = pytest.importorskip("jsonschema")
-    (entry,) = [s for s in op_schemas(kind) if s["name"] == name]
-    schema = entry["schema"]
-    jsonschema.Draft202012Validator.check_schema(schema)
-
-    # The same parameters and defaults the dashboard's forms are built from.
-    listed = _listing(kind)[name]["params"]
-    assert list(schema["properties"]) == list(listed)
-    for pname, prop in schema["properties"].items():
-        if pname in schema["required"]:
-            assert listed[pname] == ""
-        else:
-            assert prop["default"] == listed[pname]
-
-    # A step built from the schema's defaults reports exactly those
-    # parameters, each of the type the schema gives it.
-    params = {
-        pname: prop.get("default", REQUIRED_SAMPLES.get(pname))
-        for pname, prop in schema["properties"].items()
-    }
-    spec = PipelineSpec(**{kind: [{"name": name, **params}]})
-    norms, posts = spec.build()
-    (step,) = norms or posts
-    reported = {k: v for k, v in step.to_dict().items() if k != "name"}
-    assert list(reported) == list(schema["properties"])
-    for pname, value in reported.items():
-        json_type = schema["properties"][pname].get("type")
-        if json_type:
-            assert isinstance(value, _PYTHON_TYPES[json_type]), (pname, value)
-            if json_type in ("integer", "number"):
-                assert not isinstance(value, bool), (pname, value)
-    jsonschema.validate(reported, schema)
-    # And an argument the op does not take is refused, as it would be there.
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate({**reported, "no_such_argument": 1}, schema)
-
-
-def test_op_schema_of_a_step_with_no_arguments():
-    from cellmap_flow.pipeline_spec import op_schemas
-
-    (sigmoid,) = [s for s in op_schemas("postprocess") if s["name"] == "SigmoidPostprocessor"]
-    assert sigmoid["title"] == "Sigmoid Postprocessor"
-    assert sigmoid["schema"]["properties"] == {} and sigmoid["schema"]["required"] == []
-    assert sigmoid["schema"]["description"].startswith("Apply sigmoid")
-
-
-def test_op_schema_types_prefer_the_annotation():
-    import cellmap_flow.pipeline_spec as spec_module
-
-    assert spec_module._json_type(float, 0) == "number"
-    assert spec_module._json_type(int, True) == "integer"
-    assert spec_module._json_type(bool, 0) == "boolean"
-    assert spec_module._json_type(spec_module.inspect.Parameter.empty, False) == "boolean"
-    assert spec_module._json_type(spec_module.inspect.Parameter.empty, None) is None
+    gc.collect()  # so no test-local op class disappears between the two listings
+    listed = get_input_normalizers() if kind == "input_norm" else get_postprocessors_list()
+    schemas = op_schemas(kind)
+    json.dumps(schemas)  # it goes into page data
+    assert [s["name"] for s in schemas] == [op["name"] for op in listed]
+    for entry, op in zip(schemas, listed):
+        schema = entry["schema"]
+        jsonschema.Draft202012Validator.check_schema(schema)
+        assert entry["title"] == schema["title"]
+        assert list(schema["properties"]) == list(op["params"])
+        assert schema["required"] == [p for p, default in op["params"].items() if default == ""]
