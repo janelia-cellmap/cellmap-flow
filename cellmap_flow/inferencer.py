@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 GPU_SLOTS_ENV = "CELLMAP_FLOW_GPU_SLOTS"
 
 
+class ChunkCancelled(Exception):
+    """The chunk was not computed: whoever asked for it stopped waiting."""
+
+
 class DeviceSlots:
     """Lets at most ``n`` chunks use the device at once, in the order they asked.
 
@@ -37,7 +41,16 @@ class DeviceSlots:
     The server takes ``n`` from ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) when it
     starts. More than one slot only helps a model too small to keep the
     device busy on its own.
+
+    ``hold(cancelled)`` asks ``cancelled()`` while it waits, and once more just
+    before taking a slot, and raises ChunkCancelled instead of taking it once
+    that says yes. Neuroglancer drops the requests for chunks that have left
+    the view after a pan; without this, those still ran their forward ahead
+    of the new view's chunks. A chunk already on the device finishes.
     """
+
+    # How often a waiting request asks whether its client is still there.
+    POLL_SECONDS = 0.1
 
     def __init__(self, n=1):
         n = int(n)
@@ -59,12 +72,21 @@ class DeviceSlots:
             ) from None
 
     @contextlib.contextmanager
-    def hold(self):
+    def hold(self, cancelled=None):
         ticket = object()
         with self._cond:
             self._waiting.append(ticket)
-            while self._waiting[0] is not ticket or self._running >= self.n:
-                self._cond.wait()
+            try:
+                while self._waiting[0] is not ticket or self._running >= self.n:
+                    if cancelled is not None and cancelled():
+                        raise ChunkCancelled()
+                    self._cond.wait(self.POLL_SECONDS if cancelled else None)
+                if cancelled is not None and cancelled():
+                    raise ChunkCancelled()
+            except BaseException:
+                self._waiting.remove(ticket)
+                self._cond.notify_all()  # the one behind may be next now
+                raise
             self._waiting.popleft()
             self._running += 1
             # With more than one slot free, the next in line may go too.
@@ -77,8 +99,10 @@ class DeviceSlots:
                 self._cond.notify_all()
 
 
-def _device_part(device_slots):
-    return device_slots.hold() if device_slots is not None else contextlib.nullcontext()
+def _device_part(device_slots, cancelled=None):
+    if device_slots is None:
+        return contextlib.nullcontext()
+    return device_slots.hold(cancelled)
 
 
 def apply_postprocess(data, postprocess=None, **kwargs):
@@ -108,7 +132,7 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     # Only the transfer, the forward and the copy back take a device slot;
     # the read and the normalization above overlap another chunk's forward.
-    with _device_part(kwargs.get("device_slots")), torch.no_grad():
+    with _device_part(kwargs.get("device_slots"), kwargs.get("cancelled")), torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
         logger.debug(f"Predicting with model {type(config.model).__name__} on device {device}")
         logger.debug(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
@@ -243,12 +267,15 @@ class Inferencer:
         except Exception as e:
             logger.info(f"Could not classify model output: {e}")
 
-    def process_chunk(self, idi, roi, input_norms=None, postprocess=None):
+    def process_chunk(self, idi, roi, input_norms=None, postprocess=None, cancelled=None):
         """Predict ``roi`` and postprocess it.
 
         ``input_norms`` / ``postprocess``: the chain to use for this chunk.
         ``None`` falls back to ``g.input_norms`` / ``g.postprocess``, for
         callers (blockwise, scripts) that set the chain process-wide.
+
+        ``cancelled``: asked while the chunk waits for a device slot; raises
+        ChunkCancelled, without computing it, once that says yes.
         """
         if input_norms is not None and hasattr(idi, "with_input_norms"):
             idi = idi.with_input_norms(input_norms)
@@ -259,10 +286,10 @@ class Inferencer:
         ):
             # A config's own process_chunk (TF, ONNX, cellpose, bioimage) runs
             # its model somewhere inside, so all of it takes the slot.
-            with _device_part(self.device_slots):
+            with _device_part(self.device_slots, cancelled):
                 result = self.model_config.config.process_chunk(idi, roi)
         else:
-            result = self.process_chunk_basic(idi, roi)
+            result = self.process_chunk_basic(idi, roi, cancelled)
 
         postprocessed = apply_postprocess(
             result,
@@ -287,7 +314,7 @@ class Inferencer:
         )
         return int(np.prod(np.ceil(shape)))
 
-    def process_chunk_basic(self, idi, roi):
+    def process_chunk_basic(self, idi, roi, cancelled=None):
         output_roi = roi
 
         input_roi = output_roi.grow(self.context, self.context)
@@ -301,11 +328,12 @@ class Inferencer:
                 output_roi,
                 self.model_config.config,
                 device_slots=self.device_slots,
+                cancelled=cancelled,
                 **kwargs,
             )
         # A script's own predict may not accept more keywords, and its device
         # part can't be told apart from the rest, so all of it takes the slot.
-        with _device_part(self.device_slots):
+        with _device_part(self.device_slots, cancelled):
             return self.model_config.config.predict(
                 input_roi, output_roi, self.model_config.config, **kwargs
             )

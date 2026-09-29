@@ -1,5 +1,7 @@
 import logging
+import select
 import socket
+import ssl
 import threading
 from collections import OrderedDict
 from http import HTTPStatus
@@ -7,13 +9,13 @@ from typing import NamedTuple, Optional
 
 import numpy as np
 import numcodecs
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, has_request_context, jsonify, redirect, request
 from flask_cors import CORS
 from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.inferencer import DeviceSlots, Inferencer
+from cellmap_flow.inferencer import ChunkCancelled, DeviceSlots, Inferencer
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
@@ -34,6 +36,37 @@ logger = logging.getLogger(__name__)
 
 # How many distinct chains (layer URLs) one server keeps built at once.
 CHAIN_CACHE_SIZE = 32
+
+
+def _client_gone_check():
+    """A callable telling whether this request's client has hung up, or None.
+
+    The werkzeug dev server puts the connection's socket in the environ. A
+    browser that drops a request, as neuroglancer does for chunks a pan took
+    out of view, closes that connection, and its socket then reads
+    end-of-file. While a request waits for its answer the client sends
+    nothing else, so any other readable state means it is still there.
+    Another WSGI server, a TLS socket, a platform without poll() or a call
+    outside a request (the CLI's server check) gives no signal: every
+    chunk is then computed, as before.
+    """
+    if not has_request_context():
+        return None
+    sock = request.environ.get("werkzeug.socket")
+    if sock is None or isinstance(sock, ssl.SSLSocket) or not hasattr(select, "poll"):
+        return None
+
+    def gone():
+        try:
+            poller = select.poll()
+            poller.register(sock, select.POLLIN)
+            if not poller.poll(0):
+                return False
+            return sock.recv(1, socket.MSG_PEEK) == b""
+        except (OSError, ValueError):  # reset, or already closed
+            return True
+
+    return gone
 
 
 class ServedChain(NamedTuple):
@@ -408,12 +441,18 @@ class CellMapFlowServer:
         corner = block * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, block]) * self.output_voxel_size
         roi = Roi(tuple(int(v) for v in self.origin + box[0]), tuple(int(v) for v in box[1]))
-        chunk_data = self.inferencer.process_chunk(
-            self.idi_raw,
-            roi,
-            input_norms=chain.input_norms,
-            postprocess=chain.postprocess,
-        )
+        try:
+            chunk_data = self.inferencer.process_chunk(
+                self.idi_raw,
+                roi,
+                input_norms=chain.input_norms,
+                postprocess=chain.postprocess,
+                cancelled=_client_gone_check(),
+            )
+        except ChunkCancelled:
+            # Nobody is left to read it. 499 is nginx's "client closed request".
+            logger.debug(f"Skipped chunk {chunk_z}.{chunk_y}.{chunk_x}: its client went away")
+            return b"", 499
 
         # Reorder model output axes to Zarr-expected order
         if self.has_channel:
