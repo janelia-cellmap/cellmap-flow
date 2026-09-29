@@ -6,6 +6,7 @@ default run limit and LSF mailed its output.
 """
 
 import os
+import re
 import subprocess
 import sys
 
@@ -71,8 +72,9 @@ def test_the_master_runs_this_interpreter_with_a_walltime_and_a_log(client, bsub
     assert argv[argv.index("-m") - 1] == sys.executable
     assert _flag(argv, "-m") == "cellmap_flow.blockwise.multiple_cli"
     assert _flag(argv, "-W") == "12:00"
+    assert body["task_name"].startswith("my_run_") and _flag(argv, "-J") == body["task_name"]
     log = _flag(argv, "-o")
-    assert log == os.path.join(str(tmp_path / "tasks"), "my_run_%J.log")
+    assert log == os.path.join(str(tmp_path / "tasks"), f"{body['task_name']}_%J.log")
     assert body["log_path"] == log.replace("%J", "5150")
     assert "-q" not in argv, "the master is a CPU job; the queue is the workers'"
     assert "-gpu" not in argv
@@ -102,6 +104,28 @@ def test_the_prechecked_yamls_are_submitted_as_they_are(client, bsub, tmp_path):
     (argv,) = bsub
     assert argv[-len(paths):] == paths
     assert _task_files(tmp_path) == before, "nothing is regenerated"
+
+
+@pytest.mark.parametrize("typed, stem", [
+    ("nuc cerebellum", "nuc_cerebellum"),
+    ("  a/b\\c:d  ", "a_b_c_d"),  # safe as a file name and an LSF job name
+    ("", "cellmap_flow"),
+])
+def test_the_typed_job_name_names_the_task_and_its_master(client, bsub, typed, stem):
+    generated = client.post(
+        "/api/blockwise/generate", json={"pipeline": PIPELINE, "job_name": typed}
+    ).get_json()
+    task = generated["task_name"]
+    assert re.fullmatch(rf"{stem}_\d{{8}}_\d{{6}}", task)
+    (path,) = generated["task_paths"]
+    assert os.path.basename(path) == f"{task}.yaml"
+    assert yaml.safe_load(open(path))["task_name"] == task
+
+    body = client.post(
+        "/api/blockwise/submit", json={"pipeline": PIPELINE, "yaml_paths": [path], "task_name": task}
+    ).get_json()
+    (argv,) = bsub
+    assert _flag(argv, "-J") == body["task_name"] == task
 
 
 @pytest.mark.parametrize("yaml_paths", [None, [], "not-a-list", ["/no/such/task.yaml"]])

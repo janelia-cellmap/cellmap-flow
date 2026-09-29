@@ -263,14 +263,14 @@ def test_the_blockwise_master_submission(monkeypatch, tmp_path):
     # The flag order is not part of the contract; the flags and the command are.
     flags, command = _split(call["argv"])
     assert flags == {
-        "-J": "my run",
+        "-J": "my_run_<ts>",
         "-n": "4",
         "-P": "grp",
         "-W": "12:00",
-        "-o": "<tmp>/tasks/my_run_%J.log",
+        "-o": "<tmp>/tasks/my_run_<ts>_%J.log",
     }
     assert command == [
-        "<python>", "-m", "cellmap_flow.blockwise.multiple_cli", "<tmp>/tasks/cellmap_flow_<ts>.yaml",
+        "<python>", "-m", "cellmap_flow.blockwise.multiple_cli", "<tmp>/tasks/my_run_<ts>.yaml",
     ]
     assert call["env"] == {} and call["timeout"] is None
 

@@ -2777,6 +2777,7 @@
             validated: false,
             generated: false,
             prechecked: false,
+            task_name: null,  // What Generate named the task; Submit names the master after it
             model_mode: ""  // Stores the selected model merge mode
         };
 
@@ -2797,6 +2798,7 @@
             blockwiseState.generated = false;
             blockwiseState.prechecked = false;
             blockwiseState.yaml_paths = null;
+            blockwiseState.task_name = null;
             ['btn-generate', 'btn-precheck', 'btn-submit'].forEach(id => {
                 document.getElementById(id).disabled = true;
             });
@@ -2907,6 +2909,10 @@
                 return;
             }
             const status = document.getElementById('blockwise-status');
+            // The server appends a timestamp; the result names the task YAML,
+            // the master LSF job, the daisy task (so the worker jobs) and their logs.
+            const jobName = prompt('Enter job name (a timestamp is appended; it names the task YAML and the LSF jobs):', 'cellmap_flow');
+            if (jobName === null) return;
             status.textContent = 'Generating...';
             const editsAtStart = blockwiseEdits;
             
@@ -2920,7 +2926,7 @@
                 const response = await fetch('/api/blockwise/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pipeline: pipelineWithConfig })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName })
                 });
                 
                 const data = await response.json();
@@ -2934,6 +2940,7 @@
                     blockwiseState.prechecked = false;
                     // The YAMLs precheck checks and submit runs.
                     blockwiseState.yaml_paths = data.task_paths;
+                    blockwiseState.task_name = data.task_name;
                     // Enable precheck
                     document.getElementById('btn-precheck').disabled = false;
                     // Disable submit until prechecked
@@ -3009,16 +3016,11 @@
                 showMessage('⚠️ Please precheck first', 'info');
                 return;
             }
-            // Captured before the prompt: these are the files Precheck passed.
+            // The files Precheck passed, and the name Generate gave them.
             const yamlPaths = blockwiseState.yaml_paths.slice();
+            const taskName = blockwiseState.task_name;
             const status = document.getElementById('blockwise-status');
             status.textContent = 'Submitting...';
-            
-            const jobName = prompt('Enter job name:', 'cellmap_flow_' + Date.now());
-            if (!jobName) {
-                status.textContent = '';
-                return;
-            }
             
             try {
                 // Add model_mode to pipeline
@@ -3032,13 +3034,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     // yaml_paths: run the prechecked task files rather than
                     // having the server generate new ones.
-                    body: JSON.stringify({ pipeline: pipelineWithConfig, job_name: jobName, yaml_paths: yamlPaths })
+                    body: JSON.stringify({ pipeline: pipelineWithConfig, task_name: taskName, yaml_paths: yamlPaths })
                 });
                 
                 const data = await response.json();
                 if (data.success) {
-                    showMessage('✓ Task submitted: ' + data.job_id, 'success');
-                    status.textContent = '✓ Submitted - Job: ' + data.job_id;
+                    showMessage('✓ Task submitted: ' + data.job_id + ' (' + data.task_name + ')', 'success');
+                    status.textContent = '✓ Submitted - Job: ' + data.job_id + ' - ' + data.task_name;
                     status.style.color = 'var(--accent-green)';
                 } else {
                     showMessage('✗ ' + data.error, 'error');

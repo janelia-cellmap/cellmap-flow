@@ -31,6 +31,27 @@ def _task_walltime():
     return getattr(g, "walltime", None) or DEFAULT_WALLTIME
 
 
+def _sanitize_job_name(name) -> str:
+    """Reduce a user-typed job name to something safe for an LSF -J value, a
+    YAML filename, a daisy task id and a log name: keep [A-Za-z0-9_.-],
+    collapse everything else into single underscores."""
+    if not name:
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name).strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned
+
+
+def _make_task_name(requested_name: str, timestamp: str) -> str:
+    """Single source of truth for the blockwise run's identifier. It names the
+    generated YAML(s), the master LSF job (-J), the daisy task and therefore
+    the worker LSF jobs and their logs. The timestamp keeps it unique so
+    re-using a name never overwrites the YAML a running master's workers are
+    still reading."""
+    base = _sanitize_job_name(requested_name) or "cellmap_flow"
+    return f"{base}_{timestamp}"
+
+
 def _existing_task_paths(paths):
     """``paths`` if it is a non-empty list of existing files, else None."""
     if not isinstance(paths, list) or not paths:
@@ -105,8 +126,11 @@ def generate_blockwise_task():
             if '.zarr' not in output_path:
                 output_path = output_path + '.zarr'
 
-        # Create task YAML content
-        task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # The job name the user typed, if any, names the task: the YAML, the
+        # master job, the daisy task, the workers and the logs.
+        task_name = _make_task_name(
+            data.get("job_name", ""), datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
         task_yaml = {
             "data_path": input_node["params"]["dataset_path"],
             "output_path": output_path,
@@ -309,7 +333,6 @@ def submit_blockwise_task():
     try:
         data = request.get_json()
         pipeline = data.get("pipeline", {})
-        job_name = data.get("job_name", f"cellmap_flow_{int(time.time())}")
 
         # First validate
         validation = validate_blockwise()
@@ -322,6 +345,8 @@ def submit_blockwise_task():
         # was not what had been checked.
         requested = data.get("yaml_paths")
         yaml_paths = _existing_task_paths(requested)
+        # The name generate gave the YAMLs; the page sends it back with them.
+        task_name = data.get("task_name")
         if yaml_paths is not None:
             logger.info(f"Submitting the given task YAML(s): {', '.join(yaml_paths)}")
         else:
@@ -334,7 +359,14 @@ def submit_blockwise_task():
                 return {"success": False, "error": gen_result.get("error")}
 
             yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
+            task_name = gen_result.get("task_name")
         blockwise_config = pipeline["blockwise_config"][0]
+
+        # The master carries the task's name, so `bjobs -J <task>` is the
+        # master and `bjobs -J "predict_*_<task>*"` are its workers.
+        job_name = _sanitize_job_name(task_name or data.get("job_name")) or (
+            f"cellmap_flow_{int(time.time())}"
+        )
 
         # The master is a CPU job on the default queue (no -q, no -gpu); the
         # configured queue is for the workers and travels in the YAML.
@@ -369,10 +401,11 @@ def submit_blockwise_task():
         return {
             "success": True,
             "job_id": job_id,
+            "task_name": job_name,
             "task_paths": yaml_paths,
             "log_path": log_pattern.replace("%J", job_id),
             "command": " ".join(bsub_cmd),
-            "message": f"Task submitted as job {job_id}"
+            "message": f"Task {job_name} submitted as job {job_id}"
         }
 
     except Exception as e:
