@@ -107,7 +107,7 @@ def _create_session_annotation_volume(
     Mirrors the body of ``create_annotation_volume_response`` minus the
     HTTP-shaped response wrapping; returns the freshly-built ``(volume_id, meta)``.
     """
-    geometry = plan_volume(raw_dataset_path, config, rounding="legacy_floor")
+    geometry = plan_volume(raw_dataset_path, config)
     volume_id = (
         f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     )

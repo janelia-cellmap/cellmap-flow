@@ -85,11 +85,19 @@ def _grid(raw_dataset_path, output_voxel_size, chunk_size, rounding):
 
     idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
     offset = np.asarray(ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size))
-    voxels = np.asarray(idi.roi.shape, dtype=float) / output_voxel_size
-    if rounding == "legacy_floor":
-        shape = voxels.astype(int)
+    if rounding == "ceil":
+        # The data's own extent in output voxels, rounded up so a partial
+        # voxel at the far end is covered. Not idi.roi's: that is the
+        # whole-nm box around the data, up to 2 nm larger, which would add
+        # a voxel to every level whose extent is not whole nm (10.48 nm...).
+        extent = np.asarray(idi.shape, dtype=float)[-output_voxel_size.size:] * np.asarray(
+            idi.voxel_size, dtype=float
+        )
+        shape = np.ceil(np.round(extent / output_voxel_size, 6)).astype(int)
+    elif rounding == "legacy_floor":
+        shape = (np.asarray(idi.roi.shape, dtype=float) / output_voxel_size).astype(int)
     else:
-        raise ValueError(f"rounding must be 'legacy_floor', got {rounding!r}")
+        raise ValueError(f"rounding must be 'ceil' or 'legacy_floor', got {rounding!r}")
     return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
 
 
@@ -100,14 +108,14 @@ def new_volume_geometry(raw_dataset_path: str, output_voxel_size, chunk_size):
     grid predictions are made on), from that level's corner, padded to whole
     chunks. ``dataset_offset_nm`` is voxel 0's centre; see volume_corner_nm.
     """
-    return _grid(raw_dataset_path, output_voxel_size, chunk_size, "legacy_floor")
+    return _grid(raw_dataset_path, output_voxel_size, chunk_size, "ceil")
 
 
 def plan_volume(
     raw_dataset_path: str,
     model_geometry,
     *,
-    rounding: Literal["legacy_floor"] = "legacy_floor",
+    rounding: Literal["ceil", "legacy_floor"] = "ceil",
 ) -> VolumeGeometry:
     """Where a new volume over ``raw_dataset_path`` lies, for a model.
 
@@ -116,8 +124,10 @@ def plan_volume(
     ``read_shape``/``write_shape`` in nm, which is what a server reports.
     Each voxel size is snapped to the raw level closest to it (the model's
     own is kept as the claimed one); the volume lies on the output level's
-    grid from its corner, one chunk per model output, padded to whole
-    chunks.
+    grid from its corner, one chunk per model output, and covers the data
+    padded to whole chunks. ``rounding="legacy_floor"`` counts the voxels
+    as volumes made before this did: rounded down, from the whole-nm box
+    around the data.
     """
     claimed_in = np.array(model_geometry.input_voxel_size)
     claimed_out = np.array(model_geometry.output_voxel_size)

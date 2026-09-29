@@ -149,7 +149,6 @@ def build_corrections(
             input_voxel_size=np.array(geom["input_voxel_size"], dtype=float),
             output_voxel_size=np.array(geom["output_voxel_size"], dtype=float),
         ),
-        rounding="legacy_floor",
     )
 
     os.makedirs(output_dir, exist_ok=True)

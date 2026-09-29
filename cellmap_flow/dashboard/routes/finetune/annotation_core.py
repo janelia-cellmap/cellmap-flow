@@ -174,7 +174,7 @@ def create_annotation_volume_response(data):
         if not dataset_path:
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
 
-        geometry = plan_volume(dataset_path, config, rounding="legacy_floor")
+        geometry = plan_volume(dataset_path, config)
 
         volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         _, corrections_dir = ensure_corrections_storage(output_path)
