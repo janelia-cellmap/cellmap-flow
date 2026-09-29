@@ -978,23 +978,19 @@
                 return;
             }
 
-            let html = '<div style="margin-bottom: 16px;"><strong>Select output channels:</strong></div>';
-
-            available.forEach(channel => {
-                const isChecked = selected.includes(channel);
-                const checkboxId = `channel-${channel}-${Date.now()}`;
-                html += `
-                    <div class="channel-checkbox-group">
-                        <input type="checkbox" id="${checkboxId}" data-channel="${channel}" 
-                               ${isChecked ? 'checked' : ''}>
-                        <label for="${checkboxId}">
-                            ${channel}
-                        </label>
-                    </div>
-                `;
-            });
-
-            body.innerHTML = html;
+            // Channel names come from model configs, which an imported YAML
+            // sets: they go in as text and attribute values, never as HTML.
+            body.replaceChildren(
+                buildEl('div', { style: 'margin-bottom: 16px;' }, [buildEl('strong', {}, ['Select output channels:'])]),
+                ...available.map(channel => {
+                    const checkboxId = `channel-${channel}-${Date.now()}`;
+                    return buildEl('div', { class: 'channel-checkbox-group' }, [
+                        buildEl('input', { type: 'checkbox', id: checkboxId, 'data-channel': channel,
+                                           checked: selected.includes(channel) }),
+                        buildEl('label', { for: checkboxId }, [String(channel)]),
+                    ]);
+                }),
+            );
         }
 
         function saveOutputChannels() {
@@ -1200,15 +1196,17 @@
                         const boxesList = document.getElementById('bbx-boxes-list');
                         existingBoxesDiv.style.display = 'block';
                         
-                        boxesList.innerHTML = result.existing_bounding_boxes.map((bbox, idx) => {
+                        // The boxes are the INPUT node's parameter, which a
+                        // loaded JSON file sets: text only.
+                        boxesList.replaceChildren(...result.existing_bounding_boxes.map((bbox, idx) => {
                             const offset = bbox.offset || [];
                             const shape = bbox.shape || [];
-                            return `<div style="background: var(--bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--accent-blue);">
-                                <div><strong>Box ${idx + 1}</strong></div>
-                                <div>Offset: [${offset.join(', ')}]</div>
-                                <div>Shape: [${shape.join(', ')}]</div>
-                            </div>`;
-                        }).join('');
+                            return buildEl('div', { style: 'background: var(--bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--accent-blue);' }, [
+                                buildEl('div', {}, [buildEl('strong', {}, [`Box ${idx + 1}`])]),
+                                buildEl('div', {}, [`Offset: [${offset.join(', ')}]`]),
+                                buildEl('div', {}, [`Shape: [${shape.join(', ')}]`]),
+                            ]);
+                        }));
                     }
                     
                     // Start polling for completed boxes
@@ -1567,137 +1565,91 @@
                 div.style.width = calculatedWidth + 'px';
             }
 
-            let paramsHTML = '';
-            const nodeParams = node.params || {};
-            Object.entries(nodeParams).forEach(([key, value]) => {
-                // Determine param type from current value
-                const paramType = typeof value === 'boolean' ? 'boolean' : 'text';
-                let inputHTML = '';
-                
-                // Format the display value with proper HTML escaping
-                let displayValue = '';
-                if (value === null || value === undefined) {
-                    displayValue = '';
-                } else if (typeof value === 'object') {
-                    displayValue = JSON.stringify(value).replace(/"/g, '&quot;');
-                } else {
-                    displayValue = String(value).replace(/"/g, '&quot;');
-                }
-
-                if (paramType === 'boolean') {
-                    const checked = value ? 'checked' : '';
-                    inputHTML = `
-                        <select class="param-input" data-key="${key}" data-type="boolean"
-                                oninput="handleParamChange(this, '${node.id}', '${node.type}')">
-                            <option value="true" ${value === true ? 'selected' : ''}>true</option>
-                            <option value="false" ${value === false ? 'selected' : ''}>false</option>
-                        </select>
-                    `;
-                } else if (typeof value === 'number') {
-                    inputHTML = `
-                        <input type="number" class="param-input" data-key="${key}" data-type="number"
-                               value="${displayValue}"
-                               oninput="handleParamChange(this, '${node.id}', '${node.type}')">
-                    `;
-                } else {
-                    inputHTML = `
-                        <input type="text" class="param-input" data-key="${key}" data-type="text"
-                               value="${displayValue}"
-                               oninput="handleParamChange(this, '${node.id}', '${node.type}')">
-                    `;
-                }
-
-                paramsHTML += `
-                    <div class="param-group">
-                        <label class="param-label">${key}</label>
-                        ${inputHTML}
-                    </div>
-                `;
-            });
+            // Node ids, names, parameter keys and values come from imported
+            // YAML and model configs, so none of them is written into HTML or
+            // into an inline handler: the elements are built here, every
+            // string goes in as text or as an attribute value, and each
+            // control gets its listener directly. (An id like x');alert(1);//
+            // used to run as script from the onmousedown attribute.)
+            const params = node.params || {};
+            const paramGroup = (label, control, style) => buildEl('div', { class: 'param-group', style }, [
+                buildEl('label', { class: 'param-label' }, [label]),
+                control,
+            ]);
+            const onParamInput = (nodeType) => ({ input() { handleParamChange(this, node.id, nodeType); } });
+            const header = (children) => buildEl('div', { class: 'node-header' }, children);
+            const actionButton = (className, text, onclick) =>
+                buildEl('button', { class: `icon-btn ${className}` }, [text], { click: onclick });
+            const ports = () => [
+                buildEl('div', { class: 'node-input', title: 'Connect from here' }, [],
+                        { mousedown(event) { startConnection(event, node.id, 'input'); } }),
+                buildEl('div', { class: 'node-output', title: 'Connect to here' }, [],
+                        { mousedown(event) { startConnection(event, node.id, 'output'); } }),
+            ];
 
             // For INPUT/OUTPUT nodes, show minimal UI
             if (node.type === 'input' || node.type === 'output') {
-                let inputContent = '';
-                if (node.type === 'input' || node.type === 'output') {
-                    // Show dataset_path field for INPUT and OUTPUT nodes
-                    const datasetPath = node.params?.dataset_path || '';
-                    const displayPath = datasetPath.replace(/"/g, '&quot;');
-                    const labelText = node.type === 'input' ? 'Dataset Path' : 'Output Path';
-                    inputContent = `
-                        <div class="param-group" style="margin-top: 8px;">
-                            <label class="param-label">${labelText}</label>
-                            <input type="text" class="param-input" data-key="dataset_path" data-type="text"
-                                   value="${displayPath}"
-                                   oninput="handleParamChange(this, '${node.id}', '${node.type}')">
-                        </div>
-                    `;
-                    
-                    // Add bounding boxes configuration for INPUT nodes
-                    if (node.type === 'input') {
-                        const bboxes = node.params?.bounding_boxes || [];
-                        const bboxDisplay = bboxes.length > 0 ? `${bboxes.length} bbox(es)` : 'None';
-                        const separateZarrs = node.params?.separate_bounding_boxes_zarrs || false;
-                        inputContent += `
-                            <div class="param-group">
-                                <label class="param-label">Bounding Boxes</label>
-                                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                                    <button class="configure-btn" onclick="openBBXGeneratorModal('${node.id}')">
-                                        📦 Generate (${bboxDisplay})
-                                    </button>
-                                    <button class="configure-btn" style="background: var(--accent-blue); flex: 0;" onclick="triggerBBXFileUpload('${node.id}')">
-                                        📂 Load
-                                    </button>
-                                    <button class="configure-btn" style="background: var(--accent-green); flex: 0; padding: 6px 10px;" onclick="showBBXJsonHelp()">
-                                        ?
-                                    </button>
-                                </div>
-                                <input type="file" id="bbx-file-input-${node.id}" accept=".json" style="display: none;" onchange="loadBBXFromFile(this, '${node.id}')">
-                                <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                    ${bboxDisplay}
-                                </div>
-                                <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" id="separate-zarrs-${node.id}" 
-                                           ${separateZarrs ? 'checked' : ''} 
-                                           onchange="updateInputNodeParam('${node.id}', 'separate_bounding_boxes_zarrs', this.checked)"
-                                           style="cursor: pointer;">
-                                    <label for="separate-zarrs-${node.id}" style="cursor: pointer; margin: 0; font-size: 13px;">
-                                        Save each bbox as separate zarr
-                                    </label>
-                                </div>
-                            </div>
-                        `;
-                    }
-                    
-                    // Add output channels configuration for OUTPUT nodes
-                    if (node.type === 'output') {
-                        const selectedChannels = node.params?.output_channels || [];
-                        const selectedDisplay = Array.isArray(selectedChannels) ? selectedChannels.join(', ') : '';
-                        inputContent += `
-                            <div class="param-group">
-                                <label class="param-label">Output Channels</label>
-                                <button class="configure-btn" onclick="openOutputChannelsModal('${node.id}')">
-                                    🔧 Configure (${selectedChannels.length || 0} selected)
-                                </button>
-                                <div class="selected-channels" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                    ${selectedDisplay ? `${selectedDisplay}` : 'Click configure to select'}
-                                </div>
-                            </div>
-                        `;
-                    }
+                // Show dataset_path field for INPUT and OUTPUT nodes
+                const content = [paramGroup(
+                    node.type === 'input' ? 'Dataset Path' : 'Output Path',
+                    buildEl('input', {
+                        type: 'text', class: 'param-input', 'data-key': 'dataset_path', 'data-type': 'text',
+                        value: params.dataset_path || '',
+                    }, [], onParamInput(node.type)),
+                    'margin-top: 8px;',
+                )];
+
+                // Add bounding boxes configuration for INPUT nodes
+                if (node.type === 'input') {
+                    const bboxes = params.bounding_boxes || [];
+                    const bboxDisplay = bboxes.length > 0 ? `${bboxes.length} bbox(es)` : 'None';
+                    const separateZarrs = params.separate_bounding_boxes_zarrs || false;
+                    const separateId = `separate-zarrs-${node.id}`;
+                    content.push(buildEl('div', { class: 'param-group' }, [
+                        buildEl('label', { class: 'param-label' }, ['Bounding Boxes']),
+                        buildEl('div', { style: 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px;' }, [
+                            buildEl('button', { class: 'configure-btn' }, [`📦 Generate (${bboxDisplay})`],
+                                    { click() { openBBXGeneratorModal(node.id); } }),
+                            buildEl('button', { class: 'configure-btn', style: 'background: var(--accent-blue); flex: 0;' },
+                                    ['📂 Load'], { click() { triggerBBXFileUpload(node.id); } }),
+                            buildEl('button', { class: 'configure-btn', style: 'background: var(--accent-green); flex: 0; padding: 6px 10px;' },
+                                    ['?'], { click() { showBBXJsonHelp(); } }),
+                        ]),
+                        buildEl('input', { type: 'file', id: `bbx-file-input-${node.id}`, accept: '.json', style: 'display: none;' },
+                                [], { change() { loadBBXFromFile(this, node.id); } }),
+                        buildEl('div', { class: 'selected-channels', style: 'font-size: 11px; color: var(--text-secondary); margin-top: 4px;' },
+                                [bboxDisplay]),
+                        buildEl('div', { style: 'margin-top: 10px; display: flex; align-items: center; gap: 8px;' }, [
+                            buildEl('input', { type: 'checkbox', id: separateId, checked: !!separateZarrs, style: 'cursor: pointer;' }, [],
+                                    { change() { updateInputNodeParam(node.id, 'separate_bounding_boxes_zarrs', this.checked); } }),
+                            buildEl('label', { for: separateId, style: 'cursor: pointer; margin: 0; font-size: 13px;' },
+                                    ['Save each bbox as separate zarr']),
+                        ]),
+                    ]));
                 }
-                div.innerHTML = `
-                    <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
-                    <div class="node-output" onmousedown="startConnection(event, '${node.id}', 'output')" title="Connect to here"></div>
-                    <div class="node-header">
-                        <div>
-                            <div class="node-title">${node.name}</div>
-                        </div>
-                        <div class="node-actions">
-                            <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
-                        </div>
-                    </div>
-                    ${inputContent}
-                `;
+
+                // Add output channels configuration for OUTPUT nodes
+                if (node.type === 'output') {
+                    const selectedChannels = params.output_channels || [];
+                    const selectedDisplay = Array.isArray(selectedChannels) ? selectedChannels.join(', ') : '';
+                    content.push(buildEl('div', { class: 'param-group' }, [
+                        buildEl('label', { class: 'param-label' }, ['Output Channels']),
+                        buildEl('button', { class: 'configure-btn' }, [`🔧 Configure (${selectedChannels.length || 0} selected)`],
+                                { click() { openOutputChannelsModal(node.id); } }),
+                        buildEl('div', { class: 'selected-channels', style: 'font-size: 11px; color: var(--text-secondary); margin-top: 4px;' },
+                                [selectedDisplay || 'Click configure to select']),
+                    ]));
+                }
+                div.append(
+                    ...ports(),
+                    header([
+                        buildEl('div', {}, [buildEl('div', { class: 'node-title' }, [String(node.name)])]),
+                        buildEl('div', { class: 'node-actions' }, [
+                            actionButton('delete', '🗑️', () => removeNode(node.id, node.type)),
+                        ]),
+                    ]),
+                    ...content,
+                );
             } else if (node.type === 'blockwise-config') {
                 // Blockwise configuration node
                 const fields = [
@@ -1709,56 +1661,76 @@
                     { key: 'tmp_dir', label: 'Temp Directory' },
                     { key: 'blockwise_tasks_dir', label: 'Tasks Directory' }
                 ];
-                
-                let blockwiseHTML = '';
-                fields.forEach(field => {
-                    const value = node.params?.[field.key] || '';
-                    const displayValue = String(value).replace(/"/g, '&quot;');
-                    const inputType = field.key.startsWith('nb_') ? 'number' : 'text';
-                    blockwiseHTML += `
-                        <div class="param-group">
-                            <label class="param-label">${field.label}</label>
-                            <input type="${inputType}" class="param-input" data-key="${field.key}" data-type="${inputType}"
-                                   value="${displayValue}"
-                                   oninput="handleParamChange(this, '${node.id}', 'blockwise-config')">
-                        </div>
-                    `;
-                });
-                
-                div.innerHTML = `
-                    <div class="node-header">
-                        <div>
-                            <div class="node-title">⚙️ Blockwise Config</div>
-                        </div>
-                        <div class="node-actions">
-                            <button class="icon-btn delete" onclick="removeNode('${node.id}', 'blockwise-config')">🗑️</button>
-                        </div>
-                    </div>
-                    <div class="node-params">
-                        ${blockwiseHTML}
-                    </div>
-                `;
+                div.append(
+                    header([
+                        buildEl('div', {}, [buildEl('div', { class: 'node-title' }, ['⚙️ Blockwise Config'])]),
+                        buildEl('div', { class: 'node-actions' }, [
+                            actionButton('delete', '🗑️', () => removeNode(node.id, 'blockwise-config')),
+                        ]),
+                    ]),
+                    buildEl('div', { class: 'node-params' }, fields.map(field => {
+                        const inputType = field.key.startsWith('nb_') ? 'number' : 'text';
+                        return paramGroup(field.label, buildEl('input', {
+                            type: inputType, class: 'param-input', 'data-key': field.key, 'data-type': inputType,
+                            value: params[field.key] || '',
+                        }, [], onParamInput('blockwise-config')));
+                    })),
+                );
             } else {
-                div.innerHTML = `
-                    <div class="node-input" onmousedown="startConnection(event, '${node.id}', 'input')" title="Connect from here"></div>
-                    <div class="node-output" onmousedown="startConnection(event, '${node.id}', 'output')" title="Connect to here"></div>
-                    <div class="node-header">
-                        <div>
-                            <div class="node-title">${node.name}</div>
-                            <div class="node-type">${node.type}</div>
-                        </div>
-                        <div class="node-actions">
-                            <button class="icon-btn reset" onclick="resetNode('${node.id}', '${node.type}')">↻</button>
-                            <button class="icon-btn delete" onclick="removeNode('${node.id}', '${node.type}')">🗑️</button>
-                        </div>
-                    </div>
-                    <div class="node-params">
-                        ${paramsHTML || '<div class="param-group"><div class="param-label">No parameters</div></div>'}
-                    </div>
-                `;
+                const paramGroups = Object.entries(params).map(([key, value]) =>
+                    paramGroup(key, paramControl(key, value, onParamInput(node.type))));
+                div.append(
+                    ...ports(),
+                    header([
+                        buildEl('div', {}, [
+                            buildEl('div', { class: 'node-title' }, [String(node.name)]),
+                            buildEl('div', { class: 'node-type' }, [node.type]),
+                        ]),
+                        buildEl('div', { class: 'node-actions' }, [
+                            actionButton('reset', '↻', () => resetNode(node.id, node.type)),
+                            actionButton('delete', '🗑️', () => removeNode(node.id, node.type)),
+                        ]),
+                    ]),
+                    buildEl('div', { class: 'node-params' }, paramGroups.length ? paramGroups : [
+                        buildEl('div', { class: 'param-group' }, [buildEl('div', { class: 'param-label' }, ['No parameters'])]),
+                    ]),
+                );
             }
 
             return div;
+        }
+
+        // An element with these attributes (null, undefined and false are
+        // left out, true is an empty attribute), listeners and children
+        // (strings become text nodes). Attribute values are never parsed as
+        // markup, whatever they contain.
+        function buildEl(tag, attrs, children, listeners) {
+            const el = document.createElement(tag);
+            Object.entries(attrs || {}).forEach(([name, value]) => {
+                if (value === null || value === undefined || value === false) return;
+                el.setAttribute(name, value === true ? '' : String(value));
+            });
+            Object.entries(listeners || {}).forEach(([type, listener]) => el.addEventListener(type, listener));
+            el.append(...(children || []));
+            return el;
+        }
+
+        // The input for one node parameter: a true/false select for a
+        // boolean, a number box for a number, and otherwise a text box
+        // showing the value, objects as JSON.
+        function paramControl(key, value, listeners) {
+            if (typeof value === 'boolean') {
+                return buildEl('select', { class: 'param-input', 'data-key': key, 'data-type': 'boolean' }, [
+                    buildEl('option', { value: 'true', selected: value === true }, ['true']),
+                    buildEl('option', { value: 'false', selected: value === false }, ['false']),
+                ], listeners);
+            }
+            let text = '';
+            if (value !== null && value !== undefined) {
+                text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+            }
+            const type = typeof value === 'number' ? 'number' : 'text';
+            return buildEl('input', { type, class: 'param-input', 'data-key': key, 'data-type': type, value: text }, [], listeners);
         }
 
         function setupNodeDragging(nodeEl, node) {
