@@ -105,38 +105,6 @@ def get_scale_info(zarr_grp):
     return offsets, resolutions, shapes
 
 
-def get_array_path_if_needed(zarr_grp_path, target_resolution):
-    try:
-        _ = get_ds_info(zarr_grp_path)
-        # If successful, it's a dataset path
-        return zarr_grp_path
-    except Exception as e:
-        if ".zarr" not in zarr_grp_path and not _is_zarr_container(zarr_grp_path):
-            raise RuntimeError(
-                f"Failed to open dataset at {zarr_grp_path}: {e}\n Multiscale is only supported for zarr groups. Please provide a valid dataset path."
-            )
-        # Otherwise, it's a group path; find the appropriate scale
-        target_scale, _, _ = find_target_scale(zarr_grp_path, target_resolution)
-        return _join_path(zarr_grp_path, target_scale)
-
-
-def find_target_scale(zarr_grp_path, target_resolution):
-    try:
-        zarr_grp = _open_zarr(zarr_grp_path, mode="r")
-    except Exception as e:
-        raise RuntimeError(f"Failed to open zarr group at {zarr_grp_path}: {e}")
-    offsets, resolutions, shapes = get_scale_info(zarr_grp)
-    target_scale = None
-    for scale, res in resolutions.items():
-        if zarr_v3.same_voxel_size(res, target_resolution):
-            target_scale = scale
-            break
-    if target_scale is None:
-        msg = f"Zarr {zarr_grp.store.path}, {zarr_grp.path} does not contain array with sampling {target_resolution}"
-        raise ValueError(msg)
-    return target_scale, offsets[target_scale], shapes[target_scale]
-
-
 def find_closest_scale(zarr_grp_path, target_resolution):
     zarr_grp = _open_zarr(zarr_grp_path, mode="r")
     offsets, resolutions, shapes = get_scale_info(zarr_grp)
