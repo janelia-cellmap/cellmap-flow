@@ -130,7 +130,33 @@ def _raw_shader(paths, normalize, image_for_fallback=None):
     return RAW_SHADER.format(lo=lo, hi=hi, wlo=wlo, whi=whi)
 
 
-def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
+def _layer(source, shader, segmentation, disable_meshes):
+    """An ImageLayer over ``source``, or a SegmentationLayer when asked.
+
+    ``shader`` is called only for an image: sampling a contrast range is of
+    no use to labels. ``disable_meshes`` turns off a segmentation's meshes
+    subsource, so picking a segment does not have neuroglancer compute its
+    mesh, which for a whole-cell label volume can exhaust a node's memory.
+    """
+    if not segmentation:
+        return neuroglancer.ImageLayer(source=source, shader=shader())
+    if isinstance(source, str):
+        source = neuroglancer.LayerDataSource(url=source)
+    if disable_meshes:
+        source.subsources = {"meshes": False}
+    return neuroglancer.SegmentationLayer(source=source)
+
+
+def get_raw_layer(
+    dataset_path, normalize=True, wrap_raw=True, segmentation=False, disable_meshes=False
+):
+    """A neuroglancer layer showing a zarr, n5 or precomputed volume.
+
+    ``segmentation`` gives a SegmentationLayer over the same source, placed
+    the same way, for a label volume; its ids are served as stored, never
+    through the input normalizers. ``disable_meshes`` then turns off its
+    meshes subsource (see _layer).
+    """
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
@@ -169,12 +195,14 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             source = dataset_path
         else:
             source = f"{filetype}://{dataset_path}"
-        return neuroglancer.ImageLayer(
-            source=source,
-            # Unwrapped: neuroglancer fetches the file directly, so the input
-            # normalizers never run on what it displays. Sample unnormalized
-            # too, or the contrast range lands in the wrong space entirely.
-            shader=_raw_shader([original_dataset_path], normalize=False),
+        # Unwrapped: neuroglancer fetches the file directly, so the input
+        # normalizers never run on what it displays. Sample unnormalized
+        # too, or the contrast range lands in the wrong space entirely.
+        return _layer(
+            source,
+            lambda: _raw_shader([original_dataset_path], normalize=False),
+            segmentation,
+            disable_meshes,
         )
 
     if is_multiscale:
@@ -195,7 +223,9 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                 ]
                 scales.sort(key=lambda x: int(x[1:]))
             images = [
-                ImageDataInterface(paths.join(dataset_path, scale), normalize=normalize)
+                ImageDataInterface(
+                    paths.join(dataset_path, scale), normalize=normalize and not segmentation
+                )
                 for scale in scales
             ]
             layers = [_local_volume(image) for image in images]
@@ -208,27 +238,29 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
             # Previously this branch set no shader at all, which neuroglancer
             # reports back as the literal string "None" -- see the guard in
             # dashboard/routes/pipeline.py.
-            return neuroglancer.ImageLayer(
-                source=neuroglancer.LayerDataSource(
+            return _layer(
+                neuroglancer.LayerDataSource(
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
-                shader=_raw_shader(
-                    [paths.join(dataset_path, sc) for sc in scales], normalize
-                ),
+                lambda: _raw_shader([paths.join(dataset_path, sc) for sc in scales], normalize),
+                segmentation,
+                disable_meshes,
             )
         except Exception as e:
             logger.error(e)
             is_multiscale = False
 
     if not is_multiscale:
-        image = ImageDataInterface(original_dataset_path)
-        return neuroglancer.ImageLayer(
-            source=neuroglancer.LayerDataSource(
+        # An image here reads through the input chain whatever normalize
+        # says, as it always has.
+        image = ImageDataInterface(original_dataset_path, normalize=not segmentation)
+        return _layer(
+            neuroglancer.LayerDataSource(
                 url=_local_volume(image), transform=_corner_transform(image)
             ),
-            shader=_raw_shader(
-                [original_dataset_path], normalize, image_for_fallback=image
-            ),
+            lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image),
+            segmentation,
+            disable_meshes,
         )
 
 

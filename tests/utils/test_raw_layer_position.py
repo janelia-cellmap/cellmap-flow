@@ -60,3 +60,22 @@ def test_an_offset_array_is_drawn_at_its_offset_not_at_offset_voxels(tmp_path):
 
     layer = get_raw_layer(str(tmp_path / "raw.zarr" / "raw"), normalize=False)
     assert _translation(layer) == [10.0, 5.0, 5.0]
+
+
+def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(tmp_path):
+    from cellmap_flow.globals import g
+    from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+
+    ids = np.arange(64, dtype=np.uint64).reshape(4, 4, 4)
+    arr = zarr.open_group(str(tmp_path / "labels.zarr"), mode="w").create_dataset("ids", data=ids)
+    arr.attrs["resolution"] = [8, 8, 8]
+    arr.attrs["offset"] = [80, 40, 40]
+    path = str(tmp_path / "labels.zarr" / "ids")
+    g.input_norms = [MinMaxNormalizer(0, 63)]
+
+    layer = get_raw_layer(path, segmentation=True, disable_meshes=True)
+    assert layer.to_json()["type"] == "segmentation"
+    assert _translation(layer) == [10.0, 5.0, 5.0]
+    assert _source(layer)["subsources"] == {"meshes": False}
+    np.testing.assert_array_equal(np.asarray(layer.source[0].url.data[...]), ids)
+    assert "subsources" not in _source(get_raw_layer(path, segmentation=True))
