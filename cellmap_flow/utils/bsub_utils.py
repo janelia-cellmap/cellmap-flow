@@ -52,6 +52,7 @@ from cellmap_flow.jobs import local as _local
 from cellmap_flow.jobs import lsf as _lsf
 from cellmap_flow.jobs.local import LocalJob
 from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
+from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.site import current_site as _current_site
 from cellmap_flow.jobs.spec import (
     Job,
@@ -116,84 +117,6 @@ DEFAULT_WALLTIME = _SITE.default_walltime
 PENDING_FALLBACK_SECONDS = _SITE.pending_fallback_seconds
 STARTUP_TIMEOUT_SECONDS = _SITE.startup_timeout_seconds
 BSUB_TIMEOUT_SECONDS = _lsf.BSUB_TIMEOUT_SECONDS
-
-
-def gpu_queue_candidates(preferred, cycle=True):
-    """The queue to try first, then the others worth falling back to.
-
-    With ``cycle=False`` the requested queue is the only candidate: the job
-    waits for it however long that takes, rather than being moved to whatever
-    is free. Some work is pinned to a queue on purpose -- a benchmark that
-    must run on one GPU model, or a charge group only valid on one queue --
-    and silently landing somewhere else is worse than waiting.
-
-    Ordered by what LSF says is actually free rather than by a fixed list, so
-    the first fallback is the one most likely to start now. Fallback queues
-    that are not accepting work are dropped: they take submissions and never
-    run them, which is indistinguishable from a very slow job.
-
-    The requested queue is kept whatever LSF says about it, but demoted to
-    last if LSF says it is not accepting work, so a closed request does not
-    cost a full pending timeout before anything else is tried.
-
-    When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
-    """
-    from cellmap_flow.utils.lsf_queues import GPU_QUEUES, gpu_queue_availability
-
-    candidates = [preferred] if preferred else []
-
-    if not cycle:
-        logger.info(
-            f"Queue cycling disabled; using {preferred or 'the default queue'} "
-            f"only, and waiting for it."
-        )
-        return candidates
-    all_gpu = [q for q, _, _ in GPU_QUEUES]
-
-    try:
-        info = gpu_queue_availability()
-    except Exception as e:
-        logger.debug(f"Could not read queue availability: {e}")
-        info = {}
-
-    if not info.get("available"):
-        return candidates + [q for q in all_gpu if q != preferred]
-
-    others = [
-        q for q in info["queues"]
-        if q["queue"] != preferred and q.get("accepting")
-    ]
-    # Most free GPUs first; break ties on the shorter pending queue.
-    others.sort(key=lambda q: (-(q.get("gpus_free") or 0), q.get("pending") or 0))
-
-    # The order is not arbitrary and the reason is worth seeing -- especially
-    # now that these records reach the dashboard's log panel. A queue that was
-    # skipped is more interesting than one that was kept.
-    for q in info["queues"]:
-        state = "skipped, not accepting work" if not q.get("accepting") else (
-            "requested" if q["queue"] == preferred else "fallback"
-        )
-        logger.info(f"  {q['queue']}: {q.get('description') or 'no detail'} [{state}]")
-
-    # If LSF says the requested queue is not accepting work, try it last
-    # rather than first. Trying it first costs PENDING_FALLBACK_SECONDS of
-    # dead wait on a queue that LSF has already said will not start the job.
-    # It stays on the list -- a queue can reopen, and the request should still
-    # be honoured if nothing else works -- just not ahead of queues that can
-    # run it now. A queue LSF says nothing about (a yaml naming gpu_l4) is
-    # unknown, not closed, and keeps its place at the front.
-    requested = next(
-        (q for q in info["queues"] if q["queue"] == preferred), None
-    )
-    if requested is not None and not requested.get("accepting") and others:
-        logger.warning(
-            f"{preferred} is not accepting work ({requested.get('description')}); "
-            f"trying it last and starting with {others[0]['queue']}"
-        )
-        return [q["queue"] for q in others] + [preferred]
-
-    return candidates + [q["queue"] for q in others]
-
 
 
 def is_bsub_available() -> bool:

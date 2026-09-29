@@ -28,17 +28,18 @@ def test_cycling_is_the_default():
 
 def test_cycling_on_offers_fallbacks_most_free_first():
     with patch(
-        "cellmap_flow.utils.lsf_queues.gpu_queue_availability", return_value=AVAILABILITY
-    ):
+        "cellmap_flow.jobs.queues.gpu_queue_availability", return_value=AVAILABILITY
+    ) as availability:
         candidates = gpu_queue_candidates("gpu_h100", cycle=True)
 
+    availability.assert_called_once()
     assert candidates[0] == "gpu_h100", "the requested queue is still tried first"
     assert candidates[1:] == ["gpu_a100", "gpu_h200"], "then most free GPUs first"
 
 
 def test_cycling_off_pins_to_the_requested_queue():
     with patch(
-        "cellmap_flow.utils.lsf_queues.gpu_queue_availability", return_value=AVAILABILITY
+        "cellmap_flow.jobs.queues.gpu_queue_availability", return_value=AVAILABILITY
     ) as availability:
         candidates = gpu_queue_candidates("gpu_h100", cycle=False)
 
@@ -49,6 +50,7 @@ def test_cycling_off_pins_to_the_requested_queue():
 
 def test_cycling_defaults_to_on_when_the_argument_is_omitted():
     with patch(
-        "cellmap_flow.utils.lsf_queues.gpu_queue_availability", return_value=AVAILABILITY
-    ):
+        "cellmap_flow.jobs.queues.gpu_queue_availability", return_value=AVAILABILITY
+    ) as availability:
         assert len(gpu_queue_candidates("gpu_h100")) > 1
+    availability.assert_called_once()

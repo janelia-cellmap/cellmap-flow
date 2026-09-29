@@ -348,6 +348,7 @@ JOBS_MODULES = [
     "cellmap_flow.jobs.site",
     "cellmap_flow.jobs.lsf",
     "cellmap_flow.jobs.local",
+    "cellmap_flow.jobs.queues",
 ]
 
 

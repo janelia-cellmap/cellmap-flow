@@ -7,7 +7,7 @@ whole queue panel say "LSF not reachable".
 
 import pytest
 
-from cellmap_flow.utils import lsf_queues
+from cellmap_flow.jobs import queues as lsf_queues
 
 HEADER = "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP\n"
 
@@ -47,6 +47,13 @@ def lsf(monkeypatch):
     return calls
 
 
+def test_the_old_module_still_answers_with_the_same_function():
+    from cellmap_flow.utils import lsf_queues as old
+
+    assert old.gpu_queue_availability is lsf_queues.gpu_queue_availability
+    assert old.GPU_QUEUES == lsf_queues.GPU_QUEUES
+
+
 def test_one_unknown_queue_does_not_hide_the_others(lsf):
     payload = lsf_queues._collect()
 
@@ -57,6 +64,7 @@ def test_one_unknown_queue_does_not_hide_the_others(lsf):
     assert by_name["gpu_a100"]["accepting"] is True
     assert by_name["gpu_h200"]["accepting"] is False
     assert by_name["gpu_h200"]["status"] == "unknown"
+    assert [c for c in lsf if c[0] == "bqueues"], "the fake answered"
 
 
 def test_the_single_call_is_used_when_it_works(lsf, monkeypatch):
@@ -67,5 +75,7 @@ def test_the_single_call_is_used_when_it_works(lsf, monkeypatch):
 
 
 def test_no_answer_at_all_is_still_unreachable(monkeypatch):
-    monkeypatch.setattr(lsf_queues, "_run", lambda args: None)
+    asked = []
+    monkeypatch.setattr(lsf_queues, "_run", lambda args: asked.append(args))
     assert lsf_queues._collect()["available"] is False
+    assert asked, "the fake answered"
