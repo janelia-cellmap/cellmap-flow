@@ -9,15 +9,15 @@ from http import HTTPStatus
 from typing import NamedTuple, Optional
 
 import numpy as np
-import numcodecs
 from flask import Flask, has_request_context, jsonify, redirect, request
 from flask_cors import CORS
-from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import ChunkCancelled, DeviceSlots, Inferencer
 from cellmap_flow.models.models_config import ModelConfig
+from cellmap_flow.pipeline_spec import chain_num_channels, chain_output_dtype
+from cellmap_flow.serving import virtual_zarr
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     get_public_ip,
@@ -25,7 +25,6 @@ from cellmap_flow.utils.web_utils import (
     get_free_port,
 )
 from cellmap_flow.utils.restart_token import TOKEN_HEADER, tokens_match
-from cellmap_flow.utils import zarr_v3
 from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 
 from cellmap_flow.globals import g
@@ -198,7 +197,7 @@ class CellMapFlowServer:
         if self.has_channel:
             # The model output spatial axes match the input data axes (not the
             # hardcoded default which assumes z,y,x).  Override so that
-            # _reorder_to_zarr_axes applies the correct permutation.
+            # reorder_to_zarr_axes applies the correct permutation.
             self.model_output_axes = ("c",) + tuple(self.axes)
         else:
             self.model_output_axes = tuple(self.axes)
@@ -225,13 +224,19 @@ class CellMapFlowServer:
                     f"channels but output_channels is {self.output_channels}; "
                     "serving output_channels"
                 )
-        self._spatial_shape = self._served_spatial_shape()
+        self._spatial_shape = virtual_zarr.served_spatial_shape(
+            self.idi_raw.offset,
+            self.idi_raw.shape,
+            self.idi_raw.voxel_size,
+            self.origin,
+            self.output_voxel_size,
+        )
         self.vol_shape, self.zarr_block_shape = self._zarr_geometry(
             ServedChain(None, None, None)
         )
 
         # Chunk encoding for Zarr
-        self.chunk_encoder = self._initialize_chunk_encoder()
+        self.chunk_encoder = virtual_zarr.chunk_encoder()
 
         # Create and configure Flask
         self.app = Flask(__name__)
@@ -358,14 +363,6 @@ class CellMapFlowServer:
         def chunk_3d(dataset, scale, chunk_z, chunk_y, chunk_x):
             return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
 
-    def _served_spatial_shape(self):
-        """Output voxels from the grid origin to the end of the raw data."""
-        raw_end = np.array(self.idi_raw.offset, dtype=float) + np.array(
-            self.idi_raw.shape, dtype=float
-        ) * np.array(self.idi_raw.voxel_size, dtype=float)
-        output_voxel_size = np.array(self.output_voxel_size, dtype=float)
-        return [int(v) for v in np.ceil((raw_end - self.origin) / output_voxel_size)]
-
     def _chain_for(self, dataset) -> ServedChain:
         """The chain the requested layer URL carries, built once per URL.
 
@@ -397,102 +394,40 @@ class CellMapFlowServer:
         """Resolve (and cache) the chain for ``dataset``. Changes no globals."""
         return self._chain_for(dataset)
 
-    def _num_channels(self, chain: ServedChain) -> int:
-        channels = self.output_channels
-        for step in chain.effective_postprocess():
-            if hasattr(step, "num_channels"):
-                channels = step.num_channels
-        return int(channels)
-
     def _zarr_geometry(self, chain: ServedChain):
         """(shape, chunks) of the served array under ``chain``."""
         shape = list(self._spatial_shape)
         chunks = list(self._spatial_block)
         if self.has_channel:
-            channels = self._num_channels(chain)
+            # After the chain: e.g. ChannelSelection serves fewer channels.
+            channels = chain_num_channels(chain.effective_postprocess(), self.output_channels)
             shape.append(channels)
             chunks.append(channels)
         return shape, chunks
 
     def _output_dtype(self, chain: ServedChain):
-        return np.dtype(
-            g.get_output_dtype(self.output_dtype, chain.effective_postprocess())
-        )
+        # Whatever the model or the chain declares: a numpy class, an
+        # np.dtype or a string.
+        return np.dtype(chain_output_dtype(chain.effective_postprocess(), self.output_dtype))
 
     def _top_level_attributes_impl(self, dataset):
-        max_scale = 0
-        datasets = []
-        for s in range(max_scale + 1):
-            scale_factor = 2**s
-            scale_values = [
-                float(self.output_voxel_size[i] * scale_factor)
-                for i in range(len(self.output_voxel_size))
-            ]
-            # OME translation is the centre of voxel 0, so the grid's corner
-            # plus half a voxel; Neuroglancer then draws voxel 0 at the origin.
-            translation_values = zarr_v3.ome_translation(self.origin, scale_values)
-            if self.has_channel:
-                scale_values.append(1.0)
-                translation_values.append(0.0)
-            datasets.append(
-                {
-                    "coordinateTransformations": [
-                        {"type": "scale", "scale": scale_values},
-                        {"type": "translation", "translation": translation_values},
-                    ],
-                    "path": f"s{s}",
-                }
-            )
-
-        axes_list = []
-        for axis_name in self.axes:
-            axes_list.append({"name": axis_name, "type": "space", "unit": "nanometer"})
-        if self.has_channel:
-            axes_list.append({"name": "c", "type": "channel"})
-
-        top_scale = [1.0] * len(self.axes)
-        if self.has_channel:
-            top_scale.append(1.0)
-
-        attr = {
-            "multiscales": [
-                {
-                    "version": "0.4",
-                    "name": dataset,
-                    "axes": axes_list,
-                    "datasets": datasets,
-                    "coordinateTransformations": [
-                        {"type": "scale", "scale": top_scale}
-                    ],
-                }
-            ]
-        }
+        attr = virtual_zarr.zattrs(
+            self.axes, self.output_voxel_size, self.origin, self.has_channel, dataset
+        )
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
         chain = self._chain_for(dataset)
         shape, chunks = self._zarr_geometry(chain)
-        attr = {
-            "chunks": chunks,
-            "compressor": {"id": "blosc", "cname": "zstd", "clevel": 5, "shuffle": 1},
-            # The zarr v2 typestr of whatever the model or the chain declares
-            # (a numpy class, an np.dtype or a string): "<f2", "|b1", "|i1"...
-            "dtype": self._output_dtype(chain).str,
-            "fill_value": 0,
-            "filters": None,
-            "order": "C",
-            "shape": shape,
-            "zarr_format": 2,
-        }
+        attr = virtual_zarr.zarray(shape, chunks, self._output_dtype(chain))
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
     def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
         chain = self._chain_for(dataset)
-        block = np.array(self._spatial_block)
-        corner = block * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, block]) * self.output_voxel_size
-        roi = Roi(tuple(int(v) for v in self.origin + box[0]), tuple(int(v) for v in box[1]))
+        roi = virtual_zarr.chunk_roi(
+            (chunk_z, chunk_y, chunk_x), self._spatial_block, self.output_voxel_size, self.origin
+        )
         try:
             chunk_data = self.inferencer.process_chunk(
                 self.idi_raw,
@@ -508,7 +443,9 @@ class CellMapFlowServer:
 
         # Reorder model output axes to Zarr-expected order
         if self.has_channel:
-            chunk_data = self._reorder_to_zarr_axes(chunk_data)
+            chunk_data = virtual_zarr.reorder_to_zarr_axes(
+                chunk_data, self.model_output_axes, self.axes
+            )
 
         chunk_data = chunk_data.astype(self._output_dtype(chain))
 
@@ -548,34 +485,6 @@ class CellMapFlowServer:
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
-
-    def _reorder_to_zarr_axes(self, data: np.ndarray) -> np.ndarray:
-        """Reorder data from model output axes to Zarr-expected order matching self.axes + channel."""
-        zarr_axes = tuple(self.axes) + ("c",)
-        model_axes = self.model_output_axes
-
-        if len(model_axes) != data.ndim:
-            logger.warning(
-                f"Model output ndim ({data.ndim}) != declared axes {model_axes}, "
-                "skipping reorder"
-            )
-            return data
-
-        if tuple(model_axes) == zarr_axes:
-            return data
-
-        # For single-channel output the byte layout is identical regardless of
-        # where the size-1 channel axis sits, so skip the expensive copy.
-        c_idx = model_axes.index("c")
-        if data.shape[c_idx] == 1:
-            return data.reshape([data.shape[model_axes.index(ax)] for ax in zarr_axes])
-
-        # Build permutation from model axes order to zarr axes order
-        perm = tuple(model_axes.index(ax) for ax in zarr_axes)
-        return np.ascontiguousarray(data.transpose(perm))
-
-    def _initialize_chunk_encoder(self):
-        return numcodecs.Blosc(cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE)
 
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
