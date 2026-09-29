@@ -12,7 +12,7 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
-from cellmap_flow.io import metadata, multiscale, paths
+from cellmap_flow.io import metadata, multiscale, ome, paths
 from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metadata)
     open_zarr as _open_zarr,
     regularize_offset,
@@ -35,48 +35,8 @@ def generate_singlescale_metadata(
     axes: list,
 ):
     """OME-NGFF 0.4 multiscales attrs for one array whose voxel 0 has its
-    lower corner at ``offset``.
-
-    OME translation is the *centre* of voxel 0, so spatial axes get
-    ``offset + voxel_size / 2``. Writing the corner there put every output
-    half a voxel off in Neuroglancer and in any OME reader.
-    """
-    translation = [
-        float(o) if axis in ("c", "c^") else float(o) + float(v) / 2
-        for axis, o, v in zip(axes, offset, voxel_size)
-    ]
-    z_attrs: dict = {"multiscales": [{}]}
-
-    # Create axes with proper types - channel axis should have type "channel"
-    axes_list = []
-    for axis, unit in zip(axes, units):
-        if axis in ["c", "c^"]:
-            axes_list.append({"name": axis, "type": "channel"})
-        else:
-            axes_list.append({"name": axis, "type": "space", "unit": unit})
-
-    z_attrs["multiscales"][0]["axes"] = axes_list
-
-    # Set coordinateTransformations scale to match dimensionality
-    scale_transform = [1.0] * len(axes)
-    z_attrs["multiscales"][0]["coordinateTransformations"] = [
-        {"scale": scale_transform, "type": "scale"}
-    ]
-
-    z_attrs["multiscales"][0]["datasets"] = [
-        {
-            "coordinateTransformations": [
-                {"scale": list(voxel_size), "type": "scale"},
-                {"translation": list(translation), "type": "translation"},
-            ],
-            "path": arr_name,
-        }
-    ]
-
-    z_attrs["multiscales"][0]["name"] = ""
-    z_attrs["multiscales"][0]["version"] = "0.4"
-
-    return z_attrs
+    lower corner at ``offset`` (see io.ome.singlescale_attrs)."""
+    return ome.singlescale_attrs(arr_name, voxel_size, offset, units, axes)
 
 
 def get_scale_info(zarr_grp):

@@ -447,3 +447,74 @@ def test_select_dataset_and_closest_raw_scale(czyx):
     assert closest_raw_scale(czyx + "/s0", (16, 16, 16)) == (16.0, 16.0, 16.0)
     assert closest_raw_scale(czyx, (12, 12, 12)) == (8.0, 8.0, 8.0)
     assert closest_raw_scale(czyx + "/missing", (8, 8, 8)) is None
+
+
+# ---------------------------------------------------------------------------
+# ome
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "args, written",
+    [
+        # As ds.generate_singlescale_metadata wrote them before it moved.
+        (
+            ("s0", "Coordinate(16, 8, 8)", [-4, 0, 4], ["nanometer"] * 3, ["z", "y", "x"]),
+            '{"multiscales": [{"axes": [{"name": "z", "type": "space", "unit": "nanometer"}, '
+            '{"name": "y", "type": "space", "unit": "nanometer"}, {"name": "x", "type": '
+            '"space", "unit": "nanometer"}], "coordinateTransformations": [{"scale": [1.0, 1.0, '
+            '1.0], "type": "scale"}], "datasets": [{"coordinateTransformations": [{"scale": '
+            '[16, 8, 8], "type": "scale"}, {"translation": [4.0, 4.0, 8.0], "type": '
+            '"translation"}], "path": "s0"}], "name": "", "version": "0.4"}]}',
+        ),
+        (
+            (
+                "s0",
+                (1, 5.24, 4.0, 4.0),
+                [0, 0.0, -2, 2],
+                ["", "nanometer", "nanometer", "nanometer"],
+                ["c", "z", "y", "x"],
+            ),
+            '{"multiscales": [{"axes": [{"name": "c", "type": "channel"}, {"name": "z", "type": '
+            '"space", "unit": "nanometer"}, {"name": "y", "type": "space", "unit": "nanometer"}, '
+            '{"name": "x", "type": "space", "unit": "nanometer"}], "coordinateTransformations": '
+            '[{"scale": [1.0, 1.0, 1.0, 1.0], "type": "scale"}], "datasets": '
+            '[{"coordinateTransformations": [{"scale": [1, 5.24, 4.0, 4.0], "type": "scale"}, '
+            '{"translation": [0.0, 2.62, 0.0, 4.0], "type": "translation"}], "path": "s0"}], '
+            '"name": "", "version": "0.4"}]}',
+        ),
+    ],
+)
+def test_singlescale_attrs_are_written_byte_for_byte_as_before(args, written):
+    from funlib.geometry import Coordinate
+
+    from cellmap_flow.io.ome import singlescale_attrs
+    from cellmap_flow.utils.ds import generate_singlescale_metadata
+
+    args = tuple(Coordinate(16, 8, 8) if a == "Coordinate(16, 8, 8)" else a for a in args)
+    assert json.dumps(generate_singlescale_metadata(*args)) == written
+    assert json.dumps(singlescale_attrs(*args)) == written
+
+
+def test_multiscales_attrs_round_trip_through_the_reader(tmp_path):
+    from cellmap_flow.io.ome import multiscales_attrs
+
+    group = zarr.open_group(str(tmp_path / "w.zarr"), mode="w")
+    group.create_dataset("s0", shape=(4, 4, 4), dtype="u1")
+    group.create_dataset("s1", shape=(2, 2, 2), dtype="u1")
+    group.attrs.update(
+        multiscales_attrs(
+            ["z", "y", "x"],
+            ["nanometer"] * 3,
+            [("s0", [8.0] * 3, [-4.0] * 3), ("s1", [16.0] * 3, [-4.0] * 3)],
+            name="raw",
+        )
+    )
+    assert group.attrs["multiscales"][0]["datasets"][1]["coordinateTransformations"][1] == {
+        "translation": [4.0, 4.0, 4.0],
+        "type": "translation",
+    }
+    assert [meta.translation for _, meta in list_levels(str(tmp_path / "w.zarr"))] == [
+        (-4.0,) * 3,
+        (-4.0,) * 3,
+    ]
