@@ -48,7 +48,7 @@
   <div class="mb-3">
     <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
     <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
-    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO). Crop will be created at current view center position.</small>
+    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO).</small>
   </div>
 
   <!-- Primary actions: start or resume an annotation volume -->
@@ -210,18 +210,6 @@
       </div>
     </div>
   </div>
-  <!-- Deprecated/advanced: dense crop at view center -->
-  <details class="mt-2">
-    <summary class="text-muted small" style="cursor: pointer;">Advanced (deprecated): dense crop at view center</summary>
-    <div class="mt-2">
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="createCropBtn">
-        Create Annotation Crop
-      </button>
-      <small class="form-text text-muted d-block mt-1">
-        Small dense region at current view center (paint <code>1</code>=foreground). Rarely used.
-      </small>
-    </div>
-  </details>
 
   <!-- MinIO Status -->
   <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
@@ -595,7 +583,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const modelSelectionDiv = document.getElementById("modelSelectionDiv");
   const modelInfo = document.getElementById("modelInfo");
   const modelInfoContent = document.getElementById("modelInfoContent");
-  const createCropBtn = document.getElementById("createCropBtn");
   const finetuneLog = document.getElementById("finetuneLog");
   const minioStatus = document.getElementById("minioStatus");
   const minioStatusContent = document.getElementById("minioStatusContent");
@@ -875,7 +862,6 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(data => {
         if (data.error) {
           if (!quiet) finetuneLog.value += `Error: ${data.error}\n`;
-          createCropBtn.disabled = true;
           scheduleModelPoll();
           return;
         }
@@ -889,7 +875,6 @@ document.addEventListener("DOMContentLoaded", function () {
             finetuneLog.value += "  \u2192 Submit a model from the main tab; this list updates automatically\n";
           }
           modelSelect.innerHTML = "";
-          createCropBtn.disabled = true;
           lastLoadedCount = 0;
           scheduleModelPoll();
           return;
@@ -925,8 +910,6 @@ document.addEventListener("DOMContentLoaded", function () {
         selectedModel = models.find(m => m.name === modelSelect.value) || models[0];
         displayModelInfo(selectedModel);
 
-        // Enable create button if we have models
-        createCropBtn.disabled = false;
         cancelModelPoll();
         loggedNoModels = false;
         if (!quiet || models.length !== lastLoadedCount) {
@@ -937,7 +920,6 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch(err => {
         if (!quiet) finetuneLog.value += `Error loading models: ${err}\n`;
         console.error(err);
-        createCropBtn.disabled = true;
         scheduleModelPoll();
       });
   }
@@ -960,74 +942,6 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
     modelInfo.style.display = "block";
   }
-
-  // Create annotation crop
-  createCropBtn.addEventListener("click", function() {
-    if (!selectedModel) {
-      alert("No model selected");
-      return;
-    }
-
-    const outputPath = document.getElementById("outputPath").value.trim();
-    if (!outputPath) {
-      alert("Please specify an output path for the zarr files");
-      return;
-    }
-
-    createCropBtn.disabled = true;
-    createCropBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
-    finetuneLog.value += `Creating annotation crop at current view center...\n`;
-    finetuneLog.value += `Output path: ${outputPath}\n`;
-
-    const payload = {
-      model_name: selectedModel.name,
-      output_path: outputPath
-    };
-
-    fetch("/api/finetune/create-crop", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          // Save output path to localStorage for next time
-          saveFinetuneState();
-
-          finetuneLog.value += `✓ Created crop: ${data.crop_id}\n`;
-          finetuneLog.value += `  Center (nm): [${data.metadata.center_position_nm.map(v => v.toFixed(1)).join(', ')}]\n`;
-          finetuneLog.value += `  Zarr path: ${data.zarr_path}\n`;
-          finetuneLog.value += `  MinIO URL: ${data.minio_url}\n`;
-          finetuneLog.value += `  Raw crop - Offset (voxels): [${data.metadata.raw_crop_offset.join(', ')}]\n`;
-          finetuneLog.value += `  Raw crop - Shape (voxels): [${data.metadata.raw_crop_shape.join(', ')}]\n`;
-          finetuneLog.value += `  Annotation crop - Offset (voxels): [${data.metadata.annotation_crop_offset.join(', ')}]\n`;
-          finetuneLog.value += `  Annotation crop - Shape (voxels): [${data.metadata.annotation_crop_shape.join(', ')}]\n`;
-
-          // Update MinIO status
-          minioStatusContent.innerHTML = `
-            <small>
-              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
-              <strong>URL:</strong> ${esc(data.minio_url)}
-            </small>
-          `;
-          minioStatus.style.display = "block";
-
-          // Add to viewer
-          addToViewer(data.crop_id, data.neuroglancer_url);
-        } else {
-          finetuneLog.value += `✗ Error: ${data.error}\n`;
-        }
-        createCropBtn.disabled = false;
-        createCropBtn.innerHTML = 'Create Annotation Crop';
-      })
-      .catch(err => {
-        finetuneLog.value += `✗ Error: ${err}\n`;
-        console.error(err);
-        createCropBtn.disabled = false;
-        createCropBtn.innerHTML = 'Create Annotation Crop';
-      });
-  });
 
   // Create annotation volume (sparse, full dataset)
   const createVolumeBtn = document.getElementById("createVolumeBtn");
