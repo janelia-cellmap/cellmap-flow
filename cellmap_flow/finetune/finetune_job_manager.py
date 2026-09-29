@@ -158,7 +158,7 @@ class FinetuneJob:
     """Track a finetuning job with metadata, status, and training progress.
 
     Manages lifecycle from submission through completion, including inference
-    server state and restart chain linkage.
+    server state.
     """
     job_id: str
     lsf_job: Optional[LSFJob]
@@ -169,15 +169,12 @@ class FinetuneJob:
     created_at: datetime
     log_file: Path
     finetuned_model_name: Optional[str] = None
-    model_script_path: Optional[Path] = None
     model_yaml_path: Optional[Path] = None
     current_epoch: int = 0
     total_epochs: int = 10
     latest_loss: Optional[float] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
-    previous_job_id: Optional[str] = None
-    next_job_id: Optional[str] = None
     # The corrections directory the job trains on. The restart route reads it
     # to refresh the manifest; it was never set, so a restart silently kept
     # the old patches_per_epoch, rehearsal fraction, input norm and
@@ -208,15 +205,12 @@ class FinetuneJob:
             "created_at": self.created_at.isoformat(),
             "log_file": str(self.log_file),
             "finetuned_model_name": self.finetuned_model_name,
-            "model_script_path": str(self.model_script_path) if self.model_script_path else None,
             "model_yaml_path": str(self.model_yaml_path) if self.model_yaml_path else None,
             "current_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
             "latest_loss": self.latest_loss,
             "inference_server_url": self.inference_server_url,
             "inference_server_ready": self.inference_server_ready,
-            "previous_job_id": self.previous_job_id,
-            "next_job_id": self.next_job_id,
             "corrections_path": str(self.corrections_path) if self.corrections_path else None,
         }
 
@@ -236,7 +230,6 @@ class FinetuneJobManager:
         """Initialize the job manager."""
         self.jobs: Dict[str, FinetuneJob] = {}
         self.logger = logging.getLogger(__name__)
-        self._monitor_threads: Dict[str, threading.Thread] = {}
 
     def _get_model_metadata(self, model_config, attr_name: str, default=None):
         """
@@ -857,7 +850,6 @@ class FinetuneJobManager:
             daemon=True
         )
         monitor_thread.start()
-        self._monitor_threads[finetune_job.job_id] = monitor_thread
         self.logger.info(f"Started monitoring thread for job {finetune_job.job_id}")
 
     def _update_metadata(self, finetune_job: FinetuneJob, **fields):

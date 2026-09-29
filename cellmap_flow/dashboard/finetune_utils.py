@@ -399,7 +399,6 @@ def _start_minio(output_base_dir):
         raise
 
     minio_state["output_base"] = output_base_dir if output_base_dir else None
-    minio_state["minio_root"] = str(minio_root)
     minio_state["log_path"] = str(log_path)
     minio_state["port"] = port
     minio_state["ip"] = ip
@@ -927,14 +926,12 @@ def _sync_annotation_volume_from_minio(volume_id, force, zarr_path):
         )
 
         if not changed_chunk_keys and not removed_chunk_keys:
-            minio_state["last_sync"][volume_id] = datetime.now()
             return False
 
         logger.info(
             f"Synced {len(changed_chunk_keys)} changed chunks for volume {volume_id}"
         )
         volume_meta["chunk_sync_state"] = remote_chunk_state
-        minio_state["last_sync"][volume_id] = datetime.now()
         return True
 
     except Exception as e:
