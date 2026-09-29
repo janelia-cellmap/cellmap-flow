@@ -7,11 +7,10 @@ import json
 import os
 import yaml
 import logging
-import inspect
 from typing import List, Dict, Any, Optional
 
+from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.cli_utils import get_all_subclasses, process_constructor_args
 
 DEFAULT_SERVER_QUEUE = "gpu_h100"
 
@@ -84,14 +83,8 @@ def resolve_data_path(data_path: str, scale: Optional[str]) -> str:
 
 
 def get_model_type_mapping() -> Dict[str, type]:
-    """
-    Get mapping of CLI-friendly names to ModelConfig classes.
-    Uses the same logic as the cellmap_flow CLI for consistency.
-    
-    Returns:
-        Dictionary mapping model type names to ModelConfig classes
-    """
-    return get_all_subclasses(ModelConfig)
+    """Every model type by the name YAML ``type:`` uses: ``registry.model_types()``."""
+    return registry.model_types()
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -148,130 +141,12 @@ def load_config(path: str) -> Dict[str, Any]:
 
 
 def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfig:
-    """
-    Build a single ModelConfig instance from a YAML entry.
-    Dynamically discovers the appropriate class and validates parameters.
-    
-    Args:
-        entry: Dictionary containing model configuration from YAML
-        model_name: Name/key of the model from YAML (used as the model's name)
-        
-    Returns:
-        Instantiated ModelConfig subclass
+    """A model config from a YAML model entry: ``registry.build_model``.
 
     Raises:
         ConfigError: the entry does not describe a model that can be built
     """
-    if not isinstance(entry, dict):
-        raise ConfigError(f"Model '{model_name}' must be a mapping, got {entry!r}")
-    mtype = entry.get("type")
-    if not mtype:
-        raise ConfigError(f"Model '{model_name}' missing 'type' field")
-
-    # Get available model types
-    model_type_mapping = get_model_type_mapping()
-    
-    # Normalize the type name (handle different separators)
-    mtype_normalized = mtype.lower().replace("_", "-")
-    
-    # Find matching model class
-    config_class = None
-    for type_name, cls in model_type_mapping.items():
-        if type_name == mtype_normalized or mtype.lower() == type_name.replace("-", ""):
-            config_class = cls
-            break
-    
-    if config_class is None:
-        available_types = ", ".join(sorted(model_type_mapping.keys()))
-        raise ConfigError(
-            f"Model '{model_name}' has unrecognized type '{mtype}'. "
-            f"Valid types are: {available_types}"
-        )
-    
-    # Get constructor signature
-    sig = inspect.signature(config_class.__init__)
-    
-    # Map YAML keys to constructor parameters
-    # Handle common YAML naming conventions vs Python parameter names
-    param_mapping = {
-        # Common aliases for parameters
-        "checkpoint": "checkpoint_path",
-        "classes": "channels",
-        "resolution": "input_voxel_size",
-        "output_resolution": "output_voxel_size",
-        "config_folder": "folder_path",
-        "model_path": "model_name",
-    }
-    
-    # Build kwargs from YAML entry
-    kwargs = {}
-    for yaml_key, yaml_value in entry.items():
-        if yaml_key == "type":
-            continue  # Skip the type field
-        
-        # Map YAML key to parameter name
-        param_name = param_mapping.get(yaml_key, yaml_key)
-        
-        # Handle list/tuple conversions for resolution
-        if param_name in ["input_voxel_size", "output_voxel_size"] and isinstance(yaml_value, int):
-            yaml_value = (yaml_value, yaml_value, yaml_value)
-        elif param_name in ["input_voxel_size", "output_voxel_size"] and isinstance(yaml_value, list):
-            yaml_value = tuple(yaml_value)
-        
-        kwargs[param_name] = yaml_value
-    
-    # Use model_name as the name if not explicitly provided in YAML
-    if 'name' not in kwargs:
-        kwargs['name'] = model_name
-    
-    # Process constructor args (handles type conversions)
-    processed_kwargs = process_constructor_args(config_class, kwargs)
-    
-    # Validate required parameters
-    required_params = []
-    for param_name, param_info in sig.parameters.items():
-        if (param_name != 'self' and 
-            param_info.default is inspect.Parameter.empty and
-            param_name not in ['name', 'scale']):
-            required_params.append(param_name)
-            
-            if param_name not in processed_kwargs:
-                # Special case: if output_voxel_size is missing but input_voxel_size exists, use input_voxel_size
-                if param_name == 'output_voxel_size' and 'input_voxel_size' in processed_kwargs:
-                    processed_kwargs['output_voxel_size'] = processed_kwargs['input_voxel_size']
-                    logger.warning(
-                        f"Model '{model_name}' ({mtype}): 'output_voxel_size' not specified, "
-                        f"using 'input_voxel_size' ({processed_kwargs['input_voxel_size']}) as default"
-                    )
-                    continue
-                
-                # Check if it exists under an alias
-                found = False
-                for yaml_key, mapped_param in param_mapping.items():
-                    if mapped_param == param_name and yaml_key in entry:
-                        found = True
-                        break
-                
-                if not found:
-                    raise ConfigError(
-                        f"Model '{model_name}' ({mtype}) missing required parameter '{param_name}'"
-                    )
-    
-    # Create model instance
-    try:
-        model = config_class(**processed_kwargs)
-        logger.debug(f"Created model '{model_name}': {model}")
-        return model
-    except TypeError as e:
-        raise ConfigError(
-            f"Error creating model '{model_name}' ({mtype}): {e}. "
-            f"Provided parameters: {processed_kwargs}. "
-            f"Required parameters: {required_params}"
-        ) from e
-    except (ValueError, OSError) as e:
-        # Some constructors read files straight away (a cellmap model's
-        # metadata.json), so a wrong path shows up here.
-        raise ConfigError(f"Error creating model '{model_name}' ({mtype}): {e}") from e
+    return registry.build_model(entry, model_name)
 
 
 def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:

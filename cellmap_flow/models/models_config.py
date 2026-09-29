@@ -900,12 +900,10 @@ class FinetuneModelConfig(ModelConfig):
     def base_model_config(self):
         """Lazily build the base ModelConfig from the stored dict."""
         if self._base_model_config is None:
-            from cellmap_flow.utils.config_utils import build_model_from_entry
+            from cellmap_flow.models.registry import build_model
 
             base_name = self.base_model_dict.get("name", "base_model")
-            self._base_model_config = build_model_from_entry(
-                self.base_model_dict, model_name=base_name
-            )
+            self._base_model_config = build_model(self.base_model_dict, base_name)
         return self._base_model_config
 
     def _get_config(self):
