@@ -16,7 +16,7 @@ Four parsers produce it:
   ``units`` -- on an array and its parent group, with the axis reversal N5
   needs. zarr v2 arrays without OME metadata go through it too, and keep
   its rounding of the offset onto the voxel grid (``regularize_offset``).
-- ``_legacy_attrs``: ``transform`` or ``resolution``/``offset`` on a v3
+- ``legacy_attrs``: ``transform`` or ``resolution``/``offset`` on a v3
   array itself (and on crops), taken as written.
 - ``_precomputed``: tensorstore's dimension units.
 
@@ -343,10 +343,16 @@ def match_dataset(multiscale: dict, dataset_path: str) -> Optional[dict]:
     )
 
 
-def _has_scale(entry: dict) -> bool:
-    return any(
-        t.get("type") == "scale" for t in entry.get("coordinateTransformations", [])
-    )
+def dataset_transforms(entry: dict):
+    """``(scale, translation)`` of an OME ``datasets`` entry as written, each
+    None when the entry has none."""
+    scale = translation = None
+    for transform in entry.get("coordinateTransformations", []):
+        if transform.get("type") == "scale":
+            scale = transform["scale"]
+        elif transform.get("type") == "translation":
+            translation = transform["translation"]
+    return scale, translation
 
 
 def _ome(multiscale: dict, entry: dict, header: _Header, path: str, fmt: str) -> ArrayMeta:
@@ -358,12 +364,11 @@ def _ome(multiscale: dict, entry: dict, header: _Header, path: str, fmt: str) ->
     """
     ndim = len(header.shape)
     spatial, spatial_names, units = spatial_axes(multiscale.get("axes", []))
-    transforms = entry["coordinateTransformations"]
-    scale = next(t["scale"] for t in transforms if t["type"] == "scale")
-    translation = next(
-        (t["translation"] for t in transforms if t["type"] == "translation"),
-        [0.0] * len(scale),
-    )
+    scale, translation = dataset_transforms(entry)
+    if scale is None:
+        raise KeyError(f"dataset {entry.get('path')!r} has no scale transformation")
+    if translation is None:
+        translation = [0.0] * len(scale)
     if spatial is None:
         spatial = list(range(ndim))
         names = _unnamed_spatial(ndim)
@@ -484,7 +489,7 @@ def _n5(items, order, ndim, is_n5, units=None, multiscales=None, level_path=None
     return voxel_size, offset, units
 
 
-def _legacy_attrs(attrs: dict, ndim: int) -> Tuple[List[float], List[float]]:
+def legacy_attrs(attrs: dict, ndim: int) -> Tuple[List[float], List[float]]:
     """``(voxel_size, offset)`` from an array's own ``transform`` or
     ``resolution``/``offset`` attributes, as written; 1 and 0 without them.
 
@@ -579,7 +584,7 @@ def _v2_array_meta(array, root, rel, path, fmt) -> ArrayMeta:
         units = None
         if not is_n5 and multiscales:
             entry = match_dataset(multiscales[0], level_path)
-            if entry is not None and _has_scale(entry):
+            if entry is not None and dataset_transforms(entry)[0] is not None:
                 # Exact: an OME corner is usually not a multiple of the voxel
                 # size (-4 nm at 8 nm for Janelia data), and rounding it onto
                 # the grid would undo the centre-to-corner conversion.
@@ -742,7 +747,7 @@ def _read_v3(path: str) -> ArrayMeta:
                     if entry is not None:
                         return _v3_level(parent, multiscale, entry)
         header = _v3_header(meta)
-        voxel_size, offset = _legacy_attrs(attrs_from_meta(meta), len(header.shape))
+        voxel_size, offset = legacy_attrs(attrs_from_meta(meta), len(header.shape))
         return _attr_meta(path, "zarr3", header, voxel_size, offset)
 
     multiscale = multiscales_from_group(container)

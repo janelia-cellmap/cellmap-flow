@@ -27,6 +27,8 @@ import yaml
 import zarr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.ome import ome_corner
 from cellmap_flow.utils import zarr_v3
 
 logger = logging.getLogger(__name__)
@@ -142,15 +144,13 @@ def _read_voxel_size_and_offset(
     voxel 0's centre, so half a voxel is taken off it; the legacy
     ``transform``/``offset`` attributes are corners already.
 
-    Handles three layouts:
+    Handles three layouts, in zarr v2 and v3 alike:
         1. Multiscale group with ``multiscales`` -> first scale's array.
-        2. Plain ``zarr.Array`` with ``transform``/``resolution`` attrs.
-        3. Plain ``zarr.Array`` with no metadata -> voxel_size=(1,1,1),
+        2. Plain array with ``transform``/``resolution`` attrs.
+        3. Plain array with no metadata -> voxel_size=(1,1,1),
            offset=(0,0,0).
 
-    Zarr **v3**-format stores (``zarr.json``) are handled separately in
-    :func:`_read_voxel_size_and_offset_v3`, since zarr-python 2.x cannot open
-    them at all.
+    The values are read as written: in the file's units, every axis.
     """
     # zarr.open reports the path *inside* the store, which for a missing
     # directory is the empty string -- "nothing found at path ''" names
@@ -173,83 +173,49 @@ def _read_voxel_size_and_offset(
         )
         raise FileNotFoundError(f"Crop path not found: {zarr_path}.{detail}")
 
-    if zarr_v3.is_v3_container(zarr_path):
+    if paths.is_v3_container(zarr_path):
         return _read_voxel_size_and_offset_v3(zarr_path)
-
     node = zarr.open(zarr_path, mode="r")
-
     if isinstance(node, zarr.hierarchy.Group):
-        attrs = dict(node.attrs)
-        multiscales = attrs.get("multiscales")
-        if multiscales:
-            ms = multiscales[0]
-            ds = ms["datasets"][0]
-            sub = ds["path"]
-            scale = np.array([1.0, 1.0, 1.0])
-            translation = np.array([0.0, 0.0, 0.0])
-            for tx in ds.get("coordinateTransformations", []):
-                if tx.get("type") == "scale":
-                    scale = np.array(tx["scale"], dtype=float)
-                elif tx.get("type") == "translation":
-                    translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, np.array(zarr_v3.ome_corner(translation, scale))
-        if "s0" in node:
-            return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
-        raise ValueError(
-            f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
-        )
-
-    attrs = dict(node.attrs)
-    if "transform" in attrs:
-        tx = attrs["transform"]
-        scale = np.array(tx.get("scale", [1, 1, 1]), dtype=float)
-        translation = np.array(tx.get("translate", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    if "resolution" in attrs:
-        scale = np.array(attrs["resolution"], dtype=float)
-        translation = np.array(attrs.get("offset", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+        return _crop_geometry(zarr_path, dict(node.attrs), "s0" in node)
+    return _crop_geometry(zarr_path, dict(node.attrs), None)
 
 
 def _read_voxel_size_and_offset_v3(
     zarr_path: str,
 ) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
-    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`. Same three
-    layouts, read via plain ``json.load`` on ``zarr.json`` instead of
-    zarr-python (which cannot open v3 stores)."""
-    meta = zarr_v3.read_zarr_json(zarr_path)
-
+    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`, read from
+    ``zarr.json`` (zarr-python 2.x cannot open v3 stores)."""
+    meta = metadata.read_zarr_json(zarr_path)
+    attrs = metadata.attrs_from_meta(meta)
     if meta.get("node_type") == "group":
-        ms = zarr_v3.multiscales_from_group(zarr_path)
-        if ms is not None:
-            ds = ms["datasets"][0]
-            sub = ds["path"]
-            scale = np.array([1.0, 1.0, 1.0])
-            translation = np.array([0.0, 0.0, 0.0])
-            for tx in ds.get("coordinateTransformations", []):
-                if tx.get("type") == "scale":
-                    scale = np.array(tx["scale"], dtype=float)
-                elif tx.get("type") == "translation":
-                    translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, np.array(zarr_v3.ome_corner(translation, scale))
-        if zarr_v3.is_v3_container(os.path.join(zarr_path, "s0")):
-            return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
-        raise ValueError(
-            f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
+        return _crop_geometry(
+            zarr_path, attrs, paths.is_v3_container(os.path.join(zarr_path, "s0"))
         )
+    return _crop_geometry(zarr_path, attrs, None)
 
-    attrs = zarr_v3.attrs_from_meta(meta)
-    if "transform" in attrs:
-        tx = attrs["transform"]
-        scale = np.array(tx.get("scale", [1, 1, 1]), dtype=float)
-        translation = np.array(tx.get("translate", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    if "resolution" in attrs:
-        scale = np.array(attrs["resolution"], dtype=float)
-        translation = np.array(attrs.get("offset", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+
+def _crop_geometry(zarr_path, attrs, has_s0):
+    """``_read_voxel_size_and_offset`` for a node's ``attrs``; ``has_s0`` is
+    None for an array, else whether the group has an ``s0`` child."""
+    if has_s0 is None:
+        voxel_size, offset = metadata.legacy_attrs(attrs, ndim=3)
+        return (), np.array(voxel_size, dtype=float), np.array(offset, dtype=float)
+
+    multiscales = attrs.get("multiscales")
+    if multiscales:
+        entry = multiscales[0]["datasets"][0]
+        scale, translation = metadata.dataset_transforms(entry)
+        scale = np.array([1.0, 1.0, 1.0] if scale is None else scale, dtype=float)
+        translation = np.array(
+            [0.0, 0.0, 0.0] if translation is None else translation, dtype=float
+        )
+        return (entry["path"],), scale, np.array(ome_corner(translation, scale))
+    if has_s0:
+        return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+    raise ValueError(
+        f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
+    )
 
 
 def _open_array(zarr_path: str, sub: Tuple[str, ...]):
