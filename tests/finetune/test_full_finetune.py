@@ -42,7 +42,7 @@ def _trainer(tmp_path, num_epochs=6):
 
 def test_full_finetune_keeps_only_best_checkpoint_and_exports_full_weights(tmp_path):
     model, trainer = _trainer(tmp_path)
-    assert not trainer._is_peft()
+    assert trainer.strategy.kind == "full"
     trainer.train()
     run = tmp_path / "run"
     assert (run / "best_checkpoint.pth").exists()

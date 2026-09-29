@@ -34,7 +34,7 @@ def _trainer(run):
 def _export(trainer, run, name):
     export_dir = run / "iterations" / name
     trainer.save_adapter(export_dir=str(export_dir))
-    _point_latest_export(run, export_dir, is_lora=False)
+    _point_latest_export(run, export_dir, "full_finetune")
     return export_dir
 
 

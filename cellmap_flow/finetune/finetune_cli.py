@@ -39,7 +39,7 @@ from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig,
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.utils.restart_token import read_or_create_restart_token
 from cellmap_flow.finetune.finetuned_model_templates import FINETUNED_MODEL_YAML_MARKER
-from cellmap_flow.finetune.lora_wrapper import wrap_model_with_lora
+from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy, strategy_for
 from cellmap_flow.finetune.model_loading import (
     decode_model_entry,
     load_trainable_model,
@@ -407,52 +407,39 @@ def _apply_restart_params(args, signal_data: dict):
                 logger.warning(f"Failed to update metadata.json: {e}")
 
 
-def _is_peft_model(model) -> bool:
-    try:
-        from peft import PeftModel
-    except ImportError:
-        return False
-    return isinstance(model, PeftModel)
-
-
 def _reset_for_restart(lora_model, args, initial_state=None):
     """Put the model back where training started, for the next iteration.
 
     LoRA: unload the adapter and wrap a fresh one around the base (which is
     how the rank can change on restart). Full finetune: load the starting
-    weights back; before, the weights carried on from the previous iteration,
-    NaNs included when it had diverged, so a full finetune never really
-    restarted. The model object -- which the inference server shares -- is
-    built once, so a restart cannot switch between the two kinds.
+    weights back (see the strategies' restart()). The model object -- which
+    the inference server shares -- is built once, so a restart cannot switch
+    between the two kinds: the model decides, and args.lora_r is made to
+    agree with it.
 
     Returns the model to train next.
     """
-    if _is_peft_model(lora_model):
-        logger.info("Resetting LoRA adapter weights for fresh restart...")
-        if args.lora_r <= 0:
-            logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
-                           "submit a new job for that. Keeping the current adapter setup.")
-            args.lora_r = max(1, int(lora_model.peft_config['default'].r))
-        base = lora_model.unload()
-        lora_model = wrap_model_with_lora(
-            base,
-            lora_r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            lora_min_channels=args.lora_min_channels,
-        )
-    else:
-        if args.lora_r > 0:
-            # The mirror image of the case above. Left alone, args.lora_r > 0
-            # made the next iteration's YAML point at a lora_adapter/ this job
-            # never writes.
-            logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
-                           "submit a new job for that. Keeping the full finetune.")
-            args.lora_r = 0
-        if initial_state is not None:
-            logger.info("Resetting the full finetune to its starting weights for a fresh restart...")
-            lora_model.load_state_dict(initial_state)
+    kept = strategy_for(lora_model)
+    if kept.kind == "lora" and args.lora_r <= 0:
+        logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                       "submit a new job for that. Keeping the current adapter setup.")
+        args.lora_r = max(1, int(kept.r))
+    elif kept.kind == "full" and args.lora_r > 0:
+        # The mirror image of the case above. Left alone, args.lora_r > 0
+        # made the next iteration's YAML point at a lora_adapter/ this job
+        # never writes.
+        logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
+                       "submit a new job for that. Keeping the full finetune.")
+        args.lora_r = 0
 
+    strategy = strategy_for(
+        lora_model,
+        args.lora_r,
+        alpha=args.lora_alpha,
+        dropout=args.lora_dropout,
+        min_channels=args.lora_min_channels,
+    )
+    lora_model = strategy.restart(lora_model, initial_state)
     lora_model.train()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -483,12 +470,10 @@ def _models_dir(args) -> Path:
     return output_dir / "models"
 
 
-def _export_name(is_lora: bool) -> str:
-    return "lora_adapter" if is_lora else "full_finetune"
+def _point_latest_export(output_dir: Path, export_dir: Path, name: str) -> None:
+    """Make <output_dir>/<name> the latest iteration's export.
 
-
-def _point_latest_export(output_dir: Path, export_dir: Path, is_lora: bool) -> None:
-    """Make <output_dir>/lora_adapter (or full_finetune) the latest iteration's export.
+    ``name`` is the strategy's export_name: lora_adapter or full_finetune.
 
     Every iteration exports into its own iterations/<n>_<ts>/ directory, so
     the YAML written for it keeps serving its weights after the next
@@ -501,7 +486,6 @@ def _point_latest_export(output_dir: Path, export_dir: Path, is_lora: bool) -> N
     import shutil
 
     output_dir = Path(output_dir)
-    name = _export_name(is_lora)
     link = output_dir / name
     target = Path(export_dir) / name
     if link.exists() and not link.is_symlink():
@@ -1216,34 +1200,17 @@ def main():
     base_model = load_trainable_model(model_config)
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
+    # The request decides, here only: --lora-r 0 is a full finetune (see
+    # FullStrategy). From here on the model does (strategy_for). A finetuned
+    # model given as the base still carries its adapter; either way it is
+    # folded into the weights first.
     if args.lora_r <= 0:
-        # Full finetune. Measured against LoRA r=64 on mito-aff-unet-setup-16
-        # (2026-09-23): faster per step (0.50 vs 0.90 s), lower memory (31 vs
-        # 50 GB at batch 8), and lower training loss at every checkpoint --
-        # the adapter's savings are in parameters, which is not where this
-        # model's cost is. The export is a full state dict under
-        # full_finetune/, served via FinetuneModelConfig(weights_path=...).
-        logger.info("lora_r=0: full finetuning -- every parameter trainable, no adapter. "
-                    "Restarts start again from the starting weights.")
-        # A finetuned model given as the base still carries its adapter; fold
-        # it into the weights, which are what a full finetune trains.
-        from cellmap_flow.finetune.lora_wrapper import _merge_existing_adapters
-
-        base_model = _merge_existing_adapters(base_model)
-        for p in base_model.parameters():
-            p.requires_grad_(True)
-        lora_model = base_model
-        n_train = sum(p.numel() for p in lora_model.parameters())
-        logger.info(f"trainable params: {n_train:,} || all params: {n_train:,} || trainable%: 100.0000")
+        strategy = FullStrategy()
     else:
-        logger.info(f"Wrapping model with LoRA (r={args.lora_r})...")
-        lora_model = wrap_model_with_lora(
-            base_model,
-            lora_r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            lora_min_channels=args.lora_min_channels,
+        strategy = LoraStrategy(
+            args.lora_r, args.lora_alpha, args.lora_dropout, min_channels=args.lora_min_channels
         )
+    lora_model = strategy.prepare(base_model)
 
     # === Training loop (supports restart via signal file) ===
     server_started = False
@@ -1256,15 +1223,11 @@ def main():
     teacher_model = None
     # The weights a full finetune starts from, on the CPU, to reset it to on
     # restart. LoRA resets by re-making its adapter and needs none.
-    initial_state = None
+    initial_state = strategy.initial_state(lora_model)
     # Where the next iteration's TensorBoard curves start: (step, epoch).
     tb_position = (0, 0)
     # Set by a restart; the reset waits until the next iteration is set up.
     pending_reset = False
-    if not _is_peft_model(lora_model):
-        from cellmap_flow.finetune.lora_trainer import cpu_state_copy
-
-        initial_state = cpu_state_copy(lora_model)
 
     while True:
         iteration += 1
@@ -1431,7 +1394,8 @@ def main():
 
             # What was exported is decided by the model, not by args.lora_r,
             # which a restart can change without changing the model.
-            is_lora = _is_peft_model(lora_model)
+            strategy = strategy_for(lora_model)
+            is_lora = strategy.kind == "lora"
 
             # Save final adapter (or, for a full finetune, the full weights),
             # into this iteration's own directory, so the YAML written for it
@@ -1439,14 +1403,14 @@ def main():
             export_dir = Path(args.output_dir) / "iterations" / f"{iteration:03d}_{timestamp}"
             logger.info("\nSaving LoRA adapter..." if is_lora else "\nSaving full finetuned weights...")
             exported = trainer.save_adapter(export_dir=str(export_dir))
-            _point_latest_export(Path(args.output_dir), export_dir, is_lora)
+            _point_latest_export(Path(args.output_dir), export_dir, strategy.export_name)
 
             logger.info("\n" + "=" * 60)
             logger.info("Finetuning Complete!")
             logger.info(f"Best loss: {stats['best_loss']:.6f}")
             logger.info(
                 f"{'Adapter' if is_lora else 'Weights'} saved to: {exported} "
-                f"({Path(args.output_dir) / _export_name(is_lora)} follows the latest iteration)"
+                f"({Path(args.output_dir) / strategy.export_name} follows the latest iteration)"
             )
             logger.info("=" * 60)
 

@@ -27,29 +27,12 @@ from cellmap_flow.finetune.losses import (  # noqa: F401
     masked_mean,
     soft_target_entropy,
 )
-
-
-def cpu_state_copy(model: nn.Module) -> Dict[str, torch.Tensor]:
-    """A CPU copy of ``model``'s state dict, to reset a full finetune to."""
-    return {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()}
-
-
-def frozen_teacher_copy(model: nn.Module) -> nn.Module:
-    """A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune."""
-    import copy
-
-    try:
-        teacher = copy.deepcopy(model)
-    except Exception as e:
-        raise ValueError(
-            "Distillation on a full finetune (--lora-r 0) needs a frozen copy "
-            f"of the model as its teacher, and this model could not be copied "
-            f"({e}). Set the distillation weight to 0, or train a LoRA adapter "
-            "(rank > 0), whose teacher is the base model itself."
-        ) from e
-    for p in teacher.parameters():
-        p.requires_grad_(False)
-    return teacher.eval()
+# So do the strategy helpers that used to live here.
+from cellmap_flow.finetune.adaptation import (  # noqa: F401
+    cpu_state_copy,
+    frozen_teacher_copy,
+    strategy_for,
+)
 
 
 from torch.utils.data import DataLoader
@@ -170,14 +153,16 @@ class LoRAFinetuner:
         # Move model to device
         self.model = self.model.to(self.device)
 
+        # LoRA or full, and everything that differs between them. The model
+        # decides (see adaptation.strategy_for).
+        self.strategy = strategy_for(self.model, teacher_model=teacher_model)
+
         # A full finetune changes the weights themselves, so resetting it --
         # after a NaN, or for a restart -- needs the weights it started from.
         # Kept on the CPU. LoRA resets by re-initialising its adapter instead.
-        self.initial_state = None
-        if not self._is_peft():
-            self.initial_state = (
-                initial_state if initial_state is not None else cpu_state_copy(self.model)
-            )
+        self.initial_state = (
+            initial_state if initial_state is not None else self.strategy.initial_state(self.model)
+        )
 
         # Optimizer (only LoRA parameters)
         self.optimizer = AdamW(
@@ -274,21 +259,14 @@ class LoRAFinetuner:
             logger.info(f"Teacher distillation enabled: lambda={self.distillation_lambda} ({scope_str})")
 
         # The distillation teacher is the model as it was before this run
-        # changed it. With LoRA that is the same module with its adapters
-        # switched off, so it costs nothing. A full finetune has no adapters
-        # to switch off -- it used to call disable_adapter_layers() anyway and
-        # die on the first batch -- so it gets a frozen copy of the starting
-        # weights instead: one extra set of parameters on the device, and no
-        # activations kept, since the teacher runs under no_grad.
-        self.teacher_model = None
-        if self.distillation_lambda > 0 and not self._is_peft():
-            self.teacher_model = (
-                teacher_model if teacher_model is not None else frozen_teacher_copy(self.model)
-            ).to(self.device)
-            logger.info(
-                "Full finetune with distillation: the teacher is a frozen copy "
-                "of the starting weights."
-            )
+        # changed it: with LoRA the same module with its adapter switched off,
+        # for a full finetune a frozen copy of the starting weights, made now,
+        # while they are the starting weights (see strategy.teacher).
+        self._teacher = None
+        if self.distillation_lambda > 0:
+            self._teacher = self.strategy.teacher(self.model)
+            if self.teacher_model is not None:
+                self.teacher_model.to(self.device)
 
         # Autocast dtype. This defaulted to fp16 (autocast's CUDA default) and
         # every run on this model NaN'd out on the startup probe and fell back
@@ -347,6 +325,21 @@ class LoRAFinetuner:
                 self.tb = SummaryWriter(log_dir=str(self.tb_dir))
             except Exception as e:  # not installed, or logdir not writable
                 logger.info(f"TensorBoard logging disabled: {e}")
+
+    @property
+    def teacher_model(self) -> Optional[nn.Module]:
+        """A full finetune's distillation teacher, the frozen copy of its starting weights; else None.
+
+        The CLI hands it to the next iteration's trainer. Setting it to None
+        frees it (the OOM handler does, with distillation).
+        """
+        return self.strategy.teacher_model
+
+    @teacher_model.setter
+    def teacher_model(self, value):
+        self.strategy.teacher_model = value
+        if value is None:
+            self._teacher = None
 
     def close(self):
         """Close the TensorBoard writer; the CLI calls this when an iteration is done."""
@@ -420,15 +413,8 @@ class LoRAFinetuner:
             torch.cuda.empty_cache()
 
     def _reset_training_state(self):
-        """Reset LoRA weights, optimizer, and training counters for a fresh start."""
-        if self._is_peft():
-            # Reset LoRA adapter weights to zero (equivalent to base model)
-            for name, param in self.model.named_parameters():
-                if 'lora_' in name and param.requires_grad:
-                    nn.init.zeros_(param) if 'lora_B' in name else nn.init.kaiming_uniform_(param, a=math.sqrt(5))
-        elif self.initial_state is not None:
-            self.model.load_state_dict(self.initial_state)
-            logger.info("Full finetune: weights reset to the ones training started from.")
+        """Reset the weights (in place), optimizer, and training counters for a fresh start."""
+        self.model = self.strategy.reset(self.model, self.initial_state)
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.optimizer.defaults['lr'],
@@ -914,23 +900,10 @@ class LoRAFinetuner:
     def _set_train_mode(self):
         """Train mode, except for the frozen base's norm layers under LoRA.
 
-        LoRA freezes the base, but model.train() also put its BatchNorm
-        layers in train mode: they normalized by each (tiny) batch and kept
-        updating running statistics that are not part of the adapter, so the
-        model served in this process drifted from adapter + fresh base, and
-        the base was not frozen after all. They stay in eval mode, as they are
-        served. A full finetune trains its norm layers, so it keeps them in
-        train mode.
+        A full finetune trains its norm layers, so it keeps them in train
+        mode (see strategy.train_mode).
         """
-        self.model.train()
-        if not self._is_peft():
-            return
-        norm_types = (nn.modules.batchnorm._BatchNorm, nn.modules.instancenorm._InstanceNorm)
-        for module in self.model.modules():
-            if isinstance(module, norm_types) and not any(
-                p.requires_grad for p in module.parameters(recurse=False)
-            ):
-                module.eval()
+        self.strategy.train_mode(self.model)
 
     @torch.no_grad()
     def _gradients_finite(self) -> bool:
@@ -950,26 +923,13 @@ class LoRAFinetuner:
     def _teacher_forward(self, raw):
         """The starting model's prediction on ``raw``, for the distillation term.
 
-        LoRA: the model itself with its adapters switched off. Full finetune:
-        the frozen copy taken before training (see ``frozen_teacher_copy``).
+        LoRA: the model itself with its adapters switched off, in eval mode.
+        Full finetune: the frozen copy taken before training.
         """
-        if self.teacher_model is not None:
+        teacher = self._teacher if self._teacher is not None else self.strategy.teacher(self.model)
+        with teacher as model:
             with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
-                teacher_pred = self.teacher_model(raw)
-        else:
-            # The teacher runs in eval mode, as the model is served: in train
-            # mode the base's dropout made its targets noisy, and its norm
-            # layers normalized by the batch.
-            was_training = self.model.training
-            self.model.eval()
-            self.model.disable_adapter_layers()
-            try:
-                with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
-                    teacher_pred = self.model(raw)
-            finally:
-                self.model.enable_adapter_layers()
-                if was_training:
-                    self._set_train_mode()
+                teacher_pred = model(raw)
         if self.select_channel is not None:
             teacher_pred = teacher_pred[:, self.select_channel:self.select_channel+1, :, :, :]
         return teacher_pred.detach()
@@ -1320,13 +1280,6 @@ class LoRAFinetuner:
         )
         return epoch_loss / num_batches
 
-    def _is_peft(self) -> bool:
-        try:
-            from peft import PeftModel
-        except ImportError:
-            return False
-        return isinstance(self.model, PeftModel)
-
     def save_checkpoint(self, is_best: bool = False):
         """
         Save training checkpoint.
@@ -1336,42 +1289,17 @@ class LoRAFinetuner:
         """
         checkpoint_name = "best_checkpoint.pth" if is_best else f"checkpoint_epoch_{self.current_epoch+1}.pth"
         checkpoint_path = self.output_dir / checkpoint_name
-        if not self._is_peft():
-            # Full finetune: every parameter is trainable, so a LoRA-style
-            # checkpoint would be the whole model plus two Adam moments --
-            # ~9.5 GB for an 800M-param UNet, twenty times per run. Keep only
-            # the best weights, without optimizer state (no resume), which is
-            # what save_adapter() exports anyway.
-            if not is_best:
-                if not getattr(self, "_warned_full_ckpt", False):
-                    logger.info("Full finetune: skipping periodic checkpoints; best_checkpoint.pth holds the full weights.")
-                    self._warned_full_ckpt = True
-                return
-            torch.save({
-                'epoch': self.current_epoch,
-                'global_step': self.global_step,
-                'model_state_dict': self.model.state_dict(),
-                'best_loss': self.best_loss,
-                'training_stats': self.training_stats,
-                'lora_only': False,
-                'full_model': True,
-            }, checkpoint_path)
-            logger.debug(f"Full-model checkpoint saved: {checkpoint_path}")
+        # What the strategy keeps: LoRA its adapter and optimizer state every
+        # time; a full finetune only its best weights (see strategy.checkpoint).
+        state = self.strategy.checkpoint(self.model, self.optimizer, self.scaler, is_best)
+        if state is None:
             return
-
-        # Save only trainable (LoRA) parameters to avoid writing the full
-        # 800M+ param base model to disk every checkpoint.
-        trainable_keys = {n for n, p in self.model.named_parameters() if p.requires_grad}
-        trainable_state = {k: v for k, v in self.model.state_dict().items() if k in trainable_keys}
         checkpoint = {
             'epoch': self.current_epoch,
             'global_step': self.global_step,
-            'model_state_dict': trainable_state,
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scaler_state_dict': self.scaler.state_dict(),
             'best_loss': self.best_loss,
             'training_stats': self.training_stats,
-            'lora_only': True,
+            **state,
         }
 
         torch.save(checkpoint, checkpoint_path)
@@ -1379,13 +1307,14 @@ class LoRAFinetuner:
 
     def save_adapter(self, adapter_path: Optional[str] = None, export_dir: Optional[str] = None):
         """
-        Save only the LoRA adapter (not the full model).
+        Export the finetune: only the LoRA adapter, or a full finetune's weights.
 
         Automatically loads the best checkpoint weights before saving
         so the exported adapter reflects the best training epoch.
 
         Args:
-            adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter
+            adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter.
+                A full finetune ignores it and writes output_dir/full_finetune.
             export_dir: Instead, the directory to export into: the adapter
                 goes to export_dir/lora_adapter, full weights to
                 export_dir/full_finetune/model_state_dict.pt. The CLI gives
@@ -1394,11 +1323,9 @@ class LoRAFinetuner:
         Returns:
             The adapter directory, or the full-finetune weights file.
         """
-        from cellmap_flow.finetune.lora_wrapper import save_lora_adapter
-
         base = Path(export_dir) if export_dir is not None else self.output_dir
-        if adapter_path is None or export_dir is not None:
-            adapter_path = str(base / "lora_adapter")
+        if export_dir is not None:
+            adapter_path = None
 
         # Load best checkpoint weights before saving
         best_ckpt = self.output_dir / "best_checkpoint.pth"
@@ -1412,18 +1339,9 @@ class LoRAFinetuner:
         else:
             logger.warning("No best checkpoint found, saving adapter from final epoch weights")
 
-        if not self._is_peft():
-            # Full finetune: there is no adapter; export the whole state dict
-            # where FinetuneModelConfig(weights_path=...) expects it.
-            out = base / "full_finetune"
-            out.mkdir(parents=True, exist_ok=True)
-            weights = out / "model_state_dict.pt"
-            torch.save(self.model.state_dict(), weights)
-            logger.info(f"Full finetuned weights saved to: {weights}")
-            return str(weights)
-        save_lora_adapter(self.model, adapter_path)
-        logger.info(f"LoRA adapter saved to: {adapter_path}")
-        return adapter_path
+        # The adapter, or for a full finetune the whole state dict, where
+        # FinetuneModelConfig(weights_path=...) expects it.
+        return str(self.strategy.export(self.model, base, path=adapter_path))
 
     def load_checkpoint(self, checkpoint_path: str):
         """
