@@ -41,6 +41,37 @@ def test_a_failed_launch_is_logged_not_raised(monkeypatch, caplog, error, launch
     assert any(str(error) in r.getMessage() for r in caplog.records)
 
 
+
+@pytest.mark.parametrize("launcher", ["run_model", "run_hf_model"])
+def test_a_multi_word_server_command_is_not_quoted_as_one_program(monkeypatch, launcher):
+    """The fileglancer deploy sets SERVER_COMMAND to "pixi run cellmap_flow_server".
+    Quoted as one token, the shell looked for a program by that whole name."""
+    import shlex
+
+    import cellmap_flow.models.run as run
+    from cellmap_flow.utils import bsub_utils
+
+    commands = []
+
+    def record(command, **kwargs):
+        commands.append(command)
+        raise JobStartError("recorded")
+
+    monkeypatch.setattr(bsub_utils, "SERVER_COMMAND", "pixi run cellmap_flow_server")
+    monkeypatch.setattr(run, "start_hosts", record)
+    g.viewer = _Viewer()
+    g.jobs = []
+    g.dataset_path = "/data/my raw.zarr"
+
+    target = "/models/mito" if launcher == "run_model" else "cellmap/mito"
+    getattr(run, launcher)(target, "mito", "blob")
+
+    assert len(commands) == 1
+    argv = shlex.split(commands[0])
+    assert argv[:3] == ["pixi", "run", "cellmap_flow_server"]
+    assert argv[argv.index("-d") + 1] == "/data/my raw.zarr"
+
+
 class _Job:
     def __init__(self, name, host):
         self.model_name, self.host = name, host

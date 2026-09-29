@@ -1,7 +1,8 @@
 from cellmap_flow.globals import g
 
 
-from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts, SERVER_COMMAND
+from cellmap_flow.utils import bsub_utils
+from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
     kill_n_remove_from_neuroglancer,
@@ -38,13 +39,22 @@ def _start(command, name):
         return None
 
 
+def _server_argv(*args):
+    """The serve command with ``args``, as one shell-quoted string.
+
+    SERVER_COMMAND can itself be several words (the fileglancer deploy sets
+    "pixi run cellmap_flow_server"), so it is split rather than quoted as
+    one token, and read when called rather than copied at import.
+    """
+    return shlex.join(shlex.split(bsub_utils.SERVER_COMMAND) + [str(a) for a in args])
+
+
 def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
         return
-    command = shlex.join(
-        [SERVER_COMMAND, "cellmap", "--folder-path", model_path, "--name", name,
-         "-d", str(g.dataset_path)]
+    command = _server_argv(
+        "cellmap", "--folder-path", model_path, "--name", name, "-d", g.dataset_path
     )
     logger.info(f"To be submitted command : {command}")
     job = _start(command, name)
@@ -62,9 +72,8 @@ def run_model(model_path, name, st_data):
 def run_hf_model(repo, name, st_data):
     """Run a Hugging Face model by repo ID."""
     name = _sanitize_job_name(name)
-    command = shlex.join(
-        [SERVER_COMMAND, "huggingface", "--repo", repo, "--name", name,
-         "-d", str(g.dataset_path)]
+    command = _server_argv(
+        "huggingface", "--repo", repo, "--name", name, "-d", g.dataset_path
     )
     logger.info(f"To be submitted HF command : {command}")
     job = _start(command, name)
