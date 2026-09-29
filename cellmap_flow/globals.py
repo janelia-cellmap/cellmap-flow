@@ -2,10 +2,8 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
 
 import os
 import queue
-import shlex
 import yaml
 import logging
-import threading
 import numpy as np
 from collections import deque
 from importlib.resources import files
@@ -83,7 +81,6 @@ class Flow:
     nb_workers: int
     tmp_dir: Optional[str]
     blockwise_tasks_dir: Optional[str]
-    neuroglancer_thread: Optional[Any]
     pipeline_inputs: List[Any]
     pipeline_outputs: List[Any]
     pipeline_edges: List[Any]
@@ -143,7 +140,6 @@ class Flow:
             cls._instance._server_config_cached = bool(cached)
             cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
             cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
-            cls._instance.neuroglancer_thread = None
 
             # Pipeline visual state storage
             cls._instance.pipeline_inputs = []
@@ -199,9 +195,6 @@ class Flow:
     def finetune_job_manager(self, value):
         self._finetune_job_manager = value
 
-    def to_dict(self):
-        return self.__dict__.items()
-
     def __repr__(self):
         return f"Flow({self.__dict__})"
 
@@ -243,74 +236,6 @@ class Flow:
                     break
 
         return dtype
-
-    @classmethod
-    def run(
-        cls,
-        zarr_path,
-        model_configs,
-        queue="gpu_h100",
-        charge_group="cellmap",
-        input_normalizers=None,
-        post_processors=None,
-    ):
-
-        from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
-        from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-
-        if input_normalizers is None:
-            input_normalizers = []
-        if post_processors is None:
-            post_processors = []
-
-        # Get the singleton instance (creates one if it doesn't exist)
-        instance = cls()
-        instance.queue = queue
-        instance.charge_group = charge_group
-        instance.dataset_path = zarr_path
-        instance.input_norms = input_normalizers
-        instance.postprocess = post_processors
-        instance.models_config = model_configs
-        instance.neuroglancer_thread = None
-
-        threads = []
-
-        for model_config in instance.models_config:
-            model_command = model_config.command
-            command = f"{SERVER_COMMAND} {model_command} -d {shlex.quote(instance.dataset_path)}"
-            print(f"Starting server with command: {command}")
-            thread = threading.Thread(
-                target=start_hosts,
-                args=(command, queue, charge_group, model_config.name),
-            )
-            thread.start()
-            threads.append(thread)
-
-        for thread in threads:
-            thread.join()
-
-        instance.neuroglancer_thread = threading.Thread(
-            target=generate_neuroglancer_url, args=(instance.dataset_path,)
-        )
-        instance.neuroglancer_thread.start()
-        # Optionally wait for the neuroglancer thread:
-        # instance.neuroglancer_thread.join()
-
-        print(f"*****Neuroglancer URL: {instance.dataset_path}")
-
-    @classmethod
-    def stop(cls):
-        instance = cls()
-        for job in instance.jobs:
-            print(f"Killing job {job.job_id}")
-            job.kill()
-        if instance.neuroglancer_thread is not None:
-            instance.neuroglancer_thread = None
-        instance.jobs = []
-
-    @classmethod
-    def delete(cls):
-        cls._instance = None
 
 
 g = Flow()
