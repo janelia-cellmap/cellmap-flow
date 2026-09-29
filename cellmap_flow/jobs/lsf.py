@@ -30,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 BSUB_TIMEOUT_SECONDS = current_site().bsub_timeout_seconds
 
+# How often wait_for_host asks LSF (bjobs, then bpeek) about a job: after
+# half a second at first, then twice as long each time, up to every five
+# seconds. Every call is a request to mbatchd, and a server can queue for
+# minutes; asking twice a second for all of that was two LSF calls a second
+# per waiting job. The wait starts over at half a second once the job leaves
+# PENDING, when its address is about to appear. A ready file, which costs
+# LSF nothing, is still looked at every half second.
+POLL_FIRST_SECONDS = 0.5
+POLL_MAX_SECONDS = 5.0
+
 
 class BsubTimeoutError(JobStartError):
     """bsub did not answer in time, and the job it may yet create is unknown.
@@ -216,10 +226,22 @@ class LSFJob(Job):
         reported_errors = set()
         max_reported_errors = 20
 
+        interval = POLL_FIRST_SECONDS
+        next_poll = time.monotonic()
+
         def pause():
-            remaining = deadline - time.monotonic()
-            if remaining > 0:
-                time.sleep(min(0.5, remaining))
+            """Done asking LSF for now: schedule the next time, further off."""
+            nonlocal interval, next_poll
+            next_poll = time.monotonic() + interval
+            interval = min(interval * 2, POLL_MAX_SECONDS)
+
+        def sleep_until_next_poll():
+            now = time.monotonic()
+            wait = min(next_poll, deadline) - now
+            if self.ready_file is not None:
+                wait = min(wait, POLL_FIRST_SECONDS)
+            if wait > 0:
+                time.sleep(wait)
 
         def found(host, source):
             nonlocal total_pending
@@ -239,6 +261,9 @@ class LSFJob(Job):
             host = self._host_from_ready_file()
             if host:
                 return found(host, "its ready file")
+            if time.monotonic() < next_poll:
+                sleep_until_next_poll()
+                continue
             try:
                 current_status = self.get_status()
                 answered = self._bjobs_answered
@@ -260,6 +285,7 @@ class LSFJob(Job):
                         f"in pending state"
                     )
                     pending_since = None
+                    interval = POLL_FIRST_SECONDS
 
                 # Only bjobs can say the job is over. An empty bpeek on its
                 # own is also what a busy mbatchd looks like.

@@ -133,13 +133,28 @@ def test_the_polling_timeline(monkeypatch):
 
     assert LSFJob("1").wait_for_host(timeout=60) == "http://node7:4321"
 
+    # Half a second, then twice as long each time while it queues; half a
+    # second again once bjobs says it runs, since its address is near.
     assert lsf.timeline == [
         (0.0, "bjobs"), (0.0, "bpeek"),
         (0.5, "bjobs"), (0.5, "bpeek"),
-        (1.0, "bjobs"), (1.0, "bpeek"),
         (1.5, "bjobs"), (1.5, "bpeek"),
-        (2.0, "bjobs"), (2.0, "bpeek"),
-        (2.5, "bjobs"), (2.5, "bpeek"),
-        (3.0, "bjobs"), (3.0, "bpeek"),
+        (3.5, "bjobs"), (3.5, "bpeek"),
+        (4.0, "bjobs"), (4.0, "bpeek"),
+        (5.0, "bjobs"), (5.0, "bpeek"),
+        (7.0, "bjobs"), (7.0, "bpeek"),
     ]
     assert lsf.sleeps == 6
+
+
+def test_a_long_wait_asks_lsf_every_five_seconds_at_most(monkeypatch):
+    lsf = FakeLSF(monkeypatch, stat="PEND")
+    lsf.bpeek_default = (255, "", "Job <1> : Not yet started.")
+
+    assert LSFJob("1").wait_for_host(timeout=180) is None
+
+    times = [t for t, command in lsf.timeline if command == "bjobs"]
+    gaps = [b - a for a, b in zip(times, times[1:])]
+    assert max(gaps) == 5.0
+    # It used to be 360 polls, each a bjobs and a bpeek.
+    assert len(times) < 45

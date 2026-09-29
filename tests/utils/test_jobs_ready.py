@@ -190,3 +190,29 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(tmp_path, monkeypa
     assert job.host == URL
     assert calls == ["which", "bjobs", "bsub"], "no bpeek, and no bjobs for the job itself"
     assert g.jobs == [job]
+
+
+def test_the_file_is_looked_at_between_lsf_polls(tmp_path, monkeypatch):
+    """LSF is asked less and less often; the file, which costs it nothing, is not."""
+    from cellmap_flow.jobs import lsf as jobs_lsf
+
+    clock = {"now": 0.0}
+    path = tmp_path / "m.ready"
+
+    def sleep(seconds):
+        clock["now"] += seconds
+        if clock["now"] >= 6.0 and not path.exists():
+            path.write_text(json.dumps({"url": URL, "job_id": "7"}))
+
+    monkeypatch.setattr(
+        jobs_lsf, "time",
+        SimpleNamespace(time=lambda: clock["now"], monotonic=lambda: clock["now"], sleep=sleep),
+    )
+    lsf = FakeLSF(monkeypatch, bpeek_out="loading\n")
+
+    assert LSFJob("7", ready_file=path).wait_for_host(timeout=60) == URL
+
+    # Polls at 0, 0.5, 1.5 and 3.5 s; the next would be at 7.5, and the file
+    # written at 6 s is seen at once.
+    assert lsf.calls == ["bjobs", "bpeek"] * 4
+    assert clock["now"] == 6.0
