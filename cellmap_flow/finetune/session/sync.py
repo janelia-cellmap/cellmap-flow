@@ -287,7 +287,9 @@ def volume_record(volume_id, zarr_path=None, *, volumes):
     if zarr_path is None:
         return None
     try:
-        record = read_volume(zarr_path)
+        # Syncing needs no geometry; a volume without it syncs, and the
+        # manifest refuses it (build_manifest, write_volume_manifest).
+        record = read_volume(zarr_path, require_geometry=False)
     except NotAnAnnotationVolume:
         return None
     except Exception as e:

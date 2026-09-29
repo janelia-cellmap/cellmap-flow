@@ -357,9 +357,9 @@ def write_volume_manifest(volume):
     corrections_dir = volume.get("corrections_dir")
     if missing or not corrections_dir:
         logger.warning(
-            "Not writing a virtual-sources manifest: volume record is missing "
-            f"{missing or ['corrections_dir']}. The session cannot be trained "
-            "without one."
+            f"Not writing a virtual-sources manifest for {volume.get('zarr_path')}: its record "
+            f"has no {', '.join(missing or ['corrections_dir'])}, which a volume gets from its "
+            ".zattrs and which is not guessed. The session cannot be trained without one."
         )
         return None
 

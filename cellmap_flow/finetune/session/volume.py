@@ -230,23 +230,40 @@ def create_volume_zarr(
     return zarr_path
 
 
-def read_volume(zarr_path: str) -> dict:
+# The root attrs a record's geometry comes from: record key -> attr.
+GEOMETRY_ATTRS = {
+    "output_size": "chunk_size",
+    "input_size": "input_size",
+    "input_voxel_size": "input_voxel_size",
+    "output_voxel_size": "output_voxel_size",
+}
+
+
+def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
     """The registry record of the annotation volume at ``zarr_path``, from its attrs.
 
-    Raises NotAnAnnotationVolume (a ValueError) if it is not one.
+    Nothing missing is guessed: it used to be 56^3 chunks, a 178^3 input and
+    16 nm voxels, which trained a volume without them on a made-up geometry.
+    Raises ValueError naming the geometry attrs the volume lacks, unless
+    ``require_geometry`` is False, when they are None in the record (serving
+    and syncing a volume need none of them). Raises NotAnAnnotationVolume (a
+    ValueError) if it is not an annotation volume at all.
     """
     attrs = dict(zarr.open(zarr_path, mode="r").attrs)
     if attrs.get("type") != "annotation_volume":
         raise NotAnAnnotationVolume(f"{zarr_path} is not an annotation volume (type {attrs.get('type')!r})")
+    missing = [attr for attr in GEOMETRY_ATTRS.values() if not attrs.get(attr)]
+    if missing and require_geometry:
+        raise ValueError(
+            f"Annotation volume {zarr_path} has no {', '.join(missing)} in its attrs, "
+            "so the geometry to train it with is not known."
+        )
     return {
         "zarr_path": zarr_path,
-        "model_name": attrs.get("model_name", ""),
-        "output_size": attrs.get("chunk_size", [56, 56, 56]),
-        "input_size": attrs.get("input_size", [178, 178, 178]),
-        "input_voxel_size": attrs.get("input_voxel_size", [16, 16, 16]),
-        "output_voxel_size": attrs.get("output_voxel_size", [16, 16, 16]),
-        "dataset_path": attrs.get("dataset_path", ""),
-        "dataset_offset_nm": attrs.get("dataset_offset_nm", [0, 0, 0]),
+        "model_name": attrs.get("model_name"),
+        **{key: attrs.get(attr) for key, attr in GEOMETRY_ATTRS.items()},
+        "dataset_path": attrs.get("dataset_path"),
+        "dataset_offset_nm": attrs.get("dataset_offset_nm"),
         "corrections_dir": str(Path(zarr_path).parent),
         "chunk_sync_state": {},
     }
@@ -259,7 +276,14 @@ def build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Opt
     on LSF, where the dashboard's chains are not: without the normalization
     it feeds the model raw uint8 while inference feeds it [-1, 1].
     ``overrides`` replaces any key, e.g. a crops manifest's patches_per_epoch.
+    Raises ValueError if the record has no geometry (see read_volume).
     """
+    missing = [key for key in GEOMETRY_ATTRS if not volume_meta.get(key)]
+    if missing:
+        raise ValueError(
+            f"The record of volume {volume_meta.get('zarr_path')} has no {', '.join(missing)}: "
+            "a training manifest for it cannot be written."
+        )
     manifest = {
         "kind": "volume_zarr_v1",
         "volume_zarr_path": volume_meta["zarr_path"],
