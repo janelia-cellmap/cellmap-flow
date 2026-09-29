@@ -1260,7 +1260,11 @@ class FinetuneJobManager:
             job_id=getattr(finetune_job.lsf_job, "job_id", None) or "local",
             model_name=model_name
         )
-        inference_job.host = server_url
+        # The address viewers use (see jobs.spec.public_server_url); the
+        # dashboard's own requests and the restart control keep server_url.
+        from cellmap_flow.jobs.spec import public_server_url
+
+        inference_job.host = public_server_url(server_url)
         inference_job.status = LSFJobStatus.RUNNING
 
         # Replace any old finetuned jobs for this base model. One assignment
@@ -1308,7 +1312,7 @@ class FinetuneJobManager:
             )
 
         source_spec = build_prediction_source(
-            server_url, model_name, st_data, override_scales
+            inference_job.host, model_name, st_data, override_scales
         )
         self.logger.info(f"Adding neuroglancer layer: {model_name}")
         self.logger.info(f"  source: {source_spec}")

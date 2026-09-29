@@ -16,6 +16,7 @@ from cellmap_flow.jobs.spec import (
     default_log_dir,
     extract_host_from_output,
     log_stem,
+    public_server_url,
     tail,
 )
 
@@ -157,7 +158,7 @@ class LocalJob(Job):
             text = carry + chunk.decode("utf-8", errors="replace")
             host = extract_host_from_output(text)
             if host:
-                self.host = host
+                host = self.host = public_server_url(host)
                 logger.info(f"Found host: {host}")
                 return host
             carry = text[-4096:]

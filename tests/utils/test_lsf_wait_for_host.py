@@ -8,6 +8,8 @@ import logging
 import subprocess
 from types import SimpleNamespace
 
+import pytest
+
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.utils.bsub_utils import LSFJob
 from cellmap_flow.utils.web_utils import IP_PATTERN
@@ -150,3 +152,18 @@ def test_a_requeued_job_reports_its_newest_address(monkeypatch):
     earlier = MARKER.replace("node7:4321", "node3:1111")
     lsf.bpeek_default = (0, f"{earlier}\nrequeued\n{MARKER}\n", "")
     assert LSFJob("1").wait_for_host(timeout=60) == "http://node7:4321"
+
+
+@pytest.mark.parametrize("template, expected", [
+    (None, "http://node7:4321"),
+    ("https://proxy.example.org/{host}/{port}", "https://proxy.example.org/node7/4321"),
+    ("https://proxy.example.org/{nope}", "http://node7:4321"),  # a bad one is ignored
+])
+def test_a_server_url_template_gives_the_address_viewers_use(monkeypatch, template, expected):
+    lsf = FakeLSF(monkeypatch)
+    lsf.bpeek_default = (0, MARKER + "\n", "")
+    monkeypatch.delenv("CELLMAP_FLOW_SERVER_URL_TEMPLATE", raising=False)
+    if template:
+        monkeypatch.setenv("CELLMAP_FLOW_SERVER_URL_TEMPLATE", template)
+    job = LSFJob("1")
+    assert job.wait_for_host(timeout=60) == expected == job.host

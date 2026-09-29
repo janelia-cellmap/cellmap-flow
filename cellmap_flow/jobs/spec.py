@@ -14,10 +14,18 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
+from urllib.parse import urlparse
 
 from cellmap_flow.utils.web_utils import IP_PATTERN
 
 logger = logging.getLogger(__name__)
+
+#: A template for the address viewers use for an inference server, for
+#: servers that are reached through a reverse proxy. For example
+#: ``https://proxy.example.org/inf-{port}``; ``{url}`` is the address the
+#: server reported, ``{host}`` its host and ``{port}`` its port. Unset, the
+#: reported address is used as it is.
+SERVER_URL_TEMPLATE_ENV = "CELLMAP_FLOW_SERVER_URL_TEMPLATE"
 
 
 @dataclass(frozen=True)
@@ -149,6 +157,24 @@ def extract_host_from_output(output: str) -> Optional[str]:
         logger.debug(f"Could not extract host: {e}")
 
     return None
+
+
+def public_server_url(url: Optional[str]) -> Optional[str]:
+    """The address to use for a server that reported ``url``: ``url`` itself,
+    or ``url`` put through $CELLMAP_FLOW_SERVER_URL_TEMPLATE when that is
+    set (see SERVER_URL_TEMPLATE_ENV). Read at call time.
+    """
+    template = os.environ.get(SERVER_URL_TEMPLATE_ENV)
+    if not template or not url:
+        return url
+    parsed = urlparse(url)
+    try:
+        public = template.format(url=url, host=parsed.hostname or "", port=parsed.port or "")
+    except (KeyError, IndexError, ValueError) as e:
+        logger.error(f"Ignoring ${SERVER_URL_TEMPLATE_ENV}={template!r}: {e!r}")
+        return url
+    logger.info(f"Server at {url} is used as {public}")
+    return public
 
 
 class Job(ABC):

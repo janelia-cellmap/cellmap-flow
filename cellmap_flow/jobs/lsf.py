@@ -23,6 +23,7 @@ from cellmap_flow.jobs.spec import (
     default_log_dir,
     extract_host_from_output,
     log_stem,
+    public_server_url,
     tail,
 )
 
@@ -223,7 +224,7 @@ class LSFJob(Job):
 
         def found(host, source):
             nonlocal total_pending
-            self.host = host
+            host = self.host = public_server_url(host)
             if pending_since is not None:
                 total_pending += time.monotonic() - pending_since
             logger.info(

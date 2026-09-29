@@ -189,6 +189,11 @@ Extra Layers
 
 A volume that cannot be opened is logged and left out. ``--validate-only`` checks that every entry has a unique ``name`` and a ``path``, and a known ``layer_type``.
 
+Behind a Reverse Proxy
+----------------------
+
+When the dashboard is reached through a reverse proxy that sets ``X-Forwarded-Host``, the page loads the neuroglancer viewer from the same path on the proxy's host, so the proxy must route ``/v/`` on to the viewer. Inference servers are addressed as they report themselves (``http://<node>:<port>``) unless ``CELLMAP_FLOW_SERVER_URL_TEMPLATE`` is set in the dashboard's environment, for example to ``https://proxy.example.org/inf-{port}``; ``{url}``, ``{host}`` and ``{port}`` are the reported address and its parts.
+
 Bounding Boxes
 --------------
 
