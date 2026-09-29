@@ -79,7 +79,6 @@ def index():
     return render_template(
         "index.html",
         neuroglancer_url=g.NEUROGLANCER_URL,
-        inference_servers=g.INFERENCE_SERVER,
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
         model_mergers=model_mergers,

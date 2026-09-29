@@ -98,7 +98,6 @@ class Flow:
     log_buffer: deque
     log_clients: list
     NEUROGLANCER_URL: Optional[str]
-    INFERENCE_SERVER: Optional[Any]
     bbx_generator_state: dict
     finetune_job_manager: Any
     minio_state: dict
@@ -163,7 +162,6 @@ class Flow:
             cls._instance.log_buffer = deque(maxlen=1000)
             cls._instance.log_clients = []
             cls._instance.NEUROGLANCER_URL = None
-            cls._instance.INFERENCE_SERVER = None
             cls._instance.bbx_generator_state = {
                 "dataset_path": None,
                 "num_boxes": 0,

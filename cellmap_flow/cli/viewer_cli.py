@@ -84,7 +84,7 @@ def main(dataset, log_level):
     print(f"{'='*80}\n")
 
     # Start the dashboard app
-    create_and_run_app(neuroglancer_url=str(viewer), inference_servers=None)
+    create_and_run_app(neuroglancer_url=str(viewer))
 
 
 if __name__ == "__main__":

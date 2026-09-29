@@ -187,20 +187,6 @@ load_plugins()
 register_all_server_commands()
 
 
-@cli.command()
-@click.option(
-    "-n", "--neuroglancer-url", required=True, type=str, help="Neuroglancer viewer URL."
-)
-@click.option(
-    "-i", "--inference-host", required=True, type=str, help="Inference host(s)."
-)
-def run_ui_server(neuroglancer_url, inference_host):
-    """Run the dashboard UI server."""
-    from cellmap_flow.dashboard.app import create_and_run_app
-
-    create_and_run_app(neuroglancer_url, inference_host)
-
-
 def main():
     """Entry point for the server CLI."""
     cli()
