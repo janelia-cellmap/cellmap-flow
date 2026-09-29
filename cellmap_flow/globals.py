@@ -119,7 +119,8 @@ class Flow:
             cls._instance.viewer = None
             cls._instance.dataset_path = None
             # {name: neuroglancer layer} that the viewer shows beside the raw
-            # data: a YAML's extra_layers, built by cellmap_flow_yaml.
+            # data: a YAML's extra_layers, built by cellmap_flow_yaml. The
+            # viewer-layer routes drop or rename their entries.
             cls._instance.extra_layers = {}
             catalog = files("cellmap_flow.models").joinpath("models.yaml").read_text()
             cls._instance.model_catalog = yaml.safe_load(catalog) or {}
@@ -177,9 +178,6 @@ class Flow:
             # The Review tab's open index and its last pick, a
             # review_routes.ReviewSession; None until /api/review/open.
             cls._instance.review = None
-            # Static layers added at startup (YAML extra_layers), by layer
-            # name; the viewer-layer routes drop or rename their entries.
-            cls._instance.extra_layers = {}
             cls._instance._finetune_job_manager = None
 
         return cls._instance
