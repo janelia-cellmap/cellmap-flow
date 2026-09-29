@@ -70,3 +70,17 @@ def test_without_one_the_saved_walltime_is_used(raw_array, model_script, task_ya
     monkeypatch.setattr(blockwise_processor.g, "walltime", "10:00")
     path = task_yaml(raw_array(), model_script())
     assert CellMapFlowBlockwiseProcessor(path, create=True).walltime == "10:00"
+
+
+def test_only_the_workers_run_the_model(raw_array, model_script, task_yaml, monkeypatch):
+    from cellmap_flow.models.models_config import ModelConfig
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the master ran the model")
+
+    monkeypatch.setattr(blockwise_processor, "Inferencer", refuse)
+    monkeypatch.setattr(ModelConfig, "_validate_model_shapes", refuse)
+    master = CellMapFlowBlockwiseProcessor(task_yaml(raw_array(), model_script()), create=True)
+    assert master.inferencers == [] and master.output_arrays, "it still creates the outputs"
+    with pytest.raises(RuntimeError, match="worker"):
+        master.process_fn(None)

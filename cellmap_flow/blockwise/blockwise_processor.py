@@ -192,8 +192,11 @@ class CellMapFlowBlockwiseProcessor:
 
         # Build model configuration objects
         models = build_models(self.config["models"])
-        # For debugging, print each model config
+        # The master (create) only needs the models' geometry, to schedule
+        # blocks and create the outputs; the workers run the model, so only
+        # they build Inferencers and run the dummy forward pass.
         for model in models:
+            model.validate_model_shapes = not create
             logger.info(str(model))
 
         if len(models) == 0:
@@ -271,11 +274,13 @@ class CellMapFlowBlockwiseProcessor:
 
         self.dtype = g.get_output_dtype(self.model_config.output_dtype)
 
-        # Create inferencers for all models
-        self.inferencers = [
-            Inferencer(model, use_half_prediction=False) for model in self.models
-        ]
-        self.inferencer = self.inferencers[0]  # Keep for backward compatibility
+        self.inferencers = []
+        self.inferencer = None
+        if not create:
+            self.inferencers = [
+                Inferencer(model, use_half_prediction=False) for model in self.models
+            ]
+            self.inferencer = self.inferencers[0]  # Keep for backward compatibility
 
         self.idi_raw = ImageDataInterface(
             self.input_path, voxel_size=self.input_voxel_size
@@ -463,7 +468,8 @@ class CellMapFlowBlockwiseProcessor:
         return daisy.Roi(snapped.offset + self.grid_origin, snapped.shape)
 
     def process_fn(self, block):
-        # logger.error(f"Processing block {block}")
+        if not self.inferencers:
+            raise RuntimeError("Only a blockwise worker (--client) builds the models' inferencers")
 
         # Handle 4D vs 3D array ROI intersection
         first_array = self.output_arrays[0]
