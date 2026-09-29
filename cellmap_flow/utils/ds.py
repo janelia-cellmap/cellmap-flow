@@ -216,8 +216,16 @@ def _clean_zarr_compressor(dataset_path: str):
 
 
 def open_ds_tensorstore(
-    dataset_path: str, mode="r", concurrency_limit=None, normalize=True
+    dataset_path: str, mode="r", concurrency_limit=None, normalize=True, cache_bytes=0
 ):
+    """Open ``dataset_path`` with tensorstore.
+
+    ``concurrency_limit``: how many files it reads and chunks it decodes at
+    once; ``None`` leaves tensorstore's defaults (one decode per core).
+    ``cache_bytes``: how much decoded data it keeps for later reads of the
+    same chunks (0: none). Cached chunks are still checked against the file
+    on every read, so what is read never differs.
+    """
     # open with zarr or n5 depending on extension
     filetype = _detect_filetype(dataset_path)
     extra_args = {}
@@ -272,18 +280,15 @@ def open_ds_tensorstore(
             extra_args["metadata"] = cleaned_metadata
             assume_metadata = True
 
+    spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
+    context = {}
     if concurrency_limit:
-        spec = {
-            "driver": filetype,
-            "context": {
-                "data_copy_concurrency": {"limit": concurrency_limit},
-                "file_io_concurrency": {"limit": concurrency_limit},
-            },
-            "kvstore": kvstore,
-            **extra_args,
-        }
-    else:
-        spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
+        context["data_copy_concurrency"] = {"limit": concurrency_limit}
+        context["file_io_concurrency"] = {"limit": concurrency_limit}
+    if cache_bytes:
+        context["cache_pool"] = {"total_bytes_limit": int(cache_bytes)}
+    if context:
+        spec["context"] = context
 
     open_kwargs = {"open": True, "assume_metadata": True} if assume_metadata else {}
     if mode == "r":

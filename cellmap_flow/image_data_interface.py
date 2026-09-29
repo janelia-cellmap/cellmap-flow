@@ -30,9 +30,15 @@ class ImageDataInterface:
         normalize=True,
         input_norms=None,
         on_voxel_size_mismatch="relabel",
+        cache_bytes=0,
     ):
         """``input_norms``: the normalizers (and ChannelSelector) to read with.
         ``None`` follows the process-wide ``g.input_norms`` at read time.
+
+        ``concurrency_limit`` and ``cache_bytes`` go to the tensorstore the
+        reads use (see ``open_ds_tensorstore``). The defaults, one reader
+        thread and no cache, are what every caller has always had; the
+        inference server asks for parallel reads and a cache.
 
         ``voxel_size`` picks the scale of a multiscale group (the finest one
         not coarser than it). When the array opened is at a different voxel
@@ -115,6 +121,7 @@ class ImageDataInterface:
         self.roi = zarr_v3.covering_roi(offset_f, voxel_size_f, shape)
         self.custom_fill_value = custom_fill_value
         self.concurrency_limit = concurrency_limit
+        self.cache_bytes = cache_bytes
         if output_voxel_size is not None:
             self.output_voxel_size = Coordinate(output_voxel_size)
         else:
@@ -134,6 +141,7 @@ class ImageDataInterface:
                 self.path,
                 concurrency_limit=self.concurrency_limit,
                 normalize=True,
+                cache_bytes=self.cache_bytes,
             ).ts_dataset
         return self._store["ts"]
 

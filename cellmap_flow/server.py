@@ -1,4 +1,5 @@
 import logging
+import os
 import select
 import socket
 import ssl
@@ -36,6 +37,22 @@ logger = logging.getLogger(__name__)
 
 # How many distinct chains (layer URLs) one server keeps built at once.
 CHAIN_CACHE_SIZE = 32
+
+# How the server reads its raw data; see CellMapFlowServer.__init__.
+RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
+RAW_CACHE_BYTES_DEFAULT = 1 << 30
+RAW_READ_CONCURRENCY_ENV = "CELLMAP_FLOW_RAW_READ_CONCURRENCY"
+
+
+def _env_count(name, default):
+    """A whole number from the environment (``1e9`` allowed), or ``default``."""
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(float(value))
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {value!r}") from None
 
 
 def _client_gone_check():
@@ -103,6 +120,10 @@ class CellMapFlowServer:
         ``CELLMAP_FLOW_GPU_SLOTS`` (default 1), read here, is how many chunk
         requests may use the device at once; the rest wait their turn in
         arrival order. See inferencer.DeviceSlots.
+
+        ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB; 0 for none) and
+        ``CELLMAP_FLOW_RAW_READ_CONCURRENCY`` (default: tensorstore's, one
+        decode per core) set how the raw data is read.
         """
         if restart_callback is not None and not restart_token:
             raise ValueError("restart_callback requires a restart_token")
@@ -123,9 +144,17 @@ class CellMapFlowServer:
         self.restart_callback = restart_callback
         self.restart_token = restart_token
 
-        # Load or initialize your dataset
+        # Every chunk request reads its input here, and neuroglancer sends
+        # them several at a time. The IDI's default single reader thread
+        # queued those reads behind one another (a cold 178^3 read from /nrs
+        # took 0.3-0.5 s instead of 0.2-0.3), and without a cache neighbouring
+        # chunks, whose inputs overlap by two thirds, each read and decoded
+        # it all again.
         self.idi_raw = ImageDataInterface(
-            dataset_name, voxel_size=self.input_voxel_size
+            dataset_name,
+            voxel_size=self.input_voxel_size,
+            concurrency_limit=_env_count(RAW_READ_CONCURRENCY_ENV, None),
+            cache_bytes=_env_count(RAW_CACHE_BYTES_ENV, RAW_CACHE_BYTES_DEFAULT),
         )
         # The output grid starts at the corner of the raw level the model
         # reads, so every output voxel sits exactly on the input voxels it is
