@@ -51,23 +51,6 @@
             margin: 0;
         }
 
-        .apply-btn {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .apply-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-        }
-
         .header-actions {
             display: flex;
             gap: 8px;
@@ -299,11 +282,6 @@
             opacity: 0.95;
         }
 
-        .node-box.dirty {
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
-        }
-
         .node-box:hover {
             border-color: var(--accent-blue);
             box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
@@ -445,15 +423,6 @@
             color: var(--accent-red);
         }
 
-        .icon-btn.save {
-            display: none;
-        }
-
-        .node-box.dirty .icon-btn.save {
-            display: flex;
-            color: var(--accent-green);
-        }
-
         .configure-btn {
             background: var(--bg-tertiary);
             color: var(--text-primary);
@@ -480,11 +449,6 @@
             max-height: 50px;
             overflow-y: auto;
             word-break: break-word;
-        }
-
-        .node-box.dirty .icon-btn.save:hover {
-            color: white;
-            background: var(--accent-green);
         }
 
         .node-params {
@@ -530,19 +494,6 @@
         .param-input:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-        }
-
-        /* Blockwise config fields */
-        .blockwise-fields {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .field-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
         }
 
         /* Message */
