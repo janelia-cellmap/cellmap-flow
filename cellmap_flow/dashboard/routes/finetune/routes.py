@@ -16,6 +16,11 @@ from cellmap_flow.dashboard.routes.finetune.overlay import (
     refresh_annotated_regions_response,
     sync_annotations_manually_response,
 )
+from cellmap_flow.dashboard.routes.finetune.instance_correction import (
+    cc3d_relabel_annotation_response,
+    create_instance_correction_response,
+    sync_instance_correction_response,
+)
 from cellmap_flow.dashboard.routes.finetune.training import (
     cancel_job_response,
     get_job_logs_response,
@@ -153,6 +158,21 @@ def cancel_job(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
     return stop_training_early_response(job_id)
+
+
+@finetune_bp.route("/api/viewer/create-instance-correction", methods=["POST"])
+def create_instance_correction():
+    return create_instance_correction_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/sync-instance-correction", methods=["POST"])
+def sync_instance_correction():
+    return sync_instance_correction_response(request.get_json() or {})
+
+
+@finetune_bp.route("/api/viewer/cc3d-relabel-annotation", methods=["POST"])
+def cc3d_relabel_annotation():
+    return cc3d_relabel_annotation_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
