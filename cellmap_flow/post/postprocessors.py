@@ -1,15 +1,14 @@
-import logging
-import numpy as np
-import inspect
+# The segmentation libraries (and neuroglancer, scipy.ndimage) are imported
+# inside the steps that use them: importing this module is how every chain
+# is read, including in processes that never run a segmentation step, and
+# together they took seconds to load.
 import ast
-import neuroglancer
-import pymorton
+import inspect
+import logging
 import threading
-from scipy.ndimage import label
-import mwatershed as mws
-from scipy.ndimage import measurements
-import fastremap
-import fastmorph
+
+import numpy as np
+
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 from cellmap_flow.utils.safe_expression import compile_expression
 
@@ -89,6 +88,8 @@ class LabelPostprocessor(PostProcessor):
         self.channel = int(channel)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
+        from scipy.ndimage import label
+
         # Into a new uint32 array: writing the labels back into the model's
         # own (often uint8) array wrapped every id above 255, and the declared
         # uint8 dtype wrapped them again on the way out.
@@ -114,6 +115,8 @@ class MortonSegmentationRelabeling(PostProcessor):
         self.use_exact = use_exact == "True"
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
+        import pymorton
+
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
         morton_order_number = pymorton.interleave(*chunk_corner)
@@ -159,6 +162,11 @@ class AffinityPostprocessor(PostProcessor):
         self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
+        import fastremap
+        import mwatershed as mws
+        import pymorton
+        from scipy import ndimage
+
         # Integer input is the 0-255 that DefaultPostprocessor produces (the
         # usual chain), so scale it back to [0, 1] exactly as before. Float
         # input is already an affinity in [0, 1] (e.g. straight after a
@@ -186,7 +194,7 @@ class AffinityPostprocessor(PostProcessor):
         fragment_ids = fastremap.unique(segmentation[segmentation > 0])
 
         for fragment, mean in zip(
-            fragment_ids, measurements.mean(average_affs, segmentation, fragment_ids)
+            fragment_ids, ndimage.mean(average_affs, segmentation, fragment_ids)
         ):
             if mean >= self.bias:
                 filtered_fragments.append(fragment)
@@ -229,6 +237,8 @@ class SimpleBlockwiseMerger(PostProcessor):
         channel: int = 0,
         face_erosion_iterations: int = 0,
     ):
+        import neuroglancer
+
         use_exact = "True"
         self.channel = int(channel)
         self.face_erosion_iterations = int(face_erosion_iterations)
@@ -264,6 +274,8 @@ class SimpleBlockwiseMerger(PostProcessor):
             return self.equivalences.to_json()
 
     def _process(self, data, chunk_corner):
+        import fastmorph
+
         segmentation = data[self.channel]
         faces = {}
         for slice_reference, slice in self.slices.items():
