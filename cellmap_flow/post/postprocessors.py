@@ -83,6 +83,45 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
+class FillHolesPostprocessor(PostProcessor):
+    """Threshold, then fill the background holes each foreground blob encloses.
+
+    For compact single-instance organelles (a nucleus, say) that never have
+    interior gaps; not for structures with a real lumen. It runs per chunk
+    with no halo, so a hole that touches the chunk's boundary is not enclosed
+    within the chunk and stays unfilled.
+    """
+
+    def __init__(self, threshold: float = 0.0):
+        self.threshold = float(threshold)
+
+    def _process(self, data):
+        import fastmorph
+
+        binary = data.astype(np.float32) > self.threshold
+        if binary.ndim == 3:
+            filled = fastmorph.fill_holes(binary, remove_enclosed=True)
+        elif binary.ndim == 4:
+            # fastmorph.fill_holes takes at most 3-D input.
+            filled = np.stack(
+                [fastmorph.fill_holes(channel, remove_enclosed=True) for channel in binary]
+            )
+        else:
+            raise ValueError(
+                f"FillHolesPostprocessor expects (z, y, x) or (c, z, y, x) data, "
+                f"got shape {data.shape}"
+            )
+        return filled.astype(np.uint8)
+
+    @property
+    def dtype(self):
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)

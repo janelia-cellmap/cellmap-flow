@@ -48,6 +48,21 @@ def test_label_postprocessor_does_not_wrap_above_255():
     assert data.max() == 1, "the input array must not be overwritten"
 
 
+@pytest.mark.parametrize("shape", [(6, 6, 6), (2, 6, 6, 6)])
+def test_fill_holes_fills_what_a_blob_encloses(shape):
+    from cellmap_flow.post.postprocessors import FillHolesPostprocessor
+
+    logits = np.full(shape, -1.0, dtype=np.float32)
+    logits[..., 1:5, 1:5, 1:5] = 1.0
+    logits[..., 2, 2, 2] = -1.0  # an enclosed hole
+    expected = np.zeros(shape, dtype=np.uint8)
+    expected[..., 1:5, 1:5, 1:5] = 1
+
+    filled = FillHolesPostprocessor(threshold="0")(logits)
+    assert filled.dtype == np.uint8
+    np.testing.assert_array_equal(filled, expected)
+
+
 def _affinities(shape=(3, 8, 8, 8)):
     affs = np.full(shape, 0.9, dtype=np.float32)
     affs[:, :, :, 4] = 0.05  # a wall of repulsive edges down the middle
