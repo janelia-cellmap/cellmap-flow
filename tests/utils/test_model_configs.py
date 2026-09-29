@@ -217,3 +217,27 @@ def test_a_plugin_config_without_to_dict_exports_its_constructor_arguments():
     ]
     assert copy.deepcopy(config).to_dict() == expected
     assert "_init_params" not in str(config)
+
+
+def test_a_config_can_skip_the_dummy_forward_pass():
+    from cellmap_flow.models.models_config import ModelConfig
+
+    class ForwardRaises(torch.nn.Module):
+        def forward(self, x):
+            raise AssertionError("the dummy forward pass ran")
+
+    class NoForwardModelConfig(ModelConfig):
+        def _get_config(self):
+            return SimpleNamespace(
+                model=ForwardRaises(),
+                read_shape=(8, 8, 8),
+                write_shape=(8, 8, 8),
+                input_voxel_size=(1, 1, 1),
+                output_voxel_size=(1, 1, 1),
+                output_channels=1,
+                block_shape=np.array((8, 8, 8, 1)),
+            )
+
+    config = NoForwardModelConfig()
+    config.validate_model_shapes = False
+    assert config.config.read_shape == (8, 8, 8)
