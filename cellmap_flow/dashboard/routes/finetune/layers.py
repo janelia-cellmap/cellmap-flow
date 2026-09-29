@@ -22,7 +22,6 @@ precomputed store the dashboard's user can read.
 
 import logging
 
-import neuroglancer
 from flask import jsonify
 
 from cellmap_flow.globals import g
@@ -34,22 +33,6 @@ _BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
 
 def _error(message, status=400):
     return jsonify({"success": False, "error": message}), status
-
-
-def _segmentation_layer(path, disable_meshes=False):
-    """``path`` as a SegmentationLayer, placed as get_raw_layer places images.
-
-    get_raw_layer builds image layers only, so this wraps the data source
-    (and corner transform) of the one it builds.
-    """
-    from cellmap_flow.utils.scale_pyramid import get_raw_layer
-
-    layer = neuroglancer.SegmentationLayer(source=get_raw_layer(path, normalize=False).source)
-    if disable_meshes:
-        # No on-the-fly meshes: one mesh request on a whole-cell label
-        # volume can take the dashboard's memory.
-        layer.source[0].subsources = {"meshes": False}
-    return layer
 
 
 def _add_layer(name, layer, layer_type, path):
@@ -82,7 +65,11 @@ def add_segmentation_layer_to_viewer_response(data):
         if g.viewer is None:
             return _error("viewer not initialized")
 
-        layer = _segmentation_layer(path, disable_meshes=bool(data.get("disable_meshes", False)))
+        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+
+        layer = get_raw_layer(
+            path, segmentation=True, disable_meshes=bool(data.get("disable_meshes", False))
+        )
         if data.get("blend"):
             layer.blend = data["blend"]
         return _add_layer(name, layer, "segmentation", path)
