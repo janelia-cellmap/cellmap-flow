@@ -1,11 +1,8 @@
 import copy
 
-import zarr
-from cellmap_flow.io import paths
+from cellmap_flow.io import multiscale
 from cellmap_flow.utils.ds import (
     LazyNormalization,
-    _open_zarr,
-    find_closest_scale,
     open_ds_tensorstore,
     read_ds_meta,
     to_ndarray_tensorstore,
@@ -46,31 +43,15 @@ class ImageDataInterface:
         """
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
-            v3_container = paths.find_v3_container(dataset_path)
-            if v3_container is not None:
-                try:
-                    meta = zarr_v3.read_zarr_json(v3_container)
-                    if meta.get("node_type") == "group":
-                        scale, _, _ = zarr_v3.find_closest_scale_v3(
-                            v3_container, voxel_size
-                        )
-                        logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                        dataset_path = paths.join(v3_container, scale)
-                        logger.info(f"using dataset path {dataset_path}")
-                except Exception as e:
-                    logger.warning(
-                        f"could not open v3 dataset {dataset_path} to find scale: {e}"
-                    )
-            else:
-                try:
-                    ds = _open_zarr(dataset_path, mode="r")
-                    if isinstance(ds, zarr.hierarchy.Group):
-                        scale, _, _ = find_closest_scale(dataset_path, voxel_size)
-                        logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                        dataset_path = paths.join(dataset_path, scale)
-                        logger.info(f"using dataset path {dataset_path}")
-                except Exception as e:
-                    logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
+            # A multiscale group is read at its level for voxel_size.
+            try:
+                resolved, scale = multiscale.select_dataset(dataset_path, voxel_size)
+                if scale is not None:
+                    logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                    dataset_path = resolved
+                    logger.info(f"using dataset path {dataset_path}")
+            except Exception as e:
+                logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         # The opened tensorstore is shared with every with_input_norms() view.
         self._store = {"ts": None}

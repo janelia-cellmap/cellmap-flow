@@ -32,6 +32,11 @@ from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metada
     snap_integral,
     spatial_axes,
 )
+from cellmap_flow.io.multiscale import (  # noqa: F401  (kept names; see io.multiscale)
+    coarser_anywhere,
+    same_voxel_size,
+    select_level,
+)
 from cellmap_flow.io.ome import ome_corner, ome_translation  # noqa: F401  (kept names)
 from cellmap_flow.io.paths import (  # noqa: F401  (kept names; see io.paths)
     ZARR_JSON,
@@ -70,21 +75,6 @@ def coordinate_or_floats(values, what="voxel size", where=""):
             "number of nanometers; keeping it as floats"
         )
     return tuple(float(v) for v in snapped)
-
-
-def same_voxel_size(a, b) -> bool:
-    """Equal as nanometer floats. Coordinate() truncated both sides, so a
-    target of (10, 8, 8) matched an actual (10.48, 8, 8)."""
-    a, b = snap_integral(a), snap_integral(b)
-    return a.shape == b.shape and bool(np.allclose(a, b, rtol=1e-6, atol=1e-9))
-
-
-def coarser_anywhere(resolution, target) -> bool:
-    """``resolution`` is coarser than ``target`` along some axis."""
-    return any(
-        r > t and not np.isclose(r, t, rtol=1e-6, atol=1e-9)
-        for r, t in zip(snap_integral(resolution), snap_integral(target))
-    )
 
 
 def covering_roi(offset, voxel_size, shape):
@@ -160,33 +150,26 @@ def get_scale_info_v3(group_path: str) -> Tuple[dict, dict, dict]:
     return scale_info(metadata.list_levels(group_path))
 
 
+def level_info(level):
+    """``(path, offset, shape)`` of a ``(path, ArrayMeta)`` level: spatial
+    axes, the offset a list of nanometer floats, as find_closest_scale
+    returned them."""
+    path, meta = level
+    spatial = meta.spatial()
+    return path, list(spatial.translation), tuple(spatial.shape)
+
+
 def find_closest_scale_v3(group_path: str, target_resolution) -> Tuple[str, list, tuple]:
-    """Mirror of ``ds.py``'s ``find_closest_scale`` for a v3 multiscale group.
+    """Mirror of ``ds.py``'s ``find_closest_scale`` for a v3 multiscale group
+    (see io.multiscale.select_level, "floor").
 
     ``target_resolution=None`` defaults to the finest (first) scale rather
     than raising, since callers sometimes ask for the "closest scale" without
     a specific target in mind.
     """
-    offsets, resolutions, shapes = get_scale_info_v3(group_path)
-    if target_resolution is None:
-        target_scale = next(iter(resolutions))
-        return target_scale, offsets[target_scale], shapes[target_scale]
-
-    target_scale = None
-    last_scale = None
-    for scale, res in resolutions.items():
-        if last_scale is None:
-            last_scale = scale
-        if same_voxel_size(res, target_resolution):
-            target_scale = scale
-            break
-        elif coarser_anywhere(res, target_resolution):
-            target_scale = last_scale
-            break
-        last_scale = scale
-    if target_scale is None:
-        target_scale = last_scale
-    return target_scale, offsets[target_scale], shapes[target_scale]
+    if multiscales_from_group(group_path) is None:
+        raise ValueError(f"No multiscales attribute found at {group_path}")
+    return level_info(select_level(metadata.list_levels(group_path), target_resolution))
 
 
 def legacy_meta(meta: metadata.ArrayMeta):

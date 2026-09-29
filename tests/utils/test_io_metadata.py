@@ -26,7 +26,13 @@ _HEAVY = ("cellmap_flow.globals", "flask", "neuroglancer", "torch", "huggingface
 
 @pytest.mark.parametrize(
     "module",
-    ["cellmap_flow.io", "cellmap_flow.io.paths", "cellmap_flow.io.metadata", "cellmap_flow.io.ome"],
+    [
+        "cellmap_flow.io",
+        "cellmap_flow.io.paths",
+        "cellmap_flow.io.metadata",
+        "cellmap_flow.io.multiscale",
+        "cellmap_flow.io.ome",
+    ],
 )
 def test_io_modules_import_nothing_heavy(module, tmp_path):
     # globals configures logging and reads ~/.cellmap_flow on import; the
@@ -375,3 +381,69 @@ def test_the_zarr_object_attribute_lookups_are_kept(tmp_path):
     assert ds.check_for_units(root.create_dataset("bare", shape=(2,), dtype="u1"), "C") == "pixels"
     multiscales, found_in = ds.check_for_multiscale(group)
     assert multiscales is None and found_in.path == ""
+
+
+# ---------------------------------------------------------------------------
+# multiscale
+# ---------------------------------------------------------------------------
+
+
+def _level(path, voxel_size):
+    n = len(voxel_size)
+    return path, ArrayMeta(
+        path=path,
+        format="zarr2",
+        shape=(4,) * n,
+        dtype=np.dtype("u1"),
+        chunk_shape=(4,) * n,
+        axes=("z", "y", "x")[-n:],
+        units=("nanometer",) * n,
+        voxel_size=tuple(float(v) for v in voxel_size),
+        translation=(0.0,) * n,
+    )
+
+
+LEVELS = [_level("s0", (8, 4, 4)), _level("s1", (16, 8, 8)), _level("s2", (32, 16, 16))]
+
+
+@pytest.mark.parametrize(
+    "voxel_size, mode, expected",
+    [
+        (None, "floor", "s0"),
+        ((16, 8, 8), "floor", "s1"),
+        ((20, 10, 10), "floor", "s1"),  # the finest level not too coarse
+        ((4, 2, 2), "floor", "s0"),  # even s0 is too coarse: s0
+        ((64, 32, 32), "floor", "s2"),
+        ((16, 8, 4), "floor", "s0"),  # s1 is coarser in x
+        ((16, 8, 8), "exact", "s1"),
+        ((20, 10, 10), "nearest", "s1"),
+        ((28, 14, 14), "nearest", "s2"),
+        ((12, 6, 6), "nearest", "s1"),  # nearer 16 than 8 on a log scale
+        ((10, 5, 5), "nearest", "s0"),
+    ],
+)
+def test_select_level(voxel_size, mode, expected):
+    from cellmap_flow.io.multiscale import select_level
+
+    assert select_level(LEVELS, voxel_size, mode)[0] == expected
+
+
+def test_select_level_exact_refuses_a_missing_voxel_size():
+    from cellmap_flow.io.multiscale import select_level
+
+    with pytest.raises(ValueError, match="no level"):
+        select_level(LEVELS, (10.48, 8, 8), "exact")
+    with pytest.raises(ValueError):
+        select_level([], (8, 8, 8))
+
+
+def test_select_dataset_and_closest_raw_scale(czyx):
+    from cellmap_flow.io.multiscale import closest_raw_scale, select_dataset
+
+    assert select_dataset(czyx, (16, 16, 16)) == (os.path.join(czyx, "s1"), "s1")
+    # An array is read as it is.
+    assert select_dataset(czyx + "/s0", (16, 16, 16)) == (czyx + "/s0", None)
+    # From the group or one of its levels alike.
+    assert closest_raw_scale(czyx + "/s0", (16, 16, 16)) == (16.0, 16.0, 16.0)
+    assert closest_raw_scale(czyx, (12, 12, 12)) == (8.0, 8.0, 8.0)
+    assert closest_raw_scale(czyx + "/missing", (8, 8, 8)) is None

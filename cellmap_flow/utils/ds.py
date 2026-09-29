@@ -12,7 +12,7 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
-from cellmap_flow.io import metadata, paths
+from cellmap_flow.io import metadata, multiscale, paths
 from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metadata)
     open_zarr as _open_zarr,
     regularize_offset,
@@ -87,27 +87,12 @@ def get_scale_info(zarr_grp):
 
 
 def find_closest_scale(zarr_grp_path, target_resolution):
-    zarr_grp = _open_zarr(zarr_grp_path, mode="r")
-    offsets, resolutions, shapes = get_scale_info(zarr_grp)
-    if target_resolution is None:
-        # No target: the finest (first) scale, as the v3 reader does.
-        target_scale = next(iter(resolutions))
-        return target_scale, offsets[target_scale], shapes[target_scale]
-    target_scale = None
-    last_scale = None
-    for scale, res in resolutions.items():
-        if last_scale is None:
-            last_scale = scale
-        if zarr_v3.same_voxel_size(res, target_resolution):
-            target_scale = scale
-            break
-        elif zarr_v3.coarser_anywhere(res, target_resolution):
-            target_scale = last_scale
-            break
-        last_scale = scale
-    if target_scale is None:
-        target_scale = last_scale
-    return target_scale, offsets[target_scale], shapes[target_scale]
+    """``(level path, offset, shape)`` of the level of an OME-Zarr v2 group
+    to read at ``target_resolution`` (see io.multiscale.select_level,
+    "floor"); the finest level when it is None."""
+    group = _open_zarr(zarr_grp_path, mode="r")
+    levels = metadata.levels_from_zarr_group(group, zarr_grp_path)
+    return zarr_v3.level_info(multiscale.select_level(levels, target_resolution))
 
 
 # Ensure tensorstore does not attempt to use GCE credentials

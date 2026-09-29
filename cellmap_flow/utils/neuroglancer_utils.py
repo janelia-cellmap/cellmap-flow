@@ -30,42 +30,9 @@ def get_raw_closest_scale(dataset_path, target_resolution):
     model's target resolution, or None if it can't be determined.
 
     ``dataset_path`` may be the multiscale group or one of its scales."""
-    import os
+    from cellmap_flow.io.multiscale import closest_raw_scale
 
-    import zarr
-
-    try:
-        v3_container = zarr_v3.find_v3_container(dataset_path)
-        if v3_container is not None:
-            # A per-scale path (.../s1) finds the array's own zarr.json first;
-            # the pyramid is described by the group above it.
-            if zarr_v3.multiscales_from_group(v3_container) is None:
-                parent = os.path.dirname(os.path.normpath(v3_container))
-                if zarr_v3.is_v3_container(parent):
-                    v3_container = parent
-            if zarr_v3.multiscales_from_group(v3_container) is not None:
-                _, resolutions, _ = zarr_v3.get_scale_info_v3(v3_container)
-                target_scale, _, _ = zarr_v3.find_closest_scale_v3(
-                    v3_container, target_resolution
-                )
-                return tuple(resolutions[target_scale])
-        zarr_grp = _open_zarr(dataset_path, mode="r")
-        if isinstance(zarr_grp, zarr.core.Array):
-            # Same for a v2 per-scale path: use the multiscale group above it.
-            if "://" in dataset_path:
-                dataset_path = dataset_path.rstrip("/").rsplit("/", 1)[0]
-            else:
-                dataset_path = os.path.dirname(os.path.normpath(dataset_path))
-            zarr_grp = _open_zarr(dataset_path, mode="r")
-        _, resolutions, _ = get_scale_info(zarr_grp)
-        target_scale, _, _ = find_closest_scale(dataset_path, target_resolution)
-        return tuple(resolutions[target_scale])
-    except Exception as e:
-        logger.warning(
-            f"Could not determine closest raw scale for {dataset_path} at "
-            f"target_resolution={target_resolution}: {e}"
-        )
-        return None
+    return closest_raw_scale(dataset_path, target_resolution)
 
 
 def build_prediction_source(host, model, st_data, override_scales):
