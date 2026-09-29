@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import jsonify
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.routes.finetune.annotation_core import _register_annotation_volume
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     rewrite_minio_url_for_proxy,
@@ -110,15 +111,6 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
                     parent_total=parent_total,
                 )
     return files_in_src
-
-
-def _register_annotation_volume(volume_id, **volume_data):
-    if not hasattr(g, "annotation_volumes"):
-        g.annotation_volumes = {}
-    g.annotation_volumes[volume_id] = {
-        **volume_data,
-        "chunk_sync_state": {},
-    }
 
 
 def _annotation_volume_dirs(corrections_dir):

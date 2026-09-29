@@ -16,6 +16,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
@@ -43,12 +44,10 @@ def _get_selected_model_config(model_name):
 
 
 def _register_annotation_volume(volume_id, **volume_data):
-    if not hasattr(g, "annotation_volumes"):
-        g.annotation_volumes = {}
-    g.annotation_volumes[volume_id] = {
-        **volume_data,
-        "chunk_sync_state": {},
-    }
+    """Record a volume being served for painting, with no chunk sync state yet."""
+    return SessionStore(g.output_sessions, g.annotation_volumes).register_volume(
+        volume_id, **volume_data
+    )
 
 
 # ``model_config.config`` is far from free: for a script model it executes the

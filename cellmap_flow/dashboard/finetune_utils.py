@@ -24,6 +24,7 @@ import zarr
 
 from cellmap_flow.finetune.session import sync as session_sync
 from cellmap_flow.finetune.session.instance import seed_instance_volume
+from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.finetune.session.volume import (
     NotAnAnnotationVolume,
     VolumeGeometry,
@@ -44,57 +45,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def get_or_create_session_path(base_output_path: str) -> str:
-    """
-    Get or create a timestamped session directory for the given base output path.
-
-    If a session already exists for this base path, reuse it.
-    Otherwise, create a new timestamped subdirectory.
-
-    Args:
-        base_output_path: Base output directory (e.g., "output/to/here")
-
-    Returns:
-        Timestamped session path (e.g., "output/to/here/20260213_123456")
-    """
-    base_output_path = os.path.expanduser(base_output_path)
-
-    if base_output_path not in output_sessions:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        session_path = os.path.join(base_output_path, timestamp)
-        output_sessions[base_output_path] = session_path
-        logger.info(f"Created new session path: {session_path}")
-
-    return output_sessions[base_output_path]
-
-
-_SESSION_DIR_RE = re.compile(r"^\d{8}_\d{6}$")
+    """This dashboard's session under ``base_output_path``; see ``SessionStore.get_or_create``."""
+    return SessionStore(output_sessions).get_or_create(base_output_path)
 
 
 def latest_session_on_disk(base_output_path: str):
-    """The newest session under ``base_output_path`` that has something to train on.
-
-    Sessions are ``<base>/<YYYYmmdd_HHMMSS>/`` directories; this takes the
-    latest one whose corrections/ holds a virtual-sources manifest. The
-    in-memory base -> session map dies with the dashboard, so after a
-    restart get_or_create_session_path hands out a new, empty session, and
-    submitting training for the base path failed with "Corrections path
-    does not exist" although the session painted before the restart was
-    right there. Returns None when there is none.
-    """
-    from cellmap_flow.finetune.virtual_dataset import VIRTUAL_MANIFEST_FILENAME
-
-    base = os.path.expanduser(str(base_output_path))
-    try:
-        entries = sorted(os.listdir(base), reverse=True)
-    except OSError:
-        return None
-    for entry in entries:
-        session = os.path.join(base, entry)
-        if _SESSION_DIR_RE.match(entry) and os.path.isfile(
-            os.path.join(session, "corrections", VIRTUAL_MANIFEST_FILENAME)
-        ):
-            return session
-    return None
+    """The newest trainable session under ``base_output_path``; see ``SessionStore.latest_on_disk``."""
+    return SessionStore(output_sessions).latest_on_disk(base_output_path)
 
 
 # ---------------------------------------------------------------------------

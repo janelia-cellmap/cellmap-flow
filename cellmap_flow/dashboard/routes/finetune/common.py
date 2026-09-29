@@ -6,11 +6,8 @@ from urllib.parse import urlparse
 
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import (
-    get_or_create_session_path,
-    latest_session_on_disk,
-    output_sessions,
-)
+from cellmap_flow.dashboard.finetune_utils import output_sessions
+from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
@@ -100,7 +97,7 @@ def viewer_position_and_scales():
 
 def ensure_corrections_storage(output_path):
     if output_path:
-        session_path = get_or_create_session_path(output_path)
+        session_path = SessionStore(output_sessions).get_or_create(output_path)
         corrections_dir = os.path.join(session_path, "corrections")
         os.makedirs(corrections_dir, exist_ok=True)
         zarr.open_group(corrections_dir, mode="a")
@@ -139,14 +136,15 @@ def resolve_finetune_session(corrections_path_str):
     # This dashboard's session for the base path, if it made one; else the
     # newest one on disk, which is what a dashboard restart forgot. Only for
     # training: creating volumes still starts a session of its own.
+    store = SessionStore(output_sessions)
     base = os.path.expanduser(str(base_corrections_path))
     if base not in output_sessions:
-        latest = latest_session_on_disk(base)
+        latest = store.latest_on_disk(base)
         if latest is not None:
             logger.info(f"No session for {base} in this dashboard; using the latest on disk: {latest}")
             return Path(latest), Path(latest) / "corrections"
 
-    session_path = Path(get_or_create_session_path(str(base_corrections_path)))
+    session_path = Path(store.get_or_create(str(base_corrections_path)))
     return session_path, session_path / "corrections"
 
 

@@ -32,6 +32,7 @@ from cellmap_flow.dashboard.finetune_utils import (
 )
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy
+from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
@@ -136,8 +137,9 @@ def _register_volume(volume_id, zarr_path, corrections_dir, minio_url):
     """Record the volume as annotation_volume records are kept, keeping the
     chunk state the pull before the mirror just recorded."""
     attrs = dict(zarr.open(zarr_path, mode="r").attrs)
-    entry = g.annotation_volumes.setdefault(volume_id, {"chunk_sync_state": {}})
-    entry.update(
+    SessionStore(g.output_sessions, g.annotation_volumes).register_volume(
+        volume_id,
+        keep_sync_state=True,
         zarr_path=zarr_path,
         model_name=attrs.get("model_name", ""),
         output_size=attrs.get("chunk_size"),
