@@ -166,3 +166,61 @@ def test_an_untrainable_type_is_refused_before_anything_is_submitted(tmp_path):
     with pytest.raises(ValueError, match="cannot be finetuned"):
         _submit(FinetuneJobManager(), _BioConfig(), tmp_path)
     assert not (tmp_path / "runs").exists()
+
+
+@pytest.fixture
+def exported_cellmap_model(monkeypatch):
+    """cellmap_models as it opens an exported folder: TorchScript to serve,
+    and train() rebuilding it as torch.export's UnflattenedModule."""
+    import sys
+    import types
+
+    class UnflattenedModule(torch.nn.Module):  # the name load_trainable_model looks for
+        def __init__(self):
+            super().__init__()
+            self.conv = torch.nn.Conv3d(1, 1, 1)
+
+        def forward(self, x):
+            return self.conv(x)
+
+    class CellmapModel:
+        def __init__(self, folder_path):
+            self.folder_path = folder_path
+            shape, voxel = [4, 4, 4], [8, 8, 8]
+            self.metadata = SimpleNamespace(
+                model_name="m", model_type="unet", framework="torch", spatial_dims=3,
+                in_channels=1, out_channels=1, iteration=0, channels_names=["mito"],
+                input_voxel_size=voxel, output_voxel_size=voxel, input_shape=shape,
+                output_shape=shape, inference_input_shape=shape, inference_output_shape=shape,
+            )
+            self.ts_model = torch.jit.trace(torch.nn.Conv3d(1, 1, 1), torch.zeros(1, 1, *shape))
+
+        def train(self):
+            return UnflattenedModule()
+
+    leaf = types.ModuleType("cellmap_models.model_export.cellmap_model")
+    leaf.CellmapModel = CellmapModel
+    for name in ("cellmap_models", "cellmap_models.model_export"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, leaf.__name__, leaf)
+
+
+@pytest.mark.filterwarnings("ignore:`torch.jit.trace:DeprecationWarning")
+def test_a_finetune_is_served_on_the_module_tree_it_was_trained_on(exported_cellmap_model, tmp_path):
+    """The exported weights are keyed by the trainer's tree, BatchLoopWrapper's
+    "model." prefix included; serving them needs exactly that tree."""
+    from cellmap_flow.models.models_config import CellMapModelConfig, FinetuneModelConfig
+
+    base = {"type": "cellmap", "folder_path": "/models/m"}
+    trained = load_trainable_model(CellMapModelConfig(folder_path=base["folder_path"]))
+    with torch.no_grad():
+        for p in trained.parameters():
+            p.fill_(0.5)
+    weights = tmp_path / "model_state_dict.pt"
+    torch.save(trained.state_dict(), weights)
+
+    served = FinetuneModelConfig(weights_path=str(weights), base_model=base).config.model
+
+    assert list(served.state_dict()) == list(trained.state_dict()) == ["model.conv.weight", "model.conv.bias"]
+    for key, value in trained.state_dict().items():
+        assert torch.equal(served.state_dict()[key], value)

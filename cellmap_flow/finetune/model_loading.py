@@ -6,7 +6,8 @@ cannot train. ``cellmap_model.train()`` rebuilds them as an unflattened
 torch.export module, which is what the trainer needs. The adapter and
 full-finetune exports are keyed by the names in that exact module tree
 (``BatchLoopWrapper``'s ``model.`` prefix included), so training and
-serving must build it the same way.
+serving must build it the same way: both call ``load_trainable_model``
+(serving through ``FinetuneModelConfig``).
 
 The finetune CLI used to do this itself for fly/dacapo/huggingface/script
 models only, so a ``type: cellmap`` model -- which is exactly what
@@ -75,7 +76,7 @@ def load_trainable_model(model_config) -> torch.nn.Module:
 
     - TorchScript (cellmap, Hugging Face): the unflattened module from
       ``cellmap_model.train()``, wrapped in BatchLoopWrapper when it is fixed
-      at batch 1 -- the same tree FinetuneModelConfig serves.
+      at batch 1.
     - A finetuned model (``type: finetune``): the model it serves -- the base
       tree with its LoRA adapter attached (a PeftModel), or with its full
       finetuned weights loaded. Wrapping it in a new adapter folds the old

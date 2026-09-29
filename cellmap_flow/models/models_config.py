@@ -969,43 +969,16 @@ class FinetuneModelConfig(ModelConfig):
         import torch
 
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
+        from cellmap_flow.finetune.model_loading import load_trainable_model
 
         # Get the fully-populated config from the base model
         base_cfg = self.base_model_config.config
 
-        # Apply LoRA adapter to the base model
-        base_model = base_cfg.model
-
-        # TorchScript models can't be used with LoRA. Use cellmap_model.train()
-        # to get a trainable nn.Module via torch.export unflatten.
-        if isinstance(base_model, torch.jit.ScriptModule):
-            base_type = self.base_model_dict.get("type", "")
-            cellmap_model = None
-            if base_type == "huggingface":
-                repo = self.base_model_dict.get("repo")
-                revision = self.base_model_dict.get("revision")
-                if repo:
-                    from cellmap_models.model_export.cellmap_model import (
-                        get_huggingface_model,
-                    )
-
-                    cellmap_model = get_huggingface_model(repo, revision)
-            elif base_type == "cellmap":
-                folder_path = self.base_model_dict.get("folder_path")
-                if folder_path:
-                    from cellmap_models.model_export.cellmap_model import (
-                        CellmapModel,
-                    )
-
-                    cellmap_model = CellmapModel(folder_path=folder_path)
-
-            if cellmap_model is not None:
-                trainable = cellmap_model.train()
-                if trainable is not None:
-                    if type(trainable).__name__ == 'UnflattenedModule':
-                        from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
-                        trainable = BatchLoopWrapper(trainable)
-                    base_model = trainable
+        # The module the finetune was trained on, built the way the trainer
+        # builds it: a TorchScript base (cellmap, Hugging Face) becomes
+        # cellmap_model.train()'s unflattened module, in BatchLoopWrapper.
+        # The adapter and full-finetune weights are keyed by that exact tree.
+        base_model = load_trainable_model(self.base_model_config)
 
         device = next(base_model.parameters()).device
         if self.weights_path:
