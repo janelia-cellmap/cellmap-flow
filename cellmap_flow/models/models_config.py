@@ -318,9 +318,6 @@ class DaCapoModelConfig(ModelConfig):
         self.scale = scale
 
     def _get_config(self):
-        from dacapo.experiments import Run
-        from dacapo.store.create_store import create_config_store, create_weights_store
-
         config = Config()
         run = self._load_dacapo_run()
 

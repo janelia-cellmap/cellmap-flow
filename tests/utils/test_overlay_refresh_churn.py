@@ -144,7 +144,6 @@ def test_no_boxes_does_not_open_a_transaction(corrections, monkeypatch):
 
 def test_annotation_layers_get_the_draw_tools_prebound(monkeypatch):
     """A/F must be bound on the layer we hand neuroglancer, not hunted for."""
-    import neuroglancer
     from cellmap_flow.dashboard.app import app
 
     viewer = _FakeViewer()

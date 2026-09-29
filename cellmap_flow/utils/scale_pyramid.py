@@ -6,8 +6,6 @@ import logging
 import numpy as np
 import os
 
-import zarr
-
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.utils.ds import (
     _is_remote_path,
@@ -15,7 +13,6 @@ from cellmap_flow.utils.ds import (
     _join_path,
     _open_zarr,
     check_for_multiscale,
-    get_ds_info,
 )
 from cellmap_flow.utils import zarr_v3
 

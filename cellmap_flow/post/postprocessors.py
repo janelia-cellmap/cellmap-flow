@@ -9,7 +9,6 @@ from scipy.ndimage import label
 import mwatershed as mws
 from scipy.ndimage import measurements
 import fastremap
-from funlib.math import cantor_number
 import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 from cellmap_flow.utils.safe_expression import compile_expression

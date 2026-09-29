@@ -6,7 +6,6 @@ from cellmap_flow.utils.serialize_config import Config
 
 
 from upath import UPath
-import numpy as np
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ that can be looked up by their __name__ attribute.
 
 import logging
 import numpy as np
-import inspect
 
 logger = logging.getLogger(__name__)
 

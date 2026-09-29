@@ -9,8 +9,7 @@ from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import shlex
 import sys
-from typing import Type, Dict
-from typing import Type, get_type_hints
+from typing import Type
 from cellmap_flow.utils.bsub_utils import (
     JobStartError,
     install_cleanup_handlers,
@@ -21,7 +20,6 @@ from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.utils.config_utils import resolve_data_path
 from cellmap_flow.utils.cli_utils import (
-    get_all_subclasses,
     create_click_option_from_param,
     process_constructor_args,
     get_all_model_configs,
@@ -238,12 +236,6 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
     """
     # Get constructor signature
     sig = inspect.signature(config_class.__init__)
-
-    # Get type hints if available
-    try:
-        type_hints = get_type_hints(config_class.__init__)
-    except:
-        type_hints = {}
 
     # Track used short names to avoid duplicates
     used_short_names = set(["-d", "-q", "-P"])  # Reserved for common options

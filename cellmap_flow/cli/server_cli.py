@@ -8,11 +8,10 @@ import logging
 from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import sys
-from typing import Type, Dict, get_type_hints
+from typing import Type
 
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.cli_utils import (
-    get_all_subclasses,
     create_click_option_from_param,
     process_constructor_args,
     get_all_model_configs,
@@ -74,12 +73,6 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     """
     # Get constructor signature
     sig = inspect.signature(config_class.__init__)
-
-    # Get type hints if available
-    try:
-        type_hints = get_type_hints(config_class.__init__)
-    except:
-        type_hints = {}
 
     # Track used short names to avoid duplicates
     used_short_names = set(["-d", "-p"])  # Reserved for common options

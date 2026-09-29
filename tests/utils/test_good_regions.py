@@ -7,7 +7,6 @@ zeroes the supervised term and gives the whole patch to distillation.
 """
 
 import json
-import os
 
 import pytest
 

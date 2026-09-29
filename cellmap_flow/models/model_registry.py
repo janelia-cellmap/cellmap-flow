@@ -3,7 +3,7 @@
 import json
 import os
 import inspect
-from typing import Dict, Any, List
+from typing import Dict, Any
 from huggingface_hub import list_models, hf_hub_download
 from cellmap_flow.models.models_config import (
     ScriptModelConfig,

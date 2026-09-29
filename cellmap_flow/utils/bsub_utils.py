@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 from abc import ABC, abstractmethod
 from enum import Enum
 
