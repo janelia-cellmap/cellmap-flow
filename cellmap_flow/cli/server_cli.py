@@ -6,17 +6,12 @@ and creates server commands based on their __init__ parameters.
 import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
-import inspect
 import sys
 from typing import Type
 
+from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.cli_utils import (
-    create_click_option_from_param,
-    process_constructor_args,
-    get_all_model_configs,
-    print_available_models,
-)
+from cellmap_flow.utils.cli_utils import print_available_models
 from cellmap_flow.utils.plugin_manager import load_plugins
 
 
@@ -71,12 +66,6 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     """
     Dynamically create a Click command for a ModelConfig subclass server.
     """
-    # Get constructor signature
-    sig = inspect.signature(config_class.__init__)
-
-    # Track used short names to avoid duplicates
-    used_short_names = set(["-d", "-p"])  # Reserved for common options
-
     # Create the command function
     def command_func(**kwargs):
         # Separate model config kwargs from server kwargs
@@ -93,7 +82,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
                 model_kwargs[key] = value
 
         # Process constructor args (handle list/tuple conversions)
-        processed_kwargs = process_constructor_args(config_class, model_kwargs)
+        processed_kwargs = registry.coerce_cli_args(config_class, model_kwargs)
 
         # Create model config instance
         try:
@@ -145,13 +134,12 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
         "--keyfile", default=None, type=str, help="Path to SSL private key file"
     )(command_func)
 
-    # Add model-specific options based on constructor parameters
-    for param_name, param_info in reversed(list(sig.parameters.items())):
-        option_config = create_click_option_from_param(param_name, param_info, used_short_names)
-        if option_config:
-            command_func = click.option(
-                *option_config.pop("param_decls"), **option_config
-            )(command_func)
+    # Add model-specific options based on constructor parameters; -d and -p
+    # are the command's own.
+    for option_config in registry.click_options(config_class, {"-d", "-p"}):
+        command_func = click.option(
+            *option_config.pop("param_decls"), **option_config
+        )(command_func)
 
     # Register as a command
     command_func = cli.command(name=cli_name)(command_func)
@@ -163,7 +151,7 @@ def register_all_server_commands():
     """
     Discover and register all ModelConfig subclasses as server CLI commands.
     """
-    model_configs = get_all_model_configs()
+    model_configs = registry.model_types()
 
     for cli_name, config_class in model_configs.items():
         try:

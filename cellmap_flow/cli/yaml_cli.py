@@ -163,24 +163,14 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
 
     # List available model types
     if list_types:
-        from cellmap_flow.utils.config_utils import get_model_type_mapping
+        from cellmap_flow.models import registry
 
-        model_types = get_model_type_mapping()
+        model_types = registry.model_types()
         click.echo("Available model types:\n")
         for type_name, config_class in sorted(model_types.items()):
             click.echo(f"  {type_name:20s} - {config_class.__name__}")
 
-            # Show required parameters
-            import inspect
-
-            sig = inspect.signature(config_class.__init__)
-            required = [
-                p
-                for p, info in sig.parameters.items()
-                if p != "self"
-                and info.default is inspect.Parameter.empty
-                and p not in ["name", "scale"]
-            ]
+            required = registry.required_params(config_class)
             if required:
                 click.echo(f"                       Required: {', '.join(required)}")
 
