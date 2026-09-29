@@ -91,6 +91,24 @@ def _cli_value(value):
     return str(value)
 
 
+def command_argv(cls, params: dict) -> list:
+    """``cellmap_flow_server`` arguments that build ``cls(**params)``.
+
+    The name the server CLI registers ``cls`` under, then ``--arg value``
+    for each constructor argument in signature order, leaving out None.
+    Each value is written the way the server CLI parses it back.
+    """
+    from cellmap_flow.models.registry import cli_name_of
+
+    argv = [str(cli_name_of(cls))]
+    for name in list(inspect.signature(cls.__init__).parameters)[1:]:
+        value = params.get(name)
+        if value is None:
+            continue
+        argv += [f"--{name.replace('_', '-')}", _cli_value(value)]
+    return argv
+
+
 class ModelConfig:
     def __new__(cls, *args, **kwargs):
         # Remember the constructor arguments, for the default to_dict().
@@ -300,20 +318,11 @@ class ModelConfig:
         (hand-written commands dropped Fly's input/output size, which then
         silently fell back to 178/56, and Bio's required voxel size), with
         every token shell-quoted: bsub runs it through ``bash -c`` and local
-        launches through ``shlex.split``.
+        launches through ``shlex.split``. The class is named as the server
+        CLI registers it (``registry.cli_name_of``), so it rebuilds this
+        class and not a parent it inherited cli_name from.
         """
-        from cellmap_flow.models.registry import cli_name_of
-
-        params = self._launch_params()
-        # The name the server CLI registers this class under, so it rebuilds
-        # this class and not a parent it inherited cli_name from.
-        parts = [cli_name_of(type(self))]
-        for name in list(inspect.signature(type(self).__init__).parameters)[1:]:
-            value = params.get(name)
-            if value is None:
-                continue
-            parts += [f"--{name.replace('_', '-')}", _cli_value(value)]
-        return " ".join(shlex.quote(str(p)) for p in parts)
+        return shlex.join(command_argv(type(self), self._launch_params()))
 
 
 class ScriptModelConfig(ModelConfig):

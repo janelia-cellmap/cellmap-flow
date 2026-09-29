@@ -6,7 +6,6 @@ This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.
 """
 
-import shlex
 import sys
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
@@ -18,8 +17,8 @@ from cellmap_flow.utils.bsub_utils import (
     JobStartError,
     install_cleanup_handlers,
     start_hosts,
-    SERVER_COMMAND,
 )
+from cellmap_flow.serving.launch import server_command
 from cellmap_flow.utils.config_utils import ConfigError, load_config, resolve_data_path
 from cellmap_flow.globals import g
 
@@ -52,7 +51,7 @@ def run_multiple(
                 f"scale {model.scale}; reading {current_data_path}"
             )
 
-        command = f"{SERVER_COMMAND} {model.command} -d {shlex.quote(current_data_path)}"
+        command = server_command(model, current_data_path)
         model_name = getattr(model, "name", None) or type(model).__name__
 
         logger.info(f"Submitting job for model: {model_name}")

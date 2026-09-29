@@ -40,33 +40,23 @@ def _run(code, tmp_path):
     )
 
 
-def test_importing_the_registry_imports_nothing_heavy(tmp_path):
+def test_the_new_modules_import_nothing_heavy(tmp_path):
+    # describe_types() runs when the dashboard opens its model form, so it
+    # must not load any model framework either.
     code = (
         "import sys\n"
-        "import cellmap_flow.models.registry\n"
-        "heavy = ['cellmap_flow.globals', 'cellmap_flow.models.models_config', 'torch',\n"
-        "         'flask', 'neuroglancer', 'huggingface_hub', 'peft']\n"
+        "import cellmap_flow.models.registry, cellmap_flow.serving.launch\n"
+        "heavy = ['cellmap_flow.globals', 'cellmap_flow.models.models_config',\n"
+        "         'torch', 'flask', 'neuroglancer', 'huggingface_hub', 'peft']\n"
         "print([m for m in heavy if m in sys.modules])\n"
-    )
-    result = _run(code, tmp_path)
-    assert result.returncode == 0, result.stderr[-2000:]
-    assert result.stdout.strip().splitlines()[-1] == "[]"
-
-
-def test_describing_the_types_reads_signatures_only(tmp_path):
-    # The dashboard calls this for its model form; loading any framework
-    # here would make opening the form cost that framework's import.
-    code = (
-        "import sys\n"
-        "from cellmap_flow.models import registry\n"
-        "types = registry.describe_types()\n"
+        "types = cellmap_flow.models.registry.describe_types()\n"
         "assert 'BioModelConfig' in types and 'DaCapoModelConfig' in types\n"
         "frameworks = ['bioimageio', 'dacapo', 'cellmap_models', 'torch', 'huggingface_hub']\n"
         "print([m for m in frameworks if m in sys.modules])\n"
     )
     result = _run(code, tmp_path)
     assert result.returncode == 0, result.stderr[-2000:]
-    assert result.stdout.strip().splitlines()[-1] == "[]"
+    assert result.stdout.strip().splitlines()[-2:] == ["[]", "[]"]
 
 
 def test_the_built_in_types_in_definition_order():

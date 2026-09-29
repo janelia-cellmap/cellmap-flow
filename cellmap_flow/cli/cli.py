@@ -7,16 +7,15 @@ import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
-import shlex
 import sys
 from typing import Type
 from cellmap_flow.utils.bsub_utils import (
     JobStartError,
     install_cleanup_handlers,
     start_hosts,
-    SERVER_COMMAND,
 )
 from cellmap_flow.models import registry
+from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.utils.config_utils import resolve_data_path
@@ -214,7 +213,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
         server._chunk_impl(None, None, 2, 2, 2)
         click.echo("Server check passed")
     else:
-        command = f"{SERVER_COMMAND} {model_config.command} -d {shlex.quote(final_data_path)}"
+        command = server_command(model_config, final_data_path)
         logger.info(f"Executing command: {command}")
         try:
             start_hosts(command, queue, project, model_config.name or model_type)
@@ -280,7 +279,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             server._chunk_impl(None, None, 2, 2, 2)
             click.echo("Server check passed")
         else:
-            command = f"{SERVER_COMMAND} {model_config.command} -d {shlex.quote(final_data_path)}"
+            command = server_command(model_config, final_data_path)
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             try:
