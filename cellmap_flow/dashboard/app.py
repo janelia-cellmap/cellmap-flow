@@ -15,6 +15,7 @@ from cellmap_flow.dashboard.routes.model_advice import model_advice_bp
 from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
+from cellmap_flow.dashboard.routes.review_routes import review_bp
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ app.register_blueprint(blockwise_bp)
 app.register_blueprint(bbx_bp)
 app.register_blueprint(finetune_bp)
 app.register_blueprint(model_advice_bp)
+app.register_blueprint(review_bp)
 
 
 def create_and_run_app(neuroglancer_url=None):
