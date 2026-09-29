@@ -41,7 +41,6 @@ import argparse
 import json
 import logging
 import os
-import shutil
 import sys
 import time
 from datetime import datetime

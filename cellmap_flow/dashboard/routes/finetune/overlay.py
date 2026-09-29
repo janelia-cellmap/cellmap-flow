@@ -238,11 +238,6 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     s0_path = os.path.join(corrections_dir, entry, "annotation", "s0")
                     if not os.path.isdir(s0_path):
                         continue
-                    crop_label = (
-                        os.path.basename(crop.get("path", "")).rstrip("/")
-                        if imported
-                        else "painted"
-                    )
                     for chunk_name in os.listdir(s0_path):
                         if not _CHUNK_KEY_RE.match(chunk_name):
                             continue

@@ -9,7 +9,6 @@ This module provides:
 import json
 import logging
 import os
-import shlex
 import re
 import string
 import sys
@@ -1118,7 +1117,7 @@ class FinetuneJobManager:
             model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
         """
         from cellmap_flow.globals import g
-        from cellmap_flow.utils.web_utils import get_norms_post_args, ARGS_KEY
+        from cellmap_flow.utils.web_utils import get_norms_post_args
         import neuroglancer
 
         server_url = finetune_job.inference_server_url

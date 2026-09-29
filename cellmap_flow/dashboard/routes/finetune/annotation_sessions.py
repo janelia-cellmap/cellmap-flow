@@ -210,8 +210,6 @@ def list_existing_sessions_response(data):
 
 def load_existing_volume_response(data):
     try:
-        import shutil
-
         from cellmap_flow.dashboard.finetune_utils import minio_state
 
         source_session_path = data.get("source_session_path")

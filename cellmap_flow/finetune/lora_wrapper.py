@@ -11,7 +11,7 @@ keeping the base model frozen.
 """
 
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional
 import torch
 import torch.nn as nn
 

@@ -1,9 +1,6 @@
 """export_merged folds a LoRA adapter into Conv3d weights exactly and only
 accepts tiles that keep the 178-tile pooling phase."""
 
-import os
-import tempfile
-
 import pytest
 import torch
 from torch import nn
