@@ -1,65 +1,59 @@
 Python Scripts
 ================================
-CellMap Flow can be executed from cli commands or programmatically via Python scripts.
+CellMap Flow can be run from the command line or from a Python script. A script does what ``cellmap_flow_yaml`` does with a YAML file (see :doc:`yaml_config`): it builds the model configs, submits one inference server per model, and then serves the dashboard.
 
-First you need to define your model config, which can be ScriptModelConfig, DacapoModelConfig, BioModelConfig or FlyModelConfig. 
-Then you can call Flow.run with the appropriate parameters.
+First define your model configs: ``ScriptModelConfig``, ``DaCapoModelConfig``, ``BioModelConfig`` or ``FlyModelConfig``. Then pass them to ``run_multiple``.
 
 Prerequisites
 -------------
 
-You should also have access to a valid model checkpoint and appropriate computational resources (e.g., H100 GPUs).
+You need a valid model checkpoint and access to GPUs through LSF (e.g. the ``gpu_h100`` queue).
 
 Script
 ------
 
 .. code-block:: python
 
-    from cellmap_flow.globals import Flow
+    from cellmap_flow.cli.yaml_cli import run_multiple
+    from cellmap_flow.globals import g
     from cellmap_flow.models.models_config import FlyModelConfig
-    from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+    from cellmap_flow.norm.input_normalize import LambdaNormalizer, MinMaxNormalizer
+    from cellmap_flow.utils.bsub_utils import install_cleanup_handlers
 
-    queue = "gpu_h100"
-    charge_group = "CHARGE_GROUP"
-    model_scale = (8, 8, 8)
-    checkpoint_path = "../fly_organelles/run07/model_checkpoint_432000"
+    DATA_PATH = "/path/to/dataset.zarr/recon-1/em/fibsem-uint8/s1"
 
     model_config = FlyModelConfig(
-        checkpoint_path=checkpoint_path,
-        channels=["classes"] * 8,
-        input_voxel_size=model_scale,
-        output_voxel_size=model_scale,
-        name="FLY",
+        checkpoint_path="/path/to/fly_organelles/run07/model_checkpoint_432000",
+        channels=["mito", "er", "nucleus"],
+        input_voxel_size=(8, 8, 8),
+        output_voxel_size=(8, 8, 8),
+        name="fly_organelles",
     )
 
-    url = Flow.run(
-        zarr_path=DATA_PATH,
-        model_configs=[model_config],
-        queue=queue,
-        charge_group=charge_group,
-        input_normalizers=[
-            MinMaxNormalizer(min_value=0, max_value=255, invert=False)
-        ],
-        post_processors=[],
-    )
+    # The normalization every layer is served with, as json_data.input_norm
+    # would set it in a YAML file.
+    g.input_norms = [
+        MinMaxNormalizer(min_value=0, max_value=255),
+        LambdaNormalizer(expression="x*2-1"),
+    ]
 
-    print(url)
+    # Ctrl+C then kills the LSF jobs this script started.
+    install_cleanup_handlers()
+
+    run_multiple(
+        [model_config],
+        DATA_PATH,
+        charge_group="CHARGE_GROUP",
+        queue="gpu_h100",
+    )
 
 Explanation
 -----------
 
-- **queue**: Specifies the job queue (e.g., `gpu_h100`) used for resource allocation.
-- **charge_group**: Accounting group for compute billing.
-- **FlyModelConfig**: Configures the model parameters, including voxel size and checkpoint path.
-- **MinMaxNormalizer**: Scales input data from [0, 255] to [0, 1].
-- **Flow.run**: Launches the inference pipeline and returns a tracking URL.
+- **FlyModelConfig**: the model, its checkpoint, and its input and output voxel sizes.
+- **g.input_norms**: the input normalization chain. Left empty, the model sees the raw values.
+- **queue**: the LSF queue the inference servers are submitted to.
+- **charge_group**: the accounting group the GPU time is billed to.
+- **run_multiple**: starts one inference server per model and waits for each to report its address. Then it serves the dashboard with a prediction layer per model. It does not return. Stop it with Ctrl+C: ``install_cleanup_handlers()`` makes that kill the jobs it started, which ``cellmap_flow_yaml`` does for you.
 
-Output
-------
-
-The script prints a tracking URL to monitor the job or retrieve results.
-
-.. note::
-
-   Ensure `DATA_PATH` is set to the path of your input Zarr volume before running the script.
-
+If no model server starts, ``run_multiple`` raises ``JobStartError`` naming each failure.
