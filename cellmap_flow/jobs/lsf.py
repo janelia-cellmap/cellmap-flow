@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from cellmap_flow.jobs.ready import READY_ENV, read_ready_file
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import (
     Job,
@@ -47,17 +48,23 @@ class JobIdMissingError(RuntimeError):
 
 
 class LSFJob(Job):
-    """Job submitted to LSF cluster via bsub."""
+    """Job submitted to LSF cluster via bsub.
+
+    ``ready_file`` is where the job was asked to write its address (see
+    jobs/ready.py); wait_for_host looks there before asking LSF.
+    """
 
     def __init__(
         self,
         job_id: str,
         model_name: Optional[str] = None,
         log_file: Optional[Path] = None,
+        ready_file: Optional[Path] = None,
     ):
         super().__init__(model_name)
         self.job_id = job_id
         self.log_file = log_file
+        self.ready_file = Path(ready_file) if ready_file else None
         # Set by get_status() to say whether bjobs actually answered; see
         # observed_status().
         self._bjobs_answered = False
@@ -143,6 +150,23 @@ class LSFJob(Job):
             logger.debug(f"Error checking LSF job status: {e}")
             return self.status
 
+    def _host_from_ready_file(self) -> Optional[str]:
+        """The address the job wrote to its ready file, if it has yet.
+
+        The file is removed once read: it has said what it had to, and one
+        is left per submission otherwise. A server that predates the ready
+        file never writes one, and the caller falls back to bpeek.
+        """
+        if self.ready_file is None:
+            return None
+        host = read_ready_file(self.ready_file, job_id=self.job_id)
+        if host:
+            try:
+                self.ready_file.unlink()
+            except OSError:
+                pass
+        return host
+
     def _log_crash_output(self) -> None:
         crash_output = self.log_file and tail(self.log_file)
         if crash_output:
@@ -152,7 +176,8 @@ class LSFJob(Job):
 
     def wait_for_host(self, timeout: int = 300) -> Optional[str]:
         """
-        Monitor LSF job output using bpeek to extract host information.
+        Wait for the job to report its address: from its ready file when it
+        writes one, otherwise from its output through bpeek.
 
         ``timeout`` is wall-clock time, including however long bjobs and
         bpeek take to answer.
@@ -196,7 +221,24 @@ class LSFJob(Job):
             if remaining > 0:
                 time.sleep(min(0.5, remaining))
 
+        def found(host, source):
+            nonlocal total_pending
+            self.host = host
+            if pending_since is not None:
+                total_pending += time.monotonic() - pending_since
+            logger.info(
+                f"Found host: {host} (from {source}, "
+                f"{time.time() - wait_started:.0f}s after submission, "
+                f"{total_pending:.0f}s of it queued)"
+            )
+            return host
+
         while time.monotonic() < deadline:
+            # Before anything is asked of LSF: a file read costs mbatchd
+            # nothing, and once it is there neither bjobs nor bpeek is needed.
+            host = self._host_from_ready_file()
+            if host:
+                return found(host, "its ready file")
             try:
                 current_status = self.get_status()
                 answered = self._bjobs_answered
@@ -258,15 +300,7 @@ class LSFJob(Job):
                 if output:
                     host = extract_host_from_output(output)
                     if host:
-                        self.host = host
-                        if pending_since is not None:
-                            total_pending += time.monotonic() - pending_since
-                        logger.info(
-                            f"Found host: {host} "
-                            f"({time.time() - wait_started:.0f}s after submission, "
-                            f"{total_pending:.0f}s of it queued)"
-                        )
-                        return host
+                        return found(host, "bpeek")
 
                     # Check for errors, reporting each line once
                     for line in output.splitlines():
@@ -478,4 +512,7 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
         logger.info(f"Job {job_id} submitted successfully")
 
     log_file = log_dir / f"{log_stem(job_name)}_{job_id}.log"
-    return LSFJob(job_id=job_id, model_name=job_name, log_file=log_file)
+    ready_file = (spec.env or {}).get(READY_ENV)
+    return LSFJob(
+        job_id=job_id, model_name=job_name, log_file=log_file, ready_file=ready_file
+    )

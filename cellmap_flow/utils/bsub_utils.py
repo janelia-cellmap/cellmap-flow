@@ -53,6 +53,7 @@ from cellmap_flow.jobs import lsf as _lsf
 from cellmap_flow.jobs.local import LocalJob
 from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
+from cellmap_flow.jobs.ready import READY_ENV, ready_path
 from cellmap_flow.jobs.site import current_site as _current_site
 from cellmap_flow.jobs.spec import (
     Job,
@@ -134,6 +135,7 @@ def submit_bsub_job(
     walltime: Optional[str] = None,
     log_dir: Optional[Path] = None,
     bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECONDS,
+    env: Optional[dict] = None,
 ) -> LSFJob:
     """
     Submit a shell command to LSF using bsub; see cellmap_flow.jobs.lsf.submit.
@@ -152,6 +154,8 @@ def submit_bsub_job(
         bsub_timeout: Seconds to wait for bsub to answer, or None to wait as
             long as it takes (an over-ratio request is held for minutes
             before bsub returns)
+        env: Variables to set in the job's environment, on top of this
+            process's (which LSF copies into the job anyway)
 
     Returns:
         LSFJob object for the submitted job
@@ -172,6 +176,7 @@ def submit_bsub_job(
         # Read here, at call time, so that pointing SERVER_LOG_DIR elsewhere
         # takes effect.
         log_dir=Path(log_dir) if log_dir is not None else SERVER_LOG_DIR,
+        env=env,
     )
     return _lsf.submit(spec, bsub_timeout=bsub_timeout)
 
@@ -258,6 +263,11 @@ def start_hosts(
         logger.info(f"Queue order: {' -> '.join(candidates)}")
         submit_errors = []
         for index, candidate in enumerate(candidates):
+            # A new file for every submission, so a job that started late on
+            # a queue given up on cannot hand its address to the next one.
+            # A server too old to know the variable ignores it, and
+            # wait_for_host reads its marker through bpeek instead.
+            ready_file = ready_path(SERVER_LOG_DIR, job_name)
             try:
                 job = submit_bsub_job(
                     command,
@@ -265,6 +275,7 @@ def start_hosts(
                     charge_group,
                     job_name=f"{job_name}",
                     walltime=walltime,
+                    env={READY_ENV: str(ready_file)},
                 )
             except BsubTimeoutError:
                 # Not a refusal: the job may still appear on this queue, and

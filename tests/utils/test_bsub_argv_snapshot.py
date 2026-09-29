@@ -56,6 +56,8 @@ class Recorder:
         value = value.replace(sys.executable, "<python>").replace(sys.prefix, "<prefix>")
         value = value.replace(self.tmp, "<tmp>")
         value = re.sub(r"\d{8}_\d{6}", "<ts>", value)
+        # The random part of a ready file's name (jobs.ready.ready_path).
+        value = re.sub(r"_[0-9a-f]{8}\.ready$", "_<token>.ready", value)
         # tempfile.mkstemp's random part of a local run's log name.
         return re.sub(r"_local_[^/]*\.log$", "_local_<random>.log", value)
 
@@ -136,7 +138,8 @@ def test_a_server_submission(monkeypatch, tmp_path, log_dir):
                 "-P", "grp", "-q", "gpu_a100", "-gpu", "num=1", "-n", "4", "-W", "12:00",
                 "bash", "-c", SERVER_COMMAND,
             ],
-            "env": {},
+            # Where the server is to write its address (jobs/ready.py).
+            "env": {"CELLMAP_FLOW_READY_FILE": "<tmp>/server_logs/mito_model_<token>.ready"},
             "timeout": 30,
         },
     ]
@@ -349,6 +352,7 @@ JOBS_MODULES = [
     "cellmap_flow.jobs.lsf",
     "cellmap_flow.jobs.local",
     "cellmap_flow.jobs.queues",
+    "cellmap_flow.jobs.ready",
 ]
 
 

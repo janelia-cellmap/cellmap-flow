@@ -497,6 +497,12 @@ class CellMapFlowServer:
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
         logger.error(output)
         print(output, flush=True)
+        # The same news, for a launcher that asked for it as a file (see
+        # jobs/ready.py): it then needs no bpeek. Written at the same moment
+        # as the marker, so before the port below is bound.
+        from cellmap_flow.jobs.ready import write_ready_file
+
+        write_ready_file(address)
 
         self.app.run(
             host="0.0.0.0",
