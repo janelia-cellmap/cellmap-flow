@@ -34,7 +34,10 @@ def _pyramid(path, scales, translations=None, shapes=None, fill_index=True):
 
 
 def test_non_integer_voxel_sizes_are_not_truncated(tmp_path):
-    path = _pyramid(str(tmp_path / "f.zarr"), [(5.24, 4, 4)], shapes=[(200, 4, 4)])
+    # Translation half a voxel in, so voxel 0's corner is at the origin.
+    path = _pyramid(
+        str(tmp_path / "f.zarr"), [(5.24, 4, 4)], shapes=[(200, 4, 4)], translations=[(2.62, 2, 2)]
+    )
     voxel_size, _, _, roi, _, _ = get_ds_info(path + "/s0")
     assert tuple(voxel_size) == pytest.approx((5.24, 4.0, 4.0))
     assert tuple(roi.shape) == (1048, 16, 16)  # 200 * 5.24, not 200 * 5
@@ -60,11 +63,12 @@ def test_float_noise_from_unit_conversion_is_still_a_whole_number():
 
 
 def test_relabelled_scale_is_read_on_its_own_grid(tmp_path):
-    # 6 and 12 nm levels, both starting at 120 nm; a 16 nm model gets s1.
+    # 6 and 12 nm levels, both with their corner at 120 nm (OME translation
+    # is voxel 0's centre); a 16 nm model gets s1.
     path = _pyramid(
         str(tmp_path / "rl.zarr"),
         [(6, 6, 6), (12, 12, 12)],
-        translations=[(120, 120, 120)] * 2,
+        translations=[(123, 123, 123), (126, 126, 126)],
     )
     idi = ImageDataInterface(path, voxel_size=(16, 16, 16))
     assert idi.path.endswith("s1")
@@ -93,7 +97,7 @@ def test_an_exact_scale_is_unchanged(tmp_path):
     path = _pyramid(
         str(tmp_path / "ex.zarr"),
         [(6, 6, 6), (12, 12, 12)],
-        translations=[(120, 120, 120)] * 2,
+        translations=[(123, 123, 123), (126, 126, 126)],
     )
     idi = ImageDataInterface(path, voxel_size=(12, 12, 12))
     assert tuple(idi.roi.offset) == (120, 120, 120)

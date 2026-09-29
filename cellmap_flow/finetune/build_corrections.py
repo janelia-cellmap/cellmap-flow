@@ -112,8 +112,7 @@ def build_corrections(
     from cellmap_flow.dashboard.finetune_utils import create_annotation_volume_zarr
     from cellmap_flow.dashboard.routes.finetune.yaml_crops import _write_crop_into_volume
     from cellmap_flow.finetune.crop_loader import parse_crops_yaml
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.finetune.virtual_dataset import new_volume_geometry, write_manifest
     from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
 
     if os.path.isdir(output_dir) and any(
@@ -146,11 +145,9 @@ def build_corrections(
     eff_out_vs = np.array(get_raw_closest_scale(raw_dataset_path, tuple(claimed_out_vs)) or claimed_out_vs, dtype=float)
     eff_in_vs = np.array(get_raw_closest_scale(raw_dataset_path, tuple(claimed_in_vs)) or claimed_in_vs, dtype=float)
 
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=eff_out_vs)
-    dataset_offset_nm = np.array(idi.roi.offset, dtype=float)
-    dataset_shape_nm = np.array(idi.roi.shape, dtype=float)
-    dataset_shape_voxels = (dataset_shape_nm / eff_out_vs).astype(int)
-    dataset_shape_voxels = np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+    dataset_offset_nm, dataset_shape_voxels = new_volume_geometry(
+        raw_dataset_path, eff_out_vs, output_size
+    )
 
     os.makedirs(output_dir, exist_ok=True)
     volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"

@@ -102,6 +102,25 @@ def to_nm(values, units):
     return [float(v) * nm_per_unit(u) for v, u in zip(values, units)]
 
 
+def ome_corner(translation, scale):
+    """The lower corner of voxel 0, from an OME-NGFF ``translation``.
+
+    OME-NGFF places ``translation`` at the *centre* of voxel 0 (Neuroglancer's
+    ome.ts subtracts half a voxel for the same reason), while everything in
+    cellmap-flow works with corners. Janelia pyramids store
+    ``translation = scale/2 - 4`` per level, so every level's corner is -4 nm;
+    read as a corner, each level sat half its voxel off (s1 8 nm, s2 16 nm)
+    and the levels did not even agree with each other. ``translation`` and
+    ``scale`` must be in the same units.
+    """
+    return [float(t) - float(s) / 2 for t, s in zip(translation, scale)]
+
+
+def ome_translation(corner, scale):
+    """The OME-NGFF ``translation`` (voxel-0 centre) for a lower ``corner``."""
+    return [float(c) + float(s) / 2 for c, s in zip(corner, scale)]
+
+
 # Unit conversion leaves float noise (0.009 um -> 8.999999999999998 nm);
 # anything this close to a whole number is that number.
 _INTEGRAL_TOLERANCE = 1e-6
@@ -290,13 +309,14 @@ def get_scale_info_v3(group_path: str) -> Tuple[dict, dict, dict]:
 
         if spatial_indices is not None:
             resolutions[scale["path"]] = to_nm([full_res[i] for i in spatial_indices], units)
-            offsets[scale["path"]] = to_nm(
-                [full_translation[i] for i in spatial_indices], units
+            offsets[scale["path"]] = ome_corner(
+                to_nm([full_translation[i] for i in spatial_indices], units),
+                resolutions[scale["path"]],
             )
             shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
         else:
             resolutions[scale["path"]] = full_res
-            offsets[scale["path"]] = full_translation
+            offsets[scale["path"]] = ome_corner(full_translation, full_res)
             shapes[scale["path"]] = tuple(full_shape)
     return offsets, resolutions, shapes
 
@@ -348,7 +368,7 @@ def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
     chunk_shape = tuple(arr_meta["chunk_grid"]["configuration"]["chunk_shape"])
     if spatial_indices is not None:
         voxel_size = to_nm([scale[i] for i in spatial_indices], units)
-        offset = to_nm([translation[i] for i in spatial_indices], units)
+        offset = ome_corner(to_nm([translation[i] for i in spatial_indices], units), voxel_size)
         shape = tuple(arr_meta["shape"][i] for i in spatial_indices)
         axes_names = spatial_names
         # Spatial like the shape: a (c, z, y, x) array reported a 4-D chunk
@@ -356,7 +376,7 @@ def _ds_info_from_group_dataset(group_path: str, ms: dict, dataset_entry: dict):
         chunk_shape = tuple(chunk_shape[i] for i in spatial_indices)
     else:
         voxel_size = [float(v) for v in scale]
-        offset = [float(v) for v in translation]
+        offset = ome_corner(translation, scale)
         shape = tuple(arr_meta["shape"])
         axes_names = ["z", "y", "x"][-len(shape):]
     return voxel_size, offset, chunk_shape, shape, axes_names, "zarr"

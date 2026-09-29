@@ -172,7 +172,6 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     else:
         filetype = "precomputed"
 
-    layers = []
     if not wrap_raw:
         if is_precomputed:
             source = dataset_path
@@ -203,28 +202,24 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                     f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
                 ]
                 scales.sort(key=lambda x: int(x[1:]))
-            for scale in scales:
-                image = ImageDataInterface(
-                    _join_path(dataset_path, scale), normalize=normalize
-                )
-                # Use axes from the actual dataset - neuroglancer will use them as-is
-                layers.append(
-                    neuroglancer.LocalVolume(
-                        data=image.ts,
-                        dimensions=neuroglancer.CoordinateSpace(
-                            names=image.axes_names,
-                            units="nm",
-                            scales=image.voxel_size,
-                        ),
-                        voxel_offset=image.offset,
-                    )
-                )
+            images = [
+                ImageDataInterface(_join_path(dataset_path, scale), normalize=normalize)
+                for scale in scales
+            ]
+            layers = [_local_volume(image) for image in images]
+            # ScalePyramid serves every level as a downsampling of the finest
+            # one, so the finest level's corner places them all. That holds
+            # for pyramids whose levels share a corner (Janelia's all sit at
+            # -4 nm); a level with a different corner cannot be expressed.
+            finest = min(images, key=lambda image: tuple(image.voxel_size))
 
             # Previously this branch set no shader at all, which neuroglancer
             # reports back as the literal string "None" -- see the guard in
             # dashboard/routes/pipeline.py.
             return neuroglancer.ImageLayer(
-                dict(type=neuroglancer.LocalVolume, source=ScalePyramid(layers)),
+                source=neuroglancer.LayerDataSource(
+                    url=ScalePyramid(layers), transform=_corner_transform(finest)
+                ),
                 shader=_raw_shader(
                     [_join_path(dataset_path, sc) for sc in scales], normalize
                 ),
@@ -236,19 +231,46 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
     if not is_multiscale:
         image = ImageDataInterface(original_dataset_path)
         return neuroglancer.ImageLayer(
-            source=neuroglancer.LocalVolume(
-                data=image.ts,
-                dimensions=neuroglancer.CoordinateSpace(
-                    names=image.axes_names,
-                    units="nm",
-                    scales=image.voxel_size,
-                ),
-                voxel_offset=image.offset,
+            source=neuroglancer.LayerDataSource(
+                url=_local_volume(image), transform=_corner_transform(image)
             ),
             shader=_raw_shader(
                 [original_dataset_path], normalize, image_for_fallback=image
             ),
         )
+
+
+def _dimensions(image):
+    return neuroglancer.CoordinateSpace(
+        names=image.axes_names, units="nm", scales=image.voxel_size
+    )
+
+
+def _local_volume(image):
+    """``image`` as a LocalVolume indexed from 0; _corner_transform places it."""
+    return neuroglancer.LocalVolume(
+        data=image.ts,
+        dimensions=_dimensions(image),
+        voxel_offset=[0] * len(image.axes_names),
+    )
+
+
+def _corner_transform(image):
+    """The transform putting ``image``'s voxel 0 lower corner at its offset.
+
+    LocalVolume's own voxel_offset is a whole number of voxels, so it cannot
+    hold an OME corner such as -4 nm at 8 nm -- and it was being handed the
+    offset in nm, which drew any dataset not at the origin far from its data.
+    The matrix's translation is in voxels of the output dimensions.
+    """
+    rank = len(image.axes_names)
+    offset = np.asarray(image.offset, dtype=float)
+    voxel_size = np.asarray(image.voxel_size, dtype=float)
+    matrix = np.hstack([np.eye(rank), np.zeros((rank, 1))])
+    matrix[rank - len(offset):, rank] = offset / voxel_size
+    return neuroglancer.CoordinateSpaceTransform(
+        output_dimensions=_dimensions(image), matrix=matrix
+    )
 
 
 class ScalePyramid(neuroglancer.LocalVolume):

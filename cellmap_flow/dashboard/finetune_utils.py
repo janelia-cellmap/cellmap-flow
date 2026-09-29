@@ -299,6 +299,8 @@ def create_annotation_volume_zarr(
     Label scheme: 0=unannotated (ignored), 1=background, 2=foreground.
 
     Args:
+        dataset_offset_nm: the world position of voxel 0's *centre*, which is
+            also written as the OME translation (new_volume_geometry gives it).
         output_voxel_size, input_voxel_size: the EFFECTIVE voxel sizes used
             for the actual grid alignment (typically the dataset's closest
             available scale to the model's claimed voxel size).
@@ -322,7 +324,8 @@ def create_annotation_volume_zarr(
             fill_value=0,
         )
 
-        # OME-NGFF v0.4 metadata with translation for dataset offset
+        # dataset_offset_nm is voxel 0's centre, so it is the OME translation
+        # as it stands (see virtual_dataset.volume_corner_nm).
         physical_translation = [float(o) for o in dataset_offset_nm]
         transforms = [
             {"type": "scale", "scale": [float(v) for v in output_voxel_size]},
@@ -1075,6 +1078,7 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
     Returns:
         bool: True if correction was created (chunk had annotations)
     """
+    from cellmap_flow.finetune.virtual_dataset import volume_corner_nm
     from cellmap_flow.image_data_interface import ImageDataInterface
     from funlib.geometry import Roi, Coordinate
 
@@ -1083,7 +1087,7 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
     output_voxel_size = np.array(volume_metadata["output_voxel_size"])
     input_size = np.array(volume_metadata["input_size"])
     input_voxel_size = np.array(volume_metadata["input_voxel_size"])
-    dataset_offset_nm = np.array(volume_metadata["dataset_offset_nm"])
+    volume_corner = volume_corner_nm(volume_metadata["dataset_offset_nm"], output_voxel_size)
     corrections_dir = volume_metadata["corrections_dir"]
 
     vol_zarr_path = volume_metadata["zarr_path"]
@@ -1104,7 +1108,7 @@ def extract_correction_from_chunk(volume_id, chunk_indices, volume_metadata):
         return False
 
     # Compute physical position of this chunk's center
-    chunk_offset_nm = dataset_offset_nm + np.array(
+    chunk_offset_nm = volume_corner + np.array(
         [z_start, y_start, x_start]
     ) * output_voxel_size
     chunk_center_nm = chunk_offset_nm + (chunk_size * output_voxel_size) / 2

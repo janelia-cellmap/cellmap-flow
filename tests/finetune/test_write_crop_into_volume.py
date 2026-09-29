@@ -19,8 +19,8 @@ from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
 from cellmap_flow.finetune.crop_loader import CropEntry
 
 
-def _make_8nm_crop(tmp, data, translation=(160.0, 160.0, 160.0)):
-    path = os.path.join(tmp, "crop_8nm.zarr")
+def _make_crop(tmp, data, translation=(160.0, 160.0, 160.0), voxel_size=8.0):
+    path = os.path.join(tmp, "crop.zarr")
     grp = zarr.open_group(path, mode="w")
     grp.attrs["multiscales"] = [
         {
@@ -29,7 +29,7 @@ def _make_8nm_crop(tmp, data, translation=(160.0, 160.0, 160.0)):
                 {
                     "path": "s0",
                     "coordinateTransformations": [
-                        {"type": "scale", "scale": [8.0, 8.0, 8.0]},
+                        {"type": "scale", "scale": [voxel_size] * 3},
                         {"type": "translation", "translation": list(translation)},
                     ],
                 }
@@ -45,7 +45,7 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
     def test_mismatched_voxel_size_is_resampled_not_written_as_is(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = np.ones((8, 8, 8), dtype=np.uint8)
-            crop_path = _make_8nm_crop(tmp, data, translation=(160.0, 160.0, 160.0))
+            crop_path = _make_crop(tmp, data, translation=(160.0, 160.0, 160.0))
 
             zarr_path = os.path.join(tmp, "volume.zarr")
             output_voxel_size = (16.0, 16.0, 16.0)
@@ -109,52 +109,51 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
         self.assertEqual(down.shape, (2, 2, 2))
         self.assertTrue(np.all(down == 5))
 
-    def test_offset_correction_for_half_voxel_shift(self):
-        """write_voxel_offset must add half the crop's *native* voxel size
-        to its translation before dividing by the volume's (coarser) voxel
-        size -- collapsing multiple fine voxels into one coarse voxel shifts
-        that coarse voxel's true center by half a fine voxel, the same
-        +scale_fine/2 accumulation OME-NGFF's own multiscale pyramids apply
-        between levels (confirmed on jrc_axolotl-heart-1's own zarr.json:
-        s0->s1->s2 translations are 0 -> 4 -> 12nm).
+    def _first_written_voxel(self, tmp, crop_path):
+        zarr_path = os.path.join(tmp, "volume.zarr")
+        output_voxel_size = (16.0, 16.0, 16.0)
+        success, info = create_annotation_volume_zarr(
+            zarr_path=zarr_path,
+            dataset_shape_voxels=(32, 32, 32),
+            output_voxel_size=output_voxel_size,
+            dataset_offset_nm=(0.0, 0.0, 0.0),
+            chunk_size=(32, 32, 32),
+            dataset_path="unused",
+            model_name="test_model",
+            input_size=(32, 32, 32),
+            input_voxel_size=output_voxel_size,
+        )
+        self.assertTrue(success, info)
 
-        translation=70nm crosses a rounding boundary depending on whether
-        this correction is applied: round(70/16)=4 (no correction, the old
-        buggy behavior) vs round((70+4)/16)=5 (corrected) -- so this
-        directly catches a regression to the old behavior, not just a
-        sub-voxel wobble."""
+        volume_meta = {
+            "zarr_path": zarr_path,
+            "output_voxel_size": list(output_voxel_size),
+            "dataset_offset_nm": [0.0, 0.0, 0.0],
+        }
+        _write_crop_into_volume(volume_meta, CropEntry(path=crop_path, fg_ids=[1]))
+
+        written = np.asarray(zarr.open(zarr_path, mode="r")["annotation/s0"][:])
+        return np.argwhere(written >= 2).min(axis=0)
+
+    def test_a_downsampled_crop_is_placed_corner_to_corner(self):
+        """Both translations are voxel-0 centres, so the corners are 4 nm
+        below the crop's 70 and 8 nm below the volume's 0. The crop's corner,
+        66, is 74 nm = 4.6 volume voxels up, so it lands in voxel 5. Reading
+        the translation itself as the position gave round(70/16) = 4."""
         with tempfile.TemporaryDirectory() as tmp:
             data = np.ones((8, 8, 8), dtype=np.uint8)
-            crop_path = _make_8nm_crop(tmp, data, translation=(70.0, 70.0, 70.0))
+            crop_path = _make_crop(tmp, data, translation=(70.0, 70.0, 70.0))
+            self.assertTrue(np.array_equal(self._first_written_voxel(tmp, crop_path), [5, 5, 5]))
 
-            zarr_path = os.path.join(tmp, "volume.zarr")
-            output_voxel_size = (16.0, 16.0, 16.0)
-            success, info = create_annotation_volume_zarr(
-                zarr_path=zarr_path,
-                dataset_shape_voxels=(32, 32, 32),
-                output_voxel_size=output_voxel_size,
-                dataset_offset_nm=(0.0, 0.0, 0.0),
-                chunk_size=(32, 32, 32),
-                dataset_path="unused",
-                model_name="test_model",
-                input_size=(32, 32, 32),
-                input_voxel_size=output_voxel_size,
-            )
-            self.assertTrue(success, info)
-
-            volume_meta = {
-                "zarr_path": zarr_path,
-                "output_voxel_size": list(output_voxel_size),
-                "dataset_offset_nm": [0.0, 0.0, 0.0],
-            }
-            entry = CropEntry(path=crop_path, fg_ids=[1])
-            _write_crop_into_volume(volume_meta, entry)
-
-            vol = zarr.open(zarr_path, mode="r")
-            written = np.asarray(vol["annotation/s0"][:])
-            fg_positions = np.argwhere(written >= 2)
-            lo = fg_positions.min(axis=0)
-            self.assertTrue(np.array_equal(lo, [5, 5, 5]))
+    def test_a_4x_downsampled_crop_is_placed_corner_to_corner(self):
+        """The fixed +fine/2 that stood in for the corners was only right at
+        2x. A 4 nm crop centred at 4 has its corner at 2; its first 16 nm
+        block spans [2, 18), mostly volume voxel 1 ([8, 24)), where +fine/2
+        rounded (4 + 2) / 16 down to voxel 0."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data = np.ones((16, 16, 16), dtype=np.uint8)
+            crop_path = _make_crop(tmp, data, translation=(4.0, 4.0, 4.0), voxel_size=4.0)
+            self.assertTrue(np.array_equal(self._first_written_voxel(tmp, crop_path), [1, 1, 1]))
 
 
 if __name__ == "__main__":

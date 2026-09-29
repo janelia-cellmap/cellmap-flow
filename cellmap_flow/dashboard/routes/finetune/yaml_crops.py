@@ -73,7 +73,7 @@ from cellmap_flow.finetune.crop_loader import (
     parse_crops_yaml,
     remap_labels,
 )
-from cellmap_flow.finetune.virtual_dataset import write_manifest
+from cellmap_flow.finetune.virtual_dataset import new_volume_geometry, volume_corner_nm, write_manifest
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,6 @@ def _create_session_annotation_volume(
     Mirrors the body of ``create_annotation_volume_response`` minus the
     HTTP-shaped response wrapping; returns the freshly-built ``(volume_id, meta)``.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
     from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
 
     read_shape = np.array(config.read_shape)
@@ -127,12 +126,8 @@ def _create_session_annotation_volume(
         eff_output_vs = claimed_output_voxel_size
         eff_input_vs = claimed_input_voxel_size
 
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=eff_output_vs)
-    dataset_offset_nm = np.array(idi.roi.offset)
-    dataset_shape_nm = np.array(idi.roi.shape)
-    dataset_shape_voxels = (dataset_shape_nm / eff_output_vs).astype(int)
-    dataset_shape_voxels = (
-        np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+    dataset_offset_nm, dataset_shape_voxels = new_volume_geometry(
+        raw_dataset_path, eff_output_vs, output_size
     )
 
     volume_id = (
@@ -291,19 +286,6 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
             # apply.
             remapped = zoom(remapped, scale_ratio, order=0, grid_mode=True, mode="nearest")
 
-        # Collapsing multiple fine voxels into one coarse voxel shifts that
-        # coarse voxel's true center by half a *fine* voxel relative to the
-        # crop's own translate (which refers to fine voxel 0's center) --
-        # this is the same +scale_fine/2 accumulation OME-NGFF's own
-        # multiscale pyramids apply between levels (confirmed on this
-        # dataset's own zarr.json: s0->s1->s2 translations are
-        # 0 -> 4 -> 12nm). Omitting it introduces a systematic, one-sided
-        # sub-voxel offset -- confirmed by directly overlaying the written
-        # volume against the source crop in neuroglancer.
-        src_offset_nm = src_offset_nm + np.where(
-            scale_ratio < 1.0, src_voxel_size_nm / 2.0, 0.0
-        )
-
     t3 = time.time()
     n_fg = int(np.count_nonzero(remapped >= 2))
     t_count = time.time() - t3
@@ -313,9 +295,13 @@ def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
         f"remap={t_remap:.2f}s count_fg={t_count:.2f}s"
     )
 
-    dataset_offset_nm = np.array(volume_meta["dataset_offset_nm"], dtype=float)
+    # Corner to corner: resampling keeps the crop's lower corner where it
+    # was (block voting and grid_mode zoom both align the grids' edges), so
+    # no per-factor shift is needed. Comparing centres needed one, and the
+    # fixed +fine/2 used for it was only right for a factor of 2.
+    volume_corner = volume_corner_nm(volume_meta["dataset_offset_nm"], eff_output_vs)
     write_voxel_offset = np.round(
-        (src_offset_nm - dataset_offset_nm) / eff_output_vs
+        (src_offset_nm - volume_corner) / eff_output_vs
     ).astype(int)
     z0, y0, x0 = write_voxel_offset.tolist()
     sz, sy, sx = remapped.shape

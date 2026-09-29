@@ -11,6 +11,7 @@ from cellmap_flow.dashboard.finetune_utils import (
     sync_all_annotations_from_minio,
     sync_annotation_from_minio,
 )
+from cellmap_flow.finetune.virtual_dataset import volume_corner_nm
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
@@ -184,11 +185,12 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     if vol_meta.get("type") != "annotation_volume":
                         continue
                     voxel = vol_meta.get("output_voxel_size")
-                    dataset_offset = vol_meta.get("dataset_offset_nm", [0, 0, 0])
+                    dataset_offset = vol_meta.get("dataset_offset_nm")
                     if not voxel:
                         continue
                     voxel_arr = np.array(voxel, dtype=np.float64)
-                    dataset_offset_arr = np.array(dataset_offset, dtype=np.float64)
+                    # Boxes are drawn from voxel edges, i.e. from the corner.
+                    corner_arr = volume_corner_nm(dataset_offset, voxel_arr)
 
                     # Pass 1: yellow boxes for each imported crop.
                     imported = vol_meta.get("imported_crops") or []
@@ -204,7 +206,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         bbox_off_list.append(offset_arr)
                         bbox_end_list.append(offset_arr + shape_arr)
                         lo = (
-                            dataset_offset_arr
+                            corner_arr
                             + offset_arr.astype(np.float64) * voxel_arr
                         )
                         hi = lo + shape_arr.astype(np.float64) * voxel_arr
@@ -255,11 +257,11 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         ):
                             continue
                         lo = (
-                            dataset_offset_arr
+                            corner_arr
                             + chunk_lo_vox.astype(np.float64) * voxel_arr
                         )
                         hi = (
-                            dataset_offset_arr
+                            corner_arr
                             + chunk_hi_vox.astype(np.float64) * voxel_arr
                         )
                         boxes.append(

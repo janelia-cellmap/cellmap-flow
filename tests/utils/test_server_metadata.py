@@ -24,13 +24,20 @@ def test_served_array_reaches_the_end_of_offset_raw_data(tmp_path):
     )
     client = server.app.test_client()
 
+    # The output grid starts at the raw data's corner, 32 nm, so the served
+    # array covers 32-96 nm: 8 voxels, the last chunk 64-96 nm.
     meta = get_json(client, "/plain/s0/.zarray")
-    assert meta["shape"][:3] == [12, 12, 12]
+    assert meta["shape"][:3] == [8, 8, 8]
 
-    # The last chunk covers 64-96 nm, which is real data.
-    response = client.get("/plain/s0/2.2.2.0")
+    response = client.get("/plain/s0/1.1.1.0")
     chunk = decode_chunk(server, response.data, meta["dtype"], meta["chunks"])
     assert np.all(chunk == 5)
+
+    # OME translation is voxel 0's centre: the 32 nm corner plus half a voxel.
+    attrs = get_json(client, "/plain/.zattrs")
+    transforms = attrs["multiscales"][0]["datasets"][0]["coordinateTransformations"]
+    translation = next(t["translation"] for t in transforms if t["type"] == "translation")
+    assert translation[:3] == [36.0, 36.0, 36.0]
 
 
 @pytest.mark.parametrize(

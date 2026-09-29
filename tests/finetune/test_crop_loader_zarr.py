@@ -107,10 +107,11 @@ class CropLoaderZarrTests(unittest.TestCase):
                 tmp, data, voxel_size=(4.0, 4.0, 4.0), translation=(10.0, 20.0, 30.0)
             )
 
-            sub, scale, translation = _read_voxel_size_and_offset(path)
+            sub, scale, offset = _read_voxel_size_and_offset(path)
             self.assertEqual(sub, ("s0",))
             self.assertTrue(np.array_equal(scale, [4.0, 4.0, 4.0]))
-            self.assertTrue(np.array_equal(translation, [10.0, 20.0, 30.0]))
+            # The OME translation is voxel 0's centre; the offset is its corner.
+            self.assertTrue(np.array_equal(offset, [8.0, 18.0, 28.0]))
 
             arr = _open_array(path, sub)
             self.assertTrue(np.array_equal(arr[:], data))
@@ -122,10 +123,11 @@ class CropLoaderZarrTests(unittest.TestCase):
                 tmp, data, voxel_size=(4.0, 4.0, 4.0), translation=(10.0, 20.0, 30.0)
             )
 
-            sub, scale, translation = _read_voxel_size_and_offset(path)
+            sub, scale, offset = _read_voxel_size_and_offset(path)
             self.assertEqual(sub, ("s0",))
             self.assertTrue(np.array_equal(scale, [4.0, 4.0, 4.0]))
-            self.assertTrue(np.array_equal(translation, [10.0, 20.0, 30.0]))
+            # The OME translation is voxel 0's centre; the offset is its corner.
+            self.assertTrue(np.array_equal(offset, [8.0, 18.0, 28.0]))
 
             arr = _open_array(path, sub)
             self.assertTrue(np.array_equal(arr[:], data))
@@ -253,5 +255,5 @@ class MissingCropPathTests(unittest.TestCase):
             path = _v2_multiscale_group(tmp, data, (8, 8, 8), (16, 32, 48))
             sub, voxel_size, offset = _read_voxel_size_and_offset(path)
             self.assertEqual(tuple(voxel_size), (8, 8, 8))
-            self.assertEqual(tuple(offset), (16, 32, 48))
+            self.assertEqual(tuple(offset), (12, 28, 44))
             self.assertTrue(sub)

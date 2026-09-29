@@ -19,10 +19,21 @@ from cellmap_flow.utils import zarr_v3
 def generate_singlescale_metadata(
     arr_name: str,
     voxel_size: list,
-    translation: list,
+    offset: list,
     units: str,
     axes: list,
 ):
+    """OME-NGFF 0.4 multiscales attrs for one array whose voxel 0 has its
+    lower corner at ``offset``.
+
+    OME translation is the *centre* of voxel 0, so spatial axes get
+    ``offset + voxel_size / 2``. Writing the corner there put every output
+    half a voxel off in Neuroglancer and in any OME reader.
+    """
+    translation = [
+        float(o) if axis in ("c", "c^") else float(o) + float(v) / 2
+        for axis, o, v in zip(axes, offset, voxel_size)
+    ]
     z_attrs: dict = {"multiscales": [{}]}
 
     # Create axes with proper types - channel axis should have type "channel"
@@ -82,13 +93,14 @@ def get_scale_info(zarr_grp):
             resolutions[scale["path"]] = zarr_v3.to_nm(
                 [full_res[i] for i in spatial_indices], units
             )
-            offsets[scale["path"]] = zarr_v3.to_nm(
-                [full_translation[i] for i in spatial_indices], units
+            offsets[scale["path"]] = zarr_v3.ome_corner(
+                zarr_v3.to_nm([full_translation[i] for i in spatial_indices], units),
+                resolutions[scale["path"]],
             )
             shapes[scale["path"]] = tuple(full_shape[i] for i in spatial_indices)
         else:
             resolutions[scale["path"]] = full_res
-            offsets[scale["path"]] = full_translation
+            offsets[scale["path"]] = zarr_v3.ome_corner(full_translation, full_res)
             shapes[scale["path"]] = full_shape
     return offsets, resolutions, shapes
 
@@ -978,6 +990,12 @@ def check_for_attrs_multiscale(ds, multiscale_group, multiscales):
                             offset = pick(attr["translation"])
                     if units is None and voxel_size is not None:
                         units = [None] * len(voxel_size)
+                    if voxel_size is not None:
+                        # translation is voxel 0's centre, and 0 when absent.
+                        offset = zarr_v3.ome_corner(
+                            offset if offset is not None else [0.0] * len(voxel_size),
+                            voxel_size,
+                        )
                     return voxel_size, offset, units
 
     return voxel_size, offset, units
@@ -995,12 +1013,15 @@ def _read_attrs(ds, order="C"):
         TypeError: incorrect data type of the input(ds) array.
         ValueError: returns value error if no multiscale attribute was found
     Returns:
-        _type_: _description_
+        (voxel_size, offset, units, offset_is_ome_corner). The last is True when
+        the offset is a corner converted from an OME translation, which is
+        exact and must not be rounded onto the voxel grid.
     """
     voxel_size = None
     offset = None
     units = None
     multiscales = None
+    from_ome = False
 
     if not isinstance(ds, zarr.core.Array):
         raise TypeError(
@@ -1021,6 +1042,7 @@ def _read_attrs(ds, order="C"):
             voxel_size, offset, units = check_for_attrs_multiscale(
                 ds, multiscale_group, multiscales
             )
+            from_ome = voxel_size is not None
 
     # if multiscale attribute is missing
     if voxel_size is None:
@@ -1035,9 +1057,9 @@ def _read_attrs(ds, order="C"):
 
     if voxel_size is not None and offset is not None and units is not None:
         if order == "F" or isinstance(ds.store, (zarr.n5.N5Store, zarr.n5.N5FSStore)):
-            return voxel_size[::-1], offset[::-1], units[::-1]
+            return voxel_size[::-1], offset[::-1], units[::-1], from_ome
         else:
-            return voxel_size, offset, units
+            return voxel_size, offset, units, from_ome
 
     # if no voxel offset are found in transform, offset or scale, check in n5 multiscale attribute:
     if (
@@ -1061,9 +1083,9 @@ def _read_attrs(ds, order="C"):
         Warning(f"No units attribute was found. Using {units} as default.")
 
     if order == "F":
-        return voxel_size[::-1], offset[::-1], units[::-1]
+        return voxel_size[::-1], offset[::-1], units[::-1], from_ome
     else:
-        return voxel_size, offset, units
+        return voxel_size, offset, units, from_ome
 
 
 def regularize_offset(voxel_size_float, offset_float):
@@ -1109,7 +1131,7 @@ def regularize_offset(voxel_size_float, offset_float):
 
 def _read_voxel_size_offset(ds, order="C"):
 
-    voxel_size, offset, units = _read_attrs(ds, order)
+    voxel_size, offset, units, from_ome = _read_attrs(ds, order)
     if isinstance(units, str) or units is None:
         units = [units] * len(voxel_size)
     # Everything downstream is in nanometers. Only the literal "um" was
@@ -1118,6 +1140,14 @@ def _read_voxel_size_offset(ds, order="C"):
     voxel_size = zarr_v3.to_nm(voxel_size, units)
     offset = zarr_v3.to_nm(offset, units)
 
+    if from_ome:
+        # An OME corner is exact, and usually not a multiple of the voxel size
+        # (-4 nm at 8 nm for Janelia data); rounding it onto the voxel grid
+        # would undo the centre-to-corner conversion.
+        return (
+            tuple(float(v) for v in zarr_v3.snap_integral(voxel_size)),
+            tuple(float(v) for v in zarr_v3.snap_integral(offset)),
+        )
     return regularize_offset(voxel_size, offset)
 
 
@@ -1149,7 +1179,9 @@ def _ome_level_info(group, leaf, ds):
         [0.0] * len(scale_transform),
     )
     voxel_size = zarr_v3.to_nm([scale_transform[i] for i in spatial_indices], units)
-    offset = zarr_v3.to_nm([translation[i] for i in spatial_indices], units)
+    offset = zarr_v3.ome_corner(
+        zarr_v3.to_nm([translation[i] for i in spatial_indices], units), voxel_size
+    )
     shape = tuple(ds.shape[i] for i in spatial_indices)
     chunk_shape = tuple(ds.chunks[i] for i in spatial_indices)
     return voxel_size, offset, chunk_shape, shape, list(spatial_names), "zarr"

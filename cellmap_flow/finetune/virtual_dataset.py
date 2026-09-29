@@ -59,6 +59,8 @@ import torch
 import zarr
 from torch.utils.data import Dataset
 
+from cellmap_flow.utils import zarr_v3
+
 logger = logging.getLogger(__name__)
 
 _CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -201,7 +203,7 @@ class VirtualPatchDataset(Dataset):
         )
         self._effective_rehearsal_fraction: float = 0.0  # set in _build_index
         # Centres of the good regions, in annotation voxels. Built in
-        # _build_index once dataset_offset_nm is known.
+        # _build_index once the volume's corner is known.
         self._rehearsal_centers: Optional[np.ndarray] = None
 
         # Input normalization to apply to every raw patch the dataset emits.
@@ -242,7 +244,9 @@ class VirtualPatchDataset(Dataset):
                 "model will see different inputs at train vs inference time."
             )
 
-        self.dataset_offset_nm: np.ndarray = np.zeros(3)
+        # World position of annotation voxel 0's lower corner (see
+        # volume_corner_nm); voxel v spans corner + v * output_voxel_size.
+        self.volume_corner_nm: np.ndarray = np.zeros(3)
         self.volume_shape_voxels: np.ndarray = np.zeros(3, dtype=int)
         # Two-pool stratified sampling: dense FG voxels live inside any
         # imported_crops bbox; sparse FG voxels are everywhere else
@@ -284,8 +288,8 @@ class VirtualPatchDataset(Dataset):
         # sparse (outside).
         with open(os.path.join(self.volume_zarr_path, ".zattrs")) as f:
             root_attrs = json.load(f)
-        self.dataset_offset_nm = np.array(
-            root_attrs.get("dataset_offset_nm", [0, 0, 0]), dtype=float
+        self.volume_corner_nm = volume_corner_nm(
+            root_attrs.get("dataset_offset_nm"), self.output_voxel_size
         )
         imported = root_attrs.get("imported_crops", []) or []
         # Bbox list as two stacked (M, 3) arrays for vectorized membership
@@ -482,7 +486,7 @@ class VirtualPatchDataset(Dataset):
                 logger.warning(f"Skipping malformed good region: {region!r}")
                 continue
             centre_nm = offset_nm + shape_nm / 2.0
-            centre_voxels = (centre_nm - self.dataset_offset_nm) / self.output_voxel_size
+            centre_voxels = (centre_nm - self.volume_corner_nm) / self.output_voxel_size
             # A region marked against a different volume would sample pure
             # out-of-bounds zeros and quietly anchor the model to nothing.
             if np.any(centre_voxels < 0) or np.any(
@@ -559,9 +563,16 @@ class VirtualPatchDataset(Dataset):
             ).astype(np.float64)
             ann_center_voxels = anchor_zyx + jitter_offset
 
-        # Convert annotation-space voxel center to physical (nm) for the raw read.
+        # The patch is whole voxels, [c - size/2, c + size/2), so move c to
+        # the nearest centre that makes that exact. Otherwise the annotation
+        # patch was cut at int(c - size/2) while the raw was read around c
+        # itself: half a voxel apart for an odd output size, and for a good
+        # region, whose centre falls anywhere. The raw is then read around
+        # the patch actually taken: the corner plus c voxels.
+        half = self.output_size / 2
+        ann_center_voxels = np.floor(ann_center_voxels - half + 0.5) + half
         ann_center_nm = (
-            self.dataset_offset_nm + ann_center_voxels * self.output_voxel_size
+            self.volume_corner_nm + ann_center_voxels * self.output_voxel_size
         )
 
         ann_patch = self._read_annotation_patch(ann_center_voxels)
@@ -840,6 +851,38 @@ class VirtualPatchDataset(Dataset):
 # ---------------------------------------------------------------------------
 
 VIRTUAL_MANIFEST_FILENAME = "_virtual_sources.json"
+
+
+def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
+    """The world position of an annotation volume's voxel-0 lower corner, in nm.
+
+    ``dataset_offset_nm`` (a root attr of every volume) is also written as the
+    volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
+    Neuroglancer drew the volume that way while it was painted, so that is
+    where the labels are. Reading the value as a corner, as this code used to,
+    put every label half an annotation voxel away from where it was drawn.
+    """
+    offset = np.zeros(3) if dataset_offset_nm is None else dataset_offset_nm
+    return np.asarray(zarr_v3.ome_corner(offset, output_voxel_size), dtype=float)
+
+
+def new_volume_geometry(raw_dataset_path: str, output_voxel_size, chunk_size):
+    """``(dataset_offset_nm, shape_voxels)`` for a new volume over a raw dataset.
+
+    The volume lies on the grid of the raw level at ``output_voxel_size`` (the
+    grid predictions are made on), from that level's corner, padded to whole
+    chunks. ``dataset_offset_nm`` is voxel 0's centre; see volume_corner_nm.
+    """
+    from cellmap_flow.image_data_interface import ImageDataInterface
+
+    output_voxel_size = np.asarray(output_voxel_size, dtype=float)
+    chunk_size = np.asarray(chunk_size, dtype=int)
+    idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
+    offset = np.asarray(
+        zarr_v3.ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size)
+    )
+    shape = (np.asarray(idi.roi.shape, dtype=float) / output_voxel_size).astype(int)
+    return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
 
 
 def has_painted_annotations(volume_zarr_path: str) -> bool:

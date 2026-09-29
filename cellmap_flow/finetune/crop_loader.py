@@ -139,6 +139,10 @@ def _read_voxel_size_and_offset(
 ) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
     """Return ``(array_subpath, voxel_size_nm, offset_nm)`` for an annotation zarr.
 
+    ``offset_nm`` is the lower corner of voxel 0. An OME-NGFF translation is
+    voxel 0's centre, so half a voxel is taken off it; the legacy
+    ``transform``/``offset`` attributes are corners already.
+
     Handles three layouts:
         1. Multiscale group with ``multiscales`` -> first scale's array.
         2. Plain ``zarr.Array`` with ``transform``/``resolution`` attrs.
@@ -189,7 +193,7 @@ def _read_voxel_size_and_offset(
                     scale = np.array(tx["scale"], dtype=float)
                 elif tx.get("type") == "translation":
                     translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, translation
+            return (sub,), scale, np.array(zarr_v3.ome_corner(translation, scale))
         if "s0" in node:
             return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
         raise ValueError(
@@ -229,7 +233,7 @@ def _read_voxel_size_and_offset_v3(
                     scale = np.array(tx["scale"], dtype=float)
                 elif tx.get("type") == "translation":
                     translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, translation
+            return (sub,), scale, np.array(zarr_v3.ome_corner(translation, scale))
         if zarr_v3.is_v3_container(os.path.join(zarr_path, "s0")):
             return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
         raise ValueError(

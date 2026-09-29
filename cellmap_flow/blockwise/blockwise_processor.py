@@ -283,13 +283,19 @@ class CellMapFlowBlockwiseProcessor:
         )
         self.output_arrays = []
 
-        # The raw extent in the frame the reader uses: its offset, and its
-        # shape at the model's input voxel size.
+        # The output grid starts at the corner of the raw level the model
+        # reads (whole nanometers), so every output voxel sits exactly on the
+        # input voxels it is computed from; anchored at 0 it was half a raw
+        # voxel off Janelia data, whose corner is -4 nm. The whole-volume
+        # output is the raw extent, shrunk to whole output voxels.
+        self.grid_origin = Coordinate(
+            int(v) for v in np.round(np.array(self.idi_raw.offset, dtype=float))
+        )
         raw_roi = daisy.Roi(
-            self.idi_raw.roi.offset,
+            self.grid_origin,
             Coordinate(self.idi_raw.shape) * self.input_voxel_size,
         )
-        self.full_output_roi = raw_roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+        self.full_output_roi = self._snap_to_output_grid(raw_roi)
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
         self.separate_zarrs = self.config.get("separate_bounding_boxes_zarrs", False)
@@ -299,7 +305,7 @@ class CellMapFlowBlockwiseProcessor:
             offset = tuple(bounding_box.get("offset", [0, 0, 0]))
             shape = tuple(bounding_box.get("shape", [0, 0, 0]))
             roi = daisy.Roi(offset, shape)
-            roi2 = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+            roi2 = self._snap_to_output_grid(roi)
             if roi2 != roi:
                 logger.warning(f"Bounding box ROI {roi} was not aligned to output voxel size grid {self.output_voxel_size}, it has been adjusted to {roi2} to avoid misalignment issues.")
             roi = roi2
@@ -401,26 +407,26 @@ class CellMapFlowBlockwiseProcessor:
                         if len(channel_indices) > 1:
                             # 4D metadata
                             metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
-                            metadata_translation = list(final_offset)
+                            metadata_offset = list(final_offset)
                             metadata_units = [""] + ["nanometer"] * 3
                             metadata_axes = ["c", "z", "y", "x"]
                         else:
                             # 3D metadata
                             metadata_voxel_size = self.output_voxel_size
-                            metadata_translation = list(final_offset)
+                            metadata_offset = list(final_offset)
                             metadata_units = ["nanometer"] * 3
                             metadata_axes = ["z", "y", "x"]
                     else:
                         # List format - 3D metadata
                         metadata_voxel_size = self.output_voxel_size
-                        metadata_translation = list(final_offset)
+                        metadata_offset = list(final_offset)
                         metadata_units = ["nanometer"] * 3
                         metadata_axes = ["z", "y", "x"]
 
                     zattrs = generate_singlescale_metadata(
                         arr_name="s0",
                         voxel_size=metadata_voxel_size,
-                        translation=metadata_translation,
+                        offset=metadata_offset,
                         units=metadata_units,
                         axes=metadata_axes,
                     )
@@ -430,7 +436,11 @@ class CellMapFlowBlockwiseProcessor:
                             logger.info(f"Old multiscales: {old_multiscales}")
                             logger.info(f"New multiscales: {zattrs['multiscales']}")
                             raise ValueError(
-                                f"multiscales attribute already exists in {z_store.path} and is different from the new one"
+                                f"multiscales attribute already exists in {z_store.path} and is "
+                                "different from the new one. If it was written by an older "
+                                "cellmap-flow, which placed outputs half a voxel off (OME "
+                                "translation is a voxel centre), its blocks are on a different "
+                                "grid: write to a new output path instead of resuming."
                             )
                     zg.attrs["multiscales"] = zattrs["multiscales"]
                 except Exception as e:
@@ -446,6 +456,12 @@ class CellMapFlowBlockwiseProcessor:
                 except Exception as e:
                     raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
             self.output_arrays.append(array)
+
+    def _snap_to_output_grid(self, roi):
+        """``roi`` shrunk onto the output voxel grid anchored at grid_origin."""
+        shifted = daisy.Roi(roi.offset - self.grid_origin, roi.shape)
+        snapped = shifted.snap_to_grid(self.output_voxel_size, mode="shrink")
+        return daisy.Roi(snapped.offset + self.grid_origin, snapped.shape)
 
     def process_fn(self, block):
         # logger.error(f"Processing block {block}")
@@ -599,7 +615,7 @@ class CellMapFlowBlockwiseProcessor:
                 offset = tuple(bbox.get("offset", [0, 0, 0]))
                 shape = tuple(bbox.get("shape", [0, 0, 0]))
                 roi = daisy.Roi(offset, shape)
-                roi = roi.snap_to_grid(self.output_voxel_size, mode="shrink")
+                roi = self._snap_to_output_grid(roi)
                 rois_to_process.append(roi)
                 logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
         else:

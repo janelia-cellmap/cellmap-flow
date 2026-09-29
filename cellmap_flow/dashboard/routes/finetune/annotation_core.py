@@ -255,7 +255,7 @@ def create_annotation_crop_response(data):
 
 def create_annotation_volume_response(data):
     try:
-        from cellmap_flow.image_data_interface import ImageDataInterface
+        from cellmap_flow.finetune.virtual_dataset import new_volume_geometry
         from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
 
         model_name = data.get("model_name")
@@ -296,12 +296,9 @@ def create_annotation_volume_response(data):
             effective_output_voxel_size = claimed_output_voxel_size
             effective_input_voxel_size = claimed_input_voxel_size
 
-        idi = ImageDataInterface(dataset_path, voxel_size=effective_output_voxel_size)
-        dataset_roi = idi.roi
-        dataset_offset_nm = np.array(dataset_roi.offset)
-        dataset_shape_nm = np.array(dataset_roi.shape)
-        dataset_shape_voxels = (dataset_shape_nm / effective_output_voxel_size).astype(int)
-        dataset_shape_voxels = np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+        dataset_offset_nm, dataset_shape_voxels = new_volume_geometry(
+            dataset_path, effective_output_voxel_size, output_size
+        )
 
         volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         _, corrections_dir = ensure_corrections_storage(output_path)

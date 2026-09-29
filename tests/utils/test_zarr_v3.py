@@ -184,7 +184,8 @@ class ZarrV3Tests(unittest.TestCase):
                 zarr_v3.get_ds_info_v3(os.path.join(group_path, "s1"))
             )
             self.assertEqual(tuple(voxel_size), (8, 8, 8))
-            self.assertEqual(tuple(roi.offset), (1, 2, 3))
+            # s1's translation (1, 2, 3) is voxel 0's centre; corner = t - 8/2.
+            self.assertEqual(tuple(roi.offset), (-3, -2, -1))
             self.assertEqual(tuple(shape), (2, 2, 2))
 
     def test_find_closest_scale_v3_none_target_defaults_to_first_scale(self):

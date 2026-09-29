@@ -107,7 +107,8 @@ def test_s3_goes_through_the_generic_remote_reader(tmp_path, monkeypatch):
     assert len(info) == 6
     voxel_size, chunk_shape, shape, roi, axes, filetype = info
     assert tuple(voxel_size) == (8, 8, 8)
-    assert tuple(roi.offset) == (10, 10, 10)
+    # OME translation is voxel 0's centre: 10 at 8 nm is a corner at 6.
+    assert tuple(roi.offset) == (6, 6, 6)
     assert tuple(shape) == (2, 2, 2) and axes == ["z", "y", "x"]
 
 
@@ -121,7 +122,8 @@ def test_multichannel_ome_zarr_keeps_its_voxel_size(tmp_path):
     )
     voxel_size, chunk_shape, shape, roi, _, _ = get_ds_info(path + "/s0")
     assert tuple(voxel_size) == (8, 4, 4)
-    assert tuple(roi.offset) == (80, 40, 40)
+    # Translation (80, 40, 40) is voxel 0's centre; its corner is half a voxel lower.
+    assert tuple(roi.offset) == (76, 38, 38)
     assert tuple(shape) == (4, 4, 4) and tuple(chunk_shape) == (2, 2, 2)
 
 
@@ -139,7 +141,8 @@ def test_micrometer_units_are_converted_to_nanometers(tmp_path):
     )
     voxel_size, _, _, roi, _, _ = get_ds_info(path + "/s0")
     assert tuple(voxel_size) == (8, 4, 4)
-    assert tuple(roi.offset) == (80, 40, 40)
+    # 0.08 um is 80 nm, voxel 0's centre; the corner is half a voxel lower.
+    assert tuple(roi.offset) == (76, 38, 38)
     # Scale selection compares nanometers too.
     assert ImageDataInterface(path, voxel_size=(16, 8, 8)).path.endswith("s1")
 

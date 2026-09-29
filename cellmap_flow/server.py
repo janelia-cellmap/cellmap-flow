@@ -23,6 +23,7 @@ from cellmap_flow.utils.web_utils import (
     get_free_port,
 )
 from cellmap_flow.utils.restart_token import TOKEN_HEADER, tokens_match
+from cellmap_flow.utils import zarr_v3
 from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 
 from cellmap_flow.globals import g
@@ -90,6 +91,11 @@ class CellMapFlowServer:
         self.idi_raw = ImageDataInterface(
             dataset_name, voxel_size=self.input_voxel_size
         )
+        # The output grid starts at the corner of the raw level the model
+        # reads, so every output voxel sits exactly on the input voxels it is
+        # computed from. Anchored at 0 it was half a raw voxel off Janelia
+        # data, whose corner is -4 nm. Whole nanometers: Roi is integral.
+        self.origin = np.round(np.array(self.idi_raw.offset, dtype=float)).astype(int)
         self.axes = self.idi_raw.axes_names.copy()
         # remove channel axis if present can be c^, c, or channel
         for axis_name in ["c^", "c", "channel"]:
@@ -287,15 +293,12 @@ class CellMapFlowServer:
         self.swagger = Swagger(self.app, config=swagger_config)
 
     def _served_spatial_shape(self):
-        """Output voxels from world 0 to the end of the raw data.
-
-        The served array has translation 0, so it has to reach roi.end, not
-        just roi.shape: for raw data with a non-zero offset, the far end of
-        the dataset was never requested at all.
-        """
-        roi_end = np.array(self.idi_raw.roi.end, dtype=float)
+        """Output voxels from the grid origin to the end of the raw data."""
+        raw_end = np.array(self.idi_raw.offset, dtype=float) + np.array(
+            self.idi_raw.shape, dtype=float
+        ) * np.array(self.idi_raw.voxel_size, dtype=float)
         output_voxel_size = np.array(self.output_voxel_size, dtype=float)
-        return [int(v) for v in np.ceil(roi_end / output_voxel_size)]
+        return [int(v) for v in np.ceil((raw_end - self.origin) / output_voxel_size)]
 
     def _chain_for(self, dataset) -> ServedChain:
         """The chain the requested layer URL carries, built once per URL.
@@ -359,7 +362,9 @@ class CellMapFlowServer:
                 float(self.output_voxel_size[i] * scale_factor)
                 for i in range(len(self.output_voxel_size))
             ]
-            translation_values = [0.0] * len(self.output_voxel_size)
+            # OME translation is the centre of voxel 0, so the grid's corner
+            # plus half a voxel; Neuroglancer then draws voxel 0 at the origin.
+            translation_values = zarr_v3.ome_translation(self.origin, scale_values)
             if self.has_channel:
                 scale_values.append(1.0)
                 translation_values.append(0.0)
@@ -421,7 +426,7 @@ class CellMapFlowServer:
         block = np.array(self._spatial_block)
         corner = block * np.array([chunk_z, chunk_y, chunk_x])
         box = np.array([corner, block]) * self.output_voxel_size
-        roi = Roi(box[0], box[1])
+        roi = Roi(tuple(int(v) for v in self.origin + box[0]), tuple(int(v) for v in box[1]))
         chunk_data = self.inferencer.process_chunk(
             self.idi_raw,
             roi,
