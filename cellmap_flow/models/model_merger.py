@@ -150,11 +150,3 @@ def get_model_merger(merger_name: str) -> ModelMerger:
     raise ValueError(
         f"Unknown merger: {merger_name}. Available mergers: {available}"
     )
-
-
-# Convenience mapping for common merge mode strings
-MERGE_MODE_MAP = {
-    "AND": "AndModelMerger",
-    "OR": "OrModelMerger",
-    "SUM": "SumModelMerger",
-}
