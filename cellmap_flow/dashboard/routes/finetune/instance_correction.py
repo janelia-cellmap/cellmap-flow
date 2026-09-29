@@ -8,11 +8,18 @@ Three ``*_response(data)`` handlers:
   from MinIO to a local destination
 - ``cc3d_relabel_annotation_response``: split a fused label via
   26-connectivity cc3d
+
+The volumes are ordinary annotation volumes (``type: annotation_volume``),
+registered under the id their MinIO bucket key names, so the periodic sync,
+the pull before every mirror, session listing and the overlay handle them
+like any other.
 """
 import logging
 import os
 
 import neuroglancer
+import numpy as np
+import zarr
 from flask import jsonify
 
 from cellmap_flow.dashboard.finetune_utils import (
@@ -22,9 +29,70 @@ from cellmap_flow.dashboard.finetune_utils import (
     minio_backing_store_populated,
     sync_instance_correction_from_minio,
 )
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
+from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
+
+# The type the first version of these volumes wrote. Nothing reads it:
+# every reader wants "annotation_volume".
+_LEGACY_TYPE = "instance_annotation_volume"
+
+
+def _error(message, status=400, **extra):
+    return jsonify({"success": False, "error": message, **extra}), status
+
+
+def _seed_geometry(model_name, dataset_path):
+    """The model geometry a seeded volume records, without building the model.
+
+    The same sources as create-volume (the running server, then the geometry
+    cache) and the same snapping of the input voxel size to a raw scale.
+    Returns ``(kwargs, None)`` or ``(None, error_response)``.
+    """
+    from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
+
+    model_config, error_response = _get_selected_model_config(model_name)
+    if error_response is not None:
+        return None, error_response
+    config = resolve_model_geometry(model_name, model_config)
+    claimed_input_voxel_size = np.array(config.input_voxel_size, dtype=float)
+    claimed_output_voxel_size = np.array(config.output_voxel_size, dtype=float)
+    try:
+        input_voxel_size = np.array(
+            get_raw_closest_scale(dataset_path, tuple(claimed_input_voxel_size))
+            or claimed_input_voxel_size
+        )
+    except Exception:
+        input_voxel_size = claimed_input_voxel_size
+    return {
+        "input_size": (np.array(config.read_shape) / claimed_input_voxel_size).astype(int).tolist(),
+        "input_voxel_size": input_voxel_size.tolist(),
+        # One chunk per training sample, as in every annotation volume.
+        "chunk_size": (np.array(config.write_shape) / claimed_output_voxel_size).astype(int).tolist(),
+        "claimed_input_voxel_size": claimed_input_voxel_size.tolist(),
+        "claimed_output_voxel_size": claimed_output_voxel_size.tolist(),
+    }, None
+
+
+def _register_volume(volume_id, zarr_path, corrections_dir, minio_url):
+    """Record the volume as annotation_volume records are kept, keeping the
+    chunk state the pull before the mirror just recorded."""
+    attrs = dict(zarr.open(zarr_path, mode="r").attrs)
+    entry = g.annotation_volumes.setdefault(volume_id, {"chunk_sync_state": {}})
+    entry.update(
+        zarr_path=zarr_path,
+        model_name=attrs.get("model_name", ""),
+        output_size=attrs.get("chunk_size"),
+        input_size=attrs.get("input_size"),
+        input_voxel_size=attrs.get("input_voxel_size"),
+        output_voxel_size=attrs.get("output_voxel_size"),
+        dataset_path=attrs.get("dataset_path", ""),
+        dataset_offset_nm=attrs.get("dataset_offset_nm"),
+        corrections_dir=corrections_dir,
+        minio_url=minio_url,
+    )
 
 
 def create_instance_correction_response(data):
@@ -32,12 +100,12 @@ def create_instance_correction_response(data):
 
     Two modes:
 
-    - **Fresh seed (default, reuse_existing=False)**: reads a uint32 instance
-      zarr (from run_postprocess_on_subvolume.py), computes a dilation shell
-      around each instance as "confident background", and writes a uint16
-      annotation zarr in cellmap-flow's AffinityTargetTransform label scheme
-      (0=unannotated, 1=background shell, 2+=instance IDs). Then serves via
-      MinIO and wires a writable SegmentationLayer into the viewer.
+    - **Fresh seed (default, reuse_existing=False)**: reads an instance
+      zarr, computes a dilation shell around each instance as "confident
+      background", and writes a uint16 annotation zarr in cellmap-flow's
+      AffinityTargetTransform label scheme (0=unannotated, 1=background
+      shell, 2+=instance IDs). Then serves via MinIO and wires a writable
+      SegmentationLayer into the viewer.
 
     - **Reuse existing (reuse_existing=True)**: skips the seeding step
       entirely and reattaches to an already-annotation-formatted zarr.
@@ -48,14 +116,19 @@ def create_instance_correction_response(data):
           preferred path for dated-snapshot workflows), or
         - omit `source_zarr_path` and the route falls back to the
           conventional `<output_dir>/<roi_name>_annotation.zarr`
-          location (Patch 41b historical behavior).
+          location.
       The path must already exist and contain `annotation/s0/`;
-      `instance_zarr_path` is ignored in this mode.
+      `instance_zarr_path` is ignored in this mode. Strokes MinIO already
+      holds under the ROI's bucket key are pulled into that zarr before it
+      is mirrored, as for every annotation volume, so reattaching never
+      drops unsaved edits; to start again from an older snapshot, give it
+      a new roi_name.
 
     The MinIO bucket object is always named `<roi_name>_annotation.zarr`
     regardless of the source path on disk. This keeps the bucket name
     stable across sessions so save / sync routes can always target the
-    same bucket key without knowing which snapshot was loaded.
+    same bucket key without knowing which snapshot was loaded. The volume
+    is registered as `<roi_name>_annotation`, the key without ".zarr".
 
     POST body:
       roi_name:               str, required (short label, e.g. "roi3")
@@ -64,7 +137,8 @@ def create_instance_correction_response(data):
       source_zarr_path:       str, optional (reuse_existing=True only)
                               explicit path to an existing annotation zarr
       dilation_radius_voxels: int, default 5 (fresh-seed mode only)
-      model_name:             str, default "mito_aff_trichocyst"
+      model_name:             str, required if reuse_existing=False: the
+                              model whose geometry the volume records
       annotation_dtype:       "uint16" (default) or "uint32" (fresh-seed only)
       output_dir:             str, default = sibling/instance_corrections/
                               (required if reuse_existing=True without
@@ -72,76 +146,31 @@ def create_instance_correction_response(data):
       layer_name:             NG layer name, default "{roi_name}_annotation"
 
     Returns:
-      {success, zarr_path, minio_url, neuroglancer_url, layer_name,
-       reload_page, mode: "fresh_seed" or "reuse_existing"}
+      {success, volume_id, zarr_path, minio_url, neuroglancer_url,
+       layer_name, reload_page, mode: "fresh_seed" or "reuse_existing"}
     """
     try:
         instance_zarr_path = data.get("instance_zarr_path")
         roi_name = data.get("roi_name")
         reuse_existing = bool(data.get("reuse_existing", False))
         source_zarr_path = data.get("source_zarr_path")
+        model_name = data.get("model_name")
         if not roi_name:
-            return (
-                jsonify({"success": False, "error": "roi_name is required"}),
-                400,
-            )
+            return _error("roi_name is required")
+        if getattr(g, "viewer", None) is None:
+            return _error("viewer not initialized")
         if not reuse_existing:
             if source_zarr_path:
-                return (
-                    jsonify({
-                        "success": False,
-                        "error": (
-                            "source_zarr_path is only valid when "
-                            "reuse_existing=True"
-                        ),
-                    }),
-                    400,
-                )
+                return _error("source_zarr_path is only valid when reuse_existing=True")
             if not instance_zarr_path:
-                return (
-                    jsonify({
-                        "success": False,
-                        "error": (
-                            "instance_zarr_path is required when "
-                            "reuse_existing=False"
-                        ),
-                    }),
-                    400,
-                )
+                return _error("instance_zarr_path is required when reuse_existing=False")
             if not os.path.exists(instance_zarr_path):
-                return (
-                    jsonify({
-                        "success": False,
-                        "error": f"instance_zarr_path does not exist: {instance_zarr_path}",
-                    }),
-                    400,
-                )
+                return _error(f"instance_zarr_path does not exist: {instance_zarr_path}")
+            if not model_name:
+                return _error("model_name is required when reuse_existing=False")
 
         dilation_radius = int(data.get("dilation_radius_voxels", 5))
-        model_name = data.get("model_name", "mito_aff_trichocyst")
         annotation_dtype = data.get("annotation_dtype", "uint16")
-
-        # Resolve model config to pull input_size / input_voxel_size.
-        model_config = None
-        for mc in getattr(g, "models_config", []):
-            if getattr(mc, "name", None) == model_name:
-                model_config = mc.config
-                break
-        if model_config is None:
-            return (
-                jsonify({
-                    "success": False,
-                    "error": f"model '{model_name}' not found in dashboard config",
-                }),
-                400,
-            )
-        # model_config.read_shape is in nm; the zarr attr is expected in
-        # voxel units (see extract_correction_from_chunk's read_shape_nm =
-        # input_size * input_voxel_size). Convert before passing through.
-        input_voxel_size = list(model_config.input_voxel_size)
-        input_size = [
-            int(ns / vs) for ns, vs in zip(model_config.read_shape, input_voxel_size)
-        ]
 
         # Resolve output_dir (MinIO backing store location) and
         # effective_zarr_path (what gets uploaded into the MinIO bucket).
@@ -153,7 +182,7 @@ def create_instance_correction_response(data):
         #   derive output_dir as the snapshot's grandparent so MinIO's
         #   .minio/ lands alongside instance_corrections, not inside a
         #   per-ROI subdir. Override with `output_dir` if needed.
-        # - Reuse without source_zarr_path (Patch 41b historical):
+        # - Reuse without source_zarr_path:
         #   require output_dir, effective_zarr_path is the conventional
         #   <output_dir>/<roi_name>_annotation.zarr.
         if reuse_existing:
@@ -224,6 +253,9 @@ def create_instance_correction_response(data):
                     }),
                     400,
                 )
+            root = zarr.open(effective_zarr_path, mode="r+")
+            if root.attrs.get("type") == _LEGACY_TYPE:
+                root.attrs["type"] = "annotation_volume"
             logger.info(
                 f"Reattaching paintable layer for {roi_name}: "
                 f"{effective_zarr_path} (reuse_existing)"
@@ -277,15 +309,22 @@ def create_instance_correction_response(data):
                 f"{instance_zarr_path} -> {effective_zarr_path}"
             )
 
+            dataset_path = getattr(g, "dataset_path", None)
+            if not dataset_path:
+                return _error("No dataset path configured")
+            geometry, error_response = _seed_geometry(model_name, dataset_path)
+            if error_response is not None:
+                return error_response
             success, info = create_instance_annotation_volume_from_seg(
                 output_zarr_path=effective_zarr_path,
                 instance_zarr_path=instance_zarr_path,
-                dataset_path=g.dataset_path,
+                dataset_path=dataset_path,
                 model_name=model_name,
-                input_size=input_size,
-                input_voxel_size=input_voxel_size,
                 dilation_radius_voxels=dilation_radius,
                 annotation_dtype=annotation_dtype,
+                input_norm_config=current_input_norm_config(),
+                postprocess_config=current_postprocess_config(),
+                **geometry,
             )
             if not success:
                 return jsonify({"success": False, "error": info}), 500
@@ -293,20 +332,19 @@ def create_instance_correction_response(data):
         # MinIO + viewer wiring. mc_target_name pins the bucket object key
         # to the stable `<roi_name>_annotation.zarr` name regardless of the
         # on-disk source filename (important for multi-ROI workflows where
-        # the source is a dated snapshot).
-        volume_id = f"{roi_name}_instance_annotation"
+        # the source is a dated snapshot). The sync finds a volume's chunks
+        # by its id, so the id is that key without ".zarr". A record from
+        # an earlier attach may point at another snapshot: drop it, so the
+        # pull before the mirror fills this zarr from the whole bucket.
+        volume_id = mc_target_name[: -len(".zarr")]
+        g.annotation_volumes.pop(volume_id, None)
         minio_url = ensure_minio_serving(
             effective_zarr_path,
             volume_id,
             output_base_dir=output_dir,
             mc_target_name=mc_target_name,
         )
-
-        if not hasattr(g, "viewer") or g.viewer is None:
-            return (
-                jsonify({"success": False, "error": "viewer not initialized"}),
-                400,
-            )
+        _register_volume(volume_id, effective_zarr_path, output_dir, minio_url)
 
         layer_name = data.get("layer_name", f"{roi_name}_annotation")
         with g.viewer.txn() as s:
@@ -329,6 +367,7 @@ def create_instance_correction_response(data):
         return jsonify({
             "success": True,
             "mode": "reuse_existing" if reuse_existing else "fresh_seed",
+            "volume_id": volume_id,
             "zarr_path": effective_zarr_path,
             "minio_url": minio_url,
             "neuroglancer_url": f"{minio_url}/annotation",
@@ -336,12 +375,8 @@ def create_instance_correction_response(data):
             "reload_page": True,
         })
     except Exception as e:
-        logger.error(f"Error creating instance correction: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Error creating instance correction: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
-
-
 
 
 def sync_instance_correction_response(data):

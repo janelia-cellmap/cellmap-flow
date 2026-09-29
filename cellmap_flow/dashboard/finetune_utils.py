@@ -415,12 +415,14 @@ def _start_minio(output_base_dir):
     start_periodic_sync()
 
 
-def _pull_painted_chunks(zarr_path, volume_id):
+def _pull_painted_chunks(zarr_path, volume_id, mc_target_name=None):
     """Sync the volume's chunks from MinIO into ``zarr_path``, if MinIO has any.
 
     A fresh volume has nothing in the bucket yet; that costs one request.
+    ``mc_target_name`` is the volume's bucket key when it is not the zarr's
+    own name.
     """
-    zarr_name = Path(zarr_path).name
+    zarr_name = mc_target_name or Path(zarr_path).name
     try:
         s3 = _make_s3_filesystem()
         if not s3.exists(f"{minio_state['bucket']}/{zarr_name}/annotation/s0"):
@@ -439,15 +441,10 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_nam
         zarr_path: Path to zarr file to upload
         crop_id: Unique identifier for the crop
         output_base_dir: Base output directory (MinIO will use output_base_dir/.minio)
-        mc_target_name: Optional override for the MinIO bucket object name.
-            Defaults to `basename(zarr_path)` (the historical behavior).
-            When provided, `mc mirror` is invoked with this as the target
-            directory name instead, producing a MinIO URL like
-            `http://.../bucket/<mc_target_name>/...` regardless of the
-            source filename on disk. Used by the multi-ROI workflow
-            (Patch 44) to keep a stable bucket name across sessions even
-            when the source is a dated snapshot like
-            `roi3_20260414_144600.zarr`.
+        mc_target_name: The bucket key, when it is not ``basename(zarr_path)``:
+            instance corrections keep one key per ROI whichever snapshot on
+            disk is served. ``crop_id`` must then be the key without
+            ".zarr", since the sync finds a volume's chunks by its id.
 
     Returns:
         MinIO URL for the zarr file
@@ -462,7 +459,7 @@ def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_nam
     # anything painted since the last sync -- up to 30 s of strokes, or all
     # of them for a resumed session whose .minio holds strokes never synced
     # -- would be overwritten by a stale local chunk. Pull those first.
-    _pull_painted_chunks(zarr_path, crop_id)
+    _pull_painted_chunks(zarr_path, crop_id, mc_target_name)
 
     # Upload zarr file. mc_target_name, when given, is the bucket key in
     # place of the zarr's own name.
@@ -1031,6 +1028,7 @@ def create_instance_annotation_volume_from_seg(
     dilation_radius_voxels=5,
     chunk_size=None,
     annotation_dtype="uint16",
+    **volume_attrs,
 ):
     """Seed a paintable annotation volume from an existing instance zarr.
 
@@ -1040,47 +1038,56 @@ def create_instance_annotation_volume_from_seg(
       1 = background (confident — the dilation shell around each instance)
       2+ = instance IDs (one distinct label per mitochondrion)
 
-    The annotation volume's shape/offset/resolution match the input instance
-    zarr, so NG renders it at the same physical location as the source.
+    The volume lies on the instance zarr's grid (shape, voxel size and
+    position), so neuroglancer draws it over the segmentation it came from.
+    It is an ordinary ``annotation_volume``, only with instance-id labels
+    and a wider dtype, so the periodic sync, the pull before a mirror,
+    session listing and the overlay all treat it like any other volume.
 
     Args:
         output_zarr_path: Where to write the new annotation zarr.
-        instance_zarr_path: Path to the uint32 instance zarr produced by
-            `run_postprocess_on_subvolume.py` (must have per-scale `.zattrs`
-            with `resolution` and `offset`, and an `s0` scale).
-        dataset_path: Raw EM zarr path (for `extract_correction_from_chunk`
-            to pull raw context later during training-data extraction).
-        model_name: Model identifier (e.g. "mito_aff_trichocyst").
-        input_size: Model's read_shape as 3-vector (e.g. [178, 178, 178]).
-        input_voxel_size: Model's input voxel size in nm (e.g. [16, 16, 16]).
+        instance_zarr_path: A zarr group whose ``s0`` holds the instance ids,
+            with OME multiscales or ``resolution``/``offset`` attributes.
+        dataset_path: The raw dataset the volume annotates.
+        model_name: The model the volume is for.
+        input_size: The model's input shape, in voxels.
+        input_voxel_size: The model's input voxel size in nm.
         dilation_radius_voxels: Number of voxels to dilate each instance by
             to form the background shell. 5 @ 16nm output = 80 nm shell.
-        chunk_size: Annotation chunks z,y,x. Defaults to the model write_shape
-            (56 for mito_aff), which matches the training-data convention.
-        annotation_dtype: "uint16" (up to 65534 instances, enough for our
-            ROIs which have 1192–2610) or "uint32" for larger workloads.
+        chunk_size: Annotation chunks z,y,x; defaults to the instance
+            array's own chunks. Each chunk is one training sample, so the
+            dashboard passes the model's output shape.
+        annotation_dtype: "uint16" (up to 65534 instances) or "uint32".
+        volume_attrs: passed on to create_annotation_volume_zarr
+            (claimed voxel sizes, input_norm_config, postprocess_config).
 
     Returns:
         (success: bool, zarr_path_or_error: str)
     """
     from scipy.ndimage import binary_dilation
 
-    if chunk_size is None:
-        chunk_size = [56, 56, 56]
+    from cellmap_flow.io.metadata import read_array_meta
+    from cellmap_flow.io.ome import ome_translation
 
-    # Read source metadata from the instance zarr's s0 .zattrs (same path the
-    # dashboard's extra_layers loader uses via get_raw_layer).
+    s0_path = os.path.join(instance_zarr_path, "s0")
     try:
-        src_s0 = zarr.open(os.path.join(instance_zarr_path, "s0"), mode="r")
+        # OME multiscales or resolution/offset attributes alike; the
+        # translation it gives is voxel 0's lower corner, in nm.
+        meta = read_array_meta(s0_path).spatial()
+        src_s0 = zarr.open(s0_path, mode="r")
     except Exception as e:
         return False, f"Failed to open instance zarr s0: {e}"
-    src_attrs = dict(src_s0.attrs)
-    try:
-        source_offset_nm = [float(v) for v in src_attrs["offset"]]
-        source_voxel_size = [float(v) for v in src_attrs["resolution"]]
-    except KeyError as e:
-        return False, f"instance zarr s0 missing attr: {e}"
+    source_voxel_size = [float(v) for v in meta.voxel_size]
+    if all(v == 1.0 for v in source_voxel_size):
+        # read_array_meta's fallback when the array says nothing.
+        return False, f"{s0_path} has no voxel size in its metadata"
+    # dataset_offset_nm is voxel 0's centre, the OME translation (see
+    # virtual_dataset.volume_corner_nm). The corner put the seeded labels
+    # half a voxel off the segmentation they were seeded from.
+    source_offset_nm = ome_translation(meta.translation, source_voxel_size)
     source_shape = tuple(src_s0.shape)
+    if chunk_size is None:
+        chunk_size = list(src_s0.chunks)
     logger.info(
         f"Seeding annotation volume from {instance_zarr_path}: "
         f"shape={source_shape}, offset_nm={source_offset_nm}, "
@@ -1134,7 +1141,7 @@ def create_instance_annotation_volume_from_seg(
         input_size=list(input_size),
         input_voxel_size=list(input_voxel_size),
         annotation_dtype=annotation_dtype,
-        annotation_type="instance_annotation_volume",
+        **volume_attrs,
     )
     if not success:
         return False, info
@@ -1142,7 +1149,14 @@ def create_instance_annotation_volume_from_seg(
     # Write the seeded annotation into annotation/s0.
     try:
         root = zarr.open(output_zarr_path, mode="r+")
-        root["annotation/s0"][:] = annotation
+        # Chunks with no labels stay unwritten, as in any volume: the
+        # trainer and the overlay count the chunks on disk as annotated.
+        s0 = zarr.open_array(
+            os.path.join(output_zarr_path, "annotation", "s0"),
+            mode="r+",
+            write_empty_chunks=False,
+        )
+        s0[:] = annotation
         # Record the seed source + parameters so we can re-seed later
         # without losing track of what this zarr was made from.
         root.attrs["seed_source_instance_zarr"] = str(instance_zarr_path)
@@ -1180,9 +1194,12 @@ def minio_backing_store_populated(output_dir, zarr_name):
     exists and contains any entries, the backing store is considered
     populated and re-seeding should be refused.
     """
-    s0_backing = (
-        Path(output_dir) / ".minio" / "annotations" / zarr_name / "annotation" / "s0"
-    )
+    # A running MinIO keeps its data where it was first started, which need
+    # not be this output_dir.
+    running = minio_state["process"] is not None and minio_state["process"].poll() is None
+    base = minio_state.get("output_base") if running else output_dir
+    root = Path(base) / ".minio" if base else Path("~/.minio-server").expanduser()
+    s0_backing = root / minio_state["bucket"] / zarr_name / "annotation" / "s0"
     if not s0_backing.exists():
         return False
     try:
