@@ -14,8 +14,6 @@ import fastmorph
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 from cellmap_flow.utils.safe_expression import compile_expression
 
-postprocessing_lock = threading.Lock()
-
 logger = logging.getLogger(__name__)
 
 
@@ -119,25 +117,16 @@ class MortonSegmentationRelabeling(PostProcessor):
     def _process(self, data, chunk_corner, chunk_num_voxels):
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
-        #        if self.use_exact:
         morton_order_number = pymorton.interleave(*chunk_corner)
         unique_increment = chunk_num_voxels * morton_order_number
         if not self.use_exact:
             mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
             mixed ^= mixed >> 16
             unique_increment = mixed & 0xFFFF
-            # with postprocessing_lock:
-            # unique_increment = self.num_previous_segments
-            # self.num_previous_segments += len(
-            #     fastremap.unique(to_process[to_process > 0])
-            # )
 
         to_process[to_process > 0] += unique_increment.astype(to_process.dtype)
         data[self.channel] = to_process
         return data
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -208,12 +197,6 @@ class AffinityPostprocessor(PostProcessor):
         unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256
-            # https://chatgpt.com/c/67c5db69-a3cc-8001-8be5-21d00cef0a8f
-            # mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
-            # mixed ^= mixed >> 16
-            # unique_increment = mixed & 0xFFFF  # with postprocessing_lock:
-            # unique_increment = self.num_previous_segments
-            # self.num_previous_segments += len(filtered_fragments)
 
         # numpy has no common integer type for uint64 and int64, so
         # ``np.result_type(np.uint64, np.int64)`` is float64 -- an in-place add of a
@@ -224,15 +207,8 @@ class AffinityPostprocessor(PostProcessor):
         # promotion, which is why this never reproduced with literal values.)
         segmentation[segmentation > 0] += np.uint64(unique_increment)
         segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
-        # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
-
-        # filtered_fragments = np.array(filtered_fragments, dtype=segmentation.dtype)
-        # data[self.channel] = to_process
         # insert empty dimension
         return np.expand_dims(segmentation, axis=0)
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -310,11 +286,7 @@ class SimpleBlockwiseMerger(PostProcessor):
             for key in self.keys_to_skip:
                 self.chunk_slice_position_to_coords_id_dict.pop(key, None)
             self.calculate_equivalences()
-        # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
         return data.astype(np.uint64 if self.use_exact else np.uint16)
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     def calculate_equivalences(self):
         chunk_slice_position_to_coords_id_dict = (
@@ -365,9 +337,6 @@ class ChannelSelection(PostProcessor):
         data = data[self.channels, :, :, :]
         return data
 
-    # def to_dict(self):
-    #     return {"name": self.name()}
-
     @property
     def num_channels(self):
         return len(self.channels)
@@ -380,9 +349,6 @@ class LambdaPostprocessor(PostProcessor):
 
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))
-
-    # def to_dict(self):
-    #     return {"name": self.name(), "expression": self.expression}
 
     @property
     def dtype(self):

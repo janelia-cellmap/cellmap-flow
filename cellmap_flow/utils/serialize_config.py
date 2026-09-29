@@ -25,13 +25,6 @@ class Config:
                 # which recursed until RecursionError.
                 elms.append(f"{k}: <function {getattr(v, '__name__', '?')}>")
                 continue
-            # if isinstance(v, np.ndarray):
-            #     elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
-            # elif inspect.ismodule(v):
-            #     elms.append(f"{k}: <module '{v.__name__}'>\n")
-            # elif k=="checkpoint" or k=="model":
-            #     elms.append(f"{k}\n")
-            # else:
             elms.append(f"{k}: {v}")
         newline = '\n'
         return f"{type(self).__name__}({newline.join(elms)})"
