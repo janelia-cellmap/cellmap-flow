@@ -1,19 +1,13 @@
 """The ready file: a server writes its address, and the launcher reads it first.
 
-On LSF a launcher learned where a server was only by polling bpeek, which
-asks mbatchd for the job's whole output so far, twice a second for every job
-it waits on. Told where to, a server now also writes its address to a file
-as it prints the marker, and the launcher reads that before asking LSF
-anything. A server from before this ignores the variable, and the launcher
-falls back to bpeek.
-
-LSF is never called: subprocess.run is a fake, and each test checks it was
-called (or, where the point is that nothing was asked of LSF, that it was
-not).
+A launcher learned where an LSF server was only by polling bpeek, a request
+to mbatchd for the job's whole output. Told where to, a server now also
+writes its address to a file as it prints the marker, and the launcher reads
+that before asking LSF anything; a server from before this ignores the
+variable, and the launcher falls back to bpeek. LSF is never called.
 """
 
 import json
-import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,61 +27,39 @@ MARKER = f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}"
 # --- the file ------------------------------------------------------------------
 
 
-def test_a_server_writes_its_address_where_it_was_told(tmp_path, monkeypatch):
-    target = tmp_path / "logs" / "m_abcd1234.ready"
+def test_the_file_is_written_where_asked_or_not_at_all(tmp_path, monkeypatch):
+    target = ready_path(tmp_path / "logs", "../mito model")
+    assert target != ready_path(tmp_path / "logs", "../mito model"), "a new path per submission"
+    assert target.name.startswith("mito_model_") and target.suffix == ".ready"
     monkeypatch.setenv(READY_ENV, str(target))
     monkeypatch.setenv("LSB_JOBID", "4242")
 
     assert write_ready_file(URL) == target
-
-    data = json.loads(target.read_text())
-    assert data["url"] == URL
-    assert data["pid"] == os.getpid()
-    assert data["job_id"] == "4242"
-    assert data["host"]
+    assert json.loads(target.read_text()).keys() == {"url", "host", "pid", "job_id"}
     assert read_ready_file(target, job_id="4242") == URL
     assert list(target.parent.iterdir()) == [target], "no temporary file is left behind"
 
-
-def test_without_the_variable_nothing_is_written(tmp_path, monkeypatch):
-    monkeypatch.delenv(READY_ENV, raising=False)
+    # Not asked, or nowhere to write it: no file, and nothing raised at the server.
+    monkeypatch.delenv(READY_ENV)
+    assert write_ready_file(URL) is None
+    (tmp_path / "not_a_dir").write_text("")
+    monkeypatch.setenv(READY_ENV, str(tmp_path / "not_a_dir" / "m.ready"))
     assert write_ready_file(URL) is None
 
 
-def test_a_file_that_cannot_be_written_does_not_stop_the_server(tmp_path, monkeypatch):
-    not_a_dir = tmp_path / "not_a_dir"
-    not_a_dir.write_text("")
-    monkeypatch.setenv(READY_ENV, str(not_a_dir / "m.ready"))
-
-    assert write_ready_file(URL) is None
-
-
-@pytest.mark.parametrize(
-    "content", [None, "", '{"url": "http://10.1', "[]", '{"url": ""}', '{"pid": 12}']
-)
-def test_no_usable_file_yet_reads_as_nothing(tmp_path, content):
+@pytest.mark.parametrize("content, job_id, expected", [
+    (None, None, None),  # not written yet
+    ('{"url": "http://10.1', None, None),  # cut short
+    ('{"url": ""}', None, None),
+    (json.dumps({"url": URL, "job_id": "6"}), "7", None),  # another job's
+    (json.dumps({"url": URL, "job_id": "7"}), "7", URL),
+    (json.dumps({"url": URL}), "7", URL),  # written outside LSF: nothing to compare
+])
+def test_reading_the_file(tmp_path, content, job_id, expected):
     path = tmp_path / "m.ready"
     if content is not None:
         path.write_text(content)
-    assert read_ready_file(path) is None
-
-
-def test_a_file_another_job_wrote_is_not_this_jobs(tmp_path):
-    path = tmp_path / "m.ready"
-    path.write_text(json.dumps({"url": URL, "job_id": "6"}))
-    assert read_ready_file(path, job_id="7") is None
-    assert read_ready_file(path, job_id="6") == URL
-
-    # Written outside LSF (no LSB_JOBID), there is nothing to compare.
-    path.write_text(json.dumps({"url": URL}))
-    assert read_ready_file(path, job_id="7") == URL
-
-
-def test_every_submission_gets_a_path_of_its_own(tmp_path):
-    first, second = ready_path(tmp_path, "../mito model"), ready_path(tmp_path, "../mito model")
-    assert first != second
-    assert first.parent == second.parent == tmp_path
-    assert first.name.startswith("mito_model_") and first.suffix == ".ready"
+    assert read_ready_file(path, job_id=job_id) == expected
 
 
 # --- the server writes it ---------------------------------------------------------
@@ -132,35 +104,19 @@ class FakeLSF:
         raise AssertionError(f"unexpected command {argv}")
 
 
-def test_a_job_that_wrote_its_file_is_found_without_asking_lsf(tmp_path, monkeypatch):
+@pytest.mark.parametrize("written, lsf_calls", [
+    (True, []),  # neither bjobs nor bpeek
+    (False, ["bjobs", "bpeek"]),  # a server that predates the file: bpeek, as before
+])
+def test_the_launcher_reads_the_file_before_asking_lsf(tmp_path, monkeypatch, written, lsf_calls):
     lsf = FakeLSF(monkeypatch)
     path = tmp_path / "m.ready"
-    path.write_text(json.dumps({"url": URL, "job_id": "7"}))
-
-    job = LSFJob("7", ready_file=path)
-
-    assert job.wait_for_host(timeout=30) == URL
-    assert job.host == URL
-    assert lsf.calls == [], "neither bjobs nor bpeek"
-    assert not path.exists(), "read once, then removed"
-
-
-def test_a_server_that_ignores_the_variable_is_found_through_bpeek(tmp_path, monkeypatch):
-    lsf = FakeLSF(monkeypatch)
-
-    job = LSFJob("7", ready_file=tmp_path / "never_written.ready")
-
-    assert job.wait_for_host(timeout=30) == URL
-    assert lsf.calls == ["bjobs", "bpeek"]
-
-
-def test_a_file_left_by_another_job_is_ignored(tmp_path, monkeypatch):
-    lsf = FakeLSF(monkeypatch)
-    path = tmp_path / "m.ready"
-    path.write_text(json.dumps({"url": "http://stale:1", "job_id": "6"}))
+    if written:
+        path.write_text(json.dumps({"url": URL, "job_id": "7"}))
 
     assert LSFJob("7", ready_file=path).wait_for_host(timeout=30) == URL
-    assert "bpeek" in lsf.calls
+    assert lsf.calls == lsf_calls
+    assert not path.exists(), "read once, then removed"
 
 
 def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(tmp_path, monkeypatch):

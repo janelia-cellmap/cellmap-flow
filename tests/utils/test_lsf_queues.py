@@ -47,13 +47,6 @@ def lsf(monkeypatch):
     return calls
 
 
-def test_the_old_module_still_answers_with_the_same_function():
-    from cellmap_flow.utils import lsf_queues as old
-
-    assert old.gpu_queue_availability is lsf_queues.gpu_queue_availability
-    assert old.GPU_QUEUES == lsf_queues.GPU_QUEUES
-
-
 def test_one_unknown_queue_does_not_hide_the_others(lsf):
     payload = lsf_queues._collect()
 

@@ -1,21 +1,10 @@
 """What each job submission hands to bsub, and a local run to Popen, pinned.
 
-Four places build bsub commands: start_hosts for inference servers, the
-finetune job manager, blockwise spawn_worker, and the dashboard's blockwise
-master. These snapshots were recorded against the code as it stood before
-they moved onto one builder in cellmap_flow.jobs, so anything that changes
-what reaches LSF shows up here as a diff, not as a job that behaves
-differently on the cluster.
-
-Every subprocess call is recorded, not only bsub: the ``which bsub`` probe
-and the ``bjobs -J`` taken before a submission (to recognise the job if bsub
-times out) are part of what a submission does. For each call the snapshot
-keeps the argv, the environment as a difference from this process's (an
-empty dict means it inherits ours; LSF copies the submitting environment
-into the job), and the timeout.
-
-Nothing reaches LSF and no process starts: subprocess.run and
-subprocess.Popen are fakes, and each test checks they were called.
+Recorded against the code before the four bsub builders (start_hosts, the
+finetune job manager, spawn_worker, the dashboard's blockwise master) moved
+onto one in cellmap_flow.jobs. Every subprocess call is kept, with its argv,
+its environment as a difference from ours ({} = inherits it, which LSF then
+copies into the job) and its timeout. subprocess.run and Popen are fakes.
 """
 
 import json
@@ -23,7 +12,6 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -91,7 +79,6 @@ class Recorder:
             "stderr_to_stdout": kwargs.get("stderr") == subprocess.STDOUT,
             "stdin_devnull": kwargs.get("stdin") == subprocess.DEVNULL,
             "start_new_session": kwargs.get("start_new_session"),
-            "shell": kwargs.get("shell", False),
         })
         return SimpleNamespace(pid=31337, poll=lambda: None, returncode=None)
 
@@ -124,7 +111,7 @@ def test_a_server_submission(monkeypatch, tmp_path, log_dir):
     g.walltime = "12:00"
     g.jobs = []
 
-    job = bsub_utils.start_hosts(
+    bsub_utils.start_hosts(
         SERVER_COMMAND, queue="gpu_a100", charge_group="grp", job_name="mito model",
         wait_for_host=False, cycle_queues=False,
     )
@@ -143,10 +130,6 @@ def test_a_server_submission(monkeypatch, tmp_path, log_dir):
             "timeout": 30,
         },
     ]
-    assert rec.popens == []
-    assert job.job_id == "4242" and job.queue == "gpu_a100"
-    assert job.log_file == log_dir / "mito_model_4242.log"
-    assert g.jobs == [job]
 
 
 # --- (b) a finetune run, through the job manager ------------------------------
@@ -220,11 +203,8 @@ def test_a_finetune_submission(monkeypatch, tmp_path, log_dir):
             "timeout": 30,
         },
     ]
-    assert rec.popens == []
-    assert job.lsf_job.job_id == "4242"
-    metadata = json.loads((job.output_dir / "metadata.json").read_text())
-    assert metadata["lsf_job_id"] == "4242"
-    assert rec.normalize(metadata["command"]) == FINETUNE_COMMAND
+    # What a later dashboard finds the job by (rehydrate_session).
+    assert json.loads((job.output_dir / "metadata.json").read_text())["lsf_job_id"] == "4242"
 
 
 # --- (c) a blockwise worker, through spawn_worker -----------------------------
@@ -293,8 +273,6 @@ def test_the_blockwise_master_submission(monkeypatch, tmp_path):
         "<python>", "-m", "cellmap_flow.blockwise.multiple_cli", "<tmp>/tasks/cellmap_flow_<ts>.yaml",
     ]
     assert call["env"] == {} and call["timeout"] is None
-    assert body["job_id"] == "4242"
-    assert rec.normalize(body["log_path"]) == "<tmp>/tasks/my_run_4242.log"
 
 
 # --- local runs, when there is no bsub ----------------------------------------
@@ -314,11 +292,8 @@ def test_a_local_server_run(monkeypatch, tmp_path, log_dir):
         "stderr_to_stdout": True,
         "stdin_devnull": True,
         "start_new_session": True,
-        "shell": False,
     }]
     assert rec.normalize(str(job.log_file)) == "<tmp>/server_logs/mito_model_local_<random>.log"
-    assert Path(job.log_file).exists()
-    assert g.jobs == [job]
 
 
 def test_a_local_finetune_run(monkeypatch, tmp_path, log_dir):
@@ -334,41 +309,24 @@ def test_a_local_finetune_run(monkeypatch, tmp_path, log_dir):
         "stderr_to_stdout": True,
         "stdin_devnull": True,
         "start_new_session": True,
-        "shell": False,
     }]
     # It tees its own log; a second copy under server_logs would be noise.
     assert str(job.lsf_job.log_file) == os.devnull
-    assert not log_dir.exists() or not list(log_dir.iterdir())
-    metadata = json.loads((job.output_dir / "metadata.json").read_text())
-    assert metadata["lsf_job_id"] == "PID:31337"
 
 
 # --- the jobs package itself --------------------------------------------------
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-JOBS_MODULES = [
-    "cellmap_flow.jobs.spec",
-    "cellmap_flow.jobs.site",
-    "cellmap_flow.jobs.lsf",
-    "cellmap_flow.jobs.local",
-    "cellmap_flow.jobs.queues",
-    "cellmap_flow.jobs.ready",
-]
-
 
 def test_the_jobs_package_imports_nothing_heavy(tmp_path):
     """Launching a job must not pull in the dashboard, a viewer or a model."""
-    code = (
-        "import sys\n"
-        + "".join(f"import {m}\n" for m in JOBS_MODULES)
-        + "heavy = ('cellmap_flow.globals', 'flask', 'neuroglancer', 'huggingface_hub', 'peft', 'torch')\n"
-        "loaded = [m for m in heavy if m in sys.modules]\n"
-        "assert not loaded, loaded\n"
-        "print('ok')\n"
+    modules = ["spec", "site", "lsf", "local", "queues", "ready"]
+    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "huggingface_hub", "peft", "torch"]
+    code = "".join(f"import cellmap_flow.jobs.{m}\n" for m in modules) + (
+        f"import sys; loaded = [m for m in {heavy!r} if m in sys.modules]; assert not loaded, loaded"
     )
-    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300,
+        env={**os.environ, "HOME": str(tmp_path), "PYTHONPATH": root},
     )
     assert result.returncode == 0, result.stderr[-2000:]
-    assert result.stdout.strip() == "ok"

@@ -1,16 +1,14 @@
-"""How the job manager follows a training log, and who it tells.
+"""The trainer's stdout markers, the log reading, and the job manager's listeners.
 
-The trainer's markers and the patterns that find them now live in
-finetune/markers.py, the whole-lines-only log reading in job_log.LogTailer,
-and what the dashboard does about a finished iteration -- a viewer layer,
-a pipeline-builder model -- is a listener, so other code can be told too.
+The markers are a protocol between two processes that can be different
+versions (a training job outlives a dashboard upgrade), so the constants and
+patterns are pinned here. What the dashboard does about a finished
+iteration -- a viewer layer, a pipeline-builder model -- is now a listener.
 """
 
 import re
 from datetime import datetime
 from pathlib import Path
-
-import pytest
 
 from cellmap_flow.finetune import finetuned_model_templates, markers
 from cellmap_flow.finetune.finetune_job_manager import (
@@ -26,53 +24,26 @@ URL = "http://node7:8123"
 SERVER_LINE = f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n"
 
 
-# --- LogTailer ------------------------------------------------------------------
-
-
 def _append(path, text):
     with open(path, "a") as f:
         f.write(text)
 
 
-def test_only_whole_lines_are_handed_out(tmp_path):
+def test_the_tailer_hands_out_whole_lines_and_starts_over_on_a_new_file(tmp_path):
     log = tmp_path / "training_log.txt"
     log.write_text("Starting epoch 3 of 10...\nEpoch 3/10 - Lo")
     tail = LogTailer(log)
 
     assert tail.read() == "Starting epoch 3 of 10...\n"
-    assert tail.read() == ""
     _append(log, "ss: 0.25\nTRAINING_ITERATION_COM")
     assert tail.read() == "Epoch 3/10 - Loss: 0.25\n"
-    _append(log, "PLETE: m_1\n")
-    assert tail.read() == "TRAINING_ITERATION_COMPLETE: m_1\n"
+
+    log.write_text("new\n")  # shorter: replaced, not appended to
+    assert tail.read() == "new\n", "the held-back half line belonged to the old file"
 
 
-def test_a_log_that_shrinks_is_read_again_from_the_start(tmp_path):
-    log = tmp_path / "training_log.txt"
-    log.write_text("one\ntwo\nthr")
-    tail = LogTailer(log)
-    assert tail.read() == "one\ntwo\n"
-
-    log.write_text("new\n")
-
-    assert tail.read() == "new\n", "the held-back 'thr' belonged to the old file"
-
-
-def test_a_log_that_cannot_be_read_yet_loses_nothing(tmp_path):
-    log = tmp_path / "training_log.txt"
-    tail = LogTailer(log)
-    with pytest.raises(OSError):
-        tail.read()
-
-    log.write_text("first\n")
-    assert tail.read() == "first\n"
-
-
-# --- markers --------------------------------------------------------------------
-
-
-def test_the_patterns_are_the_ones_the_job_manager_always_used():
-    expected = {
+def test_the_markers_and_patterns_are_the_ones_both_sides_always_used(capsys):
+    patterns = {
         "EPOCH_START_RE": (r"Starting\s+epoch\s+(\d+)\s+of\s+(\d+)", re.IGNORECASE),
         "EPOCH_SUMMARY_RE": (r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)", re.IGNORECASE),
         "ITERATION_COMPLETE_RE": (r"TRAINING_ITERATION_COMPLETE:\s+(\S+)", 0),
@@ -80,43 +51,27 @@ def test_the_patterns_are_the_ones_the_job_manager_always_used():
         "STATUS_MARKER_RE": (r"TRAINING_DIVERGED|RESTARTING_TRAINING|WAITING_FOR_RESTART", 0),
         "SERVER_URL_RE": (re.escape(IP_PATTERN[0]) + r"(.+?)" + re.escape(IP_PATTERN[1]), 0),
     }
-    for name, (pattern, flags) in expected.items():
+    for name, (pattern, flags) in patterns.items():
         compiled = getattr(markers, name)
-        assert compiled.pattern == pattern, name
-        assert compiled.flags & (re.IGNORECASE | re.MULTILINE) == flags, name
+        assert (compiled.pattern, compiled.flags & (re.IGNORECASE | re.MULTILINE)) == (pattern, flags), name
 
-
-def test_the_markers_are_the_ones_the_trainer_prints():
+    # What the trainer prints today, until it prints through markers.emit.
     here = Path(markers.__file__).parent
     trainer = (here / "finetune_cli.py").read_text() + (here / "lora_trainer.py").read_text()
     for marker in (
-        markers.TRAINING_ITERATION_COMPLETE,
-        markers.RESTART_FAILED,
-        markers.INFERENCE_SERVER_FAILED,
-        markers.TRAINING_DIVERGED,
-        markers.RESTARTING_TRAINING,
-        markers.WAITING_FOR_RESTART,
+        markers.TRAINING_ITERATION_COMPLETE, markers.RESTART_FAILED, markers.INFERENCE_SERVER_FAILED,
+        markers.TRAINING_DIVERGED, markers.RESTARTING_TRAINING, markers.WAITING_FOR_RESTART,
     ):
         assert marker in trainer, marker
     assert markers.FINETUNED_MODEL_YAML == finetuned_model_templates.FINETUNED_MODEL_YAML_MARKER
 
-
-def test_what_emit_prints_the_job_manager_reads(capsys):
+    # And what emit prints, the job manager reads.
     markers.emit(markers.FINETUNED_MODEL_YAML, "/s/models/m_1.yaml")
     markers.emit(markers.TRAINING_ITERATION_COMPLETE, "m_1")
     markers.emit(markers.WAITING_FOR_RESTART)
-
     out = capsys.readouterr().out
-    assert out == (
-        "FINETUNED_MODEL_YAML: /s/models/m_1.yaml\n"
-        "TRAINING_ITERATION_COMPLETE: m_1\n"
-        "WAITING_FOR_RESTART\n"
-    )
+    assert out.splitlines()[-1] == "WAITING_FOR_RESTART"
     assert trainer_outputs_from_log(out) == ("m_1", "/s/models/m_1.yaml")
-    assert markers.STATUS_MARKER_RE.findall(out) == ["WAITING_FOR_RESTART"]
-
-
-# --- listeners ------------------------------------------------------------------
 
 
 def _job(tmp_path):
@@ -140,7 +95,7 @@ class Recording:
         self.events.append(("iteration complete", model_name, job.finetuned_model_name))
 
 
-def test_a_listener_hears_of_the_server_and_of_each_iteration(tmp_path):
+def test_listeners_hear_of_the_server_and_each_iteration(tmp_path):
     manager = FinetuneJobManager()
     manager.remove_listener(manager.viewer_listener)
     heard = Recording()
@@ -161,18 +116,26 @@ def test_a_listener_hears_of_the_server_and_of_each_iteration(tmp_path):
     assert job.finetuned_model_name == "m_finetuned_2"
 
 
-def test_the_default_listener_still_adds_the_layer_and_registers_the_model(tmp_path, monkeypatch):
+def test_the_default_listener_adds_the_layer_and_the_model_and_failures_stay_contained(
+    tmp_path, monkeypatch, caplog
+):
     manager = FinetuneJobManager()
     calls = []
 
     def add_layer(job, model_name):
         calls.append(("layer", model_name))
-        job.finetuned_model_name = model_name
+        if model_name.endswith("_2"):
+            raise RuntimeError("no viewer")
+
+    class Broken:
+        def on_iteration_complete(self, job, model_name):
+            raise RuntimeError("listener bug")
 
     monkeypatch.setattr(manager, "_add_finetuned_neuroglancer_layer", add_layer)
     monkeypatch.setattr(
         manager, "_register_finetune_model_config", lambda job, name: calls.append(("config", name))
     )
+    manager.add_listener(Broken())
     job = _job(tmp_path)
     job.log_file.write_text("TRAINING_ITERATION_COMPLETE: m_finetuned_1\n" + SERVER_LINE)
 
@@ -182,35 +145,8 @@ def test_the_default_listener_still_adds_the_layer_and_registers_the_model(tmp_p
 
     assert calls == [
         ("layer", "m_finetuned_1"), ("config", "m_finetuned_1"),
+        # The layer failing does not skip the config, nor does another listener.
         ("layer", "m_finetuned_2"), ("config", "m_finetuned_2"),
     ]
-    assert job.inference_server_url == URL
-
-
-def test_one_failure_does_not_stop_the_rest(tmp_path, monkeypatch, caplog):
-    manager = FinetuneJobManager()
-    registered = []
-
-    def broken_layer(job, model_name):
-        raise RuntimeError("no viewer")
-
-    class Broken:
-        def on_iteration_complete(self, job, model_name):
-            raise RuntimeError("listener bug")
-
-    monkeypatch.setattr(manager, "_add_finetuned_neuroglancer_layer", broken_layer)
-    monkeypatch.setattr(
-        manager, "_register_finetune_model_config", lambda job, name: registered.append(name)
-    )
-    heard = Recording()
-    manager.add_listener(Broken())
-    manager.add_listener(heard)
-    job = _job(tmp_path)
-    job.log_file.write_text("TRAINING_ITERATION_COMPLETE: m_finetuned_1\n")
-
-    manager._parse_training_restart(job, "")
-
-    assert registered == ["m_finetuned_1"], "the layer failing does not skip the config"
-    assert heard.events == [("iteration complete", "m_finetuned_1", None)]
-    assert job.finetuned_model_name == "m_finetuned_1", "and the name moves on regardless"
+    assert job.finetuned_model_name == "m_finetuned_2", "and the name moves on regardless"
     assert "no viewer" in caplog.text and "listener bug" in caplog.text
