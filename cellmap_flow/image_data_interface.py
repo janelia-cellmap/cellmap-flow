@@ -1,9 +1,9 @@
 import copy
 
 import zarr
+from cellmap_flow.io import paths
 from cellmap_flow.utils.ds import (
     LazyNormalization,
-    _join_path,
     _open_zarr,
     find_closest_scale,
     open_ds_tensorstore,
@@ -46,7 +46,7 @@ class ImageDataInterface:
         """
         dataset_path = dataset_path.replace("\\ ", " ")
         if not dataset_path.startswith("precomputed://"):
-            v3_container = zarr_v3.find_v3_container(dataset_path)
+            v3_container = paths.find_v3_container(dataset_path)
             if v3_container is not None:
                 try:
                     meta = zarr_v3.read_zarr_json(v3_container)
@@ -55,7 +55,7 @@ class ImageDataInterface:
                             v3_container, voxel_size
                         )
                         logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                        dataset_path = _join_path(v3_container, scale)
+                        dataset_path = paths.join(v3_container, scale)
                         logger.info(f"using dataset path {dataset_path}")
                 except Exception as e:
                     logger.warning(
@@ -67,7 +67,7 @@ class ImageDataInterface:
                     if isinstance(ds, zarr.hierarchy.Group):
                         scale, _, _ = find_closest_scale(dataset_path, voxel_size)
                         logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                        dataset_path = _join_path(dataset_path, scale)
+                        dataset_path = paths.join(dataset_path, scale)
                         logger.info(f"using dataset path {dataset_path}")
                 except Exception as e:
                     logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")

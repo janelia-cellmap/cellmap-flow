@@ -7,13 +7,8 @@ import numpy as np
 import os
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.utils.ds import (
-    _is_remote_path,
-    _is_zarr_container,
-    _join_path,
-    _open_zarr,
-    check_for_multiscale,
-)
+from cellmap_flow.io import paths
+from cellmap_flow.utils.ds import _open_zarr, check_for_multiscale
 from cellmap_flow.utils import zarr_v3
 
 logger = logging.getLogger(__name__)
@@ -151,7 +146,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
         is_multiscale = True
     else:
         try:
-            v3_container = zarr_v3.find_v3_container(dataset_path)
+            v3_container = paths.find_v3_container(dataset_path)
             if v3_container is not None:
                 is_multiscale = zarr_v3.multiscales_from_group(v3_container) is not None
             else:
@@ -162,7 +157,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_precomputed:
         filetype = "precomputed"
-    elif ".zarr" in dataset_path or _is_zarr_container(dataset_path):
+    elif ".zarr" in dataset_path or paths.is_zarr_container(dataset_path):
         filetype = "zarr"
     elif ".n5" in dataset_path:
         filetype = "n5"
@@ -184,7 +179,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
 
     if is_multiscale:
         try:
-            if _is_remote_path(dataset_path):
+            if paths.is_remote(dataset_path):
                 grp = _open_zarr(dataset_path, mode="r")
                 multiscales = grp.attrs.get("multiscales", None)
                 if multiscales:
@@ -200,7 +195,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                 ]
                 scales.sort(key=lambda x: int(x[1:]))
             images = [
-                ImageDataInterface(_join_path(dataset_path, scale), normalize=normalize)
+                ImageDataInterface(paths.join(dataset_path, scale), normalize=normalize)
                 for scale in scales
             ]
             layers = [_local_volume(image) for image in images]
@@ -218,7 +213,7 @@ def get_raw_layer(dataset_path, normalize=True, wrap_raw=True):
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
                 shader=_raw_shader(
-                    [_join_path(dataset_path, sc) for sc in scales], normalize
+                    [paths.join(dataset_path, sc) for sc in scales], normalize
                 ),
             )
         except Exception as e:

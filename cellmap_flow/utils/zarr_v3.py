@@ -24,10 +24,13 @@ from typing import Optional, Tuple
 import numpy as np
 from funlib.geometry import Coordinate, Roi
 
+from cellmap_flow.io.paths import (  # noqa: F401  (kept names; see io.paths)
+    ZARR_JSON,
+    find_v3_container,
+    is_v3_container,
+)
+
 logger = logging.getLogger(__name__)
-
-
-ZARR_JSON = "zarr.json"
 
 # Everything downstream works in nanometers.
 _NM_PER_UNIT = {
@@ -187,26 +190,6 @@ def covering_roi(offset, voxel_size, shape):
     end = snap_integral(begin + snap_integral(voxel_size) * np.asarray(shape, dtype=float))
     begin, end = np.floor(begin).astype(int), np.ceil(end).astype(int)
     return Roi(Coordinate(begin), Coordinate(end - begin))
-
-
-def is_v3_container(path: str) -> bool:
-    """True if ``path`` is a directory with a ``zarr.json`` at its root."""
-    return os.path.isdir(path) and os.path.isfile(os.path.join(path, ZARR_JSON))
-
-
-def find_v3_container(path: str) -> Optional[str]:
-    """Walk up from ``path`` looking for the nearest directory containing a
-    ``zarr.json``. Returns ``None`` if none is found (e.g. a v2 store, or a
-    remote URL)."""
-    if path.startswith("http://") or path.startswith("https://") or "://" in path:
-        return None
-    normalized = os.path.normpath(path)
-    current = normalized
-    while current and current != os.path.dirname(current):
-        if is_v3_container(current):
-            return current
-        current = os.path.dirname(current)
-    return None
 
 
 def read_zarr_json(path: str) -> dict:

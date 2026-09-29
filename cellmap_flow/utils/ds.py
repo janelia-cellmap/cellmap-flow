@@ -13,6 +13,13 @@ from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
+from cellmap_flow.io import paths
+from cellmap_flow.io.paths import (  # noqa: F401  (kept names; see io.paths)
+    is_remote as _is_remote_path,
+    is_zarr_container as _is_zarr_container,
+    join as _join_path,
+    normalize_path as _normalize_path,
+)
 from cellmap_flow.utils import zarr_v3
 
 
@@ -144,22 +151,6 @@ def ends_with_scale(string):
     return bool(re.search(pattern, string))
 
 
-def _normalize_path(path: str) -> str:
-    """Remove shell-escape backslashes from a filesystem path.
-
-    Users often copy-paste paths from a terminal where spaces are escaped
-    (e.g. ``/path/to/file\\ name.zarr``).  YAML preserves the literal
-    backslashes, but the filesystem expects plain spaces.
-    """
-    if _is_remote_path(path):
-        return path
-    return path.replace("\\ ", " ")
-
-
-def _is_remote_path(path: str) -> bool:
-    return path.startswith(("http://", "https://", "s3://"))
-
-
 def _open_zarr(path, mode="r"):
     """Open a zarr dataset, handling HTTP/HTTPS and (anonymous) S3 URLs via fsspec."""
     path = _normalize_path(path)
@@ -171,92 +162,18 @@ def _open_zarr(path, mode="r"):
     return zarr.open(path, mode=mode)
 
 
-def _join_path(base, *parts):
-    """Join path components, handling URLs correctly."""
-    if _is_remote_path(base):
-        return "/".join([base.rstrip("/"), *parts])
-    return os.path.join(base, *parts)
-
-
-def _is_zarr_container(path: str) -> bool:
-    """Check if a local path is a zarr container by looking for zarr metadata files.
-
-    Works for zarr directories that don't have a .zarr extension.
-    """
-    if _is_remote_path(path):
-        return False
-    return os.path.isdir(path) and (
-        os.path.exists(os.path.join(path, ".zgroup"))
-        or os.path.exists(os.path.join(path, ".zarray"))
-        or os.path.exists(os.path.join(path, ".zattrs"))
-        or zarr_v3.is_v3_container(path)
-    )
-
-
 def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
-    """Split the dataset path into the filename and dataset
+    """``(container, dataset inside it)``, as io.paths.split_container.
 
-    Args:
-        dataset_path ('str'): Path to the dataset
-        scale ('int'): Scale to use, if present
-
-    Returns:
-        Tuple of filename and dataset
+    ``scale``, if given, is appended to the dataset as ``s<scale>``.
     """
-
-    has_zarr = ".zarr" in dataset_path
-    has_n5 = ".n5" in dataset_path
-
-    if has_zarr or has_n5:
-        # split at .zarr or .n5, whichever comes last
-        splitter = (
-            ".zarr"
-            if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
-            else ".n5"
-        )
-
-        filename, dataset = dataset_path.rsplit(splitter, 1)
-        if dataset.startswith("/"):
-            dataset = dataset[1:]
-        # include scale if present
-        if scale is not None:
+    filename, dataset, by_suffix = paths._split_container(dataset_path)
+    if scale is not None:
+        if by_suffix:
             dataset += f"/s{scale}"
-
-        return filename + splitter, dataset
-
-    # No .zarr or .n5 extension — walk up the path to find a zarr group container.
-    if _is_remote_path(dataset_path):
-        raise RuntimeError(
-            f"Remote URL must contain .zarr or .n5 in the path: {dataset_path}"
-        )
-    # Prefer .zgroup (container root) over .zarray (leaf dataset).
-    path = os.path.normpath(dataset_path)
-    parts = []
-    fallback = None  # track first .zarray-only match as fallback
-    while path and path != os.path.dirname(path):
-        if os.path.isdir(path):
-            if os.path.exists(os.path.join(path, ".zgroup")):
-                dataset = "/".join(reversed(parts))
-                if scale is not None:
-                    dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
-                return path, dataset
-            if fallback is None and os.path.exists(
-                os.path.join(path, ".zarray")
-            ):
-                fallback = (path, list(parts))
-        path, part = os.path.split(path)
-        parts.append(part)
-
-    if fallback is not None:
-        fb_path, fb_parts = fallback
-        dataset = "/".join(reversed(fb_parts))
-        if scale is not None:
+        else:
             dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
-        return fb_path, dataset
-
-    raise RuntimeError(
-        f"Could not find a zarr or n5 container in path: {dataset_path}"
-    )
+    return filename, dataset
 
 
 def apply_norms(data, input_norms=None):
@@ -351,22 +268,8 @@ class LazyNormalization:
 
 
 def _detect_filetype(dataset_path: str) -> str:
-    """Detect whether a dataset path is zarr or n5."""
-    if ".zarr" in dataset_path or ".n5" in dataset_path:
-        return (
-            "zarr"
-            if dataset_path.rfind(".zarr") > dataset_path.rfind(".n5")
-            else "n5"
-        )
-    # No extension — check filesystem for zarr metadata
-    normalized = os.path.normpath(dataset_path)
-    path = normalized
-    while path and path != os.path.dirname(path):
-        if _is_zarr_container(path):
-            return "zarr"
-        path = os.path.dirname(path)
-    # Default to zarr
-    return "zarr"
+    """"n5" when the last container suffix in the path is .n5, else "zarr"."""
+    return "n5" if paths.suffix_format(dataset_path) == "n5" else "zarr"
 
 
 def _clean_zarr_compressor(dataset_path: str):
