@@ -5,12 +5,10 @@ import uuid
 from datetime import datetime
 
 import numpy as np
-import zarr
 from flask import jsonify
 
 from cellmap_flow.dashboard.finetune_utils import (
     create_annotation_volume_zarr,
-    create_correction_zarr,
     ensure_minio_serving,
 )
 from cellmap_flow.dashboard.routes.finetune.common import (
@@ -18,7 +16,6 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     find_model_config,
     load_user_prefs,
     save_user_prefs,
-    viewer_position_and_scales,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
@@ -157,100 +154,6 @@ def get_finetune_models_response():
     except Exception as e:
         logger.error(f"Error getting finetune models: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-def create_annotation_crop_response(data):
-    try:
-        from cellmap_flow.image_data_interface import ImageDataInterface
-        from funlib.geometry import Coordinate, Roi
-
-        model_name = data.get("model_name")
-        output_path = data.get("output_path")
-
-        position, viewer_scales_nm = viewer_position_and_scales()
-        view_center = np.array(position)
-
-        model_config, error_response = _get_selected_model_config(model_name)
-        if error_response is not None:
-            return error_response
-
-        # Ask the running inference server for the geometry. It already has
-        # the model; building it here instead costs a full load on the
-        # dashboard's CPU -- 43s in one measured session, for shapes the
-        # server can report in milliseconds -- and is what made "create
-        # annotation volume" feel slow. model_config.config stays as the
-        # fallback for when no server is up.
-        config = resolve_model_geometry(model_name, model_config)
-        read_shape = np.array(config.read_shape)
-        write_shape = np.array(config.write_shape)
-        input_voxel_size = np.array(config.input_voxel_size)
-        output_voxel_size = np.array(config.output_voxel_size)
-        output_channels = config.output_channels
-
-        if viewer_scales_nm is not None:
-            view_center_nm = view_center * np.array(viewer_scales_nm)
-        else:
-            view_center_nm = view_center
-            logger.warning("No viewer scales provided, assuming view center is already in nm")
-
-        raw_crop_shape_voxels = (read_shape / input_voxel_size).astype(int)
-        annotation_crop_shape_voxels = (write_shape / output_voxel_size).astype(int)
-        raw_crop_offset_voxels = ((view_center_nm - read_shape / 2) / input_voxel_size).astype(int)
-        annotation_crop_offset_voxels = ((view_center_nm - write_shape / 2) / output_voxel_size).astype(int)
-
-        crop_id = f"{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        _, corrections_dir = ensure_corrections_storage(output_path)
-        zarr_path = os.path.join(corrections_dir, f"{crop_id}.zarr")
-
-        dataset_path = getattr(g, "dataset_path", "unknown")
-        idi = ImageDataInterface(dataset_path, voxel_size=input_voxel_size)
-        raw_dtype = str(idi.ts.dtype)
-
-        success, zarr_info = create_correction_zarr(
-            zarr_path=zarr_path,
-            raw_crop_shape=raw_crop_shape_voxels,
-            raw_voxel_size=input_voxel_size,
-            raw_offset=raw_crop_offset_voxels,
-            annotation_crop_shape=annotation_crop_shape_voxels,
-            annotation_voxel_size=output_voxel_size,
-            annotation_offset=annotation_crop_offset_voxels,
-            dataset_path=dataset_path,
-            model_name=model_name,
-            output_channels=output_channels,
-            raw_dtype=raw_dtype,
-            create_mask=False,
-        )
-        if not success:
-            return jsonify({"success": False, "error": zarr_info}), 500
-
-        roi = Roi(offset=Coordinate(view_center_nm - read_shape / 2), shape=Coordinate(read_shape))
-        raw_zarr = zarr.open(zarr_path, mode="r+")
-        raw_zarr["raw/s0"][:] = idi.to_ndarray_ts(roi)
-
-        minio_url = ensure_minio_serving(zarr_path, crop_id, output_base_dir=corrections_dir)
-        return jsonify(
-            {
-                "success": True,
-                "crop_id": crop_id,
-                "zarr_path": zarr_path,
-                "minio_url": minio_url,
-                "neuroglancer_url": f"{minio_url}/annotation",
-                "metadata": {
-                    "center_position_nm": view_center_nm.tolist(),
-                    "raw_crop_offset": raw_crop_offset_voxels.tolist(),
-                    "raw_crop_shape": raw_crop_shape_voxels.tolist(),
-                    "raw_voxel_size": input_voxel_size.tolist(),
-                    "annotation_crop_offset": annotation_crop_offset_voxels.tolist(),
-                    "annotation_crop_shape": annotation_crop_shape_voxels.tolist(),
-                    "annotation_voxel_size": output_voxel_size.tolist(),
-                },
-            }
-        )
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    except Exception as e:
-        logger.error(f"Error creating annotation crop: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def create_annotation_volume_response(data):

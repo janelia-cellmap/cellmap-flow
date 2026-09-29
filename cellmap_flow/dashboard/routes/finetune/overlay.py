@@ -7,10 +7,7 @@ import neuroglancer
 import numpy as np
 from flask import jsonify
 
-from cellmap_flow.dashboard.finetune_utils import (
-    sync_all_annotations_from_minio,
-    sync_annotation_from_minio,
-)
+from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.finetune.virtual_dataset import volume_corner_nm
 from cellmap_flow.globals import g
 
@@ -411,16 +408,7 @@ def add_crop_to_viewer_response(data):
 
 def sync_annotations_manually_response(data):
     try:
-        crop_id = data.get("crop_id", None)
         force = data.get("force", True)
-
-        if crop_id:
-            success = sync_annotation_from_minio(crop_id, force=force)
-            refresh_annotated_regions_layer()
-            if success:
-                return jsonify({"success": True, "message": f"Synced annotation for {crop_id}"})
-            return jsonify({"success": False, "message": f"No updates to sync for {crop_id}"})
-
         synced = sync_all_annotations_from_minio(force=force)
         refresh_annotated_regions_layer()
         if synced == -1:

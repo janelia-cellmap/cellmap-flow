@@ -1,5 +1,4 @@
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
-    create_annotation_crop_response,
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
@@ -18,7 +17,6 @@ from cellmap_flow.dashboard.routes.finetune.overlay import (
 
 __all__ = [
     "add_crop_to_viewer_response",
-    "create_annotation_crop_response",
     "create_annotation_volume_response",
     "get_finetune_models_response",
     "get_user_prefs_response",

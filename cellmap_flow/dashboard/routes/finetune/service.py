@@ -1,6 +1,5 @@
 from cellmap_flow.dashboard.routes.finetune.annotation import (
     add_crop_to_viewer_response,
-    create_annotation_crop_response,
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
@@ -33,7 +32,6 @@ __all__ = [
     "cancel_job_response",
     "get_job_logs_response",
     "get_job_status_response",
-    "create_annotation_crop_response",
     "create_annotation_volume_response",
     "get_finetune_models_response",
     "get_user_prefs_response",

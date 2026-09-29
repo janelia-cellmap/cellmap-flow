@@ -2,7 +2,6 @@ from flask import Blueprint, request
 
 from cellmap_flow.dashboard.routes.finetune.annotation import (
     add_crop_to_viewer_response,
-    create_annotation_crop_response,
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
@@ -58,11 +57,6 @@ def delete_good_region():
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     return get_finetune_models_response()
-
-
-@finetune_bp.route("/api/finetune/create-crop", methods=["POST"])
-def create_annotation_crop():
-    return create_annotation_crop_response(request.get_json() or {})
 
 
 @finetune_bp.route("/api/finetune/create-volume", methods=["POST"])

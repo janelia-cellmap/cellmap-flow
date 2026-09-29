@@ -899,63 +899,6 @@ def _diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_chunk_state, force=Fal
 
 
 # ---------------------------------------------------------------------------
-# Annotation sync (crop-based)
-# ---------------------------------------------------------------------------
-
-def sync_annotation_from_minio(crop_id, force=False):
-    """
-    Sync a single annotation crop from MinIO to local filesystem.
-
-    Args:
-        crop_id: Crop ID to sync
-        force: Force sync even if not modified
-
-    Returns:
-        bool: True if synced successfully
-    """
-    if not minio_state["ip"] or not minio_state["port"] or not minio_state["output_base"]:
-        return False
-
-    try:
-        s3 = _make_s3_filesystem()
-
-        zarr_name = f"{crop_id}.zarr"
-        src_path = f"{minio_state['bucket']}/{zarr_name}/annotation"
-        dst_path = Path(minio_state["output_base"]) / zarr_name / "annotation"
-
-        if not s3.exists(src_path):
-            return False
-
-        known_chunk_state = minio_state["chunk_sync_state"].get(crop_id, {})
-        s0_path = f"{src_path}/s0"
-        changed, removed, remote_chunk_state = _diff_and_sync_chunks(
-            s3, s0_path, dst_path / "s0", known_chunk_state, force=force
-        )
-
-        if not changed and not removed:
-            return False
-
-        logger.info(
-            f"Syncing annotation for {crop_id} "
-            f"(changed={len(changed)}, removed={len(removed)})"
-        )
-
-        _sync_zarr_group_metadata(s3, src_path, dst_path)
-
-        minio_state["last_sync"][crop_id] = datetime.now()
-        minio_state["chunk_sync_state"][crop_id] = remote_chunk_state
-
-        logger.info(f"Successfully synced annotation for {crop_id}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Error syncing annotation for {crop_id}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
-
-
-# ---------------------------------------------------------------------------
 # Annotation sync (full-dataset sync)
 # ---------------------------------------------------------------------------
 
@@ -967,10 +910,11 @@ _sync_lock = threading.RLock()
 
 
 def sync_all_annotations_from_minio(force: bool = True):
-    """Sync all annotations from MinIO to local disk.
+    """Sync every annotation volume in MinIO to local disk.
 
     Returns:
-        Number of annotations synced, or -1 if MinIO is not initialized.
+        Number of volumes that had changed chunks, or -1 if MinIO is not
+        initialized.
     """
     with _sync_lock:
         return _sync_all_annotations_from_minio(force)
@@ -985,35 +929,37 @@ def _sync_all_annotations_from_minio(force):
     s3 = _make_s3_filesystem()
     zarrs = s3.ls(minio_state["bucket"])
     zarr_ids = [Path(c).name.replace(".zarr", "") for c in zarrs if c.endswith(".zarr")]
+    volumes = 0
     synced = 0
     failed = 0
     for zid in zarr_ids:
+        # Only annotation volumes are synced: they are all the dashboard
+        # serves now. Anything else in the bucket is a crop zarr from the
+        # create-crop route, which is gone and whose crops nothing trained on.
+        attrs_path = f"{minio_state['bucket']}/{zid}.zarr/.zattrs"
         try:
-            zarr_name = f"{zid}.zarr"
-            attrs_path = f"{minio_state['bucket']}/{zarr_name}/.zattrs"
-            if s3.exists(attrs_path):
-                root_attrs = json.loads(s3.cat(attrs_path))
-                if root_attrs.get("type") == "annotation_volume":
-                    if sync_annotation_volume_from_minio(zid, force=force):
-                        synced += 1
-                    continue
+            if not s3.exists(attrs_path):
+                continue
+            if json.loads(s3.cat(attrs_path)).get("type") != "annotation_volume":
+                continue
         except Exception as e:
-            # Not necessarily a problem -- a crop zarr has no root .zattrs and
-            # is handled below -- but silently swallowing this hid real
-            # failures behind a count that looked like a quiet steady state.
+            # Silently swallowing this hid real failures behind a count that
+            # looked like a quiet steady state.
             logger.debug(f"Could not read root attrs for {zid}: {e}")
             failed += 1
-        if sync_annotation_from_minio(zid, force=force):
+            continue
+        volumes += 1
+        if sync_annotation_volume_from_minio(zid, force=force):
             synced += 1
 
     # "Synced 0/1" counted volumes that *changed*, so the healthy idle case
     # and a broken sync printed the same line -- which is what made a real
     # sync failure take a day to spot. Say which of the two this is.
-    unchanged = len(zarr_ids) - synced
+    unchanged = volumes - synced
     if synced:
         summary = f"{synced} updated, {unchanged} unchanged"
     else:
-        summary = f"no changes ({len(zarr_ids)} checked)"
+        summary = f"no changes ({volumes} checked)"
     if failed:
         summary += f", {failed} could not be read"
     logger.info(f"Annotation sync: {summary}")
