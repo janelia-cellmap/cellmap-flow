@@ -1,4 +1,8 @@
 # %%
+import collections
+import contextlib
+import os
+import threading
 import time
 import numpy as np
 import torch
@@ -9,6 +13,72 @@ from cellmap_flow.globals import g
 
 
 logger = logging.getLogger(__name__)
+
+GPU_SLOTS_ENV = "CELLMAP_FLOW_GPU_SLOTS"
+
+
+class DeviceSlots:
+    """Lets at most ``n`` chunks use the device at once, in the order they asked.
+
+    The inference server answers every request on its own thread, and
+    neuroglancer asks for 6 chunks at once over HTTP/1.1, or dozens through an
+    HTTP/2 proxy. Unbounded, k concurrent forwards interleave on the GPU and
+    finish together, after about k forwards' time, so the first chunks of a
+    view all appeared at once, late. Each forward also holds its own
+    activations, and a dozen at once ran an 11 GB card out of memory. One
+    slot makes the GPU compute chunks one after another, the first one asked
+    for first, at the same total throughput: reading and normalizing the next
+    chunk, which stay outside the slot, overlap the current forward.
+
+    Strictly first come, first served: a thread that arrives while a slot is
+    free still waits behind anyone already waiting. A plain Semaphore lets
+    newcomers barge ahead.
+
+    The server takes ``n`` from ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) when it
+    starts. More than one slot only helps a model too small to keep the
+    device busy on its own.
+    """
+
+    def __init__(self, n=1):
+        n = int(n)
+        if n < 1:
+            raise ValueError(f"DeviceSlots needs at least 1 slot, got {n}")
+        self.n = n
+        self._cond = threading.Condition()
+        self._waiting = collections.deque()  # one ticket per waiting thread, oldest first
+        self._running = 0
+
+    @classmethod
+    def from_env(cls):
+        value = os.environ.get(GPU_SLOTS_ENV, "1")
+        try:
+            return cls(int(value))
+        except ValueError:
+            raise ValueError(
+                f"{GPU_SLOTS_ENV} must be a whole number of at least 1, got {value!r}"
+            ) from None
+
+    @contextlib.contextmanager
+    def hold(self):
+        ticket = object()
+        with self._cond:
+            self._waiting.append(ticket)
+            while self._waiting[0] is not ticket or self._running >= self.n:
+                self._cond.wait()
+            self._waiting.popleft()
+            self._running += 1
+            # With more than one slot free, the next in line may go too.
+            self._cond.notify_all()
+        try:
+            yield
+        finally:
+            with self._cond:
+                self._running -= 1
+                self._cond.notify_all()
+
+
+def _device_part(device_slots):
+    return device_slots.hold() if device_slots is not None else contextlib.nullcontext()
 
 
 def apply_postprocess(data, postprocess=None, **kwargs):
@@ -36,7 +106,9 @@ def predict(read_roi, write_roi, config, **kwargs):
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
-    with torch.no_grad():
+    # Only the transfer, the forward and the copy back take a device slot;
+    # the read and the normalization above overlap another chunk's forward.
+    with _device_part(kwargs.get("device_slots")), torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
         logger.debug(f"Predicting with model {type(config.model).__name__} on device {device}")
         logger.debug(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
@@ -46,7 +118,14 @@ def predict(read_roi, write_roi, config, **kwargs):
     return result
 
 class Inferencer:
-    def __init__(self, model_config: ModelConfig, use_half_prediction=False):
+    def __init__(
+        self, model_config: ModelConfig, use_half_prediction=False, device_slots=None
+    ):
+        """``device_slots``: a DeviceSlots bounding how many chunks use the
+        device at once, as the inference server passes. ``None``, as blockwise
+        workers (one chunk at a time) use, bounds nothing.
+        """
+        self.device_slots = device_slots
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -178,7 +257,10 @@ class Inferencer:
         if getattr(self.model_config.config, "process_chunk", None) and callable(
             self.model_config.config.process_chunk
         ):
-            result = self.model_config.config.process_chunk(idi, roi)
+            # A config's own process_chunk (TF, ONNX, cellpose, bioimage) runs
+            # its model somewhere inside, so all of it takes the slot.
+            with _device_part(self.device_slots):
+                result = self.model_config.config.process_chunk(idi, roi)
         else:
             result = self.process_chunk_basic(idi, roi)
 
@@ -209,12 +291,21 @@ class Inferencer:
         output_roi = roi
 
         input_roi = output_roi.grow(self.context, self.context)
-        result = self.model_config.config.predict(
-            input_roi,
-            output_roi,
-            self.model_config.config,
-            idi=idi,
-            device=self.device,
-            use_half_prediction=self.use_half_prediction,
+        kwargs = dict(
+            idi=idi, device=self.device, use_half_prediction=self.use_half_prediction
         )
-        return result
+        if self.model_config.config.predict is predict:
+            # The default predict takes the slot around its device part only.
+            return predict(
+                input_roi,
+                output_roi,
+                self.model_config.config,
+                device_slots=self.device_slots,
+                **kwargs,
+            )
+        # A script's own predict may not accept more keywords, and its device
+        # part can't be told apart from the rest, so all of it takes the slot.
+        with _device_part(self.device_slots):
+            return self.model_config.config.predict(
+                input_roi, output_roi, self.model_config.config, **kwargs
+            )

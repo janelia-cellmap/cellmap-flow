@@ -13,7 +13,7 @@ from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.inferencer import DeviceSlots, Inferencer
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
@@ -66,6 +66,10 @@ class CellMapFlowServer:
         ``restart_callback`` enables POST /__control__/restart, which then
         only accepts requests carrying ``restart_token`` in the
         X-Restart-Token header.
+
+        ``CELLMAP_FLOW_GPU_SLOTS`` (default 1), read here, is how many chunk
+        requests may use the device at once; the rest wait their turn in
+        arrival order. See inferencer.DeviceSlots.
         """
         if restart_callback is not None and not restart_token:
             raise ValueError("restart_callback requires a restart_token")
@@ -82,7 +86,7 @@ class CellMapFlowServer:
         # dashboard having to build the model itself.
         self.model_config = model_config
 
-        self.inferencer = Inferencer(model_config)
+        self.inferencer = Inferencer(model_config, device_slots=DeviceSlots.from_env())
         self.restart_callback = restart_callback
         self.restart_token = restart_token
 
