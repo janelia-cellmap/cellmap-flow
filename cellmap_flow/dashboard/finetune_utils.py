@@ -786,7 +786,8 @@ def _sync_all_annotations_from_minio(force):
         logger.info("MinIO not initialized, skipping annotation sync")
         return -1
 
-    logger.info(f"Syncing all annotations from MinIO (force={force})...")
+    # DEBUG: the periodic sync runs this every 30 s.
+    logger.debug(f"Syncing all annotations from MinIO (force={force})...")
     s3 = _make_s3_filesystem()
     zarrs = s3.ls(minio_state["bucket"])
     zarr_ids = [Path(c).name.replace(".zarr", "") for c in zarrs if c.endswith(".zarr")]
