@@ -152,6 +152,9 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
             if shader_controls:
                 layer_kwargs["shaderControls"] = shader_controls
             s.layers[model] = neuroglancer.ImageLayer(**layer_kwargs)
+        # The YAML's extra_layers (cellmap_flow_yaml builds them).
+        for name, layer in g.extra_layers.items():
+            s.layers[name] = layer
     # show(viewer)
     viewer_url = str(g.viewer)
     # .replace("zouinkhim-lm1", "192.168.1.167")

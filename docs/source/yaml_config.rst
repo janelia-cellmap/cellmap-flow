@@ -51,6 +51,9 @@ A configuration file has the following top-level fields:
    * - ``wrap_raw``
      - No
      - Wrap raw data in neuroglancer (default: ``true``).
+   * - ``extra_layers``
+     - No
+     - More volumes to show in the viewer beside the raw data (see below).
    * - ``output_path``
      - No
      - Output zarr path (used by blockwise processing).
@@ -165,6 +168,26 @@ Define input normalization and output postprocessing under ``json_data``:
           threshold: 0.5
 
 Normalizers are applied in order before inference. Postprocessors are applied in order after inference.
+
+Extra Layers
+------------
+
+``cellmap_flow_yaml`` can show more volumes in the viewer beside the raw data and the predictions, for instance an earlier prediction or an instance segmentation. Each is read as stored, without the input normalizers:
+
+.. code-block:: yaml
+
+    extra_layers:
+      - name: base_mito
+        path: /nrs/cellmap/predictions/mito.zarr/mito
+        shader: |                      # optional, image layers only
+          void main() { emitRGB(vec3(0, toNormalized(getDataValue()), 0)); }
+        blend: additive                # optional, image layers only
+      - name: instances
+        path: /nrs/cellmap/predictions/instances.zarr/s0
+        layer_type: segmentation       # default: image
+        disable_meshes: true           # optional; no meshes computed when a segment is picked
+
+A volume that cannot be opened is logged and left out. ``--validate-only`` checks that every entry has a unique ``name`` and a ``path``, and a known ``layer_type``.
 
 Bounding Boxes
 --------------

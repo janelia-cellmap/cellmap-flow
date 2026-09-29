@@ -27,6 +27,71 @@ if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
 
 logger = logging.getLogger(__name__)
 
+EXTRA_LAYER_TYPES = ("image", "segmentation")
+
+
+def extra_layer_entries(config) -> list:
+    """The YAML's ``extra_layers``, checked; [] when there are none.
+
+    Each entry is ``{name, path, layer_type?, shader?, blend?,
+    disable_meshes?}``: a volume shown beside the raw data under ``name``.
+
+    Raises:
+        ConfigError: an entry lacks a name or path, repeats a name or uses
+            the raw layer's ("data"), or has an unknown layer_type.
+    """
+    entries = config.get("extra_layers") or []
+    if not isinstance(entries, list):
+        raise ConfigError("YAML 'extra_layers' must be a list")
+    names = {"data"}
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("name") or not entry.get("path"):
+            raise ConfigError(f"Each extra_layers entry needs a name and a path: {entry!r}")
+        if entry["name"] in names:
+            raise ConfigError(f"extra_layers name {entry['name']!r} is taken")
+        names.add(entry["name"])
+        if entry.get("layer_type", "image") not in EXTRA_LAYER_TYPES:
+            raise ConfigError(
+                f"extra_layers {entry['name']!r}: layer_type must be one of {EXTRA_LAYER_TYPES}"
+            )
+    return entries
+
+
+def build_extra_layers(entries) -> dict:
+    """``{name: neuroglancer layer}`` for extra_layers entries.
+
+    Read as stored, without the input normalizers. An image entry's
+    ``shader`` and ``blend`` are applied to its layer; a segmentation colours
+    its ids itself, and has no blend. An entry whose volume cannot be opened
+    is logged and left out, rather than stopping the dashboard.
+    """
+    from cellmap_flow.utils.scale_pyramid import get_raw_layer
+
+    layers = {}
+    for entry in entries:
+        name = entry["name"]
+        segmentation = entry.get("layer_type", "image") == "segmentation"
+        try:
+            layer = get_raw_layer(
+                entry["path"],
+                normalize=False,
+                segmentation=segmentation,
+                disable_meshes=bool(entry.get("disable_meshes", False)),
+            )
+        except Exception as e:
+            logger.error(f"Could not open extra layer {name!r} ({entry['path']}): {e}")
+            continue
+        if segmentation:
+            if entry.get("shader") or entry.get("blend"):
+                logger.warning(f"Extra layer {name!r} is a segmentation: ignoring shader and blend")
+        else:
+            if entry.get("shader"):
+                layer.shader = entry["shader"]
+            if entry.get("blend"):
+                layer.blend = entry["blend"]
+        layers[name] = layer
+    return layers
+
 
 def run_multiple(
     models: List["ModelConfig"], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
@@ -120,6 +185,15 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     cycle_gpu_queues: true # optional; false pins the job to `queue` above
                            # instead of falling back to a queue with capacity.
     wrap_raw: true         # optional; false serves raw straight from the file
+    extra_layers:          # optional; more volumes to show beside the raw data
+      - name: mito_pred
+        path: /path/to/pred.zarr/mito
+        shader: "..."      # optional, image layers only
+        blend: additive    # optional, image layers only
+      - name: instances
+        path: /path/to/instances.zarr/s0
+        layer_type: segmentation  # default: image
+        disable_meshes: true      # optional; no meshes computed on a pick
     json_data:             # optional; normalization and postprocessing
       input_norm:
         MinMaxNormalizer: {min_value: 0, max_value: 255}
@@ -186,6 +260,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     logger.info(f"Loading configuration from: {config_path}")
     try:
         config = load_config(config_path)
+        extra_layers = extra_layer_entries(config)
     except ConfigError as e:
         raise click.ClickException(str(e))
 
@@ -249,9 +324,12 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
         click.echo(f"  - Models: {len(g.models_config)}")
         click.echo(f"  - Data path: {data_path}")
         click.echo(f"  - Queue: {queue}")
+        if extra_layers:
+            click.echo(f"  - Extra layers: {len(extra_layers)}")
         return
 
     g.save_server_config()
+    g.extra_layers = build_extra_layers(extra_layers)
 
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()
