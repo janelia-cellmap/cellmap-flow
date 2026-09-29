@@ -139,8 +139,12 @@ def extract_host_from_output(output: str) -> Optional[str]:
 
     try:
         if IP_PATTERN[0] in output and IP_PATTERN[1] in output:
-            host = output.split(IP_PATTERN[0])[1].split(IP_PATTERN[1])[0]
-            return host
+            # The newest marker: a requeued LSF job's output still holds its
+            # earlier run's address, and the first marker is that dead one.
+            tail = output.rsplit(IP_PATTERN[0], 1)[1]
+            if IP_PATTERN[1] not in tail:
+                return None  # its closing half is not written yet
+            return tail.split(IP_PATTERN[1])[0]
     except (IndexError, AttributeError) as e:
         logger.debug(f"Could not extract host: {e}")
 

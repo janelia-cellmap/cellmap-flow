@@ -143,3 +143,10 @@ def test_the_polling_timeline(monkeypatch):
         (3.0, "bjobs"), (3.0, "bpeek"),
     ]
     assert lsf.sleeps == 6
+
+
+def test_a_requeued_job_reports_its_newest_address(monkeypatch):
+    lsf = FakeLSF(monkeypatch)
+    earlier = MARKER.replace("node7:4321", "node3:1111")
+    lsf.bpeek_default = (0, f"{earlier}\nrequeued\n{MARKER}\n", "")
+    assert LSFJob("1").wait_for_host(timeout=60) == "http://node7:4321"
