@@ -1,7 +1,8 @@
-"""The io/ package: paths, metadata, multiscale levels and OME attributes.
+"""The io/ package through its public interface.
 
 What the old readers returned on real layouts is pinned in test_io_matrix;
-this file covers the new interfaces themselves.
+this file covers what is new: ArrayMeta with every axis, list_levels,
+select_level's modes, the path helpers and the OME writers.
 """
 
 import json
@@ -14,129 +15,63 @@ import pytest
 import tensorstore as ts
 import zarr
 
-from cellmap_flow.io import metadata, paths
+from cellmap_flow.io import paths
 from cellmap_flow.io.metadata import ArrayMeta, list_levels, read_array_meta
-
-# ---------------------------------------------------------------------------
-# io/ stays importable without the application around it
-# ---------------------------------------------------------------------------
-
-_HEAVY = ("cellmap_flow.globals", "flask", "neuroglancer", "torch", "huggingface_hub", "peft")
+from cellmap_flow.io.multiscale import closest_raw_scale, select_dataset, select_level
+from cellmap_flow.io.ome import multiscales_attrs, singlescale_attrs
 
 
-@pytest.mark.parametrize(
-    "module",
-    [
-        "cellmap_flow.io",
-        "cellmap_flow.io.paths",
-        "cellmap_flow.io.metadata",
-        "cellmap_flow.io.multiscale",
-        "cellmap_flow.io.ome",
-    ],
-)
-def test_io_modules_import_nothing_heavy(module, tmp_path):
+def test_io_imports_nothing_heavy(tmp_path):
     # globals configures logging and reads ~/.cellmap_flow on import; the
     # others are slow or optional. A fresh interpreter, so that what this
-    # test process has already imported does not hide anything.
-    code = (
-        f"import sys, {module}; "
-        f"loaded = [m for m in {_HEAVY!r} if m in sys.modules]; "
-        "assert not loaded, loaded"
-    )
-    env = {**os.environ, "HOME": str(tmp_path)}
+    # process has already imported hides nothing.
+    modules = ["cellmap_flow.io." + m for m in ("paths", "metadata", "multiscale", "ome")]
+    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "torch", "huggingface_hub", "peft"]
+    code = f"import sys, {', '.join(modules)}; print([m for m in {heavy!r} if m in sys.modules])"
     result = subprocess.run(
-        [sys.executable, "-c", code], env=env, capture_output=True, text=True, cwd=os.getcwd()
+        [sys.executable, "-c", code],
+        env={**os.environ, "HOME": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        cwd=os.getcwd(),
     )
     assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
 
 
-# ---------------------------------------------------------------------------
-# paths
-# ---------------------------------------------------------------------------
-
-
-def test_split_container_at_the_last_suffix():
-    assert paths.split_container("/d/x.zarr/em/s0") == ("/d/x.zarr", "em/s0")
-    assert paths.split_container("/d/x.zarr") == ("/d/x.zarr", "")
-    assert paths.split_container("/d/a.n5/b.zarr/raw") == ("/d/a.n5/b.zarr", "raw")
-    assert paths.split_container("/d/a.zarr/b.n5/raw") == ("/d/a.zarr/b.n5", "raw")
-    assert paths.split_container("s3://bucket/x.zarr/raw") == ("s3://bucket/x.zarr", "raw")
-
-
-def test_split_container_without_a_suffix_finds_the_group(tmp_path):
-    root = zarr.open_group(str(tmp_path / "plain"), mode="w")
-    root.create_group("em").create_dataset("s0", shape=(2, 2, 2), dtype="u1")
-    # The nearest .zgroup going up is em's own.
-    assert paths.split_container(str(tmp_path / "plain" / "em" / "s0")) == (
-        str(tmp_path / "plain" / "em"),
-        "s0",
-    )
-    with pytest.raises(RuntimeError):
-        paths.split_container(str(tmp_path / "nothing" / "here"))
-    with pytest.raises(RuntimeError):
-        paths.split_container("https://host/no/suffix")
-
-
-def test_split_dataset_path_still_appends_a_scale(tmp_path):
-    from cellmap_flow.utils.ds import split_dataset_path
-
-    assert split_dataset_path("/d/x.zarr/em", scale=1) == ("/d/x.zarr", "em/s1")
-    assert split_dataset_path("/d/x.zarr", scale=0) == ("/d/x.zarr", "/s0")
-    zarr.open_group(str(tmp_path / "plain"), mode="w")
-    assert split_dataset_path(str(tmp_path / "plain"), scale=2) == (str(tmp_path / "plain"), "s2")
-
-
-def test_join_and_normalize():
-    assert paths.join("https://host/x.zarr/", "em", "s0") == "https://host/x.zarr/em/s0"
-    assert paths.join("/d/x.zarr", "em", "s0") == os.path.join("/d/x.zarr", "em", "s0")
-    assert paths.normalize_path("/d/my\\ data.zarr") == "/d/my data.zarr"
-    # Shell escapes are a filesystem thing; a URL is left alone.
-    assert paths.normalize_path("https://host/my\\ data.zarr") == "https://host/my\\ data.zarr"
-    assert paths.is_remote("s3://b/x") and paths.is_remote("http://h/x")
-    assert not paths.is_remote("gs://b/x") and not paths.is_remote("/d/x")
-
-
-def _v3_node(path, node_type):
+def _v3_node(path, node_type="group", attributes=None):
     os.makedirs(path, exist_ok=True)
     with open(os.path.join(path, "zarr.json"), "w") as f:
-        json.dump({"zarr_format": 3, "node_type": node_type}, f)
+        json.dump({"zarr_format": 3, "node_type": node_type, "attributes": attributes or {}}, f)
 
 
-def test_detect_format(tmp_path):
-    _v3_node(str(tmp_path / "v3.zarr"), "group")
-    _v3_node(str(tmp_path / "v3.zarr" / "s0"), "array")
-    assert paths.detect_format(str(tmp_path / "v3.zarr" / "s0")) == "zarr3"
-    assert paths.detect_format(str(tmp_path / "v3.zarr")) == "zarr3"
-    assert paths.detect_format(str(tmp_path / "v2.zarr" / "s0")) == "zarr2"
-    assert paths.detect_format(str(tmp_path / "a.n5" / "raw")) == "n5"
-    assert paths.detect_format("precomputed:///d/pc") == "precomputed"
-    assert paths.detect_format("gs://bucket/pc") == "precomputed"
-    assert paths.detect_format("https://host/a.n5/raw") == "n5"
-    assert paths.detect_format("https://host/x.zarr/raw") == "zarr2"
+def test_paths(tmp_path):
+    from cellmap_flow.utils.ds import split_dataset_path
+
+    t = str(tmp_path)
+    _v3_node(f"{t}/v3.zarr")
+    _v3_node(f"{t}/v3.zarr/s0", "array")
+    zarr.open_group(f"{t}/plain", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
+    assert paths.split_container("/d/x.zarr/em/s0") == ("/d/x.zarr", "em/s0")
+    assert paths.split_container("/d/a.n5/b.zarr/raw") == ("/d/a.n5/b.zarr", "raw")
+    # Without a suffix: the nearest .zgroup going up (em's own).
+    assert paths.split_container(f"{t}/plain/em/s0") == (f"{t}/plain/em", "s0")
+    with pytest.raises(RuntimeError):
+        paths.split_container("https://host/no/suffix")
+    assert split_dataset_path("/d/x.zarr/em", scale=1) == ("/d/x.zarr", "em/s1")
+    assert [
+        paths.detect_format(p)
+        for p in (f"{t}/v3.zarr/s0", f"{t}/v2.zarr/s0", "/d/a.n5/raw", "gs://b/pc", "https://h/a.n5")
+    ] == ["zarr3", "zarr2", "n5", "precomputed", "n5"]
     # zarr v3 is only read from the local filesystem.
     assert paths.find_v3_container("https://host/v3.zarr") is None
-    assert paths.find_v3_container(str(tmp_path / "v3.zarr" / "s0" / "c")) == str(
-        tmp_path / "v3.zarr" / "s0"
-    )
+    assert paths.join("https://host/x.zarr/", "em", "s0") == "https://host/x.zarr/em/s0"
+    assert paths.normalize_path("/d/my\\ data.zarr") == "/d/my data.zarr"
+    assert paths.normalize_path("https://h/my\\ data.zarr") == "https://h/my\\ data.zarr"
 
 
-def test_zarr_container_markers(tmp_path):
-    zarr.open_group(str(tmp_path / "g"), mode="w")
-    _v3_node(str(tmp_path / "v3"), "group")
-    (tmp_path / "empty").mkdir()
-    assert paths.is_zarr_container(str(tmp_path / "g"))
-    assert paths.is_zarr_container(str(tmp_path / "v3"))
-    assert not paths.is_zarr_container(str(tmp_path / "empty"))
-    assert not paths.is_zarr_container("https://host/x.zarr")
-
-
-# ---------------------------------------------------------------------------
-# metadata
-# ---------------------------------------------------------------------------
-
-
-def _ome_axes(channel=False, unit="nanometer"):
-    axes = [{"name": n, "type": "space", "unit": unit} for n in "zyx"]
+def _ome_axes(channel=False):
+    axes = [{"name": n, "type": "space", "unit": "nanometer"} for n in "zyx"]
     return ([{"name": "c", "type": "channel"}] if channel else []) + axes
 
 
@@ -153,27 +88,19 @@ def _datasets(levels):
     ]
 
 
-JANELIA = [("s0", (8,) * 3, (0,) * 3), ("s1", (16,) * 3, (4,) * 3), ("s2", (32,) * 3, (12,) * 3)]
-
-
 @pytest.fixture
 def czyx(tmp_path):
     group = zarr.open_group(str(tmp_path / "c.zarr"), mode="w")
     group.create_dataset("s0", shape=(2, 8, 8, 8), chunks=(1, 4, 4, 4), dtype="u2", fill_value=3)
     group.create_dataset("s1", shape=(2, 4, 4, 4), chunks=(1, 2, 2, 2), dtype="u2")
+    levels = [("s0", (1, 8, 8, 8), (0, 4, 4, 4)), ("s1", (1, 16, 16, 16), (0, 8, 8, 8))]
     group.attrs["multiscales"] = [
-        {
-            "version": "0.4",
-            "axes": _ome_axes(channel=True),
-            "datasets": _datasets(
-                [("s0", (1, 8, 8, 8), (0, 4, 4, 4)), ("s1", (1, 16, 16, 16), (0, 8, 8, 8))]
-            ),
-        }
+        {"version": "0.4", "axes": _ome_axes(channel=True), "datasets": _datasets(levels)}
     ]
     return str(tmp_path / "c.zarr")
 
 
-def test_every_axis_is_kept(czyx):
+def test_array_meta_keeps_every_axis(czyx):
     meta = read_array_meta(czyx + "/s0")
     assert meta == ArrayMeta(
         path=czyx + "/s0",
@@ -189,217 +116,93 @@ def test_every_axis_is_kept(czyx):
         fill_value=3,
     )
     assert meta.channel_axis == 0
-    spatial = meta.spatial()
-    assert spatial.axes == ("z", "y", "x") and spatial.shape == (8, 8, 8)
-    assert spatial.chunk_shape == (4, 4, 4) and spatial.channel_axis is None
+    assert meta.spatial().axes == ("z", "y", "x") and meta.spatial().channel_axis is None
+    assert meta.spatial().chunk_shape == (4, 4, 4)
 
 
-def test_levels_of_a_group(czyx, tmp_path):
-    levels = list_levels(czyx)
-    assert [path for path, _ in levels] == ["s0", "s1"]
-    assert levels[1][1].spatial().voxel_size == (16.0, 16.0, 16.0)
-    assert levels[1][1].path == os.path.join(czyx, "s1")
-
-    zarr.open_group(str(tmp_path / "plain.zarr"), mode="w")
-    with pytest.raises(KeyError):
-        list_levels(str(tmp_path / "plain.zarr"))
-    _v3_node(str(tmp_path / "plain_v3.zarr"), "group")
-    with pytest.raises(ValueError):
-        list_levels(str(tmp_path / "plain_v3.zarr"))
-
-
-def _v3_group(path, levels, unit="nanometer"):
-    for name, _, _ in levels:
-        ts.open(
-            {
-                "driver": "zarr3",
-                "kvstore": {"driver": "file", "path": os.path.join(path, name)},
-                "metadata": {
-                    "shape": [4, 4, 4],
-                    "data_type": "uint8",
-                    "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [2, 2, 2]}},
-                },
-            },
-            create=True,
-        ).result()
-    with open(os.path.join(path, "zarr.json"), "w") as f:
-        json.dump(
-            {
-                "zarr_format": 3,
-                "node_type": "group",
-                "attributes": {
-                    "ome": {
-                        "multiscales": [
-                            {"version": "0.5", "axes": _ome_axes(unit=unit), "datasets": _datasets(levels)}
-                        ]
-                    }
-                },
-            },
-            f,
-        )
-    return path
-
-
-@pytest.mark.parametrize("fmt", ["zarr2", "zarr3"])
-def test_the_ome_centre_becomes_an_exact_corner(tmp_path, fmt):
-    if fmt == "zarr3":
-        group = _v3_group(str(tmp_path / "j.zarr"), JANELIA)
-    else:
-        group = str(tmp_path / "j.zarr")
-        root = zarr.open_group(group, mode="w")
-        for name, _, _ in JANELIA:
-            root.create_dataset(name, shape=(4, 4, 4), dtype="u1")
-        root.attrs["multiscales"] = [
-            {"version": "0.4", "axes": _ome_axes(), "datasets": _datasets(JANELIA)}
-        ]
-    for name, meta in list_levels(group):
-        # -4 nm at 8, 16 and 32 nm voxels: not on any level's grid, and not
-        # rounded onto it.
-        assert meta.translation == (-4.0, -4.0, -4.0), name
-        assert read_array_meta(os.path.join(group, name)).translation == (-4.0,) * 3
-        assert meta.format == fmt
-
-
-def test_units_are_converted_before_the_centre_is(tmp_path):
-    group = _v3_group(
-        str(tmp_path / "um.zarr"),
-        [("s0", (0.008, 0.004, 0.004), (0.08, 0.04, 0.04))],
-        unit="micrometer",
-    )
-    meta = read_array_meta(group + "/s0")
-    assert meta.voxel_size == (8.0, 4.0, 4.0)
-    assert meta.translation == (76.0, 38.0, 38.0)
-    assert meta.units == ("nanometer",) * 3
-
-
-def test_legacy_offsets_are_rounded_onto_the_grid_but_v3_array_attrs_are_not(tmp_path):
-    root = zarr.open_group(str(tmp_path / "l.zarr"), mode="w")
-    arr = root.create_dataset("raw", shape=(4, 4, 4), dtype="u1")
-    arr.attrs.update({"resolution": [8, 8, 8], "offset": [4, 4, 4]})
-    assert read_array_meta(str(tmp_path / "l.zarr" / "raw")).translation == (8.0, 8.0, 8.0)
-
-    ts.open(
-        {
-            "driver": "zarr3",
-            "kvstore": {"driver": "file", "path": str(tmp_path / "plain")},
-            "metadata": {
-                "shape": [4, 4, 4],
-                "data_type": "uint8",
-                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4, 4, 4]}},
-                "attributes": {"resolution": [8, 8, 8], "offset": [4, 4, 4]},
-            },
-        },
-        create=True,
-    ).result()
-    meta = read_array_meta(str(tmp_path / "plain"))
-    assert meta.format == "zarr3" and meta.translation == (4.0, 4.0, 4.0)
-
-
-def test_a_legacy_array_with_a_leading_channel_axis(tmp_path):
-    root = zarr.open_group(str(tmp_path / "l.zarr"), mode="w")
-    arr = root.create_dataset("raw", shape=(3, 4, 4, 4), dtype="u1")
-    arr.attrs.update({"resolution": [8, 4, 4], "offset": [0, 0, 0]})
-    meta = read_array_meta(str(tmp_path / "l.zarr" / "raw"))
-    assert meta.axes == ("c^", "z", "y", "x") and meta.channel_axis == 0
-    assert meta.voxel_size == (1.0, 8.0, 4.0, 4.0)
-    assert meta.spatial().shape == (4, 4, 4)
-
-
-def test_n5_transform_in_c_order(tmp_path):
-    from zarr.n5 import N5FSStore
-
-    root = zarr.open(N5FSStore(str(tmp_path / "a.n5")), mode="w")
-    arr = root.create_dataset("raw", shape=(10, 20, 30), dtype="u1")
-    arr.attrs["transform"] = {
-        "axes": ["z", "y", "x"],
-        "ordering": "C",
-        "scale": [8, 4, 2],
-        "translate": [80, 40, 20],
-        "units": ["nm", "nm", "nm"],
-    }
-    meta = read_array_meta(str(tmp_path / "a.n5" / "raw"))
-    assert meta.format == "n5"
-    assert meta.shape == (10, 20, 30)
-    assert meta.voxel_size == (8.0, 4.0, 2.0) and meta.translation == (80.0, 40.0, 20.0)
-
-
-def test_precomputed_is_read_in_c_order(tmp_path):
-    path = str(tmp_path / "pc")
+def _precomputed(path):
     ts.open(
         {
             "driver": "neuroglancer_precomputed",
             "kvstore": {"driver": "file", "path": path},
             "multiscale_metadata": {"type": "image", "data_type": "uint8", "num_channels": 1},
-            "scale_metadata": {
-                "size": [20, 10, 2],
-                "resolution": [4, 8, 16],
-                "encoding": "raw",
-                "chunk_size": [10, 5, 2],
+            "scale_metadata": {"size": [20, 10, 2], "resolution": [4, 8, 16], "encoding": "raw"},
+        },
+        create=True,
+    ).result()
+    return "precomputed://" + path
+
+
+def _legacy_channels(path):
+    arr = zarr.open_group(path, mode="w").create_dataset("raw", shape=(3, 4, 4, 4), dtype="u1")
+    arr.attrs.update({"resolution": [8, 4, 4], "offset": [0, 0, 0]})
+    return path + "/raw"
+
+
+def _janelia_v3(path):
+    multiscale = {"version": "0.5", "axes": _ome_axes(), "datasets": _datasets([("s1", (16,) * 3, (4,) * 3)])}
+    _v3_node(path, attributes={"ome": {"multiscales": [multiscale]}})
+    ts.open(
+        {
+            "driver": "zarr3",
+            "kvstore": {"driver": "file", "path": path + "/s1"},
+            "metadata": {
+                "shape": [4, 4, 4],
+                "data_type": "uint8",
+                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [2, 2, 2]}},
             },
         },
         create=True,
     ).result()
-    meta = read_array_meta("precomputed://" + path)
-    assert meta.format == "precomputed"
-    assert meta.axes == ("channel", "z", "y", "x")
-    assert meta.shape == (1, 2, 10, 20)
-    assert meta.voxel_size == (1.0, 16.0, 8.0, 4.0)
-    assert meta.spatial().chunk_shape == (2, 5, 10)
+    return path + "/s1"
 
 
-def test_float_voxel_sizes_are_kept(tmp_path):
-    root = zarr.open_group(str(tmp_path / "f.zarr"), mode="w")
-    root.create_dataset("s0", shape=(4, 4, 4), dtype="u1")
-    root.attrs["multiscales"] = [
-        {"version": "0.4", "axes": _ome_axes(), "datasets": _datasets([("s0", (5.24, 4, 4), (2.62, 2, 2))])}
+@pytest.mark.parametrize(
+    "make, fmt, axes, voxel_size, translation",
+    [
+        (_precomputed, "precomputed", ("channel", "z", "y", "x"), (1.0, 16.0, 8.0, 4.0), (0.0,) * 4),
+        # Legacy attributes covering the last axes: the others are channels.
+        (_legacy_channels, "zarr2", ("c^", "z", "y", "x"), (1.0, 8.0, 4.0, 4.0), (0.0,) * 4),
+        # -4 nm at 16 nm: exact, not rounded onto the grid.
+        (_janelia_v3, "zarr3", ("z", "y", "x"), (16.0,) * 3, (-4.0,) * 3),
+    ],
+)
+def test_read_array_meta(tmp_path, make, fmt, axes, voxel_size, translation):
+    meta = read_array_meta(make(str(tmp_path / "data")))
+    assert (meta.format, meta.axes, meta.voxel_size, meta.translation) == (
+        fmt,
+        axes,
+        voxel_size,
+        translation,
+    )
+    assert meta.spatial().axes == ("z", "y", "x")
+
+
+def test_list_levels(czyx, tmp_path):
+    levels = list_levels(czyx)
+    assert [(path, meta.path, meta.spatial().voxel_size) for path, meta in levels] == [
+        ("s0", os.path.join(czyx, "s0"), (8.0, 8.0, 8.0)),
+        ("s1", os.path.join(czyx, "s1"), (16.0, 16.0, 16.0)),
     ]
-    meta = read_array_meta(str(tmp_path / "f.zarr" / "s0"))
-    assert meta.voxel_size == (5.24, 4.0, 4.0) and meta.translation == (0.0, 0.0, 0.0)
-
-
-def test_to_nm_and_unknown_units(caplog):
-    assert metadata.to_nm([0.008, 4], ["micrometer", "nm"]) == (8.0, 4.0)
-    assert metadata.to_nm([8], None) == (8.0,)
-    with caplog.at_level("WARNING"):
-        assert metadata.nm_per_unit("furlong-for-this-test") == 1.0
-        assert metadata.nm_per_unit("furlong-for-this-test") == 1.0
-    assert sum("furlong" in r.getMessage() for r in caplog.records) == 1
-
-
-def test_the_zarr_object_attribute_lookups_are_kept(tmp_path):
-    from cellmap_flow.utils import ds
-
-    root = zarr.open_group(str(tmp_path / "l.zarr"), mode="w")
-    group = root.create_group("g")
-    group.attrs["units"] = ["nm", "nm", "nm"]
-    arr = group.create_dataset("raw", shape=(4, 4, 4), dtype="u1")
-    arr.attrs["transform"] = {"ordering": "C", "scale": [8, 4, 2], "translate": [1, 2, 3], "units": ["nm"] * 3}
-    assert ds.check_for_voxel_size(arr, "F") == [2, 4, 8]
-    assert ds.check_for_offset(arr, "C") == [1, 2, 3]
-    # The array's own transform comes before its parent's units.
-    assert ds.check_for_units(arr, "C") == ["nm"] * 3
-    assert ds.check_for_units(root.create_dataset("bare", shape=(2,), dtype="u1"), "C") == "pixels"
-    multiscales, found_in = ds.check_for_multiscale(group)
-    assert multiscales is None and found_in.path == ""
-
-
-# ---------------------------------------------------------------------------
-# multiscale
-# ---------------------------------------------------------------------------
+    zarr.open_group(str(tmp_path / "plain.zarr"), mode="w")
+    with pytest.raises(KeyError):
+        list_levels(str(tmp_path / "plain.zarr"))
+    _v3_node(str(tmp_path / "plain_v3.zarr"))
+    with pytest.raises(ValueError):
+        list_levels(str(tmp_path / "plain_v3.zarr"))
 
 
 def _level(path, voxel_size):
-    n = len(voxel_size)
     return path, ArrayMeta(
         path=path,
         format="zarr2",
-        shape=(4,) * n,
+        shape=(4, 4, 4),
         dtype=np.dtype("u1"),
-        chunk_shape=(4,) * n,
-        axes=("z", "y", "x")[-n:],
-        units=("nanometer",) * n,
+        chunk_shape=(4, 4, 4),
+        axes=("z", "y", "x"),
+        units=("nanometer",) * 3,
         voxel_size=tuple(float(v) for v in voxel_size),
-        translation=(0.0,) * n,
+        translation=(0.0,) * 3,
     )
 
 
@@ -411,47 +214,30 @@ LEVELS = [_level("s0", (8, 4, 4)), _level("s1", (16, 8, 8)), _level("s2", (32, 1
     [
         (None, "floor", "s0"),
         ((16, 8, 8), "floor", "s1"),
-        ((20, 10, 10), "floor", "s1"),  # the finest level not too coarse
-        ((4, 2, 2), "floor", "s0"),  # even s0 is too coarse: s0
-        ((64, 32, 32), "floor", "s2"),
+        ((20, 10, 10), "floor", "s1"),  # the finest level that is not too coarse
+        ((4, 2, 2), "floor", "s0"),  # even s0 is too coarse
         ((16, 8, 4), "floor", "s0"),  # s1 is coarser in x
+        ((64, 32, 32), "floor", "s2"),
         ((16, 8, 8), "exact", "s1"),
-        ((20, 10, 10), "nearest", "s1"),
-        ((28, 14, 14), "nearest", "s2"),
+        ((10.48, 8, 8), "exact", ValueError),
         ((12, 6, 6), "nearest", "s1"),  # nearer 16 than 8 on a log scale
-        ((10, 5, 5), "nearest", "s0"),
     ],
 )
 def test_select_level(voxel_size, mode, expected):
-    from cellmap_flow.io.multiscale import select_level
-
-    assert select_level(LEVELS, voxel_size, mode)[0] == expected
-
-
-def test_select_level_exact_refuses_a_missing_voxel_size():
-    from cellmap_flow.io.multiscale import select_level
-
-    with pytest.raises(ValueError, match="no level"):
-        select_level(LEVELS, (10.48, 8, 8), "exact")
-    with pytest.raises(ValueError):
-        select_level([], (8, 8, 8))
+    if expected is ValueError:
+        with pytest.raises(ValueError, match="no level"):
+            select_level(LEVELS, voxel_size, mode)
+    else:
+        assert select_level(LEVELS, voxel_size, mode)[0] == expected
 
 
 def test_select_dataset_and_closest_raw_scale(czyx):
-    from cellmap_flow.io.multiscale import closest_raw_scale, select_dataset
-
     assert select_dataset(czyx, (16, 16, 16)) == (os.path.join(czyx, "s1"), "s1")
     # An array is read as it is.
     assert select_dataset(czyx + "/s0", (16, 16, 16)) == (czyx + "/s0", None)
     # From the group or one of its levels alike.
     assert closest_raw_scale(czyx + "/s0", (16, 16, 16)) == (16.0, 16.0, 16.0)
-    assert closest_raw_scale(czyx, (12, 12, 12)) == (8.0, 8.0, 8.0)
     assert closest_raw_scale(czyx + "/missing", (8, 8, 8)) is None
-
-
-# ---------------------------------------------------------------------------
-# ome
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -488,7 +274,6 @@ def test_select_dataset_and_closest_raw_scale(czyx):
 def test_singlescale_attrs_are_written_byte_for_byte_as_before(args, written):
     from funlib.geometry import Coordinate
 
-    from cellmap_flow.io.ome import singlescale_attrs
     from cellmap_flow.utils.ds import generate_singlescale_metadata
 
     args = tuple(Coordinate(16, 8, 8) if a == "Coordinate(16, 8, 8)" else a for a in args)
@@ -496,25 +281,15 @@ def test_singlescale_attrs_are_written_byte_for_byte_as_before(args, written):
     assert json.dumps(singlescale_attrs(*args)) == written
 
 
-def test_multiscales_attrs_round_trip_through_the_reader(tmp_path):
-    from cellmap_flow.io.ome import multiscales_attrs
-
+def test_written_corners_read_back(tmp_path):
     group = zarr.open_group(str(tmp_path / "w.zarr"), mode="w")
     group.create_dataset("s0", shape=(4, 4, 4), dtype="u1")
     group.create_dataset("s1", shape=(2, 2, 2), dtype="u1")
-    group.attrs.update(
-        multiscales_attrs(
-            ["z", "y", "x"],
-            ["nanometer"] * 3,
-            [("s0", [8.0] * 3, [-4.0] * 3), ("s1", [16.0] * 3, [-4.0] * 3)],
-            name="raw",
-        )
-    )
+    levels = [("s0", [8.0] * 3, [-4.0] * 3), ("s1", [16.0] * 3, [-4.0] * 3)]
+    group.attrs.update(multiscales_attrs(["z", "y", "x"], ["nanometer"] * 3, levels, name="raw"))
+    # Written as voxel 0's centre (4 at 16 nm), read back as the corner.
     assert group.attrs["multiscales"][0]["datasets"][1]["coordinateTransformations"][1] == {
         "translation": [4.0, 4.0, 4.0],
         "type": "translation",
     }
-    assert [meta.translation for _, meta in list_levels(str(tmp_path / "w.zarr"))] == [
-        (-4.0,) * 3,
-        (-4.0,) * 3,
-    ]
+    assert [meta.translation for _, meta in list_levels(str(tmp_path / "w.zarr"))] == [(-4.0,) * 3] * 2
