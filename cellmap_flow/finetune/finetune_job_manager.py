@@ -9,7 +9,6 @@ This module provides:
 import json
 import logging
 import os
-import re
 import string
 import sys
 import threading
@@ -23,6 +22,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Any
 
+from cellmap_flow.finetune import markers
+from cellmap_flow.finetune.job_log import LogTailer
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.utils.bsub_utils import (
     submit_bsub_job,
@@ -59,9 +60,8 @@ class JobStatus(Enum):
     WAITING_FOR_RESTART = "WAITING_FOR_RESTART"
 
 
-# Status markers the trainer prints, in the order they matter: the last one
-# in a chunk of log decides.
-_STATUS_MARKER_RE = re.compile(r"TRAINING_DIVERGED|RESTARTING_TRAINING|WAITING_FOR_RESTART")
+# The trainer's markers; see finetune/markers.py.
+_STATUS_MARKER_RE = markers.STATUS_MARKER_RE
 
 
 TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
@@ -116,8 +116,8 @@ def finetune_export_kwargs(output_dir, params=None) -> dict:
     return {"lora_adapter_path": str(adapter)}
 
 
-_ITERATION_COMPLETE_RE = re.compile(r"TRAINING_ITERATION_COMPLETE:\s+(\S+)")
-_MODEL_YAML_RE = re.compile(r"^.*?FINETUNED_MODEL_YAML:\s*(.+?)\s*$", re.MULTILINE)
+_ITERATION_COMPLETE_RE = markers.ITERATION_COMPLETE_RE
+_MODEL_YAML_RE = markers.MODEL_YAML_RE
 
 
 def _yaml_model_entry(yaml_path) -> Optional[dict]:
@@ -215,6 +215,57 @@ class FinetuneJob:
         }
 
 
+class FinetuneJobListener:
+    """What the job manager tells its listeners (FinetuneJobManager.add_listener).
+
+    Both are called on the job's monitor thread. A listener need not define
+    both; one that raises is logged and does not stop the others.
+    """
+
+    def on_server_ready(self, job: FinetuneJob, url: str, model_name: str) -> None:
+        """The job's inference server is up at ``url``, serving ``model_name``."""
+
+    def on_iteration_complete(self, job: FinetuneJob, model_name: str) -> None:
+        """The job finished a training iteration and named its model ``model_name``.
+
+        ``job.finetuned_model_name`` is still the previous iteration's name
+        (None before the first) while listeners run, so one that replaces a
+        viewer layer can find the old one; the manager updates it after.
+        """
+
+
+class ViewerListener(FinetuneJobListener):
+    """What the dashboard has always done: a viewer layer and a pipeline model.
+
+    Each event adds (or replaces) the finetuned model's neuroglancer layer and
+    registers its FinetuneModelConfig, through the manager's own methods.
+    Either failing is logged, and does not stop the other.
+    """
+
+    def __init__(self, manager: "FinetuneJobManager"):
+        self.manager = manager
+
+    def _add_layer(self, job, model_name, failure):
+        try:
+            self.manager._add_finetuned_neuroglancer_layer(job, model_name)
+        except Exception as e:
+            self.manager.logger.error(f"{failure}: {e}", exc_info=True)
+
+    def _register(self, job, model_name):
+        try:
+            self.manager._register_finetune_model_config(job, model_name)
+        except Exception as e:
+            self.manager.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
+
+    def on_server_ready(self, job, url, model_name):
+        self._add_layer(job, model_name, "Failed to add finetuned model to neuroglancer")
+        self._register(job, model_name)
+
+    def on_iteration_complete(self, job, model_name):
+        self._add_layer(job, model_name, "Failed to update neuroglancer layer")
+        self._register(job, model_name)
+
+
 class FinetuneJobManager:
     """
     Orchestrate finetuning jobs from submission to completion.
@@ -230,6 +281,27 @@ class FinetuneJobManager:
         """Initialize the job manager."""
         self.jobs: Dict[str, FinetuneJob] = {}
         self.logger = logging.getLogger(__name__)
+        # Told when a job's server comes up and when an iteration finishes.
+        self.viewer_listener = ViewerListener(self)
+        self._listeners: List[Any] = [self.viewer_listener]
+
+    def add_listener(self, listener) -> None:
+        """Tell ``listener`` about job events; see FinetuneJobListener."""
+        self._listeners.append(listener)
+
+    def remove_listener(self, listener) -> None:
+        """Stop telling ``listener``, which may be the default viewer_listener."""
+        self._listeners = [other for other in self._listeners if other is not listener]
+
+    def _notify(self, event: str, *args) -> None:
+        for listener in list(self._listeners):
+            handler = getattr(listener, event, None)
+            if handler is None:
+                continue
+            try:
+                handler(*args)
+            except Exception as e:
+                self.logger.error(f"Finetune listener {listener!r} failed in {event}: {e}", exc_info=True)
 
     def _get_model_metadata(self, model_config, attr_name: str, default=None):
         """
@@ -971,8 +1043,7 @@ class FinetuneJobManager:
         job_id = finetune_job.job_id
         self.logger.info(f"Monitoring job {job_id}...")
 
-        last_log_position = 0
-        partial_line = ""  # an incomplete last line, held back until it is whole
+        log = LogTailer(finetune_job.log_file)
         check_interval = 3  # seconds
         persisted_status = finetune_job.status
 
@@ -1019,40 +1090,19 @@ class FinetuneJobManager:
 
                 if finetune_job.log_file.exists():
                     try:
-                        # tee writes this one log for the job's whole life,
-                        # restarts included, so it only grows; start over if
-                        # something replaced it.
-                        file_size = finetune_job.log_file.stat().st_size
-                        if file_size < last_log_position:
-                            self.logger.info(f"Log file truncated (size {file_size} < position {last_log_position}), resetting")
-                            last_log_position = 0
-                            partial_line = ""
-
-                        with open(finetune_job.log_file, "r") as f:
-                            # Seek to last read position
-                            f.seek(last_log_position)
-                            new_content = f.read()
-                            last_log_position = f.tell()
-
-                            # Only whole lines are parsed. A read can end
-                            # mid-line ("Epoch 7/10 - Lo", "TRAINING_ITERATION_COM");
-                            # parsed as it stood, the epoch's loss or the marker
-                            # was lost or cut short. Keep the tail for next time.
-                            new_content = partial_line + new_content
-                            cut = new_content.rfind("\n") + 1
-                            new_content, partial_line = new_content[:cut], new_content[cut:]
-
-                            if new_content:
-                                # Parse for epoch and loss information
-                                self._parse_training_progress(finetune_job, new_content)
-                                # Parse for inference server ready marker
-                                self._parse_inference_server_ready(finetune_job, new_content)
+                        # Whole lines only; see LogTailer.
+                        new_content = log.read()
+                        if new_content:
+                            # Parse for epoch and loss information
+                            self._parse_training_progress(finetune_job, new_content)
+                            # Parse for inference server ready marker
+                            self._parse_inference_server_ready(finetune_job, new_content)
 
                         # Always check for restart/iteration markers (reads full log).
                         # This must run every cycle, not just when there's new content,
                         # because the marker may have been at the end of the previous
                         # chunk and we need to detect it even if no new output follows.
-                        self._parse_training_restart(finetune_job, new_content if new_content else "")
+                        self._parse_training_restart(finetune_job, new_content)
                     except Exception as e:
                         self.logger.debug(f"Error reading log file: {e}")
 
@@ -1110,14 +1160,11 @@ class FinetuneJobManager:
         #
         # "Starting epoch N of M" is read too, so the epoch counter advances
         # as soon as an epoch begins rather than when it ends.
-        start_pattern = r"Starting\s+epoch\s+(\d+)\s+of\s+(\d+)"
-        summary_pattern = r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)"
-
-        for cur, total in re.findall(start_pattern, log_content, re.IGNORECASE):
+        for cur, total in markers.EPOCH_START_RE.findall(log_content):
             finetune_job.current_epoch = int(cur)
             finetune_job.total_epochs = int(total)
 
-        summary_matches = re.findall(summary_pattern, log_content, re.IGNORECASE)
+        summary_matches = markers.EPOCH_SUMMARY_RE.findall(log_content)
         if summary_matches:
             cur, total, loss = summary_matches[-1]
             finetune_job.current_epoch = max(
@@ -1277,12 +1324,7 @@ class FinetuneJobManager:
             return
 
         # Look for the standard server IP marker (same one start_hosts() uses)
-        from cellmap_flow.utils.web_utils import IP_PATTERN
-        ip_start = IP_PATTERN[0]
-        ip_end = IP_PATTERN[1]
-
-        pattern = re.escape(ip_start) + r"(.+?)" + re.escape(ip_end)
-        matches = re.findall(pattern, log_content)
+        matches = markers.SERVER_URL_RE.findall(log_content)
         if not matches:
             return
 
@@ -1295,23 +1337,18 @@ class FinetuneJobManager:
             # Read the FULL log file to find TRAINING_ITERATION_COMPLETE marker.
             # This marker is printed BEFORE the server starts, so it's typically
             # in an earlier log chunk than the server IP marker.
-            iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
             full_log = finetune_job.log_file.read_text()
-            iter_matches = re.findall(iter_pattern, full_log)
+            iter_matches = markers.ITERATION_COMPLETE_RE.findall(full_log)
             if iter_matches:
                 model_name = iter_matches[-1]
             else:
                 model_name = f"{finetune_job.model_name}_finetuned"
             self._read_trainer_outputs(finetune_job, set_name=False)
-
-            self._add_finetuned_neuroglancer_layer(finetune_job, model_name)
         except Exception as e:
             self.logger.error(f"Failed to add finetuned model to neuroglancer: {e}", exc_info=True)
+            return
 
-        try:
-            self._register_finetune_model_config(finetune_job, model_name)
-        except Exception as e:
-            self.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
+        self._notify("on_server_ready", finetune_job, server_url, model_name)
 
     def _register_finetune_model_config(
         self, finetune_job: FinetuneJob, finetuned_model_name: str
@@ -1414,12 +1451,11 @@ class FinetuneJobManager:
 
         # Check for iteration complete marker - update neuroglancer layer.
         # Read full log in case the marker was in a previous chunk.
-        iter_pattern = r"TRAINING_ITERATION_COMPLETE:\s+(\S+)"
         try:
             full_log = finetune_job.log_file.read_text()
         except Exception:
             full_log = log_content
-        iter_matches = re.findall(iter_pattern, full_log)
+        iter_matches = markers.ITERATION_COMPLETE_RE.findall(full_log)
         # Only process new iteration-complete markers (ignore ones already handled).
         # After a restart, _processed_iteration_count stays at the old count so
         # previously-seen markers don't re-trigger inference_server_ready or
@@ -1437,20 +1473,10 @@ class FinetuneJobManager:
             self._read_trainer_outputs(finetune_job, set_name=False)
             if new_model_name != finetune_job.finetuned_model_name:
                 self.logger.info(f"New training iteration complete: {new_model_name}")
-                try:
-                    self._add_finetuned_neuroglancer_layer(finetune_job, new_model_name)
-                    # Without a server no layer was added; still show the
-                    # new name, and don't retry every poll.
-                    finetune_job.finetuned_model_name = new_model_name
-                except Exception as e:
-                    self.logger.error(f"Failed to update neuroglancer layer: {e}", exc_info=True)
-                    # Still update the stored name so the frontend reflects the new model
-                    # and we don't retry the failed neuroglancer update every cycle
-                    finetune_job.finetuned_model_name = new_model_name
-                try:
-                    self._register_finetune_model_config(finetune_job, new_model_name)
-                except Exception as e:
-                    self.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
+                self._notify("on_iteration_complete", finetune_job, new_model_name)
+                # Whatever the listeners managed -- without a server no layer
+                # is added -- show the new name, and don't retry every poll.
+                finetune_job.finetuned_model_name = new_model_name
 
     def _read_trainer_outputs(self, finetune_job: FinetuneJob, set_name: bool = True):
         """Take the latest iteration's model name and serving YAML from the log.
