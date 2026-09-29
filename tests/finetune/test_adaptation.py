@@ -91,11 +91,22 @@ def test_lora_merges_into_a_plain_module_that_computes_the_same():
 
 
 def test_the_new_modules_import_nothing_heavy(tmp_path):
-    """adaptation and losses may use torch (finetune/*), but never peft or the dashboard."""
+    """adaptation and losses may use torch (finetune/*), but never peft or the dashboard.
+
+    And importing the CLI module leaves the importer's logging alone: it
+    used to call logging.basicConfig(force=True) at import, and the
+    dashboard imports it. (Importing cellmap_flow.globals configures logging
+    too; the dashboard has done that long before.)
+    """
     heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "huggingface_hub", "peft"]
     code = (
-        "import cellmap_flow.finetune.adaptation, cellmap_flow.finetune.losses, sys\n"
-        f"loaded = [m for m in {heavy!r} if m in sys.modules]; assert not loaded, loaded"
+        "import logging, sys\n"
+        "import cellmap_flow.finetune.adaptation, cellmap_flow.finetune.losses\n"
+        f"loaded = [m for m in {heavy!r} if m in sys.modules]; assert not loaded, loaded\n"
+        "import cellmap_flow.globals\n"
+        "mine = logging.StreamHandler(); logging.root.addHandler(mine)\n"
+        "import cellmap_flow.finetune.finetune_cli\n"
+        "assert mine in logging.root.handlers, 'importing finetune_cli reconfigured logging'\n"
     )
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     result = subprocess.run(

@@ -354,3 +354,18 @@ def test_as_probabilities_does_not_double_sigmoid():
     # the failure mode this guards: sigmoid of a probability lands in [0.5, 0.73]
     squashed = torch.sigmoid(probs)
     assert squashed.min() >= 0.5 and squashed.max() <= 0.732
+
+
+@pytest.mark.parametrize("script, expected", [
+    ("offsets = [[1, 0, 0], [0, 1, 0]]\nmodel = None\n", [[1, 0, 0], [0, 1, 0]]),
+    ("model = None\n", None),
+    ("offsets = [[1, 0, 0]\n", None),  # does not parse
+])
+def test_read_offsets_from_script(tmp_path, script, expected):
+    from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
+    from cellmap_flow.finetune.target_transforms import read_offsets_from_script
+
+    path = tmp_path / "model.py"
+    path.write_text(script)
+    assert read_offsets_from_script(path) == expected
+    assert _read_offsets_from_script is read_offsets_from_script  # the dashboard's import

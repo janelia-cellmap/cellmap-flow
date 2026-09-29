@@ -48,13 +48,11 @@ from cellmap_flow.finetune.model_loading import (
 )
 from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    force=True,
+# Moved to target_transforms; the dashboard still imports it from here.
+from cellmap_flow.finetune.target_transforms import (  # noqa: F401
+    read_offsets_from_script as _read_offsets_from_script,
 )
+
 logger = logging.getLogger(__name__)
 
 
@@ -759,25 +757,6 @@ def _build_target_transform(args, model_config):
         raise ValueError(f"Unknown output type: {output_type}")
 
 
-def _read_offsets_from_script(script_path):
-    """Try to read an 'offsets' variable from a model script via AST parsing."""
-    import ast
-
-    try:
-        with open(script_path, "r") as f:
-            tree = ast.parse(f.read())
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id == "offsets":
-                        return ast.literal_eval(node.value)
-    except Exception as e:
-        logger.debug(f"Could not read offsets from {script_path}: {e}")
-
-    return None
-
-
 def _model_config_from_args(args) -> ModelConfig:
     """The ModelConfig the command line describes."""
     if args.model_entry:
@@ -1164,6 +1143,13 @@ def build_arg_parser():
 
 
 def main():
+    # Here, not at import: importing this module (the dashboard did, for
+    # _read_offsets_from_script) reconfigured the importing process's logging.
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True,
+    )
     parser = build_arg_parser()
 
     args = parser.parse_args()

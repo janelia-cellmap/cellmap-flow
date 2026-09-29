@@ -12,10 +12,37 @@ And produces:
   mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
 """
 
-from typing import List, Tuple
+import logging
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
+
+
+def read_offsets_from_script(script_path) -> Optional[list]:
+    """The ``offsets`` a model script assigns, read by parsing it (not running it); None if none.
+
+    An affinity model's script names its neighbour offsets, which the
+    affinity target needs. The dashboard reads them too, to tell an affinity
+    model when a session is set up.
+    """
+    import ast
+
+    try:
+        with open(script_path, "r") as f:
+            tree = ast.parse(f.read())
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "offsets":
+                        return ast.literal_eval(node.value)
+    except Exception as e:
+        logger.debug(f"Could not read offsets from {script_path}: {e}")
+
+    return None
 
 
 class TargetTransform:
