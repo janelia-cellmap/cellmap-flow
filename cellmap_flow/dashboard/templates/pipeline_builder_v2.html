@@ -15,7 +15,6 @@
             <div class="header-actions">
                 <button class="action-btn" onclick="autoLayoutNodes()" title="Auto-arrange nodes in a clean left-to-right layout">Auto Arrange</button>
                 <button class="action-btn" onclick="exportYAML()">📥 Export YAML</button>
-                <!-- <button class="action-btn" onclick="exportJSON()">📥 Export JSON</button> -->
                 <label class="import-btn">
                     📂 Import YAML
                     <input type="file" class="file-input" accept=".yaml,.json" id="import-file" onchange="importFile()">
@@ -657,7 +656,6 @@
         // Node management with positions
         let draggedNode = null;
         let selectedNode = null;  // Track the currently selected/front node
-        let dragOffset = { x: 0, y: 0 };
 
         // Connection state
         let connectionDrag = null;
@@ -1935,102 +1933,6 @@
             invalidateBlockwiseSteps();
         }
 
-        function saveNode(nodeId, nodeType) {
-            const nodeBox = document.getElementById(`node-${nodeId}`);
-            const inputs = nodeBox.querySelectorAll('.param-input');
-
-            let node;
-            if (nodeType === 'input') {
-                node = pipeline.inputs.find(n => n.id === nodeId);
-            } else if (nodeType === 'output') {
-                node = pipeline.outputs.find(n => n.id === nodeId);
-            } else if (nodeType === 'normalizer') {
-                node = pipeline.normalizers.find(n => n.id === nodeId);
-            } else if (nodeType === 'model') {
-                node = pipeline.models.find(m => m.id === nodeId);
-            } else if (nodeType === 'postprocessor') {
-                node = pipeline.postprocessors.find(p => p.id === nodeId);
-            } else if (nodeType === 'blockwise-config') {
-                node = pipeline.blockwise_config.find(c => c.id === nodeId);
-            }
-
-            if (node) {
-                inputs.forEach(input => {
-                    const key = input.dataset.key;
-                    const type = input.dataset.type || 'text';
-                    let value;
-
-                    if (type === 'boolean') {
-                        value = input.value === 'true';
-                    } else if (type === 'number') {
-                        value = parseFloat(input.value);
-                        if (isNaN(value)) {
-                            showMessage(`Invalid number for ${key}`, 'error');
-                            return;
-                        }
-                    } else {
-                        try {
-                            value = JSON.parse(input.value);
-                        } catch {
-                            value = input.value;
-                        }
-                    }
-
-                    node.params[key] = value;
-                    // Also update config if this is a model node
-                    if (nodeType === 'model' && node.config) {
-                        node.config[key] = value;
-                    }
-                    // Sync dataset_path to backend when updated on INPUT or OUTPUT node
-                    if ((nodeType === 'input' || nodeType === 'output') && key === 'dataset_path') {
-                        fetch('/api/dataset-path', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ dataset_path: value })
-                        }).then(r => r.json()).then(data => {
-                            console.log('Dataset path synced:', data);
-                            // Recalculate node width based on new dataset_path
-                            const nodeBox = document.getElementById(`node-${nodeId}`);
-                            if (nodeBox) {
-                                const canvas = document.createElement('canvas');
-                                const ctx = canvas.getContext('2d');
-                                ctx.font = '11px Menlo, Monaco, monospace';
-                                const textMetrics = ctx.measureText(value);
-                                const textWidth = textMetrics.width + 150;
-                                const minWidth = 400;
-                                const maxWidth = 1600;
-                                const calculatedWidth = Math.min(Math.max(textWidth, minWidth), maxWidth);
-                                nodeBox.style.width = calculatedWidth + 'px';
-                            }
-                        });
-                    }
-                });
-                
-                // Sync blockwise config to backend if this is a blockwise-config node
-                if (nodeType === 'blockwise-config') {
-                    const config = {
-                        queue: node.params.queue,
-                        charge_group: node.params.charge_group,
-                        nb_cores_master: node.params.nb_cores_master,
-                        nb_cores_worker: node.params.nb_cores_worker,
-                        nb_workers: node.params.nb_workers,
-                        tmp_dir: node.params.tmp_dir,
-                        blockwise_tasks_dir: node.params.blockwise_tasks_dir
-                    };
-                    fetch('/api/blockwise-config', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(config)
-                    }).then(r => r.json()).then(data => {
-                        console.log('Blockwise config synced:', data);
-                    }).catch(err => console.error('Error syncing blockwise config:', err));
-                }
-                
-                nodeBox.classList.remove('dirty');
-                showMessage('Parameters saved', 'success');
-            }
-        }
-
         // ↻ on a normalizer, model or postprocessor node: put its parameters
         // back to what a freshly added node of the same name gets. (It used to
         // only redraw the canvas, leaving every edited value in place.)
@@ -2316,12 +2218,6 @@
             }
 
             downloadFile(yaml, 'pipeline.yaml', 'text/yaml');
-        }
-
-        // Export JSON
-        function exportJSON() {
-            const data = JSON.stringify(pipeline, null, 2);
-            downloadFile(data, 'pipeline.json', 'application/json');
         }
 
         // Download file helper
