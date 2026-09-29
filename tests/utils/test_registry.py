@@ -197,3 +197,59 @@ def test_the_old_names_are_the_registry():
     assert model_registry.get_parameter_info(FlyModelConfig) == registry.parameter_info(FlyModelConfig)
     assert cli_utils.parse_type_annotation(list[int]) == (int, False)
     assert cli_utils.parse_comma_separated_values("1,2", int) == [1, 2]
+
+
+@pytest.fixture
+def dashboard():
+    from flask import Flask
+
+    from cellmap_flow.dashboard.routes.models import models_bp
+    from cellmap_flow.globals import g
+
+    app = Flask(__name__)
+    app.register_blueprint(models_bp)
+    g.models_config = []
+    return app.test_client()
+
+
+def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
+    from cellmap_flow.globals import g
+
+    class OnnxModelConfig(ModelConfig):
+        cli_name = "onnx"
+
+        def __init__(self, onnx_path: str, output_channels: int = 1, name=None):
+            super().__init__()
+            self.onnx_path, self.output_channels, self.name = onnx_path, output_channels, name
+
+        def to_dict(self):
+            return {"type": "onnx", "onnx_path": self.onnx_path,
+                    "output_channels": self.output_channels, "name": self.name}
+
+    types = dashboard.get("/api/model-config-types").get_json()
+    assert types["OnnxModelConfig"]["display_name"] == "Onnx Model"
+    assert types["OnnxModelConfig"]["parameters"]["onnx_path"]["input_type"] == "file"
+    assert "ScriptModelConfig" in types
+
+    response = dashboard.post("/api/create-model-config", json={
+        "class_name": "OnnxModelConfig",
+        "params": {"onnx_path": "/m.onnx", "output_channels": "3", "name": "o"},
+    })
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["config_dict"] == {
+        "type": "onnx", "onnx_path": "/m.onnx", "output_channels": 3, "name": "o",
+    }
+    assert isinstance(g.models_config[-1], OnnxModelConfig)
+
+
+def test_model_config_classes_is_a_live_mapping():
+    from cellmap_flow.models.model_registry import MODEL_CONFIG_CLASSES
+
+    assert MODEL_CONFIG_CLASSES["FlyModelConfig"] is FlyModelConfig
+    assert "LaterModelConfig" not in MODEL_CONFIG_CLASSES
+
+    class LaterModelConfig(ModelConfig):
+        pass
+
+    assert MODEL_CONFIG_CLASSES["LaterModelConfig"] is LaterModelConfig
+    assert dict(MODEL_CONFIG_CLASSES.items())["LaterModelConfig"] is LaterModelConfig

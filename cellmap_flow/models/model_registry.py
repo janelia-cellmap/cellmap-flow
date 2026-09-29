@@ -2,10 +2,12 @@
 
 import json
 import os
+from collections.abc import Mapping
 from typing import Dict, Any
 from huggingface_hub import list_models, hf_hub_download
 from cellmap_flow.models import registry
-from cellmap_flow.models.models_config import (
+# Importable from here as before.
+from cellmap_flow.models.models_config import (  # noqa: F401
     ScriptModelConfig,
     DaCapoModelConfig,
     FlyModelConfig,
@@ -16,16 +18,29 @@ from cellmap_flow.models.models_config import (
 )
 
 
-# Registry of available model config classes
-MODEL_CONFIG_CLASSES = {
-    'ScriptModelConfig': ScriptModelConfig,
-    'DaCapoModelConfig': DaCapoModelConfig,
-    'FlyModelConfig': FlyModelConfig,
-    'BioModelConfig': BioModelConfig,
-    'CellMapModelConfig': CellMapModelConfig,
-    'HuggingFaceModelConfig': HuggingFaceModelConfig,
-    'FinetuneModelConfig': FinetuneModelConfig,
-}
+class _LiveModelConfigClasses(Mapping):
+    """``registry.model_classes()`` as it is at each lookup, plugins included.
+
+    This was a fixed dict of the seven built-in classes, so the dashboard's
+    model form never offered a plugin's model type, and refused to create
+    one, although the CLIs and YAML configs took it.
+    """
+
+    def __getitem__(self, class_name):
+        return registry.model_classes()[class_name]
+
+    def __iter__(self):
+        return iter(registry.model_classes())
+
+    def __len__(self):
+        return len(registry.model_classes())
+
+    def __repr__(self):
+        return f"MODEL_CONFIG_CLASSES({registry.model_classes()!r})"
+
+
+# Model config classes by class name.
+MODEL_CONFIG_CLASSES = _LiveModelConfigClasses()
 
 HUGGING_FACE_ORGS_NAME = "cellmap"
 HF_CACHE_DIR = os.path.expanduser("~/.cellmap_flow/hugging_face")
@@ -38,7 +53,7 @@ def get_parameter_info(cls) -> Dict[str, Any]:
 
 def get_all_model_configs() -> Dict[str, Dict[str, Any]]:
     """What the dashboard's model form offers, by class name: ``registry.describe_types``."""
-    return registry.describe_types(MODEL_CONFIG_CLASSES)
+    return registry.describe_types()
 
 
 def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
