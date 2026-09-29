@@ -15,10 +15,10 @@ Three sources, cheapest first:
 3. building the model, which then populates the cache.
 
 Reading the declarations statically is deliberately *not* among them. The
-script contract allows geometry to depend on the model -- for instance
-``example/dacapo_run_retrieve.py`` has ``output_voxel_size =
-Coordinate(model.scale(voxel_size))`` -- so parsing literals would silently
-produce wrong numbers for those scripts rather than failing.
+script contract allows geometry to depend on the model -- a DaCapo script
+can say ``output_voxel_size = Coordinate(model.scale(voxel_size))`` -- so
+parsing literals would silently produce wrong numbers for those scripts
+rather than failing.
 """
 
 import json
