@@ -98,6 +98,7 @@ class Flow:
     annotation_volumes: dict
     output_sessions: dict
     review: Optional[Any]
+    extra_layers: dict
 
     def __new__(cls):
         if cls._instance is None:
@@ -173,6 +174,9 @@ class Flow:
             # The Review tab's open index and its last pick, a
             # review_routes.ReviewSession; None until /api/review/open.
             cls._instance.review = None
+            # Static layers added at startup (YAML extra_layers), by layer
+            # name; the viewer-layer routes drop or rename their entries.
+            cls._instance.extra_layers = {}
             cls._instance._finetune_job_manager = None
 
         return cls._instance

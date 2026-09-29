@@ -1,0 +1,211 @@
+"""Add, remove and rename layers of the running viewer over HTTP.
+
+For scripts and the command line; the dashboard's own pages do not call
+these. Each takes a pre-parsed JSON body:
+
+- ``add_image_layer_to_viewer_response``: ``/api/viewer/add-image-layer``
+- ``add_segmentation_layer_to_viewer_response``: ``/api/viewer/add-segmentation-layer``
+- ``remove_layer_from_viewer_response``: ``/api/viewer/remove-layer``
+- ``rename_layer_in_viewer_response``: ``/api/viewer/rename-layer``
+
+Idempotency: add-* replaces a same-named layer; remove-layer is a no-op
+when the name is absent; rename-layer answers 409 rather than overwrite
+another layer.
+
+The layer's per-name bookkeeping -- ``g.shaders``, ``g.shader_controls``
+and ``g.extra_layers`` -- follows a remove or a rename, so a later layer of
+the same name starts fresh.
+
+``path`` is opened as ``/api/set-data`` opens a dataset: any zarr, n5 or
+precomputed store the dashboard's user can read.
+"""
+
+import logging
+
+import neuroglancer
+from flask import jsonify
+
+from cellmap_flow.globals import g
+
+logger = logging.getLogger(__name__)
+
+_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
+
+
+def _error(message, status=400):
+    return jsonify({"success": False, "error": message}), status
+
+
+def _segmentation_layer(path, disable_meshes=False):
+    """``path`` as a SegmentationLayer, placed as get_raw_layer places images.
+
+    get_raw_layer builds image layers only, so this wraps the data source
+    (and corner transform) of the one it builds.
+    """
+    from cellmap_flow.utils.scale_pyramid import get_raw_layer
+
+    layer = neuroglancer.SegmentationLayer(source=get_raw_layer(path, normalize=False).source)
+    if disable_meshes:
+        # No on-the-fly meshes: one mesh request on a whole-cell label
+        # volume can take the dashboard's memory.
+        layer.source[0].subsources = {"meshes": False}
+    return layer
+
+
+def _add_layer(name, layer, layer_type, path):
+    with g.viewer.txn() as s:
+        if name in s.layers:
+            logger.info(f"Replacing existing layer {name}")
+            del s.layers[name]
+        s.layers[name] = layer
+    logger.info(f"Added {layer_type} layer: {name} -> {path}")
+    return jsonify(
+        {
+            "success": True,
+            "layer_name": name,
+            "layer_type": layer_type,
+            "reload_page": True,
+        }
+    )
+
+
+def add_segmentation_layer_to_viewer_response(data):
+    """Register a static segmentation zarr on the running NG viewer.
+
+    Required: path, name. Optional: blend, disable_meshes.
+    """
+    try:
+        path = data.get("path")
+        name = data.get("name")
+        if not path or not name:
+            return _error("Missing path or name")
+        if g.viewer is None:
+            return _error("viewer not initialized")
+
+        layer = _segmentation_layer(path, disable_meshes=bool(data.get("disable_meshes", False)))
+        if data.get("blend"):
+            layer.blend = data["blend"]
+        return _add_layer(name, layer, "segmentation", path)
+
+    except Exception as e:
+        logger.error(f"Error adding segmentation layer: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def add_image_layer_to_viewer_response(data):
+    """Register a static image zarr on the running NG viewer.
+
+    Required: path, name. Optional: shader, blend.
+    """
+    try:
+        path = data.get("path")
+        name = data.get("name")
+        if not path or not name:
+            return _error("Missing path or name")
+        if g.viewer is None:
+            return _error("viewer not initialized")
+
+        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+
+        layer = get_raw_layer(path, normalize=False)
+        if data.get("shader"):
+            layer.shader = data["shader"]
+        if data.get("blend"):
+            layer.blend = data["blend"]
+        return _add_layer(name, layer, "image", path)
+
+    except Exception as e:
+        logger.error(f"Error adding image layer: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def remove_layer_from_viewer_response(data):
+    """Drop a layer from the running NG viewer state by name.
+
+    Idempotent: returns success with removed=false if the name is absent.
+    """
+    try:
+        name = data.get("name")
+        if not name:
+            return _error("Missing name")
+        if g.viewer is None:
+            return _error("viewer not initialized")
+
+        # Read first: txn() pushes the whole state back even when nothing
+        # changed.
+        removed = name in g.viewer.state.layers
+        if removed:
+            with g.viewer.txn() as s:
+                if name in s.layers:
+                    del s.layers[name]
+        for attr in _BOOKKEEPING:
+            getattr(g, attr).pop(name, None)
+
+        logger.info(f"Removed layer: {name} (was_present={removed})")
+        return jsonify(
+            {
+                "success": True,
+                "layer_name": name,
+                "removed": removed,
+                "reload_page": removed,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error removing layer: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def rename_layer_in_viewer_response(data):
+    """Rename a layer in the running NG viewer state.
+
+    Required: old_name, new_name. 404s if old_name is absent; 409s if
+    new_name already exists (refuses to silently overwrite). The layer
+    keeps its place in the layer list and its visibility.
+    """
+    try:
+        old_name = data.get("old_name")
+        new_name = data.get("new_name")
+        if not old_name or not new_name:
+            return _error("Missing old_name or new_name")
+        if g.viewer is None:
+            return _error("viewer not initialized")
+
+        if old_name == new_name:
+            return jsonify(
+                {
+                    "success": True,
+                    "renamed": False,
+                    "old_name": old_name,
+                    "new_name": new_name,
+                    "reload_page": False,
+                }
+            )
+
+        layers = g.viewer.state.layers
+        if old_name not in layers:
+            return _error(f"Layer not found: {old_name}", 404)
+        if new_name in layers:
+            return _error(f"Target name already exists: {new_name}", 409)
+        with g.viewer.txn() as s:
+            s.layers[old_name].name = new_name
+
+        for attr in _BOOKKEEPING:
+            bookkeeping = getattr(g, attr)
+            if old_name in bookkeeping:
+                bookkeeping[new_name] = bookkeeping.pop(old_name)
+
+        logger.info(f"Renamed layer: {old_name} -> {new_name}")
+        return jsonify(
+            {
+                "success": True,
+                "renamed": True,
+                "old_name": old_name,
+                "new_name": new_name,
+                "reload_page": True,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error renaming layer: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
