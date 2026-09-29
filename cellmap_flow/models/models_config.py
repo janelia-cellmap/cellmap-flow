@@ -41,6 +41,44 @@ def _as_int_tuple(value):
     return tuple(int(v) for v in value)
 
 
+def _plain(value):
+    """``value`` with tuples, arrays and numpy numbers as lists and Python numbers.
+
+    A tuple in a model's to_dict() would reach the exported YAML as a
+    ``!!python/tuple`` tag, which ``yaml.safe_load`` refuses.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [_plain(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    return value
+
+
+def _given_init_params(cls, args, kwargs):
+    """The arguments ``cls(*args, **kwargs)`` passes, by parameter name, or None.
+
+    None when they do not fit the signature; the constructor then raises
+    its own error.
+    """
+    try:
+        sig = inspect.signature(cls.__init__)
+        bound = sig.bind(None, *args, **kwargs)  # None stands in for self
+    except (TypeError, ValueError):
+        return None
+    params = {}
+    for pname, value in list(bound.arguments.items())[1:]:
+        kind = sig.parameters[pname].kind
+        if kind is inspect.Parameter.VAR_POSITIONAL:
+            continue
+        if kind is inspect.Parameter.VAR_KEYWORD:
+            params.update(value)
+        else:
+            params[pname] = value
+    return params
+
+
 def _cli_value(value):
     """One constructor argument as the server CLI parses it back."""
     if isinstance(value, dict):
@@ -54,12 +92,24 @@ def _cli_value(value):
 
 
 class ModelConfig:
+    def __new__(cls, *args, **kwargs):
+        # Remember the constructor arguments, for the default to_dict().
+        # Recorded here rather than by wrapping each subclass's __init__,
+        # whose signature the CLIs and the model form are built from.
+        # Unpickling and copying call __new__ with no arguments, record
+        # None, and then restore the original's.
+        self = super().__new__(cls)
+        self._init_params = _given_init_params(cls, args, kwargs)
+        return self
+
     def __init__(self):
         self._config = None
 
     def __str__(self) -> str:
         elms = []
         for k, v in vars(self).items():
+            if k == "_init_params":
+                continue
             if isinstance(v, np.ndarray):
                 elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
             else:
@@ -210,13 +260,33 @@ class ModelConfig:
         return np.float32
 
     def to_dict(self):
-        """
-        Export model configuration as a dict that can be used with build_model_from_entry.
+        """This config as a model entry, which ``registry.build_model`` rebuilds.
 
-        Returns:
-            Dictionary containing model type and all init parameters.
+        ``{"type": <registered name>, **the constructor arguments given}``,
+        leaving out None as the built-in types leave out an unset name or
+        scale. The built-in types write their own; this one serves a plugin
+        type that does not, so exporting its config and launching its server
+        work without one.
         """
-        raise NotImplementedError("Subclasses must implement to_dict()")
+        params = self.__dict__.get("_init_params")
+        if params is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} was not built through its constructor, "
+                "so it needs a to_dict() of its own"
+            )
+        from cellmap_flow.models.registry import cli_name_of
+
+        result = {"type": cli_name_of(type(self))}
+        result.update({k: _plain(v) for k, v in params.items() if v is not None})
+        return result
+
+    def _with_name_scale(self, result: dict) -> dict:
+        """``result`` with name and scale added after its keys, when they are set."""
+        if getattr(self, "name", None) is not None:
+            result["name"] = self.name
+        if getattr(self, "scale", None) is not None:
+            result["scale"] = self.scale
+        return result
 
     def _launch_params(self) -> dict:
         """The constructor arguments a launched server needs; to_dict() by default."""
@@ -297,12 +367,7 @@ class ScriptModelConfig(ModelConfig):
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
-        result = {"type": "script", "script_path": self.script_path}
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
-        return result
+        return self._with_name_scale({"type": "script", "script_path": self.script_path})
 
 
 class DaCapoModelConfig(ModelConfig):
@@ -382,16 +447,9 @@ class DaCapoModelConfig(ModelConfig):
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
-        result = {
-            "type": "dacapo",
-            "run_name": self.run_name,
-            "iteration": self.iteration,
-        }
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
-        return result
+        return self._with_name_scale(
+            {"type": "dacapo", "run_name": self.run_name, "iteration": self.iteration}
+        )
 
 
 class FlyModelConfig(ModelConfig):
@@ -680,15 +738,11 @@ class BioModelConfig(ModelConfig):
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
-        result = {
+        result = self._with_name_scale({
             "type": "bioimage",
             "model_name": self.model_name,
             "voxel_size": list(self.voxel_size) if hasattr(self.voxel_size, '__iter__') else self.voxel_size,
-        }
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
+        })
         if self.voxels_to_process is not None:
             # Reconstruct edge_length_to_process from voxels_to_process
             edge_length = round(self.voxels_to_process ** (1/3))
@@ -828,15 +882,9 @@ class CellMapModelConfig(ModelConfig):
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
-        result = {
-            "type": "cellmap",
-            "folder_path": self.cellmap_model.folder_path,
-        }
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
-        return result
+        return self._with_name_scale(
+            {"type": "cellmap", "folder_path": self.cellmap_model.folder_path}
+        )
 
 class FinetuneModelConfig(ModelConfig):
     """Configuration class for a LoRA-finetuned model.
@@ -992,16 +1040,12 @@ class FinetuneModelConfig(ModelConfig):
         Surfaces key base model fields at the top level so the pipeline
         builder UI can display them alongside the finetune-specific fields.
         """
-        result = {
+        result = self._with_name_scale({
             "type": "finetune",
             "lora_adapter_path": self.lora_adapter_path,
             "weights_path": self.weights_path,
             "base_model": self.base_model_dict,
-        }
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
+        })
 
         # Surface base model fields for UI display
         base = self.base_model_dict
@@ -1070,16 +1114,10 @@ class HuggingFaceModelConfig(ModelConfig):
 
     def to_dict(self):
         """Export configuration for use with build_model_from_entry."""
-        result = {
-            "type": "huggingface",
-            "repo": self.repo,
-        }
+        result = {"type": "huggingface", "repo": self.repo}
         if self.revision is not None:
             result["revision"] = self.revision
-        if self.name is not None:
-            result["name"] = self.name
-        if self.scale is not None:
-            result["scale"] = self.scale
+        self._with_name_scale(result)
 
         # Include metadata from HuggingFace model for pipeline builder display
         metadata = self._load_metadata()

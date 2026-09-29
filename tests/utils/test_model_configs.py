@@ -197,3 +197,23 @@ def test_a_plugin_config_gets_a_command_under_its_registered_name():
         "--weights",
         "/w w.pt",
     ]
+
+
+def test_a_plugin_config_without_to_dict_exports_its_constructor_arguments():
+    import copy
+
+    from cellmap_flow.models.models_config import ModelConfig
+
+    class WeightsModelConfig(ModelConfig):
+        def __init__(self, weights: str, sizes: tuple = (1, 1, 1), name=None, scale=None):
+            super().__init__()
+            self.weights, self.name, self.scale = weights, name, scale
+
+    config = WeightsModelConfig("/w w.pt", sizes=(8, 8, 8), name="w")
+    expected = {"type": "weights", "weights": "/w w.pt", "sizes": [8, 8, 8], "name": "w"}
+    assert config.to_dict() == expected
+    assert shlex.split(config.command) == [
+        "weights", "--weights", "/w w.pt", "--sizes", "8,8,8", "--name", "w",
+    ]
+    assert copy.deepcopy(config).to_dict() == expected
+    assert "_init_params" not in str(config)
