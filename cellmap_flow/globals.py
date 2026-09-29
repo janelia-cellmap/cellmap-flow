@@ -97,6 +97,7 @@ class Flow:
     minio_state: dict
     annotation_volumes: dict
     output_sessions: dict
+    review: Optional[Any]
 
     def __new__(cls):
         if cls._instance is None:
@@ -169,6 +170,9 @@ class Flow:
             }
             cls._instance.annotation_volumes = {}
             cls._instance.output_sessions = {}
+            # The Review tab's open index and its last pick, a
+            # review_routes.ReviewSession; None until /api/review/open.
+            cls._instance.review = None
             cls._instance._finetune_job_manager = None
 
         return cls._instance

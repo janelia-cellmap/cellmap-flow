@@ -119,8 +119,7 @@
         <textarea class="form-control font-monospace" id="reviewEditDetails" rows="6"
                   placeholder='{"split_into": 2, "notes": "over-merged by fragment filter"}'></textarea>
         <div class="small text-muted mt-1">
-          Free-form JSON stored in the ledger. Phase 3 will populate this from
-          voxel-annotation tools; for now any valid JSON object is accepted.
+          Free-form JSON stored in the ledger; any valid JSON object is accepted.
         </div>
       </div>
       <div class="modal-footer">
@@ -291,14 +290,20 @@
         $("reviewSessionStatus").className = "small text-danger mt-2";
         return;
       }
-      const segInfo = j.segmentation_layer
-        ? `, highlight=${j.segmentation_layer}`
-        : "";
-      $("reviewSessionStatus").innerHTML =
-        `<strong>opened</strong><br>`
-        + `${j.n_instances} instances<br>`
-        + `reviewer: ${j.reviewer}${segInfo}`;
-      $("reviewSessionStatus").className = "small text-success mt-2";
+      // The reviewer and layer name are the request's own text: build the
+      // status from nodes so neither is ever parsed as markup.
+      const status = $("reviewSessionStatus");
+      const opened = document.createElement("strong");
+      opened.textContent = "opened";
+      status.replaceChildren(
+        opened,
+        document.createElement("br"),
+        `${j.n_instances} instances`,
+        document.createElement("br"),
+        `reviewer: ${j.reviewer}`
+          + (j.segmentation_layer ? `, pick layer=${j.segmentation_layer}` : ""),
+      );
+      status.className = "small text-success mt-2";
       refreshProgress();
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(refreshProgress, 5000);
@@ -311,12 +316,11 @@
   });
 
   // Subscribe to /api/review/pick_stream — Server-Sent Events one-way push
-  // from Flask. The action handler (Tornado side, NG-Python) sets a
-  // threading.Event when 't' lands; the SSE generator emits one event per
-  // new pick. Single long-lived HTTP connection — does not re-acquire a
-  // browser HTTP/1.1 slot per update, so it doesn't compete with NG chunk
-  // fetches over the SSH tunnel. Replaces the prior 700ms polling loop,
-  // which was queuing 14s mean response time under chunk load.
+  // from Flask. The action handler (Tornado side, NG-Python) numbers each
+  // pick when 't' lands; the SSE generator emits one event per new pick.
+  // Single long-lived HTTP connection — does not re-acquire a browser
+  // HTTP/1.1 slot per update, so it doesn't compete with NG chunk fetches.
+  // Polling every 700ms instead queued for 14s on average under chunk load.
   function startPickStream() {
     if (pickStream) { try { pickStream.close(); } catch (e) {} }
     pickStream = new EventSource("/api/review/pick_stream");

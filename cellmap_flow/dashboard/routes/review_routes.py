@@ -1,189 +1,233 @@
-"""HTTP routes for the instance-review workflow (Phase 2).
+"""HTTP routes for the instance-review workflow (the dashboard's Review tab).
 
-Thin Flask wrappers over cellmap_flow.review helpers. Per-request SQLite
-connections (no pooling — write rate is one row per user click, read
-rate is one row per GET /review/next).
+Thin Flask wrappers over cellmap_flow.review helpers. The index opened by
+/api/review/open, and the last instance picked in the viewer, live in
+``g.review`` (a ReviewSession). Each request opens its own SQLite
+connection, read-only except for verdict and undo (no pooling — write
+rate is one row per user click, read rate is one row per GET /review/next).
 
 Navigation on /review/next is server-side: mutating g.viewer.txn()
-propagates to the browser via neuroglancer's WebSocket. If
-g.review_segmentation_layer is set, also sets the highlighted segment
-set on that layer. Both are best-effort — if g.viewer is None (no
-viewer is attached yet), navigation is silently skipped and the
-instance record is still returned.
+propagates to the browser via neuroglancer's WebSocket. It is
+best-effort — if g.viewer is None (no viewer is attached yet),
+navigation is silently skipped and the instance record is still returned.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import sqlite3
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Optional
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from cellmap_flow.globals import g
+from cellmap_flow.io.metadata import nm_per_unit
 from cellmap_flow.review import (
     ORDER_COL,
     count_instances,
-    find_instance_at_voxel,
     get_instance,
-    get_meta,
     get_next,
     get_progress,
     open_db,
     record_verdict,
+    resolve_db_path,
     undo_verdict,
 )
-import json as _json
 
 logger = logging.getLogger(__name__)
 
 review_bp = Blueprint("review", __name__)
 
-
-# Neuroglancer serializes CoordinateSpace to SI base units internally.
-# A viewer configured with scales=[6,6,6] units="nm" reads back as
-# scales=[6e-9,6e-9,6e-9] units="m". Table converts the reported unit
-# to nm so we can combine it with the nm-unit centroids we store in
-# the review SQLite.
-_UNIT_TO_NM = {
-    "m": 1e9,
-    "mm": 1e6,
-    "um": 1e3,
-    "µm": 1e3,
-    "nm": 1.0,
-    "": 1.0,
-}
-
-
-def _require_db() -> Optional[str]:
-    """Return the active db path or None (caller should respond 409)."""
-    return g.review_db_path if getattr(g, "review_db_path", None) else None
-
-
+_REVIEW_PICK_ACTION = "review-pick"
 _REVIEW_PICK_KEYBINDING = "keyt"  # press 't' over a segment to pick it
 
-# Wake-up signal for the SSE pick stream. The NG action handler sets
-# this when a new pick lands; the streaming generator in
-# /api/review/pick_stream wait()s on it.
-_pick_event = threading.Event()
+# A pick stream with nothing new sends a heartbeat this often. Writing it is
+# also how the server notices the browser tab has gone and frees the thread.
+PICK_STREAM_HEARTBEAT_S = 25.0
 
 
-def _register_pick_action(viewer, seg_layer_name: str) -> None:
-    """Register the 'review-pick' Neuroglancer action.
+class PickBoard:
+    """The last instance picked with the t key, numbered by ``seq``.
+
+    The neuroglancer action posts to it. Each pick stream remembers the last
+    ``seq`` it sent and waits for a different one. Nothing is ever cleared,
+    so one stream waking up cannot hide a pick from another, as a shared
+    Event that each woken stream cleared did.
+    """
+
+    def __init__(self):
+        self._changed = threading.Condition()
+        self.seq = 0
+        self.label_id: Optional[int] = None
+        self.at: Optional[float] = None  # time.monotonic() of the pick
+        self.closed = False
+
+    def post(self, label_id: int) -> int:
+        with self._changed:
+            self.seq += 1
+            self.label_id = label_id
+            self.at = time.monotonic()
+            self._changed.notify_all()
+            return self.seq
+
+    def latest(self):
+        """``(seq, label_id, at)`` of the last pick."""
+        with self._changed:
+            return self.seq, self.label_id, self.at
+
+    def wait_past(self, seq: int, timeout: float):
+        """``(seq, label_id)`` once there is a pick after ``seq``, or as they
+        are after ``timeout`` seconds or a close()."""
+        with self._changed:
+            self._changed.wait_for(lambda: self.seq != seq or self.closed, timeout)
+            return self.seq, self.label_id
+
+    def close(self) -> None:
+        """Wake every stream waiting here so it ends: another index was opened."""
+        with self._changed:
+            self.closed = True
+            self._changed.notify_all()
+
+
+@dataclass
+class ReviewSession:
+    """The index /api/review/open selected, kept in ``g.review``."""
+
+    db_path: str  # resolved by review.resolve_db_path
+    reviewer: str
+    segmentation_layer: Optional[str] = None
+    picks: PickBoard = field(default_factory=PickBoard)
+
+
+def _no_session():
+    return jsonify({"error": "no review index open; POST /api/review/open first"}), 409
+
+
+def _json_body() -> dict:
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _optional_int(name: str) -> Optional[int]:
+    """Query argument ``name`` as an int, None when absent; ValueError otherwise."""
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from None
+
+
+def _read_instance(db_path: str, instance_id: int) -> Optional[dict]:
+    conn = open_db(db_path)
+    try:
+        return get_instance(conn, instance_id)
+    finally:
+        conn.close()
+
+
+def _on_review_pick(action_state) -> None:
+    """The 'review-pick' neuroglancer action: pick the segment under the cursor.
 
     Reads the label_id under the cursor at action-fire time via NG's
     `ActionState.selected_values[<seg_layer>]` (a clean, atomic snapshot
     populated by NG-JS at click/keypress time — distinct from
     `state.position`, which is hover-polluted and unreliable for this
-    purpose). The label_id is looked up in the active review db; the
-    found instance is stashed in `g.review_last_pick` for the dashboard
-    JS to poll via /api/review/current_pick.
+    purpose) and posts it to the open session's PickBoard. The instance
+    lookup happens in the Flask routes that read the board.
 
-    Idempotent: re-calling reattaches the handler and rebinds the key.
+    Runs on Neuroglancer's Tornado event loop, which is single-threaded and
+    shared with every HTTP-request dispatch (including subvolume chunk
+    fetches). Keep this handler O(1) — no DB I/O, nothing that can yield.
+
+    One module-level function: neuroglancer keeps a set of handlers per
+    action, so registering it again on every /open adds nothing.
     """
-    def handler(action_state):
-        # Runs on Neuroglancer's Tornado event loop, which is single-threaded
-        # and shared with every HTTP-request dispatch (including subvolume
-        # chunk fetches). Keep this handler O(1) — no DB I/O, nothing that
-        # can yield. Flask /api/review/current_pick does the DB lookup
-        # off-loop.
-        #
-        # Instrumentation: ONE logger.warning at action-arrival, ONE
-        # time.monotonic() write. Timestamps let us measure end-to-end
-        # latency: keypress (user clock) → action-arrival here (this log)
-        # → poll-arrival in Flask (separate log) → UI update.
-        try:
-            t0 = time.monotonic()
-            sv_map = action_state.selected_values
-            entry = sv_map.get(seg_layer_name) if sv_map is not None else None
-            if entry is None or entry.value is None:
-                return
-            raw = entry.value
-            try:
-                label_id = int(raw)
-            except (TypeError, ValueError):
-                key = getattr(raw, "key", None)
-                value = getattr(raw, "value", None)
-                label_id = int(key if key is not None else value)
-            if label_id == 0:
-                return
-            g.review_last_pick_label_id = label_id
-            g.review_last_pick_ts = t0
-            g.review_pick_seq = (getattr(g, "review_pick_seq", 0) or 0) + 1
-            _pick_event.set()  # wake the SSE stream
-            logger.warning(
-                f"PICK_HANDLER_ENTRY seq={g.review_pick_seq} "
-                f"label={label_id} t_mono={t0:.3f}"
-            )
-        except Exception:
+    session = g.review
+    if session is None or not session.segmentation_layer:
+        return
+    try:
+        sv_map = action_state.selected_values
+        entry = sv_map.get(session.segmentation_layer) if sv_map is not None else None
+        if entry is None or entry.value is None:
             return
+        raw = entry.value
+        try:
+            label_id = int(raw)
+        except (TypeError, ValueError):
+            key = getattr(raw, "key", None)
+            value = getattr(raw, "value", None)
+            label_id = int(key if key is not None else value)
+    except Exception as e:
+        logger.debug(f"review: could not read the picked segment: {e}")
+        return
+    if label_id == 0:
+        return
+    seq = session.picks.post(label_id)
+    # Timestamps measure end-to-end latency: keypress → action arrival
+    # (this line) → the stream or poll that serves it (PICK_POLL_ARRIVAL).
+    logger.debug(
+        f"PICK_HANDLER_ENTRY seq={seq} label={label_id} t_mono={time.monotonic():.3f}"
+    )
 
-    viewer.actions.add("review-pick", handler)
+
+def _register_pick_action(viewer) -> None:
+    """Bind the t key in ``viewer`` to the 'review-pick' action."""
+    viewer.actions.add(_REVIEW_PICK_ACTION, _on_review_pick)
     with viewer.config_state.txn() as cs:
-        cs.input_event_bindings.viewer[_REVIEW_PICK_KEYBINDING] = "review-pick"
+        cs.input_event_bindings.viewer[_REVIEW_PICK_KEYBINDING] = _REVIEW_PICK_ACTION
 
 
 def _navigate_viewer(instance: dict) -> bool:
-    """Best-effort: move g.viewer to the instance's nm centroid and
-    highlight the segment on g.review_segmentation_layer if configured.
+    """Best-effort: move g.viewer to the instance's nm centroid.
 
     Neuroglancer's s.position is expressed in **voxels of the viewer's
-    coordinate space**, not in nm. To convert our nm centroid we divide
-    by the per-axis scale from s.dimensions (which is nm-per-voxel for
-    each named axis). Assumes the viewer's dimensions are declared in
-    (z, y, x) order, matching bbx_generator.py and the dashboard
-    configs. Fallback: if dimensions are missing or shaped
-    unexpectedly, send the nm value directly (best-effort still lands
-    somewhere in-volume even if scale is off).
+    coordinate space**, not in nm, and neuroglancer reports that space's
+    scales in SI units (8 nm reads back as 8e-9 m). So each nm centroid is
+    divided by its axis's scale in nm. Axes are matched by name (z, y, x),
+    falling back to the first three dimensions; other dimensions keep
+    their position. A viewer with no dimensions yet gets the nm values.
 
     Returns True if navigation happened, False if silently skipped
     (no viewer attached). Never raises — viewer errors are logged but
     the HTTP response continues with the instance payload.
     """
-    viewer = getattr(g, "viewer", None)
+    viewer = g.viewer
     if viewer is None:
         logger.info("review: g.viewer is None; skipping navigation")
         return False
     try:
         with viewer.txn() as s:
-            # Reconstruct the per-axis nm-per-voxel factor. Neuroglancer
-            # normalizes to SI meters internally, so `scales` alone can
-            # be 10^9 smaller than the user-facing "6nm" — must multiply
-            # by the unit factor.
-            scales_nm = [1.0, 1.0, 1.0]
-            try:
-                dims = s.dimensions
-                if dims is not None:
-                    raw_scales = list(dims.scales) if dims.scales is not None else []
-                    raw_units = list(dims.units) if dims.units is not None else []
-                    for i in range(min(3, len(raw_scales))):
-                        unit = str(raw_units[i]).strip().lower() if i < len(raw_units) else "nm"
-                        factor = _UNIT_TO_NM.get(unit, 1.0)
-                        scales_nm[i] = float(raw_scales[i]) * factor
-                    logger.warning(
-                        f"review: viewer scales_nm={scales_nm} "
-                        f"(raw_scales={raw_scales} raw_units={raw_units})"
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"review: could not read s.dimensions: {e}"
-                )
-
-            s.position = [
-                float(instance["cz_nm"]) / scales_nm[0],
-                float(instance["cy_nm"]) / scales_nm[1],
-                float(instance["cx_nm"]) / scales_nm[2],
-            ]
-
-            seg_layer = getattr(g, "review_segmentation_layer", None)
-            if seg_layer:
-                seg_id = int(instance["id"])
-                logger.warning(
-                    f"review: navigated to instance {seg_id} "
-                    f"(layer {seg_layer!r}, no segment-level highlight)"
-                )
+            dims = s.dimensions
+            if dims is not None and len(dims.names) >= 3:
+                names = list(dims.names)
+                scales_nm = [
+                    float(scale) * nm_per_unit(unit)
+                    for scale, unit in zip(dims.scales, dims.units)
+                ]
+            else:
+                names, scales_nm = ["z", "y", "x"], [1.0, 1.0, 1.0]
+            position = (
+                [float(p) for p in s.position]
+                if s.position is not None and len(s.position) == len(names)
+                else [0.0] * len(names)
+            )
+            for fallback, (axis, key) in enumerate(
+                (("z", "cz_nm"), ("y", "cy_nm"), ("x", "cx_nm"))
+            ):
+                i = names.index(axis) if axis in names else fallback
+                position[i] = float(instance[key]) / scales_nm[i]
+            s.position = position
+            logger.debug(
+                f"review: navigated to instance {instance['id']} "
+                f"(scales_nm={scales_nm}, position={position})"
+            )
         return True
     except Exception as e:
         logger.warning(f"review: viewer navigation failed: {e}")
@@ -197,50 +241,61 @@ def _navigate_viewer(instance: dict) -> bool:
 
 @review_bp.route("/api/review/open", methods=["POST"])
 def review_open():
-    """Select the active review SQLite for this dashboard session.
+    """Select the active review index for this dashboard session.
 
-    Body: {"db_path": "...",
+    Body: {"db_path": "....sqlite",
            "reviewer": "davi",             # optional
-           "segmentation_layer": "labels"  # optional; layer to highlight
+           "segmentation_layer": "labels"  # optional; enables the t-key pick
           }
+
+    Only a ``.sqlite`` or ``.db`` file (after resolving symlinks) is
+    opened, and the name is checked before existence.
     """
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     db_path = data.get("db_path")
     reviewer = data.get("reviewer") or os.environ.get("USER", "")
-    seg_layer = data.get("segmentation_layer")
+    seg_layer = data.get("segmentation_layer") or None
 
-    if not db_path:
+    if not db_path or not isinstance(db_path, str):
         return jsonify({"success": False, "error": "db_path is required"}), 400
-    if not os.path.exists(db_path):
+    if not isinstance(reviewer, str) or not isinstance(seg_layer, (str, type(None))):
         return jsonify({"success": False,
-                        "error": f"db not found: {db_path}"}), 404
+                        "error": "reviewer and segmentation_layer must be strings"}), 400
+    try:
+        real_path = resolve_db_path(db_path)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except FileNotFoundError:
+        return jsonify({"success": False,
+                        "error": f"review index not found: {db_path}"}), 404
 
     try:
-        conn = open_db(db_path)
-        n = count_instances(conn)
-        conn.close()
-    except Exception as e:
-        return jsonify({"success": False,
-                        "error": f"could not open db: {e}"}), 500
-
-    g.review_db_path = db_path
-    g.review_reviewer = reviewer
-    g.review_segmentation_layer = seg_layer
-    g.review_last_pick_label_id = None
-    g.review_pick_seq = 0
-    if seg_layer is not None and getattr(g, "viewer", None) is not None:
+        conn = open_db(real_path)
         try:
-            _register_pick_action(g.viewer, seg_layer)
+            n = count_instances(conn)
+        finally:
+            conn.close()
+    except (ValueError, sqlite3.Error) as e:
+        return jsonify({"success": False,
+                        "error": f"could not open review index: {e}"}), 400
+
+    previous = g.review
+    g.review = ReviewSession(real_path, reviewer, seg_layer)
+    if previous is not None:
+        previous.picks.close()
+    if seg_layer is not None and g.viewer is not None:
+        try:
+            _register_pick_action(g.viewer)
             logger.info(f"review: registered 'review-pick' action on key 't' for layer {seg_layer!r}")
         except Exception as e:
             logger.warning(f"review: failed to register pick action: {e}")
     logger.info(
-        f"review: opened db={db_path} reviewer={reviewer!r} "
+        f"review: opened db={real_path} reviewer={reviewer!r} "
         f"seg_layer={seg_layer!r} n_instances={n}"
     )
     return jsonify({
         "success": True,
-        "db_path": db_path,
+        "db_path": real_path,
         "reviewer": reviewer,
         "segmentation_layer": seg_layer,
         "n_instances": n,
@@ -251,28 +306,29 @@ def review_open():
 def review_next():
     """Return the next unreviewed instance in the chosen queue.
 
-    Query: ?order=fm|smallest|random&min_vox=100
+    Query: ?order=fm|smallest|random&min_vox=100&skip_rank=12
 
     Side effect: navigates g.viewer to the instance's centroid (if
-    viewer exists) and highlights it on the configured segmentation
-    layer (if set).
+    viewer exists).
     """
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open; POST /api/review/open first"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
 
     order = request.args.get("order", "fm")
     if order not in ORDER_COL:
         return jsonify({"error": f"order must be one of {list(ORDER_COL)}"}), 400
+    try:
+        min_vox = _optional_int("min_vox")
+        skip_rank = _optional_int("skip_rank")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
-    min_vox_raw = request.args.get("min_vox")
-    min_vox = int(min_vox_raw) if min_vox_raw is not None else None
-    skip_rank_raw = request.args.get("skip_rank")
-    skip_rank = int(skip_rank_raw) if skip_rank_raw is not None else None
-
-    conn = open_db(db_path)
+    conn = open_db(session.db_path)
     try:
         inst = get_next(conn, order, min_vox, skip_rank)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     finally:
         conn.close()
 
@@ -293,14 +349,14 @@ def review_verdict():
     Body: {"id": 123,
            "verdict": "blessed" | "edited" | "erased",
            "edit_details": {...},        # optional, only for edited
-           "entry_method": "next" | "select_at" | "show",  # optional
+           "entry_method": "next" | "show" | "pick",  # optional
           }
     """
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open; POST /api/review/open first"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
 
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     try:
         instance_id = int(data["id"])
         verdict = str(data["verdict"])
@@ -316,14 +372,11 @@ def review_verdict():
         if not isinstance(entry_method, str):
             return jsonify({"error": "entry_method must be a string"}), 400
 
-    reviewer = getattr(g, "review_reviewer", None) or os.environ.get("USER", "")
-
-    conn = open_db(db_path)
+    conn = open_db(session.db_path, write=True)
     try:
-        row = record_verdict(conn, instance_id, verdict, reviewer,
+        row = record_verdict(conn, instance_id, verdict, session.reviewer,
                              edit_details, entry_method=entry_method)
     except ValueError as e:
-        conn.close()
         return jsonify({"error": str(e)}), 400
     finally:
         conn.close()
@@ -337,21 +390,20 @@ def review_undo():
 
     Body: {"id": 123}
     """
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open; POST /api/review/open first"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
 
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     try:
         instance_id = int(data["id"])
     except (KeyError, TypeError, ValueError) as e:
         return jsonify({"error": f"id required: {e}"}), 400
 
-    conn = open_db(db_path)
+    conn = open_db(session.db_path, write=True)
     try:
         row = undo_verdict(conn, instance_id)
     except ValueError as e:
-        conn.close()
         return jsonify({"error": str(e)}), 400
     finally:
         conn.close()
@@ -362,16 +414,16 @@ def review_undo():
 @review_bp.route("/api/review/progress", methods=["GET"])
 def review_progress():
     """Aggregate review progress."""
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open; POST /api/review/open first"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
 
-    conn = open_db(db_path)
+    conn = open_db(session.db_path)
     try:
         p = get_progress(conn)
     finally:
         conn.close()
-    p["db_path"] = db_path
+    p["db_path"] = session.db_path
     return jsonify(p)
 
 
@@ -380,62 +432,17 @@ def review_show(instance_id: int):
     """Full instance record + ledger state for a specific id.
 
     Side effect: navigates g.viewer to the instance's centroid (if a
-    viewer is attached). Bypasses the cursor-state-read path of
-    select_at, so it's the reliable way to navigate to a known ID
-    when select_at gives stale cursor reads.
+    viewer is attached), the reliable way to go to a known ID.
     """
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open; POST /api/review/open first"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
 
-    conn = open_db(db_path)
-    try:
-        inst = get_instance(conn, instance_id)
-    finally:
-        conn.close()
-
+    inst = _read_instance(session.db_path, instance_id)
     if inst is None:
         return jsonify({"error": f"instance {instance_id} not in index"}), 404
     _navigate_viewer(inst)
     return jsonify(inst)
-
-
-@review_bp.route("/api/review/debug/viewer_state", methods=["GET"])
-def review_debug_viewer_state():
-    """Dump the server-side cached neuroglancer viewer state.
-
-    Diagnostic for the "select_at returns stale label voxel" bug. Cross-
-    reference the returned `position` against what the browser shows in
-    its URL fragment after a position-bar paste — if they differ, the
-    server's cached view of state.position is lagging or partial.
-    """
-    viewer = getattr(g, "viewer", None)
-    if viewer is None:
-        return jsonify({"error": "g.viewer is not attached"}), 409
-    try:
-        state = viewer.state
-        def _coerce(v):
-            try:
-                return [float(x) for x in v]
-            except Exception:
-                return list(v) if v is not None else None
-        out = {
-            "position": _coerce(state.position) if state.position is not None else None,
-            "dimensions": {
-                "names": list(state.dimensions.names) if state.dimensions is not None else None,
-                "scales": _coerce(state.dimensions.scales) if state.dimensions is not None else None,
-                "units": [str(u) for u in state.dimensions.units] if state.dimensions is not None else None,
-            } if state.dimensions is not None else None,
-            "cross_section_scale": float(state.cross_section_scale) if getattr(state, "cross_section_scale", None) is not None else None,
-        }
-        try:
-            import json as _json2
-            out["state_json"] = _json2.loads(_json2.dumps(state.to_json(), default=str))
-        except Exception as e:
-            out["state_json_error"] = str(e)
-        return jsonify(out)
-    except Exception as e:
-        return jsonify({"error": f"could not read viewer state: {e}"}), 500
 
 
 @review_bp.route("/api/review/current_pick", methods=["GET"])
@@ -443,41 +450,28 @@ def review_current_pick():
     """Return the most-recent instance picked via the 'review-pick' NG action.
 
     Two-stage to keep NG's Tornado event loop unblocked:
-      - the action handler stashes `label_id` only (no DB I/O on the loop)
+      - the action handler posts `label_id` only (no DB I/O on the loop)
       - this endpoint, served by Flask on its own thread pool, does the
         catalog lookup at poll time
 
     Response:
       200 with {"pick": instance_record, "seq": int}
           when a pick has been recorded since /api/review/open
-      204 No Content when no pick yet (or last pick was cleared)
+      204 No Content when no pick yet
     """
-    label_id = getattr(g, "review_last_pick_label_id", None)
+    session = g.review
+    if session is None:
+        return _no_session()
+    seq, label_id, picked_at = session.picks.latest()
     if label_id is None:
         return ("", 204)
     t_poll = time.monotonic()
-    seq = getattr(g, "review_pick_seq", 0)
-    pick_ts = getattr(g, "review_last_pick_ts", t_poll)
-    age_ms = (t_poll - pick_ts) * 1000.0
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open"}), 409
-    conn = open_db(db_path)
-    try:
-        inst = get_instance(conn, label_id)
-    finally:
-        conn.close()
-    t_done = time.monotonic()
-    db_ms = (t_done - t_poll) * 1000.0
-    # Log only on first observation of a new seq, so polls that see no
-    # change don't spam the log.
-    last_logged_seq = getattr(g, "review_last_logged_pick_seq", -1)
-    if seq != last_logged_seq:
-        g.review_last_logged_pick_seq = seq
-        logger.warning(
-            f"PICK_POLL_ARRIVAL seq={seq} label={label_id} "
-            f"age_since_handler_ms={age_ms:.1f} flask_db_ms={db_ms:.1f}"
-        )
+    inst = _read_instance(session.db_path, label_id)
+    logger.debug(
+        f"PICK_POLL_ARRIVAL seq={seq} label={label_id} "
+        f"age_since_handler_ms={(t_poll - picked_at) * 1000.0:.1f} "
+        f"flask_db_ms={(time.monotonic() - t_poll) * 1000.0:.1f}"
+    )
     if inst is None:
         return jsonify({
             "error": f"label_id {label_id} not in catalog",
@@ -491,67 +485,59 @@ def review_current_pick():
 def review_pick_stream():
     """Server-Sent Events stream of pick updates.
 
-    Single long-lived HTTP/1.1 connection — much cheaper than 700ms-
-    interval polling, and crucially does NOT compete with NG chunk
-    fetches for fresh connection slots over the SSH tunnel. The
-    action handler (Tornado side) sets `_pick_event`; this generator
-    (Werkzeug worker thread) wait()s on it and emits one SSE event
-    per new pick. Heartbeats every 25s keep proxies / load balancers
-    from idle-closing the connection.
+    Single long-lived HTTP/1.1 connection — much cheaper than polling,
+    and it does not compete with NG chunk fetches for fresh connection
+    slots. The action handler (Tornado side) posts to the session's
+    PickBoard; this generator (Werkzeug worker thread) waits on it and
+    emits one SSE event per new pick. Every stream tracks its own last
+    sequence number, so each open tab sees every pick.
+
+    Heartbeats every PICK_STREAM_HEARTBEAT_S keep proxies from
+    idle-closing the connection. The stream ends when another index is
+    opened; the browser's EventSource then reconnects to the new one.
     """
-    db_path = _require_db()
-    if db_path is None:
-        return jsonify({"error": "no review db open"}), 409
+    session = g.review
+    if session is None:
+        return _no_session()
+    picks = session.picks
+
+    def lookup(label_id):
+        try:
+            inst = _read_instance(session.db_path, label_id)
+        except Exception as e:
+            logger.warning(f"review: pick_stream db lookup failed: {e}")
+            return None
+        if inst is not None:
+            inst["label_id"] = int(inst["id"])
+        return inst
+
+    def event(payload):
+        return f"data: {json.dumps(payload)}\n\n"
 
     def stream():
-        last_seq_emitted = -1
         # First yield is a real `data:` event with the current pick (if any)
         # so EventSource clients see something the moment they open. Comment
         # lines (": ...") are dropped by some buffering proxies and don't
         # trigger onmessage on the client.
-        first_seq = getattr(g, "review_pick_seq", 0) or 0
-        first_label = getattr(g, "review_last_pick_label_id", None)
-        first_payload = {"seq": first_seq, "pick": None}
-        if first_seq > 0 and first_label is not None:
-            try:
-                conn = open_db(db_path)
-                try:
-                    inst = get_instance(conn, first_label)
-                finally:
-                    conn.close()
-                if inst is not None:
-                    inst["label_id"] = int(inst["id"])
-                    first_payload["pick"] = inst
-                    last_seq_emitted = first_seq
-            except Exception as e:
-                logger.warning(f"review: pick_stream initial db lookup failed: {e}")
-        yield f"data: {_json.dumps(first_payload)}\n\n"
+        sent, label_id, _ = picks.latest()
+        yield event({
+            "seq": sent,
+            "pick": lookup(label_id) if label_id is not None else None,
+        })
 
-        while True:
-            woke = _pick_event.wait(timeout=25.0)
-            _pick_event.clear()
-            current_seq = getattr(g, "review_pick_seq", 0) or 0
-            if woke and current_seq != last_seq_emitted and current_seq > 0:
-                label_id = getattr(g, "review_last_pick_label_id", None)
-                if label_id is not None:
-                    try:
-                        conn = open_db(db_path)
-                        try:
-                            inst = get_instance(conn, label_id)
-                        finally:
-                            conn.close()
-                    except Exception as e:
-                        logger.warning(f"review: pick_stream db lookup failed: {e}")
-                        inst = None
-                    if inst is not None:
-                        inst["label_id"] = int(inst["id"])
-                        last_seq_emitted = current_seq
-                        payload = {"pick": inst, "seq": current_seq}
-                        yield f"data: {_json.dumps(payload)}\n\n"
-                        continue
+        while g.review is session and not picks.closed:
+            seq, label_id = picks.wait_past(sent, PICK_STREAM_HEARTBEAT_S)
+            if g.review is not session or picks.closed:
+                break
+            if seq != sent:
+                sent = seq
+                inst = lookup(label_id)
+                if inst is not None:
+                    yield event({"pick": inst, "seq": seq})
+                    continue
             # No new pick (timeout) → heartbeat as a `data:` event with no
             # pick change (kind="heartbeat") so client knows we're alive.
-            yield f"data: {_json.dumps({'kind':'heartbeat','seq':current_seq})}\n\n"
+            yield event({"kind": "heartbeat", "seq": seq})
 
     return Response(
         stream_with_context(stream()),
@@ -566,10 +552,11 @@ def review_pick_stream():
 
 @review_bp.route("/api/review/status", methods=["GET"])
 def review_status():
-    """Current review-session state (is a db open? which reviewer?)."""
+    """Current review-session state (is an index open? which reviewer?)."""
+    session = g.review
     return jsonify({
-        "db_path": getattr(g, "review_db_path", None),
-        "reviewer": getattr(g, "review_reviewer", None),
-        "segmentation_layer": getattr(g, "review_segmentation_layer", None),
-        "viewer_attached": getattr(g, "viewer", None) is not None,
+        "db_path": session.db_path if session else None,
+        "reviewer": session.reviewer if session else None,
+        "segmentation_layer": session.segmentation_layer if session else None,
+        "viewer_attached": g.viewer is not None,
     })

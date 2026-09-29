@@ -1,8 +1,7 @@
-"""Shared SQL helpers for the instance-review workflow.
+"""SQL helpers for the instance-review workflow (the dashboard's Review tab).
 
-Backs both scripts/review_query.py (CLI) and the dashboard's
-routes/review_routes.py (HTTP). Schema is defined by
-scripts/build_instance_index.py:
+A review index is one SQLite file (built outside
+cellmap-flow) with three tables:
 
   instances(id, cz, cy, cx, cz_nm, cy_nm, cx_nm,
             bz0, bz1, by0, by1, bx0, bx1,
@@ -12,21 +11,26 @@ scripts/build_instance_index.py:
          edit_details_json, entry_method)
   meta(key, value)
 
-Ledger is pre-initialized one row per instance with NULL fields;
-verdicts are recorded by UPDATE, undo clears the same row to NULL.
+The ledger is pre-initialized with one row per instance and NULL fields;
+a verdict is an UPDATE, and undo sets the row back to NULL.
 
-`entry_method` is auto-added to legacy DBs by `open_db` (idempotent
-ALTER); rows recorded before the column existed read as NULL.
+Connections are read-only unless ``open_db(..., write=True)``, which the
+verdict and undo paths use. Only a writable connection adds the
+``entry_method`` column to an index that predates it; a read-only one
+reads it as NULL.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sqlite3
 import time
 from typing import Optional
 
+DB_SUFFIXES = (".sqlite", ".db")
+REQUIRED_TABLES = ("instances", "ledger", "meta")
 
 ORDER_COL = {
     "smallest":   "rank_smallest",
@@ -43,13 +47,54 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def open_db(db_path: str) -> sqlite3.Connection:
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"review db not found: {db_path}")
-    conn = sqlite3.connect(db_path)
+def resolve_db_path(path: str) -> str:
+    """The real path of a review index, or an error.
+
+    Only files named ``*.sqlite`` or ``*.db`` after resolving symlinks are
+    accepted, and the name is checked before existence, so the dashboard
+    route that takes this path cannot be used to probe for other files.
+
+    Raises ValueError for any other name, FileNotFoundError when the file
+    does not exist.
+    """
+    real = os.path.realpath(os.path.expanduser(path))
+    if not real.lower().endswith(DB_SUFFIXES):
+        raise ValueError(
+            f"a review index must be a {' or '.join(DB_SUFFIXES)} file"
+        )
+    if not os.path.isfile(real):
+        raise FileNotFoundError(f"review index not found: {path}")
+    return real
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> list:
+    return [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def open_db(db_path: str, write: bool = False) -> sqlite3.Connection:
+    """Open a review index; read-only unless ``write``.
+
+    Raises ValueError when the file is not a review index (a SQLite
+    database with the instances, ledger and meta tables).
+    """
+    if not os.path.isfile(db_path):
+        raise FileNotFoundError(f"review index not found: {db_path}")
+    uri = pathlib.Path(db_path).resolve().as_uri() + ("" if write else "?mode=ro")
+    conn = sqlite3.connect(uri, uri=True)
     conn.row_factory = sqlite3.Row
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(ledger)")}
-    if "entry_method" not in cols:
+    try:
+        tables = {
+            r["name"]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    except sqlite3.DatabaseError as e:
+        conn.close()
+        raise ValueError(f"not a review index: {e}") from e
+    missing = [t for t in REQUIRED_TABLES if t not in tables]
+    if missing:
+        conn.close()
+        raise ValueError(f"not a review index: no {', '.join(missing)} table")
+    if write and "entry_method" not in _columns(conn, "ledger"):
         conn.execute("ALTER TABLE ledger ADD COLUMN entry_method TEXT")
         conn.commit()
     return conn
@@ -77,8 +122,7 @@ def get_next(conn: sqlite3.Connection, order: str,
     if order not in ORDER_COL:
         raise ValueError(f"order must be one of {list(ORDER_COL)}; got {order!r}")
     order_col = ORDER_COL[order]
-    inst_cols = {r["name"] for r in conn.execute("PRAGMA table_info(instances)")}
-    if order_col not in inst_cols:
+    if order_col not in _columns(conn, "instances"):
         raise ValueError(
             f"queue {order!r} requires column {order_col!r} which is "
             f"not present in this catalog"
@@ -115,61 +159,18 @@ def get_next(conn: sqlite3.Connection, order: str,
 def get_instance(conn: sqlite3.Connection,
                  instance_id: int) -> Optional[dict]:
     """Full instance record (joined with ledger state), or None if not found."""
+    entry_method = (
+        "l.entry_method" if "entry_method" in _columns(conn, "ledger")
+        else "NULL AS entry_method"
+    )
     row = conn.execute(
         "SELECT i.*, l.review_state, l.reviewed_at, l.reviewer, "
-        "       l.edit_details_json, l.entry_method "
+        f"       l.edit_details_json, {entry_method} "
         "FROM instances i LEFT JOIN ledger l ON l.instance_id = i.id "
         "WHERE i.id = ?",
         (instance_id,),
     ).fetchone()
     return dict(row) if row is not None else None
-
-
-def find_instance_at_voxel(conn: sqlite3.Connection,
-                           label_voxel_zyx: tuple) -> Optional[dict]:
-    """Open the labels zarr declared in `meta.source_zarr` and return the
-    instance record at `(vz, vy, vx)` (label-zarr voxel coords).
-
-    Returns the same shape as `get_instance`. Returns `None` if:
-      - the voxel is background (label = 0)
-      - the voxel is out-of-bounds for the labels zarr
-      - the looked-up label id has no row in the instances table
-        (e.g. erased-and-reindexed; treated as a soft miss, not an error)
-
-    Raises:
-      - FileNotFoundError if meta.source_zarr is missing or doesn't exist on disk.
-    """
-    import zarr  # local import: dashboard process already imports zarr,
-                 # but keep this module standalone-importable for CLI use
-    meta = get_meta(conn)
-    src = meta.get("source_zarr")
-    if not src:
-        raise FileNotFoundError("meta.source_zarr is unset for this review db")
-    if not os.path.exists(src):
-        raise FileNotFoundError(f"meta.source_zarr not on disk: {src}")
-    # Try multiscale s0 first (the build_label_pyramid.py output convention),
-    # else fall back to opening src as a single array.
-    try:
-        arr = zarr.open(os.path.join(src, "s0"), mode="r")
-    except Exception:
-        arr = zarr.open(src, mode="r")
-
-    vz, vy, vx = label_voxel_zyx
-    # Round to nearest voxel and bounds-check
-    iz, iy, ix = int(round(vz)), int(round(vy)), int(round(vx))
-    nz, ny, nx = arr.shape[-3:]  # tolerate possible leading channel axis
-    if not (0 <= iz < nz and 0 <= iy < ny and 0 <= ix < nx):
-        return None
-
-    if arr.ndim == 4:
-        # (c, z, y, x) — pick channel 0; labels are normally 3-D so this
-        # is just defensive
-        label_id = int(arr[0, iz, iy, ix])
-    else:
-        label_id = int(arr[iz, iy, ix])
-    if label_id == 0:
-        return None
-    return get_instance(conn, label_id)
 
 
 VALID_VERDICTS = ("blessed", "edited", "erased")
@@ -190,9 +191,8 @@ def record_verdict(conn: sqlite3.Connection, instance_id: int, verdict: str,
                      indicating "not mito" for training).
 
     entry_method records HOW the reviewer arrived at this instance:
-      'next' (queue advance — trusted),
-      'select_at' (cursor lookup — historically buggy, see notes/260427),
-      'show' (Go to ID — trusted).
+      'next' (queue advance), 'show' (Go to ID), 'pick' (the t key in
+      the viewer), or 'select_at' (a cursor lookup older indexes used).
     NULL means unknown (legacy rows pre-dating this column).
 
     Raises ValueError for unknown verdict, unknown entry_method, or
@@ -254,7 +254,7 @@ def get_progress(conn: sqlite3.Connection) -> dict:
     ).fetchall()
     by_state = {r["state"]: r["n"] for r in by_state_rows}
 
-    inst_cols = {r["name"] for r in conn.execute("PRAGMA table_info(instances)")}
+    inst_cols = set(_columns(conn, "instances"))
     queues = {}
     for q, col in ORDER_COL.items():
         if col not in inst_cols:
