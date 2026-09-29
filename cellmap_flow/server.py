@@ -42,6 +42,7 @@ CHAIN_CACHE_SIZE = 32
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
 RAW_READ_CONCURRENCY_ENV = "CELLMAP_FLOW_RAW_READ_CONCURRENCY"
+HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
 
 
 def _env_count(name, default):
@@ -53,6 +54,15 @@ def _env_count(name, default):
         return int(float(value))
     except ValueError:
         raise ValueError(f"{name} must be a number, got {value!r}") from None
+
+
+def _env_flag(name):
+    value = os.environ.get(name, "").strip().lower()
+    if value in ("", "0", "false", "no", "off"):
+        return False
+    if value in ("1", "true", "yes", "on"):
+        return True
+    raise ValueError(f"{name} must be 1 or 0, got {os.environ[name]!r}")
 
 
 def _client_gone_check():
@@ -124,6 +134,10 @@ class CellMapFlowServer:
         ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB; 0 for none) and
         ``CELLMAP_FLOW_RAW_READ_CONCURRENCY`` (default: tensorstore's, one
         decode per core) set how the raw data is read.
+
+        ``CELLMAP_FLOW_HALF_PRECISION=1`` serves the model under half-precision
+        autocast, as ``half_precision = True`` in its config does, if it
+        agrees with fp32 at warmup. See Inferencer.
         """
         if restart_callback is not None and not restart_token:
             raise ValueError("restart_callback requires a restart_token")
@@ -132,7 +146,11 @@ class CellMapFlowServer:
         # so that the declared shapes are checked on its warmup forward, on
         # the GPU, rather than by a separate forward on the CPU. A mismatch
         # raises here, before the server announces itself.
-        self.inferencer = Inferencer(model_config, device_slots=DeviceSlots.from_env())
+        self.inferencer = Inferencer(
+            model_config,
+            device_slots=DeviceSlots.from_env(),
+            half_precision=_env_flag(HALF_PRECISION_ENV),
+        )
 
         block_shape = [int(x) for x in model_config.config.block_shape]
 

@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 GPU_SLOTS_ENV = "CELLMAP_FLOW_GPU_SLOTS"
 
+# Half precision is kept only if its output stays within this fraction of
+# the fp32 output's range (1% is under 3 levels of a uint8 display).
+HALF_PRECISION_TOLERANCE = 0.01
+
 
 class ChunkCancelled(Exception):
     """The chunk was not computed: whoever asked for it stopped waiting."""
@@ -105,6 +109,12 @@ def _device_part(device_slots, cancelled=None):
     return device_slots.hold(cancelled)
 
 
+def _autocast(device, dtype):
+    if dtype is None:
+        return contextlib.nullcontext()
+    return torch.autocast(device.type, dtype=dtype)
+
+
 def apply_postprocess(data, postprocess=None, **kwargs):
     """Run ``data`` through a postprocessing chain.
 
@@ -132,22 +142,42 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     # Only the transfer, the forward and the copy back take a device slot;
     # the read and the normalization above overlap another chunk's forward.
+    autocast_dtype = kwargs.get("autocast_dtype")
     with _device_part(kwargs.get("device_slots"), kwargs.get("cancelled")), torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
         logger.debug(f"Predicting with model {type(config.model).__name__} on device {device}")
         logger.debug(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
         raw_input_torch = raw_input_torch.half() if use_half_prediction else raw_input_torch.float()
-        result = config.model.forward(raw_input_torch).cpu().numpy()[0]
+        with _autocast(device, autocast_dtype):
+            output = config.model.forward(raw_input_torch)
+        if autocast_dtype is not None:
+            output = output.float()  # what the postprocessing always got
+        result = output.cpu().numpy()[0]
         logger.debug(f"Output shape: {result.shape}, dtype: {result.dtype}")
     return result
 
 class Inferencer:
     def __init__(
-        self, model_config: ModelConfig, use_half_prediction=False, device_slots=None
+        self,
+        model_config: ModelConfig,
+        use_half_prediction=False,
+        device_slots=None,
+        half_precision=False,
     ):
         """``device_slots``: a DeviceSlots bounding how many chunks use the
         device at once, as the inference server passes. ``None``, as blockwise
         workers (one chunk at a time) use, bounds nothing.
+
+        ``half_precision``, or ``half_precision = True`` in the model's config
+        (a script sets it at top level), runs the forward under autocast:
+        float16 on a GPU (0.28 s instead of 0.61 s for fly_organelles_run08
+        on a 2080 Ti), bfloat16 on a CPU. It is kept only if, at warmup, its
+        output is within HALF_PRECISION_TOLERANCE of fp32's; otherwise a
+        warning says by how much it differed and the model is served in fp32.
+        Unlike ``use_half_prediction``, which converts the weights, the
+        weights stay in fp32 and torch picks the operations that are safe in
+        half precision. A config's own predict or process_chunk decides its
+        precision itself.
         """
         self.device_slots = device_slots
 
@@ -170,6 +200,12 @@ class Inferencer:
         model_config.check_shapes_on_warmup = True
         # config is lazy so one call is needed to get the config
         _ = self.model_config.config
+        self.half_precision = bool(
+            half_precision or getattr(self.model_config.config, "half_precision", False)
+        )
+        # The dtype chunks are computed in under autocast; set by the warmup
+        # when half precision is asked for and agrees with fp32.
+        self.autocast_dtype = None
 
         if hasattr(self.model_config.config, "read_shape") and hasattr(
             self.model_config.config, "write_shape"
@@ -255,6 +291,58 @@ class Inferencer:
         if check is not None and getattr(self.model_config, "validate_model_shapes", True):
             check(out.shape)
         self._record_output_class(out)
+        if self.half_precision:
+            self._check_half_precision(shape)
+
+    def _check_half_precision(self, shape):
+        """Turn autocast on if it agrees with fp32 on the model's output.
+
+        The comparison input is uniform in [-1, 1], the range most input
+        chains produce, rather than the extreme warmup input above, which
+        can overflow float16 inside the network in a way real data doesn't.
+        These forwards also initialize the half-precision kernels, so the
+        first chunk doesn't pay for that.
+        """
+        config = self.model_config.config
+        name = getattr(self.model_config, "name", None) or type(self.model_config).__name__
+        if self.use_half_prediction:
+            return  # the weights are already half precision
+        own_predict = getattr(config, "predict", predict) is not predict
+        if own_predict or callable(getattr(config, "process_chunk", None)):
+            logger.warning(
+                f"Half precision asked for {name}, but its config has its own "
+                "predict or process_chunk, which decides its precision; not used"
+            )
+            return
+        dtype = torch.float16 if self.device.type == "cuda" else torch.bfloat16
+        try:
+            probe = torch.rand(shape, device=self.device) * 2 - 1
+            with torch.no_grad():
+                reference = config.model.forward(probe).float()
+                with _autocast(self.device, dtype):
+                    # Twice: TorchScript re-optimizes a graph on its second
+                    # call with new input types, which cost the first chunk
+                    # 0.4 s (fly_organelles_run08, 2080 Ti).
+                    config.model.forward(probe)
+                    reduced = config.model.forward(probe).float()
+            difference = float((reduced - reference).abs().max())
+            spread = float(reference.max() - reference.min()) or 1.0
+        except Exception as e:
+            logger.warning(f"{name}: {dtype} forward failed ({e}); serving in fp32")
+            return
+        relative = difference / spread
+        if not np.isfinite(relative) or relative > HALF_PRECISION_TOLERANCE:
+            logger.warning(
+                f"{name}: {dtype} output differs from fp32 by up to {difference:.3g} "
+                f"({relative:.1%} of the output's range, over the "
+                f"{HALF_PRECISION_TOLERANCE:.0%} allowed); serving in fp32"
+            )
+            return
+        self.autocast_dtype = dtype
+        logger.info(
+            f"{name}: serving in {dtype} under autocast; it differs from fp32 by "
+            f"up to {difference:.3g} ({relative:.2%} of the output's range)"
+        )
 
     def _record_output_class(self, out):
         """Classify the model's output activation from the warmup pass.
@@ -339,6 +427,7 @@ class Inferencer:
                 self.model_config.config,
                 device_slots=self.device_slots,
                 cancelled=cancelled,
+                autocast_dtype=self.autocast_dtype,
                 **kwargs,
             )
         # A script's own predict may not accept more keywords, and its device
