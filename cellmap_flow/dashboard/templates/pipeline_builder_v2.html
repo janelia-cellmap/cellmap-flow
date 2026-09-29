@@ -1892,7 +1892,7 @@
             const logOutput = document.getElementById('log-output');
             
             eventSource.onmessage = (event) => {
-                if (event.data && event.data !== 'keepalive') {
+                if (event.data) {
                     const logLine = document.createElement('div');
                     logLine.textContent = event.data;
                     logOutput.appendChild(logLine);
