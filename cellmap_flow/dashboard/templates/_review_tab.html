@@ -32,15 +32,8 @@
   <div class="card-body">
     <div class="mb-2">
       <label class="form-label mb-1" for="reviewOrder">order</label>
-      <select class="form-select form-select-sm" id="reviewOrder">
-        <option value="fm" selected>fm (false-merge candidates)</option>
-        <option value="smallest">smallest</option>
-        <option value="random">random</option>
-        <option value="em_bright">em_bright (trichocyst candidates)</option>
-        <option value="keep_lt65k">keep_lt65k (Tier-B: sub-65k kept-interior)</option>
-        <option value="keep_ge65k">keep_ge65k (Tier-B: ≥65k kept-interior)</option>
-        <option value="drop">drop (Tier-B: interior dropped by filter)</option>
-      </select>
+      <!-- Filled from the open index: one option per rank_<queue> column. -->
+      <select class="form-select form-select-sm" id="reviewOrder"></select>
     </div>
     <div class="mb-2">
       <label class="form-label mb-1" for="reviewMinVox">min_vox</label>
@@ -179,26 +172,13 @@
     $("reviewCurrentRank").textContent =
       (inst.rank !== undefined && inst.rank !== null) ? inst.rank : "—";
     $("reviewCurrentVox").textContent = inst.vox.toLocaleString();
-    if (inst.em_mean != null) {
-      $("reviewCurrentEmMean").textContent = Number(inst.em_mean).toFixed(1);
-    } else {
-      $("reviewCurrentEmMean").textContent = "…";
-      fetch(`/api/review/show/${inst.id}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(j => {
-          if (j && j.em_mean != null &&
-              currentInstance && currentInstance.id === j.id) {
-            currentInstance.em_mean = j.em_mean;
-            $("reviewCurrentEmMean").textContent = Number(j.em_mean).toFixed(1);
-          } else if (currentInstance && currentInstance.id === inst.id) {
-            $("reviewCurrentEmMean").textContent = "—";
-          }
-        })
-        .catch(() => { $("reviewCurrentEmMean").textContent = "—"; });
-    }
-    $("reviewCurrentSphericity").textContent = inst.sphericity.toFixed(3);
+    // Optional columns: an index has them only if its builder wrote them.
+    $("reviewCurrentEmMean").textContent =
+      inst.em_mean != null ? Number(inst.em_mean).toFixed(1) : "—";
+    $("reviewCurrentSphericity").textContent =
+      inst.sphericity != null ? Number(inst.sphericity).toFixed(3) : "—";
     $("reviewCurrentFmScore").textContent =
-      inst.fm_score != null ? Number(inst.fm_score).toExponential(3) : "-";
+      inst.fm_score != null ? Number(inst.fm_score).toExponential(3) : "—";
     $("reviewCurrentCentroid").textContent =
       `z=${inst.cz_nm.toFixed(0)}\ny=${inst.cy_nm.toFixed(0)}\nx=${inst.cx_nm.toFixed(0)}`;
     $("reviewCurrentCentroid").style.whiteSpace = "pre-line";
@@ -248,23 +228,19 @@
       ).join(", ");
       $("reviewProgressSummary").textContent =
         `queues — ${qSummary}`;
-      // Hide queue dropdown options whose ranking column is missing from
-      // this catalog's instances table. /api/review/progress already
-      // enumerates only the queues that exist; everything else stays out
-      // of view so the user can't pick a queue that 400s.
+      // The queues are the index's own (its rank_<queue> columns), so list
+      // exactly those, keeping the current choice when it is still there.
+      // Rebuilt only when they change: this runs every 5 s, and replacing
+      // the options closes the dropdown if it is open.
       const sel = $("reviewOrder");
-      let firstVisibleQueue = null;
-      for (const opt of sel.options) {
-        const has = Object.prototype.hasOwnProperty.call(q, opt.value);
-        opt.hidden = !has;
-        opt.disabled = !has;
-        if (has && firstVisibleQueue === null) firstVisibleQueue = opt.value;
-      }
-      // If the currently-selected queue was hidden, pick the first
-      // available one so the UI doesn't silently sit on a disabled value.
-      if (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].hidden
-          && firstVisibleQueue !== null) {
-        sel.value = firstVisibleQueue;
+      const options = Object.entries(q).map(
+        ([name, v]) => [name, v.label ? `${name} (${v.label})` : name]
+      );
+      if (sel.dataset.queues !== JSON.stringify(options)) {
+        const chosen = sel.value;
+        sel.replaceChildren(...options.map(([name, text]) => new Option(text, name)));
+        if (Object.prototype.hasOwnProperty.call(q, chosen)) sel.value = chosen;
+        sel.dataset.queues = JSON.stringify(options);
       }
     } catch (e) {
       $("reviewProgressSummary").textContent = "progress error: " + e;

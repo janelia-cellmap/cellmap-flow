@@ -1,15 +1,23 @@
 """SQL helpers for the instance-review workflow (the dashboard's Review tab).
 
-A review index is one SQLite file (built outside
-cellmap-flow) with three tables:
+A review index is one SQLite file (``python -m cellmap_flow.review_index``
+builds one) with three tables:
 
-  instances(id, cz, cy, cx, cz_nm, cy_nm, cx_nm,
-            bz0, bz1, by0, by1, bx0, bx1,
-            vox, faces, sphericity, fm_score,
-            rank_smallest, rank_fm, rank_random)
+  instances(id, vox, cz, cy, cx, cz_nm, cy_nm, cx_nm,
+            bz0, bz1, by0, by1, bx0, bx1, rank_<queue>, ...)
   ledger(instance_id PK, review_state, reviewed_at, reviewer,
          edit_details_json, entry_method)
   meta(key, value)
+
+``cz..cx`` is the centroid in voxels, ``cz_nm..cx_nm`` the same point in
+world nm, and ``bz0..bx1`` the half-open bounding box in voxels. Other
+per-instance columns (sphericity, fm_score, em_mean, ...) are optional and
+passed through.
+
+Queues are data, not names known here: every ``rank_<name>`` column of
+``instances`` is a queue called ``<name>``, walked by ascending rank over
+its non-NULL rows. ``meta.queue_labels``, a JSON object, can describe them
+for the dashboard.
 
 The ledger is pre-initialized with one row per instance and NULL fields;
 a verdict is an UPDATE, and undo sets the row back to NULL.
@@ -25,22 +33,16 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import sqlite3
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 DB_SUFFIXES = (".sqlite", ".db")
 REQUIRED_TABLES = ("instances", "ledger", "meta")
-
-ORDER_COL = {
-    "smallest":   "rank_smallest",
-    "fm":         "rank_fm",
-    "random":     "rank_random",
-    "em_bright":  "rank_em_bright",
-    "keep_lt65k": "rank_random_keep_lt65k",
-    "keep_ge65k": "rank_random_keep_ge65k",
-    "drop":       "rank_random_drop",
-}
+RANK_PREFIX = "rank_"
+# Queue columns are interpolated into SQL, so only plain identifiers count.
+_RANK_COLUMN = re.compile(r"^rank_[A-Za-z0-9_]+$")
 
 
 def _now() -> str:
@@ -109,6 +111,15 @@ def count_instances(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM instances").fetchone()[0]
 
 
+def queues(conn: sqlite3.Connection) -> Dict[str, str]:
+    """``{queue name: rank column}``, in the order of the columns."""
+    return {
+        col[len(RANK_PREFIX):]: col
+        for col in _columns(conn, "instances")
+        if _RANK_COLUMN.match(col)
+    }
+
+
 def get_next(conn: sqlite3.Connection, order: str,
              min_vox: Optional[int] = None,
              skip_rank: Optional[int] = None) -> Optional[dict]:
@@ -119,14 +130,10 @@ def get_next(conn: sqlite3.Connection, order: str,
     (without it, the query returns the same "first unreviewed" row
     every call, because nothing got marked reviewed).
     """
-    if order not in ORDER_COL:
-        raise ValueError(f"order must be one of {list(ORDER_COL)}; got {order!r}")
-    order_col = ORDER_COL[order]
-    if order_col not in _columns(conn, "instances"):
-        raise ValueError(
-            f"queue {order!r} requires column {order_col!r} which is "
-            f"not present in this catalog"
-        )
+    available = queues(conn)
+    if order not in available:
+        raise ValueError(f"order must be one of {list(available)}; got {order!r}")
+    order_col = available[order]
 
     clauses = []
     params = []
@@ -140,10 +147,7 @@ def get_next(conn: sqlite3.Connection, order: str,
     extra_sql = " ".join(clauses)
 
     sql = f"""
-        SELECT i.id, i.cz, i.cy, i.cx, i.cz_nm, i.cy_nm, i.cx_nm,
-               i.bz0, i.bz1, i.by0, i.by1, i.bx0, i.bx1,
-               i.vox, i.sphericity, i.fm_score,
-               i.{order_col} AS rank
+        SELECT i.*, i.{order_col} AS rank
         FROM instances i
         LEFT JOIN ledger l ON l.instance_id = i.id
         WHERE i.{order_col} IS NOT NULL
@@ -244,6 +248,14 @@ def undo_verdict(conn: sqlite3.Connection, instance_id: int) -> dict:
     return dict(row)
 
 
+def _json_object(text: Optional[str]) -> dict:
+    try:
+        value = json.loads(text) if text else {}
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def get_progress(conn: sqlite3.Connection) -> dict:
     """Aggregate review progress: per-state counts + per-queue counts."""
     total = count_instances(conn)
@@ -254,11 +266,10 @@ def get_progress(conn: sqlite3.Connection) -> dict:
     ).fetchall()
     by_state = {r["state"]: r["n"] for r in by_state_rows}
 
-    inst_cols = set(_columns(conn, "instances"))
-    queues = {}
-    for q, col in ORDER_COL.items():
-        if col not in inst_cols:
-            continue
+    meta = get_meta(conn)
+    labels = _json_object(meta.get("queue_labels"))
+    queue_counts = {}
+    for q, col in queues(conn).items():
         q_total = conn.execute(
             f"SELECT COUNT(*) FROM instances WHERE {col} IS NOT NULL"
         ).fetchone()[0]
@@ -267,13 +278,16 @@ def get_progress(conn: sqlite3.Connection) -> dict:
             f"ON l.instance_id = i.id "
             f"WHERE i.{col} IS NOT NULL AND l.review_state IS NOT NULL"
         ).fetchone()[0]
-        queues[q] = {"total": q_total, "reviewed": q_reviewed}
+        queue_counts[q] = {
+            "total": q_total,
+            "reviewed": q_reviewed,
+            "label": labels.get(q),
+        }
 
-    meta = get_meta(conn)
     return {
         "total": total,
         "by_state": by_state,
-        "queues": queues,
+        "queues": queue_counts,
         "source_zarr": meta.get("source_zarr"),
         "built_at": meta.get("built_at"),
         "voxel_size_nm": json.loads(meta["voxel_size_nm"])

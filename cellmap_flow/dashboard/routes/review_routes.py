@@ -28,12 +28,12 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from cellmap_flow.globals import g
 from cellmap_flow.io.metadata import nm_per_unit
 from cellmap_flow.review import (
-    ORDER_COL,
     count_instances,
     get_instance,
     get_next,
     get_progress,
     open_db,
+    queues,
     record_verdict,
     resolve_db_path,
     undo_verdict,
@@ -306,7 +306,8 @@ def review_open():
 def review_next():
     """Return the next unreviewed instance in the chosen queue.
 
-    Query: ?order=fm|smallest|random&min_vox=100&skip_rank=12
+    Query: ?order=<queue>&min_vox=100&skip_rank=12, where the queues are
+    the index's rank_<queue> columns; the first one when order is absent.
 
     Side effect: navigates g.viewer to the instance's centroid (if
     viewer exists).
@@ -315,9 +316,7 @@ def review_next():
     if session is None:
         return _no_session()
 
-    order = request.args.get("order", "fm")
-    if order not in ORDER_COL:
-        return jsonify({"error": f"order must be one of {list(ORDER_COL)}"}), 400
+    order = request.args.get("order")
     try:
         min_vox = _optional_int("min_vox")
         skip_rank = _optional_int("skip_rank")
@@ -326,6 +325,8 @@ def review_next():
 
     conn = open_db(session.db_path)
     try:
+        if order is None:
+            order = next(iter(queues(conn)), "")
         inst = get_next(conn, order, min_vox, skip_rank)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
