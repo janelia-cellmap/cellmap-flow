@@ -10,6 +10,7 @@
    custom_script
    post
    plugins
+   review
    autoapi/index
    
 
