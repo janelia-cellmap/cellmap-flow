@@ -1,19 +1,19 @@
-"""Tests for finetuning dashboard service helpers."""
+"""Tests for the finetune dashboard helpers in routes/finetune/common.py."""
 
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from cellmap_flow.dashboard.routes.finetune.service import (
-    _autodetect_output_type,
-    _build_restart_params,
+from cellmap_flow.dashboard.routes.finetune.common import (
+    autodetect_output_type,
+    build_restart_params,
 )
 
 
-class FinetuneServiceHelperTests(unittest.TestCase):
+class FinetuneCommonHelperTests(unittest.TestCase):
     def test_build_restart_params_maps_distillation_scope(self):
-        params = _build_restart_params(
+        params = build_restart_params(
             {
                 "batch_size": 4,
                 "loss_type": "margin",
@@ -34,7 +34,7 @@ class FinetuneServiceHelperTests(unittest.TestCase):
             script_path.write_text("offsets = [[1, 0, 0], [0, 1, 0]]\n")
             model_config = SimpleNamespace(script_path=str(script_path))
 
-            output_type, offsets = _autodetect_output_type(
+            output_type, offsets = autodetect_output_type(
                 model_config,
                 output_type=None,
                 offsets=None,

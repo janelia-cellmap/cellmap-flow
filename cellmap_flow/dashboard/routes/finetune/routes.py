@@ -1,19 +1,20 @@
 from flask import Blueprint, request
 
-from cellmap_flow.dashboard.routes.finetune.annotation import (
-    add_crop_to_viewer_response,
+from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     create_annotation_volume_response,
     get_finetune_models_response,
     get_user_prefs_response,
-    list_existing_sessions_response,
-    load_existing_volume_response,
-    refresh_annotated_regions_layer,
-    refresh_annotated_regions_response,
     set_user_prefs_response,
-    sync_annotations_manually_response,
 )
 from cellmap_flow.dashboard.routes.finetune.annotation_sessions import (
     get_resume_progress_response,
+    list_existing_sessions_response,
+    load_existing_volume_response,
+)
+from cellmap_flow.dashboard.routes.finetune.overlay import (
+    add_crop_to_viewer_response,
+    refresh_annotated_regions_response,
+    sync_annotations_manually_response,
 )
 from cellmap_flow.dashboard.routes.finetune.training import (
     cancel_job_response,
@@ -159,4 +160,4 @@ def restart_finetuning_job(job_id):
     return restart_finetuning_job_response(job_id, request.get_json() or {})
 
 
-__all__ = ["finetune_bp", "refresh_annotated_regions_layer"]
+__all__ = ["finetune_bp"]
