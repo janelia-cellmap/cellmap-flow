@@ -1213,38 +1213,25 @@ def sync_instance_correction_from_minio(zarr_path, dst_path=None):
     """Force-snapshot the MinIO state of a paintable instance-correction zarr
     to a local destination path.
 
-    Unlike `sync_annotation_volume_from_minio`, this does NOT trigger any
-    `extract_correction_from_chunk` side effects — it is a plain write-through
-    snapshot. Its purpose is to produce a durable on-disk copy of the
-    MinIO-backed paintable layer so that:
-      - Run 12 training-data extraction can read `annotation/s0` from a
-        user-visible path without going through MinIO;
-      - a dated snapshot can be produced at any time for rollback / audit;
-      - the dashboard can safely be restarted (re-POSTing
-        `create-instance-correction` would otherwise trigger
-        `ensure_minio_serving`'s initial `mc mirror local->MinIO` and
-        clobber the user's brush edits with the stale seed).
+    Unlike `sync_annotation_volume_from_minio`, which pulls changed chunks
+    into the served volume, this copies the whole MinIO object, metadata
+    included, so it can make a new zarr: a dated snapshot for rollback or
+    audit, or a copy to train from.
 
     Args:
-        zarr_path: Absolute path to the user-visible instance-correction
-            zarr (e.g. `.../instance_corrections/roi3_annotation.zarr`).
-            Used to derive the MinIO bucket key from its basename
-            (`<bucket>/<basename(zarr_path)>/annotation`). The file itself
-            is not opened — only the name is read.
-        dst_path: Absolute path to write the snapshot to. Defaults to
-            `zarr_path` (in-place pull-back into the user-visible zarr).
-            Prefer a fresh dated path (e.g.
-            `.../roi3_annotation_FINAL_session14_<ts>.zarr`) to avoid any
-            hardlink / aliasing hazards with provenance snapshots — a
-            plain in-place sync overwrites chunk files in the existing
-            inodes, and if those inodes are hardlinked to another path
-            (e.g. the bootstrap-via-`cp -rl` seed path), the "other" path
-            is corrupted as a side effect. Using a distinct `dst_path`
-            sidesteps this entirely.
+        zarr_path: The instance-correction zarr, e.g.
+            `.../instance_corrections/roi3_annotation.zarr`. Its basename is
+            the MinIO bucket key; the zarr itself is not opened.
+        dst_path: Where to write the copy; defaults to `zarr_path`. Prefer a
+            fresh dated path (e.g. `.../roi3_annotation_<ts>.zarr`): an
+            in-place copy overwrites chunk files in their existing inodes,
+            which corrupts any hardlinked copy of them (a `cp -rl` seed).
+            The route only accepts a `.zarr` beside `zarr_path`.
 
     Returns:
         (success: bool, info_or_error: dict or str). On success, info is
-        {"zarr_path", "dst_path", "chunks_synced", "chunks_removed"}.
+        {"zarr_path", "dst_path", "keys_copied", "keys_skipped",
+        "bytes_copied"}.
     """
     if not minio_state["ip"] or not minio_state["port"]:
         return False, "MinIO not running"
@@ -1264,33 +1251,12 @@ def sync_instance_correction_from_minio(zarr_path, dst_path=None):
                 "(was create-instance-correction ever POSTed for this zarr?)"
             )
 
-        # Use `zarr.copy_store` for a complete byte-for-byte copy from
-        # MinIO to the local destination. Copies every key under the
-        # bucket root verbatim: top-level `.zattrs` + `.zgroup`,
-        # `annotation/.zattrs` + `.zgroup`, `annotation/s0/.zarray`
-        # (which preserves the Patch 39 `compressor=None` setting —
-        # critical, because the raw chunks in MinIO are uncompressed
-        # bytes and opening them with the wrong compressor in .zarray
-        # produces a blosc decompression error), `annotation/s0/.zattrs`,
-        # and every chunk file.
-        #
-        # Why not `_sync_zarr_group_metadata` + `_diff_and_sync_chunks`
-        # (the pre-Patch-46 approach)? Because that pair was written for
-        # the legacy crop-based annotation_volume workflow, where the
-        # destination was always pre-created by a session setup step and
-        # its `.zarray` already had the correct compressor. For fresh
-        # destinations (e.g. save_roi.sh writing a timestamped snapshot),
-        # `_sync_zarr_group_metadata` would call `create_dataset` without
-        # specifying a compressor, so zarr's default (Blosc) would be
-        # written into the new `.zarray` — and subsequent reads would
-        # blosc-decode the raw bytes and fail. Also, that pair only
-        # syncs the `annotation/` subgroup, not the top-level zarr group
-        # metadata, so the new snapshot lacks a `.zgroup` marker at the
-        # root and `zarr.open(path)` doesn't recognize it as a group.
-        #
-        # `zarr.copy_store` copies every key under the source store and
-        # is semantically a deep byte-for-byte clone. Slower than the
-        # parallel chunk-diff path, but correct.
+        # `zarr.copy_store` copies every key under the bucket root as it
+        # is: the root and annotation group metadata, `.zarray` with its
+        # compressor, and every chunk. `_sync_zarr_group_metadata` +
+        # `_diff_and_sync_chunks` only sync `annotation/` into a volume
+        # that already exists, so a fresh destination would get no root
+        # `.zgroup` and would not open as a group.
         src_store = s3fs.S3Map(root=src_root, s3=s3, check=False)
         os.makedirs(dst_path, exist_ok=True)
         dst_store = zarr.DirectoryStore(str(dst_path))
@@ -1330,8 +1296,7 @@ def cc3d_relabel_instance_correction(zarr_path, target_label, snapshot_dir=None)
     POSTs this route with that label. cc3d finds the now-separated
     components; we keep the largest as `target_label` and reassign the
     smaller components to `max(existing) + 1 ...`. A hard reload of the
-    NG tab shows the split colors. Validated end-to-end on ROI3 in
-    Session 13 — productionizes `scripts/oneshot_cc3d_split_roi3.py`.
+    NG tab shows the split colors.
 
     Reads and writes the MinIO-backed zarr in place (MinIO is the source
     of truth for in-progress brush edits; the user-visible `zarr_path` is

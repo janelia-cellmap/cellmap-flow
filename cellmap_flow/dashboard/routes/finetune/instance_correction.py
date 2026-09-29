@@ -16,6 +16,7 @@ like any other.
 """
 import logging
 import os
+import re
 
 import neuroglancer
 import numpy as np
@@ -42,6 +43,64 @@ _LEGACY_TYPE = "instance_annotation_volume"
 
 def _error(message, status=400, **extra):
     return jsonify({"success": False, "error": message, **extra}), status
+
+
+# Where requests may write. The dashboard listens on every interface, and
+# these routes create directories, write seeds and copy MinIO objects over
+# whatever paths they are given, so each path must be a zarr, in a
+# directory that already exists, next to the volume it belongs to.
+
+# roi_name becomes a file name and a bucket key.
+_ROI_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+class _Refused(ValueError):
+    """Request input these routes will not act on; answered with 400."""
+
+
+def _real(path):
+    return os.path.realpath(os.path.expanduser(str(path)))
+
+
+def _is_zarr(path):
+    return any(os.path.isfile(os.path.join(path, key)) for key in (".zgroup", ".zarray"))
+
+
+def _existing_dir(path, name):
+    real = _real(path)
+    if not os.path.isdir(real):
+        raise _Refused(f"{name} must be an existing directory: {path}")
+    return real
+
+
+def _zarr_target(path, name, beside=None):
+    """``path`` resolved, if a request may write a zarr there.
+
+    It must be named *.zarr once links are resolved (checked before the disk
+    is looked at), lie in an existing directory -- the directory of
+    ``beside``, when given -- and, if it exists, be a zarr.
+    """
+    if not path:
+        raise _Refused(f"{name} is required")
+    real = _real(path)
+    if not real.endswith(".zarr"):
+        raise _Refused(f"{name} must be a .zarr path: {path}")
+    parent = os.path.dirname(real)
+    if beside is not None and parent != os.path.dirname(beside):
+        raise _Refused(f"{name} must be in the same directory as {beside}")
+    if not os.path.isdir(parent):
+        raise _Refused(f"the directory of {name} does not exist: {path}")
+    if os.path.exists(real) and not _is_zarr(real):
+        raise _Refused(f"{name} exists and is not a zarr: {path}")
+    return real
+
+
+def _int(data, key, default=None):
+    value = data.get(key, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise _Refused(f"{key} must be an integer, got {value!r}")
 
 
 def _seed_geometry(model_name, dataset_path):
@@ -157,6 +216,8 @@ def create_instance_correction_response(data):
         model_name = data.get("model_name")
         if not roi_name:
             return _error("roi_name is required")
+        if not _ROI_NAME.match(str(roi_name)):
+            return _error("roi_name may hold only letters, digits, '_', '-' and '.'")
         if getattr(g, "viewer", None) is None:
             return _error("viewer not initialized")
         if not reuse_existing:
@@ -169,8 +230,10 @@ def create_instance_correction_response(data):
             if not model_name:
                 return _error("model_name is required when reuse_existing=False")
 
-        dilation_radius = int(data.get("dilation_radius_voxels", 5))
+        dilation_radius = _int(data, "dilation_radius_voxels", 5)
         annotation_dtype = data.get("annotation_dtype", "uint16")
+        if annotation_dtype not in ("uint16", "uint32"):
+            return _error("annotation_dtype must be uint16 or uint32")
 
         # Resolve output_dir (MinIO backing store location) and
         # effective_zarr_path (what gets uploaded into the MinIO bucket).
@@ -185,42 +248,42 @@ def create_instance_correction_response(data):
         # - Reuse without source_zarr_path:
         #   require output_dir, effective_zarr_path is the conventional
         #   <output_dir>/<roi_name>_annotation.zarr.
+        #
+        # A requested output_dir must already exist. Only the default
+        # instance_corrections/, beside an instance zarr that exists, is
+        # made here.
         if reuse_existing:
             if source_zarr_path:
+                source_zarr_path = _real(source_zarr_path)
+                if not source_zarr_path.endswith(".zarr"):
+                    return _error("source_zarr_path must be a .zarr path")
                 # Default output_dir = grandparent of the snapshot
                 # (e.g. snapshot at instance_corrections/roi3/roi3_<ts>.zarr
                 # -> output_dir = instance_corrections/).
-                default_output_dir = os.path.dirname(
-                    os.path.dirname(os.path.normpath(source_zarr_path))
-                )
-                output_dir = data.get("output_dir", default_output_dir)
+                default_output_dir = os.path.dirname(os.path.dirname(source_zarr_path))
+                output_dir = _existing_dir(data.get("output_dir", default_output_dir), "output_dir")
                 effective_zarr_path = source_zarr_path
             else:
-                output_dir = data.get("output_dir")
-                if not output_dir:
-                    return (
-                        jsonify({
-                            "success": False,
-                            "error": (
-                                "output_dir is required when "
-                                "reuse_existing=True and source_zarr_path "
-                                "is not provided"
-                            ),
-                        }),
-                        400,
+                if not data.get("output_dir"):
+                    return _error(
+                        "output_dir is required when reuse_existing=True "
+                        "and source_zarr_path is not provided"
                     )
+                output_dir = _existing_dir(data["output_dir"], "output_dir")
                 effective_zarr_path = os.path.join(
                     output_dir, f"{roi_name}_annotation.zarr"
                 )
         else:
-            default_parent = os.path.join(
-                os.path.dirname(instance_zarr_path), "instance_corrections"
-            )
-            output_dir = data.get("output_dir", default_parent)
+            if data.get("output_dir"):
+                output_dir = _existing_dir(data["output_dir"], "output_dir")
+            else:
+                output_dir = os.path.join(
+                    os.path.dirname(_real(instance_zarr_path)), "instance_corrections"
+                )
+                os.makedirs(output_dir, exist_ok=True)
             effective_zarr_path = os.path.join(
                 output_dir, f"{roi_name}_annotation.zarr"
             )
-        os.makedirs(output_dir, exist_ok=True)
 
         # The MinIO bucket object name is always `<roi_name>_annotation.zarr`
         # regardless of the on-disk source path. Keeps the bucket key stable
@@ -374,6 +437,8 @@ def create_instance_correction_response(data):
             "layer_name": layer_name,
             "reload_page": True,
         })
+    except _Refused as e:
+        return _error(str(e))
     except Exception as e:
         logger.error(f"Error creating instance correction: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
@@ -383,42 +448,29 @@ def sync_instance_correction_response(data):
     """Snapshot a paintable instance-correction zarr from MinIO to a local
     destination.
 
-    Pulls the current contents of the MinIO-backed annotation zarr (where
-    NG brush edits actually land) into a destination zarr path. Call this:
-      - before Run 12 training-data extraction, so `finetune_cli` can read
-        `annotation/s0` directly from the user-visible path;
-      - before any dashboard restart with live edits, so `ensure_minio_serving`
-        can't clobber them during its next initial mirror;
-      - any time you want a durable on-disk snapshot of in-progress
-        proofreading state (e.g. for rollback safety or dated audit).
-
-    Uses `s3fs` + `zarr.copy_store` under the hood (via
-    `_diff_and_sync_chunks`) — does NOT shell out to `mc`, which is not
-    on PATH on h2node10.
+    Copies the MinIO object that brush edits land in, metadata and all, to
+    a zarr on disk: a dated snapshot for rollback or audit, or a copy to
+    train from. The served volume itself is kept current by the periodic
+    sync, like any annotation volume. Uses s3fs, not `mc`.
 
     POST body:
-      zarr_path: str, required. Absolute path to the user-visible zarr
-          (e.g. `/.../instance_corrections/roi3_annotation.zarr`). Only
-          used to derive the MinIO bucket key from its basename; the
-          file itself is not opened.
-      dst_path:  str, optional. Absolute path to write the snapshot to.
-          Defaults to `zarr_path` (in-place pull-back). Prefer a fresh
-          dated path (e.g. `.../roi3_annotation_FINAL_session14_<ts>.zarr`)
-          to avoid any hardlink / aliasing hazards with provenance
-          snapshots — see the helper docstring for the inode-sharing
-          detail.
+      zarr_path: str, required. The volume, e.g.
+          `/.../instance_corrections/roi3_annotation.zarr`; its basename is
+          the MinIO bucket key.
+      dst_path:  str, optional. Where to write the copy: a `.zarr` in the
+          same directory as `zarr_path`, new or an existing zarr. Defaults
+          to `zarr_path`. Prefer a fresh dated path (e.g.
+          `.../roi3_annotation_<ts>.zarr`); see the helper docstring for
+          why an in-place copy can corrupt hardlinked snapshots.
 
     Returns:
-      {success, zarr_path, dst_path, chunks_synced, chunks_removed}
+      {success, zarr_path, dst_path, keys_copied, keys_skipped, bytes_copied}
     """
     try:
-        zarr_path = data.get("zarr_path")
+        zarr_path = _zarr_target(data.get("zarr_path"), "zarr_path")
         dst_path = data.get("dst_path")
-        if not zarr_path:
-            return (
-                jsonify({"success": False, "error": "zarr_path is required"}),
-                400,
-            )
+        if dst_path:
+            dst_path = _zarr_target(dst_path, "dst_path", beside=zarr_path)
 
         success, info = sync_instance_correction_from_minio(
             zarr_path, dst_path=dst_path
@@ -427,6 +479,8 @@ def sync_instance_correction_response(data):
             return jsonify({"success": False, "error": info}), 500
 
         return jsonify({"success": True, **info})
+    except _Refused as e:
+        return _error(str(e))
     except Exception as e:
         logger.error(f"Error syncing instance correction: {e}")
         import traceback
@@ -453,8 +507,9 @@ def cc3d_relabel_annotation_response(data):
     POST body:
       zarr_path:     str, required. Absolute path to the user-visible zarr.
       target_label:  int, required. The instance ID to split (must be >= 2).
-      snapshot_dir:  str, optional. Where to drop rollback snapshots.
-                     Defaults to `<parent_of_zarr>/snapshots/`.
+      snapshot_dir:  str, optional. Where to drop rollback snapshots: a
+                     directory beside `zarr_path`. Defaults to
+                     `<parent_of_zarr>/snapshots/`.
 
     Returns:
       {success, zarr_path, target_label, n_components, kept_voxels,
@@ -462,21 +517,22 @@ def cc3d_relabel_annotation_response(data):
        reload_hint: "hard reload NG tab to see split"}
     """
     try:
-        zarr_path = data.get("zarr_path")
-        target_label = data.get("target_label")
-        if not zarr_path or target_label is None:
-            return (
-                jsonify({
-                    "success": False,
-                    "error": "zarr_path and target_label are required",
-                }),
-                400,
-            )
-        snapshot_dir = data.get("snapshot_dir")
+        if not data.get("zarr_path") or data.get("target_label") is None:
+            return _error("zarr_path and target_label are required")
+        zarr_path = _zarr_target(data["zarr_path"], "zarr_path")
+        target_label = _int(data, "target_label")
+        if target_label < 2:
+            return _error("target_label must be >= 2: 0 is unannotated and 1 is background")
+        default_snapshot_dir = os.path.join(os.path.dirname(zarr_path), "snapshots")
+        snapshot_dir = _real(data.get("snapshot_dir") or default_snapshot_dir)
+        if os.path.dirname(snapshot_dir) != os.path.dirname(zarr_path):
+            return _error(f"snapshot_dir must be in the same directory as {zarr_path}")
+        if os.path.exists(snapshot_dir) and not os.path.isdir(snapshot_dir):
+            return _error(f"snapshot_dir is not a directory: {snapshot_dir}")
 
         success, info = cc3d_relabel_instance_correction(
             zarr_path=zarr_path,
-            target_label=int(target_label),
+            target_label=target_label,
             snapshot_dir=snapshot_dir,
         )
         if not success:
@@ -487,6 +543,8 @@ def cc3d_relabel_annotation_response(data):
             "reload_hint": "hard reload NG tab to see split",
             **info,
         })
+    except _Refused as e:
+        return _error(str(e))
     except Exception as e:
         logger.error(f"Error in cc3d-relabel-annotation: {e}")
         import traceback

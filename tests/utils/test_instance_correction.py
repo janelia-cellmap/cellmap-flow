@@ -67,3 +67,93 @@ def test_a_seeded_volume_lies_on_its_segmentation(tmp_path, group_attrs, s0_attr
     assert labels[2, 2, 2] == 8  # instance 7 is label 8
     assert labels[1, 2, 2] == 1  # the background shell, one voxel out
     assert labels[6, 6, 6] == 0  # unannotated
+
+
+CREATE = "/api/viewer/create-instance-correction"
+SYNC = "/api/viewer/sync-instance-correction"
+CC3D = "/api/viewer/cc3d-relabel-annotation"
+
+
+class _Viewer:
+    def __init__(self):
+        self.layers = {}
+
+    def txn(self):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+
+        return nullcontext(SimpleNamespace(layers=self.layers))
+
+
+class _Unbuildable:
+    name = "model"
+
+    @property
+    def config(self):
+        raise AssertionError("the dashboard built the model")
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    from cellmap_flow.dashboard.app import app
+    from cellmap_flow.globals import g
+
+    make_instances(tmp_path / "instances.zarr", s0_attrs={"resolution": [16] * 3, "offset": [0] * 3})
+    zarr.open_group(str(tmp_path / "vols" / "roi_annotation.zarr"), mode="w")
+    (tmp_path / "vols" / "plain.zarr").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.setattr(g, "viewer", _Viewer())
+    monkeypatch.setattr(g, "models_config", [_Unbuildable()])
+    monkeypatch.setattr(g, "dataset_path", "/raw.zarr")
+    return app.test_client()
+
+
+@pytest.mark.parametrize(
+    "url, body",
+    [
+        (CREATE, {"roi_name": "roi", "instance_zarr_path": "{tmp}/instances.zarr",
+                  "model_name": "model", "output_dir": "{tmp}/missing"}),
+        (CREATE, {"roi_name": "../roi", "instance_zarr_path": "{tmp}/instances.zarr",
+                  "model_name": "model"}),
+        (CREATE, {"roi_name": "roi", "instance_zarr_path": "{tmp}/instances.zarr"}),
+        (CREATE, {"roi_name": "roi", "reuse_existing": True, "source_zarr_path": "{tmp}/vols"}),
+        (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/elsewhere/copy.zarr"}),
+        (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/plain.zarr"}),
+        (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/copy"}),
+        (CC3D, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "target_label": 5,
+                "snapshot_dir": "{tmp}/elsewhere/snapshots"}),
+        (CC3D, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "target_label": "five"}),
+    ],
+    ids=["output-dir-missing", "roi-name-path", "no-model", "source-not-zarr",
+         "dst-elsewhere", "dst-not-a-zarr", "dst-not-dot-zarr", "snapshots-elsewhere", "bad-label"],
+)
+def test_bad_paths_are_refused_before_anything_is_written(client, tmp_path, url, body):
+    body = {k: v.format(tmp=tmp_path) if isinstance(v, str) else v for k, v in body.items()}
+    before = sorted(tmp_path.rglob("*"))
+    response = client.post(url, json=body)
+    assert response.status_code == 400
+    assert response.get_json()["success"] is False and response.get_json()["error"]
+    assert sorted(tmp_path.rglob("*")) == before
+
+
+def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from cellmap_flow.dashboard.routes.finetune import instance_correction
+    from cellmap_flow.globals import g
+    from cellmap_flow.utils import model_geometry
+
+    geometry = SimpleNamespace(read_shape=[192] * 3, write_shape=[64] * 3,
+                               input_voxel_size=[16] * 3, output_voxel_size=[16] * 3)
+    monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: geometry)
+    served = []
+    monkeypatch.setattr(instance_correction, "ensure_minio_serving",
+                        lambda *a, **k: served.append((a, k)) or "http://m:9000/annotations/roi_annotation.zarr")
+
+    response = client.post(CREATE, json={"roi_name": "roi", "model_name": "model",
+                                         "instance_zarr_path": str(tmp_path / "instances.zarr")})
+    assert response.status_code == 200, response.get_json()
+    (path, volume_id), kwargs = served[0]
+    assert volume_id == "roi_annotation" and kwargs["mc_target_name"] == "roi_annotation.zarr"
+    assert g.annotation_volumes["roi_annotation"]["zarr_path"] == path
+    assert zarr.open_group(path, mode="r").attrs["chunk_size"] == [4, 4, 4]
