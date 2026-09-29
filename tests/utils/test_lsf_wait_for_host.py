@@ -25,6 +25,8 @@ class FakeLSF:
         self.bpeek = []  # (returncode, stdout, stderr), consumed in order
         self.bpeek_default = (0, "starting\n", "")
         self.calls = []
+        self.timeline = []  # (seconds since the start, command)
+        self.start = self.now
         monkeypatch.setattr(
             bsub_utils,
             "time",
@@ -39,6 +41,7 @@ class FakeLSF:
 
     def run(self, argv, **kwargs):
         self.calls.append(argv[0])
+        self.timeline.append((round(self.now - self.start, 3), argv[0]))
         if argv[0] == "bjobs":
             self.now += self.bjobs_seconds
             stat = self.stat(self.now) if callable(self.stat) else self.stat
@@ -105,3 +108,26 @@ def test_a_job_that_exits_reports_its_log_once(monkeypatch, caplog, tmp_path):
     assert lsf.now - 1000.0 < 5, "a finished job should end the wait at once"
     crash = [r for r in caplog.records if "bad checkpoint" in r.getMessage()]
     assert len(crash) == 1, f"crash output logged {len(crash)} times"
+
+
+def test_the_polling_timeline(monkeypatch):
+    """When bjobs and bpeek are asked, for a job that queues, loads, then serves.
+
+    Pinned so that a change of polling cadence is a visible diff here rather
+    than a surprise in mbatchd's load.
+    """
+    lsf = FakeLSF(monkeypatch, stat=lambda now: "PEND" if now < 1002 else "RUN")
+    not_started = (255, "", "Job <1> : Not yet started.")
+    lsf.bpeek = [not_started] * 4 + [(0, "loading\n", "")] * 2 + [(0, f"loading\n{MARKER}\n", "")]
+
+    assert LSFJob("1").wait_for_host(timeout=60) == "http://node7:4321"
+
+    assert lsf.timeline == [
+        (0.0, "bjobs"), (0.0, "bpeek"),
+        (0.5, "bjobs"), (0.5, "bpeek"),
+        (1.0, "bjobs"), (1.0, "bpeek"),
+        (1.5, "bjobs"), (1.5, "bpeek"),
+        (2.0, "bjobs"), (2.0, "bpeek"),
+        (2.5, "bjobs"), (2.5, "bpeek"),
+        (3.0, "bjobs"), (3.0, "bpeek"),
+    ]
