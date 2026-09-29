@@ -6,6 +6,10 @@ reads; ``good_regions.json`` sits beside ``corrections/``.
 
 - ``manifest``: the manifest, good regions, and whether a volume is painted.
 - ``volume``: planning, creating, reading and writing annotation volumes.
+- ``store``: which session a base path means, and the volume registry.
+- ``minio``: starting MinIO and serving volumes through it.
+- ``sync``: pulling painted chunks back from MinIO, and the periodic sync.
+- ``instance``: instance corrections, seeded from a segmentation.
 
 The submodules import neither flask, neuroglancer, torch nor
 ``cellmap_flow.globals``, so the CLI, the trainer and scripts can use them
