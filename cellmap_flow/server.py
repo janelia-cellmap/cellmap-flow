@@ -128,6 +128,12 @@ class CellMapFlowServer:
         if restart_callback is not None and not restart_token:
             raise ValueError("restart_callback requires a restart_token")
 
+        # Before anything reads model_config.config: the Inferencer builds it
+        # so that the declared shapes are checked on its warmup forward, on
+        # the GPU, rather than by a separate forward on the CPU. A mismatch
+        # raises here, before the server announces itself.
+        self.inferencer = Inferencer(model_config, device_slots=DeviceSlots.from_env())
+
         block_shape = [int(x) for x in model_config.config.block_shape]
 
         self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
@@ -140,7 +146,6 @@ class CellMapFlowServer:
         # dashboard having to build the model itself.
         self.model_config = model_config
 
-        self.inferencer = Inferencer(model_config, device_slots=DeviceSlots.from_env())
         self.restart_callback = restart_callback
         self.restart_token = restart_token
 

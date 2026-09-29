@@ -123,6 +123,12 @@ class ModelConfig:
     def __init__(self):
         self._config = None
         self.validate_model_shapes = True
+        # Set by an Inferencer before it builds the config: the declared shapes
+        # are then checked on its warmup forward, on the device that serves,
+        # instead of by a separate forward here, on whatever device the loader
+        # left the model on. For a script model that is the CPU, where the
+        # extra forward took 7-13 s of the server's start.
+        self.check_shapes_on_warmup = False
 
     def __str__(self) -> str:
         elms = []
@@ -165,14 +171,21 @@ class ModelConfig:
             if not hasattr(self._config, attr):
                 raise AttributeError(f"{attr} not found in config")
 
-        if self.validate_model_shapes:
-            self._validate_model_shapes()
-        else:
+        if not self.validate_model_shapes:
             logger.info("Skipping model shape validation for %s", type(self).__name__)
+        elif getattr(self, "check_shapes_on_warmup", False):
+            logger.info("Model shapes will be checked on the warmup forward")
+        else:
+            self._validate_model_shapes()
         logger.warning(f"Model config validated: {self.__str__()}")
 
     def _validate_model_shapes(self):
-        """Run a dummy forward pass to verify declared shapes match actual model output."""
+        """Run a dummy forward pass to verify declared shapes match actual model output.
+
+        For a config built without an Inferencer to serve it (the dashboard
+        resolving geometry, a script); an Inferencer checks its warmup
+        forward's output instead, with check_output_shape.
+        """
         # Imported here rather than at module scope: importing torch costs
         # ~7s, and the CLI builds its command list from this module, so
         # `cellmap_flow --help` paid that before printing anything.
@@ -188,10 +201,6 @@ class ModelConfig:
             # object and run through process_chunk; there is nothing to forward.
             return
         input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
-        declared_output_size = np.array(config.write_shape) // np.array(
-            config.output_voxel_size
-        )
-        declared_block_spatial = np.array(config.block_shape)[:3]
 
         try:
             first_param = next(model.parameters(), None)
@@ -205,59 +214,71 @@ class ModelConfig:
                 out = model(dummy)
             if was_training:
                 model.train()
-
-            actual_output = np.array(out.shape[1:])  # drop batch dim
-            # Determine actual spatial shape (skip channel dim if present)
-            if len(actual_output) == 4:
-                actual_channels = actual_output[0]
-                actual_spatial = actual_output[1:]
-            elif len(actual_output) == 3:
-                actual_channels = 1
-                actual_spatial = actual_output
-            else:
-                logger.warning(
-                    f"Unexpected model output ndim={len(actual_output)}, "
-                    "skipping shape validation"
-                )
-                return
-
-            errors = []
-            if not np.array_equal(actual_spatial, declared_output_size):
-                errors.append(
-                    f"write_shape mismatch: declared write_shape / output_voxel_size = "
-                    f"{declared_output_size.tolist()} but model actually outputs "
-                    f"spatial shape {actual_spatial.tolist()}. "
-                    f"Expected write_shape = "
-                    f"{(actual_spatial * np.array(config.output_voxel_size)).tolist()}"
-                )
-            if not np.array_equal(actual_spatial, declared_block_spatial):
-                errors.append(
-                    f"block_shape mismatch: declared block_shape spatial dims = "
-                    f"{declared_block_spatial.tolist()} but model actually outputs "
-                    f"spatial shape {actual_spatial.tolist()}. "
-                    f"Expected block_shape = "
-                    f"{[*actual_spatial.tolist(), int(actual_channels)]}"
-                )
-            if int(actual_channels) != int(config.output_channels):
-                errors.append(
-                    f"output_channels mismatch: declared {config.output_channels} "
-                    f"but model actually outputs {int(actual_channels)} channels"
-                )
-            if errors:
-                msg = (
-                    f"Script config shape validation failed for "
-                    f"{getattr(self, 'script_path', 'unknown')}:\n"
-                    + "\n".join(f"  - {e}" for e in errors)
-                )
-                raise ValueError(msg)
-
-            logger.info(
-                f"Shape validation passed: input {input_size.tolist()} -> "
-                f"output spatial {actual_spatial.tolist()}, "
-                f"channels {int(actual_channels)}"
-            )
         except (RuntimeError, TypeError) as e:
             logger.warning(f"Could not validate model shapes (forward pass failed): {e}")
+            return
+        self.check_output_shape(out.shape)
+
+    def check_output_shape(self, output_shape):
+        """Raise ValueError if a forward's ``output_shape`` (batch first)
+        contradicts the declared write_shape, block_shape or output_channels.
+        """
+        config = self._config
+        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
+        declared_output_size = np.array(config.write_shape) // np.array(
+            config.output_voxel_size
+        )
+        declared_block_spatial = np.array(config.block_shape)[:3]
+        actual_output = np.array(tuple(output_shape)[1:])  # drop batch dim
+        # Determine actual spatial shape (skip channel dim if present)
+        if len(actual_output) == 4:
+            actual_channels = actual_output[0]
+            actual_spatial = actual_output[1:]
+        elif len(actual_output) == 3:
+            actual_channels = 1
+            actual_spatial = actual_output
+        else:
+            logger.warning(
+                f"Unexpected model output ndim={len(actual_output)}, "
+                "skipping shape validation"
+            )
+            return
+
+        errors = []
+        if not np.array_equal(actual_spatial, declared_output_size):
+            errors.append(
+                f"write_shape mismatch: declared write_shape / output_voxel_size = "
+                f"{declared_output_size.tolist()} but model actually outputs "
+                f"spatial shape {actual_spatial.tolist()}. "
+                f"Expected write_shape = "
+                f"{(actual_spatial * np.array(config.output_voxel_size)).tolist()}"
+            )
+        if not np.array_equal(actual_spatial, declared_block_spatial):
+            errors.append(
+                f"block_shape mismatch: declared block_shape spatial dims = "
+                f"{declared_block_spatial.tolist()} but model actually outputs "
+                f"spatial shape {actual_spatial.tolist()}. "
+                f"Expected block_shape = "
+                f"{[*actual_spatial.tolist(), int(actual_channels)]}"
+            )
+        if int(actual_channels) != int(config.output_channels):
+            errors.append(
+                f"output_channels mismatch: declared {config.output_channels} "
+                f"but model actually outputs {int(actual_channels)} channels"
+            )
+        if errors:
+            msg = (
+                f"Script config shape validation failed for "
+                f"{getattr(self, 'script_path', 'unknown')}:\n"
+                + "\n".join(f"  - {e}" for e in errors)
+            )
+            raise ValueError(msg)
+
+        logger.info(
+            f"Shape validation passed: input {input_size.tolist()} -> "
+            f"output spatial {actual_spatial.tolist()}, "
+            f"channels {int(actual_channels)}"
+        )
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
@@ -975,7 +996,12 @@ class FinetuneModelConfig(ModelConfig):
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
         from cellmap_flow.finetune.model_loading import load_trainable_model
 
-        # Get the fully-populated config from the base model
+        # Get the fully-populated config from the base model. The served model
+        # has the base's geometry, so the base is checked the way this config
+        # is (on the warmup forward, or not at all) rather than by a forward of
+        # its own.
+        self.base_model_config.validate_model_shapes = self.validate_model_shapes
+        self.base_model_config.check_shapes_on_warmup = self.check_shapes_on_warmup
         base_cfg = self.base_model_config.config
 
         # The module the finetune was trained on, built the way the trainer

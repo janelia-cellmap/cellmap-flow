@@ -165,6 +165,9 @@ class Inferencer:
         # Populated by the warmup probe; None when it could not run.
         self.output_range = None
         self.output_class = None
+        # The warmup forward below checks the declared shapes, on the device
+        # that serves; building the config then needs no forward of its own.
+        model_config.check_shapes_on_warmup = True
         # config is lazy so one call is needed to get the config
         _ = self.model_config.config
 
@@ -211,7 +214,10 @@ class Inferencer:
         ``wait_for_host()`` and it costs the user nothing.
 
         Best effort: a failure here (unknown shapes, an unusual forward
-        signature, OOM) must never stop the server from coming up.
+        signature, OOM) must never stop the server from coming up. The one
+        exception is an output whose shape contradicts the config's declared
+        write_shape, block_shape or output_channels: that raises, as building
+        the config used to, since every chunk served would be misplaced.
         """
         config = self.model_config.config
         try:
@@ -239,12 +245,16 @@ class Inferencer:
             if self.device.type == "cuda":
                 torch.cuda.synchronize()
             logger.info(f"Warmup forward {shape} took {time.time() - start:.1f}s")
-            self._record_output_class(out)
         except Exception as e:
             logger.warning(
                 f"Warmup forward {shape} failed ({e}); the first chunk request "
                 "will absorb the one-time initialization cost instead"
             )
+            return
+        check = getattr(self.model_config, "check_output_shape", None)
+        if check is not None and getattr(self.model_config, "validate_model_shapes", True):
+            check(out.shape)
+        self._record_output_class(out)
 
     def _record_output_class(self, out):
         """Classify the model's output activation from the warmup pass.
