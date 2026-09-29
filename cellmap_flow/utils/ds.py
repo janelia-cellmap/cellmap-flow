@@ -299,6 +299,11 @@ def open_ds_tensorstore(
         # returned x/z-transposed data, and precomputed lost its x axis to the
         # channel selection.
         ts_dataset = ts_dataset[ts.d[:].transpose[::-1]]
+    if filetype == "neuroglancer_precomputed":
+        # tensorstore starts a precomputed volume's domain at its
+        # voxel_offset. Index 0 is voxel 0 everywhere else here, and the
+        # metadata's translation already carries the offset.
+        ts_dataset = ts_dataset[ts.d[:].translate_to[0]]
 
     if normalize:
         return LazyNormalization(ts_dataset)

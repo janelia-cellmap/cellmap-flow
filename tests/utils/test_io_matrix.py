@@ -170,7 +170,7 @@ def build(root):
                 "resolution": [4, 8, 16],
                 "encoding": "raw",
                 "chunk_size": [10, 5, 2],
-                # Not read: every reader reports offset 0.
+                # x, y, z voxels: the corner is at (16, 16, 12) nm z, y, x.
                 "voxel_offset": [3, 2, 1],
             },
         },
@@ -375,7 +375,7 @@ EXPECTED = {
         "([8.0, 8.0, 4.0], [8.0, 24.0, 32.0], (5, 10, 15), (10, 20, 30), ['z', 'y', 'x'], 'n5')"
     ),
     'meta precomputed': (
-        "([16.0, 8.0, 4.0], [0.0, 0.0, 0.0], (2, 5, 10), (2, 10, 20), ['z', 'y', 'x'], "
+        "([16.0, 8.0, 4.0], [16.0, 16.0, 12.0], (2, 5, 10), (2, 10, 20), ['z', 'y', 'x'], "
         "'precomputed')"
     ),
     'meta float': (
@@ -504,10 +504,10 @@ EXPECTED = {
     ),
     'idi precomputed': (
         "{'path': 'precomputed://<root>/pc', 'voxel_size': Coordinate(16, 8, 4), "
-        "'offset': Coordinate(0, 0, 0), 'roi': Roi(Coordinate(0, 0, 0), Coordinate(32, 80, 80)), "
+        "'offset': Coordinate(16, 16, 12), 'roi': Roi(Coordinate(16, 16, 12), Coordinate(32, 80, 80)), "
         "'shape': Coordinate(2, 10, 20), 'chunk_shape': (2, 5, 10), 'axes_names': ['z', 'y', 'x'], "
         "'filetype': 'precomputed', 'actual_voxel_size': Coordinate(16, 8, 4), "
-        "'requested_voxel_size': None, '_offset_f': ndarray[float64]([0.0, 0.0, 0.0])}"
+        "'requested_voxel_size': None, '_offset_f': ndarray[float64]([16.0, 16.0, 12.0])}"
     ),
     'idi float': (
         "{'path': '<root>/float.zarr/s0', 'voxel_size': Coordinate(10, 8, 8), "
@@ -536,6 +536,6 @@ EXPECTED = {
     ),
     'raw layer precomputed': (
         "({'z': float64(1.6e-08), 'y': float64(8e-09), 'x': float64(4e-09)}, [[1.0, 0.0, 0.0, "
-        '0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]])'
+        '1.0], [0.0, 1.0, 0.0, 2.0], [0.0, 0.0, 1.0, 3.0]])'
     ),
 }

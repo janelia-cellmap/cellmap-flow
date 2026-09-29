@@ -79,6 +79,34 @@ def test_precomputed_keeps_all_three_spatial_axes(tmp_path):
     np.testing.assert_array_equal(got, xyz.transpose(2, 1, 0))
 
 
+def test_a_precomputed_voxel_offset_places_the_volume(tmp_path):
+    path = str(tmp_path / "pc")
+    store = ts.open(
+        {
+            "driver": "neuroglancer_precomputed",
+            "kvstore": {"driver": "file", "path": path},
+            "multiscale_metadata": {"type": "image", "data_type": "uint8", "num_channels": 1},
+            "scale_metadata": {
+                "size": [4, 4, 4],
+                "resolution": [4, 8, 16],
+                "encoding": "raw",
+                "voxel_offset": [3, 2, 1],
+            },
+        },
+        create=True,
+    ).result()
+    xyz = np.arange(64, dtype=np.uint8).reshape(4, 4, 4)
+    store[..., 0] = xyz
+
+    idi = ImageDataInterface("precomputed://" + path)
+    # voxel_offset (3, 2, 1) x, y, z voxels is (16, 16, 12) nm z, y, x.
+    assert tuple(idi.roi.offset) == (16, 16, 12)
+    assert tuple(idi.roi.shape) == (64, 32, 16)
+    # Voxel 0 is read where the offset puts it, and the whole volume from 0.
+    assert idi.to_ndarray_ts(Roi((16, 16, 12), (16, 8, 4))).ravel().tolist() == [0]
+    np.testing.assert_array_equal(np.asarray(idi.ts[...]), xyz.transpose(2, 1, 0))
+
+
 def test_border_reads_of_an_array_with_a_fill_value(tmp_path):
     root = zarr.open(str(tmp_path / "f.zarr"), mode="w")
     arr = root.create_dataset("raw", data=np.ones((4, 4, 4), np.uint8), fill_value=7)

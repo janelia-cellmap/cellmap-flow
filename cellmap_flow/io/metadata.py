@@ -768,7 +768,9 @@ def _read_v3(path: str) -> ArrayMeta:
 def _precomputed(path: str) -> ArrayMeta:
     """A neuroglancer precomputed volume, in C order (c, z, y, x).
 
-    Its ``voxel_offset`` is not read: the translation is 0, as it always was.
+    ``voxel_offset`` is where voxel 0 is, in voxels, so the translation is
+    ``voxel_offset * resolution``. tensorstore starts the volume's domain at
+    it; utils.ds opens it with the domain moved to 0.
     """
     import tensorstore as ts
 
@@ -797,7 +799,10 @@ def _precomputed(path: str) -> ArrayMeta:
         tuple(store.chunk_layout.read_chunk.shape),
     )
     names = dict(enumerate(labels))
-    return _meta(path, "precomputed", header, spatial, names, voxel_size, [0.0] * len(spatial))
+    corner = [
+        float(store.domain.inclusive_min[i]) * vs for i, vs in zip(spatial, voxel_size)
+    ]
+    return _meta(path, "precomputed", header, spatial, names, voxel_size, corner)
 
 
 def read_array_meta(path: str) -> ArrayMeta:
