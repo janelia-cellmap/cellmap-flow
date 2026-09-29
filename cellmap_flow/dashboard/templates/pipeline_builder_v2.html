@@ -123,25 +123,6 @@
         </div>
     </div>
 
-    <!-- Bounding Box Generator Number Input Modal -->
-    <div id="bbx-count-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 400px;">
-            <div class="modal-header">
-                <h2>Generate Bounding Boxes</h2>
-                <button class="modal-close-btn" onclick="closeBBXCountModal()">✕</button>
-            </div>
-            <div class="modal-body">
-                <label class="param-label" style="margin-bottom: 12px;">How many bounding boxes do you want to create?</label>
-                <input type="number" id="bbx-count-input" min="1" max="100" value="1" class="param-input" style="width: 100%; padding: 8px; font-size: 14px;">
-            </div>
-            <div class="modal-footer">
-                <button class="action-btn" onclick="closeBBXCountModal()">Cancel</button>
-                <button class="action-btn" style="background: var(--accent-green); color: white;" 
-                        onclick="startBBXGeneration()">✓ Start Drawing</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Bounding Box Viewer Modal (Neuroglancer) -->
     <div id="bbx-viewer-modal" class="modal" style="display: none; width: 80%;">
         <div class="modal-content" style="width: 95%; height: 90vh; overflow: hidden;">
@@ -1073,53 +1054,12 @@
         // Global state for BBX modal
         let bbxGeneratorState = {
             inputNodeId: null,
-            numBoxes: 1,
-            createdBoxes: [],
-            generatorWindow: null
+            numBoxes: 1
         };
 
         function openBBXGeneratorModal(inputNodeId) {
             bbxGeneratorState.inputNodeId = inputNodeId;
-            // Skip the count modal and directly start drawing
             startBBXGeneration();
-        }
-
-        function closeBBXCountModal() {
-            document.getElementById('bbx-count-modal').style.display = 'none';
-        }
-
-        function injectAnnotationsIntoIframe(iframe, boundingBoxes) {
-            if (!boundingBoxes || boundingBoxes.length === 0) {
-                return;
-            }
-            
-            try {
-                // Wait for Neuroglancer viewer to fully initialize
-                setTimeout(() => {
-                    const iframeWindow = iframe.contentWindow;
-                    
-                    // Try to inject annotations via postMessage
-                    const annotationData = boundingBoxes.map(bbox => ({
-                        type: 'bounding_box',
-                        pointA: bbox.offset,
-                        pointB: [
-                            bbox.offset[0] + bbox.shape[0],
-                            bbox.offset[1] + bbox.shape[1],
-                            bbox.offset[2] + bbox.shape[2]
-                        ]
-                    }));
-                    
-                    // Send message to iframe
-                    iframeWindow.postMessage({
-                        type: 'createAnnotations',
-                        annotations: annotationData
-                    }, '*');
-                    
-                    console.log('Sent annotations to iframe:', annotationData);
-                }, 2000);
-            } catch (err) {
-                console.error('Error injecting annotations into iframe:', err);
-            }
         }
 
         function triggerBBXFileUpload(inputNodeId) {
@@ -1201,7 +1141,6 @@
             const numBoxes = 999;  // Essentially unlimited
             
             bbxGeneratorState.numBoxes = numBoxes;
-            bbxGeneratorState.createdBoxes = [];
 
             // Find the input node to get dataset path and existing bounding boxes
             const inputNode = pipeline.inputs.find(n => n.id === bbxGeneratorState.inputNodeId);
@@ -1219,8 +1158,6 @@
             // Get existing bounding boxes if any
             const existingBoundingBoxes = inputNode.params?.bounding_boxes || [];
 
-            closeBBXCountModal();
-            
             // Show the viewer modal
             document.getElementById('bbx-viewer-modal').style.display = 'block';
             document.getElementById('modal-overlay').style.display = 'block';
@@ -1239,10 +1176,8 @@
 
                 const result = await response.json();
                 if (response.ok) {
-                    // Store existing bounding boxes for iframe injection
-                    bbxGeneratorState.existingBoundingBoxes = result.existing_bounding_boxes || [];
-                    
-                    // Open the Neuroglancer URL in the modal
+                    // Open the Neuroglancer URL in the modal. The server has
+                    // already put the existing boxes in its annotation layer.
                     const viewerContent = document.getElementById('bbx-viewer-content');
                     const iframe = document.createElement('iframe');
                     iframe.id = 'bbx-iframe';
@@ -1252,11 +1187,6 @@
                     iframe.style.border = 'none';
                     viewerContent.innerHTML = '';
                     viewerContent.appendChild(iframe);
-                    
-                    // Wait for iframe to load, then inject annotations
-                    iframe.onload = function() {
-                        injectAnnotationsIntoIframe(iframe, bbxGeneratorState.existingBoundingBoxes);
-                    };
                     
                     const boxCount = result.existing_count || 0;
                     const statusMsg = boxCount > 0 
@@ -1305,7 +1235,6 @@
 
                     const result = await response.json();
                     if (result.bounding_boxes && result.bounding_boxes.length > 0) {
-                        bbxGeneratorState.createdBoxes = result.bounding_boxes;
                         document.getElementById('bbx-status').textContent = 
                             `📦 ${result.bounding_boxes.length}/${bbxGeneratorState.numBoxes} box(es) created`;
                     }
@@ -1330,9 +1259,7 @@
             // Clear the state
             bbxGeneratorState = {
                 inputNodeId: null,
-                numBoxes: 1,
-                createdBoxes: [],
-                generatorWindow: null
+                numBoxes: 1
             };
         }
 
