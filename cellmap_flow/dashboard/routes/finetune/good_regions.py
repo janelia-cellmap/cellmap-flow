@@ -13,9 +13,7 @@ these carry only a human's assertion that the model's own output is
 acceptable there. Both are evidence, but not the same kind.
 """
 
-import json
 import logging
-import os
 import uuid
 
 import neuroglancer
@@ -23,12 +21,13 @@ import numpy as np
 from flask import jsonify
 
 from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
+from cellmap_flow.finetune.session import manifest as session_manifest
+from cellmap_flow.finetune.session.manifest import GOOD_REGIONS_FILENAME  # noqa: F401  (kept name)
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
 GOOD_REGIONS_LAYER = "good_regions"
-GOOD_REGIONS_FILENAME = "good_regions.json"
 
 # Used when neither the request nor the active volume says how big a region
 # should be. One model *output* patch is the natural unit: it is what you can
@@ -76,25 +75,13 @@ def _store_path():
     of adding to it. You could click ten times and still have one box.
     """
     volume = _active_volume() or {}
-    corrections_dir = volume.get("corrections_dir") or _minio_corrections_dir()
-    if not corrections_dir:
-        return None
-    return os.path.join(
-        os.path.dirname(str(corrections_dir).rstrip("/")), GOOD_REGIONS_FILENAME
+    return session_manifest.good_regions_path(
+        volume.get("corrections_dir") or _minio_corrections_dir()
     )
 
 
 def load_good_regions():
-    path = _store_path()
-    if not path or not os.path.exists(path):
-        return []
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (OSError, ValueError) as e:
-        logger.warning(f"Could not read good regions from {path}: {e}")
-        return []
+    return session_manifest.load_good_regions(_store_path())
 
 
 def save_good_regions(regions):
@@ -102,16 +89,7 @@ def save_good_regions(regions):
     if not path:
         logger.warning("No annotation session yet; good regions were not saved.")
         return False
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = f"{path}.tmp"
-        with open(tmp, "w") as f:
-            json.dump(regions, f, indent=2)
-        os.replace(tmp, path)
-        return True
-    except OSError as e:
-        logger.error(f"Could not save good regions to {path}: {e}")
-        return False
+    return session_manifest.save_good_regions(path, regions)
 
 
 def _default_size_nm():

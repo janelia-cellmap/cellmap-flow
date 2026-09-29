@@ -51,7 +51,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -59,11 +58,26 @@ import torch
 import zarr
 from torch.utils.data import Dataset
 
-from cellmap_flow.utils import zarr_v3
+# The session's files moved to finetune.session; these names stay importable
+# from here, where the job manager, the CLI and the dashboard look for them.
+from cellmap_flow.finetune.session.manifest import (  # noqa: F401  (kept names)
+    GOOD_REGIONS_FILENAME,
+    VIRTUAL_MANIFEST_FILENAME,
+    has_painted_annotations,
+    load_good_regions_for,
+    read_manifest,
+    write_manifest,
+)
+from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
+from cellmap_flow.finetune.session.manifest import (
+    voxels_inside_any_bbox as _voxels_inside_any_bbox,
+)
+from cellmap_flow.finetune.session.volume import (  # noqa: F401  (kept names)
+    new_volume_geometry,
+    volume_corner_nm,
+)
 
 logger = logging.getLogger(__name__)
-
-_CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _intensity_range(arr: np.ndarray, normalizers=()) -> Tuple[Optional[float], Optional[float]]:
@@ -85,24 +99,6 @@ def _intensity_range(arr: np.ndarray, normalizers=()) -> Tuple[Optional[float], 
         info = np.iinfo(arr.dtype)
         return float(info.min), float(info.max)
     return None, None
-
-
-def _voxels_inside_any_bbox(
-    voxels: np.ndarray, bbox_offsets: np.ndarray, bbox_ends: np.ndarray
-) -> np.ndarray:
-    """Return a boolean mask: ``True`` where ``voxels[i]`` lies inside any
-    ``[bbox_offsets[j], bbox_ends[j])`` half-open box.
-
-    voxels: (N, 3) int. bbox_offsets, bbox_ends: (M, 3) int. Vectorized
-    over both: builds an (N, M) inside-test matrix and reduces along M.
-    For typical M ~ 1-10 the temporary stays small.
-    """
-    if voxels.shape[0] == 0 or bbox_offsets.shape[0] == 0:
-        return np.zeros(voxels.shape[0], dtype=bool)
-    # (N, M, 3) broadcast: voxels[:, None, :] vs bbox_offsets[None, :, :]
-    ge = np.all(voxels[:, None, :] >= bbox_offsets[None, :, :], axis=-1)
-    lt = np.all(voxels[:, None, :] < bbox_ends[None, :, :], axis=-1)
-    return np.any(ge & lt, axis=-1)
 
 
 class VirtualPatchDataset(Dataset):
@@ -844,131 +840,6 @@ class VirtualPatchDataset(Dataset):
                 self.seed + worker_id * 1_000_003
             )
         return self._cached_rng
-
-
-# ---------------------------------------------------------------------------
-# Manifest helpers
-# ---------------------------------------------------------------------------
-
-VIRTUAL_MANIFEST_FILENAME = "_virtual_sources.json"
-
-
-def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
-    """The world position of an annotation volume's voxel-0 lower corner, in nm.
-
-    ``dataset_offset_nm`` (a root attr of every volume) is also written as the
-    volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
-    Neuroglancer drew the volume that way while it was painted, so that is
-    where the labels are. Reading the value as a corner, as this code used to,
-    put every label half an annotation voxel away from where it was drawn.
-    """
-    offset = np.zeros(3) if dataset_offset_nm is None else dataset_offset_nm
-    return np.asarray(zarr_v3.ome_corner(offset, output_voxel_size), dtype=float)
-
-
-def new_volume_geometry(raw_dataset_path: str, output_voxel_size, chunk_size):
-    """``(dataset_offset_nm, shape_voxels)`` for a new volume over a raw dataset.
-
-    The volume lies on the grid of the raw level at ``output_voxel_size`` (the
-    grid predictions are made on), from that level's corner, padded to whole
-    chunks. ``dataset_offset_nm`` is voxel 0's centre; see volume_corner_nm.
-    """
-    from cellmap_flow.image_data_interface import ImageDataInterface
-
-    output_voxel_size = np.asarray(output_voxel_size, dtype=float)
-    chunk_size = np.asarray(chunk_size, dtype=int)
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
-    offset = np.asarray(
-        zarr_v3.ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size)
-    )
-    shape = (np.asarray(idi.roi.shape, dtype=float) / output_voxel_size).astype(int)
-    return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
-
-
-def has_painted_annotations(volume_zarr_path: str) -> bool:
-    """Whether the volume holds annotations outside its imported crops.
-
-    Those are painted: scribbles, sparse by construction, with unannotated
-    voxels all around them. Chunks entirely inside a crop are not read.
-    """
-    s0_path = os.path.join(volume_zarr_path, "annotation", "s0")
-    try:
-        with open(os.path.join(volume_zarr_path, ".zattrs")) as f:
-            imported = json.load(f).get("imported_crops", []) or []
-        arr = zarr.open(s0_path, mode="r")
-        chunk_keys = [name for name in os.listdir(s0_path) if _CHUNK_KEY_RE.match(name)]
-    except (OSError, ValueError, KeyError) as e:
-        logger.debug(f"Could not look for painted annotations in {volume_zarr_path}: {e}")
-        return False
-    if imported:
-        bbox_offsets = np.array([c["annotation_offset_voxels"] for c in imported], dtype=np.int64)
-        bbox_ends = bbox_offsets + np.array([c["annotation_shape_voxels"] for c in imported], dtype=np.int64)
-    else:
-        bbox_offsets = bbox_ends = np.zeros((0, 3), dtype=np.int64)
-    chunk_shape = np.array(arr.chunks, dtype=np.int64)
-    for key in chunk_keys:
-        index = np.array([int(s) for s in key.split(".")], dtype=np.int64)
-        origin = index * chunk_shape
-        end = origin + chunk_shape
-        if bbox_offsets.shape[0] and np.any(
-            np.all(origin >= bbox_offsets, axis=1) & np.all(end <= bbox_ends, axis=1)
-        ):
-            continue  # all of it inside one crop
-        annotated = np.argwhere(arr.blocks[tuple(index)] >= 1).astype(np.int64) + origin
-        if not annotated.size:
-            continue
-        if not bbox_offsets.shape[0] or not _voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends).all():
-            return True
-    return False
-
-
-def write_manifest(corrections_dir: str, manifest: dict) -> str:
-    """Persist a manifest sentinel that ``create_dataloader`` looks for."""
-    os.makedirs(corrections_dir, exist_ok=True)
-    path = os.path.join(corrections_dir, VIRTUAL_MANIFEST_FILENAME)
-    with open(path, "w") as f:
-        json.dump(manifest, f, indent=2)
-    return path
-
-
-def read_manifest(corrections_dir: str) -> Optional[dict]:
-    """Return the manifest if present, else ``None``."""
-    path = os.path.join(corrections_dir, VIRTUAL_MANIFEST_FILENAME)
-    if not os.path.exists(path):
-        return None
-    with open(path) as f:
-        return json.load(f)
-
-
-GOOD_REGIONS_FILENAME = "good_regions.json"
-
-
-def load_good_regions_for(corrections_dir: Optional[str]) -> list:
-    """Read the session's good regions, if any were marked.
-
-    Deliberately read here rather than snapshotted into the manifest: the
-    manifest is written when crops are imported, and regions get marked
-    afterwards, for as long as the user keeps browsing. Reading at training
-    time means the run uses every region marked up to the moment it started.
-    """
-    if not corrections_dir:
-        return []
-    path = os.path.join(
-        os.path.dirname(str(corrections_dir).rstrip("/")), GOOD_REGIONS_FILENAME
-    )
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path) as f:
-            regions = json.load(f)
-    except (OSError, ValueError) as e:
-        logger.warning(f"Could not read good regions from {path}: {e}")
-        return []
-    if not isinstance(regions, list):
-        logger.warning(f"Ignoring good regions at {path}: expected a list.")
-        return []
-    logger.info(f"Loaded {len(regions)} good region(s) from {path}")
-    return regions
 
 
 def dataset_from_manifest(
