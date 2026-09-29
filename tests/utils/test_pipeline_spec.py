@@ -440,3 +440,149 @@ def test_resubmitting_the_same_chain_gives_the_same_layer_source(dashboard):
     url = url["url"] if isinstance(url, dict) else url
     blob = url.split(ARGS_KEY)[1]
     assert PipelineSpec.from_url_blob(blob)[1]["digest"] == received["digest"]
+
+
+# --- what a chain produces ------------------------------------------------------------
+
+
+def _old_output_dtype(model_dtype, postprocess):
+    """Flow.get_output_dtype before output_info."""
+    for step in postprocess[::-1]:
+        if step.dtype:
+            return step.dtype
+    return model_dtype
+
+
+def _old_is_segmentation(postprocess):
+    """dashboard.routes.pipeline.is_output_segmentation before output_info."""
+    if len(postprocess) == 0:
+        return False
+    for step in postprocess[::-1]:
+        if step.is_segmentation is not None:
+            return step.is_segmentation
+
+
+def _old_num_channels(postprocess, channels):
+    """CellMapFlowServer._num_channels before output_info."""
+    for step in postprocess:
+        if hasattr(step, "num_channels"):
+            channels = step.num_channels
+    return int(channels)
+
+
+def _chains_to_compare():
+    from cellmap_flow.post.postprocessors import (
+        AffinityPostprocessor,
+        ChannelSelection,
+        DefaultPostprocessor,
+        LabelPostprocessor,
+        LambdaPostprocessor,
+        SigmoidPostprocessor,
+        SimpleBlockwiseMerger,
+        ThresholdPostprocessor,
+    )
+
+    return {
+        "empty": [],
+        "sigmoid": [SigmoidPostprocessor()],
+        "select": [ChannelSelection("0,2")],
+        "sigmoid_affinity": [SigmoidPostprocessor(), AffinityPostprocessor()],
+        "affinity_sigmoid": [AffinityPostprocessor(), SigmoidPostprocessor()],
+        "default_affinity_merger": [
+            DefaultPostprocessor(), AffinityPostprocessor(), SimpleBlockwiseMerger(),
+        ],
+        "select_then_affinity": [ChannelSelection("0,1,2"), AffinityPostprocessor()],
+        "affinity_then_select": [AffinityPostprocessor(), ChannelSelection("0,0")],
+        "threshold_default": [ThresholdPostprocessor(), DefaultPostprocessor()],
+        "default_sigmoid": [DefaultPostprocessor(), SigmoidPostprocessor()],
+        "label_lambda": [LabelPostprocessor(), LambdaPostprocessor("x")],
+    }
+
+
+@pytest.mark.parametrize("name", list(_chains_to_compare()))
+def test_chain_helpers_agree_with_the_scans_they_replace(name):
+    import numpy as np
+
+    from cellmap_flow.pipeline_spec import (
+        chain_is_segmentation,
+        chain_num_channels,
+        chain_output_dtype,
+    )
+
+    chain = _chains_to_compare()[name]
+    assert chain_output_dtype(chain, np.float16) == _old_output_dtype(np.float16, chain)
+    assert chain_is_segmentation(chain) is _old_is_segmentation(chain)
+    assert chain_num_channels(chain, 9) == _old_num_channels(chain, 9)
+
+
+def test_chain_helpers_on_a_few_chains_by_value():
+    import numpy as np
+
+    from cellmap_flow.pipeline_spec import (
+        chain_is_segmentation,
+        chain_num_channels,
+        chain_output_dtype,
+    )
+
+    chains = _chains_to_compare()
+    assert chain_output_dtype(chains["sigmoid_affinity"], np.float32) is np.uint64
+    assert chain_output_dtype(chains["empty"], "float16") == "float16"
+    assert chain_num_channels(chains["select"], 3) == 2
+    assert chain_num_channels(chains["select_then_affinity"], 9) == 1
+    assert chain_is_segmentation(chains["sigmoid"]) is None
+    assert chain_is_segmentation(chains["threshold_default"]) is False
+    assert chain_is_segmentation(chains["default_affinity_merger"]) is True
+
+
+def test_steps_that_are_not_ops_are_read_by_their_attributes():
+    import numpy as np
+
+    from cellmap_flow.pipeline_spec import chain_num_channels, chain_output_dtype
+
+    class Plain:
+        dtype = np.uint8
+        num_channels = 4
+
+    assert chain_output_dtype([Plain()], np.float32) is np.uint8
+    assert chain_num_channels([Plain()], 1) == 4
+
+
+def test_output_info_defaults_to_the_declared_attributes():
+    import numpy as np
+
+    from cellmap_flow.norm.input_normalize import ChannelSelector, MinMaxNormalizer
+    from cellmap_flow.post.postprocessors import (
+        AffinityPostprocessor,
+        ChannelSelection,
+        SigmoidPostprocessor,
+    )
+
+    assert AffinityPostprocessor().output_info(np.float32, 9) == (np.uint64, 1, True)
+    assert ChannelSelection("1,2").output_info(np.uint8, 3) == (np.uint8, 2, None)
+    assert SigmoidPostprocessor().output_info(np.uint8, 3) == (np.float32, 3, None)
+    assert MinMaxNormalizer().output_info(np.uint8, 1) == (np.float32, 1, None)
+    assert ChannelSelector().output_info(np.uint16, 2) == (np.uint16, 2, None)
+
+
+def test_flow_and_dashboard_use_the_chain_helpers(monkeypatch):
+    import numpy as np
+
+    import cellmap_flow.dashboard.routes.pipeline as pipeline
+    import cellmap_flow.globals as globals_module
+    from cellmap_flow.globals import g
+    from cellmap_flow.post.postprocessors import SigmoidPostprocessor, ThresholdPostprocessor
+
+    g.postprocess = [ThresholdPostprocessor(), SigmoidPostprocessor()]
+    assert g.get_output_dtype(np.uint16) is np.float32
+    assert g.get_output_dtype(np.uint16, []) is np.uint16
+    assert pipeline.is_output_segmentation() is True
+
+    calls = []
+    monkeypatch.setattr(
+        globals_module, "chain_output_dtype", lambda *a: calls.append("dtype") or "x"
+    )
+    monkeypatch.setattr(
+        pipeline, "chain_is_segmentation", lambda *a: calls.append("seg") or "y"
+    )
+    assert (g.get_output_dtype(np.uint16), pipeline.is_output_segmentation()) == ("x", "y")
+    assert calls == ["dtype", "seg"]

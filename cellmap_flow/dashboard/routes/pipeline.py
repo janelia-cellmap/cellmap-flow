@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify
 
 from cellmap_flow.globals import g
 from cellmap_flow.norm.input_normalize import get_input_normalizers
-from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.pipeline_spec import PipelineSpec, chain_is_segmentation
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.utils.output_probe import output_display_range
 from cellmap_flow.utils.scale_pyramid import (
@@ -63,12 +63,7 @@ def _chain_signature(steps) -> str:
 
 
 def is_output_segmentation():
-    if len(g.postprocess) == 0:
-        return False
-
-    for postprocess in g.postprocess[::-1]:
-        if postprocess.is_segmentation is not None:
-            return postprocess.is_segmentation
+    return chain_is_segmentation(g.postprocess)
 
 
 def validate_pipeline_config(config):

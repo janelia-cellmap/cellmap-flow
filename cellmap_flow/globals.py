@@ -6,7 +6,11 @@ from collections import deque
 from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
-from cellmap_flow.pipeline_spec import PipelineSpec, normalize_steps
+from cellmap_flow.pipeline_spec import (
+    PipelineSpec,
+    chain_output_dtype,
+    normalize_steps,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -229,31 +233,17 @@ class Flow:
         """The dtype a chain hands to the client.
 
         ``postprocess=None`` means ``self.postprocess``; the inference server
-        passes the chain of the layer being served.
+        passes the chain of the layer being served. The last step that
+        declares a dtype decides, since the steps run in order: taking the
+        first picked e.g. SigmoidPostprocessor's float32 ahead of a trailing
+        AffinityPostprocessor's uint64, which both advertised the wrong dtype
+        in the zarr metadata (neuroglancer: "Data type not compatible with
+        segmentation layer") and cast uint64 label ids through float32,
+        corrupting any id above 2**24.
         """
-        dtype = model_output_dtype
         if postprocess is None:
             postprocess = self.postprocess
-
-        if len(postprocess) > 0:
-            # Postprocessors are applied in order (see Inferencer), so the dtype
-            # that actually reaches the client is the one declared by the LAST
-            # step that declares one. Scan in reverse, matching
-            # is_output_segmentation(). Scanning forward picked e.g.
-            # SigmoidPostprocessor's float32 ahead of a trailing
-            # AffinityPostprocessor's uint64, which both advertised the wrong
-            # dtype in the zarr metadata (neuroglancer: "Data type not
-            # compatible with segmentation layer") and cast uint64 label ids
-            # through float32, corrupting any id above 2**24.
-            for step in postprocess[::-1]:
-                if step.dtype:
-                    logger.debug(
-                        f"Setting output dtype to {step.dtype} from {step} - was {dtype}"
-                    )
-                    dtype = step.dtype
-                    break
-
-        return dtype
+        return chain_output_dtype(postprocess, model_output_dtype)
 
 
 g = Flow()

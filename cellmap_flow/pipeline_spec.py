@@ -37,6 +37,9 @@ __all__ = [
     "POSTPROCESS_KEY",
     "PipelineSpec",
     "builder_steps",
+    "chain_is_segmentation",
+    "chain_num_channels",
+    "chain_output_dtype",
     "normalize_steps",
     "split_dataset_url",
 ]
@@ -206,3 +209,55 @@ class PipelineSpec:
 
     def is_empty(self) -> bool:
         return not self.input_norm and not self.postprocess
+
+
+# --- what a chain of live steps produces ---------------------------------------
+#
+# Each step says what it does to (dtype, channels) through output_info(), and a
+# chain is those steps applied in order. So a later step's declaration wins,
+# the same "last step that says" the separate scans in the server, globals and
+# the dashboard each implemented.
+
+
+def _output_info(step, dtype, channels):
+    info = getattr(step, "output_info", None)
+    if info is not None:
+        return info(dtype, channels)
+    # Not an op class (a stand-in, say): read the same attributes it would.
+    own_dtype = getattr(step, "dtype", None)
+    return (
+        own_dtype if own_dtype else dtype,
+        getattr(step, "num_channels", channels),
+        getattr(step, "is_segmentation", None),
+    )
+
+
+def _run_output_info(postprocess, dtype, channels):
+    is_segmentation = None
+    for step in postprocess or ():
+        dtype, channels, step_is_segmentation = _output_info(step, dtype, channels)
+        if step_is_segmentation is not None:
+            is_segmentation = step_is_segmentation
+    return dtype, channels, is_segmentation
+
+
+def chain_output_dtype(postprocess, model_dtype):
+    """The dtype the client receives: the last step's that declares one,
+    else the model's own."""
+    return _run_output_info(postprocess, model_dtype, None)[0]
+
+
+def chain_num_channels(postprocess, model_channels) -> int:
+    """How many channels the client receives, after e.g. ChannelSelection."""
+    return int(_run_output_info(postprocess, None, model_channels)[1])
+
+
+def chain_is_segmentation(postprocess) -> Optional[bool]:
+    """Whether the output is labels: the last step's that says.
+
+    False for an empty chain (raw model output is never labels), None when
+    steps are present but none of them says.
+    """
+    if not postprocess:
+        return False
+    return _run_output_info(postprocess, None, None)[2]

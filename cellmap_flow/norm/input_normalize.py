@@ -138,6 +138,23 @@ class SerializableInterface:
     def dtype(self):
         return None
 
+    def output_info(self, dtype, channels):
+        """``(dtype, channels, is_segmentation)`` of what this step returns.
+
+        ``dtype`` and ``channels`` describe what it is given. By default the
+        step's declared ``dtype`` replaces the incoming one (``None`` keeps
+        it), a ``num_channels`` attribute (only steps that change the count
+        have one) replaces the channel count, and ``is_segmentation`` is the
+        step's own, where ``None`` means it does not say. A step whose output
+        depends on its input in some other way overrides this.
+        """
+        own_dtype = self.dtype
+        return (
+            own_dtype if own_dtype else dtype,
+            getattr(self, "num_channels", channels),
+            getattr(self, "is_segmentation", None),
+        )
+
 
 class InputNormalizer(SerializableInterface):
     pass
