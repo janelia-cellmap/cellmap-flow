@@ -336,6 +336,23 @@ class FinetuneJobManager:
 
         return default
 
+    def _warn_made_up(self, model_config, made_up: dict) -> None:
+        """Say, once per model, which of its settings the trainer is guessing.
+
+        A model that says nothing of its channels or voxel sizes is trained as
+        if it predicted mito at 16 nm, which is quietly wrong for most models.
+        """
+        name = getattr(model_config, "name", None)
+        warned = self.__dict__.setdefault("_made_up_warned", set())
+        if not made_up or name in warned:
+            return
+        warned.add(name)
+        guesses = ", ".join(f"{key}={value}" for key, value in made_up.items())
+        self.logger.warning(
+            f"Model {name!r} does not say its {', '.join(made_up)}; training it "
+            f"with {guesses}. Set them in the model's config if that is wrong."
+        )
+
     def _model_geometry(self, model_config):
         """The model's geometry (see utils/model_geometry), looked up once per config."""
         cache = self.__dict__.setdefault("_geometry_cache", {})
@@ -746,13 +763,19 @@ class FinetuneJobManager:
             channels = self._get_model_metadata(model_config, attr_name, None)
             if channels:
                 break
+        made_up = {}
         if channels is None:
-            channels = ["mito"]  # Default fallback
+            channels = made_up["channels"] = ["mito"]  # Default fallback
         channels = self._normalize_metadata_list(channels, ["mito"])
 
         # Get voxel sizes
-        input_voxel_size = self._get_model_metadata(model_config, "input_voxel_size", [16, 16, 16])
-        output_voxel_size = self._get_model_metadata(model_config, "output_voxel_size", [16, 16, 16])
+        input_voxel_size = self._get_model_metadata(model_config, "input_voxel_size", None)
+        if input_voxel_size is None:
+            input_voxel_size = made_up["input_voxel_size"] = [16, 16, 16]
+        output_voxel_size = self._get_model_metadata(model_config, "output_voxel_size", None)
+        if output_voxel_size is None:
+            output_voxel_size = made_up["output_voxel_size"] = [16, 16, 16]
+        self._warn_made_up(model_config, made_up)
 
         input_voxel_size = self._normalize_metadata_list(input_voxel_size, [16, 16, 16])
         output_voxel_size = self._normalize_metadata_list(output_voxel_size, [16, 16, 16])

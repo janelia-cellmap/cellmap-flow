@@ -36,6 +36,20 @@ class _HubModel:
         raise AssertionError("submit built the model")
 
 
+def _submit(tmp_path, manager=None):
+    corrections = tmp_path / "corrections"
+    (corrections / "vol.zarr").mkdir(parents=True, exist_ok=True)
+    (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+    (corrections / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
+
+    with patch.object(fjm, "is_bsub_available", return_value=False), \
+         patch.object(fjm, "run_locally", return_value=SimpleNamespace(process=SimpleNamespace(pid=1))), \
+         patch.object(fjm.threading, "Thread", _Thread):
+        return (manager or FinetuneJobManager()).submit_finetuning_job(
+            model_config=_HubModel(), corrections_path=corrections, output_base=tmp_path,
+        )
+
+
 def test_submit_reads_geometry_without_building_the_model(tmp_path, monkeypatch):
     from cellmap_flow.utils import model_geometry
 
@@ -49,20 +63,26 @@ def test_submit_reads_geometry_without_building_the_model(tmp_path, monkeypatch)
         )
 
     monkeypatch.setattr(model_geometry, "resolve_model_geometry", fake_resolve)
-    corrections = tmp_path / "corrections"
-    (corrections / "vol.zarr").mkdir(parents=True)
-    (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
-    (corrections / "_virtual_sources.json").write_text(json.dumps({"kind": "volume_zarr_v1"}))
-
-    with patch.object(fjm, "is_bsub_available", return_value=False), \
-         patch.object(fjm, "run_locally", return_value=SimpleNamespace(process=SimpleNamespace(pid=1))), \
-         patch.object(fjm.threading, "Thread", _Thread):
-        job = FinetuneJobManager().submit_finetuning_job(
-            model_config=_HubModel(), corrections_path=corrections, output_base=tmp_path,
-        )
+    job = _submit(tmp_path)
 
     command = json.loads((job.output_dir / "metadata.json").read_text())["command"]
     assert "--input-voxel-size 8 8 8" in command
     assert "--output-voxel-size 4 4 4" in command
     assert "--channels nuc" in command
     assert asked == ["hub_model"], "looked up once, not once per field"
+
+
+def test_a_model_without_geometry_is_trained_on_guesses_that_are_named_once(tmp_path, monkeypatch, caplog):
+    from cellmap_flow.utils import model_geometry
+
+    monkeypatch.setattr(model_geometry, "resolve_model_geometry", lambda name, config: None)
+    manager = FinetuneJobManager()
+
+    with caplog.at_level("WARNING", logger=fjm.__name__):
+        job = _submit(tmp_path, manager)
+        _submit(tmp_path, manager)
+
+    command = json.loads((job.output_dir / "metadata.json").read_text())["command"]
+    assert "--channels mito --input-voxel-size 16 16 16 --output-voxel-size 16 16 16" in command
+    (warning,) = [r.getMessage() for r in caplog.records if "does not say" in r.getMessage()]
+    assert "hub_model" in warning and "channels" in warning and "input_voxel_size" in warning
