@@ -374,9 +374,9 @@ small, .text-muted {
 
 /* ---------- Alerts ---------- */
 .alert-info {
-  background: var(--accent-muted);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  color: var(--accent-hover);
+  background: var(--bg-muted);
+  border: 1px solid var(--info);
+  color: var(--text-primary);
   border-radius: var(--radius-md);
   font-size: 14px;
   padding: 10px 14px;
@@ -450,13 +450,6 @@ textarea.form-control[readonly] {
 .modal-footer.border-secondary {
   border-color: var(--border) !important;
   padding: 12px 20px;
-}
-
-/* ---------- Alert ---------- */
-.alert-info {
-  background-color: var(--bg-muted);
-  border-color: var(--info);
-  color: var(--text-primary);
 }
 
 /* ---------- Card ---------- */
