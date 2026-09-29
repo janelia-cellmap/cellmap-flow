@@ -9,6 +9,8 @@ serving mismatch gets mistaken for a training failure.
 
 import logging
 
+import pytest
+
 from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 from cellmap_flow.utils.web_utils import ARGS_KEY, encode_to_str
 
@@ -62,3 +64,67 @@ def test_normal_case_reports_what_it_built(caplog):
     ]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert any("MinMaxNormalizer" in r.getMessage() for r in caplog.records)
+
+
+NO_BLOCK = (
+    "Serving WITHOUT normalization or postprocessing: the layer URL has no "
+    f"{ARGS_KEY} block. Raw voxel values go to the model unmodified. If the "
+    "model expects normalized input (e.g. [-1, 1]) its output will be "
+    "meaningless. Re-add the layer from the dashboard so the URL carries the "
+    "current Input/Postprocess configuration."
+)
+
+
+def _messages(caplog, dataset):
+    with caplog.at_level(logging.INFO, logger="cellmap_flow.utils.serilization_utils"):
+        get_process_dataset_url(dataset)
+    return [
+        (r.levelname, r.getMessage())
+        for r in caplog.records
+        if r.name == "cellmap_flow.utils.serilization_utils"
+    ]
+
+
+def _url(args):
+    return f"http://host:1234/d.zarr{ARGS_KEY}{encode_to_str(args)}{ARGS_KEY}"
+
+
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        (
+            {"input_norm": {}, "postprocess": {}},
+            "Dataset args decoded but produced NO input normalizers "
+            "(input_norm={}). The model will see raw voxel values.",
+        ),
+        (
+            {"input_norm": [], "postprocess": [{"name": "SigmoidPostprocessor"}]},
+            "Dataset args decoded but produced NO input normalizers "
+            "(input_norm=[]). The model will see raw voxel values.",
+        ),
+    ],
+    ids=["dict", "list"],
+)
+def test_the_no_normalizer_warning_shows_the_chain_as_sent(caplog, args, expected):
+    assert _messages(caplog, _url(args)) == [("WARNING", expected)]
+
+
+def test_the_messages_are_word_for_word(caplog):
+    assert _messages(caplog, "http://host:1234/some/dataset.zarr") == [
+        ("WARNING", NO_BLOCK)
+    ]
+    caplog.clear()
+    args = {
+        "input_norm": [
+            {"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
+            {"name": "LambdaNormalizer", "expression": "x*2-1"},
+        ],
+        "postprocess": [{"name": "SigmoidPostprocessor"}],
+    }
+    assert _messages(caplog, _url(args)) == [
+        (
+            "INFO",
+            "Serving with input normalizers: ['MinMaxNormalizer', "
+            "'LambdaNormalizer'], postprocessors: ['SigmoidPostprocessor']",
+        )
+    ]

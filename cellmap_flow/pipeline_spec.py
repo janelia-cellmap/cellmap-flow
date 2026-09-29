@@ -124,14 +124,26 @@ class PipelineSpec:
         object.__setattr__(self, "postprocess", normalize_steps(self.postprocess))
 
     @classmethod
-    def from_json_data(cls, data) -> "PipelineSpec":
-        """From a ``json_data`` dict (or its JSON text); either chain may be
-        in the list or the legacy dict form, or missing."""
-        if data is None:
+    def from_json_data(cls, data, strict: bool = False) -> "PipelineSpec":
+        """From a ``json_data`` dict (or its JSON text).
+
+        Either chain may be in the list or the legacy dict form. By default a
+        missing or null chain is empty. ``strict`` instead requires both keys
+        (KeyError) and a list or dict under each (ValueError), which is what
+        the readers before PipelineSpec enforced, and what the blockwise
+        precheck relies on to reject a misspelt ``json_data``.
+        """
+        if data is None and not strict:
             return cls()
         if isinstance(data, str):
             data = json.loads(data)
-        return cls(data.get(INPUT_NORM_KEY), data.get(POSTPROCESS_KEY))
+        if not strict:
+            return cls(data.get(INPUT_NORM_KEY), data.get(POSTPROCESS_KEY))
+        chains = (data[INPUT_NORM_KEY], data[POSTPROCESS_KEY])
+        for chain in chains:
+            if not isinstance(chain, (list, dict)):
+                raise ValueError(f"Expected dict or list, got {type(chain)}")
+        return cls(*chains)
 
     @classmethod
     def from_steps(cls, input_norms=(), postprocess=()) -> "PipelineSpec":

@@ -137,6 +137,28 @@ def test_the_old_dict_form_is_still_read():
     assert [type(p).__name__ for p in posts] == ["ThresholdPostprocessor"]
 
 
+@pytest.mark.parametrize(
+    "json_data, error",
+    [
+        ({"input_norm": []}, KeyError),
+        ({"postprocess": []}, KeyError),
+        ({"input_norm": None, "postprocess": []}, ValueError),
+        ({"input_norm": [], "postprocess": "SigmoidPostprocessor"}, ValueError),
+    ],
+)
+def test_the_readers_still_require_both_chains(json_data, error):
+    """A json_data that names neither chain is misspelt, not empty.
+
+    The blockwise precheck turns this error into "Invalid json_data".
+    """
+    from cellmap_flow.utils.web_utils import encode_to_str
+
+    with pytest.raises(error):
+        get_process_dataset(json_data)
+    with pytest.raises(error):
+        get_process_dataset_url(f"m{ARGS_KEY}{encode_to_str(json_data)}{ARGS_KEY}")
+
+
 def test_current_config_fallback_keeps_every_step():
     from cellmap_flow.globals import (
         current_input_norm_config,

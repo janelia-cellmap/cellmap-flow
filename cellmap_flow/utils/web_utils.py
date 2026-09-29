@@ -80,9 +80,8 @@ def kill_n_remove_from_neuroglancer(jobs, s):
 
 
 def get_norms_post_args(input_norms, postprocess):
-    args = {}
+    """The args blob a layer URL carries for these two live chains."""
+    # Imported here: pipeline_spec builds on this module's helpers.
+    from cellmap_flow.pipeline_spec import PipelineSpec
 
-    args[INPUT_NORM_DICT_KEY] = list_cls_to_dict(input_norms)
-    args[POSTPROCESS_DICT_KEY] = list_cls_to_dict(postprocess)
-    st_data = encode_to_str(args)
-    return st_data
+    return PipelineSpec.from_steps(input_norms, postprocess).to_url_blob()

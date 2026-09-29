@@ -1,32 +1,32 @@
+import json
 import logging
+
+from cellmap_flow.pipeline_spec import PipelineSpec, split_dataset_url
 from cellmap_flow.utils.web_utils import (
-    decode_to_json,
-    list_cls_to_dict,
     ARGS_KEY,
     INPUT_NORM_DICT_KEY,
-    POSTPROCESS_DICT_KEY,
+    decode_to_json,
 )
-from cellmap_flow.norm.input_normalize import get_normalizations
-from cellmap_flow.post.postprocessors import get_postprocessors
-
-# from cellmap_flow.utils.web_utils import encode_to_str, decode_to_json
-import json
 
 logger = logging.getLogger(__name__)
 
 
 def get_process_dataset(json_data: dict):
+    """``(input_norms, postprocess)`` built from a ``json_data`` dict or its JSON.
+
+    Either chain may be in the list or the legacy dict form; both keys are
+    required (the blockwise precheck reports a json_data without them).
+    """
     if isinstance(json_data, str):
         json_data = json.loads(json_data)
 
     logger.info(f"json data: {json_data}")
-    input_norm_fns = get_normalizations(json_data[INPUT_NORM_DICT_KEY])
-    postprocess_fns = get_postprocessors(json_data[POSTPROCESS_DICT_KEY])
-    return input_norm_fns, postprocess_fns
+    return PipelineSpec.from_json_data(json_data, strict=True).build()
 
 
 def get_process_dataset_url(dataset: str):
-    if ARGS_KEY not in dataset:
+    blob = split_dataset_url(dataset)
+    if blob is None:
         # A layer URL without the args blob means this request carries no
         # normalization and no postprocessing, and the model is about to be
         # fed raw voxel values. For a model trained on, say, [-1, 1] that is
@@ -43,17 +43,14 @@ def get_process_dataset_url(dataset: str):
             "configuration."
         )
         return None, [], []
-    norm_data = dataset.split(ARGS_KEY)
-    if len(norm_data) != 3:
-        raise ValueError(
-            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}"
-        )
-    encoded_data = norm_data[1]
-    result = decode_to_json(encoded_data)
+    # Decoded here rather than through PipelineSpec.from_url_blob so the
+    # messages below can show the chain exactly as the URL spelled it.
+    result = decode_to_json(blob)
     logger.debug(f"Decoded dataset args: {result}")
     dashboard_url = result.get("dashboard_url", None)
-    input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
-    postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
+    input_norm_fns, postprocess_fns = PipelineSpec.from_json_data(
+        result, strict=True
+    ).build()
     # Log what actually got built, not the raw dict -- an args block that
     # decodes fine but produces no normalizers is the same silent failure as
     # having no args block at all.
@@ -74,9 +71,4 @@ def get_process_dataset_url(dataset: str):
 
 def serialize_norms_posts_to_json(norms=(), posts=()):
     """JSON with both chains in the ordered ``[{name, **params}]`` form."""
-    return json.dumps(
-        {
-            INPUT_NORM_DICT_KEY: list_cls_to_dict(norms),
-            POSTPROCESS_DICT_KEY: list_cls_to_dict(posts),
-        }
-    )
+    return json.dumps(PipelineSpec.from_steps(norms, posts).to_json_data())

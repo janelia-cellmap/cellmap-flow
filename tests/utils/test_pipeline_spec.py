@@ -151,6 +151,17 @@ def test_from_json_data_accepts_every_shape():
     assert PipelineSpec.from_json_data({"postprocess": [THRESHOLD]}).input_norm == ()
 
 
+def test_strict_json_data_needs_both_chains_as_lists_or_dicts():
+    data = {"input_norm": [MINMAX], "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}}
+    assert PipelineSpec.from_json_data(data, strict=True) == PipelineSpec([MINMAX], [THRESHOLD])
+    with pytest.raises(KeyError):
+        PipelineSpec.from_json_data({"postprocess": []}, strict=True)
+    with pytest.raises(ValueError, match="Expected dict or list"):
+        PipelineSpec.from_json_data({"input_norm": None, "postprocess": []}, strict=True)
+    with pytest.raises(ValueError, match="Expected dict or list"):
+        PipelineSpec.from_json_data({"input_norm": [], "postprocess": ()}, strict=True)
+
+
 def test_to_json_data_has_input_norm_first():
     data = PipelineSpec(postprocess=[THRESHOLD], input_norm=[MINMAX]).to_json_data()
     assert list(data) == ["input_norm", "postprocess"]
