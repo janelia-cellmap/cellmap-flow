@@ -15,6 +15,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     find_model_config,
     load_user_prefs,
+    rewrite_minio_url_for_proxy,
     save_user_prefs,
     write_volume_manifest,
 )
@@ -225,6 +226,7 @@ def create_annotation_volume_response(data):
             return jsonify({"success": False, "error": zarr_info}), 500
 
         minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
+        minio_url = rewrite_minio_url_for_proxy(minio_url)
         _register_annotation_volume(
             volume_id,
             zarr_path=zarr_path,

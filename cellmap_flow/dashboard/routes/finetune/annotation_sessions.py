@@ -10,6 +10,7 @@ from flask import jsonify
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
+    rewrite_minio_url_for_proxy,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
@@ -338,6 +339,7 @@ def load_existing_volume_response(data):
         s0_count = _populated_chunk_count(new_volume_path)
 
         minio_url = ensure_minio_serving(new_volume_path, volume_id, output_base_dir=new_corrections)
+        minio_url = rewrite_minio_url_for_proxy(minio_url)
         _register_annotation_volume(
             volume_id,
             zarr_path=new_volume_path,

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import zarr
 
@@ -13,6 +14,12 @@ from cellmap_flow.dashboard.finetune_utils import (
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
+
+# The URL a reverse proxy in front of the dashboard serves this dashboard's
+# MinIO at, for browsers that reach the dashboard through that proxy. Unset,
+# MinIO URLs are handed out as they are. "{proto}" and "{host}" stand for the
+# forwarded scheme and host, e.g. "{proto}://{host}/minio".
+MINIO_PROXY_URL_ENV = "CELLMAP_FLOW_MINIO_PROXY_URL"
 
 USER_PREFS_FILE = os.path.expanduser("~/.cellmap_flow/user_prefs.json")
 LOG_FILTER_PATTERNS = [
@@ -300,6 +307,40 @@ def get_lsf_job_id(finetune_job):
         if hasattr(finetune_job.lsf_job, "process"):
             return f"PID:{finetune_job.lsf_job.process.pid}"
     return None
+
+
+def rewrite_minio_url_for_proxy(minio_url, request=None):
+    """``minio_url`` as the browser can reach it through a reverse proxy.
+
+    A browser that loaded the dashboard over a proxy's HTTPS cannot fetch
+    ``http://<node>:<port>/...`` chunks from MinIO: the node may not be
+    reachable, and the page blocks the mixed content. When
+    CELLMAP_FLOW_MINIO_PROXY_URL is set and the request came through a
+    proxy, the URL's path is put under that URL instead.
+
+    Only a request carrying X-Forwarded-Host came through a proxy. Falling
+    back to the Host header, as the first version of this did, rewrote the
+    URL for every browser reaching the dashboard directly. The scheme is
+    X-Forwarded-Proto's, else the request's own. Outside a request (a
+    background import, a script) the URL is returned unchanged.
+    """
+    template = os.environ.get(MINIO_PROXY_URL_ENV, "").strip()
+    if not template:
+        return minio_url
+    if request is None:
+        from flask import has_request_context, request as current_request
+
+        if not has_request_context():
+            return minio_url
+        request = current_request
+    forwarded_host = request.headers.get("X-Forwarded-Host")
+    if not forwarded_host:
+        return minio_url
+    # Each proxy in a chain appends its own; the first is the client's.
+    host = forwarded_host.split(",")[0].strip()
+    proto = (request.headers.get("X-Forwarded-Proto") or request.scheme).split(",")[0].strip()
+    base = template.replace("{proto}", proto).replace("{host}", host).rstrip("/")
+    return base + urlparse(minio_url).path
 
 
 # Geometry the trainer cannot guess and will not run without.

@@ -31,6 +31,7 @@ from cellmap_flow.dashboard.finetune_utils import (
     sync_instance_correction_from_minio,
 )
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
+from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
@@ -407,6 +408,7 @@ def create_instance_correction_response(data):
             output_base_dir=output_dir,
             mc_target_name=mc_target_name,
         )
+        minio_url = rewrite_minio_url_for_proxy(minio_url)
         _register_volume(volume_id, effective_zarr_path, output_dir, minio_url)
 
         layer_name = data.get("layer_name", f"{roi_name}_annotation")
