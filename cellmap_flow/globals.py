@@ -160,10 +160,7 @@ class Flow:
                 "port": None,
                 "ip": None,
                 "bucket": "annotations",
-                "minio_root": None,
                 "output_base": None,
-                "last_sync": {},
-                "chunk_sync_state": {},
                 "sync_thread": None,
             }
             cls._instance.annotation_volumes = {}

@@ -128,11 +128,11 @@ def test_strokes_go_to_the_volumes_own_zarr(tmp_path, monkeypatch):
     s3.put("annotations/vol-b.zarr/annotation/s0/0.0.0", b"stroke", "e1")
     monkeypatch.setattr(fu, "minio_state", {
         "ip": "127.0.0.1", "port": 9000, "bucket": "annotations",
-        "output_base": str(first_session), "last_sync": {},
+        "output_base": str(first_session),
     })
     monkeypatch.setattr(fu, "annotation_volumes", {
         "vol-b": {"zarr_path": str(vol_b), "corrections_dir": str(other_session),
-                  "chunk_sync_state": {}, "extracted_chunks": set()},
+                  "chunk_sync_state": {}},
     })
     monkeypatch.setattr(fu, "_make_s3_filesystem", lambda: s3)
     monkeypatch.setattr(fu, "_sync_zarr_group_metadata", lambda *a: set())
