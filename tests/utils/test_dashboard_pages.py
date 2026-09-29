@@ -84,16 +84,21 @@ def test_the_postprocess_tab_lists_the_configured_chain_first_in_its_order(clien
     g.postprocess = get_postprocessors([
         {"name": "ThresholdPostprocessor", "threshold": 0.7},
         {"name": "SigmoidPostprocessor"},
+        {"name": "ChannelSelection", "channels": [0, 2]},
     ])
 
     html = client.get("/").get_data(as_text=True)
     rows = _rows(html, "postprocessor-item", "postProcessCheckbox")
 
-    assert rows[:2] == [
+    assert rows[:3] == [
         ("ThresholdPostprocessor", True, {"threshold": "0.7"}),
         ("SigmoidPostprocessor", True, {}),
+        ("ChannelSelection", True, {"channels": "0,2"}),
     ]
-    assert not any(checked for _, checked, _ in rows[2:])
+    # What Submit All sends back builds the same step.
+    (sent,) = get_postprocessors([{"name": "ChannelSelection", **rows[2][2]}])
+    assert sent.channels == [0, 2]
+    assert not any(checked for _, checked, _ in rows[3:])
     assert [name for name, _, _ in rows].count("SigmoidPostprocessor") == 1
 
 

@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 index_bp = Blueprint("index", __name__)
 
 
+def _form_value(value):
+    """A parameter as the Input/Postprocess form shows and sends it back.
+
+    A flat list or tuple is comma-joined, the form the constructors parse
+    ("0,2" for ChannelSelection): rendered as it stands it became "[0, 2]",
+    which Submit All sent back and the constructor could not read.
+    """
+    if isinstance(value, (list, tuple)) and not any(
+        isinstance(v, (list, tuple, dict)) for v in value
+    ):
+        return ",".join(str(v) for v in value)
+    return value
+
+
 def chain_items(available, configured):
     """The rows of an Input/Postprocess list, in the order to render them.
 
@@ -43,12 +57,12 @@ def chain_items(available, configured):
             }
         else:
             params = {k: v for k, v in step_dict.items() if k != "name"}
+        params = {k: _form_value(v) for k, v in params.items()}
         items.append({"name": name, "checked": True, "params": params})
     for op in available:
         if op["name"] not in configured_names:
-            items.append(
-                {"name": op["name"], "checked": False, "params": dict(op.get("params", {}))}
-            )
+            params = {k: _form_value(v) for k, v in op.get("params", {}).items()}
+            items.append({"name": op["name"], "checked": False, "params": params})
     return items
 
 
