@@ -1,6 +1,12 @@
 // The dashboard page (templates/index.html and the tab partials it
 // includes).
-import { esc } from "../lib/dom.js";
+//
+// A module runs once the page is parsed and before DOMContentLoaded: the
+// page's elements are all there, and the inline scripts still in the tab
+// partials, which wait for DOMContentLoaded, have not started yet.
+import { ApiError, postJSON } from "../lib/api.js";
+import { initConnect } from "./connect.js";
+import { refreshModelAdvice } from "./model-advice.js";
 
 // The header's "Toggle Dashboard" button. The Neuroglancer column's inline
 // flex style makes it fill whatever width the dashboard column leaves, so
@@ -9,8 +15,110 @@ function toggleDashboard() {
   document.getElementById("dashboard-column").classList.toggle("d-none");
 }
 
-// For the handlers and inline scripts outside these modules, which call
-// these by name: the header's onclick="toggleDashboard()", and esc() for
-// scripts escaping text into innerHTML.
-window.toggleDashboard = toggleDashboard;
-window.esc = esc;
+// Enter in a parameter field of the Input or Postprocess list submits the
+// pipeline, like Submit All. Only there: every submit rebuilds all the
+// viewer's layers, so Enter anywhere else -- a newline in a textarea, the
+// output path, a search box, a modal -- must not trigger one, and Enter on a
+// focused button already clicks it.
+const SUBMIT_ON_ENTER_SKIP_TYPES = ["checkbox", "radio", "button", "submit", "reset", "file"];
+
+function submitOnEnter(event) {
+  if (event.key !== "Enter" || event.isComposing) return;
+  const target = event.target;
+  if (!target || target.tagName !== "INPUT") return;
+  if (SUBMIT_ON_ENTER_SKIP_TYPES.indexOf(target.type) !== -1) return;
+  const form = target.closest("#inputNormForm, #postProcessForm");
+  if (!form) return;
+  event.preventDefault();
+  const button = form.querySelector("#submitAll");
+  if (button) button.click();
+}
+
+// Submit All, in each of the Input and Postprocess tabs: send both chains to
+// /api/process, which rebuilds the viewer's layers.
+function initSubmitAll() {
+  function handleSubmitAll() {
+    const finalPayload = {
+      input_norm: window.gatherInputNormData ? window.gatherInputNormData() : {},
+      postprocess: window.gatherPostProcessData ? window.gatherPostProcessData() : {},
+    };
+    console.log("Combined Payload:", finalPayload);
+    postJSON("/api/process", finalPayload)
+      .then((data) => {
+        console.log("Server response:", data);
+        ["submissionLog_inputNorm", "submissionLog_postProcess"].forEach((id) => {
+          const logArea = document.getElementById(id);
+          if (logArea) logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+        });
+        refreshModelAdvice();
+      })
+      .catch((err) => {
+        console.error("Error:", err);
+        alert("Error submitting combined data");
+      });
+  }
+  // Both partials' buttons have id="submitAll".
+  document.querySelectorAll("#submitAll").forEach((btn) => {
+    btn.addEventListener("click", handleSubmitAll);
+  });
+}
+
+// The first-run dialog, on the page only until a server config is saved.
+function initServerConfigModal() {
+  const modalEl = document.getElementById("serverConfigModal");
+  if (!modalEl) return;
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+
+  document.getElementById("modalSaveConfigBtn").addEventListener("click", function () {
+    const statusEl = document.getElementById("modalConfigStatus");
+    function fail(message) {
+      statusEl.style.color = "#f87171";
+      statusEl.textContent = message;
+    }
+    // Counts go as numbers (the inputs hold strings, and "" reached int("")
+    // on the server); a blank one or a blank queue is left out so the server
+    // keeps its default.
+    const payload = {
+      charge_group: document.getElementById("modal_charge_group").value.trim(),
+    };
+    const queue = document.getElementById("modal_queue").value.trim();
+    if (queue) payload.queue = queue;
+    const counts = [
+      ["modal_nb_cores_worker", "nb_cores_worker", "Cores per Worker"],
+      ["modal_nb_workers", "nb_workers", "Number of Workers"],
+    ];
+    for (const [id, key, label] of counts) {
+      const raw = document.getElementById(id).value.trim();
+      if (raw === "") continue;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) {
+        fail(label + " must be a whole number of at least 1.");
+        return;
+      }
+      payload[key] = n;
+    }
+    postJSON("/api/server-config", payload)
+      .then(function (data) {
+        if (!data.success) {
+          fail("Error saving config: " + (data.error || "HTTP 200"));
+          return;
+        }
+        statusEl.style.color = "#4ade80";
+        statusEl.textContent = "Saved!";
+        setTimeout(function () { modal.hide(); }, 500);
+      })
+      .catch(function (err) {
+        fail(err instanceof ApiError ? "Error saving config: " + err.message : "Error: " + err);
+      });
+  });
+}
+
+initConnect();
+document.getElementById("toggleDashboardBtn").addEventListener("click", toggleDashboard);
+document.addEventListener("keydown", submitOnEnter);
+initSubmitAll();
+initServerConfigModal();
+
+// The Models tab's inline script calls this by name after a submit.
+window.refreshModelAdvice = refreshModelAdvice;

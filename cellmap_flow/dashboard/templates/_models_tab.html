@@ -198,7 +198,7 @@
     document.addEventListener("DOMContentLoaded", function () {
       const submitBtn = document.getElementById("submitModelsBtn");
       const logArea   = document.getElementById("modelSubmissionLogModels");
-      const defaultHfRepos = {{ default_hf_repos | tojson }};
+      const defaultHfRepos = JSON.parse(document.getElementById("page-data").textContent).default_hf_repos;
       let hfModelsLoaded = false;
 
       function renderHfModels(data) {
