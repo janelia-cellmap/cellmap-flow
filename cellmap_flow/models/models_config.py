@@ -7,6 +7,7 @@ import copy
 from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
+from cellmap_flow.models.geometry import ModelGeometry
 from cellmap_flow.utils.serialize_config import Config
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ class ModelConfig:
     def __str__(self) -> str:
         elms = []
         for k, v in vars(self).items():
-            if k == "_init_params":
+            if k in ("_init_params", "_geometry"):
                 continue
             if isinstance(v, np.ndarray):
                 elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
@@ -279,6 +280,23 @@ class ModelConfig:
             f"output spatial {actual_spatial.tolist()}, "
             f"channels {int(actual_channels)}"
         )
+
+    @property
+    def geometry(self) -> ModelGeometry:
+        """The config's geometry as one ModelGeometry, read once per built config."""
+        config = self.config
+        cached = self.__dict__.get("_geometry")
+        if cached is None or cached[0] is not config:
+            cached = (
+                config,
+                ModelGeometry.from_config(
+                    config,
+                    chunk_output_axes=self.chunk_output_axes,
+                    output_dtype=self.output_dtype,
+                ),
+            )
+            self._geometry = cached
+        return cached[1]
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
