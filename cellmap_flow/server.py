@@ -7,7 +7,7 @@ from typing import NamedTuple, Optional
 
 import numpy as np
 import numcodecs
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, redirect, request
 from flask_cors import CORS
 from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
@@ -150,6 +150,11 @@ class CellMapFlowServer:
 
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
+
+        # Opening a server's address in a browser shows what it serves.
+        @self.app.route("/")
+        def home():
+            return redirect("/__control__/model_info")
 
         @self.app.route("/__control__/model_info", methods=["GET"])
         # Older name, kept so a dashboard can still talk to a server started

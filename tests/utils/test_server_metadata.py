@@ -61,3 +61,18 @@ def test_any_declared_output_dtype_gives_a_valid_zarr_dtype(tmp_path, declared, 
     response = client.get("/plain/s0/0.0.0.0")
     assert response.status_code == 200
     decode_chunk(server, response.data, meta["dtype"], meta["chunks"])
+
+
+def test_a_servers_address_shows_its_model_info(tmp_path):
+    """/ redirected to a Swagger page that documented nothing; with Swagger
+    gone it leads to what the server actually serves."""
+    raw = write_raw(tmp_path, np.zeros((8, 8, 8), dtype=np.uint8))
+    server = CellMapFlowServer(
+        raw, ScriptModelConfig(script_path=write_script(tmp_path, IDENTITY_MODEL))
+    )
+    client = server.app.test_client()
+
+    response = client.get("/")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/__control__/model_info")
+    assert client.get("/", follow_redirects=True).status_code == 200
