@@ -586,3 +586,132 @@ def test_flow_and_dashboard_use_the_chain_helpers(monkeypatch):
     )
     assert (g.get_output_dtype(np.uint16), pipeline.is_output_segmentation()) == ("x", "y")
     assert calls == ["dtype", "seg"]
+
+
+# --- op_schemas --------------------------------------------------------------------
+
+
+def _builtin_ops(kind):
+    """The ops cellmap_flow itself registers. Tests and plugins add their own
+    subclasses to the same registry, so those are left out of the per-op
+    parametrization (test_op_schemas_cover_the_registry still covers them)."""
+    if kind == "input_norm":
+        from cellmap_flow.norm.input_normalize import InputNormalizer as base
+    else:
+        from cellmap_flow.post.postprocessors import PostProcessor as base
+    return [
+        (kind, cls.__name__)
+        for cls in base.__subclasses__()
+        if cls.__module__.startswith("cellmap_flow.")
+    ]
+
+
+BUILTIN_OPS = _builtin_ops("input_norm") + _builtin_ops("postprocess")
+
+# One value for each argument without a default.
+REQUIRED_SAMPLES = {"expression": "x*2-1"}
+
+_PYTHON_TYPES = {
+    "boolean": bool,
+    "integer": int,
+    "number": (int, float),
+    "string": str,
+    "array": list,
+    "object": dict,
+}
+
+
+def _listing(kind):
+    from cellmap_flow.norm.input_normalize import get_input_normalizers
+    from cellmap_flow.post.postprocessors import get_postprocessors_list
+
+    ops = get_input_normalizers() if kind == "input_norm" else get_postprocessors_list()
+    return {op["name"]: op for op in ops}
+
+
+def test_there_are_builtin_ops_to_check():
+    names = {name for _, name in BUILTIN_OPS}
+    assert {"MinMaxNormalizer", "LambdaNormalizer", "AffinityPostprocessor"} <= names
+    assert len(BUILTIN_OPS) >= 15
+
+
+@pytest.mark.parametrize("kind", ["input_norm", "postprocess"])
+def test_op_schemas_cover_the_registry(kind):
+    from cellmap_flow.pipeline_spec import _op_classes, op_schemas
+
+    # Held so that no test-local subclass is collected between the two reads.
+    registered = _op_classes(kind)
+    schemas = op_schemas(kind)
+    assert [s["name"] for s in schemas] == list(_listing(kind))
+    assert len(schemas) == len(registered)
+    json.dumps(schemas)  # it goes into page data as JSON
+    for entry in schemas:
+        assert set(entry) == {"name", "title", "schema"}
+        assert entry["schema"]["title"] == entry["title"]
+
+
+def test_op_schemas_reject_an_unknown_kind():
+    from cellmap_flow.pipeline_spec import op_schemas
+
+    with pytest.raises(ValueError, match="input_norm"):
+        op_schemas("models")
+
+
+@pytest.mark.parametrize("kind, name", BUILTIN_OPS, ids=[n for _, n in BUILTIN_OPS])
+def test_op_schema_describes_what_the_op_takes_and_reports(kind, name):
+    from cellmap_flow.pipeline_spec import PipelineSpec, op_schemas
+
+    jsonschema = pytest.importorskip("jsonschema")
+    (entry,) = [s for s in op_schemas(kind) if s["name"] == name]
+    schema = entry["schema"]
+    jsonschema.Draft202012Validator.check_schema(schema)
+
+    # The same parameters and defaults the dashboard's forms are built from.
+    listed = _listing(kind)[name]["params"]
+    assert list(schema["properties"]) == list(listed)
+    for pname, prop in schema["properties"].items():
+        if pname in schema["required"]:
+            assert listed[pname] == ""
+        else:
+            assert prop["default"] == listed[pname]
+
+    # A step built from the schema's defaults reports exactly those
+    # parameters, each of the type the schema gives it.
+    params = {
+        pname: prop.get("default", REQUIRED_SAMPLES.get(pname))
+        for pname, prop in schema["properties"].items()
+    }
+    spec = PipelineSpec(**{kind: [{"name": name, **params}]})
+    norms, posts = spec.build()
+    (step,) = norms or posts
+    reported = {k: v for k, v in step.to_dict().items() if k != "name"}
+    assert list(reported) == list(schema["properties"])
+    for pname, value in reported.items():
+        json_type = schema["properties"][pname].get("type")
+        if json_type:
+            assert isinstance(value, _PYTHON_TYPES[json_type]), (pname, value)
+            if json_type in ("integer", "number"):
+                assert not isinstance(value, bool), (pname, value)
+    jsonschema.validate(reported, schema)
+    # And an argument the op does not take is refused, as it would be there.
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({**reported, "no_such_argument": 1}, schema)
+
+
+def test_op_schema_of_a_step_with_no_arguments():
+    from cellmap_flow.pipeline_spec import op_schemas
+
+    (sigmoid,) = [s for s in op_schemas("postprocess") if s["name"] == "SigmoidPostprocessor"]
+    assert sigmoid["title"] == "Sigmoid Postprocessor"
+    assert sigmoid["schema"]["properties"] == {} and sigmoid["schema"]["required"] == []
+    assert sigmoid["schema"]["description"].startswith("Apply sigmoid")
+
+
+def test_op_schema_types_prefer_the_annotation():
+    import cellmap_flow.pipeline_spec as spec_module
+
+    assert spec_module._json_type(float, 0) == "number"
+    assert spec_module._json_type(int, True) == "integer"
+    assert spec_module._json_type(bool, 0) == "boolean"
+    assert spec_module._json_type(spec_module.inspect.Parameter.empty, False) == "boolean"
+    assert spec_module._json_type(spec_module.inspect.Parameter.empty, None) is None

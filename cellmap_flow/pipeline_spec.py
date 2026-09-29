@@ -19,9 +19,11 @@ them need) are imported only when a spec is built.
 """
 
 import hashlib
+import inspect
 import json
+import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 from cellmap_flow.utils.web_utils import (
     ARGS_KEY,
@@ -41,6 +43,7 @@ __all__ = [
     "chain_num_channels",
     "chain_output_dtype",
     "normalize_steps",
+    "op_schemas",
     "split_dataset_url",
 ]
 
@@ -261,3 +264,111 @@ def chain_is_segmentation(postprocess) -> Optional[bool]:
     if not postprocess:
         return False
     return _run_output_info(postprocess, None, None)[2]
+
+
+# --- describing the ops -----------------------------------------------------------
+
+# bool before int: bool is an int subclass, and a flag is not a count.
+_JSON_TYPES = (
+    (bool, "boolean"),
+    (int, "integer"),
+    (float, "number"),
+    (str, "string"),
+    ((list, tuple), "array"),
+    (dict, "object"),
+)
+
+
+def _json_type(annotation, default):
+    """The JSON Schema type for a constructor argument, or None if unknown.
+
+    The annotation decides when there is one; otherwise the default's type.
+    """
+    if isinstance(annotation, type):
+        for python_type, name in _JSON_TYPES:
+            if issubclass(annotation, python_type):
+                return name
+    if default is not None and default is not inspect.Parameter.empty:
+        for python_type, name in _JSON_TYPES:
+            if isinstance(default, python_type):
+                return name
+    return None
+
+
+def _op_classes(kind):
+    if kind == INPUT_NORM_KEY:
+        from cellmap_flow.norm.input_normalize import InputNormalizer
+
+        return InputNormalizer.__subclasses__()
+    if kind == POSTPROCESS_KEY:
+        from cellmap_flow.post.postprocessors import PostProcessor
+
+        return PostProcessor.__subclasses__()
+    raise ValueError(f"kind must be {INPUT_NORM_KEY!r} or {POSTPROCESS_KEY!r}, got {kind!r}")
+
+
+def _title(name):
+    # "MinMaxNormalizer" -> "Min Max Normalizer"; "ZScoreNormalizer" keeps "ZScore".
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name)
+
+
+def _jsonable_default(value):
+    if isinstance(value, tuple):
+        value = list(value)
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return value
+
+
+def _op_schema(cls):
+    properties = {}
+    required = []
+    extra = False
+    for pname, param in inspect.signature(cls.__init__).parameters.items():
+        if pname == "self" or param.kind is inspect.Parameter.VAR_POSITIONAL:
+            continue
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            extra = True
+            continue
+        prop = {"title": pname}
+        json_type = _json_type(param.annotation, param.default)
+        if json_type:
+            prop["type"] = json_type
+        if param.default is inspect.Parameter.empty:
+            required.append(pname)
+        else:
+            prop["default"] = _jsonable_default(param.default)
+        properties[pname] = prop
+
+    schema = {"type": "object", "title": _title(cls.name())}
+    # The class's own docstring only; an inherited one describes the base.
+    doc = inspect.cleandoc(cls.__dict__.get("__doc__") or "")
+    if doc:
+        schema["description"] = doc.split("\n\n")[0]
+    schema["properties"] = properties
+    schema["required"] = required
+    # Older servers pass every key but "name" to the constructor, so an
+    # unknown one is an error there.
+    schema["additionalProperties"] = extra
+    return schema
+
+
+def op_schemas(kind: Literal["input_norm", "postprocess"]) -> list:
+    """A JSON Schema for each registered op's parameters.
+
+    ``[{"name", "title", "schema"}]``, one per op, in the order
+    get_input_normalizers() / get_postprocessors_list() list them. The
+    schema describes a step's parameters, i.e. its dict without ``name``,
+    taken from the constructor's signature: a type from the annotation or
+    the default's type, the default, and which arguments are required.
+    Values arrive from the dashboard's forms as strings and the constructors
+    parse them, so the types say what a value means, not how it must be
+    sent.
+    """
+    schemas = []
+    for cls in _op_classes(kind):
+        schema = _op_schema(cls)
+        schemas.append({"name": cls.name(), "title": schema["title"], "schema": schema})
+    return schemas
