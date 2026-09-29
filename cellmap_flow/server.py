@@ -7,9 +7,8 @@ from typing import NamedTuple, Optional
 
 import numpy as np
 import numcodecs
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flasgger import Swagger
 from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
@@ -148,14 +147,9 @@ class CellMapFlowServer:
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
-        self._configure_swagger()
 
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
-
-        @self.app.route("/")
-        def home():
-            return redirect("/apidocs/")
 
         @self.app.route("/__control__/model_info", methods=["GET"])
         # Older name, kept so a dashboard can still talk to a server started
@@ -269,28 +263,6 @@ class CellMapFlowServer:
         )
         def chunk_3d(dataset, scale, chunk_z, chunk_y, chunk_x):
             return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
-
-    def _configure_swagger(self):
-        self.app.config["SWAGGER"] = {
-            "title": "CellMapFlow Virtual Zarr API",
-            "uiversion": 3,  # Use Swagger UI 3.x
-        }
-        swagger_config = {
-            "headers": [],
-            "specs": [
-                {
-                    "version": "0.0.1",
-                    "title": "CellMapFlow Virtual Zarr API",
-                    "endpoint": "api_spec",
-                    "description": "API to serve a virtual Zarr interface for Neuroglancer.",
-                    "route": "/api_spec.json",
-                }
-            ],
-            "static_url_path": "/flasgger_static",
-            "swagger_ui": True,
-            "specs_route": "/apidocs/",
-        }
-        self.swagger = Swagger(self.app, config=swagger_config)
 
     def _served_spatial_shape(self):
         """Output voxels from the grid origin to the end of the raw data."""
