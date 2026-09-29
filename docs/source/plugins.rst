@@ -170,7 +170,9 @@ Another example — connected-component filtering by size:
 Custom ModelConfig
 ~~~~~~~~~~~~~~~~~~
 
-Subclass ``ModelConfig`` and implement ``_get_config``, ``command``, and ``to_dict``.
+Subclass ``ModelConfig`` and implement ``_get_config``.
+
+``command`` (how a server is launched for this config) and ``to_dict`` (how it is exported to a YAML) have defaults, built from the constructor arguments the config was created with. Override them only if the config needs something else. The type is named by ``cli_name`` when the class sets one, otherwise by its class name without ``ModelConfig``, lower-cased (``ONNXModelConfig`` is ``onnx``). That name is what ``type:`` in a YAML and the ``cellmap_flow`` subcommand use.
 
 The ``_get_config`` method must return a ``Config`` object with the following attributes:
 ``model`` (or ``predict``), ``read_shape``, ``write_shape``, ``input_voxel_size``,
@@ -209,10 +211,6 @@ The ``_get_config`` method must return a ``Config`` object with the following at
             self.name = name
             self.scale = scale
 
-        @property
-        def command(self):
-            return f"onnx --onnx-path {self.onnx_path}"
-
         def _get_config(self):
             import onnxruntime as ort
 
@@ -227,19 +225,6 @@ The ``_get_config`` method must return a ``Config`` object with the following at
                 self._output_shape + (self._output_channels,)
             )
             return config
-
-        def to_dict(self):
-            return {
-                "type": "onnx",
-                "onnx_path": self.onnx_path,
-                "input_voxel_size": ",".join(str(v) for v in self._input_voxel_size),
-                "output_voxel_size": ",".join(str(v) for v in self._output_voxel_size),
-                "input_shape": ",".join(str(v) for v in self._input_shape),
-                "output_shape": ",".join(str(v) for v in self._output_shape),
-                "output_channels": self._output_channels,
-                "name": self.name,
-                "scale": self.scale,
-            }
 
 Quick Start
 -----------
