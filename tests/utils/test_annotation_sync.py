@@ -21,6 +21,8 @@ import pytest
 import zarr
 
 from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.finetune.session import minio as session_minio
+from cellmap_flow.finetune.session import sync
 
 S0 = "annotations/vol.zarr/annotation/s0"
 
@@ -66,10 +68,10 @@ class FakeS3:
 def test_a_second_write_within_the_same_second_is_synced(tmp_path):
     s3 = FakeS3()
     s3.put(f"{S0}/0.0.0", b"first", "etag-1")
-    _, _, state = fu._diff_and_sync_chunks(s3, S0, tmp_path, {})
+    _, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
     s3.put(f"{S0}/0.0.0", b"second", "etag-2")  # same LastModified as before
 
-    changed, _, state = fu._diff_and_sync_chunks(s3, S0, tmp_path, state)
+    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
 
     assert changed == ["0.0.0"]
     assert (tmp_path / "0.0.0").read_bytes() == b"second"
@@ -81,12 +83,12 @@ def test_a_chunk_that_failed_to_download_is_retried(tmp_path):
     s3.put(f"{S0}/0.0.1", b"other", "e2")
     s3.fail.add(f"{S0}/0.0.0")
 
-    changed, _, state = fu._diff_and_sync_chunks(s3, S0, tmp_path, {})
+    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
     assert changed == ["0.0.1"]
     assert "0.0.0" not in state
 
     s3.fail.clear()
-    changed, _, state = fu._diff_and_sync_chunks(s3, S0, tmp_path, state)
+    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
     assert changed == ["0.0.0"]
     assert (tmp_path / "0.0.0").read_bytes() == b"stroke"
 
@@ -97,7 +99,7 @@ def test_a_failed_download_leaves_the_old_chunk_whole(tmp_path):
     s3.put(f"{S0}/0.0.0", b"new chunk", "e1")
     s3.partial.add(f"{S0}/0.0.0")
 
-    fu._diff_and_sync_chunks(s3, S0, tmp_path, {})
+    sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
 
     assert (tmp_path / "0.0.0").read_bytes() == b"old chunk"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["0.0.0"], "no temp file left behind"
@@ -108,12 +110,12 @@ def test_a_layout_mismatch_never_deletes_local_chunks(tmp_path, monkeypatch):
     zarr.open_group(store=remote, mode="w").create_dataset(
         "s0", shape=(8, 8, 8), chunks=(4, 4, 4), dtype="u1"
     )
-    monkeypatch.setattr(fu.s3fs, "S3Map", lambda root, s3: remote)
+    monkeypatch.setattr(sync.s3fs, "S3Map", lambda root, s3: remote)
     local = zarr.open_group(store=zarr.DirectoryStore(str(tmp_path)), mode="a")
     local.create_dataset("s0", shape=(4, 4, 4), chunks=(2, 2, 2), dtype="u1")
     local["s0"][:] = 2
 
-    mismatched = fu._sync_zarr_group_metadata(None, "annotations/vol.zarr/annotation", tmp_path)
+    mismatched = sync.sync_zarr_group_metadata(None, "annotations/vol.zarr/annotation", tmp_path)
 
     assert mismatched == {"s0"}
     again = zarr.open_group(store=zarr.DirectoryStore(str(tmp_path)), mode="r")["s0"]
@@ -134,12 +136,14 @@ def test_strokes_go_to_the_volumes_own_zarr(tmp_path, monkeypatch):
         "vol-b": {"zarr_path": str(vol_b), "corrections_dir": str(other_session),
                   "chunk_sync_state": {}},
     })
-    monkeypatch.setattr(fu, "_make_s3_filesystem", lambda: s3)
-    monkeypatch.setattr(fu, "_sync_zarr_group_metadata", lambda *a: set())
+    synced_metadata = []
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: s3)
+    monkeypatch.setattr(sync, "sync_zarr_group_metadata", lambda *a: synced_metadata.append(a[1]) or set())
     (other_session / "_virtual_sources.json").parent.mkdir(parents=True)
     (other_session / "_virtual_sources.json").write_text("{}")
 
     assert fu.sync_annotation_volume_from_minio("vol-b")
+    assert synced_metadata == ["annotations/vol-b.zarr/annotation"]
 
     assert (vol_b / "annotation" / "s0" / "0.0.0").read_bytes() == b"stroke"
     assert not (first_session / "vol-b.zarr").exists()
@@ -154,7 +158,7 @@ def test_only_one_sync_runs_at_a_time(monkeypatch):
             return []
 
     monkeypatch.setattr(fu, "minio_state", {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations"})
-    monkeypatch.setattr(fu, "_make_s3_filesystem", lambda: _Listing())
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: _Listing())
 
     with fu._sync_lock:
         worker = threading.Thread(target=fu.sync_all_annotations_from_minio, kwargs={"force": False})
@@ -166,22 +170,22 @@ def test_only_one_sync_runs_at_a_time(monkeypatch):
 
 
 def test_a_failing_periodic_sync_warns_once_per_interval(monkeypatch, caplog):
-    def broken(force=True):
+    def broken(force=True, **kw):
         raise ConnectionError("MinIO is gone")
 
     monkeypatch.setattr(fu, "minio_state", {"ip": "127.0.0.1", "port": 9000, "output_base": "/x"})
-    monkeypatch.setattr(fu, "sync_all_annotations_from_minio", broken)
-    monkeypatch.setattr(fu, "_sync_failures", {"count": 0, "last_warned": None})
+    monkeypatch.setattr(sync, "sync_all", broken)
+    monkeypatch.setattr(sync, "_sync_failures", {"count": 0, "last_warned": None})
 
-    with caplog.at_level(logging.WARNING, logger=fu.logger.name):
+    with caplog.at_level(logging.WARNING, logger=sync.logger.name):
         fu._periodic_sync_once()
         fu._periodic_sync_once()
 
     warnings = [r for r in caplog.records if "Periodic annotation sync failed" in r.getMessage()]
     assert len(warnings) == 1
-    assert fu._sync_failures["count"] == 2
+    assert sync._sync_failures["count"] == 2
 
 
 @pytest.fixture(autouse=True)
 def _small_pool(monkeypatch):
-    monkeypatch.setattr(fu, "_get_sync_worker_count", lambda: 2)
+    monkeypatch.setattr(sync, "worker_count", lambda: 2)

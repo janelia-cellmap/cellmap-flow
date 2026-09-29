@@ -7,16 +7,19 @@
 - `mc alias set` wrote the shared ~/.mc config, so two dashboards
   repointed each other's alias.
 - Nothing stopped two requests from starting two servers.
-No real MinIO or mc runs here: subprocess is faked.
+No real MinIO or mc runs here: subprocess and s3fs are faked.
 """
 
 import subprocess
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.finetune.session import minio as session_minio
+from cellmap_flow.finetune.session import sync as session_sync
 
 
 class _Proc:
@@ -58,21 +61,30 @@ def fake_minio(monkeypatch, tmp_path):
         procs.append(_Proc(*a, **k))
         return procs[-1]
 
+    calls = []
+
+    def recorded(name, value=None):
+        return lambda *a, **k: calls.append(name) or value
+
     _Proc.started = 0
     monkeypatch.setattr(fu, "minio_state", {"process": None, "bucket": "annotations",
                                             "output_base": None, "sync_thread": None})
-    monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
-    monkeypatch.setattr(fu, "get_local_ip", lambda: "127.0.0.1")
-    monkeypatch.setattr(fu, "find_available_port", lambda: 9123)
-    monkeypatch.setattr(fu, "start_periodic_sync", lambda: None)
-    monkeypatch.setattr(fu, "_wait_for_minio_ready", lambda ip, port, proc, timeout=0: True)
-    monkeypatch.setattr(fu.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(fu.subprocess, "run", fake_run)
+    monkeypatch.setattr(fu, "_require_minio_binaries", recorded("preflight"))
+    monkeypatch.setattr(session_minio, "get_local_ip", recorded("ip", "127.0.0.1"))
+    monkeypatch.setattr(session_minio, "find_available_port", recorded("port", 9123))
+    monkeypatch.setattr(session_sync, "start_periodic_sync", recorded("sync thread"))
+    monkeypatch.setattr(session_minio, "wait_for_ready", recorded("ready", True))
+    # The pull before the mirror asks MinIO whether it has the volume: no.
+    bucket = SimpleNamespace(exists=recorded("exists", False))
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: bucket)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    fake_run.calls = calls
     return runs, procs, fake_run
 
 
 def test_minio_logs_to_a_file_and_mc_uses_its_own_alias(fake_minio, tmp_path):
-    runs, procs, _ = fake_minio
+    runs, procs, fake_run = fake_minio
     corrections = tmp_path / "corrections"
     url = fu.ensure_minio_serving(str(corrections / "vol.zarr"), "vol", output_base_dir=str(corrections))
 
@@ -83,6 +95,7 @@ def test_minio_logs_to_a_file_and_mc_uses_its_own_alias(fake_minio, tmp_path):
     for cmd, env in runs:
         assert env.get(f"MC_HOST_{fu.MC_ALIAS}") == "http://minio:minio123@127.0.0.1:9123", cmd
     assert fu.minio_state["process"] is procs[0]
+    assert fake_run.calls == ["preflight", "ip", "port", "ready", "sync thread", "exists"]
 
 
 def test_a_failed_setup_leaves_no_half_started_server(fake_minio, tmp_path):
@@ -96,7 +109,7 @@ def test_a_failed_setup_leaves_no_half_started_server(fake_minio, tmp_path):
 
 def test_a_server_that_never_gets_ready_is_not_used(fake_minio, tmp_path, monkeypatch):
     _, procs, _ = fake_minio
-    monkeypatch.setattr(fu, "_wait_for_minio_ready", lambda ip, port, proc, timeout=0: False)
+    monkeypatch.setattr(session_minio, "wait_for_ready", lambda ip, port, proc, timeout=0: False)
     with pytest.raises(RuntimeError, match="did not become ready"):
         fu.ensure_minio_serving(str(tmp_path / "vol.zarr"), "vol", output_base_dir=str(tmp_path))
     assert fu.minio_state["process"] is None
@@ -108,7 +121,7 @@ def test_two_requests_start_one_server(fake_minio, tmp_path, monkeypatch):
         time.sleep(0.2)
         return True
 
-    monkeypatch.setattr(fu, "_wait_for_minio_ready", slow_ready)
+    monkeypatch.setattr(session_minio, "wait_for_ready", slow_ready)
     threads = [
         threading.Thread(
             target=fu.ensure_minio_serving,
@@ -120,8 +133,10 @@ def test_two_requests_start_one_server(fake_minio, tmp_path, monkeypatch):
     for t in threads:
         t.start()
     for t in threads:
-        t.join(5)
+        t.join()
     assert _Proc.started == 1
+    runs, _, _ = fake_minio
+    assert [cmd[1] for cmd, _ in runs].count("mirror") == 2, "both volumes were served"
 
 
 def test_readiness_is_asked_of_minio(monkeypatch):
@@ -144,5 +159,5 @@ def test_readiness_is_asked_of_minio(monkeypatch):
         return _Response()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert fu._wait_for_minio_ready("127.0.0.1", 9123, _Proc(["minio"]), timeout=1)
+    assert session_minio.wait_for_ready("127.0.0.1", 9123, _Proc(["minio"]), timeout=1)
     assert asked == ["http://127.0.0.1:9123/minio/health/ready"]

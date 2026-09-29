@@ -25,7 +25,6 @@ from typing import Literal, Optional
 import numpy as np
 import zarr
 
-from cellmap_flow.finetune.session import sync
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.io.ome import ome_corner, ome_translation
 
@@ -328,6 +327,7 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
         _read_voxel_size_and_offset,
         remap_labels,
     )
+    from cellmap_flow.finetune.session import sync  # sync reads volumes: import here
 
     t0 = time.time()
     sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)

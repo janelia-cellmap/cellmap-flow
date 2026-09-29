@@ -6,11 +6,14 @@ import into a painted volume, or a resume, overwrote recent strokes with
 stale local chunks.
 """
 
+import subprocess
 from types import SimpleNamespace
 
 import pytest
 
 from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.finetune.session import minio as session_minio
+from cellmap_flow.finetune.session import sync
 
 
 class _Alive:
@@ -27,26 +30,25 @@ def order(monkeypatch):
                                             "bucket": "annotations", "output_base": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
     monkeypatch.setattr(
-        fu.subprocess, "run",
+        subprocess, "run",
         lambda cmd, **k: events.append(("mc", cmd[1])) or SimpleNamespace(returncode=0, stderr=""),
     )
     monkeypatch.setattr(
-        fu, "sync_annotation_volume_from_minio",
-        lambda volume_id, force=False, zarr_path=None: events.append(("pull", volume_id, zarr_path)),
+        sync, "sync_volume",
+        lambda volume_id, force=False, zarr_path=None, **k: events.append(("pull", volume_id, zarr_path)),
     )
     return events
 
 
-def test_painted_chunks_are_pulled_before_the_mirror(order, monkeypatch, tmp_path):
-    monkeypatch.setattr(fu, "_make_s3_filesystem", lambda: SimpleNamespace(exists=lambda path: True))
+@pytest.mark.parametrize("in_minio, pulled", [(True, True), (False, False)])
+def test_painted_chunks_are_pulled_before_the_mirror(order, monkeypatch, tmp_path, in_minio, pulled):
+    asked = []
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: SimpleNamespace(
+        exists=lambda path: asked.append(path) or in_minio))
     fu.ensure_minio_serving(str(tmp_path / "vol-1.zarr"), "vol-1")
-    assert order == [("pull", "vol-1", str(tmp_path / "vol-1.zarr")), ("mc", "mirror")]
-
-
-def test_a_volume_minio_does_not_have_yet_is_just_mirrored(order, monkeypatch, tmp_path):
-    monkeypatch.setattr(fu, "_make_s3_filesystem", lambda: SimpleNamespace(exists=lambda path: False))
-    fu.ensure_minio_serving(str(tmp_path / "vol-1.zarr"), "vol-1")
-    assert order == [("mc", "mirror")]
+    assert asked == ["annotations/vol-1.zarr/annotation/s0"]
+    pull = [("pull", "vol-1", str(tmp_path / "vol-1.zarr"))] if pulled else []
+    assert order == pull + [("mc", "mirror")]
 
 
 def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path):

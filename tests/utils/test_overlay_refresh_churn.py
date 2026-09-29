@@ -187,12 +187,10 @@ def test_the_periodic_sync_never_writes_to_the_viewer(monkeypatch):
     """
     import inspect
 
-    from cellmap_flow.dashboard import finetune_utils
+    from cellmap_flow.finetune.session import sync
 
-    # The loop runs each round through _periodic_sync_once.
-    body = inspect.getsource(finetune_utils.periodic_sync_annotations) + inspect.getsource(
-        finetune_utils._periodic_sync_once
-    )
+    # The loop runs each round through periodic_sync_once.
+    body = inspect.getsource(sync.periodic_sync) + inspect.getsource(sync.periodic_sync_once)
     # Comments in there explain at length why it must not touch the viewer,
     # so look at the code only.
     code = "\n".join(
@@ -201,7 +199,7 @@ def test_the_periodic_sync_never_writes_to_the_viewer(monkeypatch):
     assert "refresh_annotated_regions_layer" not in code
     assert "viewer" not in code
     # It must still do its actual job.
-    assert "sync_all_annotations_from_minio" in code
+    assert "sync_all(" in code
 
 
 def test_refresh_is_not_callable_on_a_timer_any_more():
