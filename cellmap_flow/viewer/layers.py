@@ -26,7 +26,7 @@ import neuroglancer
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.pipeline_spec import chain_is_segmentation
 from cellmap_flow.utils.output_probe import output_display_range
-from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS, get_raw_layer, prediction_shader
+from cellmap_flow.viewer.raw import PREDICTION_COLORS, get_raw_layer, prediction_shader
 from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import ARGS_KEY
 
@@ -140,7 +140,7 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
 
 
 def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None):
-    """The raw data's layer (scale_pyramid.get_raw_layer), with the user's
+    """The raw data's layer (viewer.raw.get_raw_layer), with the user's
     ``shader`` and ``shader_controls`` in place of the default contrast.
 
     A layer with no shader reports the string "None", which is not one.

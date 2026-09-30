@@ -73,7 +73,7 @@ def _raw_dtype_and_range(dataset_path):
     dtype_name, value_range = None, None
     try:
         from cellmap_flow.image_data_interface import ImageDataInterface
-        from cellmap_flow.utils.scale_pyramid import _auto_contrast_range
+        from cellmap_flow.viewer.raw import _auto_contrast_range
 
         # normalize=False: we want the range of the data as stored, which is
         # what the normalizers being proposed have to map from.

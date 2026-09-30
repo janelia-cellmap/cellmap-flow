@@ -66,7 +66,7 @@ def add_segmentation_layer_to_viewer_response(data):
         if session.viewer is None:
             return _error("viewer not initialized")
 
-        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+        from cellmap_flow.viewer.raw import get_raw_layer
 
         layer = get_raw_layer(
             path, segmentation=True, disable_meshes=bool(data.get("disable_meshes", False))
@@ -94,7 +94,7 @@ def add_image_layer_to_viewer_response(data):
         if session.viewer is None:
             return _error("viewer not initialized")
 
-        from cellmap_flow.utils.scale_pyramid import get_raw_layer
+        from cellmap_flow.viewer.raw import get_raw_layer
 
         layer = get_raw_layer(path, normalize=False)
         if data.get("shader"):

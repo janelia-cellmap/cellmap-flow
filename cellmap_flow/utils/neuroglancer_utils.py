@@ -10,7 +10,7 @@ import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
+from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import get_norms_post_args
 from cellmap_flow.viewer.bootstrap import new_viewer
