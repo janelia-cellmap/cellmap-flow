@@ -22,48 +22,21 @@ Routes: POST ``/api/finetune/load-crops`` (the import), GET
 
 import logging
 import os
-import threading
 import time
 
 from flask import jsonify, request
 from pydantic import ValidationError
 
-from cellmap_flow.utils.model_geometry import resolve_model_geometry
-
-# Module-level progress tracker, keyed by load_id supplied by the client.
-# Each value is the most recent progress snapshot for that load + its
-# final result (or None while in progress). Old entries are evicted after
-# 5 minutes to bound memory.
-_PROGRESS: dict = {}
-_PROGRESS_LOCK = threading.Lock()
-_PROGRESS_TTL_SECONDS = 300
-
-
-def _set_progress(load_id, **fields):
-    if not load_id:
-        return
-    with _PROGRESS_LOCK:
-        entry = _PROGRESS.setdefault(load_id, {"created_at": time.time()})
-        entry.update(fields)
-        entry["updated_at"] = time.time()
-        now = time.time()
-        stale = [
-            k for k, v in _PROGRESS.items()
-            if now - v.get("updated_at", v.get("created_at", now)) > _PROGRESS_TTL_SECONDS
-        ]
-        for k in stale:
-            _PROGRESS.pop(k, None)
-
-
 from cellmap_flow.dashboard.finetune_utils import (
     ensure_minio_serving,
     sync_annotation_volume_from_minio,
 )
-from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.progress import Progress
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
     serve_new_volume,
 )
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     current_chain,
     ensure_corrections_storage,
@@ -78,8 +51,13 @@ from cellmap_flow.finetune.session.volume import (
     write_crop_into_volume,
 )
 from cellmap_flow.finetune.session.manifest import write_manifest
+from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
+
+# Each import's progress, by the load_id the page sent with it: the phase,
+# the crop and tile it is on, and at the end what it imported.
+_PROGRESS = Progress()
 
 
 # ---------------------------------------------------------------------------
@@ -165,17 +143,16 @@ def load_crops_from_yaml():
         output_path = data.get("output_path")
         yaml_input = data.get("yaml")
         load_id = data.get("load_id")
-        if load_id:
-            _set_progress(
-                load_id,
-                phase="starting",
-                current_path="",
-                tile_done=0,
-                tile_total=0,
-                crop_index=0,
-                n_crops=0,
-                done=False,
-            )
+        _PROGRESS.update(
+            load_id,
+            phase="starting",
+            current_path="",
+            tile_done=0,
+            tile_total=0,
+            crop_index=0,
+            n_crops=0,
+            done=False,
+        )
 
         started_at = time.time()
 
@@ -194,8 +171,7 @@ def load_crops_from_yaml():
             elapsed = time.time() - started_at
             stamped = f"[{elapsed:.0f}s] {message}"
             logger.info(stamped)
-            if load_id:
-                _set_progress(load_id, phase=phase, message=stamped, **extra)
+            _PROGRESS.update(load_id, phase=phase, message=stamped, **extra)
 
         if not yaml_input:
             return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400
@@ -274,30 +250,28 @@ def load_crops_from_yaml():
         errors = []
         total_fg_written = 0
         for crop_index, entry in enumerate(crops_config.crops):
-            if load_id:
-                _set_progress(
-                    load_id,
-                    phase="crop_start",
-                    crop_index=crop_index,
-                    n_crops=n_crops,
-                    current_path=entry.path,
-                    tile_done=0,
-                    tile_total=0,
-                    done=False,
-                )
+            _PROGRESS.update(
+                load_id,
+                phase="crop_start",
+                crop_index=crop_index,
+                n_crops=n_crops,
+                current_path=entry.path,
+                tile_done=0,
+                tile_total=0,
+                done=False,
+            )
             try:
                 def _cb(done, total, ci=crop_index, p=entry.path):
-                    if load_id:
-                        _set_progress(
-                            load_id,
-                            phase="tile",
-                            crop_index=ci,
-                            n_crops=n_crops,
-                            current_path=p,
-                            tile_done=int(done),
-                            tile_total=int(total),
-                            done=False,
-                        )
+                    _PROGRESS.update(
+                        load_id,
+                        phase="tile",
+                        crop_index=ci,
+                        n_crops=n_crops,
+                        current_path=p,
+                        tile_done=int(done),
+                        tile_total=int(total),
+                        done=False,
+                    )
 
                 n_fg = write_crop_into_volume(
                     volume_meta, entry, progress_callback=_cb
@@ -351,16 +325,15 @@ def load_crops_from_yaml():
         except Exception as e:
             logger.warning(f"refresh_annotated_regions_layer failed: {e}")
 
-        if load_id:
-            _set_progress(
-                load_id,
-                phase="done",
-                done=True,
-                n_crops_imported=n_crops - len(errors),
-                n_errors=len(errors),
-                volume_id=volume_id,
-                fg_voxels_written=total_fg_written,
-            )
+        _PROGRESS.update(
+            load_id,
+            phase="done",
+            done=True,
+            n_crops_imported=n_crops - len(errors),
+            n_errors=len(errors),
+            volume_id=volume_id,
+            fg_voxels_written=total_fg_written,
+        )
 
         return jsonify(
             {
@@ -380,21 +353,13 @@ def load_crops_from_yaml():
 
 
 # ---------------------------------------------------------------------------
-# Auxiliary endpoints (file read + progress polling) — unchanged behavior
+# Auxiliary endpoints (progress polling + file read)
 # ---------------------------------------------------------------------------
 
 @finetune_bp.route("/api/finetune/load-crops-progress", methods=["GET"])
 def get_load_crops_progress():
     """Return current progress for an in-flight ``/api/finetune/load-crops`` call."""
-    load_id = request.args.get("load_id")
-    if not load_id:
-        return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
-    with _PROGRESS_LOCK:
-        snapshot = _PROGRESS.get(load_id)
-        snapshot = dict(snapshot) if snapshot else None
-    if snapshot is None:
-        return jsonify({"success": False, "error": f"Unknown load_id {load_id}"}), 404
-    return jsonify({"success": True, "progress": snapshot})
+    return _PROGRESS.response(request.args.get("load_id"))
 
 
 @finetune_bp.route("/api/finetune/read-yaml", methods=["GET"])

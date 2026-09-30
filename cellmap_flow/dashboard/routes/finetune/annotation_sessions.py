@@ -8,13 +8,12 @@ Routes: POST ``/api/finetune/list-existing-sessions``, POST
 import json
 import logging
 import os
-import threading
-import time
 from datetime import datetime
 
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.progress import Progress
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
@@ -30,43 +29,16 @@ from cellmap_flow.finetune.session.volume import read_volume
 
 logger = logging.getLogger(__name__)
 
-
-# Module-level progress tracker for in-flight Resume operations, keyed by a
-# load_id supplied by the client. Same pattern as
-# yaml_crops._PROGRESS / _set_progress so the dashboard can poll for updates
-# while the long copytree + mirror is in flight.
-_RESUME_PROGRESS: dict = {}
-_RESUME_PROGRESS_LOCK = threading.Lock()
-_RESUME_PROGRESS_TTL_SECONDS = 300
-
-
-def _set_resume_progress(load_id, **fields):
-    if not load_id:
-        return
-    with _RESUME_PROGRESS_LOCK:
-        entry = _RESUME_PROGRESS.setdefault(load_id, {"created_at": time.time()})
-        entry.update(fields)
-        entry["updated_at"] = time.time()
-        now = time.time()
-        stale = [
-            k for k, v in _RESUME_PROGRESS.items()
-            if now - v.get("updated_at", v.get("created_at", now)) > _RESUME_PROGRESS_TTL_SECONDS
-        ]
-        for k in stale:
-            _RESUME_PROGRESS.pop(k, None)
+# Each resume's progress, by the load_id the page sent with it: the phase
+# (copying the zarrs, then MinIO's data, then mirroring), and the files and
+# zarrs copied so far.
+_RESUME_PROGRESS = Progress()
 
 
 @finetune_bp.route("/api/finetune/load-existing-volume-progress", methods=["GET"])
 def load_existing_volume_progress():
-    load_id = request.args.get("load_id")
-    if not load_id:
-        return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
-    with _RESUME_PROGRESS_LOCK:
-        snapshot = _RESUME_PROGRESS.get(load_id)
-        snapshot = dict(snapshot) if snapshot else None
-    if snapshot is None:
-        return jsonify({"success": False, "error": f"Unknown load_id {load_id}"}), 404
-    return jsonify({"success": True, "progress": snapshot})
+    """How far the resume with this load_id has got."""
+    return _RESUME_PROGRESS.response(request.args.get("load_id"))
 
 
 def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total):
@@ -112,7 +84,7 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
             fut.result()  # surface any exception
             copied_so_far += 1
             if copied_so_far % progress_step == 0 or copied_so_far == files_in_src:
-                _set_resume_progress(
+                _RESUME_PROGRESS.update(
                     load_id,
                     phase="copying",
                     current=label,
@@ -221,16 +193,15 @@ def load_existing_volume():
         source_session_path = data.get("source_session_path")
         output_path = data.get("output_path")
         load_id = data.get("load_id")
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="starting",
-                done=False,
-                files_done=0,
-                files_total=0,
-                parent_done=0,
-                parent_total=0,
-            )
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="starting",
+            done=False,
+            files_done=0,
+            files_total=0,
+            parent_done=0,
+            parent_total=0,
+        )
         if not source_session_path or not output_path:
             return jsonify(
                 {"success": False, "error": "source_session_path and output_path required"}
@@ -270,17 +241,16 @@ def load_existing_volume():
             if os.path.exists(dst):
                 logger.info(f"Skipping {item} (already exists in target)")
                 continue
-            if load_id:
-                _set_resume_progress(
-                    load_id,
-                    phase="copying",
-                    current=item,
-                    files_done=0,
-                    files_total=0,
-                    parent_done=idx,
-                    parent_total=len(zarr_entries),
-                    done=False,
-                )
+            _RESUME_PROGRESS.update(
+                load_id,
+                phase="copying",
+                current=item,
+                files_done=0,
+                files_total=0,
+                parent_done=idx,
+                parent_total=len(zarr_entries),
+                done=False,
+            )
             _copytree_with_progress(
                 src, dst, load_id, label=item,
                 parent_done=idx, parent_total=len(zarr_entries),
@@ -298,29 +268,27 @@ def load_existing_volume():
                     "if the source had unsynced chunks."
                 )
             elif not os.path.exists(new_minio):
-                if load_id:
-                    _set_resume_progress(
-                        load_id,
-                        phase="copying_minio",
-                        current=".minio",
-                        files_done=0, files_total=0,
-                        parent_done=len(zarr_entries),
-                        parent_total=len(zarr_entries) + 1,
-                        done=False,
-                    )
+                _RESUME_PROGRESS.update(
+                    load_id,
+                    phase="copying_minio",
+                    current=".minio",
+                    files_done=0, files_total=0,
+                    parent_done=len(zarr_entries),
+                    parent_total=len(zarr_entries) + 1,
+                    done=False,
+                )
                 _copytree_with_progress(
                     source_minio, new_minio, load_id, label=".minio",
                     parent_done=len(zarr_entries), parent_total=len(zarr_entries) + 1,
                 )
                 copied_minio = True
 
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="mirroring_minio",
-                current=volume_dir,
-                done=False,
-            )
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="mirroring_minio",
+            current=volume_dir,
+            done=False,
+        )
 
         lineage_file = os.path.join(new_session_path, "loaded_from.json")
         with open(lineage_file, "w") as f:
@@ -356,15 +324,14 @@ def load_existing_volume():
         write_volume_manifest(session.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="done",
-                done=True,
-                volume_id=volume_id,
-                copied_count=len(copied),
-                painted_chunk_count=s0_count,
-            )
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="done",
+            done=True,
+            volume_id=volume_id,
+            copied_count=len(copied),
+            painted_chunk_count=s0_count,
+        )
 
         return jsonify(
             {
@@ -383,6 +350,6 @@ def load_existing_volume():
         )
     except Exception as e:
         if load_id:
-            _set_resume_progress(load_id, phase="error", done=True, error=str(e))
+            _RESUME_PROGRESS.update(load_id, phase="error", done=True, error=str(e))
         logger.error(f"Error loading existing volume: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
