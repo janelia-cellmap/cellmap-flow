@@ -329,7 +329,8 @@ def strategy_for(
     """
     if not is_peft_model(model):
         return FullStrategy(teacher_model=teacher_model)
-    config = model.peft_config["default"]
+    active = model.active_adapter
+    config = model.peft_config[active[0] if isinstance(active, (list, tuple)) else active]
     return LoraStrategy(
         r=lora_r if lora_r is not None and lora_r > 0 else config.r,
         alpha=alpha if alpha is not None else config.lora_alpha,
