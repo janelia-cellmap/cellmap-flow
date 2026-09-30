@@ -323,8 +323,7 @@ def build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Opt
 
 
 def majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
-    """Downsample integer labels by exact per-axis block factors, by majority
-    vote (the mode) over each block.
+    """Downsample integer labels by whole per-axis factors: the majority vote of each block.
 
     Nearest-neighbour sampling always picks one fixed corner of each block
     (scipy.ndimage.zoom with grid_mode=True picks the block's *last* voxel on

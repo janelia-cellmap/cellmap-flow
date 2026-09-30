@@ -230,10 +230,11 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
 
 
 def volume_record(volume_id, zarr_path=None, *, volumes):
-    """The registry record of ``volume_id``, or None if there is none.
+    """The registry record of ``volume_id``, rebuilt from ``zarr_path`` if need be.
 
-    When the registry has none yet (after a dashboard restart, say), it is
-    rebuilt from ``zarr_path``'s attrs and registered.
+    When the registry has none yet (after a dashboard restart, say), the
+    record is rebuilt from ``zarr_path``'s attrs and registered. None if
+    neither gives one.
     """
     if volume_id in volumes:
         return volumes[volume_id]
