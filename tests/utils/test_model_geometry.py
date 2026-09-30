@@ -33,8 +33,13 @@ from cellmap_flow.models.geometry import ModelGeometry
             dict(input_voxel_size=(5.24, 4, 4), read_shape=(52.4, 40, 40), input_shape=(10, 10, 10),
                  output_shape=(5, 6, 6), context=(13, 8, 8), block_shape=(5, 6, 6, 3)),
         ),
+        (  # a string names one channel: "mito" is not m, i, t and o
+            dict(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8), read_shape=(32, 32, 32),
+                 write_shape=(32, 32, 32), output_channels=1, channels="mito"),
+            dict(context=(0, 0, 0), block_shape=(4, 4, 4, 1), channel_names=("mito",)),
+        ),
     ],
-    ids=["declared", "floor", "fractional"],
+    ids=["declared", "floor", "fractional", "one-name-as-a-string"],
 )
 def test_what_follows_from_a_configs_sizes(config, expected):
     geometry = ModelGeometry.from_config(SimpleNamespace(**config))

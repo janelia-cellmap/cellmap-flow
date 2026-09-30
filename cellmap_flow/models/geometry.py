@@ -47,13 +47,26 @@ def _voxels(extent, voxel_size) -> Tuple[int, ...]:
     return tuple(int(v) for v in np.where(np.isclose(quotient, nearest), nearest, np.floor(quotient)))
 
 
+def _channel_names(names) -> Optional[Tuple[str, ...]]:
+    """``names`` as a tuple of strings, or None when it names no channel.
+
+    A string is one name: iterating it would make every letter a channel.
+    """
+    if isinstance(names, str):
+        names = [names] if names else []
+    if names is None or len(names) == 0:
+        return None
+    return tuple(str(c) for c in names)
+
+
 def channel_names_of(config):
-    """The channel names a config gives, or None: the first non-empty one of
-    channels, channels_names (Hugging Face), classes, or a ModelGeometry's
-    channel_names."""
+    """The channel names a config gives, as a tuple, or None: the first
+    non-empty one of channels, channels_names (Hugging Face), classes, or a
+    ModelGeometry's channel_names. A string is one name, so
+    ``channels = "mito"`` is ``("mito",)``."""
     for attr in ("channels", "channels_names", "classes", "channel_names"):
-        names = getattr(config, attr, None)
-        if names is not None and len(names) > 0:
+        names = _channel_names(getattr(config, attr, None))
+        if names is not None:
             return names
     return None
 
@@ -86,8 +99,7 @@ class ModelGeometry:
         set_("output_channels", int(self.output_channels))
         set_("input_channels", int(self.input_channels))
         set_("chunk_output_axes", tuple(self.chunk_output_axes))
-        if self.channel_names is not None:
-            set_("channel_names", tuple(str(c) for c in self.channel_names))
+        set_("channel_names", _channel_names(self.channel_names))
         if self.output_dtype is not None:
             set_("output_dtype", np.dtype(self.output_dtype))
         if self.declared_block_shape is not None:
