@@ -20,7 +20,8 @@ def _forget_test_classes():
 
 
 def _built_in(types):
-    return {k: v for k, v in types.items() if v.__module__ == "cellmap_flow.models.models_config"}
+    """The types cellmap_flow defines, without the ones tests and plugins add."""
+    return {k: v for k, v in types.items() if v.__module__.startswith("cellmap_flow.")}
 
 
 def test_the_built_in_types_and_how_yaml_names_them():

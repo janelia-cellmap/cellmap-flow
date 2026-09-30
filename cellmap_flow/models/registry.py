@@ -1,7 +1,8 @@
 """The model types cellmap-flow knows, and how a model config is built from strings.
 
 Every ModelConfig subclass is a model type: the built-in ones in
-models_config and any that a plugin defines. The model CLIs
+``models/configs`` (imported from models_config) and any that a plugin
+defines. The model CLIs
 (``cellmap_flow``, ``cellmap_flow_server``, ``cellmap_flow_yaml``), YAML
 configs, the dashboard's model form and the finetune CLI's model entries
 all look types up here, so a plugin type is a type everywhere.
@@ -21,10 +22,10 @@ because each reproduces what its caller has always done:
   shorthands, then ``coerce_cli_args``.
 
 Importing this module imports neither torch, flask, huggingface_hub nor
-``cellmap_flow.globals``. The classes live in models_config, which reaches
-globals through the image data interface, so it is imported only when a
-function needs them. ``describe_types`` reads constructor signatures only, so
-it never imports bioimageio, dacapo or cellmap_models either.
+``cellmap_flow.globals``. The model config classes, which bring numpy and
+funlib (most of a second), are imported only when a function needs them.
+``describe_types`` reads constructor signatures only, so it never imports
+bioimageio, dacapo or cellmap_models either.
 """
 
 import inspect

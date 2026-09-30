@@ -35,7 +35,7 @@ def server_argv_for(model_type: str, params: dict, data_path: str) -> list:
     go in signature order, and None ones are left out, as in
     ``ModelConfig.command``.
     """
-    from cellmap_flow.models.models_config import command_argv
+    from cellmap_flow.models.configs.base import command_argv
     from cellmap_flow.models.registry import model_type as lookup
 
     return [*_serve_words(), *command_argv(lookup(model_type), params), "-d", str(data_path)]

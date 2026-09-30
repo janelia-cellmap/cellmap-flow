@@ -48,7 +48,8 @@ check(["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr", "cel
     # workers import too; a type loads its framework only to build a model.
     "registry": """
 check(["cellmap_flow.models.registry", "cellmap_flow.serving.launch"],
-      LIGHT + ["cellmap_flow.models.models_config", "torch", "huggingface_hub", "peft"])
+      LIGHT + ["cellmap_flow.models.models_config", "cellmap_flow.models.configs",
+               "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
 check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "torch", "huggingface_hub", "peft"])

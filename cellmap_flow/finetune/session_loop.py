@@ -127,7 +127,7 @@ def _start_inference_server_background(
     # Use the already-trained model
     logger.info("Using trained LoRA model for inference...")
 
-    from cellmap_flow.models.models_config import _get_device
+    from cellmap_flow.models.configs.base import _get_device
     device = _get_device()
     trained_model.eval()
     logger.info(f"Model set to eval mode on {device}")
