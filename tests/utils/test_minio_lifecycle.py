@@ -93,7 +93,7 @@ def test_minio_logs_to_a_file_and_mc_uses_its_own_alias(fake_minio, tmp_path):
     assert (corrections / ".minio.log").exists()
     assert not any(cmd[:3] == ["mc", "alias", "set"] for cmd, _ in runs), "no shared ~/.mc config"
     for cmd, env in runs:
-        assert env.get(f"MC_HOST_{fu.MC_ALIAS}") == "http://minio:minio123@127.0.0.1:9123", cmd
+        assert env.get(f"MC_HOST_{session_minio.MC_ALIAS}") == "http://minio:minio123@127.0.0.1:9123", cmd
     assert fu.minio_state["process"] is procs[0]
     assert fake_run.calls == ["preflight", "ip", "port", "ready", "sync thread", "exists"]
 

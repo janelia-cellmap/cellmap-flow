@@ -14,10 +14,8 @@ import torch
 import pytest
 import zarr
 
-from cellmap_flow.finetune.virtual_dataset import (
-    VirtualPatchDataset,
-    load_good_regions_for,
-)
+from cellmap_flow.finetune.session.manifest import load_good_regions_for
+from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
 
 MULTISCALES = [{
     "version": "0.4",

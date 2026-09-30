@@ -12,10 +12,7 @@ import os
 import pytest
 
 from cellmap_flow.dashboard.routes.finetune import common, training
-from cellmap_flow.finetune.virtual_dataset import (
-    VIRTUAL_MANIFEST_FILENAME,
-    read_manifest,
-)
+from cellmap_flow.finetune.session.manifest import VIRTUAL_MANIFEST_FILENAME, read_manifest
 
 
 def _volume(corrections_dir, **overrides):
@@ -112,10 +109,7 @@ def test_backfill_declines_when_no_volume_belongs_to_that_session(
 def test_good_regions_live_beside_the_corrections_dir_not_inside_it(corrections):
     """load_good_regions_for looks one level up; keep the writer in step."""
     from cellmap_flow.dashboard.routes.finetune import good_regions as gr
-    from cellmap_flow.finetune.virtual_dataset import (
-        GOOD_REGIONS_FILENAME,
-        load_good_regions_for,
-    )
+    from cellmap_flow.finetune.session.manifest import GOOD_REGIONS_FILENAME, load_good_regions_for
 
     session_dir = os.path.dirname(corrections)
     with open(os.path.join(session_dir, GOOD_REGIONS_FILENAME), "w") as f:

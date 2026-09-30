@@ -8,10 +8,10 @@ from datetime import datetime
 from flask import jsonify
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
-from cellmap_flow.dashboard.routes.finetune.annotation_core import _register_annotation_volume
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     rewrite_minio_url_for_proxy,
+    session_store,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
@@ -334,7 +334,7 @@ def load_existing_volume_response(data):
         # Whatever geometry the copied .zattrs has; what it lacks stays None.
         record = read_volume(new_volume_path, require_geometry=False)
         record.pop("chunk_sync_state")
-        _register_annotation_volume(volume_id, **record)
+        session_store().register_volume(volume_id, **record)
         # A resumed session is trained the same way a fresh one is. The
         # geometry comes from the copied .zattrs, so a volume written before
         # those keys existed gets no manifest and cannot be trained --

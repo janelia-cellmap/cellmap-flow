@@ -111,7 +111,7 @@ def _backfill_manifest(corrections_dir):
     then has nothing the trainer can read, and submit refuses it.
     """
     from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
-    from cellmap_flow.finetune.virtual_dataset import read_manifest
+    from cellmap_flow.finetune.session.manifest import read_manifest
 
     volumes = getattr(g, "annotation_volumes", {}) or {}
     for volume in reversed(list(volumes.values())):
@@ -130,7 +130,7 @@ def _backfill_manifest(corrections_dir):
 
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
+    from cellmap_flow.finetune.session.manifest import write_manifest
     from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
 
     current_norm = current_input_norm_config()
@@ -286,7 +286,7 @@ def submit_finetuning_response(data):
         # data. Only a session without a manifest was synced here, to
         # materialize the per-chunk extracts of the removed legacy dataset;
         # without a manifest the job manager refuses the submit anyway.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
         if existing_manifest is None:
@@ -693,7 +693,7 @@ def restart_finetuning_job_response(job_id, data):
         # sync also materialized per-chunk raw extracts the virtual dataset
         # never reads, which on a big session took minutes. The sync is just
         # the chunk diff now.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
         job_record = jobs.get(job_id)

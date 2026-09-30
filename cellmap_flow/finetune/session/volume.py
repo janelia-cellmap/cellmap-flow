@@ -100,16 +100,6 @@ def _grid(raw_dataset_path, output_voxel_size, chunk_size, rounding):
     return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
 
 
-def new_volume_geometry(raw_dataset_path: str, output_voxel_size, chunk_size):
-    """``(dataset_offset_nm, shape_voxels)`` for a new volume over a raw dataset.
-
-    The volume lies on the grid of the raw level at ``output_voxel_size`` (the
-    grid predictions are made on), from that level's corner, padded to whole
-    chunks. ``dataset_offset_nm`` is voxel 0's centre; see volume_corner_nm.
-    """
-    return _grid(raw_dataset_path, output_voxel_size, chunk_size, "ceil")
-
-
 def plan_volume(
     raw_dataset_path: str,
     model_geometry,

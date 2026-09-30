@@ -23,16 +23,11 @@ import numpy as np
 import zarr
 from flask import jsonify
 
-from cellmap_flow.dashboard.finetune_utils import (
-    cc3d_relabel_instance_correction,
-    create_instance_annotation_volume_from_seg,
-    ensure_minio_serving,
-    minio_backing_store_populated,
-    sync_instance_correction_from_minio,
-)
+from cellmap_flow.dashboard import finetune_utils
+from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
-from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy
-from cellmap_flow.finetune.session.store import SessionStore
+from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy, session_store
+from cellmap_flow.finetune.session import instance as session_instance
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
@@ -137,7 +132,7 @@ def _register_volume(volume_id, zarr_path, corrections_dir, minio_url):
     """Record the volume as annotation_volume records are kept, keeping the
     chunk state the pull before the mirror just recorded."""
     attrs = dict(zarr.open(zarr_path, mode="r").attrs)
-    SessionStore(g.output_sessions, g.annotation_volumes).register_volume(
+    session_store().register_volume(
         volume_id,
         keep_sync_state=True,
         zarr_path=zarr_path,
@@ -344,7 +339,9 @@ def create_instance_correction_response(data):
             # would cause ensure_minio_serving's initial `mc mirror <seed>
             # <minio>` to overwrite those edits with the stale seed. Refuse
             # and point at the sync route.
-            if minio_backing_store_populated(output_dir, mc_target_name):
+            if session_instance.backing_store_populated(
+                finetune_utils.minio_state, output_dir, mc_target_name
+            ):
                 return (
                     jsonify({
                         "success": False,
@@ -377,7 +374,7 @@ def create_instance_correction_response(data):
             geometry, error_response = _seed_geometry(model_name, dataset_path)
             if error_response is not None:
                 return error_response
-            success, info = create_instance_annotation_volume_from_seg(
+            success, info = session_instance.seed_instance_volume(
                 output_zarr_path=effective_zarr_path,
                 instance_zarr_path=instance_zarr_path,
                 dataset_path=dataset_path,
@@ -472,8 +469,8 @@ def sync_instance_correction_response(data):
         if dst_path:
             dst_path = _zarr_target(dst_path, "dst_path", beside=zarr_path)
 
-        success, info = sync_instance_correction_from_minio(
-            zarr_path, dst_path=dst_path
+        success, info = session_instance.snapshot_from_minio(
+            finetune_utils.minio_state, zarr_path, dst_path=dst_path
         )
         if not success:
             return jsonify({"success": False, "error": info}), 500
@@ -530,7 +527,8 @@ def cc3d_relabel_annotation_response(data):
         if os.path.exists(snapshot_dir) and not os.path.isdir(snapshot_dir):
             return _error(f"snapshot_dir is not a directory: {snapshot_dir}")
 
-        success, info = cc3d_relabel_instance_correction(
+        success, info = session_instance.cc3d_relabel(
+            finetune_utils.minio_state,
             zarr_path=zarr_path,
             target_label=target_label,
             snapshot_dir=snapshot_dir,

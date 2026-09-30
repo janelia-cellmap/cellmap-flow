@@ -13,10 +13,10 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     load_user_prefs,
     rewrite_minio_url_for_proxy,
     save_user_prefs,
+    session_store,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
@@ -41,13 +41,6 @@ def _get_selected_model_config(model_name):
         )
 
     return model_config, None
-
-
-def _register_annotation_volume(volume_id, **volume_data):
-    """Record a volume being served for painting, with no chunk sync state yet."""
-    return SessionStore(g.output_sessions, g.annotation_volumes).register_volume(
-        volume_id, **volume_data
-    )
 
 
 # ``model_config.config`` is far from free: for a script model it executes the
@@ -189,7 +182,7 @@ def create_annotation_volume_response(data):
 
         minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
         minio_url = rewrite_minio_url_for_proxy(minio_url)
-        _register_annotation_volume(
+        session_store().register_volume(
             volume_id,
             zarr_path=zarr_path,
             model_name=model_name,

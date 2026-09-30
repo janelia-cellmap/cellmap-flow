@@ -58,24 +58,16 @@ import torch
 import zarr
 from torch.utils.data import Dataset
 
-# The session's files moved to finetune.session; these names stay importable
-# from here, where the job manager, the CLI and the dashboard look for them.
-from cellmap_flow.finetune.session.manifest import (  # noqa: F401  (kept names)
-    GOOD_REGIONS_FILENAME,
+from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
+from cellmap_flow.finetune.session.manifest import (
     VIRTUAL_MANIFEST_FILENAME,
-    has_painted_annotations,
     load_good_regions_for,
     read_manifest,
-    write_manifest,
 )
-from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
 from cellmap_flow.finetune.session.manifest import (
     voxels_inside_any_bbox as _voxels_inside_any_bbox,
 )
-from cellmap_flow.finetune.session.volume import (  # noqa: F401  (kept names)
-    new_volume_geometry,
-    volume_corner_nm,
-)
+from cellmap_flow.finetune.session.volume import volume_corner_nm
 
 logger = logging.getLogger(__name__)
 

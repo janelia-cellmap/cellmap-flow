@@ -7,16 +7,14 @@ corner too, so over a Janelia pyramid every label was paired with raw
 fractions of a voxel away from what it had been painted on.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import create_annotation_volume_zarr
-from cellmap_flow.finetune.virtual_dataset import (
-    VirtualPatchDataset,
-    new_volume_geometry,
-    volume_corner_nm,
-)
+from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume, volume_corner_nm
+from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
 
 # Janelia pyramids: translation = scale/2 - 4, so every level's corner is -4 nm.
 LEVELS = [("s0", 8.0, 0.0), ("s1", 16.0, 4.0)]
@@ -53,31 +51,24 @@ def raw(tmp_path):
     return str(tmp_path / "raw.zarr" / "em")
 
 
+def _geometry(raw, output_size):
+    model = SimpleNamespace(input_shape=[2 * s for s in output_size], output_shape=list(output_size),
+                            input_voxel_size=(8.0,) * 3, output_voxel_size=(16.0,) * 3)
+    return plan_volume(raw, model)
+
+
 def _volume(tmp_path, raw, output_size):
-    offset, shape = new_volume_geometry(raw, (16.0,) * 3, output_size)
-    path = str(tmp_path / "vol.zarr")
-    ok, info = create_annotation_volume_zarr(
-        zarr_path=path,
-        dataset_shape_voxels=shape,
-        output_voxel_size=np.array([16.0] * 3),
-        dataset_offset_nm=offset,
-        chunk_size=np.array(output_size),
-        dataset_path=raw,
-        model_name="m",
-        input_size=np.array(output_size) * 2,
-        input_voxel_size=np.array([8.0] * 3),
-    )
-    assert ok, info
-    return path
+    return create_volume_zarr(str(tmp_path / "vol.zarr"), _geometry(raw, output_size),
+                              dataset_path=raw, model_name="m")
 
 
 def test_a_new_volume_sits_on_the_raw_grid(tmp_path, raw):
-    offset, shape = new_volume_geometry(raw, (16.0,) * 3, (4, 4, 4))
+    geometry = _geometry(raw, (4, 4, 4))
     # s1's corner is -4, so voxel 0's centre is 4: the same value volumes
     # were given before, when s1's translation was read as its corner.
-    assert offset.tolist() == [4.0] * 3
-    assert volume_corner_nm(offset, (16.0,) * 3).tolist() == [-4.0] * 3
-    assert shape.tolist() == [16] * 3
+    assert list(geometry.dataset_offset_nm) == [4.0] * 3
+    assert volume_corner_nm(geometry.dataset_offset_nm, (16.0,) * 3).tolist() == [-4.0] * 3
+    assert list(geometry.dataset_shape_voxels) == [16] * 3
 
     path = _volume(tmp_path, raw, (4, 4, 4))
     transforms = zarr.open_group(path, mode="r")["annotation"].attrs["multiscales"][0][

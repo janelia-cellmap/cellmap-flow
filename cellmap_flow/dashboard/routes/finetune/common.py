@@ -89,9 +89,14 @@ def viewer_position_and_scales():
     return position, scales_nm
 
 
+def session_store():
+    """The dashboard's sessions and volume registry (``g``'s dicts)."""
+    return SessionStore(output_sessions, g.annotation_volumes)
+
+
 def ensure_corrections_storage(output_path):
     if output_path:
-        session_path = SessionStore(output_sessions).get_or_create(output_path)
+        session_path = session_store().get_or_create(output_path)
         corrections_dir = os.path.join(session_path, "corrections")
         os.makedirs(corrections_dir, exist_ok=True)
         zarr.open_group(corrections_dir, mode="a")
@@ -130,7 +135,7 @@ def resolve_finetune_session(corrections_path_str):
     # This dashboard's session for the base path, if it made one; else the
     # newest one on disk, which is what a dashboard restart forgot. Only for
     # training: creating volumes still starts a session of its own.
-    store = SessionStore(output_sessions)
+    store = session_store()
     base = os.path.expanduser(str(base_corrections_path))
     if base not in output_sessions:
         latest = store.latest_on_disk(base)

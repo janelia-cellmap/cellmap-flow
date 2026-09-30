@@ -393,7 +393,7 @@ class FinetuneJobManager:
         -- and only then the first correction zarr's attrs, which a crop zarr
         may not have.
         """
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         try:
             raw = (read_manifest(str(corrections_path)) or {}).get("raw_dataset_path")
@@ -738,7 +738,7 @@ class FinetuneJobManager:
         # without one failed on the GPU node with FileNotFoundError after
         # queueing. This used to count *.zarr directories instead: always
         # "Only 1 corrections" for a volume session, and any crop zarr passed.
-        from cellmap_flow.finetune.virtual_dataset import VIRTUAL_MANIFEST_FILENAME, read_manifest
+        from cellmap_flow.finetune.session.manifest import VIRTUAL_MANIFEST_FILENAME, read_manifest
 
         if read_manifest(str(corrections_path)) is None:
             raise ValueError(

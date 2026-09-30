@@ -57,13 +57,11 @@ from cellmap_flow.dashboard.finetune_utils import (
     ensure_minio_serving,
     sync_annotation_volume_from_minio,
 )
-from cellmap_flow.dashboard.routes.finetune.annotation_core import (
-    _get_selected_model_config,
-    _register_annotation_volume,
-)
+from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     rewrite_minio_url_for_proxy,
+    session_store,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.finetune.crop_loader import parse_crops_yaml
@@ -72,9 +70,6 @@ from cellmap_flow.finetune.session.volume import (
     create_volume_zarr,
     plan_volume,
     write_crop_into_volume,
-)
-from cellmap_flow.finetune.session.volume import (  # noqa: F401  (kept name)
-    majority_vote_downsample as _majority_vote_downsample,
 )
 from cellmap_flow.finetune.session.manifest import write_manifest
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
@@ -126,7 +121,7 @@ def _create_session_annotation_volume(
 
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     minio_url = rewrite_minio_url_for_proxy(minio_url)
-    _register_annotation_volume(
+    session_store().register_volume(
         volume_id,
         zarr_path=zarr_path,
         model_name=model_name,
@@ -163,17 +158,6 @@ def _ensure_editable_layer(volume_id, minio_url):
             s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
     except Exception as e:
         logger.warning(f"Could not add editable layer for {volume_id}: {e}")
-
-
-# ---------------------------------------------------------------------------
-# Crop -> volume write
-# ---------------------------------------------------------------------------
-
-def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
-    """Write a YAML crop into the volume (``session.volume.write_crop_into_volume``);
-    returns the number of FG voxels written."""
-    record = write_crop_into_volume(volume_meta, entry, progress_callback=progress_callback)
-    return record["n_fg_voxels"]
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +312,9 @@ def load_crops_from_yaml_response(data):
                             done=False,
                         )
 
-                n_fg = _write_crop_into_volume(
+                n_fg = write_crop_into_volume(
                     volume_meta, entry, progress_callback=_cb
-                )
+                )["n_fg_voxels"]
                 total_fg_written += n_fg
                 logger.info(f"Imported crop {entry.path}: {n_fg} FG voxels")
             except Exception as e:

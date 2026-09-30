@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import zarr
 
-from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.finetune.session.instance import seed_instance_volume
 
 CENTRE = [8.0, 168.0, 8.0]  # voxel 0's centre: corner (0, 160, 0) at 16 nm
 OME = {
@@ -45,7 +45,7 @@ def make_instances(path, group_attrs=None, s0_attrs=None):
     ids=["resolution-offset", "ome"],
 )
 def test_a_seeded_volume_lies_on_its_segmentation(tmp_path, group_attrs, s0_attrs):
-    ok, path = fu.create_instance_annotation_volume_from_seg(
+    ok, path = seed_instance_volume(
         str(tmp_path / "roi_annotation.zarr"),
         make_instances(tmp_path / "instances.zarr", group_attrs, s0_attrs),
         "/raw.zarr",

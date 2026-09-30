@@ -70,8 +70,9 @@ def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path)
     monkeypatch.setattr(yaml_crops, "_ensure_editable_layer", lambda *a: None)
     monkeypatch.setattr(yaml_crops, "sync_annotation_volume_from_minio",
                         lambda vid, **k: events.append(("pull", vid)))
-    monkeypatch.setattr(yaml_crops, "_write_crop_into_volume",
-                        lambda m, entry, progress_callback=None: events.append(("write", entry.path)) or 0)
+    monkeypatch.setattr(yaml_crops, "write_crop_into_volume",
+                        lambda m, entry, progress_callback=None: events.append(("write", entry.path))
+                        or {"n_fg_voxels": 0})
     monkeypatch.setattr(yaml_crops, "ensure_minio_serving", lambda *a, **k: events.append(("mirror",)))
     monkeypatch.setattr(yaml_crops, "write_manifest", lambda *a: None)
     monkeypatch.setattr(yaml_crops, "refresh_annotated_regions_layer", lambda **k: None)

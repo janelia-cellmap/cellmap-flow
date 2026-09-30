@@ -1,4 +1,4 @@
-"""Regression test: _write_crop_into_volume must resample a crop whose
+"""Regression test: write_crop_into_volume must resample a crop whose
 native voxel size differs from the annotation volume's output_voxel_size,
 rather than writing raw array indices as-is (which silently doubles/halves
 the written data's physical extent -- see the jrc_axolotl-heart-1 mito005
@@ -11,12 +11,24 @@ import unittest
 import numpy as np
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import create_annotation_volume_zarr
-from cellmap_flow.dashboard.routes.finetune.yaml_crops import (
-    _majority_vote_downsample,
-    _write_crop_into_volume,
-)
 from cellmap_flow.finetune.crop_loader import CropEntry
+from cellmap_flow.finetune.session.volume import (
+    VolumeGeometry,
+    create_volume_zarr,
+    majority_vote_downsample,
+    write_crop_into_volume,
+)
+
+
+def _empty_volume(zarr_path, shape):
+    """A 16 nm volume whose voxel 0 is centred at 0, one chunk."""
+    geometry = VolumeGeometry(
+        output_voxel_size=(16.0,) * 3, input_voxel_size=(16.0,) * 3,
+        claimed_output_voxel_size=None, claimed_input_voxel_size=None,
+        chunk_size=shape, input_size=shape, dataset_offset_nm=(0.0,) * 3,
+        dataset_shape_voxels=shape,
+    )
+    create_volume_zarr(zarr_path, geometry, dataset_path="unused", model_name="test_model")
 
 
 def _make_crop(tmp, data, translation=(160.0, 160.0, 160.0), voxel_size=8.0):
@@ -49,18 +61,7 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
 
             zarr_path = os.path.join(tmp, "volume.zarr")
             output_voxel_size = (16.0, 16.0, 16.0)
-            success, info = create_annotation_volume_zarr(
-                zarr_path=zarr_path,
-                dataset_shape_voxels=(64, 64, 64),
-                output_voxel_size=output_voxel_size,
-                dataset_offset_nm=(0.0, 0.0, 0.0),
-                chunk_size=(64, 64, 64),
-                dataset_path="unused",
-                model_name="test_model",
-                input_size=(64, 64, 64),
-                input_voxel_size=output_voxel_size,
-            )
-            self.assertTrue(success, info)
+            _empty_volume(zarr_path, (64, 64, 64))
 
             volume_meta = {
                 "zarr_path": zarr_path,
@@ -69,7 +70,7 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
             }
             entry = CropEntry(path=crop_path, fg_ids=[1])
 
-            n_fg = _write_crop_into_volume(volume_meta, entry)
+            n_fg = write_crop_into_volume(volume_meta, entry)["n_fg_voxels"]
 
             # Crop is 8x8x8 voxels at 8nm = 64nm per side physically. At the
             # volume's 16nm voxel size that must occupy 4x4x4 voxels, not 8x8x8
@@ -88,7 +89,7 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
             self.assertTrue(np.array_equal(lo, [10, 10, 10]))
 
     def test_majority_vote_beats_single_corner_sample(self):
-        """_majority_vote_downsample must represent each output voxel by
+        """majority_vote_downsample must represent each output voxel by
         the value most common across its whole block -- not by picking one
         fixed corner sample, which is what a naive nearest-neighbor zoom
         does (e.g. scipy.ndimage.zoom(..., grid_mode=True) deterministically
@@ -105,32 +106,21 @@ class WriteCropIntoVolumeResamplingTests(unittest.TestCase):
         # 2 of the 3 voxels per block are foreground (5).
         labels = np.zeros((6, 2, 2), dtype=np.uint8)
         labels[[0, 1, 3, 4]] = 5  # positions 0,1 (block 0) and 3,4 (block 1) fg
-        down = _majority_vote_downsample(labels, factors=(3, 1, 1))
+        down = majority_vote_downsample(labels, factors=(3, 1, 1))
         self.assertEqual(down.shape, (2, 2, 2))
         self.assertTrue(np.all(down == 5))
 
     def _first_written_voxel(self, tmp, crop_path):
         zarr_path = os.path.join(tmp, "volume.zarr")
         output_voxel_size = (16.0, 16.0, 16.0)
-        success, info = create_annotation_volume_zarr(
-            zarr_path=zarr_path,
-            dataset_shape_voxels=(32, 32, 32),
-            output_voxel_size=output_voxel_size,
-            dataset_offset_nm=(0.0, 0.0, 0.0),
-            chunk_size=(32, 32, 32),
-            dataset_path="unused",
-            model_name="test_model",
-            input_size=(32, 32, 32),
-            input_voxel_size=output_voxel_size,
-        )
-        self.assertTrue(success, info)
+        _empty_volume(zarr_path, (32, 32, 32))
 
         volume_meta = {
             "zarr_path": zarr_path,
             "output_voxel_size": list(output_voxel_size),
             "dataset_offset_nm": [0.0, 0.0, 0.0],
         }
-        _write_crop_into_volume(volume_meta, CropEntry(path=crop_path, fg_ids=[1]))
+        write_crop_into_volume(volume_meta, CropEntry(path=crop_path, fg_ids=[1]))
 
         written = np.asarray(zarr.open(zarr_path, mode="r")["annotation/s0"][:])
         return np.argwhere(written >= 2).min(axis=0)

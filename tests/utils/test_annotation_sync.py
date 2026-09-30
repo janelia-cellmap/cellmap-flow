@@ -160,7 +160,7 @@ def test_only_one_sync_runs_at_a_time(monkeypatch):
     monkeypatch.setattr(fu, "minio_state", {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations"})
     monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: _Listing())
 
-    with fu._sync_lock:
+    with sync._sync_lock:
         worker = threading.Thread(target=fu.sync_all_annotations_from_minio, kwargs={"force": False})
         worker.start()
         time.sleep(0.3)
@@ -173,13 +173,13 @@ def test_a_failing_periodic_sync_warns_once_per_interval(monkeypatch, caplog):
     def broken(force=True, **kw):
         raise ConnectionError("MinIO is gone")
 
-    monkeypatch.setattr(fu, "minio_state", {"ip": "127.0.0.1", "port": 9000, "output_base": "/x"})
+    state = {"ip": "127.0.0.1", "port": 9000, "output_base": "/x"}
     monkeypatch.setattr(sync, "sync_all", broken)
     monkeypatch.setattr(sync, "_sync_failures", {"count": 0, "last_warned": None})
 
     with caplog.at_level(logging.WARNING, logger=sync.logger.name):
-        fu._periodic_sync_once()
-        fu._periodic_sync_once()
+        sync.periodic_sync_once(state=state, volumes={})
+        sync.periodic_sync_once(state=state, volumes={})
 
     warnings = [r for r in caplog.records if "Periodic annotation sync failed" in r.getMessage()]
     assert len(warnings) == 1
