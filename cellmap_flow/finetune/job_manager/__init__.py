@@ -9,6 +9,7 @@
   settings, the trainer's command line, and launching it on LSF or here.
 - ``persistence``: each run's ``metadata.json`` and export, and finding a
   session's jobs again from them (rehydration).
+- ``restart``: asking a job that waits for a restart to train again.
 
 Nothing here imports torch, Flask, neuroglancer or ``cellmap_flow.globals``
 at module level. Import the submodule you need; this package imports none

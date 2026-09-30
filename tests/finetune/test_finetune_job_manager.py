@@ -12,10 +12,10 @@ from types import SimpleNamespace
 from unittest.mock import ANY
 
 import pytest
-import requests
 
 from cellmap_flow.finetune import finetune_job_manager as fjm
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+from cellmap_flow.finetune.job_manager import restart
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry
@@ -542,7 +542,7 @@ def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, monkeypatch, st
         return SimpleNamespace(raise_for_status=lambda: None,
                                json=lambda: {"success": server == "answers", "error": "refused"})
 
-    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(restart.requests, "post", post)
     signal = job.output_dir / "restart_signal.json"
     if sent is None:
         with pytest.raises(ValueError):
