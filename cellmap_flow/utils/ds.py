@@ -196,8 +196,8 @@ def check_for_offset(array, order):
 
 
 def check_for_units(array, order):
-    """The units in ``array``'s own or its parent's attributes, "pixels"
-    without any (see io.metadata.n5_units)."""
+    """The units in ``array``'s own or its parent's attributes, one per axis,
+    "pixels" without any (see io.metadata.n5_units)."""
     return metadata.n5_units(_items(array), order, len(array.shape))
 
 

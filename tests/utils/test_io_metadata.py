@@ -156,6 +156,12 @@ LAYOUTS = {
             "ordering": "C", "scale": [8, 4, 2], "translate": [80, 40, 20], "units": ["nm"] * 3}}),
         ("n5", ZYX, (8.0, 4.0, 2.0), (80.0, 40.0, 20.0), (10, 20, 30), (5, 10, 15)),
     ),
+    # One unit for every axis, not a string to reverse with them ("um" read as "mu").
+    "n5-units-string": (
+        lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {
+            "resolution": [3, 2, 1], "offset": [0] * 3, "units": "um"}),
+        ("n5", ZYX, (1000.0, 2000.0, 3000.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
+    ),
     # Without an offset the whole lookup falls through, voxel size and all.
     "n5-resolution-without-offset": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"resolution": [3, 2, 1]}),

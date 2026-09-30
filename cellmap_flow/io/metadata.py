@@ -430,19 +430,28 @@ def n5_offset(items: Sequence[dict], order: str):
 
 
 def n5_units(items: Sequence[dict], order: str, ndim: int):
-    """``units``, ``pixelResolution.unit`` or ``transform.units``; "pixels"
-    when there are none."""
+    """``units``, ``pixelResolution.unit`` or ``transform.units``, one per
+    axis (see _per_axis); ``ndim`` "pixels" when there are none."""
     for attrs in items:
         if "units" in attrs:
-            return attrs["units"]
+            return _per_axis(attrs["units"], ndim)
         elif "pixelResolution" in attrs and "unit" in attrs["pixelResolution"]:
             return [attrs["pixelResolution"]["unit"]] * ndim
         elif "transform" in attrs:
-            units = attrs["transform"]["units"]
+            units = _per_axis(attrs["transform"]["units"], ndim)
             if attrs["transform"].get("ordering", "C") != order:
                 units = _reverse(units)
             return units
-    return "pixels"
+    return ["pixels"] * ndim
+
+
+def _per_axis(units, ndim: int):
+    """``units`` as one per axis: a single unit, a string, is every axis's.
+
+    N5's units are reversed with its axes, and that must reverse the list,
+    never the letters of a string.
+    """
+    return [units] * ndim if isinstance(units, str) else units
 
 
 def _n5_multiscale_level(multiscales, level_path):
@@ -482,8 +491,7 @@ def _n5(items, order, ndim, is_n5, units=None, multiscales=None, level_path=None
         voxel_size = (1,) * dims
     if offset is None:
         offset = (0,) * dims
-    if units is None:
-        units = "pixels"
+    units = _per_axis("pixels" if units is None else units, dims)
     if order == "F":
         return _reverse(voxel_size), _reverse(offset), _reverse(units)
     return voxel_size, offset, units
