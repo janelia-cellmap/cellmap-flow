@@ -305,6 +305,19 @@ def test_a_job_lsf_says_is_done_is_completed_only_once_its_export_is_found(make_
     assert job.status.value == json.loads((job.output_dir / "metadata.json").read_text())["status"] == final
 
 
+def test_a_job_that_finished_stays_completed_when_its_record_cannot_be_read(make_job, monkeypatch):
+    """Its export was found, but recording that read metadata.json, which raised,
+    and the job was FAILED: the tab said a model that exists was never trained.
+    A record that cannot be read is left as it is, as every other write leaves it."""
+    job = make_job("RUNNING", lsf_job=_lsf(LSF.COMPLETED))
+    (job.output_dir / FULL[0]).parent.mkdir()
+    (job.output_dir / FULL[0]).write_bytes(b"")
+    (job.output_dir / "metadata.json").write_text('{"status": "RUNN')
+    _monitor(FinetuneJobManager(), job, ["Epoch 1/1 - Loss: 0.1\n"], monkeypatch)
+    assert job.status == JobStatus.COMPLETED
+    assert (job.output_dir / "metadata.json").read_text() == '{"status": "RUNN'
+
+
 class _Killable:
     def __init__(self):
         self.killed = False

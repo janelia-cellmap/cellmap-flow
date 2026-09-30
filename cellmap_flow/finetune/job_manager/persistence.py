@@ -124,7 +124,11 @@ def write_metadata(output_dir, metadata: dict) -> None:
 
 
 def update_metadata(output_dir, **fields) -> None:
-    """Merge ``fields`` into the run's metadata.json, replacing it atomically."""
+    """Merge ``fields`` into the run's metadata.json, replacing it atomically.
+
+    A missing record is started with ``fields``; one that cannot be read is
+    left as it is, with a warning.
+    """
     path = Path(output_dir) / METADATA_FILE
     try:
         metadata = json.loads(path.read_text()) if path.exists() else {}
@@ -149,24 +153,24 @@ def recorded_model_entry(output_dir) -> Optional[dict]:
 
 
 def record_completion(finetune_job: FinetuneJob) -> None:
-    """Record in metadata.json that the job completed, with its model and last epoch."""
-    metadata_file = finetune_job.output_dir / METADATA_FILE
-    if metadata_file.exists():
-        with open(metadata_file, "r") as f:
-            metadata = json.load(f)
+    """Record in metadata.json that the job completed, with its model and last epoch.
 
-        metadata["completed_at"] = datetime.now().isoformat()
-        metadata["status"] = "COMPLETED"
-        metadata["finetuned_model_name"] = finetune_job.finetuned_model_name
-        yaml_path = finetune_job.model_yaml_path
-        metadata["model_yaml_path"] = str(yaml_path) if yaml_path else None
-        metadata["final_epoch"] = finetune_job.current_epoch
-        metadata["final_loss"] = finetune_job.latest_loss
-
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f, indent=2)
-
-        logger.info(f"Updated metadata file: {metadata_file}")
+    Through update_metadata, so the record is replaced whole or not at all.
+    A record that cannot be read is left as it is, with a warning, and the
+    job is still COMPLETED: its export was found (check_export), and the
+    record is only the dashboard's note of the job, which a later dashboard
+    skips when it cannot read it.
+    """
+    yaml_path = finetune_job.model_yaml_path
+    update_metadata(
+        finetune_job.output_dir,
+        completed_at=datetime.now().isoformat(),
+        status=JobStatus.COMPLETED.value,
+        finetuned_model_name=finetune_job.finetuned_model_name,
+        model_yaml_path=str(yaml_path) if yaml_path else None,
+        final_epoch=finetune_job.current_epoch,
+        final_loss=finetune_job.latest_loss,
+    )
 
 
 def rehydrate(session_path, known) -> List[FinetuneJob]:

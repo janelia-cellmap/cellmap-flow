@@ -287,7 +287,8 @@ def complete_job(finetune_job: FinetuneJob):
         finetune_job: The completed job
 
     Raises:
-        RuntimeError: If adapter files missing or registration fails
+        RuntimeError: If its export is missing (persistence.check_export);
+            nothing else here raises
     """
     job_id = finetune_job.job_id
     logger.info(f"Running post-completion for job {job_id}...")
