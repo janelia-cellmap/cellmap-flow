@@ -57,4 +57,7 @@ def cli(yaml_configs, client):
 
 
 if __name__ == "__main__":
+    from cellmap_flow.plugins import load_plugins
+
+    load_plugins()
     cli()

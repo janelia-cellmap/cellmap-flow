@@ -95,4 +95,7 @@ def main(dataset, project):
 
 
 if __name__ == "__main__":
+    from cellmap_flow.plugins import load_plugins
+
+    load_plugins()
     main()

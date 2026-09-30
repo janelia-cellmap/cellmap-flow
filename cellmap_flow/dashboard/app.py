@@ -82,12 +82,17 @@ def create_and_run_app(neuroglancer_url=None):
     It prints its URL, and writes it where SERVICE_URL_PATH says. Its
     terminal lines (the URL, the models it launches) are INFO: a
     cellmap_flow command has configured logging by now, and a script that
-    calls this without doing so gets the shared format at INFO.
+    calls this without doing so gets the shared format at INFO. It loads
+    the plugins, whose normalizers, postprocessors and model types its
+    pages offer, if nothing has yet.
     """
     from werkzeug.serving import make_server
 
+    from cellmap_flow.plugins import load_plugins
+
     if not logging.getLogger().handlers:
         configure_logging()
+    load_plugins()
     g.NEUROGLANCER_URL = neuroglancer_url
     hostname = socket.gethostname()
     # threaded=True is not optional. make_server defaults to one request at a

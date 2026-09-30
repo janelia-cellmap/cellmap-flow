@@ -27,7 +27,7 @@ from cellmap_flow.cli import doctor, viewer_cli, yaml_cli
 from cellmap_flow.cli.common import deprecated, log_level_option
 from cellmap_flow.cli.infer import infer, run_generic
 from cellmap_flow.models import registry
-from cellmap_flow.plugins import list_plugins, register_plugin, unregister_plugin
+from cellmap_flow.plugins import list_plugins, load_plugins, register_plugin, unregister_plugin
 
 
 class CellMapFlowGroup(click.Group):
@@ -207,9 +207,11 @@ cli.add_command(deprecated(unregister_cmd, "unregister", "cellmap_flow unregiste
 cli.add_command(deprecated(list_plugins_cmd, "list-plugins", "cellmap_flow list-plugins", "cellmap_flow plugins list"))
 
 
-def main():
-    """The ``cellmap_flow`` console script."""
-    cli(prog_name="cellmap_flow")
+def main(args=None):
+    """The ``cellmap_flow`` console script: load the plugins, then run the
+    command ``args`` (by default, the process's arguments) names."""
+    load_plugins()
+    cli.main(args=args, prog_name="cellmap_flow")
 
 
 if __name__ == "__main__":

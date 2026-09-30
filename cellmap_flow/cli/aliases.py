@@ -20,9 +20,9 @@ from cellmap_flow.cli.common import deprecation_notice
 def _alias(old: str, subcommand: str):
     def run(args=None):
         deprecation_notice(old, f"cellmap_flow {subcommand}")
-        from cellmap_flow.cli.main import cli
+        from cellmap_flow.cli.main import main
 
-        cli.main(args=[subcommand, *(sys.argv[1:] if args is None else args)], prog_name="cellmap_flow")
+        main([subcommand, *(sys.argv[1:] if args is None else args)])
 
     run.__doc__ = f"``{old}``: ``cellmap_flow {subcommand}``, after a deprecation notice."
     return run

@@ -52,9 +52,8 @@ ENTRY_POINTS = {
     "cellmap_flow_blockwise": "cellmap_flow.cli.aliases:blockwise",
     "cellmap_flow_blockwise_multiple": "cellmap_flow.cli.aliases:blockwise_multiple",
     "cellmap_flow_app": "cellmap_flow.cli.aliases:app",
-    "cellmap_flow_server": "cellmap_flow.cli.server_cli:cli",
+    "cellmap_flow_server": "cellmap_flow.cli.server_cli:main",
 }
-CLICK_ENTRY_POINTS = {"cellmap_flow_server"}
 
 
 def _entry_point(target):
@@ -67,14 +66,24 @@ def test_the_console_scripts_are_unchanged():
     assert scripts == ENTRY_POINTS
     click_commands = {name for name, target in scripts.items()
                       if isinstance(_entry_point(target), click.Command)}
-    assert click_commands == CLICK_ENTRY_POINTS
+    assert not click_commands, "a click command run as the script would not load the plugins"
     assert _entry_point(scripts["cellmap_flow"]) is main.main
 
 
-# Where cellmap_flow's console script pointed before 0.3.0: an environment
-# installed then runs cellmap_flow through it until it is reinstalled.
-def test_an_install_from_before_0_3_0_still_runs_cellmap_flow():
+# Where the console scripts pointed before 0.3.0. An environment installed
+# then (a deployed pixi checkout, until it is reinstalled) runs them
+# through these, and its `cellmap_flow` gets the new subcommands.
+OLD_ENTRY_POINTS = [
+    "cellmap_flow.cli.server_cli:cli", "cellmap_flow.cli.yaml_cli:main", "cellmap_flow.cli.viewer_cli:main",
+    "cellmap_flow.blockwise.cli:cli", "cellmap_flow.blockwise.multiple_cli:cli",
+    "cellmap_flow.dashboard.app:create_and_run_app",
+]
+
+
+def test_an_install_from_before_0_3_0_still_runs():
     assert _entry_point("cellmap_flow.cli.cli:main") is main.main
+    for target in OLD_ENTRY_POINTS:
+        assert callable(_entry_point(target)), target
 
 
 # The old console script, its arguments, and the subcommand that replaces it.
@@ -213,7 +222,7 @@ CELLMAP_FLOW = {
     'finetune export-merged': PASSED_THROUGH,
     'finetune train': PASSED_THROUGH,
     'infer': [],
-    **{f'infer {t}': options for t, options in INFER.items()},
+    **{f'infer {t}': options for t, options in sorted(INFER.items())},
     'list-models': [],
     'list-plugins': [],
     'models': [],

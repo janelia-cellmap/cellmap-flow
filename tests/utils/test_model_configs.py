@@ -10,6 +10,7 @@ import time
 import types
 from types import SimpleNamespace
 
+import click
 import numpy as np
 import pytest
 import torch
@@ -53,7 +54,8 @@ def test_the_server_rebuilds_the_same_config_from_its_command(config, monkeypatc
     monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", no_download)
     config = config()
     argv = shlex.split(config.command)
-    params = cli.commands[argv[0]].make_context(argv[0], argv[1:] + ["-d", "/data/raw.zarr"]).params
+    command = cli.get_command(click.Context(cli), argv[0])
+    params = command.make_context(argv[0], argv[1:] + ["-d", "/data/raw.zarr"]).params
     server_options = {"data_path", "debug", "port", "certfile", "keyfile"}
     kwargs = {k: v for k, v in params.items() if k not in server_options and v is not None}
     rebuilt = type(config)(**registry.coerce_cli_args(type(config), kwargs))

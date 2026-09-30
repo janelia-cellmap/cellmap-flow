@@ -329,4 +329,7 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
 
 
 if __name__ == "__main__":
+    from cellmap_flow.plugins import load_plugins
+
+    load_plugins()
     main()

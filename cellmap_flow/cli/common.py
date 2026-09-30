@@ -62,7 +62,8 @@ class ModelTypeGroup(click.Group):
         self._make_command = make_command
 
     def list_commands(self, ctx):
-        return [*super().list_commands(ctx), *registry.model_types()]
+        # Sorted, as click lists the commands it was given.
+        return sorted({*super().list_commands(ctx), *registry.model_types()})
 
     def get_command(self, ctx, name):
         command = super().get_command(ctx, name)

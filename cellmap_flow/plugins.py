@@ -4,8 +4,10 @@ Plugin manager for cellmap_flow.
 Handles registration, loading, and management of user plugins
 (ModelConfig, InputNormalizer, PostProcessor subclasses).
 
-Plugins are stored in ~/.cellmap_flow/plugins/ and loaded automatically
-at startup so that custom subclasses appear in __subclasses__() calls.
+Plugins are stored in ~/.cellmap_flow/plugins/. ``load_plugins`` runs them,
+so that their subclasses appear in __subclasses__() calls; the commands,
+the dashboard and the finetune job call it when they start, and importing
+cellmap_flow does not. A script that uses a plugin's classes calls it.
 
 ``analyze_script`` is the safety check a plugin passes to be registered;
 a script model's script passes it too, each time it is loaded

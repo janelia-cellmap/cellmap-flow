@@ -44,6 +44,7 @@ def main():
     # when it serves (the inference server). Imported first, so that the
     # format set here holds for the whole run.
     import cellmap_flow.globals  # noqa: F401
+    from cellmap_flow.plugins import load_plugins
 
     logging.basicConfig(
         level=logging.INFO,
@@ -51,6 +52,9 @@ def main():
         force=True,
     )
     args = parse_args()
+    # A plugin's model type, normalizers and postprocessors, which the model
+    # entry and the chain it serves with may name.
+    load_plugins()
 
     # Print configuration
     logger.info("=" * 60)

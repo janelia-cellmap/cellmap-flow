@@ -95,6 +95,21 @@ thread.join()
 assert errors == [None], errors
 assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == before
 """,
+    # Plugins run when a command starts, not when the package is imported.
+    "plugins": """
+import builtins, os, pathlib
+plugins = pathlib.Path(os.environ["HOME"], ".cellmap_flow", "plugins")
+plugins.mkdir(parents=True)
+(plugins / "p.py").write_text("import builtins\\nbuiltins.PLUGIN_RAN = True\\n")
+check(["cellmap_flow", "cellmap_flow.cli.main", "cellmap_flow.cli.server_cli"], [])
+assert not hasattr(builtins, "PLUGIN_RAN")
+from cellmap_flow.cli import main
+try:
+    main.main(["models"])
+except SystemExit:
+    pass
+assert builtins.PLUGIN_RAN
+""",
     # Every LSF job imports the package.
     "package-home": """
 import os
