@@ -7,11 +7,21 @@ import yaml
 from tests.utils.serving_helpers import POOLING_MODEL
 
 
+CHANNELS_LINE = 'channels = ["a", "b"]'
+
+
 @pytest.fixture
 def pooling_model(model_script):
-    """``pooling_model(in_vs=8, out_vs=8)``: POOLING_MODEL (channels "a" and "b") as a script; its path."""
-    return lambda in_vs=8, out_vs=8: model_script(POOLING_MODEL, name=f"model_{in_vs}_{out_vs}.py",
-                                                  in_vs=in_vs, out_vs=out_vs)
+    """``pooling_model(in_vs=8, out_vs=8, names=None)``: POOLING_MODEL (channels
+    "a" and "b") as a script; its path. ``names`` replaces the line that names
+    its channels, e.g. with ``classes = [...]``."""
+    assert CHANNELS_LINE in POOLING_MODEL
+
+    def make(in_vs=8, out_vs=8, names=None):
+        body = POOLING_MODEL if names is None else POOLING_MODEL.replace(CHANNELS_LINE, names)
+        return model_script(body, name=f"model_{in_vs}_{out_vs}.py", in_vs=in_vs, out_vs=out_vs)
+
+    return make
 
 
 @pytest.fixture

@@ -251,8 +251,17 @@ class CellMapFlowBlockwiseProcessor:
 
         self.input_voxel_size = Coordinate(geometry.input_voxel_size)
         self.output_voxel_size = Coordinate(geometry.output_voxel_size)
-        # self.output_channels = self.model_config.config.output_channels
-        self.channels = self.model_config.config.channels
+        # The model's channel names, by whichever name it gives them
+        # (channels, channels_names or classes). They name the outputs when
+        # the task gives no output_channels, and a list of output_channels
+        # picks its channels by them; a dict gives indices instead.
+        self.channels = list(geometry.channel_names) if geometry.channel_names else None
+        if self.channels is None and not self.output_channels_is_dict:
+            raise ConfigError(
+                f"Model {self.model_config.name!r} names no channels (channels, "
+                "channels_names or classes): give output_channels as a mapping "
+                "of output name to channel index"
+            )
 
         self.task_name = task_name
         if output_channels:

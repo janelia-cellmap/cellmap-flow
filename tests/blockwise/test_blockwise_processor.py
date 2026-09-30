@@ -108,6 +108,29 @@ def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, 
                 written) == expected, channel
 
 
+@pytest.mark.parametrize("names", [
+    pytest.param('classes = ["a", "b"]', id="a-scripts-classes"),
+    pytest.param('channels_names = ["a", "b"]', id="hugging-faces-channels_names"),
+])
+def test_the_outputs_are_named_however_the_model_names_its_channels(raw_zarr, pooling_model, task_yaml, names):
+    """Blockwise read config.channels alone, so a model naming its channels
+    another way failed with AttributeError."""
+    path = task_yaml(raw_zarr(), pooling_model(names=names))
+    master = CellMapFlowBlockwiseProcessor(path, create=True)
+    worker = CellMapFlowBlockwiseProcessor(path, create=False)
+    roi = daisy.Roi((0, 0, 0), (32, 32, 32))
+    worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
+    assert master.output_channels == ["a", "b"]
+    assert all(array.to_ndarray(roi).any() for array in worker.output_arrays), "each output was written"
+
+
+def test_a_model_naming_no_channels_needs_them_given(raw_zarr, pooling_model, task_yaml):
+    """Without names blockwise cannot name the outputs, or pick a listed channel."""
+    path = task_yaml(raw_zarr(), pooling_model(names=""))
+    with pytest.raises(ConfigError, match="names no channels"):
+        CellMapFlowBlockwiseProcessor(path, create=True)
+
+
 def test_the_whole_volume_task_covers_the_output_on_its_chunk_grid(raw_zarr, pooling_model, task_yaml, monkeypatch):
     """With no context, the task's blocks start on the output chunk grid; they
     straddled output chunks while the output sat at 0 and the task at the raw's offset."""
