@@ -43,13 +43,15 @@ check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome"
 check(["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr", "cellmap_flow.inference.runner"],
       LIGHT + ["torch"])
 """,
-    # describe_types() runs when the dashboard opens its model form.
+    # describe_types() runs when the dashboard opens its model form. It
+    # imports the model config classes, which the CLIs, servers and blockwise
+    # workers import too; a type loads its framework only to build a model.
     "registry": """
 check(["cellmap_flow.models.registry", "cellmap_flow.serving.launch"],
       LIGHT + ["cellmap_flow.models.models_config", "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
-check([], ["bioimageio", "dacapo", "cellmap_models", "torch", "huggingface_hub"])
+check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "torch", "huggingface_hub", "peft"])
 """,
     # A chain is read wherever one is listed; its steps import what they need.
     "chain": """
