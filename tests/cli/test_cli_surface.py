@@ -1,26 +1,34 @@
-"""The model CLIs, model configs and model form as users and files see them.
+"""The CLIs, model configs and model form as users and files see them.
 
 Pinned as literals because nothing else pins them, and changing any of it
 is a breaking release rather than a refactor:
 
-- every command and option of ``cellmap_flow``, ``cellmap_flow_server`` and
-  ``cellmap_flow_yaml``, down to the short flags, which come from walking
-  each constructor signature in reverse, and the type listings;
+- the console scripts and what each one runs;
+- every command and option of ``cellmap_flow``, ``cellmap_flow_server``,
+  ``cellmap_flow_yaml``, ``cellmap_flow_view`` and the two blockwise
+  commands, down to the short flags, which come from walking each
+  constructor signature in reverse, and the type listings;
 - ``to_dict()`` (exported and finetuned YAMLs are written from it) and
   ``command`` (the server rebuilds the config from it) of every model type;
 - what the dashboard's model form is offered, and how it parses its strings.
 """
 
 import gc
+import importlib
 import sys
+import tomllib
 import types
+from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 from flask import Flask
 
+from cellmap_flow.blockwise import cli as blockwise_cli
+from cellmap_flow.blockwise import multiple_cli as blockwise_multiple_cli
 from cellmap_flow.cli import cli as cli_module
-from cellmap_flow.cli import yaml_cli
+from cellmap_flow.cli import viewer_cli, yaml_cli
 from cellmap_flow.cli.server_cli import cli as server_cli
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import (
@@ -32,9 +40,47 @@ from cellmap_flow.models.models_config import (
     ScriptModelConfig,
 )
 
+# --- the console scripts ----------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# What each installed command runs. cellmap_flow's main() installs the
+# Ctrl+C cleanup and then runs the click group; cellmap_flow_app is a plain
+# function, so it takes no arguments and `cellmap_flow_app --help` starts
+# the dashboard.
+ENTRY_POINTS = {
+    "cellmap_flow": "cellmap_flow.cli.cli:main",
+    "cellmap_flow_server": "cellmap_flow.cli.server_cli:cli",
+    "cellmap_flow_yaml": "cellmap_flow.cli.yaml_cli:main",
+    "cellmap_flow_blockwise": "cellmap_flow.blockwise.cli:cli",
+    "cellmap_flow_blockwise_multiple": "cellmap_flow.blockwise.multiple_cli:cli",
+    "cellmap_flow_app": "cellmap_flow.dashboard.app:create_and_run_app",
+    "cellmap_flow_view": "cellmap_flow.cli.viewer_cli:main",
+}
+CLICK_ENTRY_POINTS = {
+    "cellmap_flow_server", "cellmap_flow_yaml", "cellmap_flow_blockwise",
+    "cellmap_flow_blockwise_multiple", "cellmap_flow_view",
+}
+
+
+def _entry_point(target):
+    module, attr = target.split(":")
+    return getattr(importlib.import_module(module), attr)
+
+
+def test_the_console_scripts_are_unchanged():
+    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
+    assert scripts == ENTRY_POINTS
+    click_commands = {name for name, target in scripts.items()
+                      if isinstance(_entry_point(target), click.Command)}
+    assert click_commands == CLICK_ENTRY_POINTS
+    assert _entry_point(scripts["cellmap_flow"]) is cli_module.main
+
+
 # --- the command-line surface ---------------------------------------------------
 
-# (name, opts, secondary_opts, type name, required, default, is_flag, help)
+# (name, opts, secondary_opts, type name, required, default, is_flag, help),
+# and nargs after them when it is not 1.
 NAME = ('name', ('-n', '--name'), (), 'text', False, None, False, 'Parameter: name (optional)')
 SCALE = ('scale', ('-s', '--scale'), (), 'text', False, None, False, 'Parameter: scale (optional)')
 DATA_PATH = ('data_path', ('-d', '--data-path'), (), 'text', True, None, False, 'Path to the dataset')
@@ -137,21 +183,51 @@ CELLMAP_FLOW_YAML = {
     ],
 }
 
+CELLMAP_FLOW_VIEW = {
+    '': [
+        ('dataset', ('-d', '--dataset'), (), 'text', True, None, False, 'Path to the dataset (zarr or n5)'),
+        ('project', ('-P', '--project'), (), 'text', False, None, False,
+         'Charge group (LSF project) billed for the models launched from the dashboard'),
+        *LOG_LEVEL,
+    ],
+}
+
+CELLMAP_FLOW_BLOCKWISE = {
+    '': [
+        ('yaml_config', ('yaml_config',), (), 'path', True, None, False, None),
+        ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),
+        ('log_level', ('--log-level',), (), 'choice', False, 'INFO', False, None),
+    ],
+}
+
+CELLMAP_FLOW_BLOCKWISE_MULTIPLE = {
+    '': [('yaml_configs', ('yaml_configs',), (), 'path', True, None, False, None, 'nargs=-1')],
+}
+
 
 def _param(p):
     # to_info_dict() reports an unset default as None on every click 8.x,
     # where p.default is a sentinel on some versions.
-    return (
+    row = (
         p.name, tuple(p.opts), tuple(p.secondary_opts), p.type.name, p.required,
         p.to_info_dict().get("default"), bool(getattr(p, "is_flag", False)),
         getattr(p, "help", None),
     )
+    return row if p.nargs == 1 else (*row, f"nargs={p.nargs}")
 
 
 @pytest.mark.parametrize(
     "command, expected",
-    [(cli_module.cli, CELLMAP_FLOW), (server_cli, CELLMAP_FLOW_SERVER), (yaml_cli.main, CELLMAP_FLOW_YAML)],
-    ids=["cellmap_flow", "cellmap_flow_server", "cellmap_flow_yaml"],
+    [
+        (cli_module.cli, CELLMAP_FLOW),
+        (server_cli, CELLMAP_FLOW_SERVER),
+        (yaml_cli.main, CELLMAP_FLOW_YAML),
+        (viewer_cli.main, CELLMAP_FLOW_VIEW),
+        (blockwise_cli.cli, CELLMAP_FLOW_BLOCKWISE),
+        (blockwise_multiple_cli.cli, CELLMAP_FLOW_BLOCKWISE_MULTIPLE),
+    ],
+    ids=["cellmap_flow", "cellmap_flow_server", "cellmap_flow_yaml", "cellmap_flow_view",
+         "cellmap_flow_blockwise", "cellmap_flow_blockwise_multiple"],
 )
 def test_commands_and_options_are_unchanged(command, expected):
     surface = {"": [_param(p) for p in command.params]}
