@@ -14,7 +14,8 @@ from flask_cors import CORS
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.inferencer import ChunkCancelled, DeviceSlots, Inferencer
+from cellmap_flow.inference.runner import ChunkCancelled, DeviceSlots
+from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.pipeline_spec import chain_num_channels, chain_output_dtype
 from cellmap_flow.serving import virtual_zarr
@@ -128,7 +129,7 @@ class CellMapFlowServer:
 
         ``CELLMAP_FLOW_GPU_SLOTS`` (default 1), read here, is how many chunk
         requests may use the device at once; the rest wait their turn in
-        arrival order. See inferencer.DeviceSlots.
+        arrival order. See inference.runner.DeviceSlots.
 
         ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB; 0 for none) and
         ``CELLMAP_FLOW_RAW_READ_CONCURRENCY`` (default: tensorstore's, one

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from cellmap_flow.inferencer import DeviceSlots, predict
+from cellmap_flow.inference.runner import DeviceSlots, predict
 
 
 def _wait_until(condition, timeout=5.0):

@@ -68,7 +68,11 @@ def test_a_model_configs_geometry_is_read_once(tmp_path):
 
 def test_the_serving_modules_import_nothing_heavy(tmp_path):
     # A fresh interpreter, so that what this process imported hides nothing.
-    modules = ["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr"]
+    modules = [
+        "cellmap_flow.models.geometry",
+        "cellmap_flow.serving.virtual_zarr",
+        "cellmap_flow.inference.runner",  # torch only once a runner is built
+    ]
     heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "torch"]
     code = f"import sys, {', '.join(modules)}; print([m for m in {heavy!r} if m in sys.modules])"
     result = subprocess.run(

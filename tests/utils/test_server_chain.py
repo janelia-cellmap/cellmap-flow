@@ -169,3 +169,24 @@ model = Squeeze()
     response = client.get("/plain/s0/0.0.0")
     chunk = decode_chunk(server, response.data, meta["dtype"], meta["chunks"])
     assert np.all(chunk == 3)
+
+
+def test_a_model_runner_returns_the_models_own_output(tmp_path):
+    """No chain and nothing from g: the model's output for the region, read with its context."""
+    from cellmap_flow.inference.runner import ModelRunner
+    from cellmap_flow.image_data_interface import ImageDataInterface
+    from funlib.geometry import Roi
+
+    data = (np.arange(512) % 251).astype(np.uint8).reshape(8, 8, 8)
+    raw = write_raw(tmp_path, data)
+    script = write_script(
+        tmp_path,
+        IDENTITY_MODEL.replace("read_shape = Coordinate(4, 4, 4)", "read_shape = Coordinate(6, 6, 6)")
+        + "\nmodel.forward = lambda x: x[:, :, 1:-1, 1:-1, 1:-1] * 2\n",
+    )
+    g.postprocess = [ThresholdPostprocessor(threshold=0.5)]
+    runner = ModelRunner(ScriptModelConfig(script_path=script))
+    out = runner.predict(ImageDataInterface(raw, voxel_size=(8, 8, 8), input_norms=[]), Roi((8, 8, 8), (32, 32, 32)))
+
+    assert out.shape == (1, 4, 4, 4) and out.dtype == np.float32
+    assert np.array_equal(out[0], 2.0 * data[1:5, 1:5, 1:5])
