@@ -109,7 +109,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a YAML crop imported with several CPUs no longer loses rows where two parallel slabs met: the slabs are cut on the volume's chunk rows, so each chunk has one writer;
     - a new volume's voxel count is its data's extent in output voxels, rounded up, one rule for create-volume, crop import and `build_corrections`; on every level tried it equals the old count;
     - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
-    - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed, and `lora_wrapper.merge_lora_into_base` now works on 1×1×1 heads;
+    - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed;
     - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`);
     - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`0fd7892`);
     - a LoRA job restarted with `lora_r=0` keeps its adapter's alpha. It used to get alpha 0, so every later iteration trained nothing and served the base model.
@@ -134,9 +134,37 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the pipeline builder's unload beacon only fires when there is an unsent change;
     - the dashboard's GPU-queue poll pauses while the page is hidden.
 
+- **Phase 4 (the breaking release), so far:**
+  - **One pipeline endpoint (K11).** `PUT /api/pipeline` sets the chain and redraws the prediction layers. `/api/process` and `/api/pipeline/apply` keep working for one release as deprecated aliases (a logged warning and a `Deprecation` header). Applying from the pipeline builder now redraws the layers; it used to leave them on the old chain.
+  - **Raw data:**
+    - a neuroglancer-precomputed volume with several scales, such as `gs://…` datasets, is shown as its multi-resolution pyramid, so zooming out reads coarse levels and auto-contrast samples one. It used to show only full resolution;
+    - a precomputed path's scale is its last `/s<N>`. A path like `/groups/scicompsoft/…/s0` was cut at the first `/s` and crashed;
+    - a read that lies wholly outside the array returns padding, as a partly outside one does. It used to raise `IndexError`.
+  - **Model configs:**
+    - a Fly model given only one of `input_size`/`output_size` is refused with a message asking for the other. It used to reset both to 178/56;
+    - a model config without a `name` falls back to float32 output instead of raising;
+    - a shape-mismatch error names the model's type;
+    - Hugging Face metadata that failed to load is fetched again after 60 s instead of being cached as empty for the whole run.
+  - **Blockwise routes:**
+    - a malformed validate/generate/precheck/submit body is answered with what is wrong (still a 200 with the failure flag the builder reads);
+    - validate now refuses pipelines missing a required setting, which used to fail later at submit;
+    - submit refuses a `yaml_paths` that is not a list of paths. A number there used to be opened as a file descriptor.
+  - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
+  - **Deprecated (K18):** `ImageDataInterface`'s `output_voxel_size` and `custom_fill_value` arguments warn; they still work this release. `concurrency_limit` stays, because the inference server uses it.
+
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `390520e` a read wholly outside the array is padding
+- `b2fde02` a precomputed volume of several scales is shown as their pyramid
+- `21681ac` a precomputed path's scale is its last /s<N>
+- `aa8d5c7` blockwise submit refuses a yaml_paths that is not a list of paths
+- `47f0417` a malformed blockwise request is answered with what is wrong
+- `ee0ab90` one PUT /api/pipeline sets the chain and redraws the layers (K11)
+- `d9277c4` a Hugging Face model's metadata is fetched again after a failure
+- `7fa6907` a shape mismatch names the model's type
+- `b1671e0` a config with no name falls back to float32 output
+- `6549224` a Fly model given one of its sizes asks for the other
 - `78743c7` a malformed finetune request is refused before anything is done
 - `bebd1a2` a restart that cannot change the rank records the rank kept
 - `1267947` a finetuned model's layer is the layer every model gets
