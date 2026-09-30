@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from cellmap_flow.globals import g
-from cellmap_flow.viewer.raw import get_raw_layer
+from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer
 
 
 def _source(layer):
@@ -82,17 +82,36 @@ def _funlib_pyramid(f):
     return f.raw_zarr(np.zeros((16, 16, 16), np.uint8), name="pyramid/s0")
 
 
-@pytest.mark.parametrize("write", [
-    pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))), id="named-sN"),
-    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]), id="named-by-number"),
-    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]) + "/1", id="one-numbered-level"),
-    pytest.param(lambda f: _unlisted_s2(f.ome_pyramid(((8, 0), (16, 4), (32, 12)))), id="a-level-not-listed"),
+def _precomputed_scales(f, count=2):
+    """A precomputed volume of ``count`` scales: 8 nm, then twice the one before."""
+    for scale in range(count):
+        path = f.write_array("precomputed", np.zeros((8 >> scale,) * 3, np.uint8), {"resolution": [8 << scale] * 3})
+    return path
+
+
+TWO_LEVELS = [(1, 1, 1), (2, 2, 2)]
+
+
+@pytest.mark.parametrize("write, levels", [
+    pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))), TWO_LEVELS, id="named-sN"),
+    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]), TWO_LEVELS, id="named-by-number"),
+    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]) + "/1", TWO_LEVELS,
+                 id="one-numbered-level"),
+    pytest.param(lambda f: _unlisted_s2(f.ome_pyramid(((8, 0), (16, 4), (32, 12)))), TWO_LEVELS,
+                 id="a-level-not-listed"),
     # Without OME multiscales, an sN level's siblings are the pyramid.
-    pytest.param(_funlib_pyramid, id="funlib-sN-without-multiscales"),
+    pytest.param(_funlib_pyramid, TWO_LEVELS, id="funlib-sN-without-multiscales"),
+    # A precomputed volume's levels are its scales, found from any one of them...
+    pytest.param(_precomputed_scales, TWO_LEVELS, id="precomputed-scales"),
+    pytest.param(lambda f: _precomputed_scales(f) + "/s1", TWO_LEVELS, id="one-precomputed-scale"),
+    # ...but one scale stays one array, which neuroglancer downsamples on the fly.
+    pytest.param(lambda f: _precomputed_scales(f, count=1), None, id="precomputed-of-one-scale"),
 ])
-def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_zarr, write):
-    layer = get_raw_layer(write(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr)), normalize=False)
-    assert sorted(layer.source[0].url.volume_layers) == [(1, 1, 1), (2, 2, 2)]
+def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_zarr, write_array, write, levels):
+    path = write(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr, write_array=write_array))
+    layer = get_raw_layer(path, normalize=False)
+    url = layer.source[0].url
+    assert (sorted(url.volume_layers) if isinstance(url, ScalePyramid) else None) == levels
     assert _placement(layer)[0] == pytest.approx([8e-9] * 3)
 
 

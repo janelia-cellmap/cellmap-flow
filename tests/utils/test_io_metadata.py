@@ -264,6 +264,17 @@ def test_a_janelia_pyramids_levels_share_their_corner(janelia):
     ]
 
 
+def test_a_precomputed_volumes_levels_are_its_scales(write_array):
+    """As s<N>, the path that opens scale N; the path of one scale is not the volume."""
+    for scale in (0, 1):
+        volume = write_array("precomputed", np.zeros((8 >> scale,) * 3, np.uint8), {"resolution": [8 << scale] * 3})
+    assert [(path, meta.path, meta.spatial().voxel_size) for path, meta in list_levels(volume)] == [
+        ("s0", volume + "/s0", (8.0,) * 3), ("s1", volume + "/s1", (16.0,) * 3),
+    ]
+    with pytest.raises(ValueError, match="scale 1"):
+        list_levels(volume + "/s1")
+
+
 def test_a_group_resolves_to_a_level_and_an_array_is_read_as_it_is(janelia):
     assert select_dataset(janelia, (16, 16, 16)) == (os.path.join(janelia, "s1"), "s1")
     assert select_dataset(janelia + "/s0", (16, 16, 16)) == (janelia + "/s0", None)

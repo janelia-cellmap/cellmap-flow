@@ -20,6 +20,9 @@ Four parsers produce it:
   array itself (and on crops), taken as written.
 - ``_precomputed``: tensorstore's dimension units.
 
+``list_levels(path)`` gives the levels of an OME multiscale group, or the
+scales of a precomputed volume.
+
 Each format's reader keeps the lookup order and fallbacks the old
 per-format readers had (``utils.ds.read_ds_meta`` and friends, now wrappers
 over this module); tests/utils/test_io_metadata.py pins them.
@@ -773,26 +776,33 @@ def _read_v3(path: str) -> ArrayMeta:
     raise RuntimeError(f"No array found under Zarr v3 group: {container}")
 
 
-def _precomputed(path: str) -> ArrayMeta:
-    """A neuroglancer precomputed volume, in C order (c, z, y, x).
-
-    ``voxel_offset`` is where voxel 0 is, in voxels, so the translation is
-    ``voxel_offset * resolution``. tensorstore starts the volume's domain at
-    it; utils.ds opens it with the domain moved to 0.
-    """
+def _open_precomputed(path: str):
+    """The tensorstore of the scale of a precomputed volume ``path`` names
+    (``paths.precomputed_kvstore``), in the driver's order."""
     import tensorstore as ts
 
     # Not GCE's metadata server: probing it for credentials stalls a gs://
     # open off Google Cloud (utils.ds sets the same on import).
     os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
     kvstore, scale_index = paths.precomputed_kvstore(path)
-    store = ts.open(
+    return ts.open(
         {"driver": "neuroglancer_precomputed", "kvstore": kvstore, "scale_index": scale_index},
         read=True,
         write=False,
     ).result()
+
+
+def _precomputed(path: str) -> ArrayMeta:
+    """A neuroglancer precomputed volume, in C order (c, z, y, x).
+
+    ``voxel_offset`` is where voxel 0 is, in voxels, so the translation is
+    ``voxel_offset * resolution``. tensorstore starts the volume's domain at
+    it; io.source opens it with the domain moved to 0.
+    """
+    import tensorstore as ts
+
     # The driver's order is x, y, z, channel.
-    store = store[ts.d[:].transpose[::-1]]
+    store = _open_precomputed(path)[ts.d[:].transpose[::-1]]
     labels = list(store.domain.labels)
     spatial = [i for i, name in enumerate(labels) if name not in _NON_SPATIAL_AXIS_NAMES]
     voxel_size = []
@@ -830,7 +840,7 @@ def read_array_meta(path: str) -> ArrayMeta:
 
 
 # ---------------------------------------------------------------------------
-# Levels of a multiscale group
+# Levels of a multiscale group (or of a precomputed volume)
 # ---------------------------------------------------------------------------
 
 
@@ -852,14 +862,31 @@ def levels_from_zarr_group(group, group_path: str = "") -> List[Tuple[str, Array
     ]
 
 
+def _precomputed_levels(path: str) -> List[Tuple[str, ArrayMeta]]:
+    """``list_levels`` of a precomputed volume: every scale its ``info``
+    lists, in that order, as ``s<N>``, the path under the volume that opens
+    scale N. The path of one scale (``…/s2``) is not the volume, and raises
+    ValueError."""
+    _, scale = paths.precomputed_scale(path)
+    if scale is not None:
+        raise ValueError(f"{path} is scale {scale} of a precomputed volume, not the volume")
+    info = json.loads(_open_precomputed(path).kvstore.read("info").result().value)
+    return [
+        (f"s{i}", _precomputed(paths.join(path, f"s{i}"))) for i in range(len(info["scales"]))
+    ]
+
+
 def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
     """``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
-    group at ``group_path``, in the order its ``datasets`` list them.
+    group at ``group_path``, in the order its ``datasets`` list them, or of
+    the precomputed volume there (``_precomputed_levels``).
 
     Raises when there is no such group (KeyError for a v2 group without
     multiscales, ValueError for a v3 one).
     """
     group_path = paths.normalize_path(group_path)
+    if paths.is_precomputed(group_path):
+        return _precomputed_levels(group_path)
     if not paths.is_remote(group_path) and paths.is_v3_container(group_path):
         multiscale = multiscales_from_group(group_path)
         if multiscale is None:

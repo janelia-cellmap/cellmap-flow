@@ -1,12 +1,13 @@
 """The raw data's neuroglancer layer, and the shaders of the viewer's layers.
 
 ``get_raw_layer`` shows a zarr, N5 or precomputed volume. By default it is
-served from this process: a multiscale pyramid as one ``ScalePyramid``
-(each level a ``LocalVolume``, served as a downsampling of the finest), a
-single array as a ``LocalVolume``, both read through ImageDataInterface so
-that the input chain applies to what is drawn (never to a segmentation's
-ids), and placed by a source transform that puts voxel 0's lower corner
-where the metadata says. With ``wrap_raw=False`` neuroglancer reads the
+served from this process: a multiscale pyramid (an OME-Zarr group's
+levels, a precomputed volume's scales) as one ``ScalePyramid`` (each level
+a ``LocalVolume``, served as a downsampling of the finest), a single array
+as a ``LocalVolume``, both read through ImageDataInterface so that the
+input chain applies to what is drawn (never to a segmentation's ids), and
+placed by a source transform that puts voxel 0's lower corner where the
+metadata says. With ``wrap_raw=False`` neuroglancer reads the
 files itself. ``RAW_SHADER`` and ``prediction_shader`` are the layers'
 shaders, their contrast windows sampled from the data where it can be read.
 
@@ -186,8 +187,11 @@ def _pyramid(dataset_path):
     ``datasets[].path`` in the order listed, whatever they are named ("s0"
     or "0"); the path of one of them finds the others. A pyramid without
     OME multiscales (N5, funlib) is a group's sN arrays, and an sN path is
-    one of its parent's.
+    one of its parent's. A precomputed volume's are its scales (see
+    _precomputed_pyramid).
     """
+    if paths.is_precomputed(dataset_path):
+        return _precomputed_pyramid(dataset_path)
     parent, _, leaf = dataset_path.rstrip("/").rpartition("/")
     for group, level in ((dataset_path, None), (parent, leaf)):
         try:
@@ -199,6 +203,25 @@ def _pyramid(dataset_path):
     group = parent if _is_sn(leaf) else dataset_path
     levels = _sn_arrays(group)
     return (group, levels) if levels else None
+
+
+def _precomputed_pyramid(dataset_path):
+    """``(volume, level paths)`` for a precomputed volume of more than one
+    scale, or one of its scales (``…/s2``), else None.
+
+    Its levels are s0, s1, ..., each scale its info lists, in that order
+    (io.metadata.list_levels). A volume of one scale is shown as one array,
+    as it always was: neuroglancer downsamples one array on the fly when
+    zoomed out, but a ScalePyramid never past its coarsest level.
+    """
+    volume, scale = paths.precomputed_scale(dataset_path)
+    try:
+        levels = [path for path, _ in metadata.list_levels(volume)]
+    except Exception:
+        return None
+    if len(levels) < 2 or (scale is not None and scale >= len(levels)):
+        return None
+    return volume, levels
 
 
 def get_raw_layer(
@@ -216,9 +239,7 @@ def get_raw_layer(
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
-    # A precomputed volume's scales are tensorstore's business, and it is
-    # not zarr to look for levels in.
-    pyramid = None if paths.is_precomputed(dataset_path) else _pyramid(dataset_path)
+    pyramid = _pyramid(dataset_path)
     if pyramid is not None:
         dataset_path, scales = pyramid
 
