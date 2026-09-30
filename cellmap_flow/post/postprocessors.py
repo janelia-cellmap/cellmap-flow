@@ -10,7 +10,7 @@ import threading
 import numpy as np
 
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
-from cellmap_flow.utils.safe_expression import compile_expression
+from cellmap_flow.norm.safe_expression import compile_expression
 
 logger = logging.getLogger(__name__)
 

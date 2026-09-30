@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import inspect
 
-from cellmap_flow.utils.safe_expression import compile_expression
+from cellmap_flow.norm.safe_expression import compile_expression
 
 logger = logging.getLogger(__name__)
 

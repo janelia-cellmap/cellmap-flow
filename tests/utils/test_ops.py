@@ -32,7 +32,7 @@ from cellmap_flow.post.postprocessors import (
     SimpleBlockwiseMerger,
     get_postprocessors,
 )
-from cellmap_flow.utils.safe_expression import compile_expression
+from cellmap_flow.norm.safe_expression import compile_expression
 
 MASK = np.zeros((8, 8, 8), np.uint8)
 MASK[2:6, 2:6, 2:6] = 1

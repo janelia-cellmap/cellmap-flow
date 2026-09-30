@@ -10,7 +10,7 @@ cellmap-flow serves PyTorch, TensorFlow, DaCapo and bioimage.io models to Neurog
 
 **Code**
 - `peft` and `tensorboard` come from the optional `finetune` extra, so import them inside the functions that use them, never at module level. CI runs the tests without that extra too.
-- Never `eval` or `exec` a string from a request, a layer URL or a YAML file; Lambda expressions go through `utils/safe_expression.compile_expression`. Inference servers and the dashboard listen on 0.0.0.0, so anything they receive can come from any host on the network.
+- Never `eval` or `exec` a string from a request, a layer URL or a YAML file; Lambda expressions go through `norm/safe_expression.compile_expression`. Inference servers and the dashboard listen on 0.0.0.0, so anything they receive can come from any host on the network.
 - Give `subprocess` an argv list, and `shlex.quote` every value put into a command string such as a bsub command.
 - Library code raises (`ConfigError` for a bad configuration); only CLI entry points call `sys.exit`.
 - New code does not add state to the `Flow` singleton `g` (`globals.py`) or hard-code site values such as `gpu_h100`, 8 nm or `sN` level names; take them as arguments or from the data's metadata.
