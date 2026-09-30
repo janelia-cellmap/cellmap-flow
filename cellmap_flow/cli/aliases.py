@@ -9,6 +9,7 @@ the arguments it was given. They go in the release after 0.3.0, with their
   cellmap_flow_view                cellmap_flow view
   cellmap_flow_blockwise           cellmap_flow blockwise
   cellmap_flow_blockwise_multiple  cellmap_flow blockwise (it takes several YAMLs)
+  cellmap_flow_app                 cellmap_flow dashboard
 """
 
 import sys
@@ -31,3 +32,4 @@ yaml = _alias("cellmap_flow_yaml", "yaml")
 view = _alias("cellmap_flow_view", "view")
 blockwise = _alias("cellmap_flow_blockwise", "blockwise")
 blockwise_multiple = _alias("cellmap_flow_blockwise_multiple", "blockwise")
+app = _alias("cellmap_flow_app", "dashboard")

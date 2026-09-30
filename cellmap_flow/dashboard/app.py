@@ -5,7 +5,7 @@ import logging
 from flask import Flask
 
 from cellmap_flow.globals import g, LogHandler
-from cellmap_flow.logging_setup import LOG_DATEFMT, LOG_FORMAT
+from cellmap_flow.logging_setup import LOG_DATEFMT, LOG_FORMAT, configure_logging
 from cellmap_flow.dashboard.routes.logging_routes import logging_bp
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
@@ -77,8 +77,17 @@ def _announce_service_url(url):
 
 
 def create_and_run_app(neuroglancer_url=None):
+    """Serve the dashboard on a free port, until the process is stopped.
+
+    It prints its URL, and writes it where SERVICE_URL_PATH says. Its
+    terminal lines (the URL, the models it launches) are INFO: a
+    cellmap_flow command has configured logging by now, and a script that
+    calls this without doing so gets the shared format at INFO.
+    """
     from werkzeug.serving import make_server
 
+    if not logging.getLogger().handlers:
+        configure_logging()
     g.NEUROGLANCER_URL = neuroglancer_url
     hostname = socket.gethostname()
     # threaded=True is not optional. make_server defaults to one request at a

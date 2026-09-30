@@ -44,16 +44,15 @@ ROOT = Path(__file__).resolve().parents[2]
 # What each installed command runs. cellmap_flow is main(), which runs the
 # click group. The commands before 0.3.0 are aliases (cli/aliases.py) of its
 # subcommands; cellmap_flow_server keeps its per-type commands for one
-# release; cellmap_flow_app is a plain function, so it takes no arguments
-# and `cellmap_flow_app --help` starts the dashboard.
+# release.
 ENTRY_POINTS = {
     "cellmap_flow": "cellmap_flow.cli.main:main",
     "cellmap_flow_yaml": "cellmap_flow.cli.aliases:yaml",
     "cellmap_flow_view": "cellmap_flow.cli.aliases:view",
     "cellmap_flow_blockwise": "cellmap_flow.cli.aliases:blockwise",
     "cellmap_flow_blockwise_multiple": "cellmap_flow.cli.aliases:blockwise_multiple",
+    "cellmap_flow_app": "cellmap_flow.cli.aliases:app",
     "cellmap_flow_server": "cellmap_flow.cli.server_cli:cli",
-    "cellmap_flow_app": "cellmap_flow.dashboard.app:create_and_run_app",
 }
 CLICK_ENTRY_POINTS = {"cellmap_flow_server"}
 
@@ -84,6 +83,8 @@ ALIASES = [
     (aliases.view, "cellmap_flow_view", "view"),
     (aliases.blockwise, "cellmap_flow_blockwise", "blockwise"),
     (aliases.blockwise_multiple, "cellmap_flow_blockwise_multiple", "blockwise"),
+    # It was a plain function: `cellmap_flow_app --help` started the dashboard.
+    (aliases.app, "cellmap_flow_app", "dashboard"),
 ]
 
 
@@ -204,6 +205,8 @@ CELLMAP_FLOW = {
         ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),
         *LOG_LEVEL_OF_GROUP,
     ],
+    'dashboard': [('neuroglancer_url', ('-n', '--neuroglancer-url'), (), 'text', False, None, False,
+                   "The viewer the dashboard's page embeds.")],
     'doctor': [('core_only', ('--core-only',), (), 'boolean', False, False, True, 'Skip the finetune checks.')],
     'finetune': [],
     'finetune build-corrections': PASSED_THROUGH,

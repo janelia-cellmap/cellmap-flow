@@ -4,6 +4,7 @@
   infer <type>   start a model's inference server and open the viewer on it
   yaml           the same for the models a YAML file lists
   view           open a dataset in the viewer; pick models in the dashboard
+  dashboard      serve the dashboard alone, for a viewer already running
   blockwise      run models over a whole volume, writing predictions to disk
   finetune       the finetune tools: train, export-merged, build-corrections
   models         list the model types and their arguments
@@ -56,6 +57,25 @@ def cli():
       cellmap_flow infer dacapo -r my_run -i 100 -d /path/to/data
       cellmap_flow blockwise config.yaml
     """
+
+
+@click.command()
+@click.option("-n", "--neuroglancer-url", default=None, help="The viewer the dashboard's page embeds.")
+def dashboard(neuroglancer_url):
+    """Serve the dashboard alone, for a viewer already running.
+
+    `view`, `yaml` and `infer` start the dashboard with the viewer they
+    open; this is the dashboard on its own, as `cellmap_flow_app` served it
+    before 0.3.0. It prints its URL, and writes it to the file named by
+    SERVICE_URL_PATH when that is set. Ctrl+C stops it and kills the models
+    it launched.
+    """
+    # Imported here: the dashboard's routes pull in flask and the rest.
+    from cellmap_flow.dashboard.app import create_and_run_app
+    from cellmap_flow.jobs.launch import install_cleanup_handlers
+
+    install_cleanup_handlers()
+    create_and_run_app(neuroglancer_url=neuroglancer_url)
 
 
 @click.command()
@@ -172,6 +192,7 @@ for _name, _module, _summary in (
 cli.add_command(infer)
 cli.add_command(yaml_cli.main, name="yaml")
 cli.add_command(viewer_cli.main, name="view")
+cli.add_command(dashboard)
 cli.add_command(blockwise, name="blockwise")
 cli.add_command(finetune)
 cli.add_command(models)

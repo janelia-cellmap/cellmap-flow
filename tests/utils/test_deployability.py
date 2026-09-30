@@ -8,6 +8,7 @@ they drifted from main.
 """
 
 import importlib
+import logging
 import os
 import socket
 import subprocess
@@ -77,8 +78,13 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
     monkeypatch.setattr(werkzeug.serving, "make_server", FakeServer)
     url_file = tmp_path / "service_url"
     monkeypatch.setenv("SERVICE_URL_PATH", str(url_file))
+    # As in a script that configured no logging: the URL still reaches the terminal.
+    root = logging.getLogger()
+    monkeypatch.setattr(root, "handlers", [])
+    monkeypatch.setattr(root, "level", root.level)
 
     dashboard.create_and_run_app(neuroglancer_url="http://ng")
+    assert root.handlers and root.level == logging.INFO
 
     url = url_file.read_text()
     host, port = url.removeprefix("http://").rsplit(":", 1)
