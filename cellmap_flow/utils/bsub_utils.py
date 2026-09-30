@@ -8,7 +8,6 @@ Supports:
 """
 
 import os
-import subprocess  # tests patch bsub_utils.subprocess.run; the module object is shared with jobs/
 import logging
 import sys
 import signal
