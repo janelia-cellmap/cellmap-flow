@@ -151,7 +151,8 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - submit refuses a `yaml_paths` that is not a list of paths. A number there used to be opened as a file descriptor.
   - **Blockwise:**
     - a model that names its channels with `classes` or `channels_names` runs. Blockwise read only `channels` and failed with `AttributeError` before creating anything. A model that names none is refused with a `ConfigError`, unless the task's `output_channels` is a dict of indices;
-    - the processor and precheck refuse a task that is not a path (str, bytes or `os.PathLike`) with a `ConfigError`. A number was opened as a file descriptor, and closing it closed whatever the process had open there.
+    - `load_config` (`cellmap_flow_yaml` and blockwise) refuses a task that is not a path (str, bytes or `os.PathLike`) with a `ConfigError`. A number was opened as a file descriptor, and closing it closed whatever the process had open there;
+    - a model that gives its channel names as one string (`channels = "mito"`, or `classes`/`channels_names`) has one channel of that name, not one per letter. Blockwise creates one output for it again, and the server's model info and the geometry cache report one name.
   - **Dashboard tabs:**
     - the Finetune tab stops polling a job once it is COMPLETED, FAILED or CANCELLED, or once the server answers 404, which also logs a line saying so;
     - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page. That note names the job's log file from the start, not only after the next line arrives;
@@ -173,6 +174,8 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `e286362` load_config refuses a YAML that is not a path
+- `d1c632c` a model's channels given as one string name one channel
 - `1bf82c7` the server is announced from what the monitor has read
 - `6ebc046` the monitor reads each log line once, and only once it is whole
 - `79e11ee` a finished job whose record cannot be read stays COMPLETED
