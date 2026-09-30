@@ -66,9 +66,9 @@ READS = {
     # A start inside a voxel reads from that voxel.
     "off-grid-start": (_at_the_origin, {}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2])),
     "negative-start": (_at_the_origin, {}, (0, 0, 0), Roi((-16, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [0, 0, 1, 2])),
-    # Half a voxel before the array: rounded toward zero, to voxel 0.
+    # Half a voxel before the array is in voxel -1, as on the other side of voxel 0.
     "negative-off-grid-start": (
-        _at_the_origin, {}, (0, 0, 0), Roi((-4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2]),
+        _at_the_origin, {}, (0, 0, 0), Roi((-4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [0, 1]),
     ),
     "past-the-end": (_at_the_origin, {}, (0, 0, 0), Roi((112, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [15, 16, 0, 0])),
     # Outside the array a read is padded with 0, not the array's fill value...

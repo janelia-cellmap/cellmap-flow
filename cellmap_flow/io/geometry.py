@@ -50,12 +50,12 @@ class Grid:
         """The voxels a read of ``roi`` returns: as many whole voxels as fit in
         ``roi.shape``, from the one ``roi.begin`` is in.
 
-        A start before voxel 0 and off the grid is rounded toward zero, so
-        half a voxel before the array reads from voxel 0. Float noise from
+        That is the voxel below an off-grid start on either side of voxel 0:
+        half a voxel before the array starts at voxel -1. Float noise from
         the division (9.9999999 voxels) counts as the whole number it is.
         """
         voxel_size = np.asarray(self.voxel_size, dtype=float)
-        begin = np.trunc(
+        begin = np.floor(
             snap_integral(
                 (np.asarray(roi.begin, dtype=float) - np.asarray(self.translation, dtype=float))
                 / voxel_size
