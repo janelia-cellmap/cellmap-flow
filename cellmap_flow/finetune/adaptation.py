@@ -1,31 +1,16 @@
 """How a finetune adapts the model: a LoRA adapter, or every weight.
 
-Whether a run trained an adapter or the whole model used to be asked at a
-dozen sites -- ``isinstance(model, PeftModel)``, the trainer's
-``_is_peft()``, ``args.lora_r`` -- and the answers could disagree: a restart
-changes ``args.lora_r`` but not the model, and the next iteration's YAML
-pointed at an adapter that was never written. Everything that differs
-between the two now lives here, behind one interface:
+Everything that differs between the two lives here: how the model is made
+trainable, what stays frozen, the distillation teacher, the in-place reset
+(the trainer's retry after a NaN) and the restart between a job's
+iterations, what a checkpoint keeps, the export and the merge into plain
+weights. The request decides once, when the model is prepared (``--lora-r``,
+0 for full); after that the model does (``strategy_for``), since a restart
+can change ``args.lora_r`` but not the model.
 
-- ``prepare``: make the model trainable -- wrap it in a fresh adapter, or
-  unfreeze every weight -- folding in any adapter it already carries;
-- ``train_mode``: train mode, less what stays frozen;
-- ``teacher``: the model as it was before this run, for distillation;
-- ``initial_state`` / ``reset``: put the model back where training started,
-  in place (the trainer's retry after a NaN);
-- ``restart``: the model the next iteration of a job trains (the CLI's
-  restart, which for LoRA re-makes the adapter so its rank can change);
-- ``trainable_state`` / ``checkpoint``: what a checkpoint keeps;
-- ``export``: what is written for serving, under ``export_name``;
-- ``merge``: the finetune folded into plain weights (export_merged).
-
-The request decides the strategy once, when the model is prepared
-(``--lora-r``, 0 for full). After that the model does: ``strategy_for``.
-
-The adapter's names depend on the module tree it was trained on --
-``BatchLoopWrapper``'s ``model.`` prefix included -- so the wrappers stay in
-lora_wrapper, and this module only calls them. peft is imported lazily, as
-everywhere: a full finetune never needs it.
+The adapter's names depend on the module tree it was trained on
+(``BatchLoopWrapper``'s ``model.`` prefix included), so the wrappers stay in
+lora_wrapper and this module only calls them. peft is imported lazily.
 """
 
 import copy
@@ -100,12 +85,9 @@ class AdaptationStrategy(Protocol):
 
 
 class _AdapterOff:
-    """LoRA's teacher: the model with its adapter switched off, in eval mode.
-
-    In train mode the base's dropout made the teacher's targets noisy, and
-    its norm layers normalized by the batch. On the way out the adapter is
-    switched back on and every module gets back the mode it had.
-    Reusable: the trainer enters it for every batch.
+    """LoRA's teacher: the model with its adapter off, in eval mode (no dropout
+    noise, no batch statistics). On exit the adapter is back on and every
+    module has its mode back. Reusable: the trainer enters it every batch.
     """
 
     def __init__(self, model):
@@ -155,14 +137,9 @@ class LoraStrategy:
         )
 
     def train_mode(self, model):
-        """Train mode, except for the frozen base's norm layers.
-
-        LoRA freezes the base, but model.train() also put its BatchNorm
-        layers in train mode: they normalized by each (tiny) batch and kept
-        updating running statistics that are not part of the adapter, so the
-        model served in this process drifted from adapter + fresh base, and
-        the base was not frozen after all. They stay in eval mode, as they are
-        served.
+        """Train mode, except for the frozen base's norm layers: they stay in
+        eval mode, as served, instead of updating running statistics that the
+        adapter does not save.
         """
         model.train()
         norm_types = (nn.modules.batchnorm._BatchNorm, nn.modules.instancenorm._InstanceNorm)
@@ -188,11 +165,7 @@ class LoraStrategy:
         return model
 
     def restart(self, model, initial_state=None):
-        """A fresh adapter, with this strategy's rank, on the base the old one was trained on.
-
-        The old adapter is unloaded, not merged: the next iteration starts
-        from the model the job started from.
-        """
+        """A fresh adapter with this strategy's rank; the old one is unloaded, not merged."""
         logger.info("Resetting LoRA adapter weights for fresh restart...")
         return self.prepare(model.unload())
 
@@ -202,11 +175,7 @@ class LoraStrategy:
         return {k: v for k, v in model.state_dict().items() if k in trainable_keys}
 
     def checkpoint(self, model, optimizer, scaler, is_best):
-        """The adapter's weights, with the optimizer and scaler states, so a run can resume.
-
-        Only the trainable parameters: writing the full 800M+ param base to
-        disk every checkpoint is what this avoids.
-        """
+        """The adapter's weights (not the 800M-param base), optimizer and scaler: resumable."""
         return {
             'model_state_dict': self.trainable_state(model),
             'optimizer_state_dict': optimizer.state_dict(),
@@ -225,11 +194,10 @@ class LoraStrategy:
 
     @staticmethod
     def merge(model):
-        """The adapter folded into the base weights: a plain module, no peft needed to serve it.
+        """The adapter folded into the base weights: a plain module, served without peft.
 
-        peft merges most layers itself; for a 1x1x1 Conv3d (an affinity
-        head) the delta is computed here, since peft's shortcut for 1x1
-        kernels is conv2d-only and fails on it.
+        A 1x1x1 Conv3d's delta is computed by lora_wrapper: peft's 1x1
+        shortcut is conv2d-only and fails on it.
         """
         from cellmap_flow.finetune.lora_wrapper import _merge_existing_adapters
 
@@ -243,14 +211,10 @@ class LoraStrategy:
 
 
 class FullStrategy:
-    """Train every weight; export the whole state dict.
+    """Train every weight; export the whole state dict (FinetuneModelConfig(weights_path=...)).
 
-    Measured against LoRA r=64 on mito-aff-unet-setup-16 (2026-09-23): faster
-    per step (0.50 vs 0.90 s), lower memory (31 vs 50 GB at batch 8), and
-    lower training loss at every checkpoint -- the adapter's savings are in
-    parameters, which is not where this model's cost is. The export is a full
-    state dict under full_finetune/, served via
-    FinetuneModelConfig(weights_path=...).
+    Against LoRA r=64 on mito-aff-unet-setup-16 (2026-09-23): 0.50 vs 0.90 s
+    a step, 31 vs 50 GB at batch 8, and a lower loss at every checkpoint.
     """
 
     kind = "full"
@@ -258,9 +222,7 @@ class FullStrategy:
     r = 0
 
     def __init__(self, teacher_model: Optional[nn.Module] = None):
-        # The frozen copy of the starting weights, once made; given, to reuse
-        # a previous iteration's.
-        self.teacher_model = teacher_model
+        self.teacher_model = teacher_model  # the frozen teacher: made once, or a previous one's
         self._warned_periodic = False
 
     def prepare(self, model):
@@ -281,15 +243,9 @@ class FullStrategy:
         model.train()
 
     def teacher(self, model):
-        """A frozen copy of the weights training starts from.
-
-        Made at the first call -- the trainer's, before any step -- and kept:
-        the CLI hands it to the next iteration's trainer, so a restart
-        neither copies the model again nor distils toward weights an earlier
-        iteration already changed. A full finetune has no adapter to switch
-        off; it used to call disable_adapter_layers() anyway and die on the
-        first batch. One extra set of parameters on the device, and no
-        activations kept, since the teacher runs under no_grad.
+        """A frozen copy of the weights training starts from, made at the first call
+        (the trainer's, before any step) and kept: the CLI hands it to each later
+        iteration's trainer, so the teacher is the job's starting weights, copied once.
         """
         if self.teacher_model is None:
             self.teacher_model = frozen_teacher_copy(model)
@@ -311,12 +267,7 @@ class FullStrategy:
         return model
 
     def restart(self, model, initial_state):
-        """The same model, back at its starting weights.
-
-        Before, the weights carried on from the previous iteration, NaNs
-        included when it had diverged, so a full finetune never really
-        restarted.
-        """
+        """The same model, back at its starting weights."""
         if initial_state is not None:
             logger.info("Resetting the full finetune to its starting weights for a fresh restart...")
             model.load_state_dict(initial_state)
@@ -327,11 +278,10 @@ class FullStrategy:
         return model.state_dict()
 
     def checkpoint(self, model, optimizer, scaler, is_best):
-        """Only the best epoch's weights, without optimizer state (so no resume); None otherwise.
+        """Only the best epoch's weights, no optimizer state; None otherwise.
 
-        Every parameter is trainable, so a LoRA-style checkpoint would be the
-        whole model plus two Adam moments -- ~9.5 GB for an 800M-param UNet,
-        twenty times per run. The best weights are what export() writes.
+        With every parameter trainable, a resumable checkpoint would be the
+        model plus two Adam moments: ~9.5 GB for an 800M-param UNet, each time.
         """
         if not is_best:
             if not self._warned_periodic:
@@ -345,11 +295,7 @@ class FullStrategy:
         }
 
     def export(self, model, export_dir, path=None):
-        """The whole state dict, to ``export_dir``/full_finetune/model_state_dict.pt.
-
-        There FinetuneModelConfig(weights_path=...) expects it. ``path`` (an
-        adapter's own directory) does not apply.
-        """
+        """The state dict, to ``export_dir``/full_finetune/model_state_dict.pt (``path`` is LoRA's)."""
         out = Path(export_dir) / self.export_name
         out.mkdir(parents=True, exist_ok=True)
         weights = out / "model_state_dict.pt"
@@ -375,15 +321,11 @@ def strategy_for(
 ) -> AdaptationStrategy:
     """The strategy ``model`` is trained with: LoRA if it carries an adapter, else full.
 
-    The model decides, not the request. A restart can ask for another rank,
-    or for none, but the model -- which the inference server shares -- is
-    built once, so a job never switches between the two.
-
-    For a LoRA model, ``lora_r`` (when positive), ``alpha``, ``dropout``,
-    ``min_channels`` and ``target_modules`` set the adapter ``restart``
-    makes; what is not given is the adapter's own (rank, alpha, dropout) or
-    the default. ``teacher_model`` is a full finetune's existing teacher, to
-    reuse.
+    The model decides, not the request: it is built once and shared with the
+    inference server, so a job never switches kinds. For a LoRA model,
+    ``lora_r`` (when positive) and the keywords set the adapter ``restart``
+    makes; the adapter's own rank, alpha and dropout fill in the rest.
+    ``teacher_model`` is a full finetune's existing teacher, to reuse.
     """
     if not is_peft_model(model):
         return FullStrategy(teacher_model=teacher_model)

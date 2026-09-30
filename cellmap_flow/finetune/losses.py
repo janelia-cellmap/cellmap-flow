@@ -1,14 +1,10 @@
 """The finetune losses, and the masked means they are all made of.
 
-Every loss here is averaged over the voxels a mask supervises, not over the
-patch: a correction labels a few voxels of it, and the rest must not count.
-``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
-the background half the weight each, and the losses and the distillation
-term below are built from the two.
-
-The float operations are kept in the order the trainer always used, so a
-run computes the same numbers bit for bit (tests/finetune/
-test_training_snapshot.py). lora_trainer re-exports these names.
+Every loss is averaged over the voxels a mask supervises, not the patch: a
+correction labels few of them. ``masked_mean`` is that average,
+``balanced_mean`` weighs foreground and background equally. The float
+operations keep the trainer's order, so a run's numbers are bit-identical
+(tests/finetune/test_training_snapshot.py).
 """
 
 from typing import Optional
@@ -102,26 +98,12 @@ class DiceLoss(nn.Module):
     """
 
     def __init__(self, smooth: float = 1.0):
-        """
-        Args:
-            smooth: Smoothing factor to avoid division by zero (default: 1.0)
-        """
         super().__init__()
-        self.smooth = smooth
+        self.smooth = smooth  # keeps an empty class from dividing by zero
         self.apply_sigmoid = True
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Compute Dice loss.
-
-        Args:
-            pred: Predictions (B, C, Z, Y, X) - raw logits or probabilities
-            target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-        Returns:
-            Dice loss value (scalar)
-        """
+        """Dice loss of (B, C, Z, Y, X) logits (or probabilities) against 0/1 targets, over ``mask``."""
         # Flatten spatial dimensions
         pred = pred.reshape(pred.size(0), pred.size(1), -1)  # (B, C, N)
         target = target.reshape(target.size(0), target.size(1), -1)  # (B, C, N)
@@ -156,11 +138,6 @@ class CombinedLoss(nn.Module):
     """
 
     def __init__(self, dice_weight: float = 0.5, bce_weight: float = 0.5):
-        """
-        Args:
-            dice_weight: Weight for Dice loss
-            bce_weight: Weight for BCE loss
-        """
         super().__init__()
         self.dice_loss = DiceLoss()
         self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
@@ -168,17 +145,7 @@ class CombinedLoss(nn.Module):
         self.bce_weight = bce_weight
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Compute combined loss.
-
-        Args:
-            pred: Predictions (B, C, Z, Y, X) - raw logits
-            target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-            mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-        Returns:
-            Combined loss value (scalar)
-        """
+        """Weighted Dice + BCE of (B, C, Z, Y, X) logits against 0/1 targets, over ``mask``."""
         dice = self.dice_loss(pred, target, mask)
 
         bce = self.bce_loss(pred, target)
