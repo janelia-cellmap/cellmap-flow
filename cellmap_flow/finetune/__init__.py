@@ -5,8 +5,8 @@ This package provides lightweight LoRA-based finetuning for pre-trained models
 using user corrections as training data.
 
 The names below are imported when first used (PEP 562): importing a light
-submodule -- ``markers`` or ``job_log``, which the dashboard reads a
-training job's log with -- used to import torch, the trainer and the
+submodule -- ``markers`` or ``job_manager.tailer``, which the dashboard
+reads a training job's log with -- used to import torch, the trainer and the
 dataset code first.
 """
 

@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Any
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_manager import state
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
-from cellmap_flow.finetune.job_log import LogTailer
+from cellmap_flow.finetune.job_manager.tailer import LogTailer, finished_iterations, trainer_outputs_from_log
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import JobSpec
@@ -100,45 +100,6 @@ def finetune_export_kwargs(output_dir, params=None) -> dict:
     if params and int(params.get("lora_r", 8) or 0) <= 0:
         return {"weights_path": str(weights)}
     return {"lora_adapter_path": str(adapter)}
-
-
-_ITERATION_COMPLETE_RE = markers.ITERATION_COMPLETE_RE
-_MODEL_YAML_RE = markers.MODEL_YAML_RE
-
-
-def _finished_iterations(log_file):
-    """(how many iterations the log says finished, the last one's model name).
-
-    Read a line at a time, since the log is everything the run printed. A log
-    that is missing or cannot be read is no evidence: (0, None).
-    """
-    count, last = 0, None
-    try:
-        with open(log_file, errors="replace") as f:
-            for line in f:
-                for name in markers.ITERATION_COMPLETE_RE.findall(line):
-                    count, last = count + 1, name
-    except OSError:
-        return 0, None
-    return count, last
-
-
-def trainer_outputs_from_log(log_text: str):
-    """(model name, serving YAML path) of the last iteration the log reports.
-
-    Either is None when the log has none. The YAML is only taken when it
-    belongs to that iteration: the trainer prints it just before the
-    iteration's completion marker, and skips it when it could not write one.
-    """
-    names = list(_ITERATION_COMPLETE_RE.finditer(log_text))
-    if not names:
-        return None, None
-    last = names[-1]
-    previous_end = names[-2].end() if len(names) > 1 else 0
-    yamls = [
-        m for m in _MODEL_YAML_RE.finditer(log_text, previous_end, last.start())
-    ]
-    return last.group(1), (yamls[-1].group(1) if yamls else None)
 
 
 class FinetuneJobListener:
@@ -911,7 +872,7 @@ class FinetuneJobManager:
                 # out of walltime -- so a run whose log shows a finished
                 # iteration delivered a model, and that is what it is recorded
                 # as having done.
-                iterations, last = _finished_iterations(metadata_file.parent / "training_log.txt")
+                iterations, last = finished_iterations(metadata_file.parent / "training_log.txt")
                 if iterations:
                     status = JobStatus.COMPLETED
                     detail = (

@@ -3,8 +3,7 @@ serving YAML of the last iteration. A training job outlives a dashboard
 upgrade, so both sides of these lines are a protocol."""
 
 from cellmap_flow.finetune import markers
-from cellmap_flow.finetune.finetune_job_manager import trainer_outputs_from_log
-from cellmap_flow.finetune.job_log import LogTailer
+from cellmap_flow.finetune.job_manager.tailer import LogTailer, trainer_outputs_from_log
 
 
 def test_the_tailer_hands_out_whole_lines_and_starts_over_on_a_new_file(tmp_path):
