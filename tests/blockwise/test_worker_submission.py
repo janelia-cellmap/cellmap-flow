@@ -12,6 +12,7 @@ import pytest
 
 from cellmap_flow.blockwise import blockwise_processor
 from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor, spawn_worker
+from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.utils import bsub_utils
 
 
@@ -25,7 +26,7 @@ def bsub(monkeypatch):
             return subprocess.CompletedProcess(argv, 0, "Job <77> is submitted to queue <gpu_h100>.\n", "")
         raise AssertionError(f"unexpected command {argv}")
 
-    monkeypatch.setattr(bsub_utils.subprocess, "run", run)
+    monkeypatch.setattr(jobs_lsf.subprocess, "run", run)
     return calls
 
 
@@ -56,7 +57,7 @@ def test_a_refused_worker_submission_raises(monkeypatch, tmp_path):
     def refuse(argv, **kwargs):
         raise subprocess.CalledProcessError(255, argv, "", "Project grp is not valid")
 
-    monkeypatch.setattr(bsub_utils.subprocess, "run", refuse)
+    monkeypatch.setattr(jobs_lsf.subprocess, "run", refuse)
     with pytest.raises(subprocess.CalledProcessError):
         spawn_worker("w", "/t.yaml", "grp", "gpu_h100", log_dir=tmp_path)()
 

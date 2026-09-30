@@ -121,3 +121,52 @@ def test_zarr_v3_and_precomputed_layers_are_placed_by_their_metadata(fmt, scales
     layer = get_raw_layer(path, normalize=False)
     assert [v[0] for v in _source(layer)["transform"]["outputDimensions"].values()] == pytest.approx(scales)
     assert _translation(layer) == translation
+
+
+def test_the_viewer_gets_no_layer_for_a_job_without_a_host(monkeypatch):
+    import neuroglancer
+
+    from cellmap_flow.globals import g
+
+    from cellmap_flow.utils import neuroglancer_utils
+
+    class Hostless:
+        model_name = "ghost"
+        host = None
+
+    class Served:
+        model_name = "real"
+        host = "http://node:3"
+
+    g.jobs = [Hostless(), Served()]
+    g.models_config = []
+    g.input_norms, g.postprocess = [], []
+    layers = {}
+
+    class FakeTxn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        @property
+        def layers(self):
+            return layers
+
+    class FakeViewer:
+        def txn(self):
+            return FakeTxn()
+
+        def __str__(self):
+            return "http://viewer"
+
+    monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
+    monkeypatch.setattr(neuroglancer_utils, "get_raw_layer", lambda *a, **k: "raw")
+    monkeypatch.setattr(neuroglancer_utils, "fetch_model_info", lambda host: {})
+    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: "url")
+
+    neuroglancer_utils.generate_neuroglancer_url("/data.zarr")
+
+    assert "real" in layers
+    assert "ghost" not in layers, "zarr://None/... is never going to load"

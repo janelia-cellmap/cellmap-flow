@@ -6,8 +6,8 @@ executes ~/.cellmap_flow/plugins/*.py and the Flow singleton reads
 write to) the developer's real config.
 
 The fixtures at the end are the datasets (``raw_zarr``, ``ome_pyramid``,
-``write_array``), a script model (``model_script``), the viewer (``viewer``) and
-the dashboard (``dashboard``).
+``write_array``), a script model (``model_script``), LSF (``fake_lsf``), the
+viewer (``viewer``) and the dashboard (``dashboard``).
 """
 
 import ctypes
@@ -15,9 +15,11 @@ import importlib
 import os
 import shutil
 import string
+import subprocess
 import sys
 import tempfile
 from collections import deque
+from types import SimpleNamespace
 
 os.environ["HOME"] = tempfile.mkdtemp(prefix="cellmap_flow_test_home_")
 
@@ -255,7 +257,65 @@ def model_script(tmp_path):
     return make
 
 
-# --- the viewer and the dashboard --------------------------------------------
+# --- LSF, the viewer and the dashboard --------------------------------------------
+
+
+class FakeLSF:
+    """``subprocess.run`` for the LSF commands, and a clock for ``jobs.lsf``.
+
+    ``answers[command]`` scripts what a command answers: a list used in order,
+    its last entry repeating, or a function of (argv, kwargs). An answer is
+    stdout (exit 0), (returncode, stdout, stderr), or an exception to raise;
+    ``check=True`` turns a non-zero exit into CalledProcessError, as it would.
+    A command with no script fails the test. ``calls`` keeps every argv, and
+    ``timeline`` when each came by the clock, which moves only when jobs.lsf
+    sleeps or a command takes its ``cost`` in seconds.
+    """
+
+    def __init__(self, monkeypatch):
+        from cellmap_flow.jobs import lsf
+
+        self.answers = {"which": ["/usr/bin/bsub\n"]}
+        self.cost, self.calls, self.timeline = {}, [], []
+        self.start = self.now = 1000.0
+        self.sleeps = 0
+        monkeypatch.setattr(lsf.subprocess, "run", self._run)
+        monkeypatch.setattr(lsf, "time", SimpleNamespace(time=self._clock, monotonic=self._clock, sleep=self._sleep))
+
+    def _clock(self):
+        return self.now
+
+    def _sleep(self, seconds):
+        self.sleeps += 1
+        self.now += seconds
+
+    def _run(self, argv, **kwargs):
+        argv = [str(a) for a in argv]
+        self.calls.append(argv)
+        self.timeline.append((round(self.now - self.start, 3), argv[0]))
+        self.now += self.cost.get(argv[0], 0)
+        script = self.answers.get(argv[0])
+        if script is None:
+            raise AssertionError(f"unexpected command {argv}")
+        answer = script(argv, kwargs) if callable(script) else (script.pop(0) if len(script) > 1 else script[0])
+        if isinstance(answer, BaseException):
+            raise answer
+        returncode, stdout, stderr = (0, answer, "") if isinstance(answer, str) else answer
+        if kwargs.get("check") and returncode:
+            raise subprocess.CalledProcessError(returncode, argv, stdout, stderr)
+        return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+    def commands(self, name=None):
+        return [argv for argv in self.calls if argv[0] == name] if name else [argv[0] for argv in self.calls]
+
+
+@pytest.fixture
+def fake_lsf(monkeypatch, tmp_path):
+    """LSF as ``FakeLSF`` answers it, with server logs under tmp_path."""
+    from cellmap_flow.utils import bsub_utils
+
+    monkeypatch.setattr(bsub_utils, "SERVER_LOG_DIR", tmp_path / "server_logs")
+    return FakeLSF(monkeypatch)
 
 
 @pytest.fixture

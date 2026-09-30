@@ -1,0 +1,188 @@
+"""bsub_utils' policy: where start_hosts runs a server, and the job cleanup the
+entry points install.
+
+start_hosts' submissions are replaced where it calls them (submit_bsub_job,
+run_locally, the queue list), and each fake job says what bjobs would have
+reported; LSF itself is never called.
+"""
+
+import json
+import logging
+import signal
+import subprocess
+import threading
+from pathlib import Path
+
+import numpy as np
+import pytest
+from click.testing import CliRunner
+
+from cellmap_flow.globals import g
+from cellmap_flow.jobs.ready import READY_ENV
+from cellmap_flow.utils import bsub_utils
+from cellmap_flow.utils.bsub_utils import BsubTimeoutError, JobStartError, JobStatus, start_hosts
+from tests.utils.serving_helpers import write_raw
+
+QUEUES = ("gpu_h100", "gpu_a100", "gpu_h200")
+P, R, F = JobStatus.PENDING, JobStatus.RUNNING, JobStatus.FAILED
+
+
+class FakeJob:
+    """A job whose host, and whose status once the wait ends, are canned; a
+    late host comes on the second wait."""
+
+    def __init__(self, job_id, host=None, status=P, late_host=None):
+        self.job_id, self._host, self._status, self._late_host = job_id, host, status, late_host
+        self.model_name = self.host = self.queue = self.log_file = None
+        self.waits, self.killed = 0, False
+
+    def wait_for_host(self, timeout=300):
+        self.waits += 1
+        self.host = self._host or (self._late_host if self.waits > 1 else None)
+        return self.host
+
+    def observed_status(self):
+        return self._status
+
+    def kill(self):
+        self.killed = True
+
+
+REFUSED = subprocess.CalledProcessError(255, "bsub", stderr="bad project")
+
+# case: (what submitting to each queue gives, bsub installed, start_hosts keywords,
+#        (the job's queue, or (error, message)), queues submitted to, jobs killed)
+CASES = {
+    # The queue it landed on is the job's: g.queue stays what the next submission asks for.
+    "falls-back": ({"gpu_h100": dict(status=P), "gpu_a100": dict(host="http://node:1")}, True, {},
+                   ("gpu_a100", ["gpu_h100", "gpu_a100"], ["gpu_h100"])),
+    # A GPU server must not start on a login or submit node instead.
+    "all-refused": ({q: REFUSED for q in QUEUES}, True, {},
+                    ((JobStartError, "gpu_h100.*gpu_a100.*gpu_h200"), list(QUEUES), [])),
+    # Nothing will point a layer at it, so it must not sit there billing.
+    "never-started": ({q: dict(status=P) for q in QUEUES}, True, {},
+                      ((JobStartError, "did not start"), list(QUEUES), list(QUEUES))),
+    # A crash reproduces on every queue.
+    "crashed": ({"gpu_h100": dict(status=F), "gpu_a100": dict(host="http://x:1")}, True, {},
+                ((JobStartError, "gpu_h100"), ["gpu_h100"], [])),
+    "loads-slowly": ({"gpu_h100": dict(status=R, late_host="http://node:2")}, True, {},
+                     ("gpu_h100", ["gpu_h100"], [])),
+    "runs-without-a-host": ({"gpu_h100": dict(status=R)}, True, {}, ((JobStartError, "killed"), ["gpu_h100"], ["gpu_h100"])),
+    # LSF may still make the timed-out job: a second bsub would leave two of it.
+    "bsub-timed-out": ({"gpu_h100": BsubTimeoutError("bjobs -a -J m")}, True, {},
+                       ((BsubTimeoutError, "bjobs -a -J m"), ["gpu_h100"], [])),
+    "no-bsub": ({}, False, {}, ("local", [], [])),
+    "asked-to-run-locally": ({}, True, {"local": True}, ("local", [], [])),
+    "local-without-a-host": ({}, False, {}, ((JobStartError, "did not report"), [], ["local"])),
+}
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
+    outcomes, bsub, kwargs, (result, submitted, killed) = CASES[case]
+    jobs = {q: o if isinstance(o, Exception) else FakeJob(q, **o) for q, o in outcomes.items()}
+    local = FakeJob("local", host=None if case == "local-without-a-host" else "http://localhost:9")
+    calls = []
+
+    def submit(command, queue, charge_group, job_name, walltime=None, env=None):
+        calls.append(queue)
+        if isinstance(jobs[queue], Exception):
+            raise jobs[queue]
+        return jobs[queue]
+
+    monkeypatch.setattr(bsub_utils, "is_bsub_available", lambda: bsub)
+    monkeypatch.setattr(bsub_utils, "submit_bsub_job", submit)
+    monkeypatch.setattr(bsub_utils, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
+    monkeypatch.setattr(bsub_utils, "gpu_queue_candidates",
+                        lambda preferred, cycle=True: [preferred] + [q for q in QUEUES if q != preferred])
+    g.jobs, g.queue, g.charge_group = [], "gpu_h100", "saved_group"
+
+    with caplog.at_level(logging.ERROR, logger=bsub_utils.logger.name):
+        if isinstance(result, tuple):
+            with pytest.raises(result[0], match=result[1]) as raised:
+                start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
+            assert g.jobs == []
+            if result[0] is JobStartError:  # a dashboard thread's exception only reaches stderr
+                assert str(raised.value) in caplog.text
+        else:
+            job = start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
+            expected = local if result == "local" else jobs[result]
+            assert job is expected and job.host and g.jobs == [job]
+            assert job.queue == (None if result == "local" else result)
+    assert calls == submitted + (["local"] if result == "local" or "local" in killed else [])
+    assert [j.job_id for j in [*jobs.values(), local] if isinstance(j, FakeJob) and j.killed] == killed
+    assert (g.queue, g.charge_group) == ("gpu_h100", "saved_group")
+    if case == "loads-slowly":
+        assert jobs["gpu_h100"].waits == 2
+
+
+def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
+    """What the server does once it runs, with the environment LSF copies into the job."""
+
+    def bsub(argv, kwargs):
+        target = Path(kwargs["env"][READY_ENV])
+        assert target.parent == bsub_utils.SERVER_LOG_DIR
+        target.write_text(json.dumps({"url": "http://10.1.2.3:8123", "job_id": "4242"}))
+        return "Job <4242> is submitted to queue <gpu_h100>.\n"
+
+    fake_lsf.answers.update(bjobs=[(255, "", "Job <m> is not found\n")], bsub=bsub)
+    g.jobs = []
+    job = start_hosts("serve", queue="gpu_h100", job_name="m", cycle_queues=False)
+    assert job.host == "http://10.1.2.3:8123" and g.jobs == [job]
+    assert fake_lsf.commands() == ["which", "bjobs", "bsub"], "no bpeek, and no bjobs for the job itself"
+
+
+def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
+    outcome = []
+    thread = threading.Thread(target=lambda: outcome.append(bsub_utils.install_cleanup_handlers()))
+    thread.start()
+    thread.join()
+    assert outcome == [False], "off the main thread it leaves the handlers alone"
+
+    job = FakeJob("1")
+    g.jobs = [job]
+    with pytest.raises(SystemExit) as exited:
+        bsub_utils.cleanup_handler(signal.SIGTERM, None)
+    assert job.killed and exited.value.code == 128 + signal.SIGTERM, "not 0, as if the run had succeeded"
+
+
+def _cellmap_flow(monkeypatch, tmp_path, order):
+    from cellmap_flow.cli import cli
+
+    monkeypatch.setattr(cli, "install_cleanup_handlers", lambda: order.append("install"))
+    monkeypatch.setattr(cli, "cli", lambda: order.append("run"))
+    cli.main()
+
+
+def _cellmap_flow_yaml(monkeypatch, tmp_path, order):
+    from cellmap_flow.cli import yaml_cli
+
+    monkeypatch.setattr(yaml_cli, "install_cleanup_handlers", lambda: order.append("install"))
+    monkeypatch.setattr(yaml_cli, "run_multiple", lambda *a, **k: order.append("run"))
+    (tmp_path / "c.yaml").write_text("data_path: /d.zarr\ncharge_group: grp\nqueue: gpu_h100\nmodels: {}\n")
+    result = CliRunner().invoke(yaml_cli.main, [str(tmp_path / "c.yaml")])
+    assert result.exit_code == 0, result.output
+
+
+def _cellmap_flow_view(monkeypatch, tmp_path, order):
+    import neuroglancer
+    from neuroglancer.viewer_base import ViewerBase
+
+    from cellmap_flow.cli import viewer_cli
+    from cellmap_flow.dashboard import app
+
+    monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
+    monkeypatch.setattr(neuroglancer, "set_server_bind_address", lambda *a: None)
+    monkeypatch.setattr(app, "create_and_run_app", lambda **k: order.append("run"))
+    monkeypatch.setattr(bsub_utils, "install_cleanup_handlers", lambda: order.append("install"))
+    result = CliRunner().invoke(viewer_cli.main, ["-d", write_raw(tmp_path, np.zeros((4, 4, 4), np.uint8))])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+
+
+@pytest.mark.parametrize("entry_point", [_cellmap_flow, _cellmap_flow_yaml, _cellmap_flow_view],
+                         ids=lambda f: f.__name__[1:])
+def test_the_entry_points_install_the_cleanup_before_starting_jobs(entry_point, monkeypatch, tmp_path):
+    """Importing bsub_utils used to set them, for every importer, and failed off the main thread."""
+    order = []
+    entry_point(monkeypatch, tmp_path, order)
+    assert order == ["install", "run"]
