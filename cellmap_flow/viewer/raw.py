@@ -66,17 +66,15 @@ def prediction_shader(color, value_range=None):
 
 
 def _dtype_default_range(image):
-    """Fallback display range when percentiles can't be computed."""
-    try:
-        kind = np.dtype(image.dtype).kind
-        if kind == "u":
-            info = np.iinfo(image.dtype)
-            return float(info.min), float(info.max)
-        if kind == "i":
-            info = np.iinfo(image.dtype)
-            return float(info.min), float(info.max)
-    except Exception:
-        pass
+    """Fallback display range when percentiles can't be computed: the range
+    of the dtype ``image`` is shown in, which is its ``ts``'s (the input
+    chain's last declared dtype, else the array's), or [-1, 1] for a float,
+    which has none."""
+    dtype = image.ts.dtype
+    dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+    if dtype.kind in "ui":
+        info = np.iinfo(dtype)
+        return float(info.min), float(info.max)
     return -1.0, 1.0
 
 
@@ -126,7 +124,8 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
 
 
 def _raw_shader(paths, normalize, image_for_fallback=None):
-    """Build the raw-layer shader, preferring a data-derived contrast range."""
+    """Build the raw-layer shader, preferring a data-derived contrast range;
+    else the range of ``image_for_fallback``'s dtype, else 0-255."""
     rng = _auto_contrast_range(paths, normalize) if paths else None
     if rng is not None:
         lo, hi = rng

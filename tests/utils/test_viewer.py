@@ -6,12 +6,14 @@ and an OME corner such as -4 nm could not be expressed at all. The position
 now goes in the source transform, in voxels of the layer's own dimensions.
 """
 
+import re
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from cellmap_flow.globals import g
+from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer
 
 
@@ -113,9 +115,31 @@ def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_za
     assert _placement(layer)[0] == pytest.approx([8e-9] * 3)
 
 
-def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
-    from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+def _contrast(layer):
+    """The contrast range of a raw layer's shader."""
+    lo, hi = re.search(r"range=\[([^,]+), ([^\]]+)\]", layer.shader).groups()
+    return float(lo), float(hi)
 
+
+FLAT = np.zeros((16, 16, 16), np.uint8)
+
+
+@pytest.mark.parametrize("data, input_norms, contrast", [
+    # The 1st and 99th percentiles of what is shown...
+    pytest.param(np.repeat(np.arange(256, dtype=np.uint8), 16).reshape(16, 16, 16), [], (2, 253), id="sampled"),
+    # ...or, with nothing to sample (flat, like padding, or too big to read whole),
+    # the range of its dtype...
+    pytest.param(FLAT, [], (0, 255), id="uint8"),
+    pytest.param(FLAT.astype(np.uint16), [], (0, 65535), id="uint16"),
+    # ...as the input chain returns it: floats have none, so [-1, 1].
+    pytest.param(FLAT, [MinMaxNormalizer(0, 255)], (-1, 1), id="through-a-float-chain"),
+])
+def test_a_single_arrays_contrast_is_sampled_or_its_dtypes(raw_zarr, data, input_norms, contrast):
+    g.input_norms = input_norms
+    assert _contrast(get_raw_layer(raw_zarr(data))) == contrast
+
+
+def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     ids = np.arange(64, dtype=np.uint64).reshape(4, 4, 4)
     path = raw_zarr(ids, offset=(80, 40, 40), name="ids")
     g.input_norms = [MinMaxNormalizer(0, 63)]
