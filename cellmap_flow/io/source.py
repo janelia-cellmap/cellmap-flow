@@ -179,34 +179,56 @@ def open_array(path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int
     return ArraySource(path, concurrency_limit, cache_bytes)
 
 
+def _read_and_pad(begin, end, inclusive_min, exclusive_max, edge):
+    """Along one axis, for a box ``[begin, end)`` over an array
+    ``[inclusive_min, exclusive_max)``: the slice of the array to read, and
+    the padding ``[before, after]`` that makes what is read the box's length.
+
+    What is read is the box's own voxels in the array: none when the box
+    lies wholly on one side of it, unless ``edge``, when it is the array's
+    voxel nearest the box, to repeat.
+    """
+    length = end - begin
+    start = min(max(begin, inclusive_min), exclusive_max)
+    stop = max(min(end, exclusive_max), inclusive_min)
+    if edge and start == stop and length:
+        if begin >= exclusive_max:
+            start, stop = exclusive_max - 1, exclusive_max
+        else:
+            start, stop = inclusive_min, inclusive_min + 1
+    before = min(max(start - begin, 0), length - (stop - start))
+    return slice(start, stop), [before, length - (stop - start) - before]
+
+
 def read_padded(store, box: Optional[Box] = None, fill=0, transform=None) -> np.ndarray:
     """The voxels of ``box`` (one entry per dimension of ``store``; all of
     it when None) as a numpy array, padded where the box runs past the
     store's domain.
 
-    ``fill`` is the padding value, or "edge" to repeat the border voxels.
-    ``transform`` is applied to what was read before the padding is added:
-    ImageDataInterface runs its input chain there, so padding is never
-    normalized.
+    ``fill`` is the padding value, or "edge" to repeat the border voxels:
+    each voxel outside the array takes the value of the nearest one inside.
+    A box wholly outside the array is all padding. ``transform`` is applied
+    to what was read before the padding is added: ImageDataInterface runs
+    its input chain there, so padding is never normalized, and a box with
+    nothing to read still has the chain's dtype.
     """
     if box is None:
         with ts.Transaction() as txn:
             data = store.with_transaction(txn).read().result()
         return data if transform is None else transform(data)
 
-    wanted = tuple(slice(b, e) for b, e in zip(box.begin, box.end))
     domain = store.domain
-    valid = tuple(
-        slice(max(s.start, inclusive_min), min(s.stop, exclusive_max))
-        for s, inclusive_min, exclusive_max in zip(
-            wanted, domain.inclusive_min, domain.exclusive_max
-        )
-    )
+    valid, pad_width = [], []
+    for begin, end, inclusive_min, exclusive_max in zip(
+        box.begin, box.end, domain.inclusive_min, domain.exclusive_max
+    ):
+        read, pad = _read_and_pad(begin, end, inclusive_min, exclusive_max, fill == "edge")
+        valid.append(read)
+        pad_width.append(pad)
     with ts.Transaction() as txn:
-        data = store.with_transaction(txn)[valid].read().result()
+        data = store.with_transaction(txn)[tuple(valid)].read().result()
     if transform is not None:
         data = transform(data)
-    pad_width = [[v.start - s.start, s.stop - v.stop] for s, v in zip(wanted, valid)]
     if np.any(np.array(pad_width)):
         if fill == "edge":
             data = np.pad(data, pad_width=pad_width, mode="edge")

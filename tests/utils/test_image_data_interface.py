@@ -104,6 +104,20 @@ READS = {
         _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "float32", [0.0, 2.0]),
     ),
+    # A ROI wholly outside the array is all padding, in the chain's dtype...
+    "wholly-past-the-end": (
+        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "float32", [0.0, 0.0]),
+    ),
+    # ...and "edge" repeats the array's voxels nearest it, on either side.
+    "wholly-before-the-start-edge": (
+        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((-32, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "uint8", [1, 1]),
+    ),
+    "wholly-past-the-end-edge": (
+        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "uint8", [16, 16]),
+    ),
     "not-normalized": (
         _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")], "normalize": False}, (0, 0, 0),
         Roi((0, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2]),
