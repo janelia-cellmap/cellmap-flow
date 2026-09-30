@@ -11,11 +11,14 @@ from cellmap_flow.utils.serialize_config import Config
 
 
 class FinetuneModelConfig(ModelConfig):
-    """Configuration class for a LoRA-finetuned model.
+    """Configuration class for a finetuned model.
 
-    Wraps any base ModelConfig with a LoRA adapter applied on top.
-    The base model is loaded via its own ModelConfig, then the adapter
-    is applied using PEFT.
+    Wraps any base ModelConfig with the finetune's weights, which are
+    exactly one of: a LoRA adapter (``lora_adapter_path``), applied with
+    PEFT, or a full finetune's state dict (``weights_path``, from a run
+    with ``--lora-r 0``), loaded strictly. The base model is built by its
+    own ModelConfig, as the trainable module the trainer trained, and the
+    weights go on top of it.
     """
 
     cli_name = "finetune"
