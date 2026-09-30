@@ -128,7 +128,8 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     """
     info = fetch_model_info(host) if info is None else info
     override = prediction_voxel_override(host, dataset_path, info, fallback_output_voxel_size)
-    source = prediction_source(host, model, url_blob, override)
+    # A server too old to say is taken to have one, as it always was.
+    source = prediction_source(host, model, url_blob, override, has_channel=info.get("has_channel", True))
     if chain_is_segmentation(postprocess):
         return neuroglancer.SegmentationLayer(source=source)
     shader = shader or prediction_shader_for(model, host, postprocess, previous_shader, color, info=info)

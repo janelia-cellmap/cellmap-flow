@@ -52,8 +52,10 @@ MODEL_INFO = {
 MODELS = ("old", "new", "flat", "silent")
 INPUT_NORM = [MinMaxNormalizer(0, 255)]
 
-# The scales a layer overlaid on the raw declares: the raw's, and the channel axis.
+# The scales a layer overlaid on the raw declares: the raw's, and the channel axis
+# if the served array has one.
 OVERLAID = {"z": 24.0, "y": 12.0, "x": 12.0, "c^": 1}
+OVERLAID_3D = {"z": 24.0, "y": 12.0, "x": 12.0}
 EIGHT_NM = {"z": 8.0, "y": 8.0, "x": 8.0}
 # The live chain as a layer URL carries it.
 CHAIN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}],
@@ -148,7 +150,7 @@ def test_the_startup_viewer(servers, monkeypatch):
         "chain": CHAIN,
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
         "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
-        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
+        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID_3D, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", OVERLAID, _unit("yellow")),
     }
 
@@ -196,7 +198,7 @@ def test_submit(submit):
         "chain": dict(SUBMITTED, postprocess=[], dashboard_url="http://localhost/", digest="5ba6d02f85d55e92"),
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, "void main() {}", {"brightness": 0.5}),
         "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
-        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
+        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID_3D, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", None, _unit("yellow")),
     }
 
@@ -209,7 +211,7 @@ def test_submit_shows_a_labelling_chain_as_segmentations(submit):
         "chain": dict(SUBMITTED, postprocess=THRESHOLD, dashboard_url="http://localhost/", digest="724f969450d08854"),
         "old": ("segmentation", "zarr://http://old:8000/old", OVERLAID, None),
         "new": ("segmentation", "zarr://http://new:8000/new", None, None),
-        "flat": ("segmentation", "zarr://http://flat:8000/flat", OVERLAID, None),
+        "flat": ("segmentation", "zarr://http://flat:8000/flat", OVERLAID_3D, None),
         "silent": ("segmentation", "zarr://http://silent:8000/silent", None, None),
     }
 
@@ -242,7 +244,7 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
         "chain": CHAIN,
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
         "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
-        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
+        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID_3D, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", None, _unit("yellow")),
     }
 
