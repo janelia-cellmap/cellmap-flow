@@ -83,14 +83,12 @@ def _annotations():
     ],
 )
 def test_the_boxes_drawn_are_read_from_the_box_layer(dashboard, viewer, monkeypatch, layers, boxes):
-    from cellmap_flow.dashboard.routes import bbx_generator
-
     with viewer.txn() as s:
         s.layers["fibsem"] = neuroglancer.ImageLayer(source="zarr://http://x/y")
         for name in layers or []:
             s.layers[name] = _annotations()
             s.layers[name].annotations.append(Box(id=name, point_a=[10, 20, 30], point_b=[40, 60, 80]))
-    monkeypatch.setitem(bbx_generator.bbx_generator_state, "viewer", viewer if layers else None)
+    monkeypatch.setitem(g.bbx_generator_state, "viewer", viewer if layers else None)
     assert dashboard.get("/api/bbx-generator/status").get_json()["bounding_boxes"] == boxes
 
 

@@ -4,7 +4,7 @@ import logging
 import numpy as np
 from flask import Blueprint, request, jsonify
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
@@ -18,11 +18,12 @@ pipeline_bp = Blueprint("pipeline", __name__)
 
 
 def _save_shaders_from_viewer() -> None:
-    """Read current shader and shaderControls from the neuroglancer viewer and persist them in globals."""
-    if g.viewer is None:
+    """Keep each layer's shader and shaderControls, as the user set them in the viewer."""
+    session = get_session()
+    if session.viewer is None:
         return
     try:
-        state = g.viewer.state
+        state = session.viewer.state
         for layer in state.layers:
             shader = getattr(layer, "shader", None)
             # A neuroglancer layer with no shader set reports the *string*
@@ -30,10 +31,10 @@ def _save_shaders_from_viewer() -> None:
             # later be restored onto the layer verbatim and fail to compile,
             # wiping the user's rendering. Treat it as "unset".
             if shader and shader != "None":
-                g.shaders[layer.name] = shader
+                session.shaders[layer.name] = shader
             shader_controls = getattr(layer, "shaderControls", None) or getattr(layer, "shader_controls", None)
             if shader_controls:
-                g.shader_controls[layer.name] = shader_controls
+                session.shader_controls[layer.name] = shader_controls
     except Exception as exc:
         logger.warning(f"Could not save shaders from viewer: {exc}")
 
@@ -90,7 +91,7 @@ def update_equivalences():
         [np.uint64(item) for item in sublist] for sublist in equivalences_str
     ]
 
-    with g.viewer.txn() as s:
+    with get_session().viewer.txn() as s:
         for layer in s.layers:
             if layer.source[0].url.endswith(dataset):
                 layer.equivalences = equivalences
@@ -100,6 +101,7 @@ def update_equivalences():
 
 @pipeline_bp.route("/api/process", methods=["POST"])
 def process():
+    session = get_session()
     data = request.get_json()
 
     # add dashboard url to data so we can update the state from the server
@@ -107,8 +109,8 @@ def process():
 
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
-    previous_norm_signature = _chain_signature(getattr(g, "input_norms", None))
-    previous_post_signature = _chain_signature(getattr(g, "postprocess", None))
+    previous_norm_signature = _chain_signature(session.input_norms)
+    previous_post_signature = _chain_signature(session.postprocess)
 
     logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
     # The posted steps are kept as the config, so finetune submit/restart,
@@ -116,7 +118,7 @@ def process():
     # inference uses. Without it the trainer reads raw uint8 from /nrs while
     # inference normalizes to the model's expected range.
     spec = PipelineSpec.from_json_data(data, strict=True)
-    g.set_pipeline(spec)
+    session.set_pipeline(spec)
     # Named by content rather than stamped with the time: resubmitting the
     # same settings gives the same layer source, so neuroglancer keeps the
     # chunks it has and each server reuses the chain it already built (with
@@ -136,39 +138,39 @@ def process():
     # the old normalization would then map every voxel outside the new range,
     # showing solid black or white. Drop it and let get_raw_layer() recompute
     # percentiles through the normalizers now in effect.
-    if previous_norm_signature != _chain_signature(g.input_norms):
-        if g.shaders.pop("data", None) is not None:
+    if previous_norm_signature != _chain_signature(session.input_norms):
+        if session.shaders.pop("data", None) is not None:
             logger.info(
                 "Input normalization changed; recomputing the raw contrast "
                 "range instead of restoring the previous one"
             )
-        g.shader_controls.pop("data", None)
+        session.shader_controls.pop("data", None)
 
     # Prediction layers have the same problem for the same reason: their
     # contrast range is a property of the postprocessing chain, and adding a
     # DefaultPostprocessor moves the output from [0, 1] to 0-255. A restored
     # [0, 1] range over 0-255 data renders every voxel saturated.
     dropped_shaders = {}
-    postprocess_changed = previous_post_signature != _chain_signature(g.postprocess)
+    postprocess_changed = previous_post_signature != _chain_signature(session.postprocess)
     if postprocess_changed:
-        for job in g.jobs:
+        for job in session.jobs:
             name = getattr(job, "model_name", None)
-            dropped_shaders[name] = g.shaders.pop(name, None)
+            dropped_shaders[name] = session.shaders.pop(name, None)
             if dropped_shaders[name] is not None:
                 logger.info(
                     f"Postprocessing changed; recomputing the contrast range "
                     f"for {name}"
                 )
-            g.shader_controls.pop(name, None)
+            session.shader_controls.pop(name, None)
 
-    with g.viewer.txn() as s:
+    with session.viewer.txn() as s:
         # The user's raw-layer contrast/shader, instead of the fresh default
         # get_raw_layer() always builds, which otherwise resets it every time
         # the pipeline is (re)submitted.
-        g.raw = raw_layer(g.dataset_path, shader=g.shaders.get("data"),
-                          shader_controls=g.shader_controls.get("data"))
-        s.layers["data"] = g.raw
-        for index, job in enumerate(g.jobs):
+        session.raw = raw_layer(session.dataset_path, shader=session.shaders.get("data"),
+                                shader_controls=session.shader_controls.get("data"))
+        s.layers["data"] = session.raw
+        for index, job in enumerate(session.jobs):
             model = job.model_name
             host = job.host
             if not host:
@@ -179,13 +181,13 @@ def process():
             # Without a shader of the user's, one over the chain's range in
             # the colour the layer had, if its shader was dropped above.
             s.layers[model] = prediction_layer(
-                model, host, st_data, dataset_path=g.dataset_path, postprocess=g.postprocess,
-                shader=g.shaders.get(model), shader_controls=g.shader_controls.get(model),
+                model, host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
+                shader=session.shaders.get(model), shader_controls=session.shader_controls.get(model),
                 previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
                 info=fetch_model_info(host),
             )
 
-    logger.debug(f"Input normalizers: {g.input_norms}")
+    logger.debug(f"Input normalizers: {session.input_norms}")
 
     return jsonify(
         {
@@ -197,16 +199,17 @@ def process():
 
 @pipeline_bp.route("/api/blockwise-config", methods=["GET", "POST"])
 def blockwise_config_api():
-    """Get or set blockwise configuration in globals"""
+    """Get or set the blockwise settings."""
+    session = get_session()
     if request.method == "GET":
         return jsonify({
-            'queue': g.queue,
-            'charge_group': g.charge_group,
-            'nb_cores_master': g.nb_cores_master,
-            'nb_cores_worker': g.nb_cores_worker,
-            'nb_workers': g.nb_workers,
-            'tmp_dir': g.tmp_dir,
-            'blockwise_tasks_dir': g.blockwise_tasks_dir
+            'queue': session.queue,
+            'charge_group': session.charge_group,
+            'nb_cores_master': session.nb_cores_master,
+            'nb_cores_worker': session.nb_cores_worker,
+            'nb_workers': session.nb_workers,
+            'tmp_dir': session.tmp_dir,
+            'blockwise_tasks_dir': session.blockwise_tasks_dir
         })
     elif request.method == "POST":
         data = request.get_json(silent=True)
@@ -223,22 +226,22 @@ def blockwise_config_api():
                     'success': False,
                     'error': f'{key} must be a whole number, got {data.get(key)!r}',
                 }), 400
-        g.queue = data.get('queue')
-        g.charge_group = data.get('charge_group')
-        g.nb_cores_master = counts['nb_cores_master']
-        g.nb_cores_worker = counts['nb_cores_worker']
-        g.nb_workers = counts['nb_workers']
-        g.tmp_dir = data.get('tmp_dir')
-        g.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
-        logger.debug(f"Blockwise config updated: queue={g.queue}, charge_group={g.charge_group}, cores_master={g.nb_cores_master}, cores_worker={g.nb_cores_worker}, workers={g.nb_workers}, tmp_dir={g.tmp_dir}, blockwise_tasks_dir={g.blockwise_tasks_dir}")
+        session.queue = data.get('queue')
+        session.charge_group = data.get('charge_group')
+        session.nb_cores_master = counts['nb_cores_master']
+        session.nb_cores_worker = counts['nb_cores_worker']
+        session.nb_workers = counts['nb_workers']
+        session.tmp_dir = data.get('tmp_dir')
+        session.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
+        logger.debug(f"Blockwise config updated: queue={session.queue}, charge_group={session.charge_group}, cores_master={session.nb_cores_master}, cores_worker={session.nb_cores_worker}, workers={session.nb_workers}, tmp_dir={session.tmp_dir}, blockwise_tasks_dir={session.blockwise_tasks_dir}")
         return jsonify({'success': True, 'config': {
-            'queue': g.queue,
-            'charge_group': g.charge_group,
-            'nb_cores_master': g.nb_cores_master,
-            'nb_cores_worker': g.nb_cores_worker,
-            'nb_workers': g.nb_workers,
-            'tmp_dir': g.tmp_dir,
-            'blockwise_tasks_dir': g.blockwise_tasks_dir
+            'queue': session.queue,
+            'charge_group': session.charge_group,
+            'nb_cores_master': session.nb_cores_master,
+            'nb_cores_worker': session.nb_cores_worker,
+            'nb_workers': session.nb_workers,
+            'tmp_dir': session.tmp_dir,
+            'blockwise_tasks_dir': session.blockwise_tasks_dir
         }})
 
 
@@ -246,11 +249,9 @@ def blockwise_config_api():
 def apply_pipeline():
     """Apply a pipeline configuration to the current inference"""
     try:
+        session = get_session()
         data = request.get_json()
-        logger.debug(f"\n{'='*80}")
-        logger.debug(f"APPLY PIPELINE - Received data:")
-        logger.debug(f"  Input normalizers: {data.get('input_normalizers', [])}")
-        logger.debug(f"  Postprocessors: {data.get('postprocessors', [])}")
+        logger.debug(f"Apply pipeline: {data}")
 
         # Validate first
         validation = validate_pipeline_config(data)
@@ -262,57 +263,29 @@ def apply_pipeline():
         spec = PipelineSpec.from_builder(
             data.get("input_normalizers", []), data.get("postprocessors", [])
         )
-        logger.debug(f"\nNormalizers config dict: {list(spec.input_norm)}")
-        logger.debug(f"Postprocessors config dict: {list(spec.postprocess)}")
-        g.set_pipeline(spec)
+        session.set_pipeline(spec)
 
-        # Save complete pipeline visual state to globals
-        g.pipeline_inputs = data.get("inputs", [])
-        g.pipeline_outputs = data.get("outputs", [])
-        g.pipeline_edges = data.get("edges", [])
-        g.pipeline_normalizers = data.get("input_normalizers", [])
-        g.pipeline_models = data.get("models", [])
-        g.pipeline_postprocessors = data.get("postprocessors", [])
-
-        # Also save model configs separately for easier access
-        if not hasattr(g, 'pipeline_model_configs'):
-            g.pipeline_model_configs = {}
+        # The builder's whole pipeline, as it sent it, for its next load.
+        session.builder_state = {
+            "inputs": data.get("inputs", []),
+            "outputs": data.get("outputs", []),
+            "edges": data.get("edges", []),
+            "normalizers": data.get("input_normalizers", []),
+            "models": data.get("models", []),
+            "postprocessors": data.get("postprocessors", []),
+        }
+        # And each model's config, for a model node that comes back without one.
         for model in data.get("models", []):
             if 'config' in model and model['config']:
-                g.pipeline_model_configs[model['name']] = model['config']
-
-        # Log the updated globals state
-        logger.debug(f"\n{'='*80}")
-        logger.debug(f"UPDATED GLOBALS (g) STATE:")
-        logger.debug(f"{'='*80}")
-        logger.debug(f"\ng.input_norms ({len(g.input_norms)} items):")
-        for idx, norm in enumerate(g.input_norms):
-            logger.debug(f"  [{idx}] {norm}")
-
-        logger.debug(f"\ng.postprocess ({len(g.postprocess)} items):")
-        for idx, post in enumerate(g.postprocess):
-            logger.debug(f"  [{idx}] {post}")
-
-        logger.debug(f"\ng.jobs ({len(g.jobs)} items):")
-        for idx, job in enumerate(g.jobs):
-            logger.debug(f"  [{idx}] model_name={getattr(job, 'model_name', 'N/A')}, host={getattr(job, 'host', 'N/A')}")
-
-        logger.debug(f"\ng.pipeline_inputs ({len(g.pipeline_inputs)} items): {g.pipeline_inputs}")
-        logger.debug(f"\ng.pipeline_outputs ({len(g.pipeline_outputs)} items): {g.pipeline_outputs}")
-        logger.debug(f"\ng.pipeline_edges ({len(g.pipeline_edges)} items): {g.pipeline_edges}")
-        logger.debug(f"\ng.pipeline_normalizers ({len(g.pipeline_normalizers)} items): {g.pipeline_normalizers}")
-        logger.debug(f"\ng.pipeline_models ({len(g.pipeline_models)} items): {g.pipeline_models}")
-        logger.debug(f"\ng.pipeline_postprocessors ({len(g.pipeline_postprocessors)} items): {g.pipeline_postprocessors}")
-
-        logger.debug(f"{'='*80}\n")
+                session.builder_model_configs[model['name']] = model['config']
+        logger.debug(f"Applied: input_norms={session.input_norms}, postprocess={session.postprocess}")
 
         return jsonify({
             "message": "Pipeline applied successfully",
-            "normalizers_applied": len(g.input_norms),
-            "postprocessors_applied": len(g.postprocess),
+            "normalizers_applied": len(session.input_norms),
+            "postprocessors_applied": len(session.postprocess),
         })
 
     except Exception as e:
         logger.error(f"Error applying pipeline: {e}")
         return jsonify({"error": str(e)}), 500
-

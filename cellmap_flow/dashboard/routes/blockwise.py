@@ -10,7 +10,7 @@ from datetime import datetime
 import yaml
 from flask import Blueprint, request
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.spec import JobSpec
 from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME
@@ -28,7 +28,7 @@ def _task_walltime():
     The dashboard's walltime setting, as for inference servers. Without -W a
     GPU worker is killed at the queue's two-hour default.
     """
-    return getattr(g, "walltime", None) or DEFAULT_WALLTIME
+    return get_session().walltime or DEFAULT_WALLTIME
 
 
 def _sanitize_job_name(name) -> str:

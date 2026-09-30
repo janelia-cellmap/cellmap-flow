@@ -265,14 +265,12 @@ def test_a_finetuned_models_layer(servers, viewer):
 
 
 def test_the_viewers_set_data_and_the_box_tool_open(servers, dashboard):
-    from cellmap_flow.dashboard.routes.bbx_generator import bbx_generator_state
-
     assert dashboard.post("/api/set-data", json={"dataset_path": servers}).status_code == 200
     assert _viewer(g.viewer) == {"layers": [("data", "image")], "dimensions": EIGHT_NM}
     drawn = [{"offset": [8, 16, 24], "shape": [80, 40, 40]}]
     assert dashboard.post("/api/bbx-generator", json={"dataset_path": servers, "existing_bounding_boxes": drawn}
                           ).status_code == 200
-    viewer = bbx_generator_state["viewer"]
+    viewer = g.bbx_generator_state["viewer"]
     assert _viewer(viewer) == {"layers": [("fibsem", "image"), ("bboxes", "annotation")], "dimensions": EIGHT_NM}
     boxes = viewer.state.layers["bboxes"].to_json()
     assert (boxes["source"], boxes["annotations"]) == (

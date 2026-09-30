@@ -22,7 +22,7 @@ import numpy as np
 
 from flask import Blueprint, jsonify
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.utils.output_probe import review_postprocess, suggest_input_norm
 from cellmap_flow.utils.server_info import fetch_model_info
 
@@ -101,24 +101,25 @@ def _fetch_probe(host: str) -> dict:
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
 def model_advice():
     """Per-model verdicts on the currently configured input/output handling."""
+    session = get_session()
     configured_post = [
-        p.to_dict().get("name") for p in (g.postprocess or []) if hasattr(p, "to_dict")
+        p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
     ]
     configured_norm = [
-        n.to_dict().get("name") for n in (g.input_norms or []) if hasattr(n, "to_dict")
+        n.to_dict().get("name") for n in (session.input_norms or []) if hasattr(n, "to_dict")
     ]
 
-    raw_dtype, raw_range = _raw_dtype_and_range(getattr(g, "dataset_path", None))
+    raw_dtype, raw_range = _raw_dtype_and_range(session.dataset_path)
 
     by_name = {}
-    for cfg in g.models_config or []:
+    for cfg in session.models_config or []:
         try:
             by_name[getattr(cfg, "name", None)] = cfg
         except Exception:
             continue
 
     results = []
-    for job in g.jobs or []:
+    for job in session.jobs or []:
         name = getattr(job, "model_name", None)
         meta = _model_metadata(by_name[name]) if name in by_name else {}
         probe = _fetch_probe(getattr(job, "host", None))

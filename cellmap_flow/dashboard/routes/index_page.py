@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, jsonify
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def chain_items(available, configured):
     registry order instead would reorder it on the next submit.
 
     ``available`` is get_input_normalizers() / get_postprocessors_list();
-    ``configured`` is the live chain (g.input_norms / g.postprocess).
+    ``configured`` is the live chain (the session's input_norms / postprocess).
     """
     defaults = {op["name"]: op.get("params", {}) for op in available}
     items = []
@@ -89,37 +89,38 @@ def chain_items(available, configured):
 @index_bp.route("/")
 def index():
     # Render the main page with tabs
-    input_norm_items = chain_items(get_input_normalizers(), g.input_norms)
-    postprocess_items = chain_items(get_postprocessors_list(), g.postprocess)
+    session = get_session()
+    input_norm_items = chain_items(get_input_normalizers(), session.input_norms)
+    postprocess_items = chain_items(get_postprocessors_list(), session.postprocess)
     model_mergers = get_model_mergers_list()
     # A copy: the "User" group lists this session's running models for the
-    # Models tab only. Written into g.model_catalog it outlived the request,
+    # Models tab only. Written into the session's catalog it outlived the request,
     # and everything else that walks the catalog (update_run_models, the
     # pipeline builder's palette) found entries with no path.
-    model_catalog = dict(g.model_catalog)
-    model_catalog["User"] = {j.model_name: "" for j in g.jobs}
+    model_catalog = dict(session.model_catalog)
+    model_catalog["User"] = {j.model_name: "" for j in session.jobs}
     logger.debug(f"Model catalog: {model_catalog}")
     logger.debug(f"Input norm rows: {input_norm_items}")
     logger.debug(f"Postprocess rows: {postprocess_items}")
 
     # Collect running HF model repos
     from cellmap_flow.models.models_config import HuggingFaceModelConfig
-    running_job_names = {j.model_name for j in g.jobs}
+    running_job_names = {j.model_name for j in session.jobs}
     default_hf_repos = [
-        mc.repo for mc in g.models_config
+        mc.repo for mc in session.models_config
         if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
     ]
 
     return render_template(
         "index.html",
-        neuroglancer_url=viewer_url_for(g.NEUROGLANCER_URL, request.headers, request.scheme),
+        neuroglancer_url=viewer_url_for(session.neuroglancer_url, request.headers, request.scheme),
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
         model_mergers=model_mergers,
         model_catalog=model_catalog,
-        default_models=[j.model_name for j in g.jobs],
+        default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
-        server_config_cached=g._server_config_cached,
+        server_config_cached=session.server_config_cached,
     )
 
 
@@ -132,17 +133,18 @@ def set_data():
         if not dataset_path:
             return jsonify({"error": "dataset_path is required"}), 400
 
-        g.dataset_path = dataset_path
+        session = get_session()
+        session.dataset_path = dataset_path
         # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
         # does not take its dimensions from the raw.
-        g.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
-        g.NEUROGLANCER_URL = str(g.viewer)
-        logger.debug(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
+        session.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
+        session.neuroglancer_url = str(session.viewer)
+        logger.debug(f"Neuroglancer viewer set up: {session.neuroglancer_url}")
 
         return jsonify({
             "success": True,
             "neuroglancer_url": viewer_url_for(
-                g.NEUROGLANCER_URL, request.headers, request.scheme
+                session.neuroglancer_url, request.headers, request.scheme
             ),
         })
     except Exception as e:

@@ -9,7 +9,7 @@ import itertools
 import logging
 
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
 from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import get_norms_post_args
@@ -26,7 +26,7 @@ def _configured_output_voxel_size(model, info):
     Only then: reading ``config`` builds the model, which for a script model
     means loading its weights and taking a CUDA context here.
     """
-    mc = {mc.name: mc for mc in getattr(g, "models_config", []) or []}.get(model)
+    mc = {mc.name: mc for mc in get_session().models_config or []}.get(model)
     if mc is None or info.get("output_voxel_size"):
         return None
     try:
@@ -39,11 +39,12 @@ def _configured_output_voxel_size(model, info):
 def generate_neuroglancer_url(dataset_path, wrap_raw=True):
     """Open the viewer on ``dataset_path`` with a layer for each running model
     and the YAML's extra layers, then serve the dashboard. Does not return."""
-    g.dataset_path = dataset_path
-    st_data = get_norms_post_args(g.input_norms, g.postprocess)
+    session = get_session()
+    session.dataset_path = dataset_path
+    st_data = get_norms_post_args(session.input_norms, session.postprocess)
     layers = {}
     colors = itertools.cycle(PREDICTION_COLORS)
-    for job in g.jobs:
+    for job in session.jobs:
         model, host = job.model_name, job.host
         if not host:
             # A zarr://None/... source never loads and nothing replaces
@@ -52,18 +53,19 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
             continue
         # One round trip, for both the contrast range and the voxel size.
         info = fetch_model_info(host)
-        g.shaders.setdefault(model, prediction_shader_for(model, host, g.postprocess, color=next(colors), info=info))
+        default_shader = prediction_shader_for(model, host, session.postprocess, color=next(colors), info=info)
+        session.shaders.setdefault(model, default_shader)
         layers[model] = prediction_layer(
-            model, host, st_data, dataset_path=dataset_path, postprocess=g.postprocess,
-            shader=g.shaders[model], shader_controls=g.shader_controls.get(model), info=info,
+            model, host, st_data, dataset_path=dataset_path, postprocess=session.postprocess,
+            shader=session.shaders[model], shader_controls=session.shader_controls.get(model), info=info,
             fallback_output_voxel_size=_configured_output_voxel_size(model, info),
         )
     # The YAML's extra_layers (cellmap_flow_yaml builds them).
-    layers.update(g.extra_layers)
+    layers.update(session.extra_layers)
 
-    g.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)
-    g.viewer = new_viewer(dataset_path, raw=g.raw, layers=layers)
-    viewer_url = str(g.viewer)
+    session.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)
+    session.viewer = new_viewer(dataset_path, raw=session.raw, layers=layers)
+    viewer_url = str(session.viewer)
     print("viewer", viewer_url)
     # Serves the dashboard; does not return.
     create_and_run_app(neuroglancer_url=viewer_url)

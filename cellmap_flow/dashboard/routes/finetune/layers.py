@@ -12,9 +12,9 @@ Idempotency: add-* replaces a same-named layer; remove-layer is a no-op
 when the name is absent; rename-layer answers 409 rather than overwrite
 another layer.
 
-The layer's per-name bookkeeping -- ``g.shaders``, ``g.shader_controls``
-and ``g.extra_layers`` -- follows a remove or a rename, so a later layer of
-the same name starts fresh.
+The layer's per-name bookkeeping -- the session's ``shaders``,
+``shader_controls`` and ``extra_layers`` (dashboard.state) -- follows a
+remove or a rename, so a later layer of the same name starts fresh.
 
 ``path`` is opened as ``/api/set-data`` opens a dataset: any zarr, n5 or
 precomputed store the dashboard's user can read.
@@ -24,7 +24,7 @@ import logging
 
 from flask import jsonify
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def _error(message, status=400):
 
 
 def _add_layer(name, layer, layer_type, path):
-    with g.viewer.txn() as s:
+    with get_session().viewer.txn() as s:
         if name in s.layers:
             logger.info(f"Replacing existing layer {name}")
             del s.layers[name]
@@ -62,7 +62,8 @@ def add_segmentation_layer_to_viewer_response(data):
         name = data.get("name")
         if not path or not name:
             return _error("Missing path or name")
-        if g.viewer is None:
+        session = get_session()
+        if session.viewer is None:
             return _error("viewer not initialized")
 
         from cellmap_flow.utils.scale_pyramid import get_raw_layer
@@ -89,7 +90,8 @@ def add_image_layer_to_viewer_response(data):
         name = data.get("name")
         if not path or not name:
             return _error("Missing path or name")
-        if g.viewer is None:
+        session = get_session()
+        if session.viewer is None:
             return _error("viewer not initialized")
 
         from cellmap_flow.utils.scale_pyramid import get_raw_layer
@@ -115,18 +117,19 @@ def remove_layer_from_viewer_response(data):
         name = data.get("name")
         if not name:
             return _error("Missing name")
-        if g.viewer is None:
+        session = get_session()
+        if session.viewer is None:
             return _error("viewer not initialized")
 
         # Read first: txn() pushes the whole state back even when nothing
         # changed.
-        removed = name in g.viewer.state.layers
+        removed = name in session.viewer.state.layers
         if removed:
-            with g.viewer.txn() as s:
+            with session.viewer.txn() as s:
                 if name in s.layers:
                     del s.layers[name]
         for attr in _BOOKKEEPING:
-            getattr(g, attr).pop(name, None)
+            getattr(session, attr).pop(name, None)
 
         logger.info(f"Removed layer: {name} (was_present={removed})")
         return jsonify(
@@ -155,7 +158,8 @@ def rename_layer_in_viewer_response(data):
         new_name = data.get("new_name")
         if not old_name or not new_name:
             return _error("Missing old_name or new_name")
-        if g.viewer is None:
+        session = get_session()
+        if session.viewer is None:
             return _error("viewer not initialized")
 
         if old_name == new_name:
@@ -169,16 +173,16 @@ def rename_layer_in_viewer_response(data):
                 }
             )
 
-        layers = g.viewer.state.layers
+        layers = session.viewer.state.layers
         if old_name not in layers:
             return _error(f"Layer not found: {old_name}", 404)
         if new_name in layers:
             return _error(f"Target name already exists: {new_name}", 409)
-        with g.viewer.txn() as s:
+        with session.viewer.txn() as s:
             s.layers[old_name].name = new_name
 
         for attr in _BOOKKEEPING:
-            bookkeeping = getattr(g, attr)
+            bookkeeping = getattr(session, attr)
             if old_name in bookkeeping:
                 bookkeeping[new_name] = bookkeeping.pop(old_name)
 

@@ -3,10 +3,8 @@ import logging
 import neuroglancer
 from flask import Blueprint, request, jsonify
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
-
-bbx_generator_state = g.bbx_generator_state
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +82,7 @@ def start_bbx_generator():
         viewer = new_viewer(dataset_path, scales=(8, 8, 8), raw_name="fibsem", layers={BBOX_LAYER_NAME: box_layer})
 
         # Store state
+        bbx_generator_state = get_session().bbx_generator_state
         bbx_generator_state["dataset_path"] = dataset_path
         bbx_generator_state["num_boxes"] = num_boxes
         bbx_generator_state["bounding_boxes"] = list(existing_bounding_boxes)
@@ -124,6 +123,7 @@ def start_bbx_generator():
 def get_bbx_generator_status():
     """Get current status of bounding box generation"""
     try:
+        bbx_generator_state = get_session().bbx_generator_state
         # Extract bounding boxes from viewer if it exists
         bboxes = _extract_bounding_boxes(bbx_generator_state.get("viewer"))
 
@@ -145,6 +145,7 @@ def get_bbx_generator_status():
 def finalize_bbx_generation():
     """Finalize bounding box generation and return results"""
     try:
+        bbx_generator_state = get_session().bbx_generator_state
         # Extract final bounding boxes from viewer
         bboxes = _extract_bounding_boxes(bbx_generator_state.get("viewer"))
 

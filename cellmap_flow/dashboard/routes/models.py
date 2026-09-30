@@ -3,13 +3,9 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.globals import (
-    g,
-    SERVER_CONFIG_KEYS,
-    current_input_norm_config,
-    current_postprocess_config,
-)
 from cellmap_flow.dashboard.services.launch import update_run_models
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.globals import SERVER_CONFIG_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +42,8 @@ def create_model_config():
         # Instantiate the model config
         model_config = instantiate_model_config(class_name, params)
 
-        # Store it in g.models_config for use in pipeline
-        if not hasattr(g, 'models_config'):
-            g.models_config = []
-        g.models_config.append(model_config)
+        # Configured, for the pipeline builder and blockwise.
+        get_session().models_config.append(model_config)
 
         logger.info(f"Created {class_name}: {model_config.name}")
         return jsonify({
@@ -117,7 +111,7 @@ def job_logs():
     cluster node, and reading it means logging in and running bpeek.
     """
     jobs = []
-    for job in getattr(g, "jobs", []) or []:
+    for job in get_session().jobs or []:
         try:
             status = job.get_status()
             text = job.peek()
@@ -152,9 +146,8 @@ def gpu_queues():
 @models_bp.route("/api/server-config")
 def get_server_config():
     """Get current server configuration."""
-    config = {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}
-    config["cached"] = g._server_config_cached
-    return jsonify(config)
+    session = get_session()
+    return jsonify({**session.server_config, "cached": session.server_config_cached})
 
 
 @models_bp.route("/api/export-config")
@@ -169,18 +162,15 @@ def export_config():
     )
 
     try:
-        models = [m.to_dict() for m in (g.models_config or [])]
-        json_data = {
-            "input_norm": current_input_norm_config(),
-            "postprocess": current_postprocess_config(),
-        }
+        session = get_session()
+        models = [m.to_dict() for m in (session.models_config or [])]
         yaml_text = generate_current_config_yaml(
             models=models,
-            data_path=g.dataset_path or "",
-            queue=g.queue,
-            charge_group=g.charge_group,
-            walltime=getattr(g, "walltime", None),
-            json_data=json_data,
+            data_path=session.dataset_path or "",
+            queue=session.queue,
+            charge_group=session.charge_group,
+            walltime=session.walltime,
+            json_data=session.pipeline_spec.to_json_data(),
         )
     except Exception as e:
         logger.error(f"Error exporting config: {str(e)}")
@@ -217,8 +207,9 @@ def update_server_config():
                         "error": f"{key} must be a whole number, got {value!r}",
                     }), 400
             updates[key] = value
+    session = get_session()
     for key, value in updates.items():
-        setattr(g, key, value)
-    g.save_server_config()
-    logger.info(f"Server config updated and cached: { {k: getattr(g, k) for k in SERVER_CONFIG_KEYS} }")
-    return jsonify({"success": True, "config": {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}})
+        setattr(session, key, value)
+    session.save_server_config()
+    logger.info(f"Server config updated and cached: {session.server_config}")
+    return jsonify({"success": True, "config": session.server_config})

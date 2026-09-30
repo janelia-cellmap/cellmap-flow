@@ -28,7 +28,6 @@ from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy, session_store
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
-from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 
@@ -212,7 +211,8 @@ def create_instance_correction_response(data):
             return _error("roi_name is required")
         if not _ROI_NAME.match(str(roi_name)):
             return _error("roi_name may hold only letters, digits, '_', '-' and '.'")
-        if getattr(g, "viewer", None) is None:
+        session = get_session()
+        if session.viewer is None:
             return _error("viewer not initialized")
         if not reuse_existing:
             if source_zarr_path:
@@ -340,7 +340,7 @@ def create_instance_correction_response(data):
             # <minio>` to overwrite those edits with the stale seed. Refuse
             # and point at the sync route.
             if session_instance.backing_store_populated(
-                get_session().minio_state, output_dir, mc_target_name
+                session.minio_state, output_dir, mc_target_name
             ):
                 return (
                     jsonify({
@@ -368,7 +368,7 @@ def create_instance_correction_response(data):
                 f"{instance_zarr_path} -> {effective_zarr_path}"
             )
 
-            dataset_path = getattr(g, "dataset_path", None)
+            dataset_path = session.dataset_path
             if not dataset_path:
                 return _error("No dataset path configured")
             geometry, error_response = _seed_geometry(model_name, dataset_path)
@@ -381,8 +381,8 @@ def create_instance_correction_response(data):
                 model_name=model_name,
                 dilation_radius_voxels=dilation_radius,
                 annotation_dtype=annotation_dtype,
-                input_norm_config=current_input_norm_config(),
-                postprocess_config=current_postprocess_config(),
+                input_norm_config=list(session.pipeline_spec.input_norm),
+                postprocess_config=list(session.pipeline_spec.postprocess),
                 **geometry,
             )
             if not success:
@@ -396,7 +396,7 @@ def create_instance_correction_response(data):
         # an earlier attach may point at another snapshot: drop it, so the
         # pull before the mirror fills this zarr from the whole bucket.
         volume_id = mc_target_name[: -len(".zarr")]
-        g.annotation_volumes.pop(volume_id, None)
+        session.annotation_volumes.pop(volume_id, None)
         minio_url = ensure_minio_serving(
             effective_zarr_path,
             volume_id,
@@ -407,7 +407,7 @@ def create_instance_correction_response(data):
         _register_volume(volume_id, effective_zarr_path, output_dir, minio_url)
 
         layer_name = data.get("layer_name", f"{roi_name}_annotation")
-        with g.viewer.txn() as s:
+        with session.viewer.txn() as s:
             if layer_name in s.layers:
                 del s.layers[layer_name]
             source_config = {

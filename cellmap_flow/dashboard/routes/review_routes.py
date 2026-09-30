@@ -1,15 +1,16 @@
 """HTTP routes for the instance-review workflow (the dashboard's Review tab).
 
 Thin Flask wrappers over cellmap_flow.review helpers. The index opened by
-/api/review/open, and the last instance picked in the viewer, live in
-``g.review`` (a ReviewSession). Each request opens its own SQLite
-connection, read-only except for verdict and undo (no pooling — write
-rate is one row per user click, read rate is one row per GET /review/next).
+/api/review/open, and the last instance picked in the viewer, live in the
+dashboard session's ``review`` (a ReviewSession; dashboard.state). Each
+request opens its own SQLite connection, read-only except for verdict and
+undo (no pooling — write rate is one row per user click, read rate is one
+row per GET /review/next).
 
-Navigation on /review/next is server-side: mutating g.viewer.txn()
-propagates to the browser via neuroglancer's WebSocket. It is
-best-effort — if g.viewer is None (no viewer is attached yet),
-navigation is silently skipped and the instance record is still returned.
+Navigation on /review/next is server-side: a viewer.txn() propagates to the
+browser via neuroglancer's WebSocket. It is best-effort — if there is no
+viewer yet, navigation is silently skipped and the instance record is still
+returned.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from typing import Optional
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.io.metadata import nm_per_unit
 from cellmap_flow.review import (
     count_instances,
@@ -96,7 +97,7 @@ class PickBoard:
 
 @dataclass
 class ReviewSession:
-    """The index /api/review/open selected, kept in ``g.review``."""
+    """The index /api/review/open selected, kept as the dashboard session's ``review``."""
 
     db_path: str  # resolved by review.resolve_db_path
     reviewer: str
@@ -149,7 +150,7 @@ def _on_review_pick(action_state) -> None:
     One module-level function: neuroglancer keeps a set of handlers per
     action, so registering it again on every /open adds nothing.
     """
-    session = g.review
+    session = get_session().review
     if session is None or not session.segmentation_layer:
         return
     try:
@@ -185,7 +186,7 @@ def _register_pick_action(viewer) -> None:
 
 
 def _navigate_viewer(instance: dict) -> bool:
-    """Best-effort: move g.viewer to the instance's nm centroid.
+    """Best-effort: move the viewer to the instance's nm centroid.
 
     Neuroglancer's s.position is expressed in **voxels of the viewer's
     coordinate space**, not in nm, and neuroglancer reports that space's
@@ -198,9 +199,9 @@ def _navigate_viewer(instance: dict) -> bool:
     (no viewer attached). Never raises — viewer errors are logged but
     the HTTP response continues with the instance payload.
     """
-    viewer = g.viewer
+    viewer = get_session().viewer
     if viewer is None:
-        logger.info("review: g.viewer is None; skipping navigation")
+        logger.info("review: no viewer yet; skipping navigation")
         return False
     try:
         with viewer.txn() as s:
@@ -279,13 +280,13 @@ def review_open():
         return jsonify({"success": False,
                         "error": f"could not open review index: {e}"}), 400
 
-    previous = g.review
-    g.review = ReviewSession(real_path, reviewer, seg_layer)
+    previous = get_session().review
+    get_session().review = ReviewSession(real_path, reviewer, seg_layer)
     if previous is not None:
         previous.picks.close()
-    if seg_layer is not None and g.viewer is not None:
+    if seg_layer is not None and get_session().viewer is not None:
         try:
-            _register_pick_action(g.viewer)
+            _register_pick_action(get_session().viewer)
             logger.info(f"review: registered 'review-pick' action on key 't' for layer {seg_layer!r}")
         except Exception as e:
             logger.warning(f"review: failed to register pick action: {e}")
@@ -309,10 +310,10 @@ def review_next():
     Query: ?order=<queue>&min_vox=100&skip_rank=12, where the queues are
     the index's rank_<queue> columns; the first one when order is absent.
 
-    Side effect: navigates g.viewer to the instance's centroid (if
+    Side effect: navigates the viewer to the instance's centroid (if
     viewer exists).
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
 
@@ -353,7 +354,7 @@ def review_verdict():
            "entry_method": "next" | "show" | "pick",  # optional
           }
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
 
@@ -391,7 +392,7 @@ def review_undo():
 
     Body: {"id": 123}
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
 
@@ -415,7 +416,7 @@ def review_undo():
 @review_bp.route("/api/review/progress", methods=["GET"])
 def review_progress():
     """Aggregate review progress."""
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
 
@@ -432,10 +433,10 @@ def review_progress():
 def review_show(instance_id: int):
     """Full instance record + ledger state for a specific id.
 
-    Side effect: navigates g.viewer to the instance's centroid (if a
+    Side effect: navigates the viewer to the instance's centroid (if a
     viewer is attached), the reliable way to go to a known ID.
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
 
@@ -460,7 +461,7 @@ def review_current_pick():
           when a pick has been recorded since /api/review/open
       204 No Content when no pick yet
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
     seq, label_id, picked_at = session.picks.latest()
@@ -497,7 +498,7 @@ def review_pick_stream():
     idle-closing the connection. The stream ends when another index is
     opened; the browser's EventSource then reconnects to the new one.
     """
-    session = g.review
+    session = get_session().review
     if session is None:
         return _no_session()
     picks = session.picks
@@ -526,9 +527,9 @@ def review_pick_stream():
             "pick": lookup(label_id) if label_id is not None else None,
         })
 
-        while g.review is session and not picks.closed:
+        while get_session().review is session and not picks.closed:
             seq, label_id = picks.wait_past(sent, PICK_STREAM_HEARTBEAT_S)
-            if g.review is not session or picks.closed:
+            if get_session().review is not session or picks.closed:
                 break
             if seq != sent:
                 sent = seq
@@ -554,10 +555,10 @@ def review_pick_stream():
 @review_bp.route("/api/review/status", methods=["GET"])
 def review_status():
     """Current review-session state (is an index open? which reviewer?)."""
-    session = g.review
+    session = get_session().review
     return jsonify({
         "db_path": session.db_path if session else None,
         "reviewer": session.reviewer if session else None,
         "segmentation_layer": session.segmentation_layer if session else None,
-        "viewer_attached": g.viewer is not None,
+        "viewer_attached": get_session().viewer is not None,
     })
