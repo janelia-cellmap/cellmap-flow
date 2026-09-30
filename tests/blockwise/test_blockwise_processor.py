@@ -40,35 +40,72 @@ def test_a_models_scale_picks_its_level_of_a_multiscale_group(ome_pyramid, pooli
     assert processor.idi_raw.path.rstrip("/").endswith("s1")
 
 
-def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, task_yaml):
-    """Where blockwise writes: each channel's array, its OME attributes (the
-    translation is voxel 0's centre), and what a worker writes for one block
-    through a json_data chain. The output starts at the raw data's corner
-    (8, 16, 24); it was created at 0 and the prediction written shifted."""
-    path = task_yaml(raw_zarr(offset=(8, 16, 24)), pooling_model(8, 16), json_data=JSON_DATA)
+SPACE = [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"]
+
+
+def ome(axes, scale, translation):
+    """The OME multiscales attribute of an output's group, for its one level s0."""
+    return [{
+        "axes": axes,
+        "coordinateTransformations": [{"scale": [1.0] * len(axes), "type": "scale"}],
+        "datasets": [{"coordinateTransformations": [{"scale": scale, "type": "scale"},
+                                                    {"translation": translation, "type": "translation"}],
+                      "path": "s0"}],
+        "name": "",
+        "version": "0.4",
+    }]
+
+
+# What an output is, written from raw whose corner is (8, 16, 24): the array a
+# worker opens (ROI, voxel size, dtype), the zarr chunks of s0, funlib's
+# attributes on s0, the OME multiscales on the group (the translation is voxel
+# 0's centre; a channel axis has none), and the sum and hash of what one block
+# writes. ONE_CHANNEL holds one model channel; STACKED holds both, on a
+# leading channel axis.
+ONE_CHANNEL = (
+    daisy.Roi((8, 16, 24), (128, 128, 128)), Coordinate(16, 16, 16), np.uint8, (4, 4, 4),
+    {"axis_names": ["z", "y", "x"], "offset": [8, 16, 24], "units": ["nanometer"] * 3,
+     "voxel_size": [16, 16, 16]},
+    ome(SPACE, [16, 16, 16], [16.0, 24.0, 32.0]),
+    (7, "f8b67fe4a95c8a04"),
+)
+STACKED = (
+    daisy.Roi((0, 8, 16, 24), (2, 128, 128, 128)), Coordinate(1, 16, 16, 16), np.uint8, (2, 4, 4, 4),
+    {"axis_names": ["c", "z", "y", "x"], "offset": [0, 8, 16, 24], "units": ["", *["nanometer"] * 3],
+     "voxel_size": [1, 16, 16, 16]},
+    ome([{"name": "c", "type": "channel"}, *SPACE], [1, 16, 16, 16], [0.0, 16.0, 24.0, 32.0]),
+    (14, "ae5ec9ead2c8d143"),
+)
+
+
+@pytest.mark.parametrize("output_channels, outputs", [
+    pytest.param(None, {"a": ONE_CHANNEL, "b": ONE_CHANNEL}, id="one-per-model-channel"),
+    pytest.param({"both": [0, 1], "second": 1}, {"both": STACKED, "second": ONE_CHANNEL},
+                 id="a-dict-of-channel-indices"),
+])
+def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, task_yaml, output_channels,
+                                                       outputs):
+    """Where blockwise writes: each output's array and attributes, and what a
+    worker writes there for one block through a json_data chain. Without
+    output_channels there is one output per model channel; a dict names each
+    output's channel indices, and one listing several stacks them. The output
+    starts at the raw data's corner (8, 16, 24); it was created at 0 and the
+    prediction written shifted."""
+    overrides = {"output_channels": output_channels} if output_channels else {}
+    path = task_yaml(raw_zarr(offset=(8, 16, 24)), pooling_model(8, 16), json_data=JSON_DATA, **overrides)
     master = CellMapFlowBlockwiseProcessor(path, create=True)
     worker = CellMapFlowBlockwiseProcessor(path, create=False)
     roi = daisy.Roi((8, 16, 24), (64, 64, 64))
     worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
 
-    multiscales = [{
-        "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
-        "coordinateTransformations": [{"scale": [1.0, 1.0, 1.0], "type": "scale"}],
-        "datasets": [{"coordinateTransformations": [{"scale": [16, 16, 16], "type": "scale"},
-                                                    {"translation": [16.0, 24.0, 32.0], "type": "translation"}],
-                      "path": "s0"}],
-        "name": "",
-        "version": "0.4",
-    }]
-    assert master.output_channels == ["a", "b"]
-    for channel, array in zip(master.output_channels, worker.output_arrays):
+    assert master.output_channels == list(outputs)
+    for (channel, expected), array in zip(outputs.items(), worker.output_arrays):
+        s0 = zarr.open(str(master.output_path / channel / "s0"), mode="r")
         attrs = zarr.open_group(str(master.output_path / channel), mode="r").attrs
-        chunks = zarr.open(str(master.output_path / channel / "s0"), mode="r").chunks
-        assert (array.roi, array.voxel_size, array.dtype, chunks) == (
-            daisy.Roi((8, 16, 24), (128, 128, 128)), Coordinate(16, 16, 16), np.uint8, (4, 4, 4))
-        assert attrs["multiscales"] == multiscales
-        data = array.to_ndarray(roi)
-        assert (int(data.sum()), hashlib.sha256(data.tobytes()).hexdigest()[:16]) == (7, "f8b67fe4a95c8a04")
+        block = s0[..., :4, :4, :4]  # the block's 64 nm at 16 nm, at the output's corner
+        written = (int(block.sum()), hashlib.sha256(block.tobytes()).hexdigest()[:16])
+        assert (array.roi, array.voxel_size, array.dtype, s0.chunks, dict(s0.attrs), attrs["multiscales"],
+                written) == expected, channel
 
 
 def test_the_whole_volume_task_covers_the_output_on_its_chunk_grid(raw_zarr, pooling_model, task_yaml, monkeypatch):
