@@ -2,7 +2,9 @@
 
 A job moves on:
 - what the scheduler (LSF, or the local process) says of it, which the
-  monitor asks every few seconds: ``on_scheduler_status``;
+  monitor asks every few seconds: ``on_scheduler_status``. A job the
+  scheduler says has completed becomes COMPLETED only once the monitor has
+  found its export (monitor.complete_job), and FAILED if it has not;
 - the status markers the trainer prints in its log: ``on_status_marker``;
 - the dashboard: a restart, which only a job that ``can_restart`` takes
   (``start_iteration``), and a cancel (FinetuneJobManager.cancel_job).
@@ -101,19 +103,24 @@ class FinetuneJob:
         }
 
 
-def on_scheduler_status(job: FinetuneJob, lsf_status) -> bool:
-    """Move ``job`` on what its scheduler says of it; True once the job has ended.
+def on_scheduler_status(job: FinetuneJob, lsf_status) -> Optional[JobStatus]:
+    """Move ``job`` on what its scheduler says of it; once it has ended, how.
 
-    ``lsf_status`` is a jobs.spec.JobStatus. A job whose cancel was asked
-    for has been cancelled however its end is reported. RUNNING moves a
-    pending job on and leaves one waiting for a restart waiting; PENDING
-    makes it pending.
+    ``lsf_status`` is a jobs.spec.JobStatus. Returns None while the job
+    lives, else the status it ended with. A job whose cancel was asked for
+    has been cancelled however its end is reported. RUNNING moves a pending
+    job on and leaves one waiting for a restart waiting; PENDING makes it
+    pending.
+
+    COMPLETED is returned but not set: the finetune tab stops polling, and
+    the log stream says done, at the first final status they see, so the
+    job keeps its status until the monitor has checked what it exported.
     """
     if job.cancel_requested and lsf_status in (
         LSFJobStatus.COMPLETED, LSFJobStatus.FAILED, LSFJobStatus.KILLED
     ):
         job.status = JobStatus.CANCELLED
-        return True
+        return job.status
     if lsf_status == LSFJobStatus.RUNNING:
         if job.status == JobStatus.PENDING:
             logger.info(f"Job {job.job_id} started running")
@@ -122,17 +129,16 @@ def on_scheduler_status(job: FinetuneJob, lsf_status) -> bool:
         job.status = JobStatus.PENDING
     elif lsf_status == LSFJobStatus.COMPLETED:
         logger.info(f"Job {job.job_id} completed according to LSF")
-        job.status = JobStatus.COMPLETED
-        return True
+        return JobStatus.COMPLETED
     elif lsf_status == LSFJobStatus.FAILED:
         logger.error(f"Job {job.job_id} failed according to LSF")
         job.status = JobStatus.FAILED
-        return True
+        return job.status
     elif lsf_status == LSFJobStatus.KILLED:
         logger.warning(f"Job {job.job_id} was killed")
         job.status = JobStatus.CANCELLED
-        return True
-    return False
+        return job.status
+    return None
 
 
 def on_status_marker(job: FinetuneJob, marker: str) -> None:

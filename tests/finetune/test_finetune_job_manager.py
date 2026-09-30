@@ -13,7 +13,7 @@ from unittest.mock import ANY
 
 import pytest
 
-from cellmap_flow.finetune.job_manager import monitor, restart
+from cellmap_flow.finetune.job_manager import monitor, persistence, restart
 from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.finetune.job_manager.state import JobStatus
@@ -258,6 +258,28 @@ def test_a_completed_job_takes_the_trainers_name_and_yaml(monitored, tmp_path, e
     assert run.job.finetuned_model_name == run.metadata["finetuned_model_name"] == "m_2"
     assert run.job.model_yaml_path == Path(run.metadata["model_yaml_path"]) == Path("/s/models/m_2.yaml")
     assert not (tmp_path / "models").exists(), "no YAML of its own"
+
+
+@pytest.mark.parametrize("exported, final", [pytest.param(FULL, "COMPLETED", id="its export is there"),
+                                             pytest.param([], "FAILED", id="its export is missing")])
+def test_a_job_lsf_says_is_done_is_completed_only_once_its_export_is_found(make_job, monkeypatch, exported, final):
+    """The finetune tab stops polling, and the log stream says done, at the first
+    final status they see. A job was COMPLETED while its export was checked,
+    and FAILED after when it was missing, so they never saw it fail."""
+    job = make_job("RUNNING", lsf_job=_lsf(LSF.COMPLETED))
+    for export in exported:
+        (job.output_dir / export).parent.mkdir(exist_ok=True)
+        (job.output_dir / export).write_bytes(b"")
+    shown, check_export = [], persistence.check_export
+
+    def check(*args):
+        shown.append(job.status.value)
+        return check_export(*args)
+
+    monkeypatch.setattr(persistence, "check_export", check)
+    _monitor(FinetuneJobManager(), job, ["Epoch 1/1 - Loss: 0.1\n"], monkeypatch)
+    assert shown == ["RUNNING"], "not final while its export is checked"
+    assert job.status.value == json.loads((job.output_dir / "metadata.json").read_text())["status"] == final
 
 
 class _Killable:

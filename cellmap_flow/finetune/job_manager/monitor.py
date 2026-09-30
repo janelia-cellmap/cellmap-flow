@@ -12,7 +12,8 @@ trainer has added to its log (tailer.LogTailer):
 
 It records each change of status in the run's metadata.json, and, when the
 job ends, its final status, model and serving YAML. A job the scheduler says
-completed must have left its export (``complete_job``); if not, it failed.
+completed must have left its export (``complete_job``): it is COMPLETED only
+once that is found, and FAILED if it is not.
 """
 
 import logging
@@ -45,6 +46,7 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
     log = LogTailer(finetune_job.log_file)
     check_interval = 3  # seconds
     persisted_status = finetune_job.status
+    ended = None  # how the scheduler says the job ended
 
     try:
         while True:
@@ -58,7 +60,8 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
             # === Check LSF job status ===
 
             if finetune_job.lsf_job:
-                if state.on_scheduler_status(finetune_job, finetune_job.lsf_job.get_status()):
+                ended = state.on_scheduler_status(finetune_job, finetune_job.lsf_job.get_status())
+                if ended:
                     break
 
             # === Tail log file for progress updates ===
@@ -99,12 +102,17 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
     finally:
         # === Post-completion actions ===
 
-        if finetune_job.status == JobStatus.COMPLETED:
+        if ended == JobStatus.COMPLETED:
             try:
                 complete_job(finetune_job)
+                outcome = JobStatus.COMPLETED
             except Exception as e:
                 logger.error(f"Error in post-completion for job {job_id}: {e}")
-                finetune_job.status = JobStatus.FAILED
+                outcome = JobStatus.FAILED
+            # Only now, so that no one sees COMPLETED turn into FAILED (see
+            # state.on_scheduler_status). A cancel that came in meanwhile stands.
+            if finetune_job.status not in TERMINAL_STATUSES:
+                finetune_job.status = outcome
         else:
             # A job that failed after training -- its server would not
             # start, say -- still produced a model; record what it was.
@@ -272,7 +280,8 @@ def complete_job(finetune_job: FinetuneJob):
 
     1. Verify adapter files exist
     2. Take the model name and serving YAML the trainer reported
-    3. Update job status and metadata
+    3. Record the completion in metadata.json; the monitor makes the job
+       COMPLETED once this has returned
 
     Args:
         finetune_job: The completed job
