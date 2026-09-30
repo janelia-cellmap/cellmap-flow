@@ -24,7 +24,7 @@ export function initJobMonitor({ picker, form }) {
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
   const card = createJobCard(lossPlot);
-  const jobLog = createJobLog({ onLine: card.logLine, logFile: card.logFile });
+  const jobLog = createJobLog({ onLine: card.logLine });
   const appendLog = jobLog.append;
 
   // Start Finetuning button
@@ -78,6 +78,10 @@ export function initJobMonitor({ picker, form }) {
       if (result.success) {
         card.submitted(result.job_id, params.model_name, result.output_type || "binary");
         jobLog.clear();
+        // The answer names the job's output directory, not its log file:
+        // the job manager writes that there as training_log.txt, and the
+        // status polls name it.
+        jobLog.setLogFile(result.output_dir ? `${result.output_dir}/training_log.txt` : null);
         appendLog("Finetuning job submitted successfully!");
         appendLog(`Job ID: ${result.job_id}`);
         appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
@@ -139,6 +143,7 @@ export function initJobMonitor({ picker, form }) {
           return;
         }
         card.polled(data);
+        if (data.log_file) jobLog.setLogFile(data.log_file);
 
         if (TERMINAL.includes(data.status)) {
           // The stream normally ends itself with "done"; see jobLog.closeSoon.
@@ -294,6 +299,7 @@ export function initJobMonitor({ picker, form }) {
 
       const jobId = activeJob.job_id;
       card.restored(activeJob);
+      jobLog.setLogFile(activeJob.log_file || null);
 
       // Restore logs and loss plot from the log file. The live stream below
       // then starts where this ends (logData.offset), instead of sending the

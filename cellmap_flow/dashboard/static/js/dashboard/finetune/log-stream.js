@@ -8,8 +8,7 @@
 // The card keeps the log's last MAX_LINES lines. Once earlier ones have
 // gone, its first line says how many, and where the whole log is.
 //
-// onLine(line) gets every line the stream brings, one at a time; logFile()
-// is the path of the job's log file, or null while that is not known.
+// onLine(line) gets every line the stream brings, one at a time.
 import { openLogStream } from "../../lib/sse.js";
 
 // Every change to a textarea's text lays all of it out again, so a log that
@@ -27,7 +26,7 @@ function countLines(text) {
   return count;
 }
 
-export function createJobLog({ onLine, logFile }) {
+export function createJobLog({ onLine }) {
   const area = document.getElementById("trainingLogs");
   const autoScroll = document.getElementById("autoScrollLogs");
   let stream = null;  // the open stream, or the last one
@@ -40,6 +39,7 @@ export function createJobLog({ onLine, logFile }) {
   let text = area.value;
   let lineCount = countLines(text);
   let dropped = 0;
+  let logFile = null;  // the path the note names, once the job's is known
 
   function dropOldest() {
     if (lineCount <= MAX_LINES) return;
@@ -57,7 +57,7 @@ export function createJobLog({ onLine, logFile }) {
       area.value = text;
       return;
     }
-    const where = logFile() || "training_log.txt in the job's output directory";
+    const where = logFile || "training_log.txt in the job's output directory";
     area.value = `[${dropped.toLocaleString()} earlier lines are not shown here; ` +
       `the whole log is ${where}]\n` + text;
   }
@@ -161,6 +161,13 @@ export function createJobLog({ onLine, logFile }) {
     // card shows.
     resumeFrom(offset) {
       restoredOffset = offset;
+    },
+    // The path of the job's log file, for the note to name; a note already
+    // shown names it at once.
+    setLogFile(path) {
+      if (path === logFile) return;
+      logFile = path;
+      if (dropped) render();
     },
   };
 }

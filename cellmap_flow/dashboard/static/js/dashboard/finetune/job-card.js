@@ -39,7 +39,6 @@ export function createJobCard(lossPlot) {
   let restartEpochResetPending = false;  // a restart began; its epochs start over
   let isServingReady = false;
   let stopRequested = false;
-  let logFile = null;  // the job's log file, once its status has named it
 
   function shouldAcceptEpochProgress(current, total) {
     if (isServingReady && !restartEpochResetPending) {
@@ -144,12 +143,9 @@ export function createJobCard(lossPlot) {
   return {
     // The job's id as the card shows it, or "-" when it shows none.
     jobId: () => $("jobId").textContent,
-    // The path of the job's log file, as its status gives it; null until then.
-    logFile: () => logFile,
 
     // A job just submitted, before its first status answer.
     submitted(jobId, modelName, outputType) {
-      logFile = null;
       showJob(jobId, modelName);
       showOutputType(outputType);
       showStatus("SUBMITTED");
@@ -166,7 +162,6 @@ export function createJobCard(lossPlot) {
     // list. Its loss plot comes from its log instead, and what only the
     // poll shows (the waiting text, Stop Early) waits for the first poll.
     restored(job) {
-      logFile = job.log_file || null;
       showJob(job.job_id, job.model_name);
       showOutputType((job.params && job.params.output_type) || "binary");
       showStatus(job.status);
@@ -183,7 +178,6 @@ export function createJobCard(lossPlot) {
 
     // A status answer (/api/finetune/job/<id>/status).
     polled(data) {
-      if (data.log_file) logFile = data.log_file;
       if (data.params && data.params.output_type) {
         showOutputType(data.params.output_type);
       }
