@@ -517,6 +517,26 @@ class TrainingSession:
         markers.emit(markers.RESTARTING_TRAINING)
         return True
 
+    def _record_rank(self) -> None:
+        """Put the rank and alpha the job keeps into its metadata.json.
+
+        apply_restart_params recorded the ones the restart asked for, which
+        a dashboard started later would take for the job's.
+        """
+        args = self.args
+        metadata_file = Path(args.output_dir) / "metadata.json" if args.output_dir else None
+        try:
+            if metadata_file is None or not metadata_file.exists():
+                return
+            metadata = json.loads(metadata_file.read_text())
+            params = metadata.get("params", {})
+            for key in ("lora_r", "lora_alpha"):
+                if key in params:
+                    params[key] = getattr(args, key)
+            metadata_file.write_text(json.dumps(metadata, indent=2))
+        except Exception as e:
+            logger.warning(f"Could not record the kept rank in {metadata_file}: {e}")
+
     def _reset_model(self) -> None:
         """Put the model back where training started, for the next iteration.
 
@@ -536,13 +556,16 @@ class TrainingSession:
             # Its alpha too: the restart derived 2 x 0 = 0 for it, and an
             # adapter scaled by alpha / r = 0 trains nothing.
             args.lora_alpha = kept.alpha
+            self._record_rank()
         elif kept.kind == "full" and args.lora_r > 0:
             # The mirror image of the case above. Left alone, args.lora_r > 0
             # made the next iteration's YAML point at a lora_adapter/ this job
-            # never writes.
+            # never writes. A full finetune has no adapter for an alpha to
+            # scale: 0, as submit records it.
             logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
                            "submit a new job for that. Keeping the full finetune.")
-            args.lora_r = 0
+            args.lora_r = args.lora_alpha = 0
+            self._record_rank()
 
         strategy = strategy_for(
             self.model,

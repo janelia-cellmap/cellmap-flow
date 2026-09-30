@@ -205,6 +205,19 @@ def test_a_lora_restarts_alpha_keeps_the_adapters_scaling(run_cli, tmp_path, res
     assert (config["r"], config["lora_alpha"]) == adapter
 
 
+@pytest.mark.parametrize("rank, restart, recorded", [
+    # It kept its adapter (above), and metadata.json said lora_r 0, lora_alpha 0.
+    pytest.param(2, {"lora_r": 0}, {"lora_r": 2, "lora_alpha": 4}, id="a LoRA job asked for rank 0",
+                 marks=pytest.mark.finetune),
+    pytest.param(0, {"lora_r": 8}, {"lora_r": 0, "lora_alpha": 0}, id="a full finetune asked for rank 8"),
+])
+def test_a_restart_that_cannot_change_the_rank_records_the_rank_kept(run_cli, tmp_path, rank, restart, recorded):
+    """A dashboard started later reads a job's settings from its metadata.json."""
+    metadata = _metadata(tmp_path / "session" / "runs" / "run", lora_r=rank, lora_alpha=2 * rank)
+    run_cli("--lora-r", str(rank), "--auto-serve", "--serve-data-path", str(tmp_path), restarts=[{"params": restart}])
+    assert json.loads(metadata.read_text())["params"] == recorded
+
+
 @pytest.mark.skipif(importlib.util.find_spec("tensorboard") is None, reason="tensorboard is not installed")
 def test_tensorboard_curves_run_on_across_a_restart(run_cli, tmp_path):
     """Each iteration's trainer started its steps at 0, on top of the last one's curves."""
