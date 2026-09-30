@@ -18,7 +18,8 @@ import pytest
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.globals import g
-from cellmap_flow.pipeline_spec import PipelineSpec, split_dataset_url
+from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.serving.protocol import split_dataset_url
 
 # The chain configured and drawn before each request.
 SHOWN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], "postprocess": []}

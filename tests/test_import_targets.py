@@ -1,4 +1,4 @@
-"""Every `from cellmap_flow... import name` in the package still resolves.
+"""Every `from cellmap_flow... import name` in the package and its tests still resolves.
 
 Code is moved between modules during the cleanup, and many imports are
 inside functions (to keep heavy libraries lazy), so a moved name whose
@@ -14,10 +14,13 @@ from pathlib import Path
 import cellmap_flow
 
 PACKAGE = Path(cellmap_flow.__file__).parent
+TESTS = Path(__file__).parent
 
 
 def _package_imports():
-    for path in sorted(PACKAGE.rglob("*.py")):
+    # The tests too: a test importing a name that moved fails only when its
+    # module is collected, which stops the whole run with one import error.
+    for path in sorted([*PACKAGE.rglob("*.py"), *TESTS.rglob("*.py")]):
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom) and not node.level:
                 if (node.module or "").startswith("cellmap_flow"):
