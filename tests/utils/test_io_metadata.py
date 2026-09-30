@@ -7,8 +7,6 @@ select_level's modes, the path helpers and the OME writers.
 
 import json
 import os
-import subprocess
-import sys
 
 import numpy as np
 import pytest
@@ -19,24 +17,6 @@ from cellmap_flow.io import paths
 from cellmap_flow.io.metadata import ArrayMeta, list_levels, read_array_meta
 from cellmap_flow.io.multiscale import closest_raw_scale, select_dataset, select_level
 from cellmap_flow.io.ome import multiscales_attrs, singlescale_attrs
-
-
-def test_io_imports_nothing_heavy(tmp_path):
-    # globals configures logging and reads ~/.cellmap_flow on import; the
-    # others are slow or optional. A fresh interpreter, so that what this
-    # process has already imported hides nothing.
-    modules = ["cellmap_flow.io." + m for m in ("paths", "metadata", "multiscale", "ome")]
-    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "torch", "huggingface_hub", "peft"]
-    code = f"import sys, {', '.join(modules)}; print([m for m in {heavy!r} if m in sys.modules])"
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        env={**os.environ, "HOME": str(tmp_path)},
-        capture_output=True,
-        text=True,
-        cwd=os.getcwd(),
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "[]"
 
 
 def _v3_node(path, node_type="group", attributes=None):

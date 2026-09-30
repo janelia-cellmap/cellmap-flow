@@ -2,19 +2,13 @@
 
 import gc
 import logging
-import os
 import shlex
-import subprocess
-import sys
 
 import pytest
 
 from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import FlyModelConfig, ModelConfig, ScriptModelConfig
 from cellmap_flow.utils.config_utils import ConfigError
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 @pytest.fixture(autouse=True)
 def _forget_test_classes():
@@ -25,28 +19,6 @@ def _forget_test_classes():
 
 def _built_in(types):
     return {k: v for k, v in types.items() if v.__module__ == "cellmap_flow.models.models_config"}
-
-
-def test_the_new_modules_import_nothing_heavy(tmp_path):
-    # describe_types() runs when the dashboard opens its model form, so it
-    # must not load a model framework either.
-    code = (
-        "import sys\n"
-        "import cellmap_flow.models.registry, cellmap_flow.serving.launch\n"
-        "heavy = ['cellmap_flow.globals', 'cellmap_flow.models.models_config',\n"
-        "         'torch', 'flask', 'neuroglancer', 'huggingface_hub', 'peft']\n"
-        "print([m for m in heavy if m in sys.modules])\n"
-        "types = cellmap_flow.models.registry.describe_types()\n"
-        "assert 'BioModelConfig' in types and 'DaCapoModelConfig' in types\n"
-        "frameworks = ['bioimageio', 'dacapo', 'cellmap_models', 'torch', 'huggingface_hub']\n"
-        "print([m for m in frameworks if m in sys.modules])\n"
-    )
-    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
-    result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
-    )
-    assert result.returncode == 0, result.stderr[-2000:]
-    assert result.stdout.strip().splitlines()[-2:] == ["[]", "[]"]
 
 
 def test_the_built_in_types_and_how_yaml_names_them():

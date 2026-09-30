@@ -1,8 +1,5 @@
 """ModelGeometry: a model's sizes read once, and what follows from them."""
 
-import os
-import subprocess
-import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -45,23 +42,3 @@ def test_what_follows_from_a_configs_sizes(config, expected):
     assert got == expected
     assert all(type(v) in (int, float) for v in geometry.read_shape + geometry.input_voxel_size)
     assert geometry.context == Coordinate(expected["context"])
-
-
-def test_the_serving_modules_import_nothing_heavy(tmp_path):
-    # A fresh interpreter, so that what this process imported hides nothing.
-    modules = [
-        "cellmap_flow.models.geometry",
-        "cellmap_flow.serving.virtual_zarr",
-        "cellmap_flow.inference.runner",  # torch only once a runner is built
-    ]
-    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "torch"]
-    code = f"import sys, {', '.join(modules)}; print([m for m in {heavy!r} if m in sys.modules])"
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        env={**os.environ, "HOME": str(tmp_path)},
-        capture_output=True,
-        text=True,
-        cwd=os.getcwd(),
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "[]"

@@ -33,12 +33,6 @@ def home(tmp_path):
     return home
 
 
-def test_importing_the_package_creates_nothing(home):
-    result = _run(home, "-c", "import cellmap_flow")
-    assert result.returncode == 0, result.stderr[-2000:]
-    assert list(home.iterdir()) == []
-
-
 def test_validate_only_leaves_the_saved_server_config_alone(home, tmp_path):
     config = tmp_path / "c.yaml"
     config.write_text(

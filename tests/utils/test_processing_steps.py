@@ -194,3 +194,21 @@ def test_model_advice_matches_what_affinity_postprocessor_accepts():
     assert level(UNIT, ["AffinityPostprocessor"]) == "ok"
     # ...logits are not.
     assert level(UNBOUNDED, ["AffinityPostprocessor"]) == "warn"
+
+
+def test_the_steps_that_import_their_libraries_lazily_still_run():
+    """The segmentation libraries are imported inside the steps (see
+    test_import_hygiene); the steps still work, and the merger still pickles."""
+    import pickle
+
+    from cellmap_flow.post.postprocessors import LabelPostprocessor, MortonSegmentationRelabeling
+
+    data = np.zeros((1, 4, 4, 4), dtype=np.uint8)
+    data[0, 1:3, 1:3, 1:3] = 1
+    assert LabelPostprocessor()(data, chunk_corner=(0, 0, 0), chunk_num_voxels=64).max() == 1
+    relabeled = MortonSegmentationRelabeling()(data, chunk_corner=(1, 0, 0), chunk_num_voxels=np.int64(64))
+    assert relabeled.max() == 1 + 64
+    merger = SimpleBlockwiseMerger(face_erosion_iterations=1)
+    merger(data.astype(np.uint64), chunk_corner=(0, 0, 0))
+    merger.equivalences.union(1, 2)
+    assert pickle.loads(pickle.dumps(merger)).equivalences_json() == merger.equivalences_json()

@@ -5,10 +5,7 @@ raised ValueError when that first import happened off the main thread; the
 handler then exited 0 on SIGTERM, as if the run had succeeded.
 """
 
-import os
 import signal
-import subprocess
-import sys
 import threading
 
 import pytest
@@ -16,32 +13,6 @@ from click.testing import CliRunner
 
 from cellmap_flow.globals import g
 from cellmap_flow.utils import bsub_utils
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-def test_importing_leaves_signal_handlers_alone_even_off_the_main_thread(tmp_path):
-    code = (
-        "import signal, threading\n"
-        "before = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))\n"
-        "errors = []\n"
-        "def load():\n"
-        "    try:\n"
-        "        import cellmap_flow.utils.bsub_utils\n"
-        "    except Exception as e:\n"
-        "        errors.append(repr(e))\n"
-        "t = threading.Thread(target=load); t.start(); t.join()\n"
-        "assert not errors, errors\n"
-        "after = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))\n"
-        "assert after == before, (before, after)\n"
-        "print('ok')\n"
-    )
-    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": ROOT}
-    result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=300
-    )
-    assert result.returncode == 0, result.stderr[-2000:]
-    assert result.stdout.strip().endswith("ok")
 
 
 def test_installing_off_the_main_thread_is_a_no_op():

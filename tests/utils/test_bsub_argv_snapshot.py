@@ -312,22 +312,3 @@ def test_a_local_finetune_run(monkeypatch, tmp_path, log_dir):
     }]
     # It tees its own log; a second copy under server_logs would be noise.
     assert str(job.lsf_job.log_file) == os.devnull
-
-
-# --- the jobs package itself --------------------------------------------------
-
-
-def test_the_jobs_package_imports_nothing_heavy(tmp_path):
-    """Launching a job, or reading its log, must not pull in the dashboard, a viewer or a model."""
-    modules = [f"jobs.{m}" for m in ("spec", "site", "lsf", "local", "queues", "ready")]
-    modules += ["finetune.markers", "finetune.job_log"]
-    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "huggingface_hub", "peft", "torch"]
-    code = "".join(f"import cellmap_flow.{m}\n" for m in modules) + (
-        f"import sys; loaded = [m for m in {heavy!r} if m in sys.modules]; assert not loaded, loaded"
-    )
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300,
-        env={**os.environ, "HOME": str(tmp_path), "PYTHONPATH": root},
-    )
-    assert result.returncode == 0, result.stderr[-2000:]

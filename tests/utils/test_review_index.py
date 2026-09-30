@@ -1,11 +1,6 @@
 """python -m cellmap_flow.review_index: an instance segmentation in, the
 index the Review tab reads out."""
 
-import json
-import os
-import sqlite3
-import subprocess
-import sys
 
 import numpy as np
 import pytest
@@ -62,20 +57,3 @@ def test_an_index_of_a_segmentation(labels, tmp_path):
     # The ledger holds the verdicts, so the index is never rebuilt over.
     with pytest.raises(FileExistsError):
         main([labels, out])
-
-
-def test_review_modules_import_nothing_heavy(tmp_path):
-    heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "torch"]
-    code = (
-        "import sys, cellmap_flow.review, cellmap_flow.review_index; "
-        f"print([m for m in {heavy!r} if m in sys.modules])"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        env={**os.environ, "HOME": str(tmp_path)},
-        capture_output=True,
-        text=True,
-        cwd=os.getcwd(),
-    )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout.strip().replace("'", '"')) == []
