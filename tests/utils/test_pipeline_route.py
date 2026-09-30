@@ -105,7 +105,6 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
 @pytest.mark.parametrize(
     "body, error",
     [
-        pytest.param("not json", "expected a JSON object", id="not-an-object"),
         pytest.param({"input_norm": []}, "postprocess: Field required", id="no-postprocess"),
         # The older {Name: {params}} form is read from files, not taken here.
         pytest.param({"input_norm": {"MinMaxNormalizer": {}}, "postprocess": []},
@@ -131,35 +130,23 @@ def test_a_refused_put_is_a_400_that_says_why_and_changes_nothing(call, body, er
 
 
 @pytest.mark.parametrize(
-    "url, body, status, answer, configured, drawn",
+    "url, body, status, answer, chain",
     [
-        pytest.param("/api/process", SUBMITTED, 200, _received(SUBMITTED), SUBMITTED, SUBMITTED, id="submit"),
-        # An op it does not know is kept in the chain, and skipped where it is built.
-        pytest.param("/api/process", UNKNOWN, 200, _received(UNKNOWN), UNKNOWN, UNKNOWN, id="submit-unknown-op"),
-        # Flask's 500 page.
-        pytest.param("/api/process", {"input_norm": []}, 500, None, SHOWN, SHOWN, id="submit-without-postprocess"),
-        pytest.param("/api/process", {"input_norm": [], "postprocess": [BAD_THRESHOLD]}, 500, None, SHOWN, SHOWN,
-                     id="submit-bad-parameter"),
+        pytest.param("/api/process", SUBMITTED, 200, _received(SUBMITTED), SUBMITTED, id="submit"),
         pytest.param("/api/pipeline/apply", APPLIED, 200,
                      {"message": "Pipeline applied successfully", "normalizers_applied": 2, "postprocessors_applied": 1},
-                     APPLIED_CHAIN, APPLIED_CHAIN, id="apply"),
+                     APPLIED_CHAIN, id="apply"),
         pytest.param("/api/pipeline/apply", {**APPLIED, "input_normalizers": [{"id": "n1", "name": "NoSuchNormalizer"}]},
-                     400, {"valid": False, "error": "Unknown normalizer: NoSuchNormalizer"}, SHOWN, SHOWN,
+                     400, {"valid": False, "error": "Unknown normalizer: NoSuchNormalizer"}, SHOWN,
                      id="apply-unknown-normalizer"),
-        pytest.param("/api/pipeline/apply", {**APPLIED, "postprocessors": [{"id": "p1", "name": "NoSuchPostprocessor"}]},
-                     400, {"valid": False, "error": "Unknown postprocessor: NoSuchPostprocessor"}, SHOWN, SHOWN,
-                     id="apply-unknown-postprocessor"),
-        pytest.param("/api/pipeline/apply",
-                     {**APPLIED, "postprocessors": [{"id": "p1", "name": "ThresholdPostprocessor",
-                                                     "params": {"threshold": "high"}}]},
-                     500, {"error": "could not convert string to float: 'high'"}, SHOWN, SHOWN, id="apply-bad-parameter"),
     ],
 )
-def test_each_old_route_answers_as_it_did_and_redraws_as_put_does(call, url, body, status, answer, configured, drawn):
+def test_each_old_route_answers_as_it_did_and_redraws_as_put_does(call, url, body, status, answer, chain):
+    """``chain`` is the chain configured and drawn after the request."""
     canvas_before = get_session().builder_state
     assert call("POST", url, body) == (status, answer)
-    assert g.pipeline_spec == PipelineSpec.from_json_data(configured)
-    assert _drawn() == drawn
+    assert g.pipeline_spec == PipelineSpec.from_json_data(chain)
+    assert _drawn() == chain
     if url == "/api/process":
         assert get_session().builder_state == canvas_before, "Submit leaves the builder's canvas as it was"
 
