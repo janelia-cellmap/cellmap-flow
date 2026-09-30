@@ -160,7 +160,7 @@ Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
 - `447df64` the training logs keep the last 1,000 lines
-- `` the finetune status poll stops at a final status or a 404
+- `df561ef` the finetune status poll stops at a final status or a 404
 - `390520e` a read wholly outside the array is padding
 - `b2fde02` a precomputed volume of several scales is shown as their pyramid
 - `21681ac` a precomputed path's scale is its last /s<N>
