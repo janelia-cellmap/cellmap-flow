@@ -17,7 +17,7 @@ from click.testing import CliRunner
 from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
-from cellmap_flow.utils import neuroglancer_utils
+from cellmap_flow.dashboard.services import startup
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.config.yaml import ConfigError
 
@@ -109,7 +109,7 @@ def test_extra_layers_are_shown_beside_the_raw_data(tmp_path, monkeypatch):
     from neuroglancer.viewer_base import ViewerBase
 
     monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
-    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: "url")
+    monkeypatch.setattr(startup, "create_and_run_app", lambda **k: "url")
     monkeypatch.setattr(yaml_cli, "install_cleanup_handlers", lambda: None)
     config = _config(tmp_path, extra_layers=[
         {"name": "pred", "path": _array(tmp_path / "pred.zarr" / "mito"),
@@ -141,7 +141,7 @@ def test_only_the_servers_that_started_are_shown(monkeypatch, caplog, failing, v
         started.append(job_name)
 
     monkeypatch.setattr(yaml_cli, "start_hosts", start_hosts)
-    monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda path, wrap_raw=True: viewers.append(path))
+    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: viewers.append(path))
     models = [ScriptModelConfig(script_path=SCRIPT, name=n) for n in ("good", "bad")]
     with caplog.at_level(logging.ERROR):
         if viewer_opened:

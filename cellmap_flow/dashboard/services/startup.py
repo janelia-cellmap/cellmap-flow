@@ -1,8 +1,11 @@
 """The CLIs' last step: open the viewer on the dataset, then serve the dashboard.
 
-The viewer and its layers are built by ``cellmap_flow.viewer``; this module
-adds the session's models to it and starts the dashboard, which is why it
-imports ``dashboard.app`` and ``viewer`` does not.
+``generate_neuroglancer_url`` is what ``cellmap_flow <type>`` and
+``cellmap_flow_yaml`` end with. The viewer and its layers are built by
+``cellmap_flow.viewer``; this module adds the session's models to it and
+starts the dashboard, which is why it imports ``dashboard.app`` and
+``viewer`` does not. The routes never import it: ``dashboard.app`` imports
+them.
 """
 
 import itertools

@@ -13,7 +13,7 @@ from click.testing import CliRunner
 import cellmap_flow.globals as G
 from cellmap_flow.cli import cli as cli_module
 from cellmap_flow.globals import g
-from cellmap_flow.utils import neuroglancer_utils
+from cellmap_flow.dashboard.services import startup
 from cellmap_flow.jobs.spec import JobStartError
 
 HERE = os.path.dirname(os.path.dirname(__file__))
@@ -34,7 +34,7 @@ def test_without_q_the_saved_queue_is_used_and_kept(monkeypatch, tmp_path, argv,
     launched = []
     monkeypatch.setattr(G, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
     monkeypatch.setattr(cli_module, "start_hosts", lambda command, queue, project, name: launched.append(queue))
-    monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda path: None)
+    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
     g.queue = "gpu_a100"
     result = CliRunner().invoke(cli_module.cli, argv)
     assert result.exit_code == 0, result.output + repr(result.exception)
@@ -60,7 +60,7 @@ def test_a_server_that_never_came_up_exits_non_zero_with_the_reason(monkeypatch)
         raise JobStartError(f"{name} never reported a server address")
 
     monkeypatch.setattr(cli_module, "start_hosts", fail)
-    monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda *a, **k: viewers.append(a))
+    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda *a, **k: viewers.append(a))
     result = CliRunner().invoke(cli_module.cli, PER_TYPE + ["--name", "m"])
     assert result.exit_code != 0 and "m never reported a server address" in result.output
     assert viewers == [] and g.jobs == []

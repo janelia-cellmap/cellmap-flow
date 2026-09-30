@@ -1,7 +1,7 @@
 """A new viewer on a dataset: ``new_viewer()``.
 
 The one place a viewer is made: the CLIs' startup viewer
-(neuroglancer_utils.generate_neuroglancer_url), /api/set-data, and the
+(dashboard.services.startup.generate_neuroglancer_url), /api/set-data, and the
 bounding-box tool. It never starts the dashboard.
 """
 

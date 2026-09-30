@@ -55,7 +55,7 @@ LAUNCHERS = {
 @pytest.fixture
 def launched(monkeypatch, tmp_path):
     """The commands the launchers submit, and the data path they are given."""
-    from cellmap_flow.utils import neuroglancer_utils
+    from cellmap_flow.dashboard.services import startup
 
     data = str(tmp_path / "my raw.zarr" / "s3")
     zarr.open_group(str(tmp_path / "my raw.zarr"), mode="w").create_dataset("s3", shape=(4, 4, 4), dtype="u1")
@@ -73,7 +73,7 @@ def launched(monkeypatch, tmp_path):
     monkeypatch.setattr(cli_module, "start_hosts", started)
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
-    monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
+    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
     g.dataset_path = data
     return commands, data

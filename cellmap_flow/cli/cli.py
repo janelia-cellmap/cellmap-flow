@@ -215,7 +215,7 @@ def run_generic(model_type, data_path, queue, project, config, server_check):
             start_hosts(command, queue, project, model_config.name or model_type)
         except JobStartError as e:
             raise click.ClickException(str(e))
-        from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+        from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
 
         # Serves the dashboard; does not return.
         generate_neuroglancer_url(final_data_path)
@@ -282,9 +282,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
                 start_hosts(command, queue, project, base_name)
             except JobStartError as e:
                 raise click.ClickException(str(e))
-            from cellmap_flow.utils.neuroglancer_utils import (
-                generate_neuroglancer_url,
-            )
+            from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
 
             # Serves the dashboard; does not return.
             generate_neuroglancer_url(final_data_path)

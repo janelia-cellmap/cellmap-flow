@@ -1,7 +1,7 @@
 """What each path that builds viewer layers puts in the viewer.
 
 The paths:
-- the CLI's startup viewer (``neuroglancer_utils.generate_neuroglancer_url``);
+- the CLI's startup viewer (``dashboard.services.startup.generate_neuroglancer_url``);
 - Submit (``/api/process``);
 - a model started from the Models tab, from the catalog or Hugging Face;
 - a finetuned model's layer (``dashboard.finetune_layers``);
@@ -132,15 +132,15 @@ def _viewer(viewer, predictions=()):
 
 
 def test_the_startup_viewer(servers, monkeypatch):
-    from cellmap_flow.utils import neuroglancer_utils
+    from cellmap_flow.dashboard.services import startup
 
     served = []
-    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda neuroglancer_url: served.append(neuroglancer_url))
+    monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: served.append(neuroglancer_url))
     # Not up yet: a zarr://None/... layer would never load, and nothing replaces it later.
     g.jobs = g.jobs + [SimpleNamespace(model_name="queued", host=None)]
     g.extra_layers = {"extra": neuroglancer.ImageLayer(source="zarr://http://files/extra.zarr")}
 
-    neuroglancer_utils.generate_neuroglancer_url(servers)
+    startup.generate_neuroglancer_url(servers)
 
     assert served == [str(g.viewer)]
     assert _viewer(g.viewer, MODELS) == {
@@ -156,12 +156,12 @@ def test_the_startup_viewer(servers, monkeypatch):
 
 
 def test_the_startup_viewer_shows_a_labelling_chain_as_segmentations(servers, monkeypatch):
-    from cellmap_flow.utils import neuroglancer_utils
+    from cellmap_flow.dashboard.services import startup
 
-    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda neuroglancer_url: None)
+    monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: None)
     g.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, [ThresholdPostprocessor(0.5)]))
 
-    neuroglancer_utils.generate_neuroglancer_url(servers)
+    startup.generate_neuroglancer_url(servers)
 
     assert _viewer(g.viewer, ["old"]) == {
         "layers": [("data", "image"), ("old", "segmentation"), ("new", "segmentation"), ("flat", "segmentation"),

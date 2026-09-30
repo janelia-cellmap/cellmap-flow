@@ -144,7 +144,7 @@ def run_multiple(
 
     # Imported here so --help and config errors do not pay for the viewer
     # stack (~16s before this).
-    from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
+    from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
 
     # Serves the dashboard; does not return.
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
