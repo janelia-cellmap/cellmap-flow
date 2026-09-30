@@ -275,7 +275,7 @@ class CellMapFlowServer:
             # makes this the only place it can learn their shapes, and their
             # channel names: the dashboard decides whether a model predicts
             # affinities by looking for "_aff" in them.
-            info = self.geometry.to_model_info()
+            info = self.geometry.to_model_info(self.axes, self.idi_raw.actual_voxel_size)
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:

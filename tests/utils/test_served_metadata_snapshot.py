@@ -78,9 +78,9 @@ def _data(side):
     return (np.arange(side**3) % 251).astype(np.uint8).reshape((side,) * 3)
 
 
-def _janelia_raw(tmp_path, data):
-    """An OME-Zarr group whose 8 nm level has its corner at -4 nm, as Janelia's do."""
-    group = zarr.open_group(str(tmp_path / "janelia.zarr"), mode="w")
+def _ome_raw(tmp_path, data, voxel_size, translation):
+    """A one-level OME-Zarr group; ``translation`` is voxel 0's centre."""
+    group = zarr.open_group(str(tmp_path / "ome.zarr"), mode="w")
     group.create_dataset("s0", data=data, chunks=data.shape)
     group.attrs["multiscales"] = [
         {
@@ -90,14 +90,14 @@ def _janelia_raw(tmp_path, data):
                 {
                     "path": "s0",
                     "coordinateTransformations": [
-                        {"type": "scale", "scale": [8.0] * 3},
-                        {"type": "translation", "translation": [0.0] * 3},
+                        {"type": "scale", "scale": [voxel_size] * 3},
+                        {"type": "translation", "translation": [translation] * 3},
                     ],
                 }
             ],
         }
     ]
-    return str(tmp_path / "janelia.zarr")
+    return str(tmp_path / "ome.zarr")
 
 
 THRESHOLD = [ThresholdPostprocessor(threshold=0.5)]
@@ -112,7 +112,10 @@ CASES = {
         {"one_channel": [ChannelSelection("1")]},
         "1.1.0.0",
     ),
-    "corner_at_-4nm": (CROP, lambda p: _janelia_raw(p, _data(8)), {}, "1.1.1.0"),
+    # Janelia's levels have their corner at -4 nm.
+    "corner_at_-4nm": (CROP, lambda p: _ome_raw(p, _data(8), 8.0, 0.0), {}, "1.1.1.0"),
+    # 6 nm data read as if it were 8 nm, voxel for voxel.
+    "relabelled": (IDENTITY_MODEL, lambda p: _ome_raw(p, _data(8), 6.0, 3.0), {}, "1.0.0.0"),
 }
 
 
@@ -167,7 +170,7 @@ def _zarray(shape, chunks, dtype):
     }
 
 
-def _info(read, write, in_vs, out_vs, channels=1, names=None):
+def _info(read, write, in_vs, out_vs, channels=1, names=None, effective=None, channel=True):
     return {
         "available": True,
         "channels": names,
@@ -177,6 +180,10 @@ def _info(read, write, in_vs, out_vs, channels=1, names=None):
         "output_voxel_size": [out_vs] * 3,
         "read_shape": [read] * 3,
         "write_shape": [write] * 3,
+        # Added with ModelGeometry; older dashboards ignore them.
+        "effective_output_voxel_size": [effective or out_vs] * 3,
+        "has_channel": channel,
+        "output_axes": ["z", "y", "x"] + (["c"] if channel else []),
     }
 
 
@@ -196,7 +203,7 @@ EXPECTED = {
             "plain": _zarray([8, 8, 8], [4, 4, 4], "<f4"),
             "threshold": _zarray([8, 8, 8], [4, 4, 4], "|u1"),
         },
-        "model_info": _info(32, 32, 8, 8),
+        "model_info": _info(32, 32, 8, 8, channel=False),
         "chunk": ["0.1.1", "float32", [4, 4, 4], "0ec2a491f84bb09a"],
     },
     "8nm_to_16nm": {
@@ -214,6 +221,13 @@ EXPECTED = {
         "zarray": {"plain": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4")},
         "model_info": _info(48, 32, 8, 8),
         "chunk": ["1.1.1.0", "float32", [4, 4, 4, 1], "75ad702d5f154932"],
+    },
+    "relabelled": {
+        # Still served as 8 nm; model_info says what a voxel really is.
+        "zattrs": _zattrs([8.0] * 3, [4.0] * 3, channel=True),
+        "zarray": {"plain": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4")},
+        "model_info": _info(32, 32, 8, 8, effective=6),
+        "chunk": ["1.0.0.0", "float32", [4, 4, 4, 1], "9ec594a49555fe11"],
     },
 }
 

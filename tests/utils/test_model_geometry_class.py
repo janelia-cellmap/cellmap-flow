@@ -63,7 +63,13 @@ def test_a_model_configs_geometry_is_read_once(tmp_path):
         "read_shape": [32, 32, 32],
         "output_voxel_size": [8, 8, 8],
         "input_voxel_size": [8, 8, 8],
+        "effective_output_voxel_size": [8, 8, 8],
+        "has_channel": True,
+        "output_axes": ["z", "y", "x", "c"],
     }
+    # Read from 12 nm data as if it were 8 nm: an output voxel is 12 nm.
+    info = geometry.to_model_info(["z", "y", "x"], actual_input_voxel_size=(12, 12, 12))
+    assert info["effective_output_voxel_size"] == [12, 12, 12]
 
 
 def test_the_serving_modules_import_nothing_heavy(tmp_path):

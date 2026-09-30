@@ -153,8 +153,28 @@ class ModelGeometry:
             declared_block_shape=getattr(config, "block_shape", None),
         )
 
-    def to_model_info(self) -> dict:
-        """The geometry keys of the server's ``/__control__/model_info``."""
+    def to_model_info(self, spatial_axes=None, actual_input_voxel_size=None) -> dict:
+        """The geometry keys of the server's ``/__control__/model_info``.
+
+        ``spatial_axes``: the served array's, which are the raw data's (the
+        spatial axes of chunk_output_axes by default). ``output_axes`` is
+        them in order, then "c" when the output has a channel axis.
+
+        ``actual_input_voxel_size``: what the input really is. When it is
+        not input_voxel_size, the data was read at another level as if it
+        were at input_voxel_size, voxel for voxel, so an output voxel really
+        is ``actual_in * output_voxel_size / input_voxel_size``: that is
+        ``effective_output_voxel_size``, otherwise output_voxel_size. The
+        served .zattrs still say output_voxel_size.
+        """
+        if spatial_axes is None:
+            spatial_axes = [a for a in self.chunk_output_axes if a not in CHANNEL_AXES]
+        effective = self.output_voxel_size
+        if actual_input_voxel_size is not None:
+            actual = np.asarray(actual_input_voxel_size, dtype=float)
+            declared = np.asarray(self.input_voxel_size, dtype=float)
+            if not np.allclose(actual, declared):
+                effective = _numbers(actual * np.asarray(effective, dtype=float) / declared)
         return {
             "output_channels": self.output_channels,
             "channels": list(self.channel_names) if self.channel_names else None,
@@ -162,4 +182,7 @@ class ModelGeometry:
             "read_shape": list(self.read_shape),
             "output_voxel_size": list(self.output_voxel_size),
             "input_voxel_size": list(self.input_voxel_size),
+            "effective_output_voxel_size": list(effective),
+            "has_channel": self.has_channel_axis,
+            "output_axes": list(spatial_axes) + (["c"] if self.has_channel_axis else []),
         }
