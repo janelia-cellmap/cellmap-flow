@@ -9,7 +9,8 @@
 //
 // Whatever edits the pipeline calls edited(): the change is applied to the
 // server (POST /api/pipeline/apply, 2 s after the last edit) and the blockwise
-// steps, which ran on the pipeline as it was, start over.
+// steps, which ran on the pipeline as it was, start over. Leaving the page
+// with a change the server has not had sends it by beacon.
 import { pageData } from "../lib/page-data.js";
 
 const PAGE = pageData();
@@ -304,6 +305,17 @@ export function modelChannels(model) {
 
 const editListeners = [];
 
+// The changes made so far (edits, moves), and how many of them the server
+// had when an apply last succeeded: the page is "dirty" while they differ.
+let changes = 0;
+let appliedChanges = 0;
+
+// A change that is not an edit of what the pipeline computes: nodes moved,
+// by Auto Arrange or a drag (a drag also schedules an apply).
+export function changed() {
+  changes += 1;
+}
+
 // listener() runs after every edit of the pipeline.
 export function onEdit(listener) {
   editListeners.push(listener);
@@ -314,6 +326,7 @@ export function onEdit(listener) {
 // an import) have never been applied on their own, and reach the server with
 // the next apply or the unload beacon.
 export function edited({ apply = true } = {}) {
+  changed();
   if (apply) scheduleApply();
   editListeners.forEach((listener) => listener());
 }
@@ -341,6 +354,7 @@ export function scheduleApply() {
 
 async function applyPipeline() {
   const payload = buildApplyPayload();
+  const sending = changes;
   try {
     const response = await fetch("/api/pipeline/apply", {
       method: "POST",
@@ -350,17 +364,25 @@ async function applyPipeline() {
     const result = await response.json();
     if (!response.ok) {
       console.error("Pipeline sync error:", result.error || "Unknown error");
+    } else {
+      appliedChanges = Math.max(appliedChanges, sending);
     }
   } catch (err) {
     console.error("Pipeline sync failed:", err.message);
   }
 }
 
-// On leaving the page (the back button, a link), apply the pipeline once more
-// by beacon, which outlives the page, instead of any apply still pending.
+// On leaving the page (the back button, a link) with changes the server has
+// not had -- an apply still pending, or one that failed, or an edit that
+// does not apply on its own -- send the pipeline by beacon, which outlives
+// the page, instead of any apply still pending. A page left unchanged sends
+// nothing: its pipeline is what the server gave it (moved by the layout at
+// most), and sending it back would undo whatever changed the server's
+// pipeline since it was loaded, such as Submit All on the dashboard.
 export function syncOnUnload() {
   window.addEventListener("beforeunload", () => {
     if (applyTimer) clearTimeout(applyTimer);
+    if (changes === appliedChanges) return;
     const payload = buildApplyPayload();
     navigator.sendBeacon("/api/pipeline/apply", new Blob([JSON.stringify(payload)], { type: "application/json" }));
   });

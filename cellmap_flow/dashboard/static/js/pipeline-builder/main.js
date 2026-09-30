@@ -27,7 +27,7 @@ import { initLogPanel } from "./log-panel.js";
 import { initModelConfigModal } from "./model-config-modal.js";
 import { initOutputChannels } from "./output-channels.js";
 import { initPalette } from "./palette.js";
-import { loadPipeline, syncOnUnload } from "./state.js";
+import { changed, loadPipeline, syncOnUnload } from "./state.js";
 
 loadPipeline();
 syncOnUnload();
@@ -42,4 +42,7 @@ initOutputChannels();
 initBbx();
 initModelConfigModal();
 initIo();
-document.getElementById("auto-arrange-btn").addEventListener("click", autoLayoutNodes);
+document.getElementById("auto-arrange-btn").addEventListener("click", () => {
+  autoLayoutNodes();
+  changed();
+});

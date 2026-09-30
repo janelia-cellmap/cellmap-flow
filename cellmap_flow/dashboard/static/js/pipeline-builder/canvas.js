@@ -8,7 +8,7 @@
 import { showMessage } from "./messages.js";
 import { createNodeElement } from "./nodes.js";
 import {
-  addEdge, addNodeTo, blockwiseSettings, connectNewNode, defaultPosition, edited, findNode, nodeDefaults,
+  addEdge, addNodeTo, blockwiseSettings, changed, connectNewNode, defaultPosition, edited, findNode, nodeDefaults,
   NODE_TYPES, nodesOf, pipeline, removeNodeFrom, scheduleApply,
 } from "./state.js";
 
@@ -414,6 +414,7 @@ export function initCanvas() {
       const dx = e.clientX - draggedNode.startX;
       const dy = e.clientY - draggedNode.startY;
       draggedNode.node.position = { x: Math.max(0, draggedNode.originalX + dx), y: Math.max(0, draggedNode.originalY + dy) };
+      changed();
       scheduleApply();
       // It stays in front (999), as the node selected last.
       draggedNode.element.style.zIndex = 999;
