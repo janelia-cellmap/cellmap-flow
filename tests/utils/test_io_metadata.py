@@ -181,6 +181,12 @@ LAYOUTS = {
             "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}),
         ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
     ),
+    # The scale is named by the last /s<N> only: not by /scans, as on /groups/scicompsoft.
+    "precomputed-scale-under-an-s-directory": (
+        lambda f: f.write_array("precomputed", np.zeros((2, 10, 20), np.uint8), {
+            "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}, "scans/pc") + "/s0",
+        ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
+    ),
 }
 
 

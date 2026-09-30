@@ -143,9 +143,8 @@ def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
     """``(volume, scale index)`` for a precomputed path: a last component
     ``s<N>`` names scale N of the volume above it; a path without one is
     the volume itself, with index None."""
-    if not ends_with_scale(path):
-        return path, None
-    return path.rsplit("/s")[0], int(path.rsplit("/s")[1])
+    match = re.fullmatch(r"(.+)/s(\d+)", path)
+    return (match[1], int(match[2])) if match else (path, None)
 
 
 def precomputed_kvstore(path: str) -> Tuple[object, int]:
