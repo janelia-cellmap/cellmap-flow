@@ -76,21 +76,20 @@ def create_dataloader(
 ) -> torch.utils.data.DataLoader:
     """Build the training DataLoader for a corrections directory.
 
-    Requires a ``_virtual_sources.json`` manifest. This used to fall back to a
-    per-chunk ``CorrectionDataset`` when the manifest was absent, but that
-    dataset ignored good regions and the dense/sparse split, so the fallback
-    silently trained on the wrong thing. Every path that creates a session now
-    writes a manifest (volume creation, YAML import, training submit) and
+    Requires a ``_virtual_sources.json`` manifest. Every path that creates a
+    session writes one (volume creation, YAML import, training submit) and
     restarts backfill one, so a missing manifest means something upstream
-    failed -- which is worth an exception rather than a quiet downgrade.
+    failed -- which is worth an exception rather than training on anything
+    else.
 
     Args:
         corrections_zarr_path: Session corrections directory.
         batch_size: Clamped down to the dataset size when smaller.
         patch_shape: Accepted for call-site compatibility; patch geometry comes
             from the manifest, so this is unused.
-        augment: Accepted for call-site compatibility. This dataset applies
-            random patch-center jitter and nothing else; see the warning below.
+        augment: Flips, XY rotations, brightness and noise, on top of the
+            patch-centre jitter that is always applied. It overrides the
+            manifest's stored preference.
         num_workers: DataLoader workers. Spawned, not forked -- tensorstore
             handles do not survive fork.
         shuffle: Ignored; the dataset already samples randomly.
@@ -111,14 +110,14 @@ def create_dataloader(
         logger.info(
             "Augmentation ON: random Z/Y/X flips, XY rotations where the YX "
             "plane is square, brightness x0.8-x1.2 and 1%-of-range noise, on "
-            f"top of patch-center jitter (jitter={dataset.jitter.tolist()}). "
+            f"top of patch-center jitter (jitter={dataset.sampler.jitter.tolist()}). "
             "Worth it when the run revisits the same patches many times; at a "
             "few dozen gradient steps it mostly just adds variance."
         )
     else:
         logger.info(
             "Augmentation OFF: patch-center jitter only "
-            f"(jitter={dataset.jitter.tolist()})."
+            f"(jitter={dataset.sampler.jitter.tolist()})."
         )
 
     actual_batch_size = max(1, min(batch_size, len(dataset)))

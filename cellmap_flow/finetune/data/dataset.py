@@ -1,95 +1,44 @@
-"""
-On-the-fly random-patch dataset for finetuning.
+"""The finetune training dataset: random patch pairs out of a session's annotation volume.
 
-Architecture
-------------
 There is exactly one source of truth per session: an
 ``annotation_volume.zarr`` (sparse, full-dataset extent, OME-NGFF) that
-holds **every** annotation — painted scribbles plus any imported YAML
-crops, all merged at their physical offsets. This dataset reads patches
-straight out of that single volume zarr; no per-tile materialization, no
-parallel source list to keep in sync.
+holds **every** annotation -- painted scribbles plus any imported YAML
+crops, all merged at their physical offsets. Patches are read straight out
+of it: no per-tile materialization, no parallel source list to keep in sync.
 
-Sampling rule
--------------
-Two-pool stratified sampling. Annotated voxels are partitioned by
-membership in the volume's ``imported_crops`` bbox list (recorded in the
-volume zattrs when YAML crops are imported):
-  - **dense pool**: FG voxels inside any imported_crops bbox (abundant GT)
-  - **sparse pool**: annotated voxels, background as well as FG, outside
-    all bboxes (painted scribbles, by construction always sparse and
-    informative — the user paints there because the base model failed)
+A patch is a centre drawn from the pools (sampler.py: dense crops, sparse
+scribbles, rehearsal regions), the annotation and raw read around it
+(reader.py), and, when asked for, augmentation (augment.py).
 
-Each ``__getitem__`` picks a pool by ``dense_to_sparse_ratio`` (default
-0.5/0.5 when both pools exist; auto-degrades to 1.0 when only one
-exists), samples a random voxel from that pool, jitters the patch
-center, and reads raw + annotation patches around it.
+Contract with the trainer:
 
-Without stratification, voxel-uniform sampling buries scribbles: a
-typical session has ~40M dense voxels vs ~10K painted, so 999/1000
-patches would be dense and the corrections you painted barely move the
-gradient. Stratification guarantees scribbles get a defined share of
-each epoch regardless of voxel count.
-
-Index construction reads only **populated** chunks of the sparse zarr
-(walks ``annotation/s0/`` for files matching ``z.y.x``). For an empty
-volume that's an empty index; for a fully painted region it's the FG
-voxels of those chunks.
-
-Reviewer notes
---------------
-- Workers each rebuild the FG index on spawn (cheap — only populated
-  chunks are read). We don't pickle any open zarr/tensorstore handles.
-- ``len(self)`` is ``patches_per_epoch``; it has no relationship to the
-  number of populated chunks. The trainer treats this as the epoch length.
-- The dataset returns ``(raw, annotation)`` tensors with shape
-  ``(1, Z, Y, X)``, which is the contract the trainer expects.
+- ``len(self)`` is ``patches_per_epoch``, the epoch length; it has no fixed
+  relation to the number of populated chunks.
+- An item is ``(raw, annotation)``, float32 tensors of shape
+  ``(1, Z, Y, X)``, and a third, the anchor mask, once the session has a
+  usable good region (``emits_anchor``).
+- Loader workers are spawned, and each gets the dataset as a pickle, by its
+  class path. The pools go with it; the arrays are opened in the worker.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
-import zarr
 from torch.utils.data import Dataset
 
-from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
-from cellmap_flow.finetune.session.manifest import (
-    voxels_inside_any_bbox as _voxels_inside_any_bbox,
-)
-from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.finetune.data.augment import Augmentation
+from cellmap_flow.finetune.data.reader import PatchReader
+from cellmap_flow.finetune.data.sampler import PatchSampler
 
 logger = logging.getLogger(__name__)
 
 
-def _intensity_range(arr: np.ndarray, normalizers=()) -> Tuple[Optional[float], Optional[float]]:
-    """The value range intensity augmentation keeps raw inside, as (low, high).
-
-    The first normalizer's own window when it is a MinMaxNormalizer -- that
-    is the range the data is known to use, and the one it is clipped to next
-    anyway. Otherwise the dtype's range for integers, and no bound at all for
-    floats. Augmentation used to clip everything to [0, dtype max] (floats to
-    [0, max(1, max)]): signed and float raw lost its whole negative half, and
-    uint16 data using 0-4000 got noise of 655, a sixth of its real range.
-    """
-    first = normalizers[0] if normalizers else None
-    if type(first).__name__ == "MinMaxNormalizer":
-        low, high = float(first.min_value), float(first.max_value)
-        if high > low:
-            return low, high
-    if np.issubdtype(arr.dtype, np.integer):
-        info = np.iinfo(arr.dtype)
-        return float(info.min), float(info.max)
-    return None, None
-
-
 class VirtualPatchDataset(Dataset):
-    """Yield random raw+annotation patches anchored on FG voxels in a volume zarr.
+    """Yield random raw+annotation patches anchored on annotated voxels in a volume zarr.
 
     Args:
         volume_zarr_path: path to the session's ``annotation_volume.zarr``.
@@ -103,17 +52,24 @@ class VirtualPatchDataset(Dataset):
         output_voxel_size_nm: voxel size for annotation patches.
         patches_per_epoch: ``len(self)``; controls how many random patches
             comprise one epoch. ``None`` (the default) means "auto:
-            substitute the total populated-chunk count" — every populated
+            substitute the number of annotated chunks" -- every annotated
             chunk gets ~one patch per epoch on average.
         jitter_voxels: half-range of the random offset applied to the patch
             center, in **annotation voxels**. Defaults to
             ``output_size_voxels // 4``.
         seed: RNG seed; per-worker offset added so multi-worker dataloaders
             sample distinct streams.
+        input_norm_config: the session's input normalization, applied to
+            every raw patch (see reader.input_normalizers).
         dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
             the dense pool (FG voxels inside any imported_crops bbox).
             ``None`` (default) means auto: 0.5 if both pools have voxels,
             else 1.0 (use the non-empty pool exclusively).
+        good_regions: the session's good regions, ``{"offset_nm",
+            "shape_nm"}`` boxes to hold the model to its teacher in.
+        rehearsal_fraction: the share of patches centred on a good region.
+            ``None`` (default) means a quarter, when any region is usable.
+        augment: flips, XY rotations, brightness and noise (augment.py).
     """
 
     def __init__(
@@ -133,380 +89,66 @@ class VirtualPatchDataset(Dataset):
         rehearsal_fraction: Optional[float] = None,
         augment: bool = False,
     ):
-        self.augment = bool(augment)
-        # Per-patch augmentation tallies. Each DataLoader worker is its own
-        # process (spawned), so these never reach the parent -- each worker
-        # reports its own, tagged, straight to the training log. Without this
-        # the only evidence augmentation ran is a flag echoed at startup,
-        # which is exactly what was untrustworthy before.
-        self._aug_n = 0
-        self._aug_flips = np.zeros(3, dtype=np.int64)
-        self._aug_rots = np.zeros(4, dtype=np.int64)
-        self._aug_scales: list = []
-        self._aug_pending: dict = {}
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
-        self.input_size = np.array(input_size_voxels, dtype=int)
-        self.output_size = np.array(output_size_voxels, dtype=int)
-        self.input_voxel_size = np.array(input_voxel_size_nm, dtype=float)
-        self.output_voxel_size = np.array(output_voxel_size_nm, dtype=float)
-        # Resolved to an int by _build_index() once the populated-chunk
-        # count is known (when patches_per_epoch was passed as None).
-        self.patches_per_epoch: Optional[int] = (
-            int(patches_per_epoch) if patches_per_epoch is not None else None
-        )
-        self.jitter = (
-            np.array(jitter_voxels, dtype=int)
-            if jitter_voxels is not None
-            else (self.output_size // 4)
-        )
+        self.augment = bool(augment)
         self.seed = int(seed)
-        self.dense_to_sparse_ratio = (
-            float(dense_to_sparse_ratio)
-            if dense_to_sparse_ratio is not None
-            else None
+        output_size = np.array(output_size_voxels, dtype=int)
+        jitter = np.array(jitter_voxels, dtype=int) if jitter_voxels is not None else output_size // 4
+
+        self.sampler = PatchSampler(
+            volume_zarr_path,
+            output_voxel_size_nm,
+            jitter,
+            dense_to_sparse_ratio=dense_to_sparse_ratio,
+            good_regions=good_regions,
+            rehearsal_fraction=rehearsal_fraction,
         )
-        self._effective_dense_ratio: float = 0.0  # set in _build_index
-
-        # Rehearsal ("good") regions: boxes the user looked at and certified
-        # the model already handles. They carry no annotations by
-        # construction, so neither FG pool can reach them -- both index on
-        # foreground voxels, and a good region has none. Hence a third pool
-        # that samples boxes directly.
-        #
-        # What they are for: the supervised loss only touches voxels you
-        # labelled, so nothing stops the adapter drifting everywhere else.
-        # A rehearsal patch pins the student to the teacher inside a region
-        # you have vouched for -- chosen deliberately, rather than
-        # "wherever happens to sit next to a scribble", which is where the
-        # model is least likely to be right.
-        self.good_regions = list(good_regions or [])
-        self.rehearsal_fraction = (
-            float(rehearsal_fraction) if rehearsal_fraction is not None else None
+        self.reader = PatchReader(
+            volume_zarr_path,
+            raw_dataset_path,
+            input_size_voxels,
+            output_size_voxels,
+            input_voxel_size_nm,
+            output_voxel_size_nm,
+            corner_nm=self.sampler.corner_nm,
+            shape_voxels=self.sampler.shape_voxels,
+            input_norm_config=input_norm_config,
         )
-        self._effective_rehearsal_fraction: float = 0.0  # set in _build_index
-        # Centres of the good regions, in annotation voxels. Built in
-        # _build_index once the volume's corner is known.
-        self._rehearsal_centers: Optional[np.ndarray] = None
+        self.augmentation = Augmentation(self.reader.normalizers)
 
-        # Input normalization to apply to every raw patch the dataset emits.
-        # The dashboard's inference path normalizes raw via ``g.input_norms``
-        # before feeding the model; the trainer (a separate LSF process)
-        # has an empty ``g.input_norms``, so without this the trainer would
-        # train on raw uint8 while inference sees normalized [-1, 1].
-        # ``input_norm_config`` arrives in either shape: the name-keyed dict a
-        # yaml gives (e.g. {"MinMaxNormalizer": {...}, "LambdaNormalizer":
-        # {...}}), or the list of {"name": ..., ...} dicts the dashboard POSTs
-        # -- a list on purpose, because jsonify sorts dict keys and the order
-        # of these steps changes what they compute.
-        #
-        # Do not coerce with dict(). Over a list whose entries have exactly two
-        # keys it does not raise; it silently returns {"name": "expression"},
-        # which builds no normalizers at all. That would train on raw uint8
-        # while inference sees [-1, 1] -- the exact mismatch this block exists
-        # to prevent. get_normalizations() understands both shapes, so pass it
-        # through untouched.
-        self.input_norm_config = input_norm_config or {}
-        self._input_normalizers = self._build_input_normalizers(self.input_norm_config)
-        if not self._input_normalizers and self.input_norm_config:
-            logger.warning(
-                "input_norm_config provided but produced no normalizers; "
-                "raw patches will be returned unnormalized."
-            )
-        if self._input_normalizers:
-            logger.info(
-                f"VirtualPatchDataset: applying {len(self._input_normalizers)} "
-                f"input normalizer(s) per patch: "
-                f"{[type(n).__name__ for n in self._input_normalizers]}"
-            )
-        else:
-            logger.warning(
-                "VirtualPatchDataset: no input normalizers configured. "
-                "Raw patches will be returned in their native dtype/range. "
-                "If inference normalizes to [-1, 1] (typical), the trained "
-                "model will see different inputs at train vs inference time."
-            )
-
-        # World position of annotation voxel 0's lower corner (see
-        # volume_corner_nm); voxel v spans corner + v * output_voxel_size.
-        self.volume_corner_nm: np.ndarray = np.zeros(3)
-        self.volume_shape_voxels: np.ndarray = np.zeros(3, dtype=int)
-        # Two-pool stratified sampling: dense FG voxels live inside any
-        # imported_crops bbox; sparse FG voxels are everywhere else
-        # (painted scribbles, by construction). Either may be empty.
-        self._fg_index_dense: Optional[np.ndarray] = None
-        self._fg_index_sparse: Optional[np.ndarray] = None
-        self._volume_arr = None  # opened lazily after worker fork
-        self._raw_idi = None     # opened lazily after worker fork
-        # Cached per-worker RNG. None until first __getitem__ (after fork/spawn).
-        # Without this cache, every __getitem__ would reseed and re-pick the
-        # very first integer of the same stream — producing the same patch
-        # forever and silently breaking training.
+        # Default: one patch per annotated chunk, so each gets ~1 patch per
+        # epoch on average -- a cheap "cover everything" the user can
+        # override from the YAML or the dashboard. Chunks, not chunk files:
+        # zarr writes empty fill chunks during slab writes, and those are no
+        # annotation work.
+        self.patches_per_epoch: int = (
+            int(patches_per_epoch)
+            if patches_per_epoch is not None
+            else max(1, self.sampler.annotated_chunks)
+        )
+        # Cached per-worker RNG, None until the first __getitem__ (in the
+        # worker, after spawn). Without the cache every __getitem__ would
+        # reseed and re-pick the very first integer of the same stream --
+        # the same patch forever, silently breaking training.
         self._cached_rng: Optional[np.random.Generator] = None
 
-        self._build_index()
-
-    # ------------------------------------------------------------------
-    # Index construction
-    # ------------------------------------------------------------------
-
-    def _build_index(self) -> None:
-        """Walk the volume's populated chunks and build dense + sparse FG indices.
-
-        We use the on-disk file layout (zarr v2 stores one file per chunk
-        named ``z.y.x``) to enumerate just the chunks that have been
-        written. Empty regions of the sparse volume produce no files and
-        cost us nothing. FG voxels are then partitioned by membership in
-        the volume's ``imported_crops`` bbox list.
-        """
-        s0_path = os.path.join(self.volume_zarr_path, "annotation", "s0")
-        if not os.path.isdir(s0_path):
-            raise ValueError(
-                f"Volume zarr at {self.volume_zarr_path} has no annotation/s0/ "
-                "directory; was it created?"
-            )
-
-        # Pull volume-level metadata once so we can map voxel coords to nm
-        # and classify FG voxels as dense (inside an imported crop) or
-        # sparse (outside).
-        with open(os.path.join(self.volume_zarr_path, ".zattrs")) as f:
-            root_attrs = json.load(f)
-        self.volume_corner_nm = volume_corner_nm(
-            root_attrs.get("dataset_offset_nm"), self.output_voxel_size
-        )
-        imported = root_attrs.get("imported_crops", []) or []
-        # Bbox list as two stacked (M, 3) arrays for vectorized membership
-        # tests below. Empty when no YAML crops were imported.
-        if imported:
-            bbox_offsets = np.array(
-                [c["annotation_offset_voxels"] for c in imported], dtype=np.int64
-            )
-            bbox_shapes = np.array(
-                [c["annotation_shape_voxels"] for c in imported], dtype=np.int64
-            )
-            bbox_ends = bbox_offsets + bbox_shapes
-        else:
-            bbox_offsets = np.zeros((0, 3), dtype=np.int64)
-            bbox_ends = np.zeros((0, 3), dtype=np.int64)
-
-        arr = zarr.open(s0_path, mode="r")
-        self.volume_shape_voxels = np.array(arr.shape, dtype=int)
-        chunk_shape = np.array(arr.chunks, dtype=int)
-
-        chunk_keys = [
-            name for name in os.listdir(s0_path)
-            if _CHUNK_KEY_RE.match(name)
-        ]
-        if not chunk_keys:
-            raise ValueError(
-                f"Volume zarr at {self.volume_zarr_path} has no populated chunks. "
-                "Paint annotations or import crops first."
-            )
-
-        # The sparse (painted) pool holds every annotated voxel outside the
-        # crops, background as well as foreground. It used to hold
-        # foreground only, so a background-only correction -- painting 1
-        # where the model hallucinates -- further than about half a patch
-        # from any foreground was never sampled, and the false-positive fix
-        # silently did nothing; a session that painted only background
-        # could not train at all. The dense pool stays foreground-centred:
-        # crops are mostly background, and centring on it would change
-        # what they teach.
-        dense_rows: List[np.ndarray] = []
-        sparse_rows: List[np.ndarray] = []
-        n_fg_chunks = 0  # chunks that contributed voxels to a pool
-        for key in chunk_keys:
-            cz, cy, cx = (int(s) for s in key.split("."))
-            chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
-            chunk_data = arr.blocks[cz, cy, cx]
-            if bbox_offsets.shape[0] == 0:
-                # No imported crops → everything is sparse (painted).
-                painted_local = np.argwhere(chunk_data >= 1).astype(np.int64)
-                if not painted_local.size:
-                    # On-disk file exists (zarr writes fill chunks during
-                    # slab writes) but holds no annotation; skip it.
-                    continue
-                n_fg_chunks += 1
-                sparse_rows.append(painted_local + chunk_origin)
-                continue
-            annotated_local = np.argwhere(chunk_data >= 1).astype(np.int64)
-            if not annotated_local.size:
-                continue
-            is_fg = chunk_data[tuple(annotated_local.T)] >= 2
-            annotated_global = annotated_local + chunk_origin
-            in_dense = _voxels_inside_any_bbox(annotated_global, bbox_offsets, bbox_ends)
-            contributed = False
-            if (in_dense & is_fg).any():
-                dense_rows.append(annotated_global[in_dense & is_fg])
-                contributed = True
-            if (~in_dense).any():
-                sparse_rows.append(annotated_global[~in_dense])
-                contributed = True
-            n_fg_chunks += int(contributed)
-
-        self._fg_index_dense = (
-            np.concatenate(dense_rows, axis=0) if dense_rows else np.zeros((0, 3), dtype=np.int64)
-        )
-        self._fg_index_sparse = (
-            np.concatenate(sparse_rows, axis=0) if sparse_rows else np.zeros((0, 3), dtype=np.int64)
-        )
-        if self._fg_index_dense.shape[0] == 0 and self._fg_index_sparse.shape[0] == 0 and bbox_offsets.shape[0]:
-            # Imported crops that are all background, and nothing painted:
-            # centre on the crops' annotated voxels rather than refuse.
-            self._fg_index_dense = self._annotated_voxels_in_crops(
-                arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends
-            )
-            n_fg_chunks = max(n_fg_chunks, 1 if self._fg_index_dense.shape[0] else 0)
-        n_dense = int(self._fg_index_dense.shape[0])
-        n_sparse = int(self._fg_index_sparse.shape[0])
-
-        if n_dense == 0 and n_sparse == 0:
-            raise ValueError(
-                f"Volume zarr at {self.volume_zarr_path} has populated chunks "
-                "but no annotated voxels. Paint annotations or import crops first."
-            )
-
-        # Resolve dense ratio: explicit value wins, else auto-balance to
-        # 0.5 when both pools have voxels, else fall back to whichever
-        # pool is non-empty so we still draw patches.
-        if self.dense_to_sparse_ratio is None:
-            if n_dense > 0 and n_sparse > 0:
-                self._effective_dense_ratio = 0.5
-            elif n_dense > 0:
-                self._effective_dense_ratio = 1.0
-            else:
-                self._effective_dense_ratio = 0.0
-        else:
-            ratio = max(0.0, min(1.0, self.dense_to_sparse_ratio))
-            # Clamp away from a pool that's empty so __getitem__ never
-            # tries to sample from an empty index.
-            if n_dense == 0:
-                self._effective_dense_ratio = 0.0
-            elif n_sparse == 0:
-                self._effective_dense_ratio = 1.0
-            else:
-                self._effective_dense_ratio = ratio
-
-        self._build_rehearsal_index()
-
-        # Default patches_per_epoch = number of FG-bearing chunks: each
-        # such chunk gets ~1 patch per epoch on average. Cheap "auto cover
-        # everything" mode the user can override via YAML or UI. We count
-        # FG-bearing chunks (not all chunk files) because zarr writes
-        # empty fill chunks during slab writes -- those don't represent
-        # annotation work and shouldn't inflate epoch length.
-        if self.patches_per_epoch is None:
-            self.patches_per_epoch = max(1, n_fg_chunks)
-
+        sampler = self.sampler
+        n_dense, n_sparse = int(sampler.dense.shape[0]), int(sampler.sparse.shape[0])
         logger.info(
             f"VirtualPatchDataset: built FG index with {n_dense + n_sparse} voxels "
-            f"(dense={n_dense}, sparse={n_sparse}) from {n_fg_chunks} FG-bearing "
-            f"chunk(s) ({len(chunk_keys)} chunk files on disk) of "
+            f"(dense={n_dense}, sparse={n_sparse}) from {sampler.annotated_chunks} FG-bearing "
+            f"chunk(s) ({sampler.chunk_files} chunk files on disk) of "
             f"{self.volume_zarr_path}; "
             f"patches_per_epoch={self.patches_per_epoch}, "
-            f"dense_ratio={self._effective_dense_ratio:.3f} "
-            f"({'auto' if self.dense_to_sparse_ratio is None else 'explicit'}), "
-            f"jitter={self.jitter.tolist()}"
+            f"dense_ratio={sampler.effective_dense_ratio:.3f} "
+            f"({'auto' if sampler.dense_to_sparse_ratio is None else 'explicit'}), "
+            f"jitter={sampler.jitter.tolist()}"
         )
-        self._log_rehearsal_status()
-
-    @staticmethod
-    def _annotated_voxels_in_crops(arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends):
-        """Every annotated voxel inside the imported crops, as (N, 3) global indices."""
-        rows = []
-        for key in chunk_keys:
-            cz, cy, cx = (int(s) for s in key.split("."))
-            chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
-            annotated = np.argwhere(arr.blocks[cz, cy, cx] >= 1).astype(np.int64) + chunk_origin
-            if annotated.size:
-                inside = _voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends)
-                if inside.any():
-                    rows.append(annotated[inside])
-        return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=np.int64)
-
-    def _log_rehearsal_status(self) -> None:
-        """Say what is happening with the good regions, if there are any.
-
-        Three different states used to share one "none usable" warning, so
-        turning rehearsal off -- a deliberate choice -- read in the log
-        exactly like a good region that had fallen outside the volume.
-        """
-        if self._effective_rehearsal_fraction > 0:
-            logger.info(
-                f"VirtualPatchDataset: {len(self._rehearsal_centers)} good "
-                f"region(s); {self._effective_rehearsal_fraction:.0%} of patches "
-                f"will be rehearsal anchors "
-                f"({'auto' if self.rehearsal_fraction is None else 'explicit'})"
-            )
-        elif not self.good_regions:
-            return
-        elif self.rehearsal_fraction is not None and self.rehearsal_fraction <= 0:
-            logger.info(
-                f"{len(self.good_regions)} good region(s) present, but "
-                f"rehearsal is set to 0, so training will not anchor on them."
-            )
-        else:
-            logger.warning(
-                f"{len(self.good_regions)} good region(s) configured but none "
-                "of them landed inside the annotation volume; training will "
-                "not anchor on them. See the 'outside the volume' lines above."
-            )
-
-    def _build_rehearsal_index(self) -> None:
-        """Turn the good-region boxes (nm) into patch centres (annotation voxels).
-
-        A region is sized to one model output patch, so one region is one
-        patch: centre on it and the loss covers exactly the area that was
-        looked at and judged. No jitter -- jitter would slide the patch out
-        of the region the user actually vouched for.
-        """
-        centers = []
-        for region in self.good_regions:
-            try:
-                offset_nm = np.array(region["offset_nm"], dtype=float)
-                shape_nm = np.array(region["shape_nm"], dtype=float)
-            except (KeyError, TypeError, ValueError):
-                logger.warning(f"Skipping malformed good region: {region!r}")
-                continue
-            centre_nm = offset_nm + shape_nm / 2.0
-            centre_voxels = (centre_nm - self.volume_corner_nm) / self.output_voxel_size
-            # A region marked against a different volume would sample pure
-            # out-of-bounds zeros and quietly anchor the model to nothing.
-            if np.any(centre_voxels < 0) or np.any(
-                centre_voxels >= self.volume_shape_voxels
-            ):
-                logger.warning(
-                    f"Good region {region.get('id', '?')} centres outside the "
-                    f"volume at voxel {centre_voxels.astype(int).tolist()}; skipping."
-                )
-                continue
-            centers.append(centre_voxels)
-
-        if not centers:
-            self._rehearsal_centers = None
-            self._effective_rehearsal_fraction = 0.0
-            return
-
-        self._rehearsal_centers = np.array(centers, dtype=np.float64)
-        if self.rehearsal_fraction is None:
-            # One patch in four. Enough to hold the model without drowning
-            # out the corrections: rehearsal patches carry dense teacher
-            # targets over the whole output, whereas a scribble patch may
-            # label only a few hundred voxels, so parity by patch count is
-            # already generous to the anchor.
-            self._effective_rehearsal_fraction = 0.25
-        else:
-            self._effective_rehearsal_fraction = max(
-                0.0, min(1.0, self.rehearsal_fraction)
-            )
-
-    # ------------------------------------------------------------------
-    # Dataset protocol
-    # ------------------------------------------------------------------
+        sampler.log_rehearsal_status()
 
     def __len__(self) -> int:
-        # Resolved by _build_index() in __init__.
-        return int(self.patches_per_epoch or 0)
+        return self.patches_per_epoch
 
     @property
     def emits_anchor(self) -> bool:
@@ -516,58 +158,24 @@ class VirtualPatchDataset(Dataset):
         dataset keeps its original 2-tuple contract, so nothing about an
         existing run changes.
         """
-        return self._effective_rehearsal_fraction > 0.0
+        return self.sampler.effective_rehearsal_fraction > 0.0
 
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()
+        centre, is_rehearsal = self.sampler.draw(rng)
+        centre = self.reader.snap(centre)
 
-        is_rehearsal = (
-            self._effective_rehearsal_fraction > 0.0
-            and rng.random() < self._effective_rehearsal_fraction
-        )
-
-        if is_rehearsal:
-            # One region is one patch, centred exactly: no jitter, or the
-            # loss would spill outside the area that was actually judged.
-            centers = self._rehearsal_centers
-            ann_center_voxels = centers[rng.integers(0, centers.shape[0])].copy()
-        else:
-            # Pick a pool by the resolved dense ratio. Both indices may exist;
-            # _build_index guarantees we never end up with the chosen pool empty.
-            use_dense = (
-                self._effective_dense_ratio >= 1.0
-                or (self._effective_dense_ratio > 0.0 and rng.random() < self._effective_dense_ratio)
-            )
-            pool = self._fg_index_dense if use_dense else self._fg_index_sparse
-            anchor_zyx = pool[rng.integers(0, pool.shape[0])].astype(np.float64)
-
-            jitter_offset = rng.integers(
-                low=-self.jitter, high=self.jitter + 1, size=3
-            ).astype(np.float64)
-            ann_center_voxels = anchor_zyx + jitter_offset
-
-        # The patch is whole voxels, [c - size/2, c + size/2), so move c to
-        # the nearest centre that makes that exact. Otherwise the annotation
-        # patch was cut at int(c - size/2) while the raw was read around c
-        # itself: half a voxel apart for an odd output size, and for a good
-        # region, whose centre falls anywhere. The raw is then read around
-        # the patch actually taken: the corner plus c voxels.
-        half = self.output_size / 2
-        ann_center_voxels = np.floor(ann_center_voxels - half + 0.5) + half
-        ann_center_nm = (
-            self.volume_corner_nm + ann_center_voxels * self.output_voxel_size
-        )
-
-        ann_patch = self._read_annotation_patch(ann_center_voxels)
-        raw_patch = self._read_raw_patch(ann_center_nm, rng)
-
+        ann_patch = self.reader.annotation(centre)
+        raw_patch = self.reader.raw(centre)
+        if self.augment:
+            raw_patch = self.augmentation.intensity(raw_patch, rng)
+        raw_patch = self.reader.normalize(raw_patch)
         if self.augment:
             # Before the tensors are built, and before `anchor` is derived
             # from ann_patch below, so the anchor mask inherits the same
             # transform rather than needing its own.
-            raw_patch, ann_patch = self._augment_spatial(raw_patch, ann_patch, rng)
-            # Both halves have now recorded what they did; report together.
-            self._report_augmentation()
+            raw_patch, ann_patch = self.augmentation.spatial(raw_patch, ann_patch, rng)
+            self.augmentation.report()
 
         raw_t = torch.from_numpy(raw_patch.astype(np.float32)[np.newaxis, ...])
         ann_t = torch.from_numpy(ann_patch.astype(np.float32)[np.newaxis, ...])
@@ -594,232 +202,8 @@ class VirtualPatchDataset(Dataset):
         anchor_t = torch.from_numpy(anchor[np.newaxis, ...])
         return raw_t, ann_t, anchor_t
 
-    # ------------------------------------------------------------------
-    # Patch reads
-    # ------------------------------------------------------------------
-
-    def _open_volume(self):
-        if self._volume_arr is None:
-            self._volume_arr = zarr.open(
-                os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
-            )
-        return self._volume_arr
-
-    def _read_annotation_patch(self, center_voxels: np.ndarray) -> np.ndarray:
-        """Crop a patch from the volume's annotation array.
-
-        Out-of-bounds voxels are filled with 0 (= unannotated → masked
-        out by the trainer's loss when ``mask_unannotated=True``).
-        """
-        out_size = self.output_size
-        lo = (center_voxels - out_size / 2).astype(int)
-        hi = lo + out_size
-
-        clip_lo = np.maximum(lo, 0)
-        clip_hi = np.minimum(hi, self.volume_shape_voxels)
-        valid = np.all(clip_hi > clip_lo)
-
-        patch = np.zeros(out_size, dtype=np.uint8)
-        if valid:
-            arr = self._open_volume()
-            src_slices = tuple(slice(int(c), int(d)) for c, d in zip(clip_lo, clip_hi))
-            dst_slices = tuple(
-                slice(int(c - l), int(d - l))
-                for c, d, l in zip(clip_lo, clip_hi, lo)
-            )
-            patch[dst_slices] = arr[src_slices]
-        return patch
-
-    def _read_raw_patch(self, center_nm: np.ndarray, rng=None) -> np.ndarray:
-        """Read an ``input_size`` patch from the raw dataset, centered at ``center_nm``.
-
-        The raw read uses ``normalize=False`` because the trainer process's
-        global ``g.input_norms`` is empty -- the dashboard's normalization
-        config doesn't propagate across the LSF process boundary. We apply
-        the dashboard's normalizers explicitly here from
-        ``self._input_normalizers``, which is built from the manifest at
-        construction time.
-        """
-        from cellmap_flow.image_data_interface import ImageDataInterface
-        from funlib.geometry import Coordinate, Roi
-
-        if self._raw_idi is None:
-            self._raw_idi = ImageDataInterface(
-                self.raw_dataset_path,
-                voxel_size=self.input_voxel_size,
-                normalize=False,
-            )
-        idi = self._raw_idi
-        read_shape_nm = self.input_size * self.input_voxel_size
-        roi = Roi(
-            offset=Coordinate(center_nm - read_shape_nm / 2),
-            shape=Coordinate(read_shape_nm),
-        )
-        patch = idi.to_ndarray_ts(roi)
-
-        # Intensity augmentation goes here, before normalization: the scale
-        # and noise are expressed in the raw dtype's own units (0-255 for
-        # uint8 EM), which is what they physically describe. Doing it after
-        # the norm chain would mean scaling a [-1, 1] signal, where a
-        # multiplicative factor pulls toward mid-grey instead of changing
-        # brightness.
-        if self.augment and rng is not None:
-            patch = self._augment_intensity(patch, rng)
-
-        # Apply the dashboard's normalizers locally (no global state).
-        # Each normalizer is callable and returns an ndarray; the chain
-        # mirrors what apply_norms() does inside the dashboard process.
-        for norm in self._input_normalizers:
-            patch = norm(patch)
-        return patch
-
-    def _augment_intensity(self, patch: np.ndarray, rng) -> np.ndarray:
-        """Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range).
-
-        The range is the data's own (see _intensity_range), and the result is
-        clipped to it; floats with no known range are not clipped, and their
-        noise is scaled by the patch's own magnitude.
-        """
-        low, high = _intensity_range(patch, self._input_normalizers)
-        if low is None:
-            span = max(1.0, float(np.nanmax(np.abs(patch)))) if patch.size else 1.0
-        else:
-            span = high - low
-        scale = rng.uniform(0.8, 1.2)
-        noise = rng.normal(0.0, 0.01 * span, patch.shape)
-        out = patch.astype(np.float32) * scale + noise
-        if low is not None:
-            out = np.clip(out, low, high)
-        self._aug_pending["scale"] = float(scale)
-        self._aug_pending["value_range"] = (low, high)
-        return out.astype(np.float32)
-
-    def _augment_spatial(self, raw: np.ndarray, ann: np.ndarray, rng):
-        """Random flips, and XY rotations when the YX plane is square.
-
-        Raw and annotation are different sizes but share a center, and for
-        even-sized patches reflection about index ``(n-1)/2`` lands on the
-        same physical plane for both -- so applying the identical transform
-        to each keeps them registered. Targets (affinities, SKOOTS vectors)
-        are derived from ``ann`` downstream in the trainer, after this, so
-        they are recomputed from the transformed labels and stay consistent.
-        Move target computation into the dataset and that stops being true:
-        a flip would then need the affinity channels permuted and negated.
-
-        Rotation is skipped unless Y and X are equal in both patches, since
-        the model's input shape is fixed and a non-square rot90 would change
-        it. Z is never rotated into -- EM is routinely anisotropic there.
-        """
-        flips = [False, False, False]
-        for axis in (0, 1, 2):
-            if rng.random() < 0.5:
-                raw = np.flip(raw, axis=axis)
-                ann = np.flip(ann, axis=axis)
-                flips[axis] = True
-
-        k = 0
-        rotatable = raw.shape[1] == raw.shape[2] and ann.shape[1] == ann.shape[2]
-        if rotatable:
-            k = int(rng.integers(0, 4))
-            if k:
-                raw = np.rot90(raw, k=k, axes=(1, 2))
-                ann = np.rot90(ann, k=k, axes=(1, 2))
-
-        self._aug_pending["flips"] = flips
-        self._aug_pending["k"] = k
-        self._aug_pending["rotatable"] = rotatable
-
-        # np.flip/np.rot90 return views; torch.from_numpy needs real strides.
-        return np.ascontiguousarray(raw), np.ascontiguousarray(ann)
-
-    def _report_augmentation(self) -> None:
-        """Say what was actually applied: the first few patches in full, then
-        rolling summaries.
-
-        Runs inside whichever DataLoader worker produced the patch, so the
-        line is tagged with the worker id -- several workers interleave in the
-        log and otherwise the counts look contradictory.
-        """
-        p = self._aug_pending
-        if not p:
-            return
-        flips = p.get("flips", [False, False, False])
-        k = p.get("k", 0)
-        scale = p.get("scale")
-
-        self._aug_n += 1
-        self._aug_flips += np.array(flips, dtype=np.int64)
-        self._aug_rots[k] += 1
-        if scale is not None:
-            self._aug_scales.append(scale)
-
-        worker_info = torch.utils.data.get_worker_info()
-        tag = f"aug w{0 if worker_info is None else worker_info.id}"
-
-        # First few in full, so concrete values are visible immediately
-        # rather than only after a summary interval.
-        if self._aug_n <= 3:
-            applied = [f"flip{ax}" for ax, on in zip("ZYX", flips) if on]
-            if k:
-                applied.append(f"rot90_xy x{k}")
-            if scale is not None:
-                applied.append(f"brightness x{scale:.3f}")
-            applied.append("noise sigma=1% of range")
-            if not p.get("rotatable", True):
-                applied.append("(rotation skipped: YX not square)")
-            logger.info(
-                f"[{tag}] patch {self._aug_n}: " + ", ".join(applied)
-            )
-
-        # Rolling summary: proves augmentation is still running deep into a
-        # long job, and that the draws are distributed as intended.
-        if self._aug_n % 100 == 0:
-            n = self._aug_n
-            fz, fy, fx = (100.0 * self._aug_flips / n)
-            rot = ", ".join(
-                f"{i}:{100.0 * c / n:.0f}%" for i, c in enumerate(self._aug_rots)
-            )
-            if self._aug_scales:
-                s = np.array(self._aug_scales)
-                brightness = (
-                    f"brightness mean {s.mean():.3f} "
-                    f"range [{s.min():.3f}, {s.max():.3f}]"
-                )
-            else:
-                brightness = "brightness n/a"
-            logger.info(
-                f"[{tag}] {n} patches augmented: flips Z {fz:.0f}% / "
-                f"Y {fy:.0f}% / X {fx:.0f}% (expect ~50%), rot90_xy {rot} "
-                f"(expect ~25% each), {brightness}"
-            )
-
-        self._aug_pending = {}
-
-    @staticmethod
-    def _build_input_normalizers(input_norm_config: dict) -> list:
-        """Materialize the dict-form ``input_norm`` config into normalizer objects."""
-        if not input_norm_config:
-            return []
-        try:
-            from cellmap_flow.norm.input_normalize import get_normalizations
-
-            return get_normalizations(input_norm_config)
-        except Exception as e:
-            logger.error(
-                f"Failed to build input normalizers from config "
-                f"{input_norm_config!r}: {e}. Patches will be unnormalized."
-            )
-            return []
-
-    # ------------------------------------------------------------------
-    # RNG plumbing
-    # ------------------------------------------------------------------
-
     def _worker_rng(self) -> np.random.Generator:
-        # Cache the Generator on self so consecutive __getitem__ calls draw
-        # from the *advancing* state of the same RNG. Reseeding every call
-        # made every patch identical (the first integer pulled from a freshly
-        # seeded generator is deterministic).
+        """This worker's generator: one stream per worker, advancing across __getitem__ calls."""
         if self._cached_rng is None:
             worker_info = torch.utils.data.get_worker_info()
             worker_id = 0 if worker_info is None else worker_info.id
