@@ -13,7 +13,7 @@ import json
 import numpy as np
 import pytest
 
-from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.globals import g
 from cellmap_flow.norm.input_normalize import EuclideanDistance, LambdaNormalizer, MinMaxNormalizer
 from cellmap_flow.pipeline_spec import (
     PipelineSpec,
@@ -202,8 +202,8 @@ def test_submit_keeps_the_posted_chain_as_the_config(submit):
     """Finetune jobs, the manifest and the exported YAML read the config: it
     must be the normalization inference uses."""
     submit()
-    assert _ordered(current_input_norm_config()) == _ordered(POSTED["input_norm"])
-    assert _ordered(current_postprocess_config()) == _ordered(POSTED["postprocess"])
+    assert _ordered(list(g.pipeline_spec.input_norm)) == _ordered(POSTED["input_norm"])
+    assert _ordered(list(g.pipeline_spec.postprocess)) == _ordered(POSTED["postprocess"])
     assert [type(n).__name__ for n in g.input_norms] == ["MinMaxNormalizer", "LambdaNormalizer"]
 
 
@@ -249,13 +249,13 @@ def test_apply_keeps_the_builders_steps_in_order_with_the_name_last(dashboard):
         "models": [{"id": "m1", "name": "mito", "config": {"type": "script", "script_path": "/m.py"}}],
     }
     _send(dashboard, "/api/pipeline/apply", nodes)
-    assert _ordered(current_input_norm_config()) == [
+    assert _ordered(list(g.pipeline_spec.input_norm)) == [
         [("min_value", 0), ("max_value", 255), ("name", "MinMaxNormalizer")],
         [("expression", "x+1"), ("name", "LambdaNormalizer")],
         [("expression", "x*2"), ("name", "LambdaNormalizer")],
     ]
     assert [n.expression for n in g.input_norms[1:]] == ["x+1", "x*2"]
-    assert current_postprocess_config() == [{"name": "SigmoidPostprocessor"}]
+    assert list(g.pipeline_spec.postprocess) == [{"name": "SigmoidPostprocessor"}]
     assert g.pipeline_normalizers == nodes["input_normalizers"]
     assert g.pipeline_model_configs["mito"] == {"type": "script", "script_path": "/m.py"}
 
@@ -265,14 +265,14 @@ def test_after_a_yaml_boot_the_config_is_the_live_chain():
     g.input_norm_config, g.postprocess_config = {}, {}
     g.input_norms = [MinMaxNormalizer(min_value="0"), LambdaNormalizer("x*2")]
     g.postprocess = [AffinityPostprocessor(bias=0.5, neighborhood="[[1, 0, 0]]")]
-    assert _ordered(current_input_norm_config()) == [
+    assert _ordered(list(g.pipeline_spec.input_norm)) == [
         [("name", "MinMaxNormalizer"), ("min_value", 0.0), ("max_value", 255.0), ("invert", False)],
         [("name", "LambdaNormalizer"), ("expression", "x*2")],
     ]
-    assert current_postprocess_config() == [{"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": "[[1, 0, 0]]"}]
+    assert list(g.pipeline_spec.postprocess) == [{"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": "[[1, 0, 0]]"}]
     # Per chain: a configured one wins over the live one.
     g.postprocess_config = [THRESHOLD]
-    assert g.pipeline_spec == PipelineSpec(current_input_norm_config(), [THRESHOLD])
+    assert g.pipeline_spec == PipelineSpec(list(g.pipeline_spec.input_norm), [THRESHOLD])
 
 
 def test_set_pipeline_writes_all_four_attributes_or_none():

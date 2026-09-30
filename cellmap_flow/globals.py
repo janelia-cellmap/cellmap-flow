@@ -297,16 +297,6 @@ def _configured_steps(config, live):
     return _chain_config(live)
 
 
-def current_input_norm_config():
-    """The dashboard's current input_norm as an ordered ``[{name, **params}]``."""
-    return list(g.pipeline_spec.input_norm)
-
-
-def current_postprocess_config():
-    """The dashboard's current postprocess chain as an ordered ``[{name, **params}]``."""
-    return list(g.pipeline_spec.postprocess)
-
-
 def get_blockwise_tasks_dir():
     tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
         "~/.cellmap_flow/blockwise_tasks"
