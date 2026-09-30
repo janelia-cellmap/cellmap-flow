@@ -303,6 +303,7 @@ def submit_finetuning():
             queue=body.queue,
             # The request's, else the dashboard's own, else the site's.
             charge_group=body.charge_group or session.charge_group or current_site().default_charge_group,
+            walltime=session.walltime,
             output_type=output_type,
             select_channel=body.select_channel,
             offsets=offsets,

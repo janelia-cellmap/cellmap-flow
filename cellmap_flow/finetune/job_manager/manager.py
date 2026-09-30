@@ -74,6 +74,7 @@ class FinetuneJobManager:
         output_base: Optional[Path] = None,
         queue: Optional[str] = None,
         charge_group: Optional[str] = None,
+        walltime: Optional[str] = None,
         checkpoint_path_override: Optional[Path] = None,
         auto_serve: bool = True,
         mask_unannotated: bool = False,
@@ -102,6 +103,8 @@ class FinetuneJobManager:
             output_base: Base directory for outputs (default: output/finetuning)
             queue: LSF queue name (default: the site's, gpu_h100 at Janelia)
             charge_group: LSF charge group (default: the site's, cellmap at Janelia)
+            walltime: LSF run limit, "HH:MM" or minutes (default: the site's,
+                08:00 at Janelia)
             checkpoint_path_override: Optional path to override checkpoint detection (default: None)
             auto_serve: Automatically start inference server after training (default: True)
 
@@ -244,7 +247,8 @@ class FinetuneJobManager:
 
         job_name = f"finetune_{model_basename}_{timestamp}"
 
-        lsf_job = submit.launch(job_name, cli_command, queue=queue, charge_group=charge_group)
+        lsf_job = submit.launch(job_name, cli_command, queue=queue, charge_group=charge_group,
+                                walltime=walltime)
 
         # === Create FinetuneJob tracking object ===
 

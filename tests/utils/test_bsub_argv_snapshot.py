@@ -165,10 +165,9 @@ def _submit_finetune(monkeypatch, tmp_path):
         "kind": "volume_zarr_v1", "raw_dataset_path": "/data/raw.zarr",
     }))
     monkeypatch.setattr(manager.threading, "Thread", _Thread)
-    g.walltime = "12:00"
     return manager.FinetuneJobManager().submit_finetuning_job(
         model_config=_ScriptModel(), corrections_path=corrections, output_base=session,
-        queue="gpu_a100", charge_group="my_lab",
+        queue="gpu_a100", charge_group="my_lab", walltime="12:00",
     )
 
 

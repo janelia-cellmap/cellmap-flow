@@ -29,12 +29,14 @@ class _Script:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    """The dashboard's test client, a model "m" (a script with affinity offsets) and billing to "my_lab"."""
+    """The dashboard's test client, a model "m" (a script with affinity offsets), billing to "my_lab"
+    and a walltime of 10:00."""
     from cellmap_flow.dashboard.app import app
 
     (tmp_path / "model.py").write_text(OFFSETS)
     for key, value in dict(models_config=[_Script("m", str(tmp_path / "model.py"))],
-                           charge_group="my_lab", annotation_volumes={}, output_sessions={}).items():
+                           charge_group="my_lab", walltime="10:00", annotation_volumes={},
+                           output_sessions={}).items():
         monkeypatch.setattr(g, key, value, raising=False)
     return app.test_client()
 
@@ -121,7 +123,8 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
         learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None, auto_serve=True,
         mask_unannotated=False, loss_type="mse", label_smoothing=0.1, distillation_lambda=None,
         distillation_scope="unlabeled", margin=0.3, balance_classes=False, augment=False, queue="gpu_h100",
-        charge_group="my_lab", output_type="affinities", select_channel=None, offsets="[[1, 0, 0], [0, 1, 0]]",
+        charge_group="my_lab", walltime="10:00", output_type="affinities", select_channel=None,
+        offsets="[[1, 0, 0], [0, 1, 0]]",
     )
 
 

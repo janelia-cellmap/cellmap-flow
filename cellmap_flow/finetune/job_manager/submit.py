@@ -426,11 +426,12 @@ def build_command(
     )
 
 
-def launch(job_name: str, command: str, queue: Optional[str], charge_group: Optional[str]):
+def launch(job_name: str, command: str, queue: Optional[str], charge_group: Optional[str],
+           walltime: Optional[str] = None):
     """Start ``command`` (build_command's) as the job ``job_name``.
 
-    On LSF with one GPU when bsub is available, for the dashboard's walltime
-    (``g.walltime``) or else the site's; otherwise as a process here.
+    On LSF with one GPU when bsub is available, for ``walltime`` ("HH:MM"
+    or minutes) or else the site's; otherwise as a process here.
     Returns its LSFJob or LocalJob; raises RuntimeError if it did not start.
     """
     # Check if bsub is available
@@ -439,8 +440,6 @@ def launch(job_name: str, command: str, queue: Optional[str], charge_group: Opti
         try:
             # Training runs epochs, not chunks, so it is the likeliest
             # thing here to outlive the queue's 120-minute default.
-            from cellmap_flow.globals import g as _g
-
             lsf_job = jobs_lsf.submit(JobSpec(
                 name=job_name,
                 # A shell line: it sets LD_LIBRARY_PATH and pipes through tee.
@@ -449,7 +448,7 @@ def launch(job_name: str, command: str, queue: Optional[str], charge_group: Opti
                 charge_group=charge_group,
                 gpus=1,
                 cpus=4,
-                walltime=getattr(_g, "walltime", None) or current_site().default_walltime,
+                walltime=walltime or current_site().default_walltime,
             ))
             logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
         except Exception as e:
