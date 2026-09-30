@@ -112,7 +112,9 @@ export function initJobMonitor({ picker, form }) {
   // The job's status, every 3 seconds (the first after 3 s), until it fails
   // or is cancelled; this replaces the poller running before, if any. The
   // poll asks once at a time and stops at once when the job is over, so a
-  // failed job notifies once, not once per tick that was waiting.
+  // failed job notifies once, not once per tick that was waiting. Unlike the
+  // tab's other polls it goes on while the page is hidden: that is when the
+  // browser notification of a failed job is useful.
   function startStatusPolling(jobId) {
     if (statusPoller) statusPoller.stop();
     statusPoller = poll(async ({ stale }) => {

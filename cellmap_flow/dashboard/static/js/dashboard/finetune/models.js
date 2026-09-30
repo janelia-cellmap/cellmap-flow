@@ -113,10 +113,12 @@ export function initModelPicker({ log, savedModelName }) {
     displayModelInfo(selectedModel);
   });
 
-  // The first load, then the polls: MODEL_POLL_MAX_ATTEMPTS after it.
+  // The first load, then the polls: MODEL_POLL_MAX_ATTEMPTS after it. They
+  // wait while the page is hidden, and one runs as soon as it is shown.
   const modelPoll = poll(loadModels, {
     intervalMs: MODEL_POLL_INTERVAL_MS,
     maxTicks: 1 + MODEL_POLL_MAX_ATTEMPTS,
+    pauseWhenHidden: true,
   });
 
   document.getElementById("refreshModelsBtn").addEventListener("click", function() {

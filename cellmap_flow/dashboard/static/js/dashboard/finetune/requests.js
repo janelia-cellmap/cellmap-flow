@@ -27,7 +27,9 @@ export function postAnswer(url, body) {
 // id and sends it with the POST; the server publishes the POST's progress
 // under it at progressUrl?load_id=<id>. This polls that every second, the
 // first time at once, and passes each progress published to show(progress).
-// A poll that fails is skipped; the next one tries again.
+// A poll that fails is skipped; the next one tries again. While the page is
+// hidden nobody sees the progress, so the polls wait, and one runs as soon as
+// it is shown.
 // Returns { loadId, stop() }; stop it once the POST has answered.
 export function watchProgress(progressUrl, show) {
   const loadId = (crypto.randomUUID && crypto.randomUUID()) ||
@@ -41,6 +43,6 @@ export function watchProgress(progressUrl, show) {
     } catch (_) {
       // Not fatal: the next poll tries again.
     }
-  }, { intervalMs: 1000 });
+  }, { intervalMs: 1000, pauseWhenHidden: true });
   return { loadId, stop: poller.stop };
 }
