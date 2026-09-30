@@ -54,15 +54,15 @@ def _unflattened():
 
 
 @pytest.mark.parametrize("model, min_channels, layers", [
-    (_mixed_widths(), None, ["0", "2", "4", "6", "8"]),
-    (_mixed_widths(), 0, ["0", "2", "4", "6", "8"]),
+    pytest.param(_mixed_widths(), None, ["0", "2", "4", "6", "8"], id="every conv"),
+    pytest.param(_mixed_widths(), 0, ["0", "2", "4", "6", "8"], id="min_channels 0 is the default"),
     # By the narrower side: 4 -> 128 is out, 128 -> 128 stays. At r=64 the seven
     # layers under 96 channels held 1% of the adapter and took 41% of each step.
-    (_mixed_widths(), 64, ["6"]),
-    (_mixed_widths(), 5, ["6"]),
-    (_mixed_widths(), 4, ["2", "4", "6", "8"]),
-    (nn.Sequential(nn.Linear(8, 256), nn.ReLU(), nn.Linear(256, 256)), 16, ["2"]),
-    (_UNetish(), None, ["down", "head"]),  # PEFT adapts neither a transposed nor a dilated conv
+    pytest.param(_mixed_widths(), 64, ["6"], id="min_channels 64"),
+    pytest.param(_mixed_widths(), 5, ["6"], id="by the narrower side"),
+    pytest.param(_mixed_widths(), 4, ["2", "4", "6", "8"], id="min_channels 4"),
+    pytest.param(nn.Sequential(nn.Linear(8, 256), nn.ReLU(), nn.Linear(256, 256)), 16, ["2"], id="linear layers"),
+    pytest.param(_UNetish(), None, ["down", "head"], id="not a transposed or a dilated conv"),  # PEFT adapts neither
 ])
 def test_which_layers_get_an_adapter(model, min_channels, layers):
     kwargs = {} if min_channels is None else {"min_channels": min_channels}
@@ -77,15 +77,16 @@ def _adapted(model):
 
 @pytest.mark.finetune
 @pytest.mark.parametrize("make, settings, batch, layers", [
-    (_small, {}, 1, ["0", "2", "4"]),
+    pytest.param(_small, {}, 1, ["0", "2", "4"], id="plain"),
     # The trainer wraps BatchLoopWrapper(model): its loop and torch.cat keep the graph.
-    (lambda: BatchLoopWrapper(_small()), {}, 3, ["0", "2", "4"]),
-    (_mixed_widths, dict(lora_min_channels=64), 1, ["6"]),
-    (_mixed_widths, dict(target_modules=["2"], lora_min_channels=64), 1, ["2"]),  # named: not filtered
+    pytest.param(lambda: BatchLoopWrapper(_small()), {}, 3, ["0", "2", "4"], id="batch loop"),
+    pytest.param(_mixed_widths, dict(lora_min_channels=64), 1, ["6"], id="the one wide layer"),
+    pytest.param(_mixed_widths, dict(target_modules=["2"], lora_min_channels=64), 1, ["2"],
+                 id="named layers are not filtered"),
     # Unflattened convs were swapped for stride-1 unpadded ones, and a
     # ConvTranspose3d for a Conv3d with its channels swapped: the first forward died.
-    (_unflattened, {}, 1, ["down", "head"]),
-], ids=["plain", "batch loop", "min channels", "named layers", "unflattened"])
+    pytest.param(_unflattened, {}, 1, ["down", "head"], id="unflattened"),
+])
 def test_every_adapter_starts_as_a_no_op_and_trains(make, settings, batch, layers):
     """A run's loss stayed constant for many epochs: every lora_B got no gradient,
     with distillation switching the adapter off and on around the teacher pass."""

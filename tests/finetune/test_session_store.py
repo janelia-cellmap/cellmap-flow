@@ -15,7 +15,10 @@ def test_a_base_path_keeps_its_session(tmp_path):
     assert SessionStore(sessions).get_or_create(str(tmp_path / "other")) != first
 
 
-@pytest.mark.parametrize("keep, expected_state", [(False, {}), (True, {"0.0.0": "etag"})])
+@pytest.mark.parametrize("keep, expected_state", [
+    pytest.param(False, {}, id="a new volume starts unsynced"),
+    pytest.param(True, {"0.0.0": "etag"}, id="a resumed one keeps what it synced"),
+])
 def test_registering_a_volume(keep, expected_state):
     volumes = {"vol": {"zarr_path": "/old.zarr", "chunk_sync_state": {"0.0.0": "etag"}}}
     store = SessionStore({}, volumes)

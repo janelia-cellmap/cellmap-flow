@@ -41,8 +41,8 @@ def test_a_build_writes_the_crop_at_its_place_and_records_where_it_came_from(tmp
 
 
 @pytest.mark.parametrize("built, geometry, error", [
-    (True, True, FileExistsError),  # a build is never overwritten
-    (False, False, ValueError),  # the model's geometry has to come from somewhere
+    pytest.param(True, True, FileExistsError, id="a build is never overwritten"),
+    pytest.param(False, False, ValueError, id="the model's geometry has to come from somewhere"),
 ])
 def test_a_build_refuses(tmp_path, built, geometry, error):
     out = tmp_path / "corrections"

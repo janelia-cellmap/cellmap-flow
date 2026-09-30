@@ -18,11 +18,11 @@ def _net():
 
 
 @pytest.mark.parametrize("lora, lora_r, expected", [
-    (False, None, ("full", 0)),
-    (False, 8, ("full", 0)),  # a restart cannot make a full finetune LoRA
-    pytest.param(True, None, ("lora", 2), marks=pytest.mark.finetune),  # the adapter's own rank
-    pytest.param(True, 0, ("lora", 2), marks=pytest.mark.finetune),  # nor LoRA a full one
-    pytest.param(True, 8, ("lora", 8), marks=pytest.mark.finetune),  # the rank a restart makes
+    pytest.param(False, None, ("full", 0), id="full"),
+    pytest.param(False, 8, ("full", 0), id="a restart cannot make a full finetune LoRA"),
+    pytest.param(True, None, ("lora", 2), marks=pytest.mark.finetune, id="LoRA keeps its adapter's rank"),
+    pytest.param(True, 0, ("lora", 2), marks=pytest.mark.finetune, id="nor make a LoRA one full"),
+    pytest.param(True, 8, ("lora", 8), marks=pytest.mark.finetune, id="the rank a restart asks for"),
 ])
 def test_the_model_decides(lora, lora_r, expected):
     model = LoraStrategy(2, 4, 0.0).prepare(_net()) if lora else FullStrategy().prepare(_net())
@@ -31,7 +31,8 @@ def test_the_model_decides(lora, lora_r, expected):
     assert strategy.export_name == {"lora": "lora_adapter", "full": "full_finetune"}[strategy.kind]
 
 
-@pytest.mark.parametrize("kind", [pytest.param("lora", marks=pytest.mark.finetune), "full"])
+@pytest.mark.parametrize("kind", [pytest.param("lora", marks=pytest.mark.finetune, id="lora"),
+                                  pytest.param("full", id="full")])
 def test_reset_and_restart_go_back_to_where_training_started(kind):
     """After a NaN the trainer resets in place; a restart starts the next iteration
     where the job started, a LoRA one with the rank it asks for. A full finetune

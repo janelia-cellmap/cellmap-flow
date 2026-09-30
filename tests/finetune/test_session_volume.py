@@ -37,18 +37,18 @@ MAJORITY[1, 1, 1] = MAJORITY[1, 1, 0] = MAJORITY[1, 0, 1] = 0  # 5 of 8 foregrou
 
 @pytest.mark.parametrize("data, voxel_size, translation, zarr_format, first, last", [
     # 8 voxels of 8 nm are 4 of 16 nm: written as 8 they claimed twice the extent.
-    (np.ones((8, 8, 8), np.uint8), 8.0, 160.0, 2, 10, 13),
-    (np.ones((8, 8, 8), np.uint8), 8.0, 160.0, 3, 10, 13),
+    pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 160.0, 2, 10, 13, id="resampled"),
+    pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 160.0, 3, 10, 13, id="resampled, from a zarr v3 group"),
     # Both translations are voxel-0 centres: the crop's corner, 66 nm, is 4.6
     # volume voxels above the volume's, -8; reading 70 as the position gave 4.
-    (np.ones((8, 8, 8), np.uint8), 8.0, 70.0, 2, 5, 8),
+    pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 70.0, 2, 5, 8, id="placed corner to corner"),
     # A 4 nm crop centred at 4 starts at 2: its first 16 nm block is mostly voxel 1.
-    (np.ones((16, 16, 16), np.uint8), 4.0, 4.0, 2, 1, 4),
+    pytest.param(np.ones((16, 16, 16), np.uint8), 4.0, 4.0, 2, 1, 4, id="placed corner to corner at 4x"),
     # Each voxel takes its block's most common label; a nearest-neighbour zoom takes the last corner.
-    (MAJORITY, 8.0, 28.0, 2, 2, 2),
+    pytest.param(MAJORITY, 8.0, 28.0, 2, 2, 2, id="by majority vote"),
     # A plain v3 array whose (legacy) transform gives its corner, 156 nm.
-    (np.ones((8, 8, 8), np.uint8), 8.0, 156.0, "v3 array", 10, 13),
-], ids=["resampled", "resampled from zarr v3", "corner to corner", "4x", "majority", "a v3 array"])
+    pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 156.0, "v3 array", 10, 13, id="from a plain zarr v3 array"),
+])
 def test_a_crop_is_written_at_its_place_and_the_volumes_resolution(tmp_path, ome_zarr, data, voxel_size,
                                                                   translation, zarr_format, first, last):
     if zarr_format == "v3 array":
@@ -65,9 +65,10 @@ def test_a_crop_is_written_at_its_place_and_the_volumes_resolution(tmp_path, ome
 
 
 @pytest.mark.parametrize("crop, error, deepest", [
-    ("annotations/typoed-dataset/crop.zarr/s0", FileNotFoundError, "annotations"),
-    ("/nonexistent-root-for-tests/a/b.zarr", FileNotFoundError, None),
-    ("annotations/empty.zarr", ValueError, None),  # a v3 group with neither multiscales nor s0
+    pytest.param("annotations/typoed-dataset/crop.zarr/s0", FileNotFoundError, "annotations",
+                 id="a typo, and where the path breaks"),
+    pytest.param("/nonexistent-root-for-tests/a/b.zarr", FileNotFoundError, None, id="nothing of it exists"),
+    pytest.param("annotations/empty.zarr", ValueError, None, id="a group with neither multiscales nor s0"),
 ])
 def test_a_crop_that_cannot_be_read_names_itself(tmp_path, crop, error, deepest):
     """zarr names the path inside the store, "" for a missing directory: a

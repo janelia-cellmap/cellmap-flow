@@ -63,13 +63,21 @@ def test_equivalence_is_judged_relative_to_the_output_scale():
     """The gate was an absolute 1e-3 on the raw output: a finetune whose logits
     lived near 1400 was refused over a one-ULP float32 difference, while one of
     the same quality near 5.5 passed."""
-    small = check_equivalence(Scaled(1.0), Scaled(1.0, nudge=0.01), 194)
-    big = check_equivalence(Scaled(1000.0), Scaled(1000.0, nudge=0.01), 194)
-    # The absolute difference and the scale grow 1000x; the relative difference does not ...
-    assert big[0] == pytest.approx(1000 * small[0], rel=1e-3) and big[2] == pytest.approx(1000 * small[2], rel=1e-3)
-    assert big[1] == pytest.approx(small[1], rel=1e-3)
-    # ... and a 1% weight change is refused at either scale, while an exact one
-    # passes at the axolotl-heart mito_daughter's huge logits.
-    assert small[1] > REL_TOL and big[1] > REL_TOL
+    d_small, r_small, s_small = check_equivalence(Scaled(1.0), Scaled(1.0, nudge=0.01), 194)[:3]
+    d_big, r_big, s_big = check_equivalence(Scaled(1000.0), Scaled(1000.0, nudge=0.01), 194)[:3]
+    # The absolute difference and the scale both grow 1000x ...
+    assert d_big == pytest.approx(1000 * d_small, rel=1e-3)
+    assert s_big == pytest.approx(1000 * s_small, rel=1e-3)
+    # ... while the relative difference, which the gate judges, does not,
+    assert r_big == pytest.approx(r_small, rel=1e-3)
+    # and a 1% weight change is refused at either scale.
+    assert r_small > REL_TOL and r_big > REL_TOL
+
+
+def test_an_exact_merge_passes_at_a_large_output_scale():
+    """The axolotl-heart mito_daughter case: huge logits, exact agreement."""
     d_ref, r_ref, scale, _, r_tile, out = check_equivalence(Scaled(1400.0), Scaled(1400.0), 194)
-    assert (d_ref, r_ref, out) == (0.0, 0.0, (190, 190, 190)) and scale > 100 and r_tile <= REL_TOL
+    assert d_ref == 0.0 and r_ref == 0.0
+    assert scale > 100  # the regime that tripped the old absolute gate
+    assert r_tile <= REL_TOL
+    assert out == (190, 190, 190)
