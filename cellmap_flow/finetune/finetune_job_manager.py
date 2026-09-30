@@ -8,25 +8,19 @@ This module provides:
 
 import json
 import logging
-import os
 import threading
 import time
-import uuid
 import requests
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Dict, List, Optional, Any
 
 from cellmap_flow.finetune import markers
-from cellmap_flow.finetune.job_manager import state, submit
+from cellmap_flow.finetune.job_manager import persistence, state, submit
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
-from cellmap_flow.finetune.job_manager.tailer import LogTailer, finished_iterations, trainer_outputs_from_log
-from cellmap_flow.jobs import lsf as jobs_lsf
+from cellmap_flow.finetune.job_manager.tailer import LogTailer, trainer_outputs_from_log
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import JobStatus as LSFJobStatus
-from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.utils.restart_token import (
     TOKEN_HEADER,
     read_restart_token,
@@ -38,28 +32,6 @@ logger = logging.getLogger(__name__)
 
 # The trainer's markers; see finetune/markers.py.
 _STATUS_MARKER_RE = markers.STATUS_MARKER_RE
-
-
-def finetune_export_kwargs(output_dir, params=None) -> dict:
-    """Which artifact a finished run produced, as FinetuneModelConfig kwargs.
-
-    A LoRA run exports lora_adapter/; a full finetune (--lora-r 0) exports
-    full_finetune/model_state_dict.pt. Decided by what is on disk first --
-    the job's own record of lora_r is the fallback for a run that has not
-    written its export yet -- so the dashboard never points a viewer at an
-    adapter directory that a rank-0 run never made.
-    """
-    from pathlib import Path
-    output_dir = Path(output_dir)
-    weights = output_dir / "full_finetune" / "model_state_dict.pt"
-    adapter = output_dir / "lora_adapter"
-    if weights.exists():
-        return {"weights_path": str(weights)}
-    if adapter.exists():
-        return {"lora_adapter_path": str(adapter)}
-    if params and int(params.get("lora_r", 8) or 0) <= 0:
-        return {"weights_path": str(weights)}
-    return {"lora_adapter_path": str(adapter)}
 
 
 class FinetuneJobManager:
@@ -92,74 +64,6 @@ class FinetuneJobManager:
     def remove_listener(self, listener) -> None:
         """Stop telling ``listener``."""
         self._listeners.remove(listener)
-
-    def _build_submission_metadata(
-        self,
-        *,
-        model_config,
-        model_type: str,
-        checkpoint_path: Optional[Path],
-        corrections_path: Path,
-        num_corrections: int,
-        output_dir: Path,
-        lora_r: int,
-        num_epochs: int,
-        batch_size: int,
-        learning_rate: float,
-        loss_type: str,
-        label_smoothing: float,
-        distillation_lambda: Optional[float],
-        distillation_scope: str,
-        margin: float,
-        balance_classes: bool,
-        augment: bool,
-        channels: List[str],
-        input_voxel_size: List[int],
-        output_voxel_size: List[int],
-        output_type: str,
-        queue: str,
-        charge_group: str,
-        command: str,
-    ) -> dict:
-        """Build metadata persisted for a submitted finetuning job."""
-        return {
-            "job_id": str(uuid.uuid4()),
-            "model_name": model_config.name,
-            "model_type": model_type,
-            "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
-            "model_script": str(model_config.script_path) if hasattr(model_config, "script_path") else None,
-            "repo": model_config.repo if model_type == "huggingface" else None,
-            "revision": getattr(model_config, "revision", None) if model_type == "huggingface" else None,
-            "model_entry": model_config.to_dict() if model_type in submit.MODEL_ENTRY_TYPES else None,
-            "corrections_path": str(corrections_path),
-            "num_corrections": num_corrections,
-            "output_dir": str(output_dir),
-            "params": {
-                "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
-                "lora_r": lora_r,
-                "lora_alpha": lora_r * 2,
-                "num_epochs": num_epochs,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate,
-                "loss_type": loss_type,
-                "label_smoothing": label_smoothing,
-                "distillation_lambda": distillation_lambda,
-                "distillation_scope": distillation_scope,
-                "margin": margin,
-                "balance_classes": balance_classes,
-                "augment": augment,
-                "channels": channels,
-                "input_voxel_size": input_voxel_size,
-                "output_voxel_size": output_voxel_size,
-                "output_type": output_type,
-                "queue": queue,
-                "charge_group": charge_group,
-            },
-            "queue": queue,
-            "charge_group": charge_group,
-            "created_at": datetime.now().isoformat(),
-            "command": command,
-        }
 
     def submit_finetuning_job(
         self,
@@ -308,7 +212,7 @@ class FinetuneJobManager:
 
         # === Save job metadata ===
 
-        metadata = self._build_submission_metadata(
+        metadata = persistence.submission_metadata(
             model_config=model_config,
             model_type=model_type,
             checkpoint_path=checkpoint_path,
@@ -336,12 +240,7 @@ class FinetuneJobManager:
         )
 
         metadata["models_dir"] = str(models_dir)
-
-        metadata_file = output_dir / "metadata.json"
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f, indent=2)
-
-        self.logger.info(f"Saved metadata to {metadata_file}")
+        persistence.write_metadata(output_dir, metadata)
 
         # === Submit job (LSF or local) ===
 
@@ -369,8 +268,8 @@ class FinetuneJobManager:
         self.jobs[job_id] = finetune_job
         # What a dashboard started later needs to find this job again: the
         # scheduler's id for it, and where it stands (see rehydrate_session).
-        self._update_metadata(
-            finetune_job, lsf_job_id=finetune_job.to_dict()["lsf_job_id"],
+        persistence.update_metadata(
+            output_dir, lsf_job_id=finetune_job.to_dict()["lsf_job_id"],
             status=finetune_job.status.value,
         )
 
@@ -386,18 +285,6 @@ class FinetuneJobManager:
         )
         monitor_thread.start()
         self.logger.info(f"Started monitoring thread for job {finetune_job.job_id}")
-
-    def _update_metadata(self, finetune_job: FinetuneJob, **fields):
-        """Merge ``fields`` into the job's metadata.json, replacing it atomically."""
-        path = Path(finetune_job.output_dir) / "metadata.json"
-        try:
-            metadata = json.loads(path.read_text()) if path.exists() else {}
-            metadata.update(fields)
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_text(json.dumps(metadata, indent=2))
-            os.replace(tmp, path)
-        except Exception as e:
-            self.logger.warning(f"Could not update {path}: {e}")
 
     def rehydrate_session(self, session_path) -> int:
         """Pick up the jobs of a session that are still alive on the cluster.
@@ -416,92 +303,12 @@ class FinetuneJobManager:
         at all -- is recorded as final, so it is not asked about again. This
         runs on every load of the finetune tab.
         """
-        candidates = []
-        for metadata_file in sorted(Path(session_path).glob("runs/*/metadata.json")):
-            try:
-                metadata = json.loads(metadata_file.read_text())
-            except (OSError, ValueError):
-                continue
-            job_id = metadata.get("job_id")
-            lsf_job_id = metadata.get("lsf_job_id")
-            if (
-                not job_id
-                or job_id in self.jobs
-                or not lsf_job_id
-                or str(lsf_job_id).startswith("PID:")
-                or metadata.get("status") in {s.value for s in TERMINAL_STATUSES}
-            ):
-                continue
-            candidates.append((metadata_file, metadata, job_id, str(lsf_job_id)))
-        if not candidates:
-            return 0
-
-        reported = jobs_lsf.statuses([lsf_job_id for *_, lsf_job_id in candidates])
-        count = 0
-        for metadata_file, metadata, job_id, lsf_job_id in candidates:
-            if lsf_job_id not in reported:
-                continue  # bjobs cannot say; try again next time
-            observed = reported[lsf_job_id]
-            record = SimpleNamespace(output_dir=metadata_file.parent)
-            if observed is None:
-                # LSF has forgotten it: it ended long enough ago to be purged,
-                # while no dashboard was watching. Asked about again, it never
-                # answers. The trainer never prints "done" -- after an
-                # iteration it waits for restarts until it is stopped or runs
-                # out of walltime -- so a run whose log shows a finished
-                # iteration delivered a model, and that is what it is recorded
-                # as having done.
-                iterations, last = finished_iterations(metadata_file.parent / "training_log.txt")
-                if iterations:
-                    status = JobStatus.COMPLETED
-                    detail = (
-                        f"LSF no longer knows job {lsf_job_id}; it had finished "
-                        f"{iterations} iteration(s), the last {last}"
-                    )
-                else:
-                    status = JobStatus.FAILED
-                    detail = (
-                        f"LSF no longer knows job {lsf_job_id}; it ended while no "
-                        "dashboard was watching, and how is not known"
-                    )
-                self._update_metadata(record, status=status.value, status_detail=detail)
-                continue
-            if observed == LSFJobStatus.COMPLETED:
-                # Finished while no dashboard was watching; say so, so it is
-                # not asked about again. complete_job does not run for it.
-                self._update_metadata(record, status=JobStatus.COMPLETED.value)
-                continue
-            if observed == LSFJobStatus.FAILED:
-                self._update_metadata(record, status=JobStatus.FAILED.value)
-                continue
-            if observed not in (LSFJobStatus.RUNNING, LSFJobStatus.PENDING):
-                continue
-            lsf_job = LSFJob(job_id=lsf_job_id, model_name=metadata.get("model_name"))
-            params = metadata.get("params") or {}
-            output_dir = metadata_file.parent
-            try:
-                created_at = datetime.fromisoformat(metadata["created_at"])
-            except (KeyError, TypeError, ValueError):
-                created_at = datetime.now()
-            job = FinetuneJob(
-                job_id=job_id,
-                lsf_job=lsf_job,
-                model_name=metadata.get("model_name") or "",
-                output_dir=output_dir,
-                params=params,
-                status=JobStatus.RUNNING if observed == LSFJobStatus.RUNNING else JobStatus.PENDING,
-                created_at=created_at,
-                log_file=output_dir / "training_log.txt",
-                total_epochs=int(params.get("num_epochs") or 10),
-                corrections_path=(
-                    Path(metadata["corrections_path"]) if metadata.get("corrections_path") else None
-                ),
-            )
-            self.jobs[job_id] = job
-            self.logger.info(f"Reattached to job {job_id} (LSF {lsf_job_id}) from {output_dir}")
+        jobs = persistence.rehydrate(session_path, known=self.jobs)
+        for job in jobs:
+            self.jobs[job.job_id] = job
+            self.logger.info(f"Reattached to job {job.job_id} (LSF {job.lsf_job.job_id}) from {job.output_dir}")
             self._start_monitor(job)
-            count += 1
-        return count
+        return len(jobs)
 
     def monitor_job(self, finetune_job: FinetuneJob):
         """
@@ -557,8 +364,8 @@ class FinetuneJobManager:
 
                 if finetune_job.status != persisted_status:
                     persisted_status = finetune_job.status
-                    self._update_metadata(
-                        finetune_job, status=persisted_status.value,
+                    persistence.update_metadata(
+                        finetune_job.output_dir, status=persisted_status.value,
                         inference_server_url=finetune_job.inference_server_url,
                     )
 
@@ -584,8 +391,8 @@ class FinetuneJobManager:
                 # start, say -- still produced a model; record what it was.
                 self._read_trainer_outputs(finetune_job)
 
-            self._update_metadata(
-                finetune_job,
+            persistence.update_metadata(
+                finetune_job.output_dir,
                 status=finetune_job.status.value,
                 finetuned_model_name=finetune_job.finetuned_model_name,
                 model_yaml_path=str(finetune_job.model_yaml_path) if finetune_job.model_yaml_path else None,
@@ -752,35 +559,7 @@ class FinetuneJobManager:
 
         # === Verify the training export exists ===
 
-        export = finetune_export_kwargs(finetune_job.output_dir, finetune_job.params)
-        if "weights_path" in export:
-            # Full finetune (--lora-r 0): a single state dict, no adapter dir.
-            weights_file = Path(export["weights_path"])
-            if not weights_file.exists():
-                raise RuntimeError(
-                    f"Training completed but full-finetune weights not found: {weights_file}"
-                )
-            self.logger.info(f"Verified full-finetune weights exist: {weights_file}")
-        else:
-            adapter_path = Path(export["lora_adapter_path"])
-
-            # Check for adapter model (supports both .bin and .safetensors formats)
-            adapter_model_bin = adapter_path / "adapter_model.bin"
-            adapter_model_safetensors = adapter_path / "adapter_model.safetensors"
-
-            if not (adapter_model_bin.exists() or adapter_model_safetensors.exists()):
-                raise RuntimeError(
-                    f"Training completed but adapter model not found. "
-                    f"Checked: {adapter_model_bin} and {adapter_model_safetensors}"
-                )
-
-            adapter_config_file = adapter_path / "adapter_config.json"
-            if not adapter_config_file.exists():
-                raise RuntimeError(
-                    f"Training completed but adapter config not found: {adapter_config_file}"
-                )
-
-            self.logger.info(f"Verified LoRA adapter files exist in {adapter_path}")
+        persistence.check_export(finetune_job.output_dir, finetune_job.params)
 
         # === The name and YAML the trainer gave the result ===
         #
@@ -804,22 +583,7 @@ class FinetuneJobManager:
 
         # === Update metadata file with completion info ===
 
-        metadata_file = finetune_job.output_dir / "metadata.json"
-        if metadata_file.exists():
-            with open(metadata_file, "r") as f:
-                metadata = json.load(f)
-
-            metadata["completed_at"] = datetime.now().isoformat()
-            metadata["status"] = "COMPLETED"
-            metadata["finetuned_model_name"] = finetuned_model_name
-            metadata["model_yaml_path"] = str(yaml_path) if yaml_path else None
-            metadata["final_epoch"] = finetune_job.current_epoch
-            metadata["final_loss"] = finetune_job.latest_loss
-
-            with open(metadata_file, "w") as f:
-                json.dump(metadata, f, indent=2)
-
-            self.logger.info(f"Updated metadata file: {metadata_file}")
+        persistence.record_completion(finetune_job)
 
         self.logger.info(f"Job {job_id} completed successfully!")
 

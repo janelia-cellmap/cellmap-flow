@@ -16,7 +16,7 @@ import yaml
 from torch.utils.data import DataLoader, TensorDataset
 
 from cellmap_flow.finetune.adaptation import cpu_state_copy
-from cellmap_flow.finetune.finetune_job_manager import finetune_export_kwargs
+from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.models.models_config import ScriptModelConfig
 
 

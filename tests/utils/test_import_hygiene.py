@@ -31,7 +31,7 @@ LIGHT = ["cellmap_flow.globals", "flask", "neuroglancer"]
 ROWS = {
     "jobs": """
 check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "lsf", "local", "queues", "ready", "launch")]
-      + ["cellmap_flow.finetune.markers"] + [f"cellmap_flow.finetune.job_manager.{m}" for m in ("state", "tailer", "listener", "submit")],
+      + ["cellmap_flow.finetune.markers"] + [f"cellmap_flow.finetune.job_manager.{m}" for m in ("state", "tailer", "listener", "submit", "persistence")],
       LIGHT + ["huggingface_hub", "peft", "torch"])
 """,
     "io": """
