@@ -1,122 +1,57 @@
 // Export YAML and Import YAML: the pipeline as a file, and back.
 //
-// The file has a section per node list (inputs, outputs, input_normalizers,
-// models, postprocessors, blockwise_config) and the edges. An import may
-// also be the same structure as JSON. Importing replaces the pipeline; its
-// edges are rebuilt from the node order, and its nodes laid out afresh.
+// The file has a section per node list, and the edges. Each node has its own
+// fields first (id, name), then what it holds, then its position:
+//   inputs, outputs: id, then the node's params as its own fields
+//     (dataset_path, bounding_boxes, separate_bounding_boxes_zarrs,
+//     output_channels, ...);
+//   input_normalizers, postprocessors, blockwise_config: id, name, params;
+//   models: id, name, then its config's fields (type, checkpoint_path,
+//     channels, ...), or its params when it has no config;
+//   edges: id, from, to.
+// An import may also be the builder's own structure as JSON (inputs with
+// params, models with a config, normalizers by name). Importing replaces the
+// pipeline; its edges are rebuilt from the node order, and its nodes laid
+// out afresh.
+import { CORE_SCHEMA, dump, load } from "../vendor/js-yaml.js";
 import { autoLayoutNodes, renderCanvas } from "./canvas.js";
 import { showMessage } from "./messages.js";
 import { autoConnectNodes, blockwiseSettings, datasetPath, defaultPosition, edited, pipeline, replacePipeline } from "./state.js";
 
-function exportYAML() {
-  let yaml = "";
+// Blocks down to a node's own fields, and anything nested deeper (a box's
+// offset and shape, a parameter's list) inline; no line folding, no
+// anchors, and whatever is not plain data (undefined) left out.
+const DUMP_OPTIONS = { flowLevel: 4, lineWidth: -1, noRefs: true, skipInvalid: true, quotingType: '"' };
 
-  // Inputs with dataset_path and bounding boxes
-  if (pipeline.inputs.length > 0) {
-    yaml += "inputs:\n";
-    pipeline.inputs.forEach((n, index) => {
-      yaml += `  - id: ${n.id}\n`;
-      // Add dataset_path to the first input node
-      if (index === 0) {
-        const path = n.params?.dataset_path || datasetPath;
-        if (path) {
-          yaml += `    dataset_path: ${path}\n`;
-        }
-      }
-      if (n.params?.bounding_boxes && n.params.bounding_boxes.length > 0) {
-        yaml += "    bounding_boxes:\n";
-        n.params.bounding_boxes.forEach((bbox) => {
-          yaml += `      - offset: [${bbox.offset.join(", ")}]\n`;
-          yaml += `        shape: [${bbox.shape.join(", ")}]\n`;
-        });
-      }
-      yaml += "    position:\n";
-      yaml += `      x: ${n.position.x}\n`;
-      yaml += `      y: ${n.position.y}\n`;
-    });
-    yaml += "\n";
-  }
+// A node's fields but these.
+const fieldsOf = (node, ...skip) => Object.fromEntries(Object.entries(node).filter(([key]) => !skip.includes(key)));
 
-  if (pipeline.outputs.length > 0) {
-    yaml += "outputs:\n";
-    pipeline.outputs.forEach((n) => {
-      yaml += `  - id: ${n.id}\n`;
-      if (n.params && Object.keys(n.params).length > 0) {
-        Object.entries(n.params).forEach(([k, v]) => {
-          yaml += `    ${k}: ${JSON.stringify(v)}\n`;
-        });
-      }
-      yaml += "    position:\n";
-      yaml += `      x: ${n.position.x}\n`;
-      yaml += `      y: ${n.position.y}\n`;
-    });
-    yaml += "\n";
-  }
-
-  const exportOps = (section, nodes) => {
-    if (nodes.length === 0) return;
-    yaml += `${section}:\n`;
-    nodes.forEach((n) => {
-      yaml += `  - id: ${n.id}\n`;
-      yaml += `    name: ${n.name}\n`;
-      if (Object.keys(n.params).length > 0) {
-        yaml += "    params:\n";
-        Object.entries(n.params).forEach(([k, v]) => {
-          yaml += `      ${k}: ${JSON.stringify(v)}\n`;
-        });
-      }
-      yaml += "    position:\n";
-      yaml += `      x: ${n.position.x}\n`;
-      yaml += `      y: ${n.position.y}\n`;
-    });
-    yaml += "\n";
+// The pipeline in the file's layout, the sections that have nodes only. The
+// first INPUT gets the dashboard's dataset when it has no path of its own.
+function toFileLayout() {
+  const ioNode = (n, params) => ({ id: n.id, ...params, position: n.position });
+  const opNode = (n) => ({
+    id: n.id, name: n.name, ...(Object.keys(n.params || {}).length > 0 ? { params: n.params } : {}), position: n.position,
+  });
+  const sections = {
+    inputs: pipeline.inputs.map((n, index) => ioNode(n, index === 0 && !n.params?.dataset_path && datasetPath
+      ? { ...n.params, dataset_path: datasetPath } : n.params)),
+    outputs: pipeline.outputs.map((n) => ioNode(n, n.params)),
+    input_normalizers: pipeline.normalizers.map(opNode),
+    models: pipeline.models.map((m) => (m.config && typeof m.config === "object"
+      ? { id: m.id, name: m.name, ...fieldsOf(m.config, "name"), position: m.position }
+      : opNode(m))),
+    postprocessors: pipeline.postprocessors.map(opNode),
+    blockwise_config: pipeline.blockwise_config.map(opNode),
+    edges: pipeline.edges.map((e) => ({ id: e.id, from: e.from, to: e.to })),
   };
+  return Object.fromEntries(Object.entries(sections).filter(([, nodes]) => nodes.length > 0));
+}
 
-  exportOps("input_normalizers", pipeline.normalizers);
-
-  if (pipeline.models.length > 0) {
-    yaml += "models:\n";
-    pipeline.models.forEach((m) => {
-      yaml += `  - id: ${m.id}\n`;
-      yaml += `    name: ${m.name}\n`;
-      // A full config (the server's ModelConfig.to_dict()) goes in as the
-      // node's own fields; without one, its params.
-      if (m.config && typeof m.config === "object") {
-        Object.entries(m.config).forEach(([k, v]) => {
-          if (k !== "name") {
-            if (Array.isArray(v)) {
-              yaml += `    ${k}: [${v.join(", ")}]\n`;
-            } else {
-              yaml += `    ${k}: ${JSON.stringify(v)}\n`;
-            }
-          }
-        });
-      } else if (Object.keys(m.params || {}).length > 0) {
-        yaml += "    params:\n";
-        Object.entries(m.params).forEach(([k, v]) => {
-          yaml += `      ${k}: ${JSON.stringify(v)}\n`;
-        });
-      }
-      yaml += "    position:\n";
-      yaml += `      x: ${m.position.x}\n`;
-      yaml += `      y: ${m.position.y}\n`;
-    });
-    yaml += "\n";
-  }
-
-  exportOps("postprocessors", pipeline.postprocessors);
-  exportOps("blockwise_config", pipeline.blockwise_config);
-
-  if (pipeline.edges.length > 0) {
-    yaml += "edges:\n";
-    pipeline.edges.forEach((e) => {
-      yaml += `  - id: ${e.id}\n`;
-      yaml += `    from: ${e.from}\n`;
-      yaml += `    to: ${e.to}\n`;
-    });
-  }
-
-  downloadFile(yaml, "pipeline.yaml", "text/yaml");
+// Each section dumped on its own, so a blank line parts them.
+function exportYAML() {
+  const text = Object.entries(toFileLayout()).map(([section, nodes]) => dump({ [section]: nodes }, DUMP_OPTIONS)).join("\n");
+  downloadFile(text, "pipeline.yaml", "text/yaml");
 }
 
 function downloadFile(content, filename, type) {
@@ -138,7 +73,8 @@ function importFile() {
   reader.onload = (e) => {
     try {
       const content = e.target.result;
-      const data = file.name.endsWith(".yaml") ? parseYAML(content) : JSON.parse(content);
+      // YAML's core schema is plain data: a date-like string stays a string.
+      const data = /\.ya?ml$/.test(file.name) ? fromFileLayout(load(content, { schema: CORE_SCHEMA })) : JSON.parse(content);
       replacePipeline(pipelineFromFile(data));
       autoConnectNodes();
       renderCanvas();
@@ -224,154 +160,32 @@ function pipelineFromFile(data) {
   };
 }
 
-// A reader for the layout exportYAML writes, and only that.
-function parseYAML(yaml) {
-  const result = {
-    inputs: [],
-    outputs: [],
-    input_normalizers: [],
-    models: [],
-    postprocessors: [],
-    blockwise_config: [],
-    edges: [],
+// A YAML file's nodes in the builder's structure: an INPUT's or OUTPUT's own
+// fields are its params, and a model's are its config and, for display, its
+// params, with its channels as a list. A node written with params: keeps
+// them, and one written as a bare name stays one. A file that is not a
+// mapping (an empty one, say) is an empty pipeline.
+function fromFileLayout(doc) {
+  if (!doc || typeof doc !== "object") return {};
+  const isNode = (n) => n && typeof n === "object";
+  const withParams = (n) => {
+    if (!isNode(n) || n.params) return n;
+    const params = fieldsOf(n, "id", "name", "position");
+    return Object.keys(params).length > 0 ? { ...n, params } : n;
   };
-  let currentSection = null;
-  let currentItem = null;
-  let inParams = false;
-  let inPosition = false;
-  let inBoundingBoxes = false;
-  let currentBBox = null;
-  const SECTIONS = ["inputs", "outputs", "input_normalizers", "models", "postprocessors", "blockwise_config", "edges"];
-  // "[a, b, 1]" -> ["a", "b", 1]
-  const arrayItems = (content) => content.split(",").map((item) => {
-    const trimmed = item.trim();
-    const num = parseFloat(trimmed);
-    return isNaN(num) ? trimmed : num;
-  });
-  const intItems = (content) => content.split(",").map((s) => {
-    const num = parseFloat(s.trim());
-    return isNaN(num) ? 0 : parseInt(num);
-  });
-
-  yaml.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return;
-
-    if (SECTIONS.some((section) => trimmed === `${section}:`)) {
-      currentSection = trimmed.slice(0, -1);
-      inParams = false;
-      inPosition = false;
-      inBoundingBoxes = false;
-    } else if (trimmed === "params:") {
-      inParams = true;
-      inPosition = false;
-      inBoundingBoxes = false;
-      if (currentItem && !currentItem.params) {
-        currentItem.params = {};
-      }
-    } else if (trimmed === "position:") {
-      inPosition = true;
-      inParams = false;
-      inBoundingBoxes = false;
-      if (currentItem && !currentItem.position) {
-        currentItem.position = {};
-      }
-    } else if (trimmed === "bounding_boxes:") {
-      inBoundingBoxes = true;
-      inParams = false;
-      inPosition = false;
-      if (currentItem && !currentItem.params) {
-        currentItem.params = {};
-      }
-      if (currentItem && !currentItem.params.bounding_boxes) {
-        currentItem.params.bounding_boxes = [];
-      }
-    } else if (trimmed.startsWith("- ")) {
-      if (inBoundingBoxes && trimmed.startsWith("- offset:")) {
-        const offsetMatch = trimmed.match(/- offset:\s*\[(.*?)\]/);
-        if (offsetMatch) {
-          currentBBox = { offset: intItems(offsetMatch[1]), shape: [] };
-          currentItem.params.bounding_boxes.push(currentBBox);
-        }
-      } else if (inBoundingBoxes) {
-        // A new item after the boxes.
-        const match = trimmed.match(/^- (\w+):\s*(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          currentItem = { [key]: value.trim() };
-          if (currentSection) result[currentSection].push(currentItem);
-          inBoundingBoxes = false;
-          inParams = false;
-          inPosition = false;
-        }
-      } else {
-        const match = trimmed.match(/^- (\w+):\s*(.*)$/);
-        currentItem = match ? { [match[1]]: match[2].trim() } : { name: trimmed.replace("- ", "").trim() };
-        if (currentSection) result[currentSection].push(currentItem);
-        inParams = false;
-        inPosition = false;
-        inBoundingBoxes = false;
-      }
-    } else if (trimmed.includes(":")) {
-      const colonIdx = trimmed.indexOf(":");
-      const key = trimmed.slice(0, colonIdx).trim();
-      const value = trimmed.slice(colonIdx + 1).trim();
-      if (!currentItem) return;
-
-      if (inBoundingBoxes && key === "shape" && currentBBox) {
-        const shapeMatch = value.match(/\[(.*?)\]/);
-        if (shapeMatch) {
-          currentBBox.shape = intItems(shapeMatch[1]);
-        }
-      } else if (inPosition) {
-        currentItem.position[key] = parseFloat(value) || 0;
-      } else if (inParams) {
-        currentItem.params = currentItem.params || {};
-        try {
-          currentItem.params[key] = JSON.parse(value);
-        } catch {
-          const arrayMatch = value.match(/^\[(.*)\]$/);
-          currentItem.params[key] = arrayMatch ? arrayItems(arrayMatch[1]) : value;
-        }
-      } else {
-        try {
-          currentItem[key] = JSON.parse(value);
-        } catch {
-          const arrayMatch = value.match(/^\[(.*)\]$/);
-          currentItem[key] = arrayMatch ? arrayItems(arrayMatch[1]) : value;
-        }
-
-        // An INPUT or OUTPUT node's dataset_path is its param.
-        if ((currentSection === "inputs" || currentSection === "outputs") && key === "dataset_path") {
-          if (!currentItem.params) currentItem.params = {};
-          currentItem.params.dataset_path = currentItem[key];
-        }
-
-        // A model's fields are its config, and its params for display.
-        if (currentSection === "models" && key !== "id" && key !== "position" && key !== "params" && key !== "name") {
-          currentItem.config = currentItem.config || {};
-          try {
-            let parsedValue = JSON.parse(value);
-            if (key === "channels" && !Array.isArray(parsedValue)) {
-              parsedValue = [parsedValue];
-            }
-            currentItem.config[key] = parsedValue;
-          } catch {
-            if (["channels", "input_size", "output_size", "input_voxel_size", "output_voxel_size"].includes(key)) {
-              const arrayMatch = value.match(/^\[(.*)\]$/);
-              currentItem.config[key] = arrayMatch ? arrayItems(arrayMatch[1]) : [value];
-            } else {
-              currentItem.config[key] = value;
-            }
-          }
-          currentItem.params = currentItem.params || {};
-          currentItem.params[key] = currentItem.config[key];
-        }
-      }
-    }
-  });
-
-  return result;
+  const model = (m) => {
+    if (!isNode(m)) return m;
+    const config = fieldsOf(m, "id", "name", "position", "params");
+    if (Object.keys(config).length === 0) return m;
+    if ("channels" in config && !Array.isArray(config.channels)) config.channels = [config.channels];
+    return { id: m.id, name: m.name, position: m.position, config, params: { ...config } };
+  };
+  return {
+    ...doc,
+    inputs: (doc.inputs || []).map(withParams),
+    outputs: (doc.outputs || []).map(withParams),
+    models: (doc.models || []).map(model),
+  };
 }
 
 export function initIo() {

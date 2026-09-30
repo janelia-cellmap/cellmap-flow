@@ -19,6 +19,14 @@ STATIC = DASHBOARD / "static"
 REPO = DASHBOARD.parents[1]
 IMPORT = re.compile(r"""^\s*(?:import|export)\s+(?:([\w$*{}\s,]+?)\s+from\s+)?["']([^"']+)["']""", re.M)
 EXPORTED = re.compile(r"^\s*export\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([\w$]+)", re.M)
+EXPORT_LIST = re.compile(r"^\s*export\s*\{([^}]*)\}", re.M)  # export { a, b as c } (the vendored js-yaml)
+
+
+def _exports(source):
+    names = set(EXPORTED.findall(source))
+    for items in EXPORT_LIST.findall(source):
+        names |= {item.split(" as ")[-1].strip() for item in items.split(",") if item.strip()}
+    return names
 
 
 def _globbed(patterns, root):
@@ -65,7 +73,7 @@ def test_the_package_ships_every_dashboard_file_and_every_module_import_resolves
                 problems.append(f"{where}: not a file in static/")
                 continue
             wanted = {n.split(" as ")[0].strip() for n in clause.strip("{} \n").split(",") if n.strip()}
-            missing = wanted - set(EXPORTED.findall(target.read_text())) if clause.strip().startswith("{") else set()
+            missing = wanted - _exports(target.read_text()) if clause.strip().startswith("{") else set()
             if missing:
                 problems.append(f"{where}: it exports no {sorted(missing)}")
             todo.append(target)
