@@ -219,27 +219,46 @@
     <div id="modal-overlay" class="modal-overlay" style="display: none;"
          onclick="closeModalFromOverlay(event)"></div>
 
-    {# What the page's scripts need from the server (static/js/lib/page-data.js). #}
-    <script type="application/json" id="page-data">{{ {"op_schemas": op_schemas} | tojson }}</script>
+    {# What the page's scripts need from the server (static/js/lib/page-data.js):
+       the palette's ops, models and mergers, the dataset, and the pipeline to
+       start from (what the builder last applied, or the live chain). #}
+    <script type="application/json" id="page-data">{{ {
+        "op_schemas": op_schemas,
+        "input_normalizers": input_normalizers,
+        "available_models": available_models,
+        "output_postprocessors": output_postprocessors,
+        "model_mergers": model_mergers,
+        "dataset_path": dataset_path,
+        "pipeline": {
+            "inputs": current_inputs,
+            "outputs": current_outputs,
+            "normalizers": current_normalizers,
+            "models": current_models,
+            "postprocessors": current_postprocessors,
+            "edges": current_edges,
+        },
+    } | tojson }}</script>
     <script>
+        const PAGE = JSON.parse(document.getElementById('page-data').textContent);
+
         // Config from Flask
         window.APP_CONFIG = {
-            availableNormalizers: {{ input_normalizers | tojson }},
-            availableModels: {{ available_models | tojson }},
-            availablePostprocessors: {{ output_postprocessors | tojson }},
-            availableModelMergers: {{ model_mergers | tojson }},
-            datasetPath: {{ dataset_path | tojson }},
+            availableNormalizers: PAGE.input_normalizers,
+            availableModels: PAGE.available_models,
+            availablePostprocessors: PAGE.output_postprocessors,
+            availableModelMergers: PAGE.model_mergers,
+            datasetPath: PAGE.dataset_path,
         };
 
         // Pipeline state - load from backend (persisted state from globals)
         let pipeline = {
-            inputs: {{ current_inputs | tojson }},
-            outputs: {{ current_outputs | tojson }},
-            normalizers: {{ current_normalizers | tojson }},
-            models: {{ current_models | tojson }},
-            postprocessors: {{ current_postprocessors | tojson }},
+            inputs: PAGE.pipeline.inputs,
+            outputs: PAGE.pipeline.outputs,
+            normalizers: PAGE.pipeline.normalizers,
+            models: PAGE.pipeline.models,
+            postprocessors: PAGE.pipeline.postprocessors,
             blockwise_config: [],
-            edges: {{ current_edges | tojson }}
+            edges: PAGE.pipeline.edges
         };
 
         // Ensure all nodes have IDs and positions

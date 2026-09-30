@@ -102,11 +102,13 @@ def test_with_nothing_configured_every_op_is_listed_once_unticked(dashboard):
     assert not any(checked for _, checked, _ in rows)
 
 
+def _page_data(html):
+    return json.loads(re.search(r'<script type="application/json" id="page-data">(.*?)</script>', html, re.S).group(1))
+
+
 def _builder_state(dashboard):
     """The pipeline state the builder page starts from."""
-    html = dashboard.get("/pipeline-builder").get_data(as_text=True)
-    return {key: json.loads(re.search(rf"^\s*{key}: (.*?),?$", html, re.M).group(1))
-            for key in ("inputs", "outputs", "normalizers", "models", "postprocessors", "edges")}
+    return _page_data(dashboard.get("/pipeline-builder").get_data(as_text=True))["pipeline"]
 
 
 def test_the_builder_keeps_a_saved_pipeline_that_has_no_normalizers(dashboard):
@@ -163,7 +165,7 @@ def test_each_model_node_carries_its_config(dashboard, applied):
     assert configs == ({"mito": {"type": "script", "script_path": "/mito.py"}, "nuc": {"type": "given"}} if applied else
                        {"mito": {"type": "script", "script_path": "/mito.py"},
                         "nuc": {"type": "script", "script_path": "/imported.py"}, "unknown": None})
-    palette = json.loads(re.search(r"^\s*availableModels: (.*?),?$", html, re.M).group(1))
+    palette = _page_data(html)["available_models"]
     assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
                                       "path": "/models/er"},
                        "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
@@ -174,9 +176,7 @@ def test_both_pages_hand_their_scripts_each_ops_schema(dashboard, page):
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.post.postprocessors import get_postprocessors_list
 
-    html = dashboard.get(page).get_data(as_text=True)
-    data = json.loads(re.search(r'<script type="application/json" id="page-data">(.*?)</script>', html, re.S).group(1))
-    schemas = data["op_schemas"]
+    schemas = _page_data(dashboard.get(page).get_data(as_text=True))["op_schemas"]
     assert [s["name"] for s in schemas["input_norm"]] == [op["name"] for op in get_input_normalizers()]
     assert [s["name"] for s in schemas["postprocess"]] == [op["name"] for op in get_postprocessors_list()]
     assert all(s["schema"]["type"] == "object" for kind in schemas.values() for s in kind)
