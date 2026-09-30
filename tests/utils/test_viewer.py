@@ -84,9 +84,7 @@ def _funlib_pyramid(f):
 
 def _precomputed_scales(f, count=2):
     """A precomputed volume of ``count`` scales: 8 nm, then twice the one before."""
-    for scale in range(count):
-        path = f.write_array("precomputed", np.zeros((8 >> scale,) * 3, np.uint8), {"resolution": [8 << scale] * 3})
-    return path
+    return f.write_array("precomputed", np.zeros((8,) * 3, np.uint8), {"resolution": [8] * 3}, scales=count)
 
 
 TWO_LEVELS = [(1, 1, 1), (2, 2, 2)]

@@ -35,13 +35,11 @@ def _two_channels(f):
 
 
 def _precomputed_pyramid(f):
-    """Scales 0 and 1 of a precomputed volume, as it lists them: 4, 10, 20 z, y, x
-    voxels of 16, 8, 4 nm, then half as many of twice that, both with their corner
-    at (32, 16, 8) nm; each voxel holds its z index + 1."""
-    for scale in (0, 1):
-        path = f.write_array("precomputed", np.broadcast_to(Z[:4 >> scale], (4 >> scale, 10 >> scale, 20 >> scale)), {
-            "resolution": [4 << scale, 8 << scale, 16 << scale], "voxel_offset": [2 >> scale] * 3})
-    return path
+    """Scales 0 and 1 of a precomputed volume: 4, 10, 20 z, y, x voxels of 16, 8,
+    4 nm, each holding its z index + 1, then every other one of them at twice the
+    size; both with their corner at (32, 16, 8) nm."""
+    return f.write_array("precomputed", np.broadcast_to(Z[:4], (4, 10, 20)), {
+        "resolution": [4, 8, 16], "voxel_offset": [2] * 3}, scales=2)
 
 
 def _extra_compressor_field(f):
@@ -72,10 +70,10 @@ READS = {
             "resolution": [4, 8, 16], "chunk_size": [20, 10, 2], "voxel_offset": [3, 2, 1]}),
         {}, (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), ((2, 10, 20), "uint8", [1, 2]),
     ),
-    # A trailing /s1 opens scale 1, z, y, x as well.
+    # A trailing /s1 opens scale 1, z, y, x as well: s0's voxels 0 and 2.
     "precomputed-level": (
         lambda f: _precomputed_pyramid(f) + "/s1", {}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
-        ((2, 5, 10), "uint8", [1, 2]),
+        ((2, 5, 10), "uint8", [1, 3]),
     ),
     "whole-array": (_at_the_origin, {}, (0, 0, 0), None, ((16, 16, 16), "uint8", list(range(1, 17)))),
     # A start inside a voxel reads from that voxel.

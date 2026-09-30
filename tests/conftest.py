@@ -197,12 +197,16 @@ def ome_pyramid(tmp_path):
 
 @pytest.fixture
 def write_array(tmp_path):
-    """``write_array(fmt, data, attrs=None, name=None, **zarr_kwargs)``: ``data`` (z, y, x)
-    as one array of ``fmt`` -- "zarr2", "zarr3", "n5" or "precomputed" -- with
+    """``write_array(fmt, data, attrs=None, name=None, scales=1, **zarr_kwargs)``: ``data``
+    (z, y, x) as one array of ``fmt`` -- "zarr2", "zarr3", "n5" or "precomputed" -- with
     ``attrs`` as that format keeps them (the scale metadata for precomputed);
     its path. ``name`` is the path under tmp_path: by default a.zarr/raw,
     a.n5/raw, v3_array or pc; a container of its own (root.zarr) holds the
-    array at its root. Chunks are halves of the shape unless given."""
+    array at its root. Chunks are halves of the shape unless given.
+
+    ``scales`` (precomputed only) is how many scales the volume has: scale i
+    is every 2**i-th voxel of ``data``, at 2**i times its ``resolution``, with
+    its ``voxel_offset`` divided by 2**i (rounded down)."""
     import numpy as np
     import tensorstore as ts
     import zarr
@@ -210,9 +214,10 @@ def write_array(tmp_path):
 
     names = {"zarr2": "a.zarr/raw", "n5": "a.n5/raw", "zarr3": "v3_array", "precomputed": "pc"}
 
-    def make(fmt, data, attrs=None, name=None, **zarr_kwargs):
+    def make(fmt, data, attrs=None, name=None, scales=1, **zarr_kwargs):
         data = np.asarray(data)
         path = str(tmp_path / (name or names[fmt]))
+        assert scales == 1 or fmt == "precomputed", "only a precomputed volume has scales"
         zarr_kwargs.setdefault("chunks", tuple(max(1, s // 2) for s in data.shape))
         if fmt in ("zarr2", "n5"):
             container, _, inner = path.partition(".n5" if fmt == "n5" else ".zarr")
@@ -234,12 +239,22 @@ def write_array(tmp_path):
                     "metadata": {**metadata, **({"attributes": attrs} if attrs else {})}}
             ts.open(spec, create=True).result()[...] = data
             return path
-        spec = {
-            "driver": "neuroglancer_precomputed", "kvstore": {"driver": "file", "path": path},
-            "multiscale_metadata": {"type": "image", "data_type": str(data.dtype), "num_channels": 1},
-            "scale_metadata": {"size": list(data.shape[::-1]), "encoding": "raw", **(attrs or {})},
-        }
-        ts.open(spec, create=True).result()[..., 0] = data.transpose()
+        attrs = attrs or {}
+        for scale in range(scales):
+            # Creating a scale on an existing volume adds it to the volume's info.
+            factor = 2**scale
+            level = data[::factor, ::factor, ::factor]
+            scale_metadata = {"size": list(level.shape[::-1]), "encoding": "raw", **attrs}
+            if scale:
+                scale_metadata["resolution"] = [r * factor for r in attrs["resolution"]]
+                if "voxel_offset" in attrs:
+                    scale_metadata["voxel_offset"] = [v // factor for v in attrs["voxel_offset"]]
+            spec = {
+                "driver": "neuroglancer_precomputed", "kvstore": {"driver": "file", "path": path},
+                "multiscale_metadata": {"type": "image", "data_type": str(data.dtype), "num_channels": 1},
+                "scale_metadata": scale_metadata,
+            }
+            ts.open(spec, create=True).result()[..., 0] = level.transpose()
         return "precomputed://" + path
 
     return make
