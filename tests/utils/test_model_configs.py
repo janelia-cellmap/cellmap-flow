@@ -3,8 +3,10 @@ takes its geometry from its model. The commands and to_dict() themselves
 are pinned in tests/cli/test_cli_surface.py."""
 
 import copy
+import json
 import shlex
 import sys
+import time
 import types
 from types import SimpleNamespace
 
@@ -146,6 +148,34 @@ def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch
     monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))
     monkeypatch.setattr(bio, "load_output_information", lambda model: (["out"], [axes], [16, 16, 16, 1], [16] * 3, 1))
     assert np.dtype(bio.output_dtype) == np.uint8 and tuple(bio.config.input_voxel_size) == (8, 8, 8)
+
+
+@pytest.mark.parametrize("seconds_later, model_type, downloads", [
+    pytest.param(30, None, 1, id="not-retried-within-the-minute"),
+    pytest.param(61, "unet", 2, id="retried-after-it"),
+])
+def test_a_failed_metadata_download_is_retried_a_minute_later(tmp_path, monkeypatch, seconds_later, model_type,
+                                                              downloads):
+    """A network blip used to hide a Hugging Face model's metadata for the rest of the process."""
+    (tmp_path / "metadata.json").write_text(json.dumps({"model_type": "unet"}))
+    calls = []
+
+    def hf_hub_download(repo, filename, revision=None):
+        calls.append(filename)
+        if len(calls) == 1:
+            raise ConnectionError("network blip")
+        return str(tmp_path / filename)
+
+    hub = types.ModuleType("huggingface_hub")
+    hub.hf_hub_download = hf_hub_download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+
+    config = HuggingFaceModelConfig(repo="cellmap/mito-v1")
+    assert "model_type" not in config.to_dict()
+    clock[0] += seconds_later
+    assert (config.to_dict().get("model_type"), len(calls)) == (model_type, downloads)
 
 
 def test_a_plugin_config_without_its_own_to_dict_exports_its_constructor_arguments():
