@@ -18,8 +18,7 @@ import pytest
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.globals import g
-from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json
+from cellmap_flow.pipeline_spec import PipelineSpec, split_dataset_url
 
 # The chain configured and drawn before each request.
 SHOWN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], "postprocess": []}
@@ -74,8 +73,7 @@ def _drawn(name="mito"):
     source = g.viewer.state.layers[name].to_json()["source"]
     source = source[0] if isinstance(source, list) else source
     url = source["url"] if isinstance(source, dict) else source
-    blob = decode_to_json(url.split(ARGS_KEY)[1])
-    return {key: blob[key] for key in ("input_norm", "postprocess")}
+    return PipelineSpec.from_url_blob(split_dataset_url(url))[0]
 
 
 # --- PUT /api/pipeline ---------------------------------------------------------
@@ -94,7 +92,7 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
         "success": True, "pipeline": SUBMITTED, "digest": PipelineSpec.from_json_data(SUBMITTED).digest(),
         "layers": ["mito"]})
     assert g.pipeline_spec == PipelineSpec.from_json_data(SUBMITTED)
-    assert _drawn() == SUBMITTED
+    assert _drawn() == PipelineSpec.from_json_data(SUBMITTED)
     if builder is None:
         assert get_session().builder_state == canvas_before, "Submit leaves the builder's canvas as it was"
     else:
@@ -122,7 +120,7 @@ def test_a_refused_put_is_a_400_that_says_why_and_changes_nothing(call, body, er
     canvas_before = get_session().builder_state
     assert call("PUT", "/api/pipeline", body) == (400, {"success": False, "error": error})
     assert g.pipeline_spec == PipelineSpec.from_json_data(SHOWN)
-    assert _drawn() == SHOWN
+    assert _drawn() == PipelineSpec.from_json_data(SHOWN)
     assert get_session().builder_state == canvas_before
 
 
@@ -146,7 +144,7 @@ def test_each_old_route_answers_as_it_did_and_redraws_as_put_does(call, url, bod
     canvas_before = get_session().builder_state
     assert call("POST", url, body) == (status, answer)
     assert g.pipeline_spec == PipelineSpec.from_json_data(chain)
-    assert _drawn() == chain
+    assert _drawn() == PipelineSpec.from_json_data(chain)
     if url == "/api/process":
         assert get_session().builder_state == canvas_before, "Submit leaves the builder's canvas as it was"
 
