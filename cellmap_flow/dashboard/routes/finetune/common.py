@@ -182,14 +182,14 @@ def detect_sparse_annotations(corrections_path):
 
 
 def autodetect_output_type(model_config, output_type, offsets):
-    from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
+    from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 
     resolved_output_type = output_type
     resolved_offsets = offsets
 
     if resolved_output_type is None:
         if hasattr(model_config, "script_path"):
-            script_offsets = _read_offsets_from_script(model_config.script_path)
+            script_offsets = read_offsets_from_script(model_config.script_path)
             if script_offsets is not None:
                 resolved_output_type = "affinities"
                 resolved_offsets = json.dumps(script_offsets)
@@ -264,7 +264,7 @@ def autodetect_output_type(model_config, output_type, offsets):
 
     if resolved_output_type == "affinities" and resolved_offsets is None:
         if hasattr(model_config, "script_path"):
-            resolved_offsets = _read_offsets_from_script(model_config.script_path)
+            resolved_offsets = read_offsets_from_script(model_config.script_path)
             if resolved_offsets is not None:
                 logger.info(f"Auto-detected {len(resolved_offsets)} offsets from model script")
                 resolved_offsets = json.dumps(resolved_offsets)

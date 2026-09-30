@@ -32,17 +32,13 @@ from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy
 from cellmap_flow.finetune.cli import model_config_from_args, parse_args
 from cellmap_flow.finetune.model_loading import load_trainable_model
 from cellmap_flow.finetune.session_loop import TrainingSession
-from cellmap_flow.finetune.target_transforms import read_offsets_from_script
-
-# The dashboard's import of it (routes/finetune/common.py), until W4-A moves it.
-_read_offsets_from_script = read_offsets_from_script
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    # Here, not at import: importing this module (the dashboard does, for
-    # _read_offsets_from_script) reconfigured the importing process's logging.
+    # Here, not at import, so that importing this module leaves the importing
+    # process's logging alone.
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
