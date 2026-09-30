@@ -2,9 +2,9 @@
 
 The training job's loop (session_loop) and lora_trainer print these to
 stdout, which tee copies into training_log.txt; the job manager reads them
-back from there to follow the job. The two sides can be different
-versions -- a training job outlives a dashboard upgrade -- so these only
-ever change compatibly.
+back from there to follow the job, and the finetune tab reads the log it
+streams. The two sides can be different versions -- a training job
+outlives a dashboard upgrade -- so these only ever change compatibly.
 
 The patterns are the ones the job manager has always used, unchanged.
 """
@@ -24,6 +24,7 @@ __all__ = [
     "TRAINING_DIVERGED",
     "RESTARTING_TRAINING",
     "WAITING_FOR_RESTART",
+    "RESTART_STATUS",
     "EPOCH_START_RE",
     "EPOCH_SUMMARY_RE",
     "ITERATION_COMPLETE_RE",
@@ -37,6 +38,10 @@ __all__ = [
 TRAINING_ITERATION_COMPLETE = "TRAINING_ITERATION_COMPLETE:"  # the iteration's model name
 RESTART_FAILED = "RESTART_FAILED:"  # why
 INFERENCE_SERVER_FAILED = "INFERENCE_SERVER_FAILED:"  # why
+# What a restart is doing before its first epoch. Only the finetune tab reads
+# it (job-card.js shows it as the job's progress); the job manager needs
+# nothing between RESTARTING_TRAINING and the epochs.
+RESTART_STATUS = "RESTART_STATUS:"
 # FINETUNED_MODEL_YAML, the iteration's serving YAML, is defined with the
 # templates that write it and printed just before TRAINING_ITERATION_COMPLETE.
 

@@ -295,7 +295,7 @@ class TrainingSession:
 
             try:
                 if self.iteration > 1:
-                    print("RESTART_STATUS: Starting training...", flush=True)
+                    markers.emit(markers.RESTART_STATUS, "Starting training...")
                 stats = trainer.train()
                 # None again if an OOM made the trainer drop distillation.
                 self.teacher_model = trainer.teacher_model
@@ -348,7 +348,7 @@ class TrainingSession:
         args = self.args
         # Re-created each iteration, to pick up new annotations.
         if self.iteration > 1:
-            print("RESTART_STATUS: Loading corrections...", flush=True)
+            markers.emit(markers.RESTART_STATUS, "Loading corrections...")
         logger.info(f"Loading corrections from {args.corrections}...")
         dataloader = create_dataloader(
             args.corrections,
@@ -375,7 +375,7 @@ class TrainingSession:
 
         # Re-created each iteration, for a fresh optimizer and scheduler.
         if self.iteration > 1:
-            print("RESTART_STATUS: Preparing trainer...", flush=True)
+            markers.emit(markers.RESTART_STATUS, "Preparing trainer...")
         logger.info("Creating trainer...")
         trainer = LoRAFinetuner(
             self.model,
