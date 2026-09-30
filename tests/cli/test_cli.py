@@ -1,7 +1,7 @@
-"""`cellmap_flow infer <type>` and `cellmap_flow run`: what they launch, and how they fail.
+"""`cellmap_flow infer <type>`: what it launches, and how it fails.
 
-The options themselves are pinned in test_cli_surface; the commands they
-build in tests/utils/test_launch_command.
+The options themselves, and `run` (its alias before 0.3.0), are pinned in
+test_cli_surface; the commands they build in tests/utils/test_launch_command.
 """
 
 import os
@@ -21,12 +21,10 @@ HERE = os.path.dirname(os.path.dirname(__file__))
 SCRIPT = os.path.join(HERE, "script_test", "fake_model_script.py")
 RAW = os.path.join(HERE, "script_test", "dummy.zarr", "raw")
 PER_TYPE = ["infer", "script", "--script-path", SCRIPT, "-d", RAW]
-RUN = ["run", "-m", "script", "-c", f"script_path={SCRIPT}", "-d", RAW]
 
 
 @pytest.mark.parametrize("argv, queue", [
-    pytest.param(PER_TYPE, "gpu_a100", id="per-type"),
-    pytest.param(RUN, "gpu_a100", id="run"),
+    pytest.param(PER_TYPE, "gpu_a100", id="saved"),
     pytest.param(PER_TYPE + ["-q", "gpu_h200"], "gpu_h200", id="explicit-q-wins"),
 ])
 def test_without_q_the_saved_queue_is_used_and_kept(monkeypatch, tmp_path, argv, queue):
@@ -44,11 +42,10 @@ def test_without_q_the_saved_queue_is_used_and_kept(monkeypatch, tmp_path, argv,
         assert yaml.safe_load((tmp_path / "server_config.yaml").read_text())["queue"] == "gpu_a100"
 
 
-@pytest.mark.parametrize("argv", [pytest.param(PER_TYPE, id="per-type"), pytest.param(RUN, id="run")])
-def test_server_check_runs_one_chunk_through_the_model(argv):
+def test_server_check_runs_one_chunk_through_the_model():
     """It called _chunk_impl with six arguments against five, and crashed
     before touching the model, for every type."""
-    result = CliRunner().invoke(cli, argv + ["--server-check"])
+    result = CliRunner().invoke(cli, PER_TYPE + ["--server-check"])
     assert result.exit_code == 0, result.output + repr(result.exception)
     assert "Server check passed" in result.output
 

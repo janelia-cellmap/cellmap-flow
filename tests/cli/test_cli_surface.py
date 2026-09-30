@@ -97,20 +97,27 @@ def test_an_old_console_script_says_what_replaces_it_and_runs_it(alias, old, new
     assert out.startswith(f"Usage: cellmap_flow {new} ")
 
 
-# cellmap_flow's own subcommands before 0.3.0: hidden from --help, and each
-# says what replaces it before running it.
+TESTS = Path(__file__).resolve().parents[1]
+SCRIPT = str(TESTS / "script_test" / "fake_model_script.py")
+RAW = str(TESTS / "script_test" / "dummy.zarr" / "raw")
+
+
+# cellmap_flow's own subcommands before 0.3.0 (hidden from --help: HIDDEN
+# below) each say what replaces them before running it. `run` names the
+# infer command its arguments stand for.
 @pytest.mark.parametrize("old, new", [
     (["list-models"], ["models"]),
     (["list-plugins"], ["plugins", "list"]),
-])
+    (["run", "-m", "script", "-c", f"script_path={SCRIPT}", "-d", RAW, "--server-check"],
+     ["infer", "script", "--script-path", SCRIPT, "-d", RAW, "--server-check"]),
+], ids=["list-models", "list-plugins", "run"])
 def test_an_old_subcommand_says_what_replaces_it_and_runs_it(old, new):
     result = CliRunner().invoke(main.cli, old)
-    assert result.exit_code == 0, result.output
-    notice = (f"`cellmap_flow {' '.join(old)}` is deprecated and goes in the release after 0.3.0; "
+    assert result.exit_code == 0, result.output + repr(result.exception)
+    notice = (f"`cellmap_flow {old[0]}` is deprecated and goes in the release after 0.3.0; "
               f"use `cellmap_flow {' '.join(new)}`.\n")
-    assert result.stderr == notice
+    assert result.stderr.startswith(notice)
     assert result.stdout == CliRunner().invoke(main.cli, new).stdout
-    assert old[0] not in CliRunner().invoke(main.cli, ["--help"]).output
 
 
 # --- the command-line surface ---------------------------------------------------
@@ -234,7 +241,7 @@ CELLMAP_FLOW = {
     ],
 }
 # Commands hidden from --help: cellmap_flow's before 0.3.0.
-HIDDEN = {'list-models', 'list-plugins', 'register', 'unregister'}
+HIDDEN = {'list-models', 'list-plugins', 'register', 'run', 'unregister'}
 
 CELLMAP_FLOW_SERVER = {
     '': LOG_LEVEL,

@@ -6,12 +6,14 @@ click asks for it. It takes the type's constructor arguments as options
 (``registry.click_options``), and the dataset (``-d``), queue (``-q``),
 billing project (``-P``) and ``--server-check`` as its own.
 
-``run`` is the older generic form, ``cellmap_flow run -m TYPE -c key=value``.
+``run``, the generic form before 0.3.0 (``cellmap_flow run -m TYPE -c
+key=value``), is a deprecated alias: it says which ``infer`` command it
+stands for, and runs it.
 """
 
 import click
 import logging
-import inspect
+import shlex
 import sys
 from typing import Type
 from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
@@ -21,12 +23,12 @@ from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.config.yaml import resolve_data_path
-from cellmap_flow.cli.common import ModelTypeGroup
+from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice
 
 logger = logging.getLogger(__name__)
 
 
-@click.command(name="run")
+@click.command(name="run", hidden=True, help="Deprecated: use `cellmap_flow infer <type>`.")
 @click.option(
     "-m",
     "--model-type",
@@ -49,85 +51,33 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--server-check", is_flag=True, help="Run server check instead of full inference"
 )
-def run_generic(model_type, data_path, queue, project, config, server_check):
+@click.pass_context
+def run_generic(ctx, model_type, data_path, queue, project, config, server_check):
+    """``cellmap_flow run -m TYPE -c key=value``, the form before 0.3.0:
+    ``cellmap_flow infer TYPE --key value``, which it prints and runs.
     """
-    Generic run command that accepts any model type with dynamic configuration.
-
-    Example:
-        cellmap_flow run -m dacapo -d /data/path -c run_name=myrun -c iteration=100
-    """
-    # Fall back to cached values if not provided
-    if project is None:
-        project = g.charge_group
-    if queue is None:
-        queue = g.queue
-
-    model_configs = registry.model_types()
-
-    if model_type not in model_configs:
-        click.echo(f"Error: Unknown model type '{model_type}'", err=True)
-        click.echo(
-            f"Available types: {', '.join(sorted(model_configs.keys()))}", err=True
+    command = infer.get_command(ctx, model_type)
+    if command is None:
+        raise click.BadParameter(
+            f"unknown model type {model_type!r}; the types are "
+            f"{', '.join(sorted(registry.model_types()))}",
+            param_hint="'-m'",
         )
-        sys.exit(1)
-
-    config_class = model_configs[model_type]
-
-    # Parse config key=value pairs
-    kwargs = {}
+    argv = []
     for item in config:
-        if "=" not in item:
-            click.echo(
-                f"Error: Invalid config format '{item}'. Use key=value", err=True
-            )
-            sys.exit(1)
-        key, value = item.split("=", 1)
-        kwargs[key] = value
+        key, sep, value = item.partition("=")
+        if not sep:
+            raise click.BadParameter(f"{item!r} is not key=value", param_hint="'-c'")
+        argv += [f"--{key.replace('_', '-')}", value]
+    argv += ["-d", data_path]
+    argv += ["-q", queue] if queue else []
+    argv += ["-P", project] if project else []
+    argv += ["--server-check"] if server_check else []
 
-    # Process the kwargs
-    processed_kwargs = registry.coerce_cli_args(config_class, kwargs)
-
-    # Create model config
-    try:
-        model_config = config_class(**processed_kwargs)
-    except TypeError as e:
-        click.echo(f"Error creating model config: {e}", err=True)
-        click.echo(f"Required parameters for {model_type}: ", err=True)
-        sig = inspect.signature(config_class.__init__)
-        for param_name, param_info in sig.parameters.items():
-            if param_name != "self" and param_info.default is inspect.Parameter.empty:
-                click.echo(f"  - {param_name}", err=True)
-        sys.exit(1)
-
-    # The scale selects a level of a multiscale data_path; see resolve_data_path.
-    final_data_path = resolve_data_path(data_path, getattr(model_config, "scale", None))
-
-    # Save server config to cache
-    g.queue = queue
-    if project:
-        g.charge_group = project
-    g.save_server_config()
-
-    # Run the server check or full inference
-    if server_check:
-        from cellmap_flow.server import CellMapFlowServer
-
-        server = CellMapFlowServer(final_data_path, model_config)
-        server._chunk_impl(None, None, 2, 2, 2)
-        click.echo("Server check passed")
-    else:
-        command = server_command(model_config, final_data_path)
-        logger.info(f"Executing command: {command}")
-        # Ctrl+C or SIGTERM from here on kills the job this starts.
-        install_cleanup_handlers()
-        try:
-            start_hosts(command, queue, project, model_config.name or model_type)
-        except JobStartError as e:
-            raise click.ClickException(str(e))
-        from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
-
-        # Serves the dashboard; does not return.
-        generate_neuroglancer_url(final_data_path)
+    deprecation_notice("cellmap_flow run", shlex.join(["cellmap_flow", "infer", model_type, *argv]))
+    # No parent, so that a usage error names `cellmap_flow infer TYPE`.
+    with command.make_context(f"cellmap_flow infer {model_type}", argv) as sub_ctx:
+        return command.invoke(sub_ctx)
 
 
 def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
