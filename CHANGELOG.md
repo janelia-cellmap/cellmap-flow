@@ -111,11 +111,35 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
     - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed, and `lora_wrapper.merge_lora_into_base` now works on 1×1×1 heads;
     - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`);
-    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`0fd7892`).
+    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`0fd7892`);
+    - a LoRA job restarted with `lora_r=0` keeps its adapter's alpha. It used to get alpha 0, so every later iteration trained nothing and served the base model.
+  - Viewer and dashboard (wave 3):
+    - the startup viewer draws a labelling model's output as segmentations, as Submit already did;
+    - a model started from the Models tab gets the same layer Submit gives it, where it used to get a fixed red 0–255 shader and no overlay;
+    - a prediction is drawn at the voxel size the server reports (`effective_output_voxel_size`), with older servers keeping the closest-raw-scale lookup;
+    - a model without a channel axis gets a 3-D overlay transform;
+    - a bad model-form or set-data request body gets a 400 `{"success": false, "error"}`, where some were a 500;
+    - the Finetune tab's model and progress polls pause while the browser tab is hidden. The job-status poll keeps running, so failure notifications still arrive.
+  - Reading data (wave 3):
+    - a read that starts before voxel 0 and off the grid floors instead of truncating toward zero;
+    - the raw layer finds a pyramid's levels from its multiscales metadata, so OME-Zarr pyramids with numeric level paths work;
+    - an N5 `units` string applies to every axis. It used to be reversed letter by letter, so `units: "um"` data was read 1000× too small;
+    - a level path missing under a zarr v3 group is treated as missing, as under v2. A mistyped v3 level used to silently read s0.
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `dbfd27e` a missing path under a zarr v3 group is missing
+- `0a49912` an N5 units string is every axis's unit
+- `f421525` the raw layer takes a pyramid's levels from its multiscales
+- `0a9060d` a read starting off the grid before voxel 0 floors
+- `4b814e2` pause the Finetune tab's model and progress polls while the page is hidden
+- `03352f1` a LoRA job restarted at rank 0 keeps its adapter's alpha
+- `38883d9` a bad model-form or set-data body is the settings forms' 400
+- `ad09407` a model without a channel axis gets a 3-D overlay transform
+- `2bfa838` draw a model's output where its server says it lies
+- `c6ecdeb` a model started from the Models tab gets the layer Submit gives it
+- `a34b1fe` the startup viewer draws a labelling chain as segmentations
 - `000e4ba` delete the Conv3d-only merge that `56701dc` replaced
 - `56701dc` fold every adapted layer in export_merged, through LoraStrategy.merge
 - `45c5b1a` cut a crop's parallel slabs on the volume's chunk rows
