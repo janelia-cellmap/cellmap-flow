@@ -96,6 +96,26 @@ def _restore_flow_state():
     vars(g).update(saved)
 
 
+@pytest.fixture(autouse=True)
+def _restore_root_logging():
+    """Undo a CLI's logging setup, which a test runs under CliRunner.
+
+    The CLIs call basicConfig(force=True), and under CliRunner its handler
+    writes to a stderr the runner closes afterwards; left on the root logger,
+    it made daisy's monitor raise "I/O operation on closed file" in whichever
+    blockwise test came later.
+    """
+    import logging
+
+    root = logging.getLogger()
+    level = root.level
+    yield
+    for handler in list(root.handlers):
+        if getattr(getattr(handler, "stream", None), "closed", False):
+            root.removeHandler(handler)
+    root.setLevel(level)
+
+
 # --- datasets --------------------------------------------------------------------
 
 
