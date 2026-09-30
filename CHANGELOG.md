@@ -4,7 +4,7 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 
 ## Unreleased (the cleanup, PR #103)
 
-One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `serving/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
+One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `inference/`, `serving/`, `finetune/session/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
 
 ### Changed
 - The wheel no longer installs top-level `tests`, `example`, `docs` and `models` packages. The model catalog moved to `cellmap_flow/models/models.yaml`.
@@ -101,10 +101,24 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - chunk requests use the GPU one at a time in arrival order (`CELLMAP_FLOW_GPU_SLOTS`, default 1);
     - a chunk whose client hung up before its turn gets 499 and isn't computed.
   - Round 1's 5 s bpeek backoff is reverted (`94e8de5`). NFS can hide the new ready file for up to 30 s, and the backoff then delayed server detection.
+  - A blockwise worker checks its first model's shapes once, on the warmup forward. It used to run the check a second time, on whatever device the loader left the model on.
+  - The pipeline builder builds its nodes from elements, not HTML strings (`00e9034`, X2). Ids, names and parameters in an imported YAML or JSON file can no longer run as script in the dashboard, and a node whose id holds a quote now works.
+  - Finetune:
+    - a YAML crop imported with several CPUs no longer loses rows where two parallel slabs met: the slabs are cut on the volume's chunk rows, so each chunk has one writer;
+    - a new volume's voxel count is its data's extent in output voxels, rounded up, one rule for create-volume, crop import and `build_corrections`; on every level tried it equals the old count;
+    - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
+    - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed, and `lora_wrapper.merge_lora_into_base` now works on 1×1×1 heads;
+    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`).
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `000e4ba` delete the Conv3d-only merge that `56701dc` replaced
+- `56701dc` fold every adapted layer in export_merged, through LoraStrategy.merge
+- `45c5b1a` cut a crop's parallel slabs on the volume's chunk rows
+- `26144fb` don't invent the geometry of a volume that lacks it
+- `f9d276f` count a new volume's voxels from the data, rounding up
+- `7c51f0b` check a blockwise worker's first model on its warmup only
 - `6329e40` check a served model's shapes on its warmup forward
 - `5c32fba` skip a chunk whose client hung up before its turn on the GPU
 - `ca73a34` let chunk requests use the GPU one at a time, in arrival order
