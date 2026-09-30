@@ -7,9 +7,13 @@
 - ``tiny_script`` and ``run_cli``: finetune_cli.main() on a script model, with
   a fake data loader and inference server, and restarts delivered the way the
   job's server delivers them.
+- ``local_jobs``, ``session`` and ``make_job``: a job manager that runs jobs
+  "locally" without starting a process or a monitor thread, a session it can
+  train on, and a FinetuneJob.
 """
 
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
 import numpy as np
@@ -217,3 +221,56 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
 
     run.patches = patches
     return run
+
+
+@pytest.fixture
+def local_jobs(monkeypatch):
+    """The job manager runs jobs locally, and starts neither a process nor a monitor thread."""
+    from cellmap_flow.finetune import finetune_job_manager as fjm
+
+    record = SimpleNamespace(runs=[], monitors=[])
+
+    def run_locally(**kwargs):
+        record.runs.append(kwargs)
+        return SimpleNamespace(process=SimpleNamespace(pid=77))
+
+    def thread(target, args, daemon):
+        return SimpleNamespace(start=lambda: record.monitors.append(args[0]))
+
+    monkeypatch.setattr(fjm, "is_bsub_available", lambda: False)
+    monkeypatch.setattr(fjm, "run_locally", run_locally)
+    monkeypatch.setattr(fjm, "threading", SimpleNamespace(Thread=thread))
+    return record
+
+
+@pytest.fixture
+def session(tmp_path):
+    """``session(name)``: <tmp>/base/<name>, whose corrections hold a manifest and one volume."""
+
+    def make(name="20260101_120000", manifest=None):
+        corrections = tmp_path / "base" / name / "corrections"
+        (corrections / "vol.zarr").mkdir(parents=True)
+        (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({"dataset_path": "/data/raw.zarr"}))
+        (corrections / "_virtual_sources.json").write_text(json.dumps(
+            manifest or {"kind": "volume_zarr_v1", "raw_dataset_path": "/data/raw.zarr"}
+        ))
+        return corrections.parent
+
+    return make
+
+
+@pytest.fixture
+def make_job(tmp_path):
+    """``make_job(status="RUNNING", lsf_job=None, **fields)``: a FinetuneJob in <tmp>/runs/r."""
+    from cellmap_flow.finetune.finetune_job_manager import FinetuneJob, JobStatus
+
+    def make(status="RUNNING", lsf_job=None, **fields):
+        out = tmp_path / "runs" / "r"
+        out.mkdir(parents=True, exist_ok=True)
+        return FinetuneJob(
+            job_id="j", lsf_job=lsf_job, model_name="m", output_dir=out, params={},
+            status=JobStatus[status], created_at=datetime.now(), log_file=out / "training_log.txt",
+            **fields,
+        )
+
+    return make
