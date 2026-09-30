@@ -13,7 +13,8 @@ This module owns:
     - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
     - The label remap function (:func:`remap_labels`).
     - Small zarr-attrs helpers used by the loader to derive a crop's voxel
-      size, offset, and the array sub-path inside an OME-NGFF group.
+      size, offset, and the array sub-path inside an OME-NGFF group (the
+      array itself is read with ``io.source.open_array``).
 """
 
 from __future__ import annotations
@@ -29,7 +30,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from cellmap_flow.io import metadata, paths
 from cellmap_flow.io.ome import ome_corner
-from cellmap_flow.utils import zarr_v3
 
 logger = logging.getLogger(__name__)
 
@@ -216,18 +216,6 @@ def _crop_geometry(zarr_path, attrs, has_s0):
     raise ValueError(
         f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
     )
-
-
-def _open_array(zarr_path: str, sub: Tuple[str, ...]):
-    target = zarr_path
-    for piece in sub:
-        target = os.path.join(target, piece)
-    if zarr_v3.is_v3_container(target):
-        return zarr_v3.open_array_v3(target)
-    arr = zarr.open(target, mode="r")
-    if not isinstance(arr, zarr.Array):
-        raise ValueError(f"Expected zarr.Array at {target}, got {type(arr).__name__}")
-    return arr
 
 
 # ---------------------------------------------------------------------------

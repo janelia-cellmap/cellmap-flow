@@ -9,17 +9,16 @@ codebase, and conflicts with the installed ``funlib.persistence`` pin).
 v3 metadata is read with ``json.load`` in :mod:`cellmap_flow.io.metadata`,
 which reads every format into one ``ArrayMeta``; the functions here keep the
 old tuple-returning contracts over it. Chunk data is read through
-``tensorstore``'s ``zarr3`` driver. Local filesystem stores only — remote
-(s3/gs/http) v3 stores are not handled.
+``tensorstore``'s ``zarr3`` driver (see :mod:`cellmap_flow.io.source`).
+Local filesystem stores only — remote (s3/gs/http) v3 stores are not
+handled.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Tuple
 
-import numpy as np
 from funlib.geometry import Coordinate
 
 from cellmap_flow.io import metadata, paths
@@ -51,46 +50,6 @@ logger = logging.getLogger(__name__)
 def to_nm(values, units):
     """``values`` (one per spatial axis) converted to nanometers."""
     return list(metadata.to_nm(values, units))
-
-
-class _TensorstoreArray:
-    """Adapter so a v3 array reads like the ``zarr.Array`` callers expect:
-    ``arr[:]``/``arr[a:b]`` returns a real ``numpy.ndarray``."""
-
-    def __init__(self, ts_obj):
-        self._ts = ts_obj
-
-    @property
-    def shape(self):
-        return tuple(self._ts.shape)
-
-    @property
-    def ndim(self):
-        return self._ts.ndim
-
-    @property
-    def dtype(self):
-        return np.dtype(self._ts.dtype.numpy_dtype)
-
-    @property
-    def chunks(self):
-        return tuple(self._ts.chunk_layout.read_chunk.shape)
-
-    def __getitem__(self, key):
-        return np.asarray(self._ts[key].read().result())
-
-
-def open_array_v3(path: str) -> _TensorstoreArray:
-    """Open a v3 array for reading. ``path`` must be the array's own
-    directory (i.e. already descended into, not its parent group)."""
-    import tensorstore as ts
-
-    spec = {
-        "driver": "zarr3",
-        "kvstore": {"driver": "file", "path": os.path.normpath(path)},
-    }
-    ts_obj = ts.open(spec, read=True, write=False).result()
-    return _TensorstoreArray(ts_obj)
 
 
 def scale_info(levels):

@@ -255,7 +255,7 @@ def test_each_read_goes_through_its_own_chain(raw_zarr):
     # An explicit chain wins, and leaves the original alone; both share one store.
     tripled = idi.with_input_norms([LambdaNormalizer("x * 3")])
     assert np.all(tripled.to_ndarray_ts(roi) == 21) and np.all(idi.to_ndarray_ts(roi) == 14)
-    assert tripled._raw_ts() is idi._raw_ts()
+    assert tripled.source.ts is idi.source.ts
     assert np.all(ImageDataInterface(idi.path, normalize=False).to_ndarray_ts(roi) == 7)
 
 
@@ -295,7 +295,7 @@ def test_the_inference_server_reads_in_parallel_through_a_cache(raw_zarr, model_
     plain = ImageDataInterface(raw, voxel_size=(8, 8, 8))
 
     def context(idi):
-        return idi._raw_ts().spec(retain_context=True).to_json()["context"]
+        return idi.source.ts.spec(retain_context=True).to_json()["context"]
 
     assert (context(served)["cache_pool"], context(served)["data_copy_concurrency"].get("limit")) == (cache_pool, limit)
     # Every other reader keeps one thread and no cache.

@@ -1,5 +1,4 @@
 # %%
-import json
 import logging
 import os
 from typing import Sequence, Union
@@ -168,155 +167,6 @@ class LazyNormalization:
         return at
 
 
-def _detect_filetype(dataset_path: str) -> str:
-    """"n5" when the last container suffix in the path is .n5, else "zarr"."""
-    return "n5" if paths.suffix_format(dataset_path) == "n5" else "zarr"
-
-
-def _clean_zarr_compressor(dataset_path: str):
-    """Return .zarray metadata with unsupported compressor fields removed.
-
-    Tensorstore is strict about compressor metadata and rejects extra fields
-    added by newer numcodecs versions, such as ``checksum``.
-    """
-    zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
-    if not os.path.isfile(zarray_path):
-        return None
-    try:
-        with open(zarray_path) as f:
-            meta = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-    compressor = meta.get("compressor")
-    if not isinstance(compressor, dict):
-        return None
-
-    known_fields = {
-        "zstd": {"id", "level"},
-        "zlib": {"id", "level"},
-        "gzip": {"id", "level"},
-        "bz2": {"id", "level"},
-        "blosc": {"id", "cname", "clevel", "shuffle", "blocksize"},
-    }
-    allowed = known_fields.get(compressor.get("id", ""))
-    if allowed is None:
-        return None
-
-    extra_keys = set(compressor.keys()) - allowed
-    if not extra_keys:
-        return None
-
-    logger.info(
-        "Stripping unsupported compressor fields %s for tensorstore compatibility",
-        extra_keys,
-    )
-    meta["compressor"] = {k: v for k, v in compressor.items() if k in allowed}
-    return meta
-
-
-def open_ds_tensorstore(
-    dataset_path: str, mode="r", concurrency_limit=None, normalize=True, cache_bytes=0
-):
-    """Open ``dataset_path`` with tensorstore.
-
-    ``concurrency_limit``: how many files it reads and chunks it decodes at
-    once; ``None`` leaves tensorstore's defaults (one decode per core).
-    ``cache_bytes``: how much decoded data it keeps for later reads of the
-    same chunks (0: none). Cached chunks are still checked against the file
-    on every read, so what is read never differs.
-    """
-    # open with zarr or n5 depending on extension
-    filetype = _detect_filetype(dataset_path)
-    extra_args = {}
-
-    if paths.is_precomputed(dataset_path):
-        # precomputed:// (a local directory) and gs:// URLs are neuroglancer
-        # precomputed volumes; a trailing /s<N> picks the scale.
-        kvstore, scale_index = paths.precomputed_kvstore(dataset_path)
-        filetype = "neuroglancer_precomputed"
-        extra_args = {"scale_index": scale_index}
-    elif dataset_path.startswith("http://") or dataset_path.startswith("https://"):
-        kvstore = {
-            "driver": "http",
-            "base_url": dataset_path.rstrip("/"),
-            "path": "",
-        }
-    elif dataset_path.startswith("s3://"):
-        kvstore = {
-            "driver": "s3",
-            "bucket": dataset_path.split("/")[2],
-            "path": "/".join(dataset_path.split("/")[3:]),
-            "aws_credentials": {
-                "anonymous": True,
-            },
-        }
-    else:
-        kvstore = {
-            "driver": "file",
-            "path": os.path.normpath(dataset_path),
-        }
-
-    is_v3 = (
-        filetype == "zarr"
-        and isinstance(kvstore, dict)
-        and kvstore.get("driver") == "file"
-        and zarr_v3.is_v3_container(kvstore["path"])
-    )
-    if is_v3:
-        filetype = "zarr3"
-
-    # tensorstore rejects compressor fields it doesn't know ("extra
-    # members", e.g. numcodecs' zstd checksum), so such arrays are opened
-    # with their metadata minus those fields.
-    assume_metadata = False
-    if (
-        filetype == "zarr"
-        and isinstance(kvstore, dict)
-        and kvstore.get("driver") == "file"
-    ):
-        cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
-        if cleaned_metadata is not None:
-            extra_args["metadata"] = cleaned_metadata
-            assume_metadata = True
-
-    spec = {"driver": filetype, "kvstore": kvstore, **extra_args}
-    context = {}
-    if concurrency_limit:
-        context["data_copy_concurrency"] = {"limit": concurrency_limit}
-        context["file_io_concurrency"] = {"limit": concurrency_limit}
-    if cache_bytes:
-        context["cache_pool"] = {"total_bytes_limit": int(cache_bytes)}
-    if context:
-        spec["context"] = context
-
-    open_kwargs = {"open": True, "assume_metadata": True} if assume_metadata else {}
-    if mode == "r":
-        dataset_future = ts.open(spec, read=True, write=False, **open_kwargs)
-    else:
-        dataset_future = ts.open(spec, read=False, write=True, **open_kwargs)
-    ts_dataset = dataset_future.result()
-
-    if filetype in ("n5", "neuroglancer_precomputed"):
-        # Both drivers expose Fortran order (x, y, z[, channel]); everything
-        # else here -- the metadata readers, the ROI math, neuroglancer's axis
-        # names -- is C order (z, y, x). Reading an N5 dataset without this
-        # returned x/z-transposed data, and precomputed lost its x axis to the
-        # channel selection.
-        ts_dataset = ts_dataset[ts.d[:].transpose[::-1]]
-    if filetype == "neuroglancer_precomputed":
-        # tensorstore starts a precomputed volume's domain at its
-        # voxel_offset. Index 0 is voxel 0 everywhere else here, and the
-        # metadata's translation already carries the offset.
-        ts_dataset = ts_dataset[ts.d[:].translate_to[0]]
-
-    if normalize:
-        return LazyNormalization(ts_dataset)
-    # Unnormalized callers still get one spatial volume, as before; the channel
-    # comes from the current chain.
-    return select_channel(ts_dataset, selected_channel(g.input_norms))
-
-
 def to_ndarray_tensorstore(
     dataset,
     roi=None,
@@ -331,7 +181,7 @@ def to_ndarray_tensorstore(
 
     Args:
         dataset ('tensorstore.dataset'): Tensorstore dataset, or the
-            LazyNormalization view ``open_ds_tensorstore`` returns
+            LazyNormalization view ImageDataInterface.ts returns
         roi ('funlib.geometry.Roi'): Region of interest to read
         input_norms: normalizers to apply to what is read. ``None`` means the
             view's own chain for a LazyNormalization, and ``g.input_norms``

@@ -3,9 +3,9 @@ import copy
 from cellmap_flow.io import multiscale
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import snap_integral
+from cellmap_flow.io.source import open_array
 from cellmap_flow.utils.ds import (
     LazyNormalization,
-    open_ds_tensorstore,
     read_ds_meta,
     to_ndarray_tensorstore,
 )
@@ -37,7 +37,7 @@ class ImageDataInterface:
         ``None`` follows the process-wide ``g.input_norms`` at read time.
 
         ``concurrency_limit`` and ``cache_bytes`` go to the tensorstore the
-        reads use (see ``open_ds_tensorstore``). The defaults, one reader
+        reads use (see ``io.source.open_array``). The defaults, one reader
         thread and no cache, are what every caller has always had; the
         inference server asks for parallel reads and a cache.
 
@@ -60,8 +60,6 @@ class ImageDataInterface:
             except Exception as e:
                 logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
-        # The opened tensorstore is shared with every with_input_norms() view.
-        self._store = {"ts": None}
         self.input_norms = None if input_norms is None else list(input_norms)
         (
             actual_voxel_size,
@@ -125,6 +123,9 @@ class ImageDataInterface:
         self.custom_fill_value = custom_fill_value
         self.concurrency_limit = concurrency_limit
         self.cache_bytes = cache_bytes
+        # The array as stored (every channel, not normalized), opened on the
+        # first read and shared with every with_input_norms() view.
+        self.source = open_array(dataset_path, concurrency_limit, cache_bytes)
         if output_voxel_size is not None:
             self.output_voxel_size = Coordinate(output_voxel_size)
         else:
@@ -137,20 +138,9 @@ class ImageDataInterface:
         # debugging question.
         logger.debug(str(self.info))
 
-    def _raw_ts(self):
-        """The dataset as opened: unnormalized, every channel."""
-        if self._store["ts"] is None:
-            self._store["ts"] = open_ds_tensorstore(
-                self.path,
-                concurrency_limit=self.concurrency_limit,
-                normalize=True,
-                cache_bytes=self.cache_bytes,
-            ).ts_dataset
-        return self._store["ts"]
-
     def _view(self):
         return LazyNormalization(
-            self._raw_ts(),
+            self.source.ts,
             input_norms=self.input_norms,
             normalize=self.normalize,
             spatial_ndim=len(self.shape),

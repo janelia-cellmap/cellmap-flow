@@ -361,16 +361,14 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
     The import is appended to the volume's ``imported_crops`` attr (the
     trainer's dense pool and the overlay's boxes), and returned.
     """
-    from cellmap_flow.finetune.crop_loader import (
-        _open_array,
-        _read_voxel_size_and_offset,
-        remap_labels,
-    )
+    from cellmap_flow.finetune.crop_loader import _read_voxel_size_and_offset, remap_labels
     from cellmap_flow.finetune.session import sync  # sync reads volumes: import here
+    from cellmap_flow.io.source import open_array
 
     started = time.time()
     sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
-    src_data = _open_array(entry.path, sub)[:]
+    # The whole crop at once, decoding chunks on every core.
+    src_data = open_array(str(Path(entry.path, *sub)), concurrency_limit=None).read()
     if src_data.ndim != 3:
         raise ValueError(f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}")
     remapped = remap_labels(
