@@ -167,12 +167,12 @@ def _get_model_metadata(model_config, attr_name: str, geometry):
 
 
 def _geometry_lookup(model_config):
-    """The model's geometry (see utils/model_geometry), as a function that
+    """The model's geometry (see models/geometry_cache), as a function that
     looks it up on its first call only, and never when the config says it all."""
 
     @functools.cache
     def geometry():
-        from cellmap_flow.utils.model_geometry import resolve_model_geometry
+        from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
         try:
             return resolve_model_geometry(getattr(model_config, "name", None), model_config)
@@ -316,7 +316,7 @@ def build_command(
     if model_type in MODEL_ENTRY_TYPES:
         # No dedicated flags: hand the trainer the model's own entry.
         # encode_to_str() is URL-safe base64, so it needs no quoting.
-        from cellmap_flow.utils.web_utils import encode_to_str
+        from cellmap_flow.serving.protocol import encode_to_str
 
         command_parts += ["--model-entry", encode_to_str(model_config.to_dict())]
     elif model_type == "huggingface":

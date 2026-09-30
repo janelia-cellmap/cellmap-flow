@@ -20,7 +20,7 @@ import requests
 
 from cellmap_flow.finetune.job_manager import state
 from cellmap_flow.finetune.job_manager.state import FinetuneJob
-from cellmap_flow.utils.restart_token import TOKEN_HEADER, read_restart_token
+from cellmap_flow.serving.restart_token import TOKEN_HEADER, read_restart_token
 
 logger = logging.getLogger(__name__)
 

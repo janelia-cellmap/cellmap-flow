@@ -28,7 +28,7 @@ from cellmap_flow.finetune.job_manager import monitor, persistence, restart, sub
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.utils.restart_token import write_restart_token
+from cellmap_flow.serving.restart_token import write_restart_token
 
 logger = logging.getLogger(__name__)
 
