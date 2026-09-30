@@ -11,7 +11,7 @@ import stat
 
 import pytest
 
-from cellmap_flow.finetune.finetune_cli import RestartController
+from cellmap_flow.finetune.session_loop import RestartController
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.utils.restart_token import TOKEN_HEADER, read_or_create_restart_token, read_restart_token

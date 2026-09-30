@@ -1,9 +1,10 @@
 """The lines the trainer prints for the job manager to find in its log.
 
-finetune_cli and lora_trainer print these to stdout, which tee copies into
-training_log.txt; the job manager reads them back from there to follow the
-job. The two sides can be different versions -- a training job outlives a
-dashboard upgrade -- so these only ever change compatibly.
+The training job's loop (session_loop) and lora_trainer print these to
+stdout, which tee copies into training_log.txt; the job manager reads them
+back from there to follow the job. The two sides can be different
+versions -- a training job outlives a dashboard upgrade -- so these only
+ever change compatibly.
 
 The patterns are the ones the job manager has always used, unchanged.
 """

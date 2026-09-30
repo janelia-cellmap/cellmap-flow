@@ -169,7 +169,7 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
     file, which ends the job. ``manifest``: the corrections' manifest, None for
     none. ``run_dir``: the output dir, <tmp>/session/runs/run by default.
     """
-    from cellmap_flow.finetune import finetune_cli
+    from cellmap_flow.finetune import finetune_cli, session_loop
 
     def run(*flags, channels=1, loaders=None, server=None, restarts=(), manifest=True,
             run_dir=None, tensorboard=False):
@@ -193,7 +193,7 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
                 raise item
             return item
 
-        real_wait = finetune_cli._wait_for_restart_signal
+        real_wait = session_loop._wait_for_restart_signal
 
         def wait(**kwargs):
             record.waited += 1
@@ -208,9 +208,9 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
             record.served.append(model)
             return server(args, model_config, model) if server else (None, 0)
 
-        monkeypatch.setattr(finetune_cli, "create_dataloader", dataloader)
-        monkeypatch.setattr(finetune_cli, "_start_inference_server_background", serve)
-        monkeypatch.setattr(finetune_cli, "_wait_for_restart_signal", wait)
+        monkeypatch.setattr(session_loop, "create_dataloader", dataloader)
+        monkeypatch.setattr(session_loop, "_start_inference_server_background", serve)
+        monkeypatch.setattr(session_loop, "_wait_for_restart_signal", wait)
         monkeypatch.setattr("sys.argv", [
             "finetune_cli", "--model-type", "script", "--model-script", str(tiny_script(channels)),
             "--model-name", "tiny", "--corrections", str(corrections), "--output-dir", str(record.run),

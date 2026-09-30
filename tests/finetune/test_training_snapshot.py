@@ -328,7 +328,7 @@ def _normalize(text, tmp_path):
     pytest.param(0, id="full"),
 ])
 def test_the_cli_writes_and_announces_what_it_always_did(lora_r, tmp_path, monkeypatch, capsys):
-    from cellmap_flow.finetune import finetune_cli
+    from cellmap_flow.finetune import finetune_cli, session_loop
 
     script = tmp_path / "model.py"
     script.write_text(SCRIPT)
@@ -347,16 +347,16 @@ def test_the_cli_writes_and_announces_what_it_always_did(lora_r, tmp_path, monke
         return DataLoader(_data(4), batch_size=2)
 
     signals = iter([json.dumps({"params": {"learning_rate": 2e-4}}), "not json"])
-    real_wait = finetune_cli._wait_for_restart_signal
+    real_wait = session_loop._wait_for_restart_signal
 
     def wait(**kwargs):
         waited.append(kwargs["signal_file"])
         kwargs["signal_file"].write_text(next(signals))
         return real_wait(**kwargs)
 
-    monkeypatch.setattr(finetune_cli, "create_dataloader", dataloader)
-    monkeypatch.setattr(finetune_cli, "_start_inference_server_background", lambda *a, **k: served.append(a) or (None, 0))
-    monkeypatch.setattr(finetune_cli, "_wait_for_restart_signal", wait)
+    monkeypatch.setattr(session_loop, "create_dataloader", dataloader)
+    monkeypatch.setattr(session_loop, "_start_inference_server_background", lambda *a, **k: served.append(a) or (None, 0))
+    monkeypatch.setattr(session_loop, "_wait_for_restart_signal", wait)
     monkeypatch.setattr(sys, "argv", [
         "finetune_cli", "--model-type", "script", "--model-script", str(script),
         "--model-name", "tiny", "--corrections", str(corrections), "--output-dir", str(run),

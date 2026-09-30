@@ -1,0 +1,556 @@
+"""The finetune job's loop: train, export, serve, wait for a restart, reset, again.
+
+``TrainingSession.run`` is the job. Each iteration builds its data, target
+and trainer, trains, exports into its own iterations/NNN_<ts>/ (see
+run_outputs), and announces the result on stdout (see markers). A served
+job (--auto-serve) then starts, or keeps, its inference server, which shares
+the model object, and waits for a restart: from the server's control
+endpoint (RestartController) or a restart_signal.json in the output
+directory. A restart may change training settings only (cli.RESTARTABLE_ARGS);
+training then starts again from the model the job started from.
+
+The job manager follows the job through those stdout lines, and a job
+outlives a dashboard upgrade, so their text and order only change
+compatibly.
+"""
+
+import gc
+import json
+import logging
+import socket
+import threading
+import time
+from contextlib import closing
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import torch
+
+from cellmap_flow.finetune import markers, run_outputs
+from cellmap_flow.finetune.adaptation import strategy_for
+from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform
+from cellmap_flow.finetune.data import create_dataloader
+from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+from cellmap_flow.io.paths import is_remote
+from cellmap_flow.models.models_config import ModelConfig
+from cellmap_flow.utils.restart_token import read_or_create_restart_token
+
+logger = logging.getLogger(__name__)
+
+
+class RestartController:
+    """In-memory restart control shared between training loop and server endpoint."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._pending = None
+
+    def request_restart(self, payload: Optional[dict]) -> bool:
+        signal_data = {
+            "restart": True,
+            "timestamp": datetime.now().isoformat(),
+            "params": {},
+        }
+        if isinstance(payload, dict):
+            if "timestamp" in payload and payload["timestamp"]:
+                signal_data["timestamp"] = payload["timestamp"]
+            if isinstance(payload.get("params"), dict):
+                signal_data["params"] = payload["params"]
+
+        with self._lock:
+            self._pending = signal_data
+            self._event.set()
+        return True
+
+    def get_if_triggered(self) -> Optional[dict]:
+        if not self._event.is_set():
+            return None
+        with self._lock:
+            signal_data = self._pending
+            self._pending = None
+            self._event.clear()
+        return signal_data
+
+
+def _wait_for_port_ready(host: str, port: int, timeout_s: float = 30.0, interval_s: float = 0.1) -> bool:
+    """Wait until a TCP port is accepting connections."""
+    deadline = time.perf_counter() + timeout_s
+    while time.perf_counter() < deadline:
+        try:
+            with closing(socket.create_connection((host, port), timeout=0.5)):
+                return True
+        except OSError:
+            time.sleep(interval_s)
+    return False
+
+
+def _start_inference_server_background(
+    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None
+):
+    """
+    Start inference server in a background daemon thread.
+
+    The server shares the same model object, so retraining updates weights
+    automatically without needing to restart the server.
+
+    Args:
+        args: Command-line arguments
+        model_config: Base model configuration
+        trained_model: The trained LoRA model
+
+    Returns:
+        (thread, port) tuple
+    """
+    logger.info("=" * 60)
+    logger.info("Starting inference server with finetuned model...")
+    logger.info("=" * 60)
+
+    startup_t0 = time.perf_counter()
+
+    # Clear GPU cache from training
+    cleanup_t0 = time.perf_counter()
+    logger.info("Clearing GPU cache...")
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    cleanup_elapsed = time.perf_counter() - cleanup_t0
+
+    # Validate serve data path
+    if not args.serve_data_path:
+        raise ValueError("--serve-data-path is required when --auto-serve is enabled")
+
+    if not is_remote(args.serve_data_path) and not Path(args.serve_data_path).exists():
+        raise ValueError(f"Data path not found: {args.serve_data_path}")
+
+    # Use the already-trained model
+    logger.info("Using trained LoRA model for inference...")
+
+    from cellmap_flow.models.models_config import _get_device
+    device = _get_device()
+    trained_model.eval()
+    logger.info(f"Model set to eval mode on {device}")
+
+    # Replace the model in the config with our finetuned version
+    model_config.config.model = trained_model
+
+    # Start server
+    from cellmap_flow.server import CellMapFlowServer
+    from cellmap_flow.utils.web_utils import get_free_port
+
+    setup_t0 = time.perf_counter()
+    logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
+    restart_callback = restart_controller.request_restart if restart_controller is not None else None
+    restart_token = (
+        read_or_create_restart_token(args.output_dir) if restart_callback is not None else None
+    )
+    server = CellMapFlowServer(
+        args.serve_data_path,
+        model_config,
+        restart_callback=restart_callback,
+        restart_token=restart_token,
+    )
+
+    # Get port
+    port = args.serve_port if args.serve_port != 0 else get_free_port()
+
+    # Start in daemon thread (server.run() prints CELLMAP_FLOW_SERVER_IP marker automatically)
+    server_thread = threading.Thread(
+        target=server.run,
+        kwargs={'port': port, 'debug': False},
+        daemon=True
+    )
+    server_thread.start()
+    setup_elapsed = time.perf_counter() - setup_t0
+
+    wait_t0 = time.perf_counter()
+    server_ready = _wait_for_port_ready("127.0.0.1", port)
+    wait_elapsed = time.perf_counter() - wait_t0
+
+    host_url = f"http://{socket.gethostname()}:{port}"
+    total_elapsed = time.perf_counter() - startup_t0
+    logger.info("=" * 60)
+    if server_ready:
+        logger.info(f"Inference server port is ready on 127.0.0.1:{port}")
+    else:
+        logger.warning(f"Inference server did not become ready within timeout on 127.0.0.1:{port}")
+    logger.info(f"Inference server running at {host_url}")
+    logger.info(
+        f"Startup timings (s): cleanup={cleanup_elapsed:.2f}, setup={setup_elapsed:.2f}, "
+        f"wait_for_bind={wait_elapsed:.2f}, total={total_elapsed:.2f}"
+    )
+    logger.info("Server is running in background. Watching for restart signals...")
+    logger.info("=" * 60)
+
+    return server_thread, port
+
+
+def _wait_for_restart_signal(
+    signal_file: Optional[Path],
+    check_interval: float = 1.0,
+    restart_controller: Optional[RestartController] = None,
+):
+    """
+    Watch for a restart signal file. Blocks until signal appears.
+
+    Prefers in-memory restart events from the control endpoint, and
+    falls back to a signal file for backward compatibility.
+
+    Args:
+        signal_file: Optional path to watch for legacy signal file
+        check_interval: Seconds between checks
+
+    Returns:
+        Dict with restart parameters, or None if signal file is malformed
+    """
+    logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
+    # The job manager's cue that this job is idle and can take a restart.
+    markers.emit(markers.WAITING_FOR_RESTART)
+
+    while True:
+        if restart_controller is not None:
+            in_memory_signal = restart_controller.get_if_triggered()
+            if in_memory_signal is not None:
+                logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
+                return in_memory_signal
+
+        if signal_file and signal_file.exists():
+            try:
+                with open(signal_file) as f:
+                    signal_data = json.load(f)
+                signal_file.unlink()  # Remove signal file
+                logger.info(f"Restart signal received: {signal_data}")
+                return signal_data
+            except Exception as e:
+                logger.error(f"Error reading restart signal: {e}")
+                # Remove malformed signal file
+                try:
+                    signal_file.unlink()
+                except OSError:
+                    pass
+                return None
+        time.sleep(check_interval)
+
+
+class TrainingSession:
+    """One finetune job, iteration after iteration, until it ends.
+
+    ``model`` is the model to train, already prepared by ``strategy`` (the
+    request decides the strategy, once, in finetune_cli.main; from then on
+    the model does, through strategy_for). It is built once and reused
+    across restarts: the inference server shares the object, so a restart
+    retrains what is being served.
+    """
+
+    def __init__(self, args, model_config: ModelConfig, model, strategy):
+        self.args = args
+        self.model_config = model_config
+        self.model = model
+        self.restart_controller = RestartController()
+        self.server_started = False
+        self.iteration = 0
+        # A full finetune's distillation teacher: a frozen copy of the
+        # starting weights, made by the first trainer that needs one and
+        # reused after, so a restart neither copies the model again nor
+        # distils toward weights an earlier iteration already changed.
+        self.teacher_model = None
+        # The weights a full finetune starts from, on the CPU, to reset it to
+        # on restart. LoRA resets by re-making its adapter and needs none.
+        self.initial_state = strategy.initial_state(model)
+        # Where the next iteration's TensorBoard curves start: (step, epoch).
+        self.tb_position = (0, 0)
+        # Set by a restart; the reset waits until the next iteration is set up.
+        self.pending_reset = False
+
+    def run(self) -> int:
+        """Train (and serve, and retrain on each restart) until the job ends; its exit code."""
+        args = self.args
+        while True:
+            self.iteration += 1
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            if self.iteration > 1:
+                logger.info("")
+                logger.info("=" * 60)
+                logger.info(f"Training Iteration {self.iteration}")
+                logger.info("=" * 60)
+
+            # Set up this iteration: its data, its target and its trainer. A
+            # restart's new settings or annotations are first used here, so an
+            # error here -- an empty volume, offsets that do not fit -- must
+            # not end the whole job and take the served model down with it.
+            try:
+                trainer = self._set_up_iteration()
+            except Exception as e:
+                logger.error(f"Could not set up training iteration {self.iteration}: {e}", exc_info=True)
+                if not (args.auto_serve and self.server_started):
+                    return 1
+                # The previous iteration's model is still loaded and served;
+                # wait for a restart with settings that work.
+                markers.emit(markers.RESTART_FAILED, e)
+                if not self._await_restart():
+                    return 1
+                continue
+
+            try:
+                if self.iteration > 1:
+                    print("RESTART_STATUS: Starting training...", flush=True)
+                stats = trainer.train()
+                # None again if an OOM made the trainer drop distillation.
+                self.teacher_model = trainer.teacher_model
+                self.tb_position = (trainer._tb_step, trainer._tb_epoch)
+                trainer.close()
+
+                if stats.get('diverged'):
+                    # Skip saving, and wait for a restart with other settings.
+                    logger.warning("Training diverged — skipping model save.")
+                    if not args.auto_serve:
+                        return 1
+                    if not self.server_started:
+                        # Nothing can restart this job: the dashboard sends a
+                        # restart to the job's inference server, which only
+                        # starts after an iteration completes. Waiting here
+                        # would hold the GPU until walltime. Exit so the job
+                        # shows as failed and the GPU is freed.
+                        logger.error(
+                            "The first training iteration diverged, so no inference "
+                            "server is running to receive a restart. Exiting; "
+                            "resubmit with other settings (e.g. a lower learning rate)."
+                        )
+                        return 1
+                else:
+                    self._export(trainer, stats, timestamp)
+                    if not args.auto_serve:
+                        return 0
+                    if not self._serve():
+                        return 1
+
+                if not self._await_restart():
+                    return 1
+                # A true restart: training starts again from the model it
+                # started from, not from the previous iteration's weights --
+                # once the next iteration is set up.
+                self.pending_reset = True
+
+            except KeyboardInterrupt:
+                logger.info("\nTraining interrupted by user")
+                logger.info("Saving current state...")
+                trainer.save_checkpoint(is_best=False)
+                return 1
+
+            except Exception as e:
+                logger.error(f"Training failed: {e}", exc_info=True)
+                return 1
+
+    def _set_up_iteration(self) -> LoRAFinetuner:
+        """This iteration's data, target and trainer, with the model reset if a restart asked."""
+        args = self.args
+        # Re-created each iteration, to pick up new annotations.
+        if self.iteration > 1:
+            print("RESTART_STATUS: Loading corrections...", flush=True)
+        logger.info(f"Loading corrections from {args.corrections}...")
+        dataloader = create_dataloader(
+            args.corrections,
+            batch_size=args.batch_size,
+            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
+            augment=not args.no_augment,
+            num_workers=args.num_workers,
+            shuffle=True,
+            model_name=args.model_name,
+        )
+        logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
+        self._record_input_norm()
+
+        # Re-built each iteration, to pick up restart params.
+        target_transform = build_target_transform(args, self.model_config)
+        logger.info(f"output_type={args.output_type}, select_channel={args.select_channel}")
+
+        # Only now that the iteration can run: put the model back where
+        # training started (see _reset_model). Until here it is still the
+        # previous iteration's, which the server keeps serving.
+        if self.pending_reset:
+            self._reset_model()
+            self.pending_reset = False
+
+        # Re-created each iteration, for a fresh optimizer and scheduler.
+        if self.iteration > 1:
+            print("RESTART_STATUS: Preparing trainer...", flush=True)
+        logger.info("Creating trainer...")
+        trainer = LoRAFinetuner(
+            self.model,
+            dataloader,
+            output_dir=args.output_dir,
+            learning_rate=args.learning_rate,
+            num_epochs=args.num_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            use_mixed_precision=not args.no_mixed_precision,
+            loss_type=args.loss_type,
+            select_channel=args.select_channel,
+            mask_unannotated=args.mask_unannotated,
+            label_smoothing=args.label_smoothing,
+            distillation_lambda=args.distillation_lambda,
+            distillation_all_voxels=args.distillation_all_voxels,
+            margin=args.margin,
+            balance_classes=args.balance_classes,
+            target_transform=target_transform,
+            tensorboard=not args.no_tensorboard,
+            teacher_model=self.teacher_model,
+            initial_state=self.initial_state,
+            tb_start_step=self.tb_position[0],
+            tb_start_epoch=self.tb_position[1],
+        )
+
+        # Resume from checkpoint if specified (first iteration only)
+        if args.resume and self.iteration == 1:
+            logger.info(f"Resuming from checkpoint: {args.resume}")
+            trainer.load_checkpoint(args.resume)
+        return trainer
+
+    def _record_input_norm(self) -> None:
+        """Snapshot the manifest's input_norm into metadata.json.
+
+        So any checkpoint saved in this iteration is reproducible: the
+        metadata.json next to the .pth says which normalization the training
+        data went through.
+        """
+        args = self.args
+        try:
+            from cellmap_flow.finetune.session.manifest import read_manifest
+
+            manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
+            if manifest_norm is not None and args.output_dir:
+                metadata_file = Path(args.output_dir) / "metadata.json"
+                if metadata_file.exists():
+                    with open(metadata_file) as f:
+                        md = json.load(f)
+                    md.setdefault("params", {})["input_norm"] = manifest_norm
+                    with open(metadata_file, "w") as f:
+                        json.dump(md, f, indent=2)
+                    logger.info(
+                        f"Snapshot input_norm into {metadata_file} "
+                        f"(keys: {list(manifest_norm.keys())})"
+                    )
+        except Exception as _e:
+            logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
+
+    def _export(self, trainer, stats, timestamp) -> None:
+        """Export this iteration, write the YAML that serves it, and announce both."""
+        args = self.args
+        output_dir = Path(args.output_dir)
+        # What was exported is decided by the model, not by args.lora_r,
+        # which a restart can change without changing the model.
+        strategy = strategy_for(self.model)
+        is_lora = strategy.kind == "lora"
+
+        # The adapter (or, for a full finetune, the full weights), into this
+        # iteration's own directory, so the YAML written for it keeps serving
+        # these weights after the next restart.
+        export_dir = run_outputs.iteration_dir(output_dir, self.iteration, timestamp)
+        logger.info("\nSaving LoRA adapter..." if is_lora else "\nSaving full finetuned weights...")
+        exported = trainer.save_adapter(export_dir=str(export_dir))
+        run_outputs.point_latest_export(output_dir, export_dir, strategy.export_name)
+
+        logger.info("\n" + "=" * 60)
+        logger.info("Finetuning Complete!")
+        logger.info(f"Best loss: {stats['best_loss']:.6f}")
+        logger.info(
+            f"{'Adapter' if is_lora else 'Weights'} saved to: {exported} "
+            f"({output_dir / strategy.export_name} follows the latest iteration)"
+        )
+        logger.info("=" * 60)
+
+        # The weights are saved by now, so a YAML that cannot be written is
+        # reported, not treated as a failed training run.
+        finetuned_model_name = run_outputs.finetuned_model_name(self.model_config, timestamp)
+        try:
+            finetuned_model_name, yaml_path = run_outputs.write_serving_yaml(
+                args, self.model_config, timestamp, is_lora=is_lora, export_dir=export_dir
+            )
+        except Exception as e:
+            logger.error(f"Training succeeded but the serving YAML could not be written: {e}", exc_info=True)
+        else:
+            # The job manager takes the YAML from here rather than guessing
+            # where it went. Printed before the completion marker so both are
+            # in the log when that is seen.
+            markers.emit(markers.FINETUNED_MODEL_YAML, yaml_path)
+
+        # The job manager's cue that the iteration is done, and its model's name.
+        markers.emit(markers.TRAINING_ITERATION_COMPLETE, finetuned_model_name)
+
+    def _serve(self) -> bool:
+        """Serve the model just trained; False if the server could not start.
+
+        The first iteration starts the inference server in a background
+        thread. After that it is running, and serves the updated weights
+        already: it shares the model object.
+        """
+        if self.server_started:
+            self.model.eval()
+            logger.info("Model updated and set to eval mode. Server continuing with new weights.")
+            return True
+        try:
+            _start_inference_server_background(
+                self.args, self.model_config, self.model, restart_controller=self.restart_controller
+            )
+        except Exception as e:
+            logger.error(f"Failed to start inference server: {e}", exc_info=True)
+            markers.emit(markers.INFERENCE_SERVER_FAILED, e)
+            # The job was asked to train and serve, and cannot serve: it
+            # fails rather than show as COMPLETED with nothing served and no
+            # sign why. The weights and YAML are saved all the same.
+            return False
+        self.server_started = True
+        return True
+
+    def _await_restart(self) -> bool:
+        """Wait for the next restart and apply its settings; False if its signal was malformed."""
+        restart_data = _wait_for_restart_signal(
+            signal_file=Path(self.args.output_dir) / "restart_signal.json",
+            check_interval=1.0,
+            restart_controller=self.restart_controller,
+        )
+        if restart_data is None:
+            logger.error("Malformed restart signal, exiting")
+            return False
+        apply_restart_params(self.args, restart_data)
+        markers.emit(markers.RESTARTING_TRAINING)
+        return True
+
+    def _reset_model(self) -> None:
+        """Put the model back where training started, for the next iteration.
+
+        LoRA: unload the adapter and wrap a fresh one around the base (which
+        is how the rank can change on restart). Full finetune: load the
+        starting weights back (see the strategies' restart()). The model
+        object -- which the inference server shares -- is built once, so a
+        restart cannot switch between the two kinds: the model decides, and
+        args.lora_r is made to agree with it.
+        """
+        args = self.args
+        kept = strategy_for(self.model)
+        if kept.kind == "lora" and args.lora_r <= 0:
+            logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                           "submit a new job for that. Keeping the current adapter setup.")
+            args.lora_r = max(1, int(kept.r))
+        elif kept.kind == "full" and args.lora_r > 0:
+            # The mirror image of the case above. Left alone, args.lora_r > 0
+            # made the next iteration's YAML point at a lora_adapter/ this job
+            # never writes.
+            logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
+                           "submit a new job for that. Keeping the full finetune.")
+            args.lora_r = 0
+
+        strategy = strategy_for(
+            self.model,
+            args.lora_r,
+            alpha=args.lora_alpha,
+            dropout=args.lora_dropout,
+            min_channels=args.lora_min_channels,
+        )
+        self.model = strategy.restart(self.model, self.initial_state)
+        self.model.train()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        logger.info("Restarting training from the starting weights...")

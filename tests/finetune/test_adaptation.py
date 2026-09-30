@@ -85,9 +85,10 @@ def test_the_lora_teacher_is_the_base_as_it_is_served():
 
 def test_the_new_modules_import_nothing_heavy(tmp_path):
     """The session layer serves the CLI and the trainer without a dashboard, a
-    viewer or torch; adaptation and losses may use torch, never peft or the
-    dashboard. Importing the CLI module leaves the importer's logging alone: it
-    called logging.basicConfig(force=True) at import, and the dashboard imports it."""
+    viewer or torch; adaptation, losses, the dataset and the training loop may
+    use torch, never peft or the dashboard. Importing the CLI module leaves the
+    importer's logging alone: it called logging.basicConfig(force=True) at
+    import, and the dashboard imports it."""
     heavy = ["cellmap_flow.globals", "flask", "neuroglancer", "huggingface_hub", "peft"]
     session = [f"cellmap_flow.finetune.session.{m}" for m in ("manifest", "volume", "store", "minio", "sync", "instance")]
     code = (
@@ -95,6 +96,8 @@ def test_the_new_modules_import_nothing_heavy(tmp_path):
         + "".join(f"import {module}\n" for module in session)
         + f"loaded = [m for m in {heavy + ['torch']!r} if m in sys.modules]; assert not loaded, loaded\n"
         "import cellmap_flow.finetune.adaptation, cellmap_flow.finetune.losses\n"
+        "import cellmap_flow.finetune.data, cellmap_flow.finetune.cli\n"
+        "import cellmap_flow.finetune.run_outputs, cellmap_flow.finetune.session_loop\n"
         f"loaded = [m for m in {heavy!r} if m in sys.modules]; assert not loaded, loaded\n"
         "import cellmap_flow.globals\n"
         "mine = logging.StreamHandler(); logging.root.addHandler(mine)\n"
