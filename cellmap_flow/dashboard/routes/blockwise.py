@@ -1,3 +1,13 @@
+"""The pipeline builder's blockwise steps: validate, generate (the task YAML
+the blockwise CLI runs), precheck, and submit (the task's master, to LSF).
+
+Each answers 200 whatever happens, with "valid" (validate) or "success"
+false beside an "error" when it cannot go on: the builder reads that flag at
+each step and shows the error. A body a step cannot take is refused before
+anything is done (the requests.Blockwise* models); a failure after that,
+writing the YAML, a precheck or bsub, is answered the same way.
+"""
+
 import os
 import re
 import ast
