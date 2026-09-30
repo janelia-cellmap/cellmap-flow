@@ -6,7 +6,8 @@ executes ~/.cellmap_flow/plugins/*.py and the Flow singleton reads
 write to) the developer's real config.
 
 The fixtures at the end are the datasets (``raw_zarr``, ``ome_pyramid``,
-``write_array``) and a script model (``model_script``).
+``write_array``), a script model (``model_script``), the viewer (``viewer``) and
+the dashboard (``dashboard``).
 """
 
 import ctypes
@@ -232,3 +233,28 @@ def model_script(tmp_path):
         return write_script(tmp_path, string.Template(body).substitute(values) if values else body, name)
 
     return make
+
+
+# --- the viewer and the dashboard --------------------------------------------
+
+
+@pytest.fixture
+def viewer():
+    """A neuroglancer viewer without its web server, as ``g.viewer``: z, y, x in 8 nm voxels."""
+    import neuroglancer
+    from neuroglancer.viewer_base import ViewerBase
+
+    from cellmap_flow.globals import g
+
+    g.viewer = ViewerBase()
+    with g.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[8, 8, 8])
+    return g.viewer
+
+
+@pytest.fixture
+def dashboard():
+    """The dashboard's Flask test client."""
+    from cellmap_flow.dashboard.app import app
+
+    return app.test_client()

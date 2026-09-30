@@ -4,6 +4,8 @@ What the server answers for five models is pinned in
 test_served_metadata_snapshot; these are the rules it follows to get there.
 """
 
+import logging
+
 import numpy as np
 import pytest
 from funlib.geometry import Roi
@@ -54,6 +56,17 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(server):
     assert g.input_norms == [] and [type(p) for p in g.postprocess] == [Plus], "nothing leaks into g"
     # The server's address leads to what it serves.
     assert client.get("/").headers["Location"].endswith("/__control__/model_info")
+
+
+def test_a_layer_served_without_normalization_says_so(server, caplog):
+    """A model fed raw voxels looks like one that trained badly, so the
+    server warns when a layer URL carries no input chain."""
+    client = server.app.test_client()
+    for dataset, warns in [(layer([LambdaNormalizer("x * 2")]), False), ("plain", True), (layer(), True)]:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            _chunk(client, server, dataset)
+        assert any(r.levelno == logging.WARNING for r in caplog.records) is warns, dataset
 
 
 def test_a_stateful_step_keeps_its_state_across_metadata_requests(server):

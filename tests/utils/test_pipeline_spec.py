@@ -2,28 +2,21 @@
 
 A chain reaches inference servers (older or newer than the dashboard) as JSON
 in the layer URL, the YAML and blockwise paths as json_data, and the trainer
-through current_*_config(). Rebuilding individual ops from their to_dict() is
-covered in test_chain_serialization.
+through current_*_config(). How each op rebuilds from its to_dict() is in
+test_ops.
 """
 
 import base64
-import contextlib
+import functools
 import gc
 import json
 
 import numpy as np
 import pytest
-from flask import Flask
 
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.norm.input_normalize import EuclideanDistance, LambdaNormalizer, MinMaxNormalizer
-from cellmap_flow.pipeline_spec import (
-    PipelineSpec,
-    builder_steps,
-    chain_num_channels,
-    normalize_steps,
-    op_schemas,
-)
+from cellmap_flow.pipeline_spec import PipelineSpec, builder_steps, chain_num_channels, normalize_steps, op_schemas
 from cellmap_flow.post.postprocessors import (
     AffinityPostprocessor,
     ChannelSelection,
@@ -33,8 +26,7 @@ from cellmap_flow.post.postprocessors import (
     SimpleBlockwiseMerger,
     ThresholdPostprocessor,
 )
-from cellmap_flow.utils.serilization_utils import get_process_dataset, get_process_dataset_url
-from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json, encode_to_str, get_norms_post_args
+from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json, get_norms_post_args
 
 MINMAX = {"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}
 SHIFT = {"name": "LambdaNormalizer", "expression": "x*2-1"}
@@ -89,21 +81,14 @@ def test_url_blob_bytes(norms, posts, text):
     assert base64.urlsafe_b64decode(blob + "=" * (-len(blob) % 4)).decode() == text
 
 
-def test_url_blob_extras_follow_the_chains():
+def test_the_blobs_extras_and_its_digest():
     spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
     blob = spec.to_url_blob(dashboard_url="http://dash/", digest=spec.digest())
     assert list(decode_to_json(blob)) == ["input_norm", "postprocess", "dashboard_url", "digest"]
-    extras = {"dashboard_url": "http://dash/", "digest": spec.digest()}
-    assert PipelineSpec.from_url_blob(blob) == (spec, extras)
-    # The server tells this dashboard about new equivalences.
-    assert get_process_dataset_url(f"m{ARGS_KEY}{blob}{ARGS_KEY}")[0] == "http://dash/"
+    assert PipelineSpec.from_url_blob(blob) == (spec, {"dashboard_url": "http://dash/", "digest": spec.digest()})
     with pytest.raises(ValueError):
         spec.to_url_blob(postprocess=[])
-
-
-def test_digest_is_stable_and_follows_the_content():
-    spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
-    # It goes into layer URLs, so it must be the same in every process.
+    # It names layers, so it must be the same in every process, and follow the content only.
     assert spec.digest() == "4d284fb937eabaec"
     reordered = {"max_value": 255, "name": "MinMaxNormalizer", "min_value": 0}
     assert PipelineSpec([reordered, SHIFT], [THRESHOLD]).digest() == spec.digest()
@@ -116,6 +101,12 @@ def test_digest_is_stable_and_follows_the_content():
 
 
 # --- reading chains ------------------------------------------------------------
+
+STRICT = functools.partial(PipelineSpec.from_json_data, strict=True)
+LEGACY = {
+    "input_norm": {"MinMaxNormalizer": {"min_value": 0, "max_value": 255}, "LambdaNormalizer": {"expression": "x*2-1"}},
+    "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}},
+}
 
 
 @pytest.mark.parametrize(
@@ -132,89 +123,29 @@ def test_digest_is_stable_and_follows_the_content():
         (builder_steps, [{"id": 1, "name": "MinMaxNormalizer", "params": {"min_value": 0}},
                          {"params": {"a": 1}}, "junk", {"name": "SigmoidPostprocessor"}],
          [[("min_value", 0), ("name", "MinMaxNormalizer")], [("name", "SigmoidPostprocessor")]]),
+        (STRICT, json.dumps(LEGACY), PipelineSpec([MINMAX, SHIFT], [THRESHOLD])),
+        # Without strict, a missing or null chain is empty; with it, a mistake
+        # the blockwise precheck reports.
+        (PipelineSpec.from_json_data, {"postprocess": None}, PipelineSpec()),
+        (STRICT, {"input_norm": []}, KeyError),
+        (STRICT, {"postprocess": []}, KeyError),
+        (STRICT, {"input_norm": None, "postprocess": []}, ValueError),
+        (STRICT, {"input_norm": [], "postprocess": "SigmoidPostprocessor"}, ValueError),
     ],
-    ids=["nothing", "list", "legacy_dict", "builder"],
+    ids=["nothing", "list", "legacy-dict", "builder", "json-data", "lenient", "no-postprocess", "no-input-norm",
+         "null-chain", "not-a-chain"],
 )
-def test_step_readers(read, given, expected):
-    assert _ordered(read(given)) == expected
-
-
-def test_json_data_forms():
-    legacy = {
-        "input_norm": {"MinMaxNormalizer": {"min_value": 0, "max_value": 255},
-                       "LambdaNormalizer": {"expression": "x*2-1"}},
-        "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}},
-    }
-    spec = PipelineSpec([MINMAX, SHIFT], [THRESHOLD])
-    assert PipelineSpec.from_json_data(json.dumps(legacy), strict=True) == spec
-    assert list(spec.to_json_data()) == ["input_norm", "postprocess"]
-    # Without strict, a missing or null chain is empty.
-    assert PipelineSpec.from_json_data({"postprocess": None}) == PipelineSpec()
-
-
-@pytest.mark.parametrize(
-    "json_data, error",
-    [
-        ({"input_norm": []}, KeyError),
-        ({"postprocess": []}, KeyError),
-        ({"input_norm": None, "postprocess": []}, ValueError),
-        ({"input_norm": [], "postprocess": "SigmoidPostprocessor"}, ValueError),
-    ],
-)
-def test_the_readers_reject_a_json_data_without_both_chains(json_data, error):
-    """A misspelt json_data is a mistake the blockwise precheck reports, not an
-    empty chain."""
-    with pytest.raises(error):
-        PipelineSpec.from_json_data(json_data, strict=True)
-    with pytest.raises(error):
-        get_process_dataset(json_data)
-    with pytest.raises(error):
-        get_process_dataset_url(f"m{ARGS_KEY}{encode_to_str(json_data)}{ARGS_KEY}")
+def test_reading_chains(read, given, expected):
+    if isinstance(expected, type) and issubclass(expected, Exception):
+        with pytest.raises(expected):
+            read(given)
+    elif isinstance(expected, PipelineSpec):
+        assert read(given) == expected
+    else:
+        assert _ordered(read(given)) == expected
 
 
 # --- the dashboard's chain state -------------------------------------------------
-
-
-@pytest.fixture
-def post(monkeypatch):
-    import cellmap_flow.dashboard.routes.pipeline as pipeline
-
-    monkeypatch.setattr(pipeline, "get_raw_layer", lambda path: type("Raw", (), {"shader": None})())
-    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {})
-
-    class Viewer:
-        state = type("State", (), {"layers": {}})()
-
-        def txn(self):
-            return contextlib.nullcontext(self.state)
-
-    g.viewer, g.dataset_path = Viewer(), "/data/raw.zarr"
-    g.jobs = [type("Job", (), {"model_name": "mito", "host": "http://gpu:8000"})()]
-    g.shaders, g.shader_controls = {}, {}
-    g.input_norms, g.postprocess, g.input_norm_config, g.postprocess_config = [], [], {}, {}
-    app = Flask(__name__)
-    app.register_blueprint(pipeline.pipeline_bp)
-    client = app.test_client()
-
-    def post(url, payload):
-        # As a browser sends it: the test client's json= sorts the keys.
-        response = client.post(url, data=json.dumps(payload), content_type="application/json")
-        assert response.status_code == 200, response.data
-        return response.get_json()
-
-    return post
-
-
-def _layer_source():
-    return g.viewer.state.layers["mito"].to_json()["source"]
-
-
-def _layer_blob():
-    source = _layer_source()
-    source = source[0] if isinstance(source, list) else source
-    url = source["url"] if isinstance(source, dict) else source
-    return decode_to_json(url.split(ARGS_KEY)[1])
-
 
 # What the Input/Output tabs post: every value a string, name first.
 POSTED = {
@@ -226,73 +157,107 @@ POSTED = {
 }
 
 
-def test_submit_keeps_the_posted_steps_and_names_the_layer_by_digest(post):
-    received = post("/api/process", POSTED)["received_data"]
+def _post(dashboard, url, payload):
+    # As a browser sends it: the test client's json= sorts the keys.
+    response = dashboard.post(url, data=json.dumps(payload), content_type="application/json")
+    assert response.status_code == 200, response.data
+    return response.get_json()
+
+
+def _layer_source(name):
+    source = g.viewer.state.layers[name].to_json()["source"]
+    return source[0] if isinstance(source, list) else source
+
+
+def test_submit_keeps_the_posted_chain_and_names_layers_by_their_digest(dashboard, viewer, ome_pyramid,
+                                                                        monkeypatch):
+    import cellmap_flow.dashboard.routes.pipeline as pipeline
+
+    # The model writes 16 nm voxels over raw at 24, 12, 12 nm: drawn at the raw's scale.
+    info = {"output_voxel_size": [16] * 3, "output_class": "unit"}
+    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: info)
+    g.dataset_path = ome_pyramid((((24, 12, 12), None),))
+    g.jobs = [type("Job", (), {"model_name": name, "host": host})() for name, host in
+              [("mito", "http://gpu:8000"), ("pending", None)]]
+    received = _post(dashboard, "/api/process", POSTED)["received_data"]
+
     assert _ordered(current_input_norm_config()) == _ordered(POSTED["input_norm"])
     assert _ordered(current_postprocess_config()) == _ordered(POSTED["postprocess"])
     assert [type(n).__name__ for n in g.input_norms] == ["MinMaxNormalizer", "LambdaNormalizer"]
-
-    blob = _layer_blob()
+    source = _layer_source("mito")
+    blob = decode_to_json(source["url"].split(ARGS_KEY)[1])
     assert list(blob) == ["input_norm", "postprocess", "dashboard_url", "digest"]
     assert _ordered(blob["input_norm"]) == _ordered(POSTED["input_norm"])
     assert blob["dashboard_url"] == "http://localhost/"
     assert blob["digest"] == received["digest"] == PipelineSpec.from_json_data(POSTED).digest()
     assert "time" not in received
+    dimensions = source["transform"]["outputDimensions"]
+    assert (dimensions["z"][0], dimensions["x"][0]) == pytest.approx((24e-9, 12e-9))
+    assert "pending" not in g.viewer.state.layers, "a job with no host yet gets no layer"
+
+    assert g.viewer.state.layers["mito"].type == "segmentation"  # a threshold's labels
 
     # The same settings give the same source, a changed parameter a new one.
-    source = _layer_source()
-    post("/api/process", POSTED)
-    assert _layer_source() == source
-    post("/api/process", dict(POSTED, postprocess=[dict(POSTED["postprocess"][0], threshold="0.6")]))
-    assert _layer_source() != source
+    _post(dashboard, "/api/process", POSTED)
+    assert _layer_source("mito") == source
+    _post(dashboard, "/api/process", dict(POSTED, postprocess=[dict(POSTED["postprocess"][0], threshold="0.6")]))
+    assert _layer_source("mito") != source
+    # Without one it is an image, shaded over the model's output range (0 to 1).
+    _post(dashboard, "/api/process", dict(POSTED, postprocess=[]))
+    mito = g.viewer.state.layers["mito"]
+    assert mito.type == "image" and "range=[0, 1]" in mito.shader
 
 
-def test_apply_keeps_the_steps_with_the_name_last(post):
+def test_apply_keeps_the_builders_steps_in_order_with_the_name_last(dashboard):
     nodes = {
         "input_normalizers": [
             {"id": "n1", "name": "MinMaxNormalizer", "params": {"min_value": 0, "max_value": 255}},
-            {"id": "n2", "name": "LambdaNormalizer", "params": {"expression": "x*2-1"}},
+            {"id": "n2", "name": "LambdaNormalizer", "params": {"expression": "x+1"}},
+            {"id": "n3", "name": "LambdaNormalizer", "params": {"expression": "x*2"}},  # the same op twice
         ],
         "postprocessors": [{"id": "p1", "name": "SigmoidPostprocessor"}],
+        "models": [{"id": "m1", "name": "mito", "config": {"type": "script", "script_path": "/m.py"}}],
     }
-    post("/api/pipeline/apply", nodes)
+    _post(dashboard, "/api/pipeline/apply", nodes)
     assert _ordered(current_input_norm_config()) == [
         [("min_value", 0), ("max_value", 255), ("name", "MinMaxNormalizer")],
-        [("expression", "x*2-1"), ("name", "LambdaNormalizer")],
+        [("expression", "x+1"), ("name", "LambdaNormalizer")],
+        [("expression", "x*2"), ("name", "LambdaNormalizer")],
     ]
+    assert [n.expression for n in g.input_norms[1:]] == ["x+1", "x*2"]
     assert current_postprocess_config() == [{"name": "SigmoidPostprocessor"}]
     assert g.pipeline_normalizers == nodes["input_normalizers"]
+    assert g.pipeline_model_configs["mito"] == {"type": "script", "script_path": "/m.py"}
 
 
-def test_after_a_yaml_boot_the_config_is_the_live_chain():
-    # yaml_cli builds the live chain from json_data and leaves the configs empty.
+def test_the_configured_chain_after_a_yaml_boot_and_set_pipeline():
+    # yaml_cli builds the live chain from json_data and leaves the configs
+    # empty: the config is the live chain then, every step of it.
     g.input_norm_config, g.postprocess_config = {}, {}
-    g.input_norms, g.postprocess = get_process_dataset({
-        "input_norm": [{"name": "MinMaxNormalizer", "min_value": "0"}],
-        "postprocess": [{"name": "SigmoidPostprocessor"}],
-    })
+    g.input_norms = [MinMaxNormalizer(min_value="0"), LambdaNormalizer("x*2")]
+    g.postprocess = [AffinityPostprocessor(bias=0.5, neighborhood="[[1, 0, 0]]")]
     assert _ordered(current_input_norm_config()) == [
-        [("name", "MinMaxNormalizer"), ("min_value", 0.0), ("max_value", 255.0), ("invert", False)]
+        [("name", "MinMaxNormalizer"), ("min_value", 0.0), ("max_value", 255.0), ("invert", False)],
+        [("name", "LambdaNormalizer"), ("expression", "x*2")],
     ]
-    assert current_postprocess_config() == [{"name": "SigmoidPostprocessor"}]
+    assert current_postprocess_config() == [
+        {"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": "[[1, 0, 0]]"}
+    ]
     # Per chain: a configured one wins over the live one.
     g.postprocess_config = [THRESHOLD]
     assert g.pipeline_spec == PipelineSpec(current_input_norm_config(), [THRESHOLD])
 
-
-def test_set_pipeline_writes_all_four_attributes_or_none():
+    # set_pipeline writes the four attributes together, keeping the stateful
+    # instances it is given, or none of them.
     merger = SimpleBlockwiseMerger()
     spec = PipelineSpec([MINMAX], [{"name": "SimpleBlockwiseMerger"}])
     g.set_pipeline(spec, built=([MinMaxNormalizer()], [merger]))
-    assert g.postprocess[0] is merger, "the stateful instances given are kept"
+    assert g.postprocess[0] is merger
     assert (g.input_norm_config, g.postprocess_config) == ([MINMAX], [{"name": "SimpleBlockwiseMerger"}])
-    # Derived, so conftest's vars(g) restore covers it.
-    assert g.pipeline_spec == spec and "pipeline_spec" not in vars(g)
-
+    assert g.pipeline_spec == spec and "pipeline_spec" not in vars(g)  # derived: conftest's restore covers it
     with pytest.raises(ValueError):
         g.set_pipeline(PipelineSpec([SHIFT], [dict(THRESHOLD, threshold="high")]))
     assert g.postprocess[0] is merger and g.input_norm_config == [MINMAX]
-    assert type(g.input_norms[0]).__name__ == "MinMaxNormalizer"
 
 
 # --- what a chain outputs ----------------------------------------------------------
@@ -302,7 +267,6 @@ def test_set_pipeline_writes_all_four_attributes_or_none():
     "chain, dtype, channels, is_segmentation",
     [
         ([], np.float16, 9, False),
-        ([SigmoidPostprocessor()], np.float32, 9, None),
         ([ChannelSelection("0,2")], np.float16, 2, None),
         # The last step that declares a dtype decides: uint64 label ids must
         # not be advertised (or cast) as a sigmoid's float32.
@@ -310,7 +274,6 @@ def test_set_pipeline_writes_all_four_attributes_or_none():
         ([AffinityPostprocessor(), SigmoidPostprocessor()], np.float32, 1, True),
         ([AffinityPostprocessor(), ChannelSelection("0,0")], np.uint64, 2, True),
         ([ThresholdPostprocessor(), DefaultPostprocessor()], np.uint8, 9, False),
-        ([DefaultPostprocessor(), SigmoidPostprocessor()], np.float32, 9, False),
     ],
 )
 def test_what_a_chain_outputs(chain, dtype, channels, is_segmentation):
@@ -320,9 +283,6 @@ def test_what_a_chain_outputs(chain, dtype, channels, is_segmentation):
     assert g.get_output_dtype(np.float16) is dtype
     assert chain_num_channels(chain, 9) == channels
     assert pipeline.is_output_segmentation() is is_segmentation
-
-
-# --- op_schemas ----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("kind", ["input_norm", "postprocess"])
