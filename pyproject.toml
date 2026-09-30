@@ -107,10 +107,12 @@ markers = [
 
 
 [project.scripts]
-cellmap_flow = "cellmap_flow.cli.cli:main"
+cellmap_flow = "cellmap_flow.cli.main:main"
+# The commands before 0.3.0, each now a cellmap_flow subcommand. They say
+# which, run it, and go in the release after 0.3.0 (cli/aliases.py).
+cellmap_flow_yaml = "cellmap_flow.cli.aliases:yaml"
+cellmap_flow_view = "cellmap_flow.cli.aliases:view"
+cellmap_flow_blockwise = "cellmap_flow.cli.aliases:blockwise"
+cellmap_flow_blockwise_multiple = "cellmap_flow.cli.aliases:blockwise_multiple"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:cli"
-cellmap_flow_yaml = "cellmap_flow.cli.yaml_cli:main"
-cellmap_flow_blockwise = "cellmap_flow.blockwise.cli:cli"
-cellmap_flow_blockwise_multiple = "cellmap_flow.blockwise.multiple_cli:cli"
 cellmap_flow_app = "cellmap_flow.dashboard.app:create_and_run_app"
-cellmap_flow_view = "cellmap_flow.cli.viewer_cli:main"

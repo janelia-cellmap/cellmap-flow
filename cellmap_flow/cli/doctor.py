@@ -1,8 +1,8 @@
 """
 Preflight check for the cellmap-flow environment.
 
-Run as ``python -m cellmap_flow.cli.doctor`` (``--core-only`` skips the
-finetune checks). Reports what is installed, what is missing,
+Run as ``cellmap_flow doctor`` (``--core-only`` skips the finetune checks),
+or ``python -m cellmap_flow.cli.doctor``. Reports what is installed, what is missing,
 and the exact command to fix each gap -- so a broken finetune environment
 surfaces up front rather than as a FileNotFoundError deep in an annotation
 route after you have already loaded a dataset and started painting.
@@ -13,6 +13,8 @@ import importlib.util
 import shutil
 import sys
 from pathlib import Path
+
+import click
 
 OK = "✓"
 FAIL = "✗"
@@ -160,10 +162,15 @@ def run_checks(include_finetune=True):
     return results
 
 
-def main():
-    include_finetune = "--core-only" not in sys.argv
-    results = run_checks(include_finetune=include_finetune)
+@click.command()
+@click.option("--core-only", is_flag=True, help="Skip the finetune checks.")
+def main(core_only):
+    """Check the environment: what is installed, what is missing, and how to fix it."""
+    sys.exit(report(run_checks(include_finetune=not core_only)))
 
+
+def report(results) -> int:
+    """Print ``results`` and the fixes they call for; 1 if any is blocking, else 0."""
     width = max(len(r.name) for r in results) + 2
     symbols = {"ok": OK, "fail": FAIL, "warn": WARN}
 
@@ -191,4 +198,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

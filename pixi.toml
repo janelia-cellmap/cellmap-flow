@@ -1,5 +1,5 @@
 # The environment cellmap-flow is deployed from. Fileglancer's runnables.yaml
-# launches `pixi run cellmap_flow_view` and `pixi run cellmap_flow_yaml` from
+# launches `pixi run cellmap_flow view` and `pixi run cellmap_flow yaml` from
 # this checkout, and the dashboard then starts inference servers on the
 # cluster with `pixi run cellmap_flow_server` (CELLMAP_FLOW_SERVER_COMMAND
 # below). Python dependencies come from pyproject.toml through the editable

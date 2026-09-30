@@ -14,8 +14,8 @@ import pytest
 import zarr
 from click.testing import CliRunner
 
-from cellmap_flow.cli import cli as cli_module
-from cellmap_flow.cli import yaml_cli
+from cellmap_flow.cli import infer, yaml_cli
+from cellmap_flow.cli.main import cli
 from cellmap_flow.globals import g
 from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
@@ -24,20 +24,20 @@ from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving import launch
 
 def _cli(*argv):
-    result = CliRunner().invoke(cli_module.cli, list(argv))
+    result = CliRunner().invoke(cli, list(argv))
     assert result.exit_code == 0, result.output + repr(result.exception)
 
 
 LAUNCHERS = {
-    "cellmap_flow-type": (
-        lambda data: _cli("script", "--script-path", "/s.py", "--name", "m", "-d", data),
+    "cellmap_flow-infer": (
+        lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data),
         ["script", "--script-path", "/s.py", "--name", "m"],
     ),
     "cellmap_flow-run": (
         lambda data: _cli("run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", data),
         ["script", "--script-path", "/s.py", "--name", "m"],
     ),
-    "cellmap_flow_yaml": (
+    "cellmap_flow-yaml": (
         lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m", scale="s3")], data, "grp", "q"),
         ["script", "--script-path", "/s.py", "--name", "m", "--scale", "s3"],
     ),
@@ -70,7 +70,7 @@ def launched(monkeypatch, tmp_path):
         raise JobStartError("recorded")
 
     monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow_server")
-    monkeypatch.setattr(cli_module, "start_hosts", started)
+    monkeypatch.setattr(infer, "start_hosts", started)
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)

@@ -224,7 +224,7 @@ def test_a_blockwise_worker_submission(monkeypatch, tmp_path):
             "argv": [
                 "bsub", "-J", "predict_mt", "-o", "<tmp>/daisy_logs/predict_mt_%J.log",
                 "-P", "grp", "-q", "gpu_h100", "-gpu", "num=1", "-n", "12", "-W", "24:00",
-                "bash", "-c", "cellmap_flow_blockwise /tasks/t.yaml --client",
+                "bash", "-c", "cellmap_flow blockwise /tasks/t.yaml --client",
             ],
             "env": {},
             # An over-ratio request is held for minutes before bsub answers.

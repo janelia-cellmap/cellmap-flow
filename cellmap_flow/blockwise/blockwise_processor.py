@@ -701,7 +701,7 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None,
 
     def run_worker():
         submit_bsub_job(
-            f"cellmap_flow_blockwise {shlex.quote(str(yaml_config))} --client",
+            f"cellmap_flow blockwise {shlex.quote(str(yaml_config))} --client",
             queue=queue,
             charge_group=charge_group,
             job_name=str(name),

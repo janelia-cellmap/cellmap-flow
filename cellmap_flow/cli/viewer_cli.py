@@ -6,10 +6,9 @@ import os
 
 import click
 import logging
-from cellmap_flow.logging_setup import configure_logging
+from cellmap_flow.cli.common import log_level_option
 from cellmap_flow.globals import g
 
-logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
@@ -27,26 +26,19 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Charge group (LSF project) billed for the models launched from the dashboard",
 )
-@click.option(
-    "--log-level",
-    type=click.Choice(
-        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
-    ),
-    default="INFO",
-    help="Set the logging level",
-)
-def main(dataset, project, log_level):
+@log_level_option()
+def main(dataset, project):
     """
     Start CellMap Flow viewer with a dataset.
 
     Opens neuroglancer on the raw data and starts the dashboard, where models
-    can be picked and submitted interactively. Use cellmap_flow_yaml instead to
-    launch models from a config file.
+    can be picked and submitted interactively. Use `cellmap_flow yaml` instead
+    to launch models from a config file.
 
     Example:
 
     \b
-      cellmap_flow_view -d /path/to/dataset.zarr
+      cellmap_flow view -d /path/to/dataset.zarr
     """
     # Imported inside the command so --help and argument errors do not
     # pay for the whole inference stack (~16s before this).
@@ -56,7 +48,6 @@ def main(dataset, project, log_level):
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.viewer.raw import get_raw_layer
 
-    configure_logging(getattr(logging, log_level.upper()))
     # Models picked in the dashboard are jobs too; kill them on the way out.
     install_cleanup_handlers()
 

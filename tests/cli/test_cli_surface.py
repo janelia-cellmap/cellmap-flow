@@ -25,10 +25,7 @@ import pytest
 from click.testing import CliRunner
 from flask import Flask
 
-from cellmap_flow.blockwise import cli as blockwise_cli
-from cellmap_flow.blockwise import multiple_cli as blockwise_multiple_cli
-from cellmap_flow.cli import cli as cli_module
-from cellmap_flow.cli import viewer_cli, yaml_cli
+from cellmap_flow.cli import aliases, main
 from cellmap_flow.cli.server_cli import cli as server_cli
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import (
@@ -44,23 +41,21 @@ from cellmap_flow.models.models_config import (
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# What each installed command runs. cellmap_flow's main() installs the
-# Ctrl+C cleanup and then runs the click group; cellmap_flow_app is a plain
-# function, so it takes no arguments and `cellmap_flow_app --help` starts
-# the dashboard.
+# What each installed command runs. cellmap_flow is main(), which runs the
+# click group. The commands before 0.3.0 are aliases (cli/aliases.py) of its
+# subcommands; cellmap_flow_server keeps its per-type commands for one
+# release; cellmap_flow_app is a plain function, so it takes no arguments
+# and `cellmap_flow_app --help` starts the dashboard.
 ENTRY_POINTS = {
-    "cellmap_flow": "cellmap_flow.cli.cli:main",
+    "cellmap_flow": "cellmap_flow.cli.main:main",
+    "cellmap_flow_yaml": "cellmap_flow.cli.aliases:yaml",
+    "cellmap_flow_view": "cellmap_flow.cli.aliases:view",
+    "cellmap_flow_blockwise": "cellmap_flow.cli.aliases:blockwise",
+    "cellmap_flow_blockwise_multiple": "cellmap_flow.cli.aliases:blockwise_multiple",
     "cellmap_flow_server": "cellmap_flow.cli.server_cli:cli",
-    "cellmap_flow_yaml": "cellmap_flow.cli.yaml_cli:main",
-    "cellmap_flow_blockwise": "cellmap_flow.blockwise.cli:cli",
-    "cellmap_flow_blockwise_multiple": "cellmap_flow.blockwise.multiple_cli:cli",
     "cellmap_flow_app": "cellmap_flow.dashboard.app:create_and_run_app",
-    "cellmap_flow_view": "cellmap_flow.cli.viewer_cli:main",
 }
-CLICK_ENTRY_POINTS = {
-    "cellmap_flow_server", "cellmap_flow_yaml", "cellmap_flow_blockwise",
-    "cellmap_flow_blockwise_multiple", "cellmap_flow_view",
-}
+CLICK_ENTRY_POINTS = {"cellmap_flow_server"}
 
 
 def _entry_point(target):
@@ -74,7 +69,48 @@ def test_the_console_scripts_are_unchanged():
     click_commands = {name for name, target in scripts.items()
                       if isinstance(_entry_point(target), click.Command)}
     assert click_commands == CLICK_ENTRY_POINTS
-    assert _entry_point(scripts["cellmap_flow"]) is cli_module.main
+    assert _entry_point(scripts["cellmap_flow"]) is main.main
+
+
+# Where cellmap_flow's console script pointed before 0.3.0: an environment
+# installed then runs cellmap_flow through it until it is reinstalled.
+def test_an_install_from_before_0_3_0_still_runs_cellmap_flow():
+    assert _entry_point("cellmap_flow.cli.cli:main") is main.main
+
+
+# The old console script, its arguments, and the subcommand that replaces it.
+ALIASES = [
+    (aliases.yaml, "cellmap_flow_yaml", "yaml"),
+    (aliases.view, "cellmap_flow_view", "view"),
+    (aliases.blockwise, "cellmap_flow_blockwise", "blockwise"),
+    (aliases.blockwise_multiple, "cellmap_flow_blockwise_multiple", "blockwise"),
+]
+
+
+@pytest.mark.parametrize("alias, old, new", ALIASES, ids=[a[1] for a in ALIASES])
+def test_an_old_console_script_says_what_replaces_it_and_runs_it(alias, old, new, capsys):
+    with pytest.raises(SystemExit) as exited:
+        alias(["--help"])
+    out, err = capsys.readouterr()
+    assert exited.value.code == 0
+    assert err == f"`{old}` is deprecated and goes in the release after 0.3.0; use `cellmap_flow {new}`.\n"
+    assert out.startswith(f"Usage: cellmap_flow {new} ")
+
+
+# cellmap_flow's own subcommands before 0.3.0: hidden from --help, and each
+# says what replaces it before running it.
+@pytest.mark.parametrize("old, new", [
+    (["list-models"], ["models"]),
+    (["list-plugins"], ["plugins", "list"]),
+])
+def test_an_old_subcommand_says_what_replaces_it_and_runs_it(old, new):
+    result = CliRunner().invoke(main.cli, old)
+    assert result.exit_code == 0, result.output
+    notice = (f"`cellmap_flow {' '.join(old)}` is deprecated and goes in the release after 0.3.0; "
+              f"use `cellmap_flow {' '.join(new)}`.\n")
+    assert result.stderr == notice
+    assert result.stdout == CliRunner().invoke(main.cli, new).stdout
+    assert old[0] not in CliRunner().invoke(main.cli, ["--help"]).output
 
 
 # --- the command-line surface ---------------------------------------------------
@@ -142,27 +178,67 @@ PROJECT = ('project', ('-P', '--project'), (), 'text', False, None, False, 'Proj
 QUEUE = ('queue', ('-q', '--queue'), (), 'text', False, None, False,
          'Queue for job submission (default: the saved queue)')
 
-# "" is the group's own options.
+PASSED_THROUGH = [('args', ('args',), (), 'text', False, None, False, None, 'nargs=-1')]
+LOG_LEVEL_OF_GROUP = [('log_level', ('--log-level',), (), 'choice', False, None, False,
+                       'Set the logging level')]
+PLUGIN_FILE = [
+    ('filepath', ('filepath',), (), 'path', True, None, False, None),
+    ('force', ('--force',), (), 'boolean', False, False, True, 'Overwrite existing plugin with the same name.'),
+]
+PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
+INFER = {t: [*options, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
+
+# Each command by its path; "" is the group's own options. A subcommand's
+# --log-level (yaml, view, blockwise) defaults to the group's.
 CELLMAP_FLOW = {
     '': LOG_LEVEL,
-    'list-models': [],
-    'register': [
-        ('filepath', ('filepath',), (), 'path', True, None, False, None),
-        ('force', ('--force',), (), 'boolean', False, False, True, 'Overwrite existing plugin with the same name.'),
+    'blockwise': [
+        ('yaml_configs', ('yaml_configs',), (), 'path', True, None, False, None, 'nargs=-1'),
+        ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),
+        *LOG_LEVEL_OF_GROUP,
     ],
-    'unregister': [('name', ('name',), (), 'text', True, None, False, None)],
+    'doctor': [('core_only', ('--core-only',), (), 'boolean', False, False, True, 'Skip the finetune checks.')],
+    'finetune': [],
+    'finetune build-corrections': PASSED_THROUGH,
+    'finetune export-merged': PASSED_THROUGH,
+    'finetune train': PASSED_THROUGH,
+    'infer': [],
+    **{f'infer {t}': options for t, options in INFER.items()},
+    'list-models': [],
     'list-plugins': [],
+    'models': [],
+    'plugins': [],
+    'plugins list': [],
+    'plugins register': PLUGIN_FILE,
+    'plugins unregister': PLUGIN_NAME,
+    'register': PLUGIN_FILE,
     'run': [
         ('model_type', ('-m', '--model-type'), (), 'text', True, None, False, 'Model type (e.g., dacapo, script, cellmap)'),
         DATA_PATH, QUEUE, PROJECT,
         ('config', ('-c', '--config'), (), 'text', False, None, False, 'Model configuration as key=value pairs'),
         SERVER_CHECK,
     ],
-    **{t: [*options, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()},
+    'unregister': PLUGIN_NAME,
+    'view': [
+        ('dataset', ('-d', '--dataset'), (), 'text', True, None, False, 'Path to the dataset (zarr or n5)'),
+        ('project', ('-P', '--project'), (), 'text', False, None, False,
+         'Charge group (LSF project) billed for the models launched from the dashboard'),
+        *LOG_LEVEL_OF_GROUP,
+    ],
+    'yaml': [
+        ('config_path', ('config_path',), (), 'path', False, None, False, None),
+        *LOG_LEVEL_OF_GROUP,
+        ('list_types', ('--list-types',), (), 'boolean', False, False, True, 'List available model types and exit'),
+        ('validate_only', ('--validate-only',), (), 'boolean', False, False, True,
+         'Validate YAML configuration without running jobs'),
+    ],
 }
+# Commands hidden from --help: cellmap_flow's before 0.3.0.
+HIDDEN = {'list-models', 'list-plugins', 'register', 'unregister'}
 
 CELLMAP_FLOW_SERVER = {
     '': LOG_LEVEL,
+    **dict(sorted({
     'list-models': [],
     **{
         t: [
@@ -175,39 +251,8 @@ CELLMAP_FLOW_SERVER = {
         ]
         for t, options in MODEL_OPTIONS.items()
     },
+    }.items())),
 }
-
-CELLMAP_FLOW_YAML = {
-    '': [
-        ('config_path', ('config_path',), (), 'path', False, None, False, None),
-        *LOG_LEVEL,
-        ('list_types', ('--list-types',), (), 'boolean', False, False, True, 'List available model types and exit'),
-        ('validate_only', ('--validate-only',), (), 'boolean', False, False, True,
-         'Validate YAML configuration without running jobs'),
-    ],
-}
-
-CELLMAP_FLOW_VIEW = {
-    '': [
-        ('dataset', ('-d', '--dataset'), (), 'text', True, None, False, 'Path to the dataset (zarr or n5)'),
-        ('project', ('-P', '--project'), (), 'text', False, None, False,
-         'Charge group (LSF project) billed for the models launched from the dashboard'),
-        *LOG_LEVEL,
-    ],
-}
-
-CELLMAP_FLOW_BLOCKWISE = {
-    '': [
-        ('yaml_config', ('yaml_config',), (), 'path', True, None, False, None),
-        ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),
-        ('log_level', ('--log-level',), (), 'choice', False, 'INFO', False, None),
-    ],
-}
-
-CELLMAP_FLOW_BLOCKWISE_MULTIPLE = {
-    '': [('yaml_configs', ('yaml_configs',), (), 'path', True, None, False, None, 'nargs=-1')],
-}
-
 
 def _param(p):
     # to_info_dict() reports an unset default as None on every click 8.x,
@@ -220,25 +265,48 @@ def _param(p):
     return row if p.nargs == 1 else (*row, f"nargs={p.nargs}")
 
 
+def _surface(command, path=""):
+    """{command path: its params} for ``command`` and every subcommand under it."""
+    rows = {path: [_param(p) for p in command.params]}
+    if isinstance(command, click.Group):
+        ctx = click.Context(command)
+        for name in command.list_commands(ctx):
+            rows.update(_surface(command.get_command(ctx, name), f"{path} {name}".strip()))
+    return rows
+
+
+def _hidden(command, path=""):
+    ctx = click.Context(command)
+    hidden = set()
+    for name in getattr(command, "list_commands", lambda ctx: [])(ctx):
+        sub = command.get_command(ctx, name)
+        if sub.hidden:
+            hidden.add(f"{path} {name}".strip())
+        hidden |= _hidden(sub, f"{path} {name}".strip())
+    return hidden
+
+
 @pytest.mark.parametrize(
-    "command, expected",
-    [
-        (cli_module.cli, CELLMAP_FLOW),
-        (server_cli, CELLMAP_FLOW_SERVER),
-        (yaml_cli.main, CELLMAP_FLOW_YAML),
-        (viewer_cli.main, CELLMAP_FLOW_VIEW),
-        (blockwise_cli.cli, CELLMAP_FLOW_BLOCKWISE),
-        (blockwise_multiple_cli.cli, CELLMAP_FLOW_BLOCKWISE_MULTIPLE),
-    ],
-    ids=["cellmap_flow", "cellmap_flow_server", "cellmap_flow_yaml", "cellmap_flow_view",
-         "cellmap_flow_blockwise", "cellmap_flow_blockwise_multiple"],
+    "command, expected, hidden",
+    [(main.cli, CELLMAP_FLOW, HIDDEN), (server_cli, CELLMAP_FLOW_SERVER, set())],
+    ids=["cellmap_flow", "cellmap_flow_server"],
 )
-def test_commands_and_options_are_unchanged(command, expected):
-    surface = {"": [_param(p) for p in command.params]}
-    for name, sub in getattr(command, "commands", {}).items():
-        surface[name] = [_param(p) for p in sub.params]
-    assert list(surface) == list(expected), "the commands, in registration order"
+def test_commands_and_options_are_unchanged(command, expected, hidden):
+    surface = _surface(command)
+    assert list(surface) == list(expected), "the commands, in --help's order"
     assert surface == expected
+    assert _hidden(command) == hidden
+
+
+def test_cellmap_flow_type_is_a_hidden_alias_of_infer_type():
+    ctx = click.Context(main.cli)
+    for model_type, options in INFER.items():
+        command = main.cli.get_command(ctx, model_type)
+        if model_type == "finetune":  # the finetune tools took the name
+            assert command.name == "finetune" and isinstance(command, click.Group)
+            continue
+        assert command.hidden and [_param(p) for p in command.params] == options
+        assert command.help == f"Deprecated: use `cellmap_flow infer {model_type}`."
 
 
 _LISTED = [
@@ -255,7 +323,7 @@ _LISTED = [
 
 
 def _listing(prog):
-    if prog == "cellmap_flow_yaml":
+    if prog == "cellmap_flow yaml":
         text = "Available model types:\n\n"
         for cli_name, cls_name, _, required in _LISTED:
             text += f"  {cli_name:20s} - {cls_name}\n"
@@ -270,9 +338,9 @@ def _listing(prog):
 @pytest.mark.parametrize(
     "command, argv, prog",
     [
-        (cli_module.cli, ["list-models"], "cellmap_flow"),
+        (main.cli, ["models"], "cellmap_flow infer"),
         (server_cli, ["list-models"], "cellmap_flow_server"),
-        (yaml_cli.main, ["--list-types"], "cellmap_flow_yaml"),
+        (main.cli, ["yaml", "--list-types"], "cellmap_flow yaml"),
     ],
 )
 def test_the_type_listings_are_unchanged(command, argv, prog):

@@ -8,7 +8,6 @@ making it easy to add new model types without modifying this file.
 
 import sys
 import logging
-from cellmap_flow.logging_setup import configure_logging
 import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,6 +17,7 @@ from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 from cellmap_flow.globals import g
+from cellmap_flow.cli.common import log_level_option
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
     from cellmap_flow.models.models_config import ModelConfig
@@ -152,21 +152,15 @@ def run_multiple(
 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True), required=False)
-@click.option(
-    "--log-level",
-    type=click.Choice(
-        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
-    ),
-    default="INFO",
-    help="Set the logging level",
-)
+@log_level_option()
 @click.option("--list-types", is_flag=True, help="List available model types and exit")
 @click.option(
     "--validate-only",
     is_flag=True,
     help="Validate YAML configuration without running jobs",
 )
-def main(config_path: str, log_level: str, list_types: bool, validate_only: bool):
+@click.pass_context
+def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     """
     Run multiple model inference jobs from a YAML configuration file.
 
@@ -224,13 +218,11 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     Examples:
 
     \b
-        cellmap_flow_yaml config.yaml
-        cellmap_flow_yaml config.yaml --log-level DEBUG
-        cellmap_flow_yaml --list-types
-        cellmap_flow_yaml config.yaml --validate-only
+        cellmap_flow yaml config.yaml
+        cellmap_flow yaml config.yaml --log-level DEBUG
+        cellmap_flow yaml --list-types
+        cellmap_flow yaml config.yaml --validate-only
     """
-    configure_logging(getattr(logging, log_level.upper()))
-
     # List available model types
     if list_types:
         from cellmap_flow.models import registry
@@ -250,7 +242,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     # Ensure config_path is provided when not listing types
     if not config_path:
         click.echo("Error: Missing argument 'CONFIG_PATH'.")
-        click.echo("Try 'cellmap_flow_yaml --help' for help.")
+        click.echo(f"Try '{ctx.command_path} --help' for help.")
         sys.exit(1)
 
     # Load and validate configuration

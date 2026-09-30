@@ -1,33 +1,10 @@
-import click
-import logging
-from cellmap_flow.logging_setup import configure_logging
+"""``python -m cellmap_flow.blockwise.multiple_cli A.yaml B.yaml``, which the
+dashboard's blockwise tab runs: ``cellmap_flow blockwise`` (blockwise/cli.py),
+which takes several YAMLs since 0.3.0. Delete this module once the tab runs
+that instead.
+"""
 
-logger = logging.getLogger(__name__)
-
-@click.command()
-@click.argument("yaml_configs", nargs=-1, required=True, type=click.Path(exists=True))
-def cli(yaml_configs: tuple) -> None:
-    """Process multiple YAML configuration files."""
-    configure_logging(logging.INFO)
-    from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
-    from cellmap_flow.config.yaml import ConfigError
-
-    incomplete = []
-    for yaml_config in yaml_configs:
-        logger.info(f"Processing: {yaml_config}")
-        try:
-            process = CellMapFlowBlockwiseProcessor(yaml_config, create=True)
-        except ConfigError as e:
-            raise click.ClickException(f"{yaml_config}: {e}")
-        # Later configs are independent of this one, so carry on.
-        if not process.run():
-            incomplete.append(yaml_config)
-
-    if incomplete:
-        raise click.ClickException(
-            f"Some blocks were not processed for: {', '.join(incomplete)}"
-        )
-
+from cellmap_flow.blockwise.cli import cli
 
 if __name__ == "__main__":
     cli()

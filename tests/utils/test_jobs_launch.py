@@ -154,12 +154,16 @@ def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
     assert job.killed and exited.value.code == 128 + signal.SIGTERM, "not 0, as if the run had succeeded"
 
 
-def _cellmap_flow(monkeypatch, tmp_path, order):
-    from cellmap_flow.cli import cli
+def _cellmap_flow_infer(monkeypatch, tmp_path, order):
+    from cellmap_flow.cli import infer, main
+    from cellmap_flow.dashboard.services import startup
 
-    monkeypatch.setattr(cli, "install_cleanup_handlers", lambda: order.append("install"))
-    monkeypatch.setattr(cli, "cli", lambda: order.append("run"))
-    cli.main()
+    monkeypatch.setattr(infer, "install_cleanup_handlers", lambda: order.append("install"))
+    monkeypatch.setattr(infer, "start_hosts", lambda *a, **k: order.append("run"))
+    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
+    monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
+    result = CliRunner().invoke(main.cli, ["infer", "script", "-s", "/s.py", "-d", str(tmp_path)])
+    assert result.exit_code == 0, result.output + repr(result.exception)
 
 
 def _cellmap_flow_yaml(monkeypatch, tmp_path, order):
@@ -187,7 +191,7 @@ def _cellmap_flow_view(monkeypatch, tmp_path, order):
     assert result.exit_code == 0, result.output + repr(result.exception)
 
 
-@pytest.mark.parametrize("entry_point", [_cellmap_flow, _cellmap_flow_yaml, _cellmap_flow_view],
+@pytest.mark.parametrize("entry_point", [_cellmap_flow_infer, _cellmap_flow_yaml, _cellmap_flow_view],
                          ids=lambda f: f.__name__[1:])
 def test_the_entry_points_install_the_cleanup_before_starting_jobs(entry_point, monkeypatch, tmp_path):
     """Importing the launcher used to set them, for every importer, and failed off the main thread."""

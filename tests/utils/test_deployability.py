@@ -1,12 +1,13 @@
 """cellmap-flow stays launchable the way Fileglancer launches it.
 
-runnables.yaml is the manifest Fileglancer reads. It runs the console scripts
-through `pixi run`, learns the dashboard's URL from the file named by
+runnables.yaml is the manifest Fileglancer reads. It runs `cellmap_flow`
+subcommands through `pixi run`, learns the dashboard's URL from the file named by
 SERVICE_URL_PATH, and bills the models picked in the dashboard to the job's
 LSF project. These used to live on a separate deploy branch, which is how
 they drifted from main.
 """
 
+import importlib
 import os
 import socket
 import subprocess
@@ -23,22 +24,33 @@ from cellmap_flow.globals import g
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _click_command(script_entry):
-    module, attr = script_entry.split(":")
-    return getattr(__import__(module, fromlist=[attr]), attr)
+def _command(words):
+    """The click command that ``words``, a console script and its subcommands, runs."""
+    from cellmap_flow.cli import main
+
+    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
+    script, *subcommands = words
+    module, attr = scripts[script].split(":")
+    command = getattr(importlib.import_module(module), attr)
+    if command is main.main:  # the cellmap_flow script: main() runs the group
+        command = main.cli
+    assert isinstance(command, click.Command), words
+    for name in subcommands:
+        command = command.get_command(click.Context(command), name)
+        assert command is not None, words
+    return command
 
 
 def test_the_manifest_runs_installed_scripts_with_flags_they_accept():
     manifest = yaml.safe_load((ROOT / "runnables.yaml").read_text())
-    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
     assert manifest["version"] == cellmap_flow.__version__
     assert any(r.startswith("pixi") for r in manifest["requirements"])
 
     for runnable in manifest["runnables"]:
-        pixi, run, script, *rest = runnable["command"].split()
-        assert (pixi, run, rest) == ("pixi", "run", []), runnable["command"]
-        command = _click_command(scripts[script])
-        assert isinstance(command, click.Command)
+        pixi, run, *words = runnable["command"].split()
+        assert (pixi, run) == ("pixi", "run"), runnable["command"]
+        command = _command(words)
+        script = runnable["command"]
         options = {opt for p in command.params for opt in p.opts}
         positionals = [p for p in command.params if isinstance(p, click.Argument)]
         for param in runnable["parameters"]:
@@ -84,7 +96,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
     import neuroglancer
     from click.testing import CliRunner
 
-    from cellmap_flow.cli import viewer_cli
+    from cellmap_flow.cli.main import cli
     from cellmap_flow.dashboard import app as dashboard
     from cellmap_flow.jobs import launch
     from cellmap_flow.viewer import raw
@@ -102,9 +114,9 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
     monkeypatch.setattr(dashboard, "create_and_run_app", lambda **k: started.append(k))
     monkeypatch.setenv("LSB_PROJECT_NAME", "cellmap-fileglancer")
 
-    result = CliRunner().invoke(viewer_cli.main, ["-d", str(tmp_path)])
+    result = CliRunner().invoke(cli, ["view", "-d", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert g.charge_group == "cellmap-fileglancer" and started and raw_layers == [str(tmp_path)]
 
-    result = CliRunner().invoke(viewer_cli.main, ["-d", str(tmp_path), "-P", "explicit"])
+    result = CliRunner().invoke(cli, ["view", "-d", str(tmp_path), "-P", "explicit"])
     assert result.exit_code == 0 and g.charge_group == "explicit"
