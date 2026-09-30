@@ -147,7 +147,7 @@ def test_the_startup_viewer(servers, monkeypatch):
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
         "chain": CHAIN,
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
-        "new": ("image", "zarr://http://new:8000/new", OVERLAID, _unit("green")),
+        "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
         "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", OVERLAID, _unit("yellow")),
     }
@@ -195,7 +195,7 @@ def test_submit(submit):
         "dimensions": EIGHT_NM,
         "chain": dict(SUBMITTED, postprocess=[], dashboard_url="http://localhost/", digest="5ba6d02f85d55e92"),
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, "void main() {}", {"brightness": 0.5}),
-        "new": ("image", "zarr://http://new:8000/new", OVERLAID, _unit("green")),
+        "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
         "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", None, _unit("yellow")),
     }
@@ -208,7 +208,7 @@ def test_submit_shows_a_labelling_chain_as_segmentations(submit):
         "dimensions": EIGHT_NM,
         "chain": dict(SUBMITTED, postprocess=THRESHOLD, dashboard_url="http://localhost/", digest="724f969450d08854"),
         "old": ("segmentation", "zarr://http://old:8000/old", OVERLAID, None),
-        "new": ("segmentation", "zarr://http://new:8000/new", OVERLAID, None),
+        "new": ("segmentation", "zarr://http://new:8000/new", None, None),
         "flat": ("segmentation", "zarr://http://flat:8000/flat", OVERLAID, None),
         "silent": ("segmentation", "zarr://http://silent:8000/silent", None, None),
     }
@@ -241,7 +241,7 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
         "dimensions": EIGHT_NM,
         "chain": CHAIN,
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
-        "new": ("image", "zarr://http://new:8000/new", OVERLAID, _unit("green")),
+        "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
         "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
         "silent": ("image", "zarr://http://silent:8000/silent", None, _unit("yellow")),
     }

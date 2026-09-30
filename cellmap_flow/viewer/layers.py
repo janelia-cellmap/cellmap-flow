@@ -43,29 +43,37 @@ def prediction_voxel_override(host, dataset_path, info=None, fallback_output_vox
     voxel size and treats that level as if it were at the model's size, so
     when the two differ its output is really at a proportionally different
     size than it declares: a model trained at 16 nm on raw at 6, 12, 24 nm
-    reads 12 nm data, and its output lies at 12 nm, not 16. The override is
-    the raw level closest to the declared output voxel size.
+    reads 12 nm data, and its output lies at 12 nm, not 16.
+
+    A server that reports ``effective_output_voxel_size`` worked that out
+    from the level it read, so its answer is used. For an older server the
+    override is a guess, the raw level closest to the declared output voxel
+    size, which is right when the model's input and output voxel sizes are
+    equal.
 
     The declared size is ``info["output_voxel_size"]``, else
     ``fallback_output_voxel_size`` (for a server too old to say).
     """
     info = fetch_model_info(host) if info is None else info
-    output_voxel_size = info.get("output_voxel_size") or fallback_output_voxel_size
-    if not output_voxel_size or not dataset_path:
+    declared = info.get("output_voxel_size") or fallback_output_voxel_size
+    if not declared:
         return None
     try:
-        output_voxel_size = tuple(output_voxel_size)
-        closest = closest_raw_scale(dataset_path, output_voxel_size)
+        declared = tuple(declared)
+        effective = info.get("effective_output_voxel_size")
+        if effective is not None:
+            override = tuple(effective)
+        elif dataset_path:
+            override = closest_raw_scale(dataset_path, declared)
+        else:
+            return None
     except Exception as e:
-        logger.warning(f"Could not find the raw scale to draw {host}'s output at: {e}")
+        logger.warning(f"Could not find the voxel size to draw {host}'s output at: {e}")
         return None
-    if closest is None or tuple(closest) == output_voxel_size:
+    if override is None or tuple(override) == declared:
         return None
-    logger.info(
-        f"Drawing {host}'s output at the raw scale {closest} rather than its "
-        f"declared {output_voxel_size}, so that it overlays the raw"
-    )
-    return closest
+    logger.info(f"Drawing {host}'s output at {override} nm rather than its declared {declared}, so that it overlays the raw")
+    return override
 
 
 def prediction_source(host, model, url_blob, override_scales=None, has_channel=True):
