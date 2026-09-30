@@ -281,9 +281,12 @@ class ModelConfig:
                 f"but model actually outputs {int(actual_channels)} channels"
             )
         if errors:
+            # A script is named by its file, the one to fix; the others by name.
+            which = getattr(self, "script_path", None) or getattr(self, "name", None)
             msg = (
-                f"Script config shape validation failed for "
-                f"{getattr(self, 'script_path', 'unknown')}:\n"
+                f"{type(self).__name__} shape validation failed"
+                + (f" for {which}" if which else "")
+                + ":\n"
                 + "\n".join(f"  - {e}" for e in errors)
             )
             raise ValueError(msg)

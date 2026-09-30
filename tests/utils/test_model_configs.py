@@ -95,12 +95,25 @@ def _dacapo_run(out_channels):
                            task=AffinitiesTask())
 
 
-def test_a_fly_models_write_shape_is_in_output_voxels():
+def _fly_whose_model_outputs(size, output_voxel_size=(8, 8, 8), name=None):
+    """A Fly config declaring 20 voxels in and 12 out, whose model returns ``size`` a side."""
     fly = FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
-                         output_voxel_size=(4, 4, 4), input_size=(20, 20, 20), output_size=(12, 12, 12))
+                         output_voxel_size=output_voxel_size, input_size=(20, 20, 20), output_size=(12, 12, 12),
+                         name=name)
     fly._model = torch.nn.Module()
-    fly._model.forward = lambda x: torch.zeros(1, 1, 12, 12, 12)
+    fly._model.forward = lambda x: torch.zeros(1, 1, size, size, size)
+    return fly
+
+
+def test_a_fly_models_write_shape_is_in_output_voxels():
+    fly = _fly_whose_model_outputs(12, output_voxel_size=(4, 4, 4))
     assert tuple(fly.config.write_shape) == (48, 48, 48)
+
+
+def test_a_shape_mismatch_names_the_models_type():
+    """It said "Script config shape validation failed" for every type."""
+    with pytest.raises(ValueError, match="^FlyModelConfig shape validation failed for mito:"):
+        _fly_whose_model_outputs(10, name="mito").config
 
 
 @pytest.mark.parametrize("given, missing", [
