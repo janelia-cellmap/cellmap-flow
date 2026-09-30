@@ -1,10 +1,11 @@
 """``FlyModelConfig``: a fly_organelles checkpoint.
 
 The checkpoint holds no geometry, so the constructor takes the voxel sizes
-and the input and output sizes (178 and 56 voxels a side when not given). A
-TorchScript file (``.ts``) or a ``StandardUnet`` state dict gets a sigmoid
-on top; a whole pickled model (``model.pt``) is used as it is, and only
-when ``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
+and the input and output sizes, as a pair: 178 and 56 voxels a side when
+neither is given, and an error when only one is. A TorchScript file
+(``.ts``) or a ``StandardUnet`` state dict gets a sigmoid on top; a whole
+pickled model (``model.pt``) is used as it is, and only when
+``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
 """
 
 import logging
@@ -47,7 +48,19 @@ class FlyModelConfig(ModelConfig):
         self.output_voxel_size = output_voxel_size
         self.scale = scale
         self._model = None
-        if input_size is None or output_size is None:
+        if (input_size is None) != (output_size is None):
+            # Not derived: the output size an input size gives depends on the
+            # network, which is not loaded here and can be any architecture
+            # (a .ts or a pickled model.pt).
+            given, missing = (
+                ("input_size", "output_size") if output_size is None
+                else ("output_size", "input_size")
+            )
+            raise ValueError(
+                f"FlyModelConfig got {given} but no {missing}: give both, or "
+                "neither for fly_organelles' StandardUnet (178 voxels in, 56 out)"
+            )
+        if input_size is None:
             input_size = (178, 178, 178)
             output_size = (56, 56, 56)
             logger.warning(

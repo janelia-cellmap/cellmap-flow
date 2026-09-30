@@ -103,6 +103,17 @@ def test_a_fly_models_write_shape_is_in_output_voxels():
     assert tuple(fly.config.write_shape) == (48, 48, 48)
 
 
+@pytest.mark.parametrize("given, missing", [
+    pytest.param({"input_size": (100, 100, 100)}, "output_size", id="input-size-only"),
+    pytest.param({"output_size": (20, 20, 20)}, "input_size", id="output-size-only"),
+])
+def test_a_fly_model_given_one_size_asks_for_the_other(given, missing):
+    """Both used to be replaced by the 178/56 default."""
+    with pytest.raises(ValueError, match=f"no {missing}"):
+        FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
+                       output_voxel_size=(8, 8, 8), **given)
+
+
 @pytest.mark.parametrize("out_channels, channels", [
     pytest.param(9, "aff_3_0_0", id="nine-affinities-named-by-offset"),
     pytest.param(3, ["x", "y", "z"], id="three-keep-the-old-names"),
