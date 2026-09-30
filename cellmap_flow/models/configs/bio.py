@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from funlib.geometry import Coordinate, Roi
 
-from cellmap_flow.models.configs.base import ModelConfig, _as_int_tuple
-from cellmap_flow.utils.serialize_config import Config
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple
 
 if TYPE_CHECKING:
     from cellmap_flow.image_data_interface import ImageDataInterface

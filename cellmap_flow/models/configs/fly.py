@@ -13,8 +13,7 @@ import logging
 import numpy as np
 from funlib.geometry import Coordinate
 
-from cellmap_flow.models.configs.base import ModelConfig, _as_int_tuple, _get_device
-from cellmap_flow.utils.serialize_config import Config
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple, _get_device
 
 logger = logging.getLogger(__name__)
 

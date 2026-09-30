@@ -8,9 +8,8 @@ launch command never downloads it.
 import logging
 import time
 
-from cellmap_flow.models.configs.base import ModelConfig
+from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import CellMapModelConfig
-from cellmap_flow.utils.serialize_config import Config
 
 logger = logging.getLogger(__name__)
 

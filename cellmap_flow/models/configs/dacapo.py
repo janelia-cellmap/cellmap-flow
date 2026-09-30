@@ -7,8 +7,7 @@ training dataset, and the channel names from its task.
 import numpy as np
 from funlib.geometry import Coordinate
 
-from cellmap_flow.models.configs.base import ModelConfig, _get_device
-from cellmap_flow.utils.serialize_config import Config
+from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 
 
 class DaCapoModelConfig(ModelConfig):

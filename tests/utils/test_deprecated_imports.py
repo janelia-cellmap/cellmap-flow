@@ -16,6 +16,7 @@ ALIASES = {
     "list_huggingface_models": ("cellmap_flow.models.model_registry", "list_huggingface_models", "cellmap_flow.models.hf_catalog"),
     "refresh_huggingface_models": ("cellmap_flow.models.model_registry", "refresh_huggingface_models",
                                    "cellmap_flow.models.hf_catalog"),
+    "Config": ("cellmap_flow.utils.serialize_config", "Config", "cellmap_flow.models.models_config"),
 }
 
 

@@ -6,8 +6,7 @@ dict. Either is loaded onto the module the trainer trained
 keeps the base model's geometry.
 """
 
-from cellmap_flow.models.configs.base import ModelConfig
-from cellmap_flow.utils.serialize_config import Config
+from cellmap_flow.models.configs.base import Config, ModelConfig
 
 
 class FinetuneModelConfig(ModelConfig):

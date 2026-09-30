@@ -6,6 +6,10 @@ Handles registration, loading, and management of user plugins
 
 Plugins are stored in ~/.cellmap_flow/plugins/ and loaded automatically
 at startup so that custom subclasses appear in __subclasses__() calls.
+
+``analyze_script`` is the safety check a plugin passes to be registered;
+a script model's script passes it too, each time it is loaded
+(``models.configs.script.load_safe_config``).
 """
 
 import ast
@@ -23,6 +27,62 @@ _plugins_loaded = False
 _plugin_namespaces: List[dict] = []
 
 
+# What a user's script may not import or call. analyze_script is copied from
+# https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/6e9d842b9a90b0df22aa07946a4d1deed5c27504/src/cellmap_segmentation_challenge/utils/security.py
+DISALLOWED_IMPORTS = {"os", "subprocess", "sys"}
+# DISALLOWED_FUNCTIONS = {"eval", "exec", "open", "compile", "__import__"}
+DISALLOWED_FUNCTIONS = {"eval", "exec", "compile", "__import__"}
+
+
+def analyze_script(filepath):
+    """
+    Analyzes the script at `filepath` using `ast` for potentially unsafe imports and function calls.
+    Returns a boolean indicating whether the script is safe and a list of detected issues.
+    """
+    issues = []
+    with open(filepath, "r") as file:
+        source_code = file.read()
+
+    # Parse the code into an AST
+    tree = ast.parse(source_code, filename=filepath)
+
+    # Traverse the AST and analyze nodes
+    for node in ast.walk(tree):
+        # Check for disallowed imports
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in DISALLOWED_IMPORTS:
+                    issues.append(f"Disallowed import detected: {alias.name}")
+
+        elif isinstance(node, ast.ImportFrom):
+            if node.module in DISALLOWED_IMPORTS:
+                issues.append(f"Disallowed import detected: {node.module}")
+
+        # Check for disallowed function calls
+        elif isinstance(node, ast.Call):
+            # If function is a direct name (e.g., `eval()`)
+            if isinstance(node.func, ast.Name) and node.func.id in DISALLOWED_FUNCTIONS:
+                issues.append(f"Disallowed function call detected: {node.func.id}")
+            # If function is an attribute call on a known-unsafe root
+            # (e.g., `builtins.eval()` / `__builtins__.eval()`). Method calls
+            # on user objects like `model.eval()` remain allowed.
+            elif isinstance(node.func, ast.Attribute):
+                base = node.func.value
+                if (
+                    node.func.attr in DISALLOWED_FUNCTIONS
+                    and isinstance(base, ast.Name)
+                    and base.id in {"builtins", "__builtins__"}
+                ):
+                    issues.append(
+                        "Disallowed function call detected via attribute access: "
+                        f"{base.id}.{node.func.attr}"
+                    )
+
+    # Return whether the script is safe (no issues found) and the list of issues
+    is_safe = len(issues) == 0
+    return is_safe, issues
+
+
 def get_plugins_dir() -> Path:
     """Return the plugins directory, creating it if necessary."""
     PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,8 +93,8 @@ def _exec_plugin(filepath: str) -> None:
     """
     Execute a plugin file so its class definitions are registered.
 
-    Unlike load_safe_config, this does not wrap the result in a Config
-    object — we only need the side-effect of defining subclasses.
+    Unlike a script model's load_safe_config, this does not wrap the result
+    in a Config object — we only need the side-effect of defining subclasses.
 
     The namespace is retained in _plugin_namespaces so class objects
     are not garbage-collected (which would remove them from __subclasses__).
@@ -82,11 +142,6 @@ def register_plugin(filepath: str, force: bool = False) -> Path:
         raise ValueError(f"Only .py files can be registered, got: {source.suffix}")
 
     # Safety check
-    # Local: cellmap_flow/__init__ calls load_plugins() on every package
-    # import, and load_py pulls in upath/fsspec (~1.5s) that only
-    # registering a plugin actually needs.
-    from cellmap_flow.utils.load_py import analyze_script
-
     is_safe, issues = analyze_script(str(source))
     if not is_safe:
         msg = "Plugin contains unsafe elements:\n" + "\n".join(f"  - {i}" for i in issues)

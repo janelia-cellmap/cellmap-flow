@@ -1,7 +1,8 @@
 """The built-in model types, one module per type.
 
-- ``base``: ``ModelConfig``, the base of every type (a plugin's too), and
-  the helpers the types share.
+- ``base``: ``ModelConfig``, the base of every type (a plugin's too),
+  ``Config``, what a type's ``_get_config`` returns, and the helpers the
+  types share.
 - ``script``: ``ScriptModelConfig``, a model that a Python script defines.
 - ``dacapo``: ``DaCapoModelConfig``, a DaCapo run at one iteration.
 - ``fly``: ``FlyModelConfig``, a fly_organelles checkpoint.

@@ -18,6 +18,8 @@ describes it. What the rest of cellmap-flow reads:
 import inspect
 import logging
 import shlex
+from types import ModuleType
+from typing import Any
 
 import numpy as np
 
@@ -121,6 +123,57 @@ def command_argv(cls, params: dict) -> list:
             continue
         argv += [f"--{name.replace('_', '-')}", _cli_value(value)]
     return argv
+
+
+DEFAULT_AXES_NAMES = ["x", "y", "z"]
+
+
+class Config:
+    """What a model type's ``_get_config`` returns: the model, its geometry
+    and anything else its script or checkpoint defines, as attributes.
+
+    Built from keyword arguments (a script's globals, for a script model),
+    which ``to_dict()`` and ``get()`` read back. ``axes_names`` defaults to
+    x, y, z.
+    """
+
+    def __init__(self, **kwargs):
+        self.axes_names = kwargs.get("axes_names", DEFAULT_AXES_NAMES)
+        self.__dict__.update(kwargs)
+        self.kwargs = kwargs
+
+    def __str__(self) -> str:
+        elms = []
+        for k, v in vars(self).items():
+            if any(x in k for x in ["kwargs", "__"]) or isinstance(v, ModuleType):
+                continue
+            if ["model","checkpoint"].__contains__(k):
+                elms.append(f"{k}")
+                continue
+            if inspect.ismethod(v) or inspect.isfunction(v):
+                # A method bound to this Config (BioModelConfig's
+                # process_chunk) reprs as "<bound method ... of Config(...)>",
+                # which recursed until RecursionError.
+                elms.append(f"{k}: <function {getattr(v, '__name__', '?')}>")
+                continue
+            elms.append(f"{k}: {v}")
+        newline = '\n'
+        return f"{type(self).__name__}({newline.join(elms)})"
+    
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def to_dict(self):
+        """
+        Returns the configuration as a dictionary.
+        """
+        return self.kwargs
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Gets the value of a configuration key.
+        """
+        return self.kwargs.get(key, default)
 
 
 class ModelConfig:

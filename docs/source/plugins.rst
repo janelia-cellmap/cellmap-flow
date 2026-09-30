@@ -183,8 +183,7 @@ The ``_get_config`` method must return a ``Config`` object with the following at
     import numpy as np
     import torch
     from funlib.geometry import Coordinate
-    from cellmap_flow.models.models_config import ModelConfig
-    from cellmap_flow.utils.serialize_config import Config
+    from cellmap_flow.models.models_config import Config, ModelConfig
 
 
     class ONNXModelConfig(ModelConfig):
