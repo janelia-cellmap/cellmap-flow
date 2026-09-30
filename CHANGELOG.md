@@ -149,10 +149,14 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a malformed validate/generate/precheck/submit body is answered with what is wrong (still a 200 with the failure flag the builder reads);
     - validate now refuses pipelines missing a required setting, which used to fail later at submit;
     - submit refuses a `yaml_paths` that is not a list of paths. A number there used to be opened as a file descriptor.
+  - **Blockwise:**
+    - a model that names its channels with `classes` or `channels_names` runs. Blockwise read only `channels` and failed with `AttributeError` before creating anything. A model that names none is refused with a `ConfigError`, unless the task's `output_channels` is a dict of indices;
+    - the processor and precheck refuse a task that is not a path (str, bytes or `os.PathLike`) with a `ConfigError`. A number was opened as a file descriptor, and closing it closed whatever the process had open there.
   - **Dashboard tabs:**
     - the Finetune tab stops polling a job once it is COMPLETED, FAILED or CANCELLED, or once the server answers 404, which also logs a line saying so;
-    - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page;
-    - the Review tab's script is ES modules, with the same behaviour.
+    - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page. That note names the job's log file from the start, not only after the next line arrives;
+    - the Review tab's script is ES modules, with the same behaviour. Its Progress card refreshes on the shared poller: no requests while the page is hidden, one when it is shown again, and no request on top of an unanswered one;
+    - the pipeline builder opens on the live chain. Its normalizer and postprocessor nodes come from the chain as it was last set, from anywhere (a dashboard Submit, say). It used to open on its own last canvas, so its first edit sent the old steps back and undid the other change without a word. Inputs, outputs, models, edges and node positions are still the builder's own.
   - **Finetune jobs:** a job is shown as COMPLETED only once its export has been found. Before, it was COMPLETED first and turned FAILED if the export check then failed, so a poll in between showed a success that wasn't one.
   - **`cellmap_flow.utils` is dissolved** into the packages that own each piece: `io/`, `jobs/`, `serving/`, `config/yaml.py`, `models/registry`, `models/hf_catalog`, `models/geometry_cache`, `norm/safe_expression`, `dashboard/services/`, and `cellmap_flow.plugins` and `cellmap_flow.logging_setup` at the package root. The three names the docs used keep deprecated aliases for one release: `utils.bsub_utils.install_cleanup_handlers` (now `jobs.launch`), `utils.serialize_config.Config` (now `models.models_config.Config`), and `models.model_registry.list_huggingface_models`/`refresh_huggingface_models` (now `models.hf_catalog`). `python -m cellmap_flow.utils.doctor` is `python -m cellmap_flow.cli.doctor`.
   - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
@@ -162,6 +166,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `886bc0f` blockwise refuses a task YAML that is not a path
+- `ccf6501` blockwise takes a model's channel names from its geometry
+- `bb1980d` the pipeline builder opens on the live chain
+- `a3bf4ee` the Training Logs note names the log file from the start
+- `0653621` the Review tab's progress refresh pauses while the page is hidden
 - `f2d7340` a job is COMPLETED only once its export has been found
 - `447df64` the training logs keep the last 1,000 lines
 - `df561ef` the finetune status poll stops at a final status or a 404
