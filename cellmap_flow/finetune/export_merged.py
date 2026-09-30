@@ -46,7 +46,6 @@ import time
 from datetime import datetime
 
 import torch
-from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -60,44 +59,6 @@ REL_TOL = 1e-5       # accepted output difference, relative to the output's own 
 def valid_tile(tile):
     """True when ``tile`` keeps the pooling phase of the 178 training tile."""
     return tile >= TRAIN_TILE and (tile - TRAIN_TILE) % (2 * POOL_FACTOR) == 0
-
-
-def merge_lora_into_conv3d(peft_model):
-    """Add each LoRA pair into its base Conv3d weight in place; return count.
-
-    For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
-    delta[o, i, z, y, x] = scale * sum_r B[o, r] A[r, i, z, y, x].
-
-    No longer what apply_finetune uses: it handles Conv3d only, so an
-    adapter on a Conv2d or Linear layer was silently left out of the merged
-    model. PEFT's own ``merge_and_unload`` fails only on 1x1x1 Conv3d
-    kernels, which ``adaptation.LoraStrategy.merge`` computes itself.
-    """
-    from peft.tuners.lora import LoraLayer
-
-    n = 0
-    for mod in peft_model.modules():
-        if isinstance(mod, LoraLayer) and isinstance(mod.base_layer, nn.Conv3d):
-            for ad in mod.active_adapters:
-                a_w = mod.lora_A[ad].weight
-                b_w = mod.lora_B[ad].weight
-                if tuple(b_w.shape[2:]) != (1, 1, 1):
-                    raise NotImplementedError(f"lora_B kernel {tuple(b_w.shape[2:])} != 1^3")
-                delta = torch.einsum("or,rizyx->oizyx", b_w[:, :, 0, 0, 0], a_w) * mod.scaling[ad]
-                mod.base_layer.weight.data += delta.to(mod.base_layer.weight.dtype)
-                n += 1
-    return n
-
-
-def strip_lora_layers(module):
-    """Replace every LoraLayer under ``module`` by its (now merged) base layer."""
-    from peft.tuners.lora import LoraLayer
-
-    for parent in list(module.modules()):
-        for name, child in list(parent.named_children()):
-            if isinstance(child, LoraLayer):
-                setattr(parent, name, child.base_layer)
-    return module
 
 
 def load_eager_base(folder_path):

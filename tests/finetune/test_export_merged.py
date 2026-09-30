@@ -5,51 +5,8 @@ import pytest
 import torch
 from torch import nn
 
-from cellmap_flow.finetune.export_merged import (
-    apply_finetune,
-    merge_lora_into_conv3d,
-    strip_lora_layers,
-    valid_tile,
-)
+from cellmap_flow.finetune.export_merged import apply_finetune, valid_tile
 from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper, wrap_model_with_lora
-
-
-class TinyNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.c1 = nn.Conv3d(1, 8, 3)
-        self.c2 = nn.Conv3d(8, 2, 3)
-
-    def forward(self, x):
-        return self.c2(torch.relu(self.c1(x)))
-
-
-@pytest.mark.finetune
-def test_manual_merge_matches_unmerged_adapter_and_strips_lora():
-    torch.manual_seed(0)
-    net = BatchLoopWrapper(TinyNet()).eval()
-    peft = wrap_model_with_lora(net, lora_r=4, lora_alpha=8, lora_dropout=0.0).eval()
-    # give the adapter something to say (PEFT starts lora_B at zero)
-    for n, p in peft.named_parameters():
-        if "lora_" in n:
-            p.data.normal_(0, 0.1)
-    x = torch.rand(1, 1, 12, 12, 12)
-    with torch.no_grad():
-        y_adapter = peft(x)
-    n = merge_lora_into_conv3d(peft)
-    assert n == 2
-    base = peft.get_base_model()
-    strip_lora_layers(base)
-    from peft.tuners.lora import LoraLayer
-    assert not any(isinstance(m, LoraLayer) for m in base.modules())
-    plain = base.model
-    assert isinstance(plain, TinyNet)
-    with torch.no_grad():
-        y_merged = plain(x)
-    assert torch.allclose(y_adapter, y_merged, atol=1e-5)
-    # and it is a different function from the un-finetuned net
-    with torch.no_grad():
-        assert (y_merged - TinyNet().eval()(x)).abs().max() > 0
 
 
 class Mixed(nn.Module):
@@ -68,7 +25,7 @@ class Mixed(nn.Module):
 
 @pytest.mark.finetune
 def test_apply_finetune_folds_in_every_adapted_layer(tmp_path):
-    """Merging only the Conv3d pairs silently dropped the Linear's adapter."""
+    """Its own Conv3d-only merge silently dropped the Linear's adapter."""
     peft = wrap_model_with_lora(BatchLoopWrapper(Mixed()), lora_r=4, lora_alpha=8, lora_dropout=0.0)
     for n, p in peft.named_parameters():
         if "lora_" in n:
@@ -78,11 +35,7 @@ def test_apply_finetune_folds_in_every_adapted_layer(tmp_path):
     with torch.no_grad():
         y_adapter = peft.eval()(x)
         y_merged = apply_finetune(Mixed().eval(), lora_adapter_path=str(tmp_path / "adapter"))(x)
-        merge_lora_into_conv3d(peft)  # the Conv3d-only merge export_merged used to do
-        y_conv3d_only = strip_lora_layers(peft.get_base_model()).model(x)
-    scale = y_adapter.abs().max()
-    assert (y_merged - y_adapter).abs().max() <= 1e-6 * scale
-    assert (y_conv3d_only - y_adapter).abs().max() > 1e-3 * scale
+    assert (y_merged - y_adapter).abs().max() <= 1e-6 * y_adapter.abs().max()
 
 
 def test_valid_tile_keeps_pooling_phase():
