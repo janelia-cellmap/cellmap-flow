@@ -62,51 +62,99 @@ STROKE_BESIDE = (_labels(crop=(1, np.s_[0:16, 0:16, 0:16]), stroke=(2, np.s_[20,
 ABSENT = object()
 
 
-@pytest.mark.parametrize("volume, request_data, status, sent, manifest", [
-    (CROPPED, {}, 200, dict(mask_unannotated=False, loss_type="mse", charge_group="my_lab", num_epochs=10,
-                            output_type="affinities", offsets="[[1, 0, 0], [0, 1, 0]]"), {}),
-    # Painted sessions were never recognised, so scribbles trained as dense labels.
-    (PAINTED, {"output_type": "distance"}, 200,
-     dict(mask_unannotated=True, output_type="binary", loss_type="margin"), {}),
-    (STROKE_BESIDE, {}, 200, dict(mask_unannotated=True, loss_type="margin"), {}),
-    # An emptied field reached the trainer as "--num-epochs None", on the cluster.
-    (CROPPED, {"num_epochs": ""}, 200, dict(num_epochs=10), {}),
-    (CROPPED, {"num_epochs": "25"}, 200, dict(num_epochs=25), {}),
-    (CROPPED, {"num_epochs": "ten"}, 400, None, {}),
-    (CROPPED, {"num_epochs": "2.5"}, 400, None, {}),
-    # 0 is a choice (rehearsal off for this run), blank leaves the manifest alone.
-    (CROPPED, {"rehearsal_fraction": "0.5", "patches_per_epoch": 0}, 200, {},
-     dict(rehearsal_fraction=0.5, patches_per_epoch=None)),
-    (CROPPED, {"rehearsal_fraction": 0}, 200, {}, dict(rehearsal_fraction=0.0)),
-    (CROPPED, {"rehearsal_fraction": ""}, 200, {}, dict(rehearsal_fraction=ABSENT)),
-    (CROPPED, {"rehearsal_fraction": 1.5}, 400, None, dict(rehearsal_fraction=ABSENT)),
-    (CROPPED, {"rehearsal_fraction": "abc"}, 400, None, dict(rehearsal_fraction=ABSENT)),
-    # A dashboard restart forgot its sessions: the base path finds the one on disk.
-    (CROPPED, {"corrections_path": "<base>"}, 200, dict(corrections_path="<corrections>"), {}),
-], ids=["crops", "painted", "a stroke beside the crops", "blank number", "number", "not a number",
-        "not a whole number", "overrides", "rehearsal off", "blank rehearsal", "rehearsal out of range",
-        "rehearsal not a number", "the base path"])
-def test_what_submit_sends_the_job_manager(client, trainable_session, volume, request_data, status, sent, manifest):
-    corrections = trainable_session(*volume)
-    submitted = []
-    g.finetune_job_manager = SimpleNamespace(jobs={}, submit_finetuning_job=lambda **kw: submitted.append(kw)
-                                             or SimpleNamespace(job_id="j", output_dir=corrections, lsf_job=None))
-    paths = {"<base>": str(corrections.parent.parent), "<corrections>": corrections}
-    data = {"model_name": "m", "corrections_path": str(corrections), **request_data}
-    response = client.post("/api/finetune/submit", json={k: paths.get(v, v) for k, v in data.items()})
+@pytest.fixture
+def submit(client, trainable_session):
+    """``submit(volume=CROPPED, via_base_path=False, **request)``: POST
+    /api/finetune/submit for model "m", on a session over ``volume``. Returns
+    the status, what the job manager was asked for (None if nothing), and the
+    session's manifest afterwards."""
 
-    assert response.status_code == status, response.get_json()
-    if sent is not None:
-        (kwargs,) = submitted
-        assert {key: kwargs[key] for key in sent} == {k: paths.get(v, v) for k, v in sent.items()}
-    written = json.loads((corrections / "_virtual_sources.json").read_text())
-    assert {key: written.get(key, ABSENT) for key in manifest} == manifest
+    def run(volume=CROPPED, via_base_path=False, **request):
+        corrections = trainable_session(*volume)
+        asked = []
+        g.finetune_job_manager = SimpleNamespace(jobs={}, submit_finetuning_job=lambda **kw: asked.append(kw)
+                                                 or SimpleNamespace(job_id="j", output_dir=corrections, lsf_job=None))
+        path = corrections.parent.parent if via_base_path else corrections
+        response = client.post("/api/finetune/submit",
+                               json={"model_name": "m", "corrections_path": str(path), **request})
+        return SimpleNamespace(status=response.status_code, sent=asked[0] if asked else None, corrections=corrections,
+                               manifest=json.loads((corrections / "_virtual_sources.json").read_text()))
+
+    return run
+
+
+@pytest.mark.parametrize("volume, request_data, sent", [
+    pytest.param(CROPPED, {}, dict(mask_unannotated=False, loss_type="mse"), id="imported crops are dense"),
+    # A distance target needs 3D boundaries, which scribbles do not have.
+    pytest.param(PAINTED, {"output_type": "distance"}, dict(mask_unannotated=True, loss_type="margin",
+                                                            output_type="binary"), id="a painted session"),
+    pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin"),
+                 id="a stroke beside the crops"),
+])
+def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent):
+    """Scribbles were detected from per-chunk extracts that no session has any
+    more, so it never fired: painted sessions trained as dense labels, with
+    unannotated voxels taken for background. It is read from the volume now."""
+    job = submit(volume, **request_data)
+    assert {key: job.sent[key] for key in sent} == sent
+
+
+def test_submit_reads_the_affinity_offsets_from_the_models_script(submit):
+    job = submit()
+    assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", "[[1, 0, 0], [0, 1, 0]]")
+
+
+def test_submit_bills_the_dashboards_charge_group(submit):
+    """Every finetune job billed "cellmap", the job manager's default."""
+    assert submit().sent["charge_group"] == "my_lab"
+
+
+@pytest.mark.parametrize("value, status, epochs", [
+    pytest.param("", 200, 10, id="blank gets the default"),
+    pytest.param("25", 200, 25, id="a number"),
+    pytest.param("ten", 400, None, id="not a number"),
+    pytest.param("2.5", 400, None, id="not a whole number"),
+])
+def test_a_number_field_is_read_as_a_number(submit, value, status, epochs):
+    """An emptied field reached the trainer as "--num-epochs None", failing on
+    the cluster; a field that is not a number is a 400 here instead."""
+    job = submit(num_epochs=value)
+    assert job.status == status
+    assert (job.sent or {}).get("num_epochs") == epochs
+
+
+@pytest.mark.parametrize("request_data, manifest", [
+    pytest.param({"rehearsal_fraction": "0.5", "patches_per_epoch": 0},
+                 dict(rehearsal_fraction=0.5, patches_per_epoch=None), id="a fraction, and patches on auto"),
+    # 0 turns rehearsal off for this run, without dropping the regions.
+    pytest.param({"rehearsal_fraction": 0}, dict(rehearsal_fraction=0.0), id="rehearsal off"),
+    pytest.param({"rehearsal_fraction": ""}, dict(rehearsal_fraction=ABSENT), id="blank leaves it alone"),
+])
+def test_the_runs_overrides_reach_the_manifest(submit, request_data, manifest):
+    job = submit(**request_data)
+    assert job.status == 200
+    assert {key: job.manifest.get(key, ABSENT) for key in manifest} == manifest
+
+
+@pytest.mark.parametrize("fraction", [pytest.param(1.5, id="out of range"), pytest.param("abc", id="not a number")])
+def test_a_rehearsal_fraction_that_is_not_one_is_refused(submit, fraction):
+    job = submit(rehearsal_fraction=fraction)
+    assert job.status == 400 and job.sent is None and "rehearsal_fraction" not in job.manifest
+
+
+def test_submit_after_a_dashboard_restart_finds_the_session_on_disk(submit):
+    """The dashboard forgot its sessions and made a new, empty one for the base
+    path: "Corrections path does not exist". The newest session there with
+    something to train on is used instead."""
+    job = submit(via_base_path=True)
+    assert job.sent["corrections_path"] == job.corrections
 
 
 @pytest.mark.parametrize("registered, written", [
-    ("this session's", True),  # a painted volume, and no manifest: trained on a per-chunk copy, or not at all
-    ("another session's", False),
-    ("an incomplete", False),  # better no manifest than one the trainer chokes on
+    # A painted volume and no manifest: it trained on a per-chunk copy, or not at all.
+    pytest.param("this session's", True, id="the session's own volume"),
+    pytest.param("another session's", False, id="another session's volume"),
+    pytest.param("an incomplete", False, id="an incomplete record"),  # better none than one the trainer chokes on
 ])
 def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_path, registered, written):
     corrections = tmp_path / "session" / "corrections"
@@ -129,32 +177,58 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
         assert json.loads(manifest.read_text())["input_size_voxels"] == [178] * 3
 
 
-@pytest.mark.parametrize("pulled, synced", [(2, 2), (0, 0), (-1, 0)])  # -1: MinIO is not running
-def test_a_restart_pulls_the_new_annotations_first(client, local_jobs, session, monkeypatch, pulled, synced):
-    """The trainer rebuilds its data from the volume on disk, and only the sync
-    puts the browser's strokes there: a session with a manifest skipped it, and
-    trained on the old annotations. The job used to forget its corrections dir,
-    so the new settings never reached the manifest; and the trainer's flags are
-    --no-augment and JSON --offsets, not what the form sends."""
+@pytest.fixture
+def restart(client, local_jobs, session, monkeypatch):
+    """``restart(pulled=0, **request)``: POST /api/finetune/job/<id>/restart for
+    a job submitted through the dashboard's own job manager, with MinIO sync
+    pulling ``pulled`` volumes. Returns the response body, the syncs asked for,
+    what the trainer is sent, and the session."""
     from cellmap_flow.dashboard.routes.finetune import training
     from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
 
-    base = session()
-    manager = g.finetune_job_manager  # the dashboard's own, made when first asked for
-    assert isinstance(manager, FinetuneJobManager)
-    job = manager.submit_finetuning_job(model_config=g.models_config[0], corrections_path=base / "corrections",
-                                        output_base=base)
-    syncs, restarts = [], []
-    monkeypatch.setattr(training, "sync_all_annotations_from_minio", lambda force=True: syncs.append(force) or pulled)
-    monkeypatch.setattr(manager, "restart_finetuning_job", lambda job_id, updated_params: restarts.append(
-        updated_params) or job)
-    response = client.post(f"/api/finetune/job/{job.job_id}/restart", json={
-        "patches_per_epoch": 7, "augment": True, "offsets": [[1, 0, 0]], "distillation_scope": "all",
-        "loss_type": "margin"})
+    def run(pulled=0, **request):
+        base = session()
+        manager = g.finetune_job_manager  # made when first asked for, as in the dashboard
+        assert isinstance(manager, FinetuneJobManager)
+        job = manager.submit_finetuning_job(model_config=g.models_config[0], corrections_path=base / "corrections",
+                                            output_base=base)
+        record = SimpleNamespace(syncs=[], sent=[], base=base)
+        monkeypatch.setattr(training, "sync_all_annotations_from_minio",
+                            lambda force=True: record.syncs.append(force) or pulled)
+        monkeypatch.setattr(manager, "restart_finetuning_job",
+                            lambda job_id, updated_params: record.sent.append(updated_params) or job)
+        record.body = client.post(f"/api/finetune/job/{job.job_id}/restart", json=request).get_json()
+        return record
 
-    assert response.get_json()["annotations_synced"] == synced and syncs == [False]
-    assert json.loads((base / "corrections" / "_virtual_sources.json").read_text())["patches_per_epoch"] == 7
-    assert restarts == [{"augment": True, "no_augment": False, "offsets": "[[1, 0, 0]]",
+    return run
+
+
+@pytest.mark.parametrize("pulled, synced", [
+    pytest.param(2, 2, id="new annotations"),
+    pytest.param(0, 0, id="nothing new: a parameters-only restart"),
+    pytest.param(-1, 0, id="MinIO is not running"),
+])
+def test_a_restart_pulls_the_new_annotations_first(restart, pulled, synced):
+    """The trainer rebuilds its data from the volume on disk, and only the sync
+    puts the browser's strokes there: a session with a manifest skipped it, and
+    trained on the old annotations."""
+    run = restart(pulled=pulled)
+    assert run.syncs == [False], "a diff of the chunks, whether or not there is a manifest"
+    assert run.body["annotations_synced"] == synced
+
+
+def test_a_restart_refreshes_the_manifest_of_the_jobs_session(restart):
+    """The job did not record its corrections dir, so a restart never refreshed
+    the manifest: its new settings, shown in the dialog, were dropped."""
+    run = restart(patches_per_epoch=7)
+    assert json.loads((run.base / "corrections" / "_virtual_sources.json").read_text())["patches_per_epoch"] == 7
+
+
+def test_a_restart_sends_the_trainer_its_own_flags(restart):
+    """The trainer's flag is --no-augment (the toggle was dropped), --offsets is
+    JSON (a list killed the restart), and the scope is --distillation-all-voxels."""
+    run = restart(augment=True, offsets=[[1, 0, 0]], distillation_scope="all", loss_type="margin")
+    assert run.sent == [{"augment": True, "no_augment": False, "offsets": "[[1, 0, 0]]",
                          "distillation_all_voxels": True, "loss_type": "margin"}]
 
 
@@ -204,13 +278,19 @@ MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
 PROXY = "https://gateway.example.org/minio/annotations/vol-1.zarr"
 
 
+TEMPLATE = "{proto}://{host}/minio"
+
+
 @pytest.mark.parametrize("template, headers, expected", [
-    (None, {"X-Forwarded-Host": "gateway.example.org"}, MINIO),  # opt-in only
-    ("{proto}://{host}/minio", {}, MINIO),  # direct access: no proxy, no rewrite
-    ("{proto}://{host}/minio", None, MINIO),  # outside a request
-    ("{proto}://{host}/minio", {"X-Forwarded-Host": "gateway.example.org, inner", "X-Forwarded-Proto": "https"}, PROXY),
-    ("{proto}://{host}/minio", {"X-Forwarded-Host": "gateway.example.org"}, PROXY.replace("https", "http")),
-    ("https://gateway.example.org/minio/", {"X-Forwarded-Host": "anything"}, PROXY),
+    pytest.param(None, {"X-Forwarded-Host": "gateway.example.org"}, MINIO, id="opt-in only"),
+    pytest.param(TEMPLATE, {}, MINIO, id="direct access: no proxy, no rewrite"),
+    pytest.param(TEMPLATE, None, MINIO, id="outside a request"),
+    pytest.param(TEMPLATE, {"X-Forwarded-Host": "gateway.example.org, inner", "X-Forwarded-Proto": "https"},
+                 PROXY, id="the first proxy of a chain, and its protocol"),
+    pytest.param(TEMPLATE, {"X-Forwarded-Host": "gateway.example.org"}, PROXY.replace("https", "http"),
+                 id="no forwarded protocol: the request's"),
+    pytest.param("https://gateway.example.org/minio/", {"X-Forwarded-Host": "anything"}, PROXY,
+                 id="a fixed proxy URL"),
 ])
 def test_minio_urls_are_rewritten_only_behind_a_configured_proxy(monkeypatch, template, headers, expected):
     from flask import Flask

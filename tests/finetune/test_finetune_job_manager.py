@@ -54,54 +54,116 @@ class _Bio:
 GEOMETRY = SimpleNamespace(input_voxel_size=[8] * 3, output_voxel_size=[4] * 3, channels=["nuc"])
 
 
-@pytest.mark.parametrize("config, geometry, manifest, settings, present, absent", [
-    (_Script(), None, None, dict(queue="gpu_a100", charge_group="my_lab", distillation_lambda=0.0,
-                           distillation_scope="all"),
-     # 0 is passed: left out, the trainer makes it 1.0 when good regions exist.
-     ["--model-type script --model-script /s.py", "--queue gpu_a100", "--charge-group my_lab",
-      "--distillation-lambda 0.0", "--channels mito --input-voxel-size 16 16 16 --output-voxel-size 16 16 16"],
-     ["--distillation-all-voxels"]),
-    # A manifest without the raw path: served on what the volume's own attrs name.
-    (_Exported(), None, {"kind": "volume_zarr_v1"}, dict(distillation_scope="all"),
-     ["--model-type cellmap", "--distillation-all-voxels"], ["--distillation-lambda"]),
-    (_Hub(), GEOMETRY, None, {}, ["--repo org/hub", "--channels nuc --input-voxel-size 8 8 8 --output-voxel-size 4 4 4"], []),
-], ids=["script", "exported", "geometry from its server"])
-def test_submit_writes_the_command_the_trainer_runs(local_jobs, session, monkeypatch, config, geometry,
-                                                    manifest, settings, present, absent):
+@pytest.fixture
+def submit(local_jobs, session, monkeypatch):
+    """``submit(config, geometry=None, manifest=None, **settings)``: a job submitted
+    from a session, locally. ``geometry`` is what the model's server reports
+    (None: the real lookup, which finds nothing for these configs). Returns the
+    job, its metadata.json and command, and the models the geometry was asked for."""
     from cellmap_flow.utils import model_geometry
 
-    asked, resolve = [], model_geometry.resolve_model_geometry
-    monkeypatch.setattr(model_geometry, "resolve_model_geometry",
-                        lambda name, c: asked.append(name) or geometry or resolve(name, c))
-    base = session(manifest=manifest)
-    job = FinetuneJobManager().submit_finetuning_job(
-        model_config=config, corrections_path=base / "corrections", output_base=base, **settings
-    )
+    record = SimpleNamespace(asked=[], runs=local_jobs.runs)
+    resolve = model_geometry.resolve_model_geometry
 
-    metadata = json.loads((job.output_dir / "metadata.json").read_text())
-    command = metadata["command"]
-    # The console script of this interpreter, and tee line-buffered too: stdio
-    # block-buffers a file, so the log (and the dashboard) got 5-10 epochs at once.
-    assert f"{sys.executable} -m cellmap_flow.finetune.finetune_cli" in command
-    assert f"| stdbuf -oL tee {job.log_file}" in command and "stdbuf -oL python -m" not in command
-    assert f"--models-dir {base / 'models'}" in command  # the session's, next to runs/
-    assert "--auto-serve --serve-data-path /data/raw.zarr" in command
-    assert all(part in command for part in present) and not any(part in command for part in absent)
-    if hasattr(config, "to_dict"):
-        tokens = command.split()
-        assert decode_model_entry(tokens[tokens.index("--model-entry") + 1]) == config.to_dict()
-    assert asked == [config.name], "the geometry is looked up once, not per field"
-    # What a dashboard started later finds the job by; its own log is the tee'd one.
-    assert (metadata["lsf_job_id"], metadata["status"]) == ("PID:77", "PENDING")
-    assert job.corrections_path == base / "corrections"
-    assert local_jobs.runs[0]["log_file"] == os.devnull
+    def run(config, geometry=None, manifest=None, **settings):
+        monkeypatch.setattr(model_geometry, "resolve_model_geometry",
+                            lambda name, c: record.asked.append(name) or geometry or resolve(name, c))
+        record.base = session(manifest=manifest)
+        record.job = FinetuneJobManager().submit_finetuning_job(
+            model_config=config, corrections_path=record.base / "corrections", output_base=record.base, **settings
+        )
+        record.metadata = json.loads((record.job.output_dir / "metadata.json").read_text())
+        record.command = record.metadata["command"]
+        return record
+
+    return run
+
+
+def test_a_job_runs_this_interpreters_trainer_and_logs_as_it_goes(submit):
+    """tee writes through stdio, which block-buffers a file: the log, and the
+    dashboard, got 5-10 epochs at once. And the command tees its own log, so a
+    local run keeps no second copy."""
+    job = submit(_Script())
+    assert f"{sys.executable} -m cellmap_flow.finetune.finetune_cli" in job.command
+    assert f"| stdbuf -oL tee {job.job.log_file}" in job.command and "stdbuf -oL python -m" not in job.command
+    assert job.runs[0]["log_file"] == os.devnull
+
+
+def test_the_job_writes_its_yamls_into_the_session_with_its_queue_and_charge_group(submit):
+    """The trainer writes each iteration's serving YAML, into the session's
+    models/ next to runs/, and a model served from one runs where this job did."""
+    job = submit(_Script(), queue="gpu_a100", charge_group="my_lab")
+    assert f"--models-dir {job.base / 'models'}" in job.command
+    assert "--queue gpu_a100" in job.command and "--charge-group my_lab" in job.command
+    assert (job.metadata["queue"], job.metadata["charge_group"]) == ("gpu_a100", "my_lab")
+
+
+@pytest.mark.parametrize("manifest", [
+    pytest.param(None, id="the manifest's raw data"),
+    pytest.param({"kind": "volume_zarr_v1"}, id="else what the volume's attrs name"),
+])
+def test_the_job_serves_the_data_it_trains_on(submit, manifest):
+    assert "--auto-serve --serve-data-path /data/raw.zarr" in submit(_Script(), manifest=manifest).command
+
+
+def test_a_dashboard_started_later_can_find_the_job(submit):
+    """Jobs lived only in the dashboard's memory, and metadata.json did not
+    record the scheduler's id: after a restart a running job was lost."""
+    job = submit(_Script())
+    assert (job.metadata["lsf_job_id"], job.metadata["status"]) == ("PID:77", "PENDING")
+    assert job.job.corrections_path == job.base / "corrections"
+
+
+@pytest.mark.parametrize("config, flags", [
+    pytest.param(_Script(), "--model-type script --model-script /s.py", id="a script"),
+    pytest.param(_Hub(), "--model-type huggingface --repo org/hub", id="a Hugging Face repo"),
+])
+def test_the_command_names_the_model_the_way_its_type_takes(submit, config, flags):
+    assert flags in submit(config, geometry=GEOMETRY).command
+
+
+def test_a_model_without_flags_of_its_own_goes_as_its_entry(submit):
+    """What export_merged produces (cellmap), and finetuned models, reach the trainer as their to_dict()."""
+    tokens = submit(_Exported()).command.split()
+    assert tokens[tokens.index("--model-type") + 1] == "cellmap"
+    assert decode_model_entry(tokens[tokens.index("--model-entry") + 1]) == _Exported().to_dict()
+
+
+def test_the_geometry_comes_from_the_models_server_without_building_it(submit):
+    """For a script, Hugging Face or DaCapo model, reading model_config.config
+    built the model in the dashboard: weights download, torch.export, CUDA."""
+    job = submit(_Hub(), geometry=GEOMETRY)
+    assert "--channels nuc --input-voxel-size 8 8 8 --output-voxel-size 4 4 4" in job.command
+    assert job.asked == ["hub"], "looked up once, not once per field"
+
+
+def test_what_a_model_does_not_say_of_its_geometry_is_the_named_default(submit):
+    """The script says its channels and nothing else: 16 nm is a guess, and the log names it."""
+    command = submit(_Script()).command
+    assert "--channels mito --input-voxel-size 16 16 16 --output-voxel-size 16 16 16" in command
+
+
+@pytest.mark.parametrize("settings, present, absent", [
+    # Left out, the weight is "unset", which the trainer makes 1.0 when good
+    # regions exist: "0 (Disabled)" could not be expressed.
+    pytest.param(dict(distillation_lambda=0.0, distillation_scope="all"), ["--distillation-lambda 0.0"],
+                 ["--distillation-all-voxels"], id="an explicit 0 is passed, and no scope with it"),
+    pytest.param(dict(distillation_scope="all"), ["--distillation-all-voxels"], ["--distillation-lambda"],
+                 id="unset is left to the trainer"),
+    pytest.param(dict(distillation_lambda=0.5, distillation_scope="all"),
+                 ["--distillation-lambda 0.5", "--distillation-all-voxels"], [], id="a weight and its scope"),
+])
+def test_the_distillation_flags(submit, settings, present, absent):
+    command = submit(_Script(), **settings).command
+    assert all(flag in command for flag in present) and not any(flag in command for flag in absent)
 
 
 @pytest.mark.parametrize("config, manifest, error", [
-    (_Bio(), True, "cannot be finetuned"),  # argparse would exit 2 on the GPU node
-    (_Script(), False, "_virtual_sources.json"),  # a crop zarr alone: nothing the trainer reads
+    pytest.param(_Bio(), True, "cannot be finetuned", id="a type the trainer cannot load"),  # argparse exit 2
+    pytest.param(_Script(), False, "_virtual_sources.json", id="a session without a manifest"),
 ])
 def test_submit_refuses_what_the_trainer_cannot_train(local_jobs, session, config, manifest, error):
+    """Refused before anything is submitted, not on the GPU node after queueing."""
     base = session()
     if not manifest:
         (base / "corrections" / "_virtual_sources.json").unlink()
@@ -118,14 +180,15 @@ def _lsf(*replies, **fields):
     return SimpleNamespace(get_status=lambda: next(replies), **fields)
 
 
-def _monitor(manager, job, chunks, monkeypatch):
-    """monitor_job over a log that grows by one chunk per poll; the job's
-    (status, epoch, loss) at each poll."""
+def _monitor(manager, job, chunks, monkeypatch, observe=None):
+    """monitor_job over a log that grows by one chunk per poll; what ``observe()``
+    returns at each poll (default: the job's status, epoch and loss)."""
     job.log_file.write_text(chunks[0])
     rest, seen = iter(chunks[1:]), []
+    observe = observe or (lambda: (job.status.value, job.current_epoch, job.latest_loss))
 
     def sleep(seconds):
-        seen.append((job.status.value, job.current_epoch, job.latest_loss))
+        seen.append(observe())
         with open(job.log_file, "a") as f:
             f.write(next(rest, ""))
 
@@ -134,45 +197,68 @@ def _monitor(manager, job, chunks, monkeypatch):
     return seen
 
 
-FULL, LORA = ["full_finetune/model_state_dict.pt"], ["lora_adapter/adapter_model.safetensors", "lora_adapter/adapter_config.json"]
-COMPLETED = ["FINETUNED_MODEL_YAML: /s/models/m_1.yaml\nTRAINING_ITERATION_COMPLETE: m_1\n"
-             "RESTARTING_TRAINING\nFINETUNED_MODEL_YAML: /s/models/m_2.yaml\nTRAINING_ITERATION_COMPLETE: m_2\n"]
+FULL = ["full_finetune/model_state_dict.pt"]
+LORA = ["lora_adapter/adapter_model.safetensors", "lora_adapter/adapter_config.json"]
 
 
-@pytest.mark.parametrize("chunks, seen, final, name, exported", [
-    # One loss per epoch, from its summary line, even split across two reads.
-    pytest.param(["Starting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
-                  "ss: 0.5 - Supervised: 0.5\nStarting epoch 2 of 10...\nEpoch 2/10 - Loss: 0.25 - Sup\n",
-                  "  Batch 1/3 - Loss: 0.123\n"],
-                 [("RUNNING", 1, None), ("RUNNING", 2, 0.25), ("RUNNING", 2, 0.25)], "FAILED", None, FULL,
-                 id="progress"),
-    # The last status marker decides, and LSF saying RUNNING does not undo waiting.
-    pytest.param(["Epoch 3/10 - Loss: nan\nTRAINING_DIVERGED\nWAITING_FOR_RESTART\n",
-                  "RESTARTING_TRAINING\nTRAINING_DIVERGED\n", "WAITING_FOR_RESTART\nRESTARTING_TRAINING\n",
-                  "TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\n"],
-                 [("WAITING_FOR_RESTART", 0, None), ("WAITING_FOR_RESTART", 0, None), ("RUNNING", 0, None),
-                  ("WAITING_FOR_RESTART", 0, None)], "FAILED", "m_1", FULL, id="waiting for a restart"),
-    # The name and YAML are the trainer's: the manager made up its own, never
-    # found that YAML, and wrote a second one.
-    pytest.param(COMPLETED, [("RUNNING", 0, None)], "COMPLETED", "m_2", FULL, id="completed, full"),
-    pytest.param(COMPLETED, [("RUNNING", 0, None)], "COMPLETED", "m_2", LORA, id="completed, LoRA"),
-])
-def test_the_monitor_follows_the_log(make_job, monkeypatch, tmp_path, chunks, seen, final, name, exported):
-    job = make_job("PENDING", lsf_job=_lsf(*[LSF.RUNNING] * len(chunks), LSF[final]))
-    (job.output_dir / "metadata.json").write_text(json.dumps({"status": "PENDING"}))
-    for export in exported:  # complete_job checks that the export is there
-        (job.output_dir / export).parent.mkdir(exist_ok=True)
-        (job.output_dir / export).write_bytes(b"")
-    manager = FinetuneJobManager()
-    manager.remove_listener(manager.viewer_listener)
+@pytest.fixture
+def monitored(make_job, monkeypatch):
+    """``monitored(chunks, final="FAILED", exported=FULL)``: a pending job monitored
+    while LSF says RUNNING for each chunk, then ``final``. Returns the job, its
+    metadata.json and its (status, epoch, loss) at each poll."""
 
-    assert _monitor(manager, job, chunks, monkeypatch) == seen
-    metadata = json.loads((job.output_dir / "metadata.json").read_text())
-    assert job.status.value == metadata["status"] == final
-    assert job.finetuned_model_name == metadata["finetuned_model_name"] == name
-    if final == "COMPLETED":
-        assert job.model_yaml_path == Path(metadata["model_yaml_path"]) == Path("/s/models/m_2.yaml")
-        assert not (tmp_path / "models").exists()
+    def run(chunks, final="FAILED", exported=FULL):
+        job = make_job("PENDING", lsf_job=_lsf(*[LSF.RUNNING] * len(chunks), LSF[final]))
+        (job.output_dir / "metadata.json").write_text(json.dumps({"status": "PENDING"}))
+        for export in exported:  # complete_job checks that the export is there
+            (job.output_dir / export).parent.mkdir(exist_ok=True)
+            (job.output_dir / export).write_bytes(b"")
+        manager = FinetuneJobManager()
+        manager.remove_listener(manager.viewer_listener)
+        seen = _monitor(manager, job, chunks, monkeypatch)
+        return SimpleNamespace(job=job, seen=seen, metadata=json.loads((job.output_dir / "metadata.json").read_text()))
+
+    return run
+
+
+def test_the_monitor_reads_one_loss_per_epoch(monitored):
+    """From the epoch's summary line, even split across two reads; per-batch
+    losses are running means mid-epoch, and are not read."""
+    run = monitored(["Starting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
+                     "ss: 0.5 - Supervised: 0.5\nStarting epoch 2 of 10...\nEpoch 2/10 - Loss: 0.25 - Sup\n",
+                     "  Batch 1/3 - Loss: 0.123\n"])
+    assert [(epoch, loss) for _, epoch, loss in run.seen] == [(1, None), (2, 0.25), (2, 0.25)]
+    assert run.job.total_epochs == 10
+
+
+def test_the_last_status_marker_in_the_log_decides(monitored):
+    """A restart after a divergence in the same chunk leaves the job running,
+    and the reverse leaves it waiting; LSF saying RUNNING does not undo waiting.
+    A job diverged in a later iteration could never be restarted."""
+    run = monitored(["Epoch 3/10 - Loss: nan\nTRAINING_DIVERGED\nWAITING_FOR_RESTART\n",
+                     "RESTARTING_TRAINING\nTRAINING_DIVERGED\n", "WAITING_FOR_RESTART\nRESTARTING_TRAINING\n",
+                     "TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\n"])
+    assert [status for status, _, _ in run.seen] == [
+        "WAITING_FOR_RESTART", "WAITING_FOR_RESTART", "RUNNING", "WAITING_FOR_RESTART"]
+
+
+def test_the_final_status_is_recorded_for_a_dashboard_started_later(monitored):
+    run = monitored(["Starting epoch 1 of 5...\n"])
+    assert run.job.status.value == run.metadata["status"] == "FAILED"
+
+
+@pytest.mark.parametrize("exported", [pytest.param(FULL, id="a full finetune"),
+                                      pytest.param(LORA, id="a LoRA adapter")])
+def test_a_completed_job_takes_the_trainers_name_and_yaml(monitored, tmp_path, exported):
+    """The manager made up its own name (the job's creation time, not the
+    iteration's), never found that YAML, and wrote a second one."""
+    run = monitored(["FINETUNED_MODEL_YAML: /s/models/m_1.yaml\nTRAINING_ITERATION_COMPLETE: m_1\n"
+                     "RESTARTING_TRAINING\nFINETUNED_MODEL_YAML: /s/models/m_2.yaml\n"
+                     "TRAINING_ITERATION_COMPLETE: m_2\n"], final="COMPLETED", exported=exported)
+    assert run.job.status.value == run.metadata["status"] == "COMPLETED"
+    assert run.job.finetuned_model_name == run.metadata["finetuned_model_name"] == "m_2"
+    assert run.job.model_yaml_path == Path(run.metadata["model_yaml_path"]) == Path("/s/models/m_2.yaml")
+    assert not (tmp_path / "models").exists(), "no YAML of its own"
 
 
 class _Killable:
@@ -186,7 +272,8 @@ class _Killable:
         return LSF.FAILED if self.killed else LSF.RUNNING
 
 
-@pytest.mark.parametrize("cancel", ["through the manager", "racing the poll"])
+@pytest.mark.parametrize("cancel", [pytest.param("through the manager", id="cancelled through the manager"),
+                                    pytest.param("racing the poll", id="killed before it was marked cancelled")])
 def test_a_cancelled_job_stays_cancelled(make_job, monkeypatch, cancel):
     """LSF reports the kill as EXIT, and the next poll overwrote CANCELLED with FAILED."""
     monkeypatch.setattr(fjm.time, "sleep", lambda s: None)
@@ -194,24 +281,23 @@ def test_a_cancelled_job_stays_cancelled(make_job, monkeypatch, cancel):
     manager.jobs[job.job_id] = job
     if cancel == "through the manager":
         assert manager.cancel_job(job.job_id)
-    else:  # killed, and not yet marked cancelled
+    else:
         job.cancel_requested = job.lsf_job.killed = True
     manager.monitor_job(job)
     assert job.status == JobStatus.CANCELLED
 
 
-def test_each_iteration_reaches_the_listeners_and_the_viewer(make_job, monkeypatch):
-    """The layer comes once the server is up (it had the source zarr://None/...),
-    for a local run too (a LocalJob has no job_id), shows the output's own range
-    ([0, 255] made a sigmoid's look black), and each iteration replaces it. A
-    listener that raises stops neither the others nor the monitor."""
-    from cellmap_flow.post.postprocessors import SigmoidPostprocessor
-    from cellmap_flow.utils import server_info
+# Iteration 1 completes before its server is up (the trainer announces the
+# model first), then the server comes up, then a restart completes iteration 2.
+ITERATIONS = ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n", f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n",
+              "RESTARTING_TRAINING\nTRAINING_ITERATION_COMPLETE: m_finetuned_2\n"]
 
-    monkeypatch.setattr(server_info, "fetch_model_info", lambda *a, **k: {"output_class": None})
-    for key, value in dict(viewer=neuroglancer.Viewer(), jobs=[], models_config=[], input_norms=[],
-                           postprocess=[SigmoidPostprocessor()]).items():
-        monkeypatch.setattr(g, key, value, raising=False)
+
+def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatch):
+    """What the dashboard does about a job is a listener. While listeners run
+    the job still has the previous iteration's name, so one can replace that
+    iteration's layer; and a listener that raises stops neither the others nor
+    the monitor."""
     heard = []
 
     class Recording:
@@ -219,27 +305,55 @@ def test_each_iteration_reaches_the_listeners_and_the_viewer(make_job, monkeypat
             heard.append(("server", url, model_name))
 
         def on_iteration_complete(self, job, model_name):
-            heard.append(("iteration", model_name, job.finetuned_model_name))  # the previous name, still
+            heard.append(("iteration", model_name, job.finetuned_model_name))
 
     class Broken:
         def on_iteration_complete(self, job, model_name):
             raise RuntimeError("listener bug")
 
     manager = FinetuneJobManager()
-    for listener in (Recording(), Broken(), manager.viewer_listener):  # the viewer's after a broken one
-        manager.remove_listener(listener)
-        manager.add_listener(listener)
-    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * 3, LSF.FAILED, process=SimpleNamespace(pid=99)))
-    _monitor(manager, job, ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n",
-                            f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n",
-                            "RESTARTING_TRAINING\nTRAINING_ITERATION_COMPLETE: m_finetuned_2\n"], monkeypatch)
-
+    manager.remove_listener(manager.viewer_listener)
+    manager.add_listener(Broken())
+    manager.add_listener(Recording())
+    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * 3, LSF.FAILED))
+    _monitor(manager, job, ITERATIONS, monkeypatch)
     assert heard == [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1"),
                      ("iteration", "m_finetuned_2", "m_finetuned_1")]
-    assert [layer.name for layer in g.viewer.state.layers] == ["m_finetuned_2"]
-    assert "range=[0, 1]" in g.viewer.state.layers["m_finetuned_2"].shader
-    assert [j.job_id for j in g.jobs] == ["local"]
-    assert [c.name for c in g.models_config] == ["m_finetuned_2"]
+    assert job.finetuned_model_name == "m_finetuned_2"
+
+
+@pytest.fixture
+def viewer(make_job, monkeypatch):
+    """The dashboard's own listener, following ITERATIONS for a local run (a
+    process, no LSF job id): the viewer's layer names at each poll."""
+    from cellmap_flow.post.postprocessors import SigmoidPostprocessor
+    from cellmap_flow.utils import server_info
+
+    monkeypatch.setattr(server_info, "fetch_model_info", lambda *a, **k: {"output_class": None})
+    for key, value in dict(viewer=neuroglancer.Viewer(), jobs=[], models_config=[], input_norms=[],
+                           postprocess=[SigmoidPostprocessor()]).items():
+        monkeypatch.setattr(g, key, value, raising=False)
+    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * 3, LSF.FAILED, process=SimpleNamespace(pid=99)))
+    layers = _monitor(FinetuneJobManager(), job, ITERATIONS, monkeypatch,
+                      observe=lambda: [layer.name for layer in g.viewer.state.layers])
+    return SimpleNamespace(layers=layers, state=g.viewer.state)
+
+
+def test_the_viewer_gets_the_layer_once_the_server_is_up_and_each_iteration_replaces_it(viewer):
+    """A layer was added before the server existed, with the source zarr://None/...;
+    and a local run's LocalJob has no job_id, so adding its layer raised."""
+    assert viewer.layers == [[], ["m_finetuned_1"], ["m_finetuned_2"]]
+    assert [job.job_id for job in g.jobs] == ["local"]
+
+
+def test_the_finetuned_layer_shows_the_outputs_own_range(viewer):
+    """It was always [0, 255], so a sigmoid's [0, 1] rendered black, and the
+    finetuned model looked worse than the same one added the normal way."""
+    assert "range=[0, 1]" in viewer.state.layers["m_finetuned_2"].shader
+
+
+def test_the_pipeline_builder_gets_each_iterations_model(viewer):
+    assert [config.name for config in g.models_config] == ["m_finetuned_2"]
 
 
 def _run(session, name, **metadata):
@@ -278,10 +392,11 @@ def test_jobs_still_on_the_cluster_are_picked_up_again(local_jobs, session, monk
 
 
 @pytest.mark.parametrize("log, status, detail", [
-    ("TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\nTRAINING_ITERATION_COMPLETE: m_2\n",
-     "COMPLETED", "finished 2 iteration(s), the last m_2"),
-    ("Starting epoch 1 of 5...\nTraceback (most recent call last):\n", "FAILED", "how is not known"),
-    (None, "FAILED", "how is not known"),
+    pytest.param("TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\nTRAINING_ITERATION_COMPLETE: m_2\n",
+                 "COMPLETED", "finished 2 iteration(s), the last m_2", id="it finished iterations"),
+    pytest.param("Starting epoch 1 of 5...\nTraceback (most recent call last):\n", "FAILED", "how is not known",
+                 id="it finished none"),
+    pytest.param(None, "FAILED", "how is not known", id="it left no log"),
 ])
 def test_a_job_lsf_has_forgotten_is_judged_by_its_log(session, monkeypatch, log, status, detail):
     """The trainer never says "done" (it waits for restarts until stopped), so a
@@ -296,7 +411,10 @@ def test_a_job_lsf_has_forgotten_is_judged_by_its_log(session, monkeypatch, log,
     assert metadata["status"] == status and detail in metadata["status_detail"] and "501" in metadata["status_detail"]
 
 
-@pytest.mark.parametrize("status, restarted", [("WAITING_FOR_RESTART", True), ("COMPLETED", False)])
+@pytest.mark.parametrize("status, restarted", [
+    pytest.param("WAITING_FOR_RESTART", True, id="waiting, with no server: through the signal file"),
+    pytest.param("COMPLETED", False, id="completed: the trainer has exited"),
+])
 def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, status, restarted):
     """Only a job whose server was marked ready could be restarted, which a
     restart resets and a diverged iteration never sets. A COMPLETED trainer has
@@ -316,10 +434,12 @@ def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, status, restart
 
 
 @pytest.mark.parametrize("on_disk, params, served_from", [
-    (None, {"lora_r": 64}, "lora_adapter"),
-    (None, {"lora_r": 0}, "full_finetune/model_state_dict.pt"),
-    ("full_finetune/model_state_dict.pt", {"lora_r": 64}, "full_finetune/model_state_dict.pt"),
-    ("lora_adapter/adapter_config.json", {"lora_r": 0}, "lora_adapter"),
+    pytest.param(None, {"lora_r": 64}, "lora_adapter", id="nothing yet, a LoRA job"),
+    pytest.param(None, {"lora_r": 0}, "full_finetune/model_state_dict.pt", id="nothing yet, a full finetune"),
+    pytest.param("full_finetune/model_state_dict.pt", {"lora_r": 64}, "full_finetune/model_state_dict.pt",
+                 id="full weights on disk win over the rank"),
+    pytest.param("lora_adapter/adapter_config.json", {"lora_r": 0}, "lora_adapter",
+                 id="an adapter on disk wins over the rank"),
 ])
 def test_what_a_run_is_served_from_is_what_it_exported(tmp_path, on_disk, params, served_from):
     """Decided by what is on disk, then the job's rank: a viewer pointed at an adapter a rank-0 run never made."""
