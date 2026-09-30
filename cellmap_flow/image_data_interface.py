@@ -5,15 +5,16 @@ group for ``voxel_size`` (``io.multiscale``), reads its metadata
 (``io.metadata``) and keeps its voxel grid (``io.geometry``) and the array
 (``io.source``). A read of a world ROI is the grid's box of voxels, read
 with padding where it runs past the array, then optionally resampled to
-``output_voxel_size``. What is read goes through the input chain on the
-way: the normalizers and ChannelSelector given as ``input_norms``, else
-the process-wide ``g.input_norms`` as it is at read time, which user
-``process_chunk`` scripts rely on.
+``output_voxel_size`` (deprecated). What is read goes through the input
+chain on the way: the normalizers and ChannelSelector given as
+``input_norms``, else the process-wide ``g.input_norms`` as it is at read
+time, which user ``process_chunk`` scripts rely on.
 """
 
 import copy
 import functools
 import logging
+import warnings
 
 import numpy as np
 import tensorstore as ts
@@ -31,6 +32,13 @@ logger = logging.getLogger(__name__)
 # (path, requested voxel size) pairs already warned about; one of these is
 # built per extracted chunk in some paths.
 _warned_relabel = set()
+
+# The arguments that warn when passed, and go in the next release (K18),
+# with what to do instead. Nothing in cellmap-flow passes them.
+_DEPRECATED = {
+    "output_voxel_size": "read at the dataset's voxel size and resample what is read",
+    "custom_fill_value": "read within the dataset's roi and pad what is read",
+}
 
 
 class ImageDataInterface:
@@ -55,6 +63,11 @@ class ImageDataInterface:
         thread and no cache, are what every caller has always had; the
         inference server asks for parallel reads and a cache.
 
+        ``output_voxel_size`` (reads resampled to it, see ``_read_resampled``)
+        and ``custom_fill_value`` (padding with that value, or "edge", instead
+        of 0) are deprecated: passing either warns, and they go in the next
+        release.
+
         ``voxel_size`` picks the scale of a multiscale group (the finest one
         not coarser than it). When the array opened is at a different voxel
         size, ``on_voxel_size_mismatch`` decides: "relabel" (the default,
@@ -62,6 +75,15 @@ class ImageDataInterface:
         voxel; "error" raises. ``actual_voxel_size`` and
         ``requested_voxel_size`` record both.
         """
+        passed = {"output_voxel_size": output_voxel_size, "custom_fill_value": custom_fill_value}
+        for name, value in passed.items():
+            if value is not None:
+                warnings.warn(
+                    f"ImageDataInterface's {name} is deprecated and goes in the next release: "
+                    f"{_DEPRECATED[name]}",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
         dataset_path = dataset_path.replace("\\ ", " ")
         # A multiscale group is read at its level for voxel_size; a
         # precomputed path at the scale it names.
@@ -213,7 +235,7 @@ class ImageDataInterface:
         return self._read_resampled(store, roi, fill, through_chain)
 
     def _read_resampled(self, store, roi, fill, through_chain):
-        """``roi`` at ``output_voxel_size`` (the K18 resampling kwargs).
+        """``roi`` at ``output_voxel_size`` (deprecated, K18).
 
         Both voxel sizes are taken as whole nanometers, and the factor is the
         z axis's, applied to every axis: a finer output repeats each voxel, a

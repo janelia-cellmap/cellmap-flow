@@ -9,6 +9,7 @@ voxels it hit.
 import json
 import logging
 import os
+import warnings
 from types import SimpleNamespace
 
 import numpy as np
@@ -177,6 +178,8 @@ def _open(write, kwargs, ome_pyramid, write_array):
     return ImageDataInterface(path, **{"input_norms": [], **kwargs})
 
 
+# The resampling rows pass the deprecated arguments, which work until they go.
+@pytest.mark.filterwarnings("ignore:ImageDataInterface's .* is deprecated:DeprecationWarning")
 @pytest.mark.parametrize("layout", READS)
 def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
     write, kwargs, corner, roi, (shape, dtype, column) = READS[layout]
@@ -239,6 +242,20 @@ def test_ts_is_one_channel_of_the_dataset_through_the_chain(layout, ome_pyramid,
     dtype = np.dtype(getattr(ts.dtype, "numpy_dtype", ts.dtype))
     assert (type(ts).__name__, dtype, (tuple(ts.domain.inclusive_min), tuple(ts.shape)),
             np.asarray(ts[:2, 0, 0]).tolist()) == TS_VIEWS[layout]
+
+
+@pytest.mark.parametrize("kwargs, deprecated", [
+    pytest.param({"output_voxel_size": (4, 4, 4)}, "output_voxel_size", id="output_voxel_size"),
+    pytest.param({"custom_fill_value": 9}, "custom_fill_value", id="custom_fill_value"),
+    # The inference server's parallel reads: in use, and kept.
+    pytest.param({"concurrency_limit": 3}, None, id="concurrency_limit-is-not"),
+])
+def test_the_resampling_arguments_are_deprecated(raw_zarr, kwargs, deprecated):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ImageDataInterface(raw_zarr(), **kwargs)
+    ours = [str(w.message) for w in caught if w.category is DeprecationWarning and "ImageDataInterface" in str(w.message)]
+    assert [deprecated in message for message in ours] == ([True] if deprecated else [])
 
 
 def test_without_a_voxel_size_the_finest_level_is_opened(ome_pyramid):
