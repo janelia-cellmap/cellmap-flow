@@ -4,7 +4,9 @@
 - ``annotation_volume``: an annotation volume over a raw zarr, and the
   VirtualPatchDataset that reads it.
 - ``make_trainer``: a LoRAFinetuner on the CPU, in fp32, without TensorBoard.
-- ``tiny_script``: a script model that the trainer and the CLI can load.
+- ``tiny_script`` and ``run_cli``: finetune_cli.main() on a script model, with
+  a fake data loader and inference server, and restarts delivered the way the
+  job's server delivers them.
 """
 
 import json
@@ -12,6 +14,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import torch
 import zarr
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -132,3 +135,85 @@ def tiny_script(tmp_path):
         return path
 
     return write
+
+
+def patches(n=2, fill=None):
+    """``n`` patches of 4^3 raw and annotation (background below z=2, foreground above)."""
+    ann = torch.full((n, 1, 4, 4, 4), 2.0)
+    ann[:, :, :2] = 1
+    raw = torch.rand(n, 1, 4, 4, 4) if fill is None else torch.full((n, 1, 4, 4, 4), fill)
+    return DataLoader(TensorDataset(raw, ann), batch_size=2)
+
+
+MARKERS = ("TRAINING_ITERATION_COMPLETE:", "FINETUNED_MODEL_YAML:", "RESTART_FAILED:",
+           "INFERENCE_SERVER_FAILED:", "TRAINING_DIVERGED", "RESTARTING_TRAINING",
+           "WAITING_FOR_RESTART", "RESTART_STATUS:")
+
+
+@pytest.fixture
+def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
+    """``run_cli(*flags, ...)``: finetune_cli.main() on the tiny script, one epoch, rank 0.
+
+    ``loaders``: what each create_dataloader call gives, in turn: a DataLoader,
+    an exception (raised), or a callable of the run's record returning either.
+    ``server``: replaces starting the inference server. ``restarts``: the
+    requests the job receives in turn, through the restart controller the
+    server would hand them to; None (and running out) is a malformed signal
+    file, which ends the job. ``manifest``: the corrections' manifest, None for
+    none. ``run_dir``: the output dir, <tmp>/session/runs/run by default.
+    """
+    from cellmap_flow.finetune import finetune_cli
+
+    def run(*flags, channels=1, loaders=None, server=None, restarts=(), manifest=True,
+            run_dir=None, tensorboard=False):
+        session = tmp_path / "session"
+        corrections = session / "corrections"
+        corrections.mkdir(parents=True, exist_ok=True)
+        if manifest is True:
+            manifest = {"kind": "volume_zarr_v1", "raw_dataset_path": "/data/raw.zarr"}
+        if manifest is not None:
+            (corrections / "_virtual_sources.json").write_text(json.dumps(manifest))
+        record = SimpleNamespace(session=session, run=run_dir or session / "runs" / "run",
+                                 loaded=[], served=[], waited=0)
+        loads = iter(loaders or [])
+        requests = iter(restarts)
+
+        def dataloader(*args, **kwargs):
+            record.loaded.append(kwargs)
+            item = next(loads, None) or patches()
+            item = item(record) if callable(item) else item
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        real_wait = finetune_cli._wait_for_restart_signal
+
+        def wait(**kwargs):
+            record.waited += 1
+            request = next(requests, None)
+            if request is None:
+                kwargs["signal_file"].write_text("not json")
+            else:
+                kwargs["restart_controller"].request_restart(request)
+            return real_wait(**kwargs)
+
+        def serve(args, model_config, model, **kwargs):
+            record.served.append(model)
+            return server(args, model_config, model) if server else (None, 0)
+
+        monkeypatch.setattr(finetune_cli, "create_dataloader", dataloader)
+        monkeypatch.setattr(finetune_cli, "_start_inference_server_background", serve)
+        monkeypatch.setattr(finetune_cli, "_wait_for_restart_signal", wait)
+        monkeypatch.setattr("sys.argv", [
+            "finetune_cli", "--model-type", "script", "--model-script", str(tiny_script(channels)),
+            "--model-name", "tiny", "--corrections", str(corrections), "--output-dir", str(record.run),
+            "--lora-r", "0", "--num-epochs", "1", "--loss-type", "bce", "--no-mixed-precision",
+            "--num-workers", "0", *([] if tensorboard else ["--no-tensorboard"]), *flags,
+        ])
+        record.code = finetune_cli.main()
+        record.out = capsys.readouterr().out
+        record.markers = [line for line in record.out.splitlines() if line.startswith(MARKERS)]
+        return record
+
+    run.patches = patches
+    return run
