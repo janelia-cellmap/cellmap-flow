@@ -30,7 +30,7 @@ LIGHT = ["cellmap_flow.globals", "flask", "neuroglancer"]
 
 ROWS = {
     "jobs": """
-check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "lsf", "local", "queues", "ready", "launch")]
+check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "settings", "lsf", "local", "queues", "ready", "launch")]
       + ["cellmap_flow.finetune.markers"] + [f"cellmap_flow.finetune.job_manager.{m}" for m in ("state", "tailer", "listener", "submit", "persistence", "restart", "monitor", "manager")],
       LIGHT + ["huggingface_hub", "peft", "torch"])
 """,
@@ -57,7 +57,7 @@ check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "
 """,
     # A chain is read wherever one is listed; its steps import what they need.
     "chain": """
-check(["cellmap_flow.pipeline_spec"], LIGHT + ["torch", "huggingface_hub", "peft",
+check(["cellmap_flow.pipeline_spec", "cellmap_flow.process_chain"], LIGHT + ["torch", "huggingface_hub", "peft",
       "cellmap_flow.norm.input_normalize", "cellmap_flow.post.postprocessors"])
 from cellmap_flow.post.postprocessors import get_postprocessors, get_postprocessors_list
 get_postprocessors_list()
