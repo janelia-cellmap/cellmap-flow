@@ -370,12 +370,16 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
             "check its OME-NGFF translation against the dataset offset."
         )
 
-    # Z slabs, as many as there are threads to write them, each a whole
-    # number of chunks deep.
+    # Z slabs, as many as there are threads to write them, cut on the volume's
+    # chunk rows: two threads writing parts of one chunk each rewrite it
+    # whole, and one's part is lost. The cuts used to be whole chunks from
+    # the crop's own first row, which is almost never on a chunk boundary.
     chunk_z = max(int(arr.chunks[0]), 1)
-    n_slabs = max(1, min(sync.worker_count(), int(np.ceil(sz / chunk_z))))
-    slab_size = max(chunk_z, int(np.ceil(sz / n_slabs / chunk_z) * chunk_z))
-    slabs = [(a, min(a + slab_size, sz)) for a in range(0, sz, slab_size)]
+    first_row, end_row = z0 // chunk_z, -(-(z0 + sz) // chunk_z)
+    n_slabs = max(1, min(sync.worker_count(), end_row - first_row))
+    rows_per_slab = max(1, -(-(end_row - first_row) // n_slabs))
+    edges = [0, *(row * chunk_z - z0 for row in range(first_row + rows_per_slab, end_row, rows_per_slab)), sz]
+    slabs = [(a, b) for a, b in zip(edges, edges[1:]) if a < b]
 
     def write(slab):
         a, b = slab

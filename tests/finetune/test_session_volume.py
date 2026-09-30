@@ -50,3 +50,37 @@ def test_a_volume_without_its_geometry_is_not_given_one(tmp_path):
     # Serving and syncing need no geometry: the record says what is missing.
     record = read_volume(path, require_geometry=False)
     assert record["output_size"] is None and record["input_size"] == [12, 12, 12]
+
+
+def test_no_two_slabs_of_a_crop_write_the_same_chunk(tmp_path, monkeypatch):
+    """A crop is written in parallel z slabs. A slab edge inside a chunk has two
+    threads rewrite that chunk whole, and one's half is lost."""
+    from cellmap_flow.finetune.crop_loader import CropEntry
+    from cellmap_flow.finetune.session import sync
+    from cellmap_flow.finetune.session.volume import write_crop_into_volume
+
+    crop = zarr.open_group(str(tmp_path / "crop.zarr"), mode="w")
+    crop.create_dataset("s0", data=np.ones((20, 4, 4), np.uint8), chunks=(20, 4, 4))
+    crop.attrs["multiscales"] = [{"version": "0.4", "axes": [
+        {"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"], "datasets": [
+        {"path": "s0", "coordinateTransformations": [
+            {"type": "scale", "scale": [16.0] * 3}, {"type": "translation", "translation": [40.0, 8.0, 8.0]}]}]}]
+    geometry = VolumeGeometry(
+        output_voxel_size=(16.0,) * 3, input_voxel_size=(16.0,) * 3, claimed_output_voxel_size=None,
+        claimed_input_voxel_size=None, chunk_size=(4,) * 3, input_size=(4,) * 3,
+        dataset_offset_nm=(8.0,) * 3, dataset_shape_voxels=(32, 4, 4),
+    )
+    path = create_volume_zarr(str(tmp_path / "v.zarr"), geometry, dataset_path="/raw", model_name="m")
+
+    written = []
+    store_set = zarr.storage.DirectoryStore.__setitem__
+    monkeypatch.setattr(zarr.storage.DirectoryStore, "__setitem__",
+                        lambda self, key, value: written.append(key) or store_set(self, key, value))
+    monkeypatch.setattr(sync, "worker_count", lambda: 4)
+    record = write_crop_into_volume({"zarr_path": path, "output_voxel_size": [16.0] * 3,
+                                     "dataset_offset_nm": [8.0] * 3}, CropEntry(path=str(tmp_path / "crop.zarr")))
+
+    # Voxel 0's corner is 32 nm: rows 2..21, chunks 0 to 5, each written once.
+    assert record["annotation_offset_voxels"] == [2, 0, 0]
+    chunks = [k for k in written if k.startswith("annotation/s0/") and not k.endswith((".zarray", ".zattrs"))]
+    assert sorted(chunks) == [f"annotation/s0/{z}.0.0" for z in range(6)]
