@@ -1,11 +1,14 @@
 """Instance corrections: annotation volumes seeded from an instance segmentation.
 
-They are ordinary annotation volumes with instance-id labels (uint16 or
-uint32) in the ``AffinityTargetTransform`` scheme: 0 unannotated, 1 the
-background shell around each instance, instance id + 1 inside it. So the
-sync, the pull before a mirror, session listing and the overlay treat them
-like any other. The routes in ``dashboard/routes/finetune/instance_correction``
-document the workflow; these return ``(success, info or error)`` for them.
+They are ordinary annotation volumes, only with instance-id labels (uint16
+or uint32) in the ``AffinityTargetTransform`` scheme: 0 unannotated, 1 the
+background shell around each instance, and instance id + 1 for each
+instance. So the periodic sync, the pull before a mirror, session listing
+and the overlay treat them like any other.
+
+The routes in ``dashboard/routes/finetune/instance_correction`` document the
+workflow; the functions here do the work for them and return
+``(success, info or error)``.
 """
 
 import gc
@@ -38,15 +41,23 @@ def seed_instance_volume(
     input_norm_config=None,
     postprocess_config=None,
 ):
-    """Write a paintable volume at ``output_zarr_path`` from the ids in
-    ``instance_zarr_path``/s0, on that array's grid so it is drawn over the
-    segmentation it came from.
+    """Seed a paintable annotation volume at ``output_zarr_path`` from an instance zarr.
 
-    Each instance gets a background shell ``dilation_radius_voxels`` thick.
+    ``instance_zarr_path`` is a zarr group whose ``s0`` holds the instance
+    ids, with OME multiscales or ``resolution``/``offset`` attributes. The
+    volume lies on that array's grid (shape, voxel size and position), so
+    neuroglancer draws it over the segmentation it came from.
+
+    Each instance gets a background shell ``dilation_radius_voxels`` thick,
+    in the instance array's voxels (5 at 16 nm is an 80 nm shell).
     ``chunk_size`` defaults to the instance array's chunks; the dashboard
-    passes the model's output shape, one chunk per training sample. The
-    model geometry and chains are recorded as for any volume. Returns
-    ``(success, zarr path or error)``.
+    passes the model's output shape, since each chunk is one training
+    sample. ``annotation_dtype`` is "uint16" (up to 65534 instances) or
+    "uint32". The model geometry (``input_size`` in voxels,
+    ``input_voxel_size`` in nm, the claimed voxel sizes) and the chains are
+    recorded in the root attrs, as for any volume.
+
+    Returns ``(success, zarr path or error)``.
     """
     from scipy.ndimage import binary_dilation
 
@@ -65,7 +76,8 @@ def seed_instance_volume(
     if all(v == 1.0 for v in source_voxel_size):
         # read_array_meta's fallback when the array says nothing.
         return False, f"{s0_path} has no voxel size in its metadata"
-    # dataset_offset_nm is voxel 0's centre, as in every volume.
+    # dataset_offset_nm is voxel 0's centre, the OME translation, as in every
+    # volume (see volume.volume_corner_nm); meta.translation is the corner.
     source_offset_nm = ome_translation(meta.translation, source_voxel_size)
     source_shape = tuple(src_s0.shape)
 
@@ -80,7 +92,11 @@ def seed_instance_volume(
         )
 
     fg_mask = instances > 0
+    # The shell: every instance grown by R face-connected steps, less the
+    # instances themselves.
     shell_mask = binary_dilation(fg_mask, iterations=int(dilation_radius_voxels)) & ~fg_mask
+    # Instance voxels get id + 1, keeping 1 for the shell (background); the
+    # rest stays 0, unannotated.
     annotation = np.zeros(source_shape, dtype=annotation_dtype)
     annotation[shell_mask] = 1
     annotation[fg_mask] = (instances[fg_mask] + 1).astype(annotation_dtype)
@@ -103,8 +119,12 @@ def seed_instance_volume(
     )
     try:
         create_volume_zarr(
-            output_zarr_path, geometry, dataset_path=dataset_path, model_name=model_name,
-            input_norm=input_norm_config, postprocess=postprocess_config,
+            output_zarr_path,
+            geometry,
+            dataset_path=dataset_path,
+            model_name=model_name,
+            input_norm=input_norm_config,
+            postprocess=postprocess_config,
             annotation_dtype=annotation_dtype,
         )
     except Exception as e:
@@ -115,8 +135,12 @@ def seed_instance_volume(
         # Chunks with no labels stay unwritten, as in any volume: the trainer
         # and the overlay count the chunks on disk as annotated.
         zarr.open_array(
-            os.path.join(output_zarr_path, "annotation", "s0"), mode="r+", write_empty_chunks=False
+            os.path.join(output_zarr_path, "annotation", "s0"),
+            mode="r+",
+            write_empty_chunks=False,
         )[:] = annotation
+        # What the volume was seeded from and how, so it can be re-seeded
+        # later without losing track of its source.
         root = zarr.open(output_zarr_path, mode="r+")
         root.attrs.update(
             seed_source_instance_zarr=str(instance_zarr_path),
@@ -136,10 +160,11 @@ def seed_instance_volume(
 def backing_store_populated(state, output_dir, zarr_name):
     """Whether MinIO's data directory already holds painted chunks of ``zarr_name``.
 
-    The clobber guard of a fresh seed: re-seeding over edits not yet pulled
-    would overwrite them on the first mirror. It looks at files because MinIO
-    may not be running yet; a running MinIO keeps its data where it started,
-    which need not be ``output_dir``.
+    The clobber guard of a fresh seed: re-seeding a zarr whose MinIO copy
+    may hold edits not yet pulled would overwrite them with the seed on the
+    first mirror. It looks at the files rather than asking MinIO because the
+    decision comes before MinIO is started. A running MinIO keeps its data
+    where it was first started, which need not be ``output_dir``.
     """
     process = state["process"]
     running = process is not None and process.poll() is None
@@ -171,20 +196,32 @@ def _bucket_root(state, zarr_path):
 
 
 def snapshot_from_minio(state, zarr_path, dst_path=None):
-    """Copy the MinIO object of ``zarr_path`` (its basename is the bucket key),
-    metadata and all, to ``dst_path`` (default ``zarr_path``).
+    """Copy the MinIO state of a paintable instance-correction zarr to disk.
 
-    Unlike the sync, which pulls changed chunks into a volume that exists,
-    this makes a whole zarr: a dated snapshot, or a copy to train from. An
-    in-place copy rewrites chunk files in their inodes, which corrupts any
-    hardlinked copy of them. Returns ``(True, {zarr_path, dst_path,
-    keys_copied, keys_skipped, bytes_copied})`` or ``(False, error)``.
+    Unlike ``sync.sync_volume``, which pulls changed chunks into the served
+    volume, this copies the whole MinIO object, metadata included, so it can
+    make a new zarr: a dated snapshot for rollback or audit, or a copy to
+    train from.
+
+    ``zarr_path``'s basename is the MinIO bucket key; the zarr itself is not
+    opened. ``dst_path`` defaults to ``zarr_path``, but a fresh dated path
+    (``.../roi3_annotation_<ts>.zarr``) is better: an in-place copy
+    overwrites chunk files in their existing inodes, which corrupts any
+    hardlinked copy of them (a ``cp -rl`` seed).
+
+    Returns ``(True, {zarr_path, dst_path, keys_copied, keys_skipped,
+    bytes_copied})`` or ``(False, error)``.
     """
     if not state["ip"] or not state["port"]:
         return False, "MinIO not running"
     dst_path = zarr_path if dst_path is None else dst_path
     try:
         s3, src_root = _bucket_root(state, zarr_path)
+        # copy_store copies every key under the bucket root as it is: the
+        # root and annotation group metadata, .zarray with its compressor, and
+        # every chunk. The sync copies only annotation/, into a volume that
+        # already exists, so a fresh destination would get no root .zgroup
+        # and would not open as a group.
         os.makedirs(dst_path, exist_ok=True)
         n_copied, n_skipped, n_bytes = zarr.copy_store(
             s3fs.S3Map(root=src_root, s3=s3, check=False),
@@ -210,11 +247,18 @@ def snapshot_from_minio(state, zarr_path, dst_path=None):
 
 
 def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
-    """Split ``target_label`` of an instance correction, in MinIO, into its
-    26-connected components: the largest keeps the label, the others get new
-    ids from ``max + 1``. MinIO holds the brush edits, so it is read and
-    written there, after a snapshot of it to ``snapshot_dir`` (default
-    ``<zarr dir>/snapshots``) for rollback.
+    """Split one label of a paintable instance correction into its connected components.
+
+    cc3d finds the 26-connected components of ``target_label``'s voxels; the
+    largest keeps the label, and every other one gets a fresh id from
+    ``max(existing) + 1``. ``target_label`` must be 2 or more: 0 is
+    unannotated and 1 is background.
+
+    The zarr is read and written in MinIO, which holds the in-progress brush
+    edits; ``zarr_path`` only names the bucket key (its basename) and where
+    the rollback snapshot goes. That snapshot of MinIO's state is taken
+    before anything is written, to ``snapshot_dir`` (default
+    ``<zarr dir>/snapshots``).
 
     Returns ``(True, {zarr_path, target_label, n_components, kept_voxels,
     splits: [{new_label, voxels}], snapshot_path})`` or ``(False, error)``.
@@ -233,6 +277,7 @@ def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
 
     try:
         s3, src_root = _bucket_root(state, zarr_path)
+        # check=False skips S3Map's bucket probe: _bucket_root has just found s0.
         store = s3fs.S3Map(root=src_root, s3=s3, check=False)
         ann = zarr.open(store, mode="r+")["annotation/s0"]
 
@@ -240,7 +285,12 @@ def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
             snapshot_dir = os.path.join(os.path.dirname(os.path.normpath(zarr_path)), "snapshots")
         os.makedirs(snapshot_dir, exist_ok=True)
         name = os.path.basename(src_root).replace(".zarr", "")
-        snapshot_path = os.path.join(snapshot_dir, f"{name}_snapshot_{time.strftime('%Y%m%d_%H%M%S')}.zarr")
+        snapshot_path = os.path.join(
+            snapshot_dir, f"{name}_snapshot_{time.strftime('%Y%m%d_%H%M%S')}.zarr"
+        )
+        # Before any write, so there is a rollback point even if cc3d or the
+        # write-back goes wrong. copy_store streams one chunk at a time, so
+        # the volume is never held twice in memory.
         zarr.copy_store(store, zarr.DirectoryStore(snapshot_path), if_exists="replace")
 
         # The whole ROI in memory (~600 MB of uint16) rather than a GET per chunk per pass.
@@ -271,7 +321,8 @@ def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
         if not splits:
             # Nothing on MinIO changes; the snapshot is still a backup.
             return True, {**info, "note": "single component, no split performed"}
-        # Every chunk is PUT, not only changed ones: ~15 s for 900 MB.
+        # Every chunk is PUT, not only the changed ones: acceptable at ROI
+        # scale, ~15 s for 900 MB.
         ann[:] = arr
         return True, info
     except _NotInMinio as e:

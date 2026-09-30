@@ -4,11 +4,14 @@ An annotation volume is a zarr v2 group ``<id>.zarr`` whose
 ``annotation/s0`` holds the labels: 0 unannotated, 1 background, 2 and up
 foreground (instance ids, for instance corrections). It covers the whole raw
 dataset on the grid predictions are made on, with one chunk per model output,
-so each chunk is one training sample; only painted or imported chunks exist.
-MinIO and neuroglancer write chunks straight into it, so its layout (uint8
-unless the labels are instance ids, "." chunk keys, Blosc zstd level 3) and
-its root attrs are a format. The root attr ``dataset_offset_nm`` is voxel 0's
-*centre*, and also the OME translation: Neuroglancer draws voxel 0 there.
+so each chunk is one training sample. Only painted or imported chunks exist
+on disk. MinIO and neuroglancer write chunks straight into it, so its layout
+-- uint8 unless the labels are instance ids, "." separated chunk keys, Blosc
+zstd level 3 -- and its root attrs are a format.
+
+The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
+OME translation, since that is where Neuroglancer draws voxel 0 while it is
+painted; ``volume_corner_nm`` gives the corner.
 """
 
 import logging
@@ -95,8 +98,14 @@ def new_volume_id() -> str:
 
 
 def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
-    """The world position of a volume's voxel-0 lower corner, in nm, from its
-    ``dataset_offset_nm`` (voxel 0's centre, where Neuroglancer drew it)."""
+    """The world position of an annotation volume's voxel-0 lower corner, in nm.
+
+    ``dataset_offset_nm`` (a root attr of every volume) is also written as the
+    volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
+    Neuroglancer drew the volume that way while it was painted, so that is
+    where the labels are: read as a corner, the value puts every label half
+    an annotation voxel away from where it was drawn.
+    """
     offset = np.zeros(3) if dataset_offset_nm is None else dataset_offset_nm
     return np.asarray(ome_corner(offset, output_voxel_size), dtype=float)
 
@@ -109,9 +118,10 @@ def _grid(raw_dataset_path, output_voxel_size, chunk_size, rounding):
     idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
     offset = np.asarray(ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size))
     if rounding == "ceil":
-        # The data's own extent in output voxels, rounded up. Not idi.roi's:
-        # that is the whole-nm box around the data, up to 2 nm larger, which
-        # would add a voxel to every level whose extent is not whole nm.
+        # The data's own extent in output voxels, rounded up so a partial
+        # voxel at the far end is covered. Not idi.roi's: that is the
+        # whole-nm box around the data, up to 2 nm larger, which would add
+        # a voxel to every level whose extent is not whole nm (10.48 nm...).
         extent = np.asarray(idi.shape, dtype=float)[-output_voxel_size.size:] * np.asarray(
             idi.voxel_size, dtype=float
         )
@@ -133,12 +143,13 @@ def plan_volume(
 
     ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
     and either ``input_shape``/``output_shape`` in voxels or
-    ``read_shape``/``write_shape`` in nm, as a server reports them. Each
-    voxel size is snapped to the raw level closest to it (the model's own is
-    kept as the claimed one); the volume lies on the output level's grid from
-    its corner and covers the data in whole chunks of one model output.
-    ``rounding="legacy_floor"`` counts the voxels as volumes made before it
-    did: rounded down, from the whole-nm box around the data.
+    ``read_shape``/``write_shape`` in nm, which is what a server reports.
+    Each voxel size is snapped to the raw level closest to it (the model's
+    own is kept as the claimed one); the volume lies on the output level's
+    grid from its corner, one chunk per model output, and covers the data
+    padded to whole chunks. ``rounding="legacy_floor"`` counts the voxels
+    as volumes made before this did: rounded down, from the whole-nm box
+    around the data.
     """
     claimed_in = np.array(model_geometry.input_voxel_size)
     claimed_out = np.array(model_geometry.output_voxel_size)
@@ -174,11 +185,13 @@ def create_volume_zarr(
     annotation_dtype="uint8",
     annotation_type="annotation_volume",
 ) -> str:
-    """Write an empty volume, metadata only, and return ``zarr_path``.
+    """Write an empty volume: its metadata only, no chunks. Returns ``zarr_path``.
 
-    ``input_norm`` and ``postprocess`` are the dashboard's chains at the
-    time, as YAML-style lists: a resumed session inherits the normalization,
-    and a model finetuned on the volume is served with the postprocessing.
+    ``input_norm`` and ``postprocess`` are the dashboard's chains when the
+    volume was made, as YAML-style lists: a resumed session inherits the
+    normalization, and a model finetuned on the volume is served with the
+    postprocessing. ``annotation_dtype`` is uint16 or uint32 when the labels
+    are instance ids.
     """
     root = zarr.open(zarr_path, mode="w")
     annotation = root.create_group("annotation")
@@ -190,15 +203,24 @@ def create_volume_zarr(
         compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
         fill_value=0,
     )
-    annotation.attrs["multiscales"] = [{
-        "version": "0.4",
-        "name": "annotation",
-        "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in ("z", "y", "x")],
-        "datasets": [{"path": "s0", "coordinateTransformations": [
-            {"type": "scale", "scale": [float(v) for v in geometry.output_voxel_size]},
-            {"type": "translation", "translation": [float(o) for o in geometry.dataset_offset_nm]},
-        ]}],
-    }]
+    # dataset_offset_nm is voxel 0's centre, so it is the OME translation as
+    # it stands (see volume_corner_nm).
+    annotation.attrs["multiscales"] = [
+        {
+            "version": "0.4",
+            "name": "annotation",
+            "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in ("z", "y", "x")],
+            "datasets": [
+                {
+                    "path": "s0",
+                    "coordinateTransformations": [
+                        {"type": "scale", "scale": [float(v) for v in geometry.output_voxel_size]},
+                        {"type": "translation", "translation": [float(o) for o in geometry.dataset_offset_nm]},
+                    ],
+                }
+            ],
+        }
+    ]
 
     attrs = {
         "type": annotation_type,
@@ -212,10 +234,12 @@ def create_volume_zarr(
         "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
         "created_at": datetime.now().isoformat(),
     }
-    # The model's own voxel sizes, before snapping to the raw levels.
+    # The model's own voxel sizes, for provenance: the ones above are the raw
+    # levels closest to them.
     for key in ("claimed_output_voxel_size", "claimed_input_voxel_size"):
         if getattr(geometry, key) is not None:
             attrs[key] = list(getattr(geometry, key))
+    # Stored as the YAML-style chains, so they round-trip through json and yaml.
     for key, chain in (("input_norm", input_norm), ("postprocess", postprocess)):
         if chain is not None:
             attrs[key] = chain
@@ -233,9 +257,10 @@ def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
 
     Nothing missing is guessed (it used to be 56^3 chunks, a 178^3 input and
     16 nm voxels). Raises ValueError naming the geometry attrs the volume
-    lacks, unless ``require_geometry`` is False, when they are None: serving
-    and syncing need none of them. Raises NotAnAnnotationVolume (a
-    ValueError) for any other zarr.
+    lacks, unless ``require_geometry`` is False, when they are None in the
+    record: serving and syncing a volume need none of them. Raises
+    NotAnAnnotationVolume (a ValueError) if it is not an annotation volume
+    at all.
     """
     attrs = dict(zarr.open(zarr_path, mode="r").attrs)
     if attrs.get("type") != "annotation_volume":
@@ -260,10 +285,12 @@ def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
 def build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Optional[dict] = None) -> dict:
     """The ``_virtual_sources.json`` that trains on the volume a record describes.
 
-    The chains travel in it because the trainer runs on LSF, where the
-    dashboard's are not: without the normalization it would feed the model
-    raw uint8 while inference feeds it [-1, 1]. ``overrides`` replaces any
-    key. Raises ValueError naming what the record lacks.
+    ``input_norm`` and ``postprocess`` travel in it because the trainer runs
+    on LSF, where the dashboard's chains are not: without the normalization
+    it would feed the model raw uint8 while inference feeds it [-1, 1].
+    ``overrides`` replaces any key, e.g. a crops manifest's
+    patches_per_epoch. Raises ValueError naming what the record lacks
+    (the geometry read_volume reads, the zarr path, the raw dataset).
     """
     overrides = overrides or {}
     missing = [key for key in ("zarr_path", *GEOMETRY_ATTRS) if not volume_meta.get(key)]
@@ -282,26 +309,39 @@ def build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Opt
         "output_size_voxels": list(volume_meta["output_size"]),
         "input_voxel_size_nm": list(volume_meta["input_voxel_size"]),
         "output_voxel_size_nm": list(volume_meta["output_voxel_size"]),
-        "patches_per_epoch": None,  # one patch per populated chunk
+        # None means "one patch per populated chunk": full coverage of what
+        # was annotated, rather than a fixed count.
+        "patches_per_epoch": None,
         "jitter_voxels": None,
         "seed": 0,
         "input_norm": input_norm,
         "postprocess": postprocess,
-        "dense_to_sparse_ratio": None,  # auto-balance the dense and sparse pools
+        # None: auto-balance the dense and sparse pools.
+        "dense_to_sparse_ratio": None,
         **overrides,
     }
 
 
 def majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
-    """Downsample labels by whole per-axis factors, each output voxel taking the
-    most common value of its block. Nearest-neighbour zoom takes one fixed
-    corner of each block instead (grid_mode=True: the last voxel)."""
+    """Downsample integer labels by exact per-axis block factors, by majority
+    vote (the mode) over each block.
+
+    Nearest-neighbour sampling always picks one fixed corner of each block
+    (scipy.ndimage.zoom with grid_mode=True picks the block's *last* voxel on
+    every axis). Here each output voxel is the value most common across its
+    whole footprint: no systematic corner bias, and fewer boundary voxels
+    flipped by an unrepresentative single sample.
+    """
     factors = tuple(int(round(f)) for f in factors)
     trimmed_shape = tuple((s // f) * f for s, f in zip(labels.shape, factors))
     block_dims = tuple(s // f for s, f in zip(trimmed_shape, factors))
-    blocks = labels[tuple(slice(0, s) for s in trimmed_shape)].reshape(
-        block_dims[0], factors[0], block_dims[1], factors[1], block_dims[2], factors[2]
-    ).transpose(0, 2, 4, 1, 3, 5).reshape(*block_dims, -1)
+    # (z, y, x, the block's voxels): each output voxel's block along the last axis.
+    blocks = (
+        labels[tuple(slice(0, s) for s in trimmed_shape)]
+        .reshape(block_dims[0], factors[0], block_dims[1], factors[1], block_dims[2], factors[2])
+        .transpose(0, 2, 4, 1, 3, 5)
+        .reshape(*block_dims, -1)
+    )
 
     best_count = np.zeros(block_dims, dtype=np.int32)
     result = np.zeros(block_dims, dtype=labels.dtype)
@@ -322,7 +362,11 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
     The import is appended to the volume's ``imported_crops`` attr (the
     trainer's dense pool and the overlay's boxes), and returned.
     """
-    from cellmap_flow.finetune.crop_loader import _open_array, _read_voxel_size_and_offset, remap_labels
+    from cellmap_flow.finetune.crop_loader import (
+        _open_array,
+        _read_voxel_size_and_offset,
+        remap_labels,
+    )
     from cellmap_flow.finetune.session import sync  # sync reads volumes: import here
 
     started = time.time()
@@ -331,7 +375,10 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
     if src_data.ndim != 3:
         raise ValueError(f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}")
     remapped = remap_labels(
-        src_data, fg_ids=entry.fg_ids, bg_ids=list(entry.bg_ids), mode=entry.mode,
+        src_data,
+        fg_ids=entry.fg_ids,
+        bg_ids=list(entry.bg_ids),
+        mode=entry.mode,
         connected_components=entry.connected_components,
     )
 
@@ -342,24 +389,41 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
         logger.info(f"Crop {entry.path} is at {tuple(src_voxel_size_nm)} nm, the volume at "
                     f"{tuple(voxel_size)}: resampling by {tuple(scale_ratio)}.")
         if np.all(scale_ratio <= 1.0) and np.allclose(factors, np.round(factors), atol=1e-6):
+            # An exact integer downsample: a majority vote over each block,
+            # rather than one arbitrary corner sample.
             remapped = majority_vote_downsample(remapped, factors)
         else:
             from scipy.ndimage import zoom
 
-            # grid_mode=True aligns the grids' edges, as block voting does;
-            # only for ratios block voting can't do.
+            # grid_mode=True aligns the grids' edges, as block voting does,
+            # where the default aligns the end voxels' centres (wrong, and
+            # more so toward the edges). It still takes each output voxel from
+            # a single input voxel, so it is only the fallback for non-integer
+            # ratios and upsampling, where block voting does not apply.
             remapped = zoom(remapped, scale_ratio, order=0, grid_mode=True, mode="nearest")
     n_fg = int(np.count_nonzero(remapped >= 2))
 
-    # Corner to corner: resampling keeps the crop's lower corner in place.
+    # Corner to corner (src_offset_nm is the crop's voxel-0 lower corner):
+    # resampling keeps that corner where it was (block voting and grid_mode
+    # zoom both align the grids' edges), so no shift per resampling factor
+    # is needed, as comparing centres would.
     z0, y0, x0 = np.round(
         (src_offset_nm - volume_corner_nm(volume_meta["dataset_offset_nm"], voxel_size)) / voxel_size
     ).astype(int).tolist()
     sz, sy, sx = remapped.shape
     arr = zarr.open(volume_meta["zarr_path"], mode="r+")["annotation/s0"]
-    if min(z0, y0, x0) < 0 or z0 + sz > arr.shape[0] or y0 + sy > arr.shape[1] or x0 + sx > arr.shape[2]:
-        # Usually a crop annotated on another dataset than the session's,
-        # consistent in itself: name the dataset, which makes that obvious.
+    if (
+        min(z0, y0, x0) < 0
+        or z0 + sz > arr.shape[0]
+        or y0 + sy > arr.shape[1]
+        or x0 + sx > arr.shape[2]
+    ):
+        # The usual cause is not a bad translation but a crop belonging to a
+        # different dataset than the session: a crop annotated on a larger
+        # volume lands past the end of a smaller one, with everything about
+        # it internally consistent. The error names the dataset this volume
+        # was built over, which next to the crop's path often makes the
+        # mismatch obvious.
         raise ValueError(
             f"Crop {entry.path} write region "
             f"[{z0}:{z0+sz}, {y0}:{y0+sy}, {x0}:{x0+sx}] is outside the "
@@ -370,10 +434,11 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
             "check its OME-NGFF translation against the dataset offset."
         )
 
-    # Z slabs, as many as there are threads to write them, cut on the volume's
-    # chunk rows: two threads writing parts of one chunk each rewrite it
-    # whole, and one's part is lost. The cuts used to be whole chunks from
-    # the crop's own first row, which is almost never on a chunk boundary.
+    # Z slabs, as many as there are threads to write them (sync.worker_count:
+    # the slots the job was given), cut on the volume's chunk rows: two
+    # threads writing parts of one chunk each rewrite it whole, and one's
+    # part is lost. The cuts used to be whole chunks from the crop's own
+    # first row, which is almost never on a chunk boundary.
     chunk_z = max(int(arr.chunks[0]), 1)
     first_row, end_row = z0 // chunk_z, -(-(z0 + sz) // chunk_z)
     n_slabs = max(1, min(sync.worker_count(), end_row - first_row))
