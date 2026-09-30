@@ -218,17 +218,17 @@ FLOAT_LEVELS = [_level("s0", (5.24, 4, 4)), _level("s1", (10.48, 8, 8))]
 @pytest.mark.parametrize(
     "levels, voxel_size, mode, expected",
     [
-        (LEVELS, None, "floor", "s0"),
-        (LEVELS, (16, 8, 8), "floor", "s1"),
-        (LEVELS, (20, 10, 10), "floor", "s1"),  # the finest level that is not too coarse
-        (LEVELS, (4, 2, 2), "floor", "s0"),  # even s0 is too coarse
-        (LEVELS, (16, 8, 4), "floor", "s0"),  # s1 is coarser in x
-        (LEVELS, (64, 32, 32), "floor", "s2"),
-        (FLOAT_LEVELS, (10.48, 8, 8), "floor", "s1"),
-        (FLOAT_LEVELS, (10, 8, 8), "floor", "s0"),  # not 10.48: s1 is coarser in z
-        (LEVELS, (16, 8, 8), "exact", "s1"),
-        (FLOAT_LEVELS, (10, 8, 8), "exact", ValueError),
-        (LEVELS, (12, 6, 6), "nearest", "s1"),  # nearer 16 than 8 on a log scale
+        pytest.param(LEVELS, None, "floor", "s0", id="none-is-the-finest"),
+        pytest.param(LEVELS, (16, 8, 8), "floor", "s1", id="floor-exact-match"),
+        pytest.param(LEVELS, (20, 10, 10), "floor", "s1", id="floor-finest-not-too-coarse"),
+        pytest.param(LEVELS, (4, 2, 2), "floor", "s0", id="floor-even-s0-too-coarse"),
+        pytest.param(LEVELS, (16, 8, 4), "floor", "s0", id="floor-s1-coarser-in-x"),
+        pytest.param(LEVELS, (64, 32, 32), "floor", "s2", id="floor-coarsest"),
+        pytest.param(FLOAT_LEVELS, (10.48, 8, 8), "floor", "s1", id="floor-fractional-match"),
+        pytest.param(FLOAT_LEVELS, (10, 8, 8), "floor", "s0", id="floor-10-is-not-10.48"),
+        pytest.param(LEVELS, (16, 8, 8), "exact", "s1", id="exact"),
+        pytest.param(FLOAT_LEVELS, (10, 8, 8), "exact", ValueError, id="exact-none-there"),
+        pytest.param(LEVELS, (12, 6, 6), "nearest", "s1", id="nearest-on-a-log-scale"),
     ],
 )
 def test_select_level(levels, voxel_size, mode, expected):
@@ -239,25 +239,37 @@ def test_select_level(levels, voxel_size, mode, expected):
         assert select_level(levels, voxel_size, mode)[0] == expected
 
 
-@pytest.mark.parametrize("zarr_format", [2, 3])
-def test_a_pyramids_levels_and_the_closest_one(ome_pyramid, zarr_format, tmp_path):
-    pyramid = ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32), zarr_format=zarr_format)
-    levels = list_levels(pyramid)
-    assert [(path, meta.voxel_size, meta.translation) for path, meta in levels] == [
+@pytest.fixture(params=[pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
+def janelia(ome_pyramid, request):
+    """A Janelia pyramid, 8, 16 and 32 nm, each level's corner at -4 nm."""
+    return ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32), zarr_format=request.param)
+
+
+def test_a_janelia_pyramids_levels_share_their_corner(janelia):
+    assert [(path, meta.voxel_size, meta.translation) for path, meta in list_levels(janelia)] == [
         ("s0", (8.0,) * 3, (-4.0,) * 3), ("s1", (16.0,) * 3, (-4.0,) * 3), ("s2", (32.0,) * 3, (-4.0,) * 3),
     ]
-    assert select_dataset(pyramid, (16, 16, 16)) == (os.path.join(pyramid, "s1"), "s1")
-    assert select_dataset(pyramid + "/s0", (16, 16, 16)) == (pyramid + "/s0", None)  # an array is read as it is
-    # From the group or any of its levels alike.
-    assert closest_raw_scale(pyramid, (16, 16, 16)) == closest_raw_scale(pyramid + "/s0", (20,) * 3) == (16.0,) * 3
-    assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None
-    # A group without multiscales has no levels.
-    if zarr_format == 2:
-        import zarr
 
-        zarr.open_group(str(tmp_path / "plain.zarr"), mode="w")
-    with pytest.raises(KeyError if zarr_format == 2 else ValueError):
-        list_levels(str(tmp_path / "plain.zarr") if zarr_format == 2 else _v3_group(tmp_path / "plain.zarr"))
+
+def test_a_group_resolves_to_a_level_and_an_array_is_read_as_it_is(janelia):
+    assert select_dataset(janelia, (16, 16, 16)) == (os.path.join(janelia, "s1"), "s1")
+    assert select_dataset(janelia + "/s0", (16, 16, 16)) == (janelia + "/s0", None)
+
+
+def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(janelia, tmp_path):
+    assert closest_raw_scale(janelia, (16, 16, 16)) == closest_raw_scale(janelia + "/s0", (20,) * 3) == (16.0,) * 3
+    assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
+
+
+@pytest.mark.parametrize("zarr_format, error", [pytest.param(2, KeyError, id="zarr2"),
+                                                pytest.param(3, ValueError, id="zarr3")])
+def test_a_group_without_multiscales_has_no_levels(tmp_path, zarr_format, error):
+    import zarr
+
+    path = str(tmp_path / "plain.zarr")
+    zarr.open_group(path, mode="w") if zarr_format == 2 else _v3_group(path)
+    with pytest.raises(error):
+        list_levels(path)
 
 
 # --- what is written ---------------------------------------------------------------
@@ -266,7 +278,7 @@ def test_a_pyramids_levels_and_the_closest_one(ome_pyramid, zarr_format, tmp_pat
 @pytest.mark.parametrize(
     "args, written",
     [
-        (
+        pytest.param(
             ("s0", (16, 8, 8), [-4, 0, 4], ["nanometer"] * 3, ["z", "y", "x"]),
             '{"multiscales": [{"axes": [{"name": "z", "type": "space", "unit": "nanometer"}, '
             '{"name": "y", "type": "space", "unit": "nanometer"}, {"name": "x", "type": '
@@ -274,8 +286,9 @@ def test_a_pyramids_levels_and_the_closest_one(ome_pyramid, zarr_format, tmp_pat
             '1.0], "type": "scale"}], "datasets": [{"coordinateTransformations": [{"scale": '
             '[16, 8, 8], "type": "scale"}, {"translation": [4.0, 4.0, 8.0], "type": '
             '"translation"}], "path": "s0"}], "name": "", "version": "0.4"}]}',
+            id="zyx",
         ),
-        (
+        pytest.param(
             ("s0", (1, 5.24, 4.0, 4.0), [0, 0.0, -2, 2], ["", "nanometer", "nanometer", "nanometer"],
              ["c", "z", "y", "x"]),
             '{"multiscales": [{"axes": [{"name": "c", "type": "channel"}, {"name": "z", "type": '
@@ -285,6 +298,7 @@ def test_a_pyramids_levels_and_the_closest_one(ome_pyramid, zarr_format, tmp_pat
             '[{"coordinateTransformations": [{"scale": [1, 5.24, 4.0, 4.0], "type": "scale"}, '
             '{"translation": [0.0, 2.62, 0.0, 4.0], "type": "translation"}], "path": "s0"}], '
             '"name": "", "version": "0.4"}]}',
+            id="channel-and-fractional-voxels",
         ),
     ],
 )
@@ -306,23 +320,41 @@ def test_written_corners_read_back(tmp_path):
     assert [meta.translation for _, meta in list_levels(str(tmp_path / "w.zarr"))] == [(-4.0,) * 3] * 2
 
 
-def test_paths(tmp_path):
+@pytest.mark.parametrize("path, expected", [
+    pytest.param("/d/x.zarr/em/s0", ("/d/x.zarr", "em/s0"), id="at-the-suffix"),
+    pytest.param("/d/a.n5/b.zarr/raw", ("/d/a.n5/b.zarr", "raw"), id="at-the-innermost-suffix"),
+    pytest.param("{tmp}/plain/em/s0", ("{tmp}/plain/em", "s0"), id="without-a-suffix-the-nearest-zgroup"),
+    pytest.param("https://host/no/suffix", RuntimeError, id="remote-without-a-suffix"),
+])
+def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expected):
     import zarr
 
-    t = str(tmp_path)
-    _v3_group(f"{t}/v3.zarr")
-    zarr.open_group(f"{t}/plain", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
-    assert paths.split_container("/d/x.zarr/em/s0") == ("/d/x.zarr", "em/s0")
-    assert paths.split_container("/d/a.n5/b.zarr/raw") == ("/d/a.n5/b.zarr", "raw")
-    # Without a suffix: the nearest .zgroup going up (em's own).
-    assert paths.split_container(f"{t}/plain/em/s0") == (f"{t}/plain/em", "s0")
-    with pytest.raises(RuntimeError):
-        paths.split_container("https://host/no/suffix")
-    formats = [paths.detect_format(p) for p in (f"{t}/v3.zarr/s0", f"{t}/v2.zarr/s0", "/d/a.n5/raw", "gs://b/pc",
-                                                "https://h/a.n5")]
-    assert formats == ["zarr3", "zarr2", "n5", "precomputed", "n5"]
-    assert paths.is_v3_container(f"{t}/v3.zarr") and not paths.is_v3_container(t)
-    assert paths.find_v3_container("https://host/v3.zarr") is None  # v3 is read from local disk only
+    zarr.open_group(f"{tmp_path}/plain", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
+    path = path.format(tmp=tmp_path)
+    if expected is RuntimeError:
+        with pytest.raises(RuntimeError):
+            paths.split_container(path)
+    else:
+        assert paths.split_container(path) == tuple(p.format(tmp=tmp_path) for p in expected)
+
+
+@pytest.mark.parametrize("path, fmt", [
+    pytest.param("{tmp}/v3.zarr/s0", "zarr3", id="under-a-zarr-json"),
+    pytest.param("{tmp}/v2.zarr/s0", "zarr2", id="zarr-suffix"),
+    pytest.param("/d/a.n5/raw", "n5", id="n5-suffix"),
+    pytest.param("https://h/a.n5", "n5", id="remote-n5"),
+    pytest.param("gs://b/pc", "precomputed", id="gs"),
+])
+def test_a_paths_format(tmp_path, path, fmt):
+    _v3_group(tmp_path / "v3.zarr")
+    assert paths.detect_format(path.format(tmp=tmp_path)) == fmt
+
+
+def test_v3_is_read_from_local_disk_only_and_paths_join_and_unescape(tmp_path):
+    _v3_group(tmp_path / "v3.zarr")
+    assert paths.is_v3_container(str(tmp_path / "v3.zarr")) and not paths.is_v3_container(str(tmp_path))
+    assert paths.find_v3_container("https://host/v3.zarr") is None
     assert paths.join("https://host/x.zarr/", "em", "s0") == "https://host/x.zarr/em/s0"
+    # A shell-escaped space is a space, on disk only.
     assert paths.normalize_path("/d/my\\ data.zarr") == "/d/my data.zarr"
     assert paths.normalize_path("https://h/my\\ data.zarr") == "https://h/my\\ data.zarr"

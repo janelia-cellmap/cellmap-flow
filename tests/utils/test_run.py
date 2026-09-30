@@ -11,7 +11,8 @@ from cellmap_flow.globals import g
 from cellmap_flow.utils.bsub_utils import BsubTimeoutError, JobStartError
 
 
-@pytest.mark.parametrize("error", [JobStartError("no GPU queue took it"), BsubTimeoutError("bsub hung")])
+@pytest.mark.parametrize("error", [pytest.param(JobStartError("no GPU queue took it"), id="no-queue-took-it"),
+                                   pytest.param(BsubTimeoutError("bsub hung"), id="bsub-timed-out")])
 @pytest.mark.parametrize("launch", [lambda: run.run_model("/models/mito", "mito", "blob"),
                                     lambda: run.run_hf_model("cellmap/mito", "mito", "blob")], ids=["catalog", "hf"])
 def test_a_failed_launch_is_logged_not_raised_and_adds_no_layer(viewer, monkeypatch, caplog, error, launch):

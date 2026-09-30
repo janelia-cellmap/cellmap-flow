@@ -45,11 +45,9 @@ def test_what_follows_from_a_configs_sizes(config, expected):
     assert geometry.context == Coordinate(expected["context"])
 
 
-def test_the_geometry_cache_and_a_servers_answer_keep_fractional_sizes(tmp_path, monkeypatch):
-    """~/.cellmap_flow/model_geometry_cache.json is read and written as before
-    ModelGeometry, and the finetune tab reads the same fields from model_info."""
+def test_the_geometry_cache_is_read_and_written_as_before(tmp_path, monkeypatch):
+    """~/.cellmap_flow/model_geometry_cache.json, fractional sizes kept, as the code before ModelGeometry wrote it."""
     from cellmap_flow.utils import model_geometry
-    from cellmap_flow.utils.server_info import model_geometry as from_model_info
 
     cache = tmp_path / "cache.json"
     monkeypatch.setattr(model_geometry, "CACHE_PATH", str(cache))
@@ -67,7 +65,11 @@ def test_the_geometry_cache_and_a_servers_answer_keep_fractional_sizes(tmp_path,
     model_geometry.store_geometry(model_config, geometry)
     assert json.loads(cache.read_text()) == old_file
 
-    # Whole numbers stay ints, and a payload without geometry has none.
+
+def test_the_geometry_read_from_model_info_keeps_fractional_sizes():
+    """The finetune tab's geometry, from a running server: whole numbers stay ints."""
+    from cellmap_flow.utils.server_info import model_geometry as from_model_info
+
     assert from_model_info({"write_shape": [448.0, 448, 448], "output_voxel_size": [5.24, 8, 8.0],
                             "output_channels": 2}) == {"write_shape": [448, 448, 448],
                                                        "output_voxel_size": [5.24, 8, 8], "output_channels": 2}

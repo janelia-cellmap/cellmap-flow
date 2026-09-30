@@ -92,12 +92,12 @@ def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
     assert (got.shape, got[:, 0, 0].tolist()) == (shape, column)
 
 
-def test_the_level_opened_and_the_voxel_size_reported(ome_pyramid, caplog):
-    pyramid = ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))
-    # No voxel size: the finest level.
-    assert ImageDataInterface(pyramid).path.endswith("s0")
+def test_without_a_voxel_size_the_finest_level_is_opened(ome_pyramid):
+    assert ImageDataInterface(ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))).path.endswith("s0")
 
-    # A level at another voxel size is relabelled, with a warning, or refused.
+
+def test_a_level_at_another_voxel_size_is_relabelled_with_a_warning_or_refused(ome_pyramid, caplog):
+    pyramid = ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))
     with caplog.at_level(logging.WARNING):
         idi = ImageDataInterface(pyramid, voxel_size=(16, 16, 16))
     assert [r.name for r in caplog.records if r.levelno >= logging.WARNING] == ["cellmap_flow.image_data_interface"]
@@ -108,17 +108,22 @@ def test_the_level_opened_and_the_voxel_size_reported(ome_pyramid, caplog):
     with pytest.raises(ValueError, match="requested"):
         ImageDataInterface(pyramid, voxel_size=(16, 16, 16), on_voxel_size_mismatch="error")
 
-    # Levels are compared in nanometers, and a voxel size is a whole number
-    # of them despite the float noise of converting units (70 A is
-    # 7.000000000000001 nm), or else kept as floats (5.24 nm).
-    microns = ome_pyramid((((0.008, 0.004, 0.004), None), ((0.016, 0.008, 0.008), None)), name="um.zarr",
-                          unit="micrometer")
-    assert ImageDataInterface(microns, voxel_size=(16, 8, 8)).path.endswith("s1")
-    angstroms = ome_pyramid((((70, 40, 40), None),), name="a.zarr", unit="angstrom")
-    assert ImageDataInterface(angstroms).voxel_size == Coordinate(7, 4, 4)
-    fractional = ome_pyramid((((5.24, 4, 4), (2.62, 2, 2)),), shape=(200, 4, 4), name="f.zarr")
-    idi = ImageDataInterface(fractional)
-    assert idi.voxel_size == (5.24, 4.0, 4.0) and tuple(idi.roi.shape) == (1048, 16, 16)
+
+@pytest.mark.parametrize("levels, unit, requested, level, voxel_size, roi_shape", [
+    # Levels are compared in nanometers.
+    pytest.param((((0.008, 0.004, 0.004), None), ((0.016, 0.008, 0.008), None)), "micrometer", (16, 8, 8),
+                 "s1", Coordinate(16, 8, 8), None, id="micrometers-picked-in-nm"),
+    # A whole number despite the float noise of converting (70 A is 7.000000000000001 nm)...
+    pytest.param((((70, 40, 40), None),), "angstrom", None, "s0", Coordinate(7, 4, 4), None, id="angstroms-whole-nm"),
+    # ...or kept as floats: Coordinate would truncate 5.24 to 5, and 200 voxels span 1048 nm, not 1000.
+    pytest.param((((5.24, 4, 4), (2.62, 2, 2)),), "nanometer", None, "s0", (5.24, 4.0, 4.0), (1048, 16, 16),
+                 id="fractional-nm-kept"),
+])
+def test_the_voxel_size_is_in_nanometers_whole_or_fractional(ome_pyramid, levels, unit, requested, level, voxel_size,
+                                                             roi_shape):
+    idi = ImageDataInterface(ome_pyramid(levels, shape=(200, 4, 4), unit=unit), voxel_size=requested)
+    assert (idi.path[-2:], idi.voxel_size) == (level, voxel_size)
+    assert roi_shape is None or tuple(idi.roi.shape) == roi_shape
 
 
 def test_each_read_goes_through_its_own_chain(raw_zarr):
@@ -131,17 +136,18 @@ def test_each_read_goes_through_its_own_chain(raw_zarr):
     tripled = idi.with_input_norms([LambdaNormalizer("x * 3")])
     assert np.all(tripled.to_ndarray_ts(roi) == 21) and np.all(idi.to_ndarray_ts(roi) == 14)
     assert tripled._raw_ts() is idi._raw_ts()
-    unnormalized = ImageDataInterface(idi.path, normalize=False)
-    assert np.all(unnormalized.to_ndarray_ts(roi) == 7)
+    assert np.all(ImageDataInterface(idi.path, normalize=False).to_ndarray_ts(roi) == 7)
 
-    # The channel is chosen on every read, not when the store is opened: a
-    # server that has read a chunk must follow a new ChannelSelector.
-    channels = ImageDataInterface(raw_zarr(np.stack([np.full((4, 4, 4), c, np.uint8) for c in (1, 2)]), name="c"))
+
+def test_the_channel_is_chosen_on_every_read_and_keeps_the_last_declared_dtype(raw_zarr):
+    """A server that has read a chunk must follow a new ChannelSelector."""
+    roi = Roi((0, 0, 0), (32, 32, 32))
+    channels = ImageDataInterface(raw_zarr(np.stack([np.full((4, 4, 4), c, np.uint8) for c in (1, 2)])))
     g.input_norms = []
     assert np.all(channels.to_ndarray_ts(roi) == 1)
     g.input_norms = [ChannelSelector(1)]
     assert np.all(channels.to_ndarray_ts(roi) == 2) and np.all(np.asarray(channels.ts[...]) == 2)
-    # A step without a dtype (ChannelSelector) keeps the last declared one.
+    # ChannelSelector declares no dtype: MinMax's float32 still reaches the viewer.
     view = channels.with_input_norms([MinMaxNormalizer(), ChannelSelector(0)])
     assert view.ts.dtype == np.float32 and view.to_ndarray_ts(roi).dtype == np.float32
     assert channels.with_input_norms([]).ts.dtype == np.uint8
@@ -152,7 +158,8 @@ CACHE, CONCURRENCY = "CELLMAP_FLOW_RAW_CACHE_BYTES", "CELLMAP_FLOW_RAW_READ_CONC
 
 @pytest.mark.parametrize(
     "env, cache_pool, limit",
-    [({}, {"total_bytes_limit": 1 << 30}, None), ({CACHE: "0", CONCURRENCY: "3"}, {}, 3)],
+    [pytest.param({}, {"total_bytes_limit": 1 << 30}, None, id="default-cache"),
+     pytest.param({CACHE: "0", CONCURRENCY: "3"}, {}, 3, id="set-by-the-environment")],
 )
 def test_the_inference_server_reads_in_parallel_through_a_cache(raw_zarr, model_script, monkeypatch, env,
                                                                  cache_pool, limit):

@@ -59,14 +59,18 @@ AVAILABILITY = {"available": True, "queues": [
 
 
 @pytest.mark.parametrize("cycle, expected", [
-    ({}, ["gpu_h100", "gpu_a100", "gpu_h200"]),  # on by default: most free GPUs first after the one asked for
-    ({"cycle": True}, ["gpu_h100", "gpu_a100", "gpu_h200"]),
+    # The one asked for first, then the most free GPUs first.
+    pytest.param({}, ["gpu_h100", "gpu_a100", "gpu_h200"], id="cycling-by-default"),
+    pytest.param({"cycle": True}, ["gpu_h100", "gpu_a100", "gpu_h200"], id="cycling"),
     # Work pinned to a queue on purpose waits for it, and LSF isn't asked.
-    ({"cycle": False}, ["gpu_h100"]),
+    pytest.param({"cycle": False}, ["gpu_h100"], id="pinned"),
 ])
 def test_the_queues_a_job_is_tried_on(monkeypatch, cycle, expected):
     asked = []
     monkeypatch.setattr(queues, "gpu_queue_availability", lambda force=False: asked.append(1) or AVAILABILITY)
     assert queues.candidates("gpu_h100", **cycle) == expected
     assert len(asked) == (0 if cycle.get("cycle") is False else 1)
+
+
+def test_the_dashboard_cycles_queues_unless_told_not_to():
     assert SERVER_CONFIG_DEFAULTS["cycle_gpu_queues"] is True

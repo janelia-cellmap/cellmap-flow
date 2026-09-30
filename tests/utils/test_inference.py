@@ -54,7 +54,7 @@ def _enter(slots, entered, i):
         entered.append(i)
 
 
-def test_device_slots_are_first_come_first_served_and_bounded(monkeypatch):
+def test_device_slots_are_first_come_first_served():
     slots, entered = DeviceSlots(1), []
     release = _holding(slots)
     _wait_until(lambda: slots._running == 1)
@@ -67,6 +67,8 @@ def test_device_slots_are_first_come_first_served_and_bounded(monkeypatch):
     [t.join(5) for t in threads]
     assert entered == [0, 1, 2, 3, 4]
 
+
+def test_never_more_chunks_than_slots_hold_the_device():
     slots, lock, now, peak = DeviceSlots(2), threading.Lock(), [0], [0]
 
     def work():
@@ -83,10 +85,12 @@ def test_device_slots_are_first_come_first_served_and_bounded(monkeypatch):
     [t.join(5) for t in threads]
     assert peak[0] == 2
 
-    for value in ("0", "two"):
-        monkeypatch.setenv("CELLMAP_FLOW_GPU_SLOTS", value)
-        with pytest.raises(ValueError, match="CELLMAP_FLOW_GPU_SLOTS"):
-            DeviceSlots.from_env()
+
+@pytest.mark.parametrize("value", [pytest.param("0", id="zero"), pytest.param("two", id="not-a-number")])
+def test_a_bad_slot_count_is_refused(monkeypatch, value):
+    monkeypatch.setenv("CELLMAP_FLOW_GPU_SLOTS", value)
+    with pytest.raises(ValueError, match="CELLMAP_FLOW_GPU_SLOTS"):
+        DeviceSlots.from_env()
 
 
 def test_a_chunk_is_read_while_the_device_is_busy():
@@ -163,11 +167,11 @@ model = Probe()
 @pytest.mark.parametrize(
     "in_script, shift, env, expected",
     [
-        (False, 0.0, None, None),  # off by default
-        (True, 0.0, None, torch.bfloat16),  # a script turns it on; bfloat16 on a CPU
-        (True, 0.5, None, None),  # fp32 when the two disagree
-        (False, 0.0, "1", torch.bfloat16),  # so does the server's environment
-        (False, 0.0, "0", None),
+        pytest.param(False, 0.0, None, None, id="off-by-default"),
+        pytest.param(True, 0.0, None, torch.bfloat16, id="a-script-turns-it-on"),  # bfloat16 on a CPU
+        pytest.param(True, 0.5, None, None, id="fp32-when-the-two-disagree"),
+        pytest.param(False, 0.0, "1", torch.bfloat16, id="the-servers-environment-turns-it-on"),
+        pytest.param(False, 0.0, "0", None, id="or-off"),
     ],
 )
 def test_half_precision_is_opt_in_and_checked_against_fp32(raw_zarr, model_script, monkeypatch, in_script, shift,
@@ -209,23 +213,27 @@ model = Recording()
 """
 
 
-def test_declared_shapes_are_checked_on_the_warmup_forward(raw_zarr, model_script):
+def test_serving_runs_one_forward_the_warmup(model_script):
+    """The shape check at config load ran a forward of its own, on zeros."""
     config = ScriptModelConfig(script_path=model_script(RECORDING, out=4))
     inferencer = Inferencer(config)
-    (probe,) = config.config.model.inputs  # one forward, the warmup's, on the device
-    assert probe.device == inferencer.device and probe.abs().max() > 0, "the probe input, not zeros"
+    (probe,) = config.config.model.inputs
+    assert probe.device == inferencer.device and probe.abs().max() > 0, "the warmup's probe input"
 
-    # A shape the model does not produce stops the server, from that same forward.
-    wrong = ScriptModelConfig(script_path=model_script(RECORDING, name="wrong.py", out=2))
+
+def test_a_declared_shape_the_model_does_not_produce_stops_the_server(raw_zarr, model_script):
+    config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
     with pytest.raises(ValueError, match="(?s)shape validation failed.*write_shape mismatch"):
-        CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), wrong)
-    (probe,) = wrong._config.model.inputs
+        CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
+    (probe,) = config._config.model.inputs  # raised by the warmup's forward
     assert probe.abs().max() > 0
-    # A config read without an inferencer checks on its own.
-    alone = ScriptModelConfig(script_path=model_script(RECORDING, name="alone.py", out=2))
+
+
+def test_a_config_read_without_an_inferencer_checks_its_shapes_itself(model_script):
+    config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
     with pytest.raises(ValueError, match="write_shape mismatch"):
-        alone.config
-    assert len(alone._config.model.inputs) == 1
+        config.config
+    assert len(config._config.model.inputs) == 1
 
 
 def test_postprocessors_space_their_ids_by_output_voxels(raw_zarr, model_script):

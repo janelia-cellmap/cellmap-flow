@@ -95,21 +95,28 @@ def _dacapo_run(out_channels):
                            task=AffinitiesTask())
 
 
-def test_each_type_takes_its_geometry_from_its_model(fake_frameworks, monkeypatch):
+def test_a_fly_models_write_shape_is_in_output_voxels():
     fly = FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
                          output_voxel_size=(4, 4, 4), input_size=(20, 20, 20), output_size=(12, 12, 12))
     fly._model = torch.nn.Module()
     fly._model.forward = lambda x: torch.zeros(1, 1, 12, 12, 12)
-    assert tuple(fly.config.write_shape) == (48, 48, 48), "in output voxels"
+    assert tuple(fly.config.write_shape) == (48, 48, 48)
 
-    for out_channels, channels in [(9, "aff_3_0_0"), (3, ["x", "y", "z"])]:
-        dacapo = DaCapoModelConfig(run_name="r", iteration=0)
-        monkeypatch.setattr(dacapo, "_load_dacapo_run", lambda: _dacapo_run(out_channels))
-        config = dacapo.config
-        assert (tuple(config.output_voxel_size), tuple(config.write_shape), config.output_channels) == (
-            (4, 4, 4), (48, 48, 48), out_channels)
-        assert (config.channels[3] if out_channels == 9 else config.channels) == channels  # old names when they fit
 
+@pytest.mark.parametrize("out_channels, channels", [
+    pytest.param(9, "aff_3_0_0", id="nine-affinities-named-by-offset"),
+    pytest.param(3, ["x", "y", "z"], id="three-keep-the-old-names"),
+])
+def test_a_dacapo_models_geometry_and_channels_follow_the_model(fake_frameworks, monkeypatch, out_channels, channels):
+    dacapo = DaCapoModelConfig(run_name="r", iteration=0)
+    monkeypatch.setattr(dacapo, "_load_dacapo_run", lambda: _dacapo_run(out_channels))
+    config = dacapo.config
+    assert (tuple(config.output_voxel_size), tuple(config.write_shape), config.output_channels) == (
+        (4, 4, 4), (48, 48, 48), out_channels)
+    assert (config.channels[3] if out_channels == 9 else config.channels) == channels
+
+
+def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch):
     bio = BioModelConfig(model_name="m", voxel_size="8,8,8")
     axes = ["b", "c", "z", "y", "x"]
     monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))

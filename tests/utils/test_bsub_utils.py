@@ -12,6 +12,7 @@ import signal
 import subprocess
 import threading
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import pytest
@@ -50,38 +51,43 @@ class FakeJob:
 
 REFUSED = subprocess.CalledProcessError(255, "bsub", stderr="bad project")
 
-# case: (what submitting to each queue gives, bsub installed, start_hosts keywords,
-#        (the job's queue, or (error, message)), queues submitted to, jobs killed)
+class Case(NamedTuple):
+    outcomes: dict  # what submitting to each queue gives: a FakeJob's arguments, or an exception
+    result: object  # the queue the job ran on, "local", or the (error, message) raised
+    submitted: list  # the queues submitted to, in order
+    killed: list  # the jobs killed
+    bsub: bool = True  # whether bsub is installed
+    kwargs: dict = {}  # start_hosts' keywords
+
+
 CASES = {
     # The queue it landed on is the job's: g.queue stays what the next submission asks for.
-    "falls-back": ({"gpu_h100": dict(status=P), "gpu_a100": dict(host="http://node:1")}, True, {},
-                   ("gpu_a100", ["gpu_h100", "gpu_a100"], ["gpu_h100"])),
+    "falls-back-to-another-queue": Case({"gpu_h100": dict(status=P), "gpu_a100": dict(host="http://node:1")},
+                                        "gpu_a100", ["gpu_h100", "gpu_a100"], ["gpu_h100"]),
     # A GPU server must not start on a login or submit node instead.
-    "all-refused": ({q: REFUSED for q in QUEUES}, True, {},
-                    ((JobStartError, "gpu_h100.*gpu_a100.*gpu_h200"), list(QUEUES), [])),
+    "every-queue-refused": Case({q: REFUSED for q in QUEUES}, (JobStartError, "gpu_h100.*gpu_a100.*gpu_h200"),
+                                list(QUEUES), []),
     # Nothing will point a layer at it, so it must not sit there billing.
-    "never-started": ({q: dict(status=P) for q in QUEUES}, True, {},
-                      ((JobStartError, "did not start"), list(QUEUES), list(QUEUES))),
+    "never-started": Case({q: dict(status=P) for q in QUEUES}, (JobStartError, "did not start"), list(QUEUES), list(QUEUES)),
     # A crash reproduces on every queue.
-    "crashed": ({"gpu_h100": dict(status=F), "gpu_a100": dict(host="http://x:1")}, True, {},
-                ((JobStartError, "gpu_h100"), ["gpu_h100"], [])),
-    "loads-slowly": ({"gpu_h100": dict(status=R, late_host="http://node:2")}, True, {},
-                     ("gpu_h100", ["gpu_h100"], [])),
-    "runs-without-a-host": ({"gpu_h100": dict(status=R)}, True, {}, ((JobStartError, "killed"), ["gpu_h100"], ["gpu_h100"])),
+    "crashed": Case({"gpu_h100": dict(status=F), "gpu_a100": dict(host="http://x:1")}, (JobStartError, "gpu_h100"),
+                    ["gpu_h100"], []),
+    "running-but-still-loading": Case({"gpu_h100": dict(status=R, late_host="http://node:2")}, "gpu_h100", ["gpu_h100"], []),
+    "running-without-ever-a-host": Case({"gpu_h100": dict(status=R)}, (JobStartError, "killed"), ["gpu_h100"], ["gpu_h100"]),
     # LSF may still make the timed-out job: a second bsub would leave two of it.
-    "bsub-timed-out": ({"gpu_h100": BsubTimeoutError("bjobs -a -J m")}, True, {},
-                       ((BsubTimeoutError, "bjobs -a -J m"), ["gpu_h100"], [])),
-    "no-bsub": ({}, False, {}, ("local", [], [])),
-    "asked-to-run-locally": ({}, True, {"local": True}, ("local", [], [])),
-    "local-without-a-host": ({}, False, {}, ((JobStartError, "did not report"), [], ["local"])),
+    "bsub-timed-out": Case({"gpu_h100": BsubTimeoutError("bjobs -a -J m")}, (BsubTimeoutError, "bjobs -a -J m"),
+                           ["gpu_h100"], []),
+    "no-bsub": Case({}, "local", [], [], bsub=False),
+    "asked-to-run-locally": Case({}, "local", [], [], kwargs={"local": True}),
+    "local-server-without-a-host": Case({}, (JobStartError, "did not report"), [], ["local"], bsub=False),
 }
 
 
 @pytest.mark.parametrize("case", CASES)
 def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
-    outcomes, bsub, kwargs, (result, submitted, killed) = CASES[case]
+    outcomes, result, submitted, killed, bsub, kwargs = CASES[case]
     jobs = {q: o if isinstance(o, Exception) else FakeJob(q, **o) for q, o in outcomes.items()}
-    local = FakeJob("local", host=None if case == "local-without-a-host" else "http://localhost:9")
+    local = FakeJob("local", host=None if case == "local-server-without-a-host" else "http://localhost:9")
     calls = []
 
     def submit(command, queue, charge_group, job_name, walltime=None, env=None):
@@ -112,8 +118,8 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
     assert calls == submitted + (["local"] if result == "local" or "local" in killed else [])
     assert [j.job_id for j in [*jobs.values(), local] if isinstance(j, FakeJob) and j.killed] == killed
     assert (g.queue, g.charge_group) == ("gpu_h100", "saved_group")
-    if case == "loads-slowly":
-        assert jobs["gpu_h100"].waits == 2
+    if case == "running-but-still-loading":
+        assert jobs["gpu_h100"].waits == 2, "it was given time to load its model"
 
 
 def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):

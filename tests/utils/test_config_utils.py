@@ -17,30 +17,32 @@ import cellmap_flow.globals as G
 from cellmap_flow.utils.config_utils import ConfigError, build_models, load_config, resolve_data_path
 
 
-@pytest.mark.parametrize(
-    "yaml_text, models, message",
-    [
-        ("charge_group: g\nmodels: {}\n", None, "data_path"),
-        ("data_path: /d.zarr\ncharge_group: g\nmodels: 3\n", None, "dict or list"),
-        ("- just\n- a list\n", None, "mapping"),
-        ("data_path: /d.zarr\n", None, "charge_group"),  # and none saved either
-        (None, {"m": {"script_path": "/s.py"}}, "missing 'type'"),
-        (None, {"m": {"type": "no-such-kind"}}, "unrecognized type"),
-        (None, {"m": {"type": "dacapo", "run_name": "r"}}, "missing required parameter 'iteration'"),
-        (None, {"m": "not a mapping"}, "must be a mapping"),
-        (None, [{"type": "script", "script_path": "/s.py"}], "name"),
-    ],
-)
-def test_a_bad_config_is_a_config_error(tmp_path, monkeypatch, yaml_text, models, message):
+@pytest.mark.parametrize("yaml_text, message", [
+    pytest.param("charge_group: g\nmodels: {}\n", "data_path", id="no-data-path"),
+    pytest.param("data_path: /d.zarr\ncharge_group: g\nmodels: 3\n", "dict or list", id="models-neither-dict-nor-list"),
+    pytest.param("- just\n- a list\n", "mapping", id="not-a-mapping"),
+    pytest.param("data_path: /d.zarr\n", "charge_group", id="no-charge-group-and-none-saved"),
+])
+def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, message):
     monkeypatch.setattr(G, "load_server_config_cache", lambda: None)
     monkeypatch.setitem(G.SERVER_CONFIG_DEFAULTS, "charge_group", "")
+    (tmp_path / "c.yaml").write_text(yaml_text)
     with pytest.raises(ConfigError, match=message) as raised:
-        if models is None:
-            (tmp_path / "c.yaml").write_text(yaml_text)
-            load_config(str(tmp_path / "c.yaml"))
-        else:
-            build_models(models)
+        load_config(str(tmp_path / "c.yaml"))
     assert not isinstance(raised.value, SystemExit)  # the dashboard's handlers answer it
+
+
+@pytest.mark.parametrize("models, message", [
+    pytest.param({"m": {"script_path": "/s.py"}}, "missing 'type'", id="entry-without-a-type"),
+    pytest.param({"m": {"type": "no-such-kind"}}, "unrecognized type", id="unknown-type"),
+    pytest.param({"m": {"type": "dacapo", "run_name": "r"}}, "missing required parameter 'iteration'",
+                 id="missing-required-parameter"),
+    pytest.param({"m": "not a mapping"}, "must be a mapping", id="entry-not-a-mapping"),
+    pytest.param([{"type": "script", "script_path": "/s.py"}], "name", id="list-entry-without-a-name"),
+])
+def test_a_bad_model_entry_is_a_config_error(models, message):
+    with pytest.raises(ConfigError, match=message):
+        build_models(models)
 
 
 def test_one_rule_for_data_path_and_scale(tmp_path, caplog):

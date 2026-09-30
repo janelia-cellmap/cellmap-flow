@@ -11,12 +11,18 @@ import pytest
 from cellmap_flow.utils.load_py import load_safe_config
 
 
-@pytest.mark.parametrize(
-    "setting, argument, allowed",
-    [(v, None, True) for v in ("False", "false", "0", "no", "", None)]
-    + [(v, None, False) for v in ("True", "1", "yes")]
-    + [("1", False, True)],  # an explicit argument wins
-)
+@pytest.mark.parametrize("setting, argument, allowed", [
+    pytest.param("False", None, True, id="False"),  # what the error message tells users to set
+    pytest.param("false", None, True, id="false"),
+    pytest.param("0", None, True, id="0"),
+    pytest.param("no", None, True, id="no"),
+    pytest.param("", None, True, id="empty"),
+    pytest.param(None, None, True, id="unset"),
+    pytest.param("True", None, False, id="True"),
+    pytest.param("1", None, False, id="1"),
+    pytest.param("yes", None, False, id="yes"),
+    pytest.param("1", False, True, id="an-explicit-argument-wins"),
+])
 def test_an_unsafe_script_is_refused_only_when_asked(tmp_path, monkeypatch, setting, argument, allowed):
     script = tmp_path / "unsafe.py"
     script.write_text("import subprocess\nvalue = 3\n")

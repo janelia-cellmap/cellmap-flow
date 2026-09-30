@@ -172,9 +172,9 @@ def test_waiting_for_a_servers_address(fake_lsf, tmp_path, caplog, stat, bpeek, 
 
 
 @pytest.mark.parametrize("template, expected", [
-    (None, URL),
-    ("https://proxy.example.org/{host}/{port}", "https://proxy.example.org/node7/4321"),
-    ("https://proxy.example.org/{nope}", URL),  # a bad one is ignored
+    pytest.param(None, URL, id="none"),
+    pytest.param("https://proxy.example.org/{host}/{port}", "https://proxy.example.org/node7/4321", id="host-and-port"),
+    pytest.param("https://proxy.example.org/{nope}", URL, id="a-bad-one-is-ignored"),
 ])
 def test_a_server_url_template_gives_the_address_viewers_use(fake_lsf, monkeypatch, template, expected):
     fake_lsf.answers.update(bjobs=lambda argv, kw: _bjobs(argv[-1]), bpeek=[(0, MARKER + "\n", "")])
@@ -189,12 +189,12 @@ def test_a_server_url_template_gives_the_address_viewers_use(fake_lsf, monkeypat
 
 
 @pytest.mark.parametrize("content, job_id, expected", [
-    (None, None, None),  # not written yet
-    ('{"url": "http://10.1', None, None),  # cut short
-    ('{"url": ""}', None, None),
-    (json.dumps({"url": URL, "job_id": "6"}), "7", None),  # another job's
-    (json.dumps({"url": URL, "job_id": "7"}), "7", URL),
-    (json.dumps({"url": URL}), "7", URL),  # written outside LSF: nothing to compare
+    pytest.param(None, None, None, id="not-written-yet"),
+    pytest.param('{"url": "http://10.1', None, None, id="cut-short"),
+    pytest.param('{"url": ""}', None, None, id="no-url"),
+    pytest.param(json.dumps({"url": URL, "job_id": "6"}), "7", None, id="another-jobs"),
+    pytest.param(json.dumps({"url": URL, "job_id": "7"}), "7", URL, id="this-jobs"),
+    pytest.param(json.dumps({"url": URL}), "7", URL, id="written-outside-lsf"),  # nothing to compare
 ])
 def test_reading_a_ready_file(tmp_path, content, job_id, expected):
     if content is not None:
@@ -202,12 +202,18 @@ def test_reading_a_ready_file(tmp_path, content, job_id, expected):
     assert read_ready_file(tmp_path / "m.ready", job_id=job_id) == expected
 
 
+def test_each_submission_gets_a_new_ready_file_named_after_its_job(tmp_path):
+    """So a job that started late on a queue given up on cannot hand its
+    address to the next submission."""
+    target = ready_path(tmp_path / "logs", "../mito model")
+    assert target != ready_path(tmp_path / "logs", "../mito model")
+    assert target.parent == tmp_path / "logs" and target.name.startswith("mito_model_") and target.suffix == ".ready"
+
+
 def test_a_server_writes_its_ready_file_as_it_prints_its_marker(tmp_path, monkeypatch, capsys):
     from cellmap_flow import server
 
-    target = ready_path(tmp_path / "logs", "../mito model")
-    assert target != ready_path(tmp_path / "logs", "../mito model"), "a new path per submission"
-    assert target.name.startswith("mito_model_") and target.suffix == ".ready"
+    target = tmp_path / "m.ready"
     monkeypatch.setenv(READY_ENV, str(target))
     monkeypatch.setenv("LSB_JOBID", "4242")
     monkeypatch.setattr(server, "get_public_ip", lambda: "10.1.2.3")
@@ -220,15 +226,19 @@ def test_a_server_writes_its_ready_file_as_it_prints_its_marker(tmp_path, monkey
     assert f"{IP_PATTERN[0]}http://10.1.2.3:8123{IP_PATTERN[1]}" in capsys.readouterr().out, "the marker still printed"
     assert json.loads(target.read_text()).keys() == {"url", "host", "pid", "job_id"}
     assert list(target.parent.iterdir()) == [target], "no temporary file is left behind"
-    # Not asked, or nowhere to write it: no file, and nothing raised at the server.
-    monkeypatch.delenv(READY_ENV)
-    assert write_ready_file(URL) is None
+
+
+@pytest.mark.parametrize("where", [pytest.param(None, id="not-asked"), pytest.param("not_a_dir/m.ready", id="unwritable")])
+def test_a_server_not_asked_or_unable_to_write_a_ready_file_goes_on(tmp_path, monkeypatch, where):
     (tmp_path / "not_a_dir").write_text("")
-    monkeypatch.setenv(READY_ENV, str(tmp_path / "not_a_dir" / "m.ready"))
+    if where:
+        monkeypatch.setenv(READY_ENV, str(tmp_path / where))
+    else:
+        monkeypatch.delenv(READY_ENV, raising=False)
     assert write_ready_file(URL) is None
 
 
-@pytest.mark.parametrize("written", [True, False])
+@pytest.mark.parametrize("written", [pytest.param(True, id="written"), pytest.param(False, id="a-server-from-before-the-file")])
 def test_the_launcher_reads_the_ready_file_before_asking_lsf(fake_lsf, tmp_path, written):
     fake_lsf.answers.update(bjobs=lambda argv, kw: _bjobs(argv[-1]), bpeek=[(0, f"loading\n{MARKER}\n", "")])
     path = tmp_path / "m.ready"

@@ -54,19 +54,24 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(server):
     # A URL without a chain (in-process callers, --server-check) gets the process's.
     assert np.all(_chunk(client, server, "plain") == 11)
     assert g.input_norms == [] and [type(p) for p in g.postprocess] == [Plus], "nothing leaks into g"
-    # The server's address leads to what it serves.
-    assert client.get("/").headers["Location"].endswith("/__control__/model_info")
 
 
-def test_a_layer_served_without_normalization_says_so(server, caplog):
+def test_the_servers_address_leads_to_what_it_serves(server):
+    """/ redirected to a Swagger page that documented nothing."""
+    assert server.app.test_client().get("/").headers["Location"].endswith("/__control__/model_info")
+
+
+@pytest.mark.parametrize("dataset, warns", [
+    pytest.param(layer([LambdaNormalizer("x * 2")]), False, id="with-an-input-chain"),
+    pytest.param("plain", True, id="no-chain-in-the-url"),
+    pytest.param(layer(), True, id="an-empty-input-chain"),
+])
+def test_a_layer_served_without_normalization_says_so(server, caplog, dataset, warns):
     """A model fed raw voxels looks like one that trained badly, so the
     server warns when a layer URL carries no input chain."""
-    client = server.app.test_client()
-    for dataset, warns in [(layer([LambdaNormalizer("x * 2")]), False), ("plain", True), (layer(), True)]:
-        caplog.clear()
-        with caplog.at_level(logging.WARNING):
-            _chunk(client, server, dataset)
-        assert any(r.levelno == logging.WARNING for r in caplog.records) is warns, dataset
+    with caplog.at_level(logging.WARNING):
+        _chunk(server.app.test_client(), server, dataset)
+    assert any(r.levelno == logging.WARNING for r in caplog.records) is warns
 
 
 def test_a_stateful_step_keeps_its_state_across_metadata_requests(server):
@@ -80,7 +85,11 @@ def test_a_stateful_step_keeps_its_state_across_metadata_requests(server):
     assert first.chunk_slice_position_to_coords_id_dict
 
 
-@pytest.mark.parametrize("declared, served", [("np.float16", "<f2"), ('"float32"', "<f4"), ("np.uint8", "|u1")])
+@pytest.mark.parametrize("declared, served", [
+    pytest.param("np.float16", "<f2", id="numpy-type"),
+    pytest.param('"float32"', "<f4", id="string"),
+    pytest.param("np.uint8", "|u1", id="unsigned"),
+])
 def test_any_declared_output_dtype_is_served_as_a_zarr_dtype(raw_zarr, model_script, declared, served):
     script = model_script(IDENTITY_MODEL + f"\noutput_dtype = {declared}\n")
     server = CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), ScriptModelConfig(script_path=script))
@@ -90,20 +99,22 @@ def test_any_declared_output_dtype_is_served_as_a_zarr_dtype(raw_zarr, model_scr
     decode_chunk(server, client.get("/plain/s0/0.0.0.0").data, meta["dtype"], meta["chunks"])
 
 
-def test_the_served_arrays_arithmetic():
+def test_the_served_array_rounds_up_and_its_chunks_start_at_the_raw_corner():
     # 11 voxels of 8 nm from -4 nm end at 84 nm: 5.5 voxels of 16 nm, so 6.
     origin = np.array([-4] * 3)
     assert virtual_zarr.served_spatial_shape([-4] * 3, [11] * 3, [8] * 3, origin, [16] * 3) == [6] * 3
     assert virtual_zarr.chunk_roi((2, 2, 2), (4, 4, 4), (16, 16, 16), origin) == Roi((124,) * 3, (64,) * 3)
-    # Chunks go out in zarr's order, each voxel keeping its own channel values.
-    for shape, axes, expected in [
-        ((2, 3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5, 2)),
-        ((3, 4, 5, 2), ("z", "y", "x", "c"), (3, 4, 5, 2)),
-        ((3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5)),  # not what it says it is: left alone
-    ]:
-        data = np.arange(np.prod(shape)).reshape(shape)
-        out = virtual_zarr.reorder_to_zarr_axes(data, axes, ("z", "y", "x"))
-        assert out.shape == expected and out.flags.c_contiguous
-        if len(shape) == 4:
-            voxel = tuple(slice(None) if a == "c" else {"z": 1, "y": 2, "x": 3}[a] for a in axes)
-            assert np.array_equal(out[1, 2, 3], data[voxel])
+
+
+@pytest.mark.parametrize("shape, axes, expected", [
+    pytest.param((2, 3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5, 2), id="channel-first-moved-last"),
+    pytest.param((3, 4, 5, 2), ("z", "y", "x", "c"), (3, 4, 5, 2), id="already-in-zarr-order"),
+    pytest.param((3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5), id="not-what-it-says-left-alone"),
+])
+def test_chunks_go_out_in_zarr_order(shape, axes, expected):
+    data = np.arange(np.prod(shape)).reshape(shape)
+    out = virtual_zarr.reorder_to_zarr_axes(data, axes, ("z", "y", "x"))
+    assert out.shape == expected and out.flags.c_contiguous
+    if len(shape) == 4:  # each voxel keeps its own channel values
+        voxel = tuple(slice(None) if a == "c" else {"z": 1, "y": 2, "x": 3}[a] for a in axes)
+        assert np.array_equal(out[1, 2, 3], data[voxel])

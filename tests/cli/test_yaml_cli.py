@@ -35,12 +35,23 @@ def placeholder_cellmap_folders(monkeypatch):
     monkeypatch.setattr(cellmap_model, "CellmapModel", lambda folder_path: None)
 
 
-@pytest.mark.parametrize("path", [pytest.param(p, id=os.path.basename(p)) for p in RUN_CONFIGS])
+EXAMPLE_RUN_CONFIGS = [pytest.param(p, id=os.path.basename(p)) for p in RUN_CONFIGS]
+
+
+def test_there_are_example_run_configs_to_check():
+    assert len(RUN_CONFIGS) >= 3
+
+
+@pytest.mark.parametrize("path", EXAMPLE_RUN_CONFIGS)
 def test_the_example_run_configs_are_valid(path, placeholder_cellmap_folders):
-    assert len(RUN_CONFIGS) >= 3, "the examples to check are there"
     result = CliRunner().invoke(yaml_cli.main, [path, "--validate-only"])
     assert result.exit_code == 0 and "Configuration is valid" in result.output, result.output
-    # Uncommented, the old "# output_channels:mito,ld" was one channel named "mito,ld".
+
+
+@pytest.mark.parametrize("path", EXAMPLE_RUN_CONFIGS)
+def test_the_examples_commented_output_channels_are_lists(path):
+    """Uncommented, "# output_channels:mito,ld" was one channel named "mito,ld",
+    and the processor's index() raised."""
     for line in open(path).read().splitlines():
         if line.lstrip("# ").strip().startswith("output_channels"):
             assert isinstance(yaml.safe_load(line.lstrip("# ").strip())["output_channels"], list), line
