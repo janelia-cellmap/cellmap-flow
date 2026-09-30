@@ -6,6 +6,7 @@ proxy. What the volume routes write is pinned by test_volume_snapshot."""
 import json
 import time
 from types import SimpleNamespace
+from unittest.mock import ANY
 
 import numpy as np
 import pytest
@@ -61,8 +62,8 @@ ABSENT = object()
 def submit(client, trainable_session):
     """``submit(volume=CROPPED, via_base_path=False, **request)``: POST
     /api/finetune/submit for model "m", on a session over ``volume``. Returns
-    the status, what the job manager was asked for (None if nothing), and the
-    session's manifest afterwards."""
+    the status and answer, what the job manager was asked for (None if
+    nothing), and the session's manifest afterwards."""
 
     def run(volume=CROPPED, via_base_path=False, **request):
         corrections = trainable_session(*volume)
@@ -72,7 +73,8 @@ def submit(client, trainable_session):
         path = corrections.parent.parent if via_base_path else corrections
         response = client.post("/api/finetune/submit",
                                json={"model_name": "m", "corrections_path": str(path), **request})
-        return SimpleNamespace(status=response.status_code, sent=asked[0] if asked else None, corrections=corrections,
+        return SimpleNamespace(status=response.status_code, body=response.get_json(), sent=asked[0] if asked else None,
+                               corrections=corrections,
                                manifest=json.loads((corrections / "_virtual_sources.json").read_text()))
 
     return run
@@ -92,6 +94,20 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
     unannotated voxels taken for background. It is read from the volume now."""
     job = submit(volume, **request_data)
     assert {key: job.sent[key] for key in sent} == sent
+
+
+def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
+    job = submit()
+    assert job.body == {"success": True, "job_id": "j", "lsf_job_id": None, "output_dir": str(job.corrections),
+                        "tensorboard_command": f"tensorboard --logdir {job.corrections.parent}",
+                        "output_type": "affinities", "message": "Finetuning job submitted successfully"}
+    assert job.sent == dict(
+        model_config=g.models_config[0], corrections_path=job.corrections, lora_r=8, num_epochs=10, batch_size=2,
+        learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None, auto_serve=True,
+        mask_unannotated=False, loss_type="mse", label_smoothing=0.1, distillation_lambda=None,
+        distillation_scope="unlabeled", margin=0.3, balance_classes=False, augment=False, queue="gpu_h100",
+        charge_group="my_lab", output_type="affinities", select_channel=None, offsets="[[1, 0, 0], [0, 1, 0]]",
+    )
 
 
 def test_submit_reads_the_affinity_offsets_from_the_models_script(submit):
@@ -176,8 +192,8 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
 def restart(client, local_jobs, session, monkeypatch):
     """``restart(pulled=0, **request)``: POST /api/finetune/job/<id>/restart for
     a job submitted through the dashboard's own job manager, with MinIO sync
-    pulling ``pulled`` volumes. Returns the response body, the syncs asked for,
-    what the trainer is sent, and the session."""
+    pulling ``pulled`` volumes. Returns the response's status and body, the
+    syncs asked for, what the trainer is sent, and the session."""
     from cellmap_flow.dashboard.routes.finetune import training
     from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
 
@@ -192,7 +208,8 @@ def restart(client, local_jobs, session, monkeypatch):
                             lambda force=True: record.syncs.append(force) or pulled)
         monkeypatch.setattr(manager, "restart_finetuning_job",
                             lambda job_id, updated_params: record.sent.append(updated_params) or job)
-        record.body = client.post(f"/api/finetune/job/{job.job_id}/restart", json=request).get_json()
+        response = client.post(f"/api/finetune/job/{job.job_id}/restart", json=request)
+        record.status, record.body = response.status_code, response.get_json()
         return record
 
     return run
@@ -225,6 +242,13 @@ def test_a_restart_sends_the_trainer_its_own_flags(restart):
     run = restart(augment=True, offsets=[[1, 0, 0]], distillation_scope="all", loss_type="margin")
     assert run.sent == [{"augment": True, "no_augment": False, "offsets": "[[1, 0, 0]]",
                          "distillation_all_voxels": True, "loss_type": "margin"}]
+
+
+def test_a_restart_with_an_override_that_is_not_one_fails(restart):
+    run = restart(rehearsal_fraction="abc")
+    assert (run.status, run.body) == (500, {"success": False,
+                                            "error": "rehearsal_fraction must be a number between 0 and 1"})
+    assert run.sent == []
 
 
 def test_the_jobs_list_looks_for_jobs_in_the_saved_output_path(client, session, monkeypatch):
@@ -301,3 +325,305 @@ def test_minio_urls_are_rewritten_only_behind_a_configured_proxy(monkeypatch, te
         return
     with Flask(__name__).test_request_context(base_url="http://node:5000", headers=headers):
         assert rewrite_minio_url_for_proxy(MINIO) == expected
+
+
+# --- What every route answers ----------------------------------------------------------
+#
+# The finetune tab shows these answers, error messages included, and scripts
+# call the /api/viewer ones. Paths are written <tmp>, a session's timestamp
+# <session> and a time <time>.
+
+STOP = ("Stop requested. Training will exit after the current epoch; the inference server will "
+        "then start so you can restart with updated parameters.")
+NOT_RESTARTABLE = ("Job j is in state RUNNING - can only restart a job that is waiting for a restart "
+                   "(its training iteration has finished or diverged)")
+NO_GOOD_REGIONS_SESSION = ("Could not work out where to save good regions for this session, so the mark was "
+                           "discarded. Create or resume an annotation volume first.")
+NO_CORRECTIONS_PATH = "corrections_path is required. Please specify the output path where annotation crops are saved."
+CROPS = "crops:\n  - path: /data/crop.zarr\n"
+
+
+def _refused(error):
+    return {"success": False, "error": error}
+
+
+class _Starting(str):
+    """A message that starts with this; the rest is a library's."""
+
+    def __eq__(self, other):
+        return isinstance(other, str) and other.startswith(self)
+
+    __hash__ = str.__hash__
+
+
+# make_job's job "j" as the routes list it.
+JOB = {"job_id": "j", "lsf_job_id": None, "model_name": "m", "output_dir": "<tmp>/runs/r", "params": {},
+       "status": "RUNNING", "created_at": "<time>", "log_file": "<tmp>/runs/r/training_log.txt",
+       "finetuned_model_name": None, "model_yaml_path": None, "current_epoch": 0, "total_epochs": 10,
+       "inference_server_url": None, "inference_server_ready": False, "corrections_path": None, "loss": None,
+       "progress_percent": 0.0}
+
+
+class _Killable:
+    job_id = "4242"
+
+    def kill(self):
+        pass
+
+
+GEOMETRY = SimpleNamespace(read_shape=[96] * 3, write_shape=[64] * 3, input_voxel_size=[8] * 3,
+                           output_voxel_size=[16] * 3, output_channels=1)
+
+
+def _given(situation, world, monkeypatch):
+    """Change the world ``routes`` sets up to ``situation``."""
+    from cellmap_flow.finetune.finetune_job_manager import JobStatus
+    from cellmap_flow.utils import model_geometry
+
+    job = world.job
+    if situation == "no viewer":
+        g.viewer = None
+    elif situation == "the viewer has a position":
+        with g.viewer.txn() as s:
+            s.position = [1, 2, 3]
+    elif situation == "no models":
+        g.models_config = []
+    elif situation == "its geometry is known":
+        monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: GEOMETRY)
+    elif situation == "a saved pipeline":
+        g.pipeline_model_configs = {"m": {"write_shape": [64] * 3, "output_voxel_size": [16] * 3,
+                                          "output_channels": 2}}
+    elif situation == "an empty session":
+        (world.tmp / "s" / "corrections").mkdir(parents=True)
+    elif situation == "no log yet":
+        job.log_file.unlink()
+    elif situation == "no output dir":
+        job.output_dir = world.tmp / "gone"
+    elif situation == "on LSF":
+        job.lsf_job = _Killable()
+    elif situation == "waiting":
+        job.status = JobStatus.WAITING_FOR_RESTART
+    else:
+        assert situation is None, situation
+
+
+@pytest.fixture
+def routes(client, viewer, make_job, tmp_path, monkeypatch):
+    """``routes(method, url, body=None, situation=None)``: (status, JSON) of a
+    request. The world: model "m", a viewer, no annotation session, MinIO not
+    running, the user prefs under tmp_path, and a job manager holding job "j"
+    (running, not on LSF, its log two lines long). ``situation`` changes it
+    (see _given)."""
+    import re
+
+    from cellmap_flow.dashboard.routes.finetune import common
+    from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+
+    monkeypatch.setattr(common, "USER_PREFS_FILE", str(tmp_path / "user_prefs.json"))
+    world = SimpleNamespace(tmp=tmp_path, job=make_job())
+    world.job.log_file.write_text("line 1\nline 2\n")
+    manager = FinetuneJobManager()
+    manager.jobs[world.job.job_id] = world.job
+    monkeypatch.setattr(g, "finetune_job_manager", manager)
+    monkeypatch.setattr(g, "minio_state", dict(g.minio_state, process=None, ip=None, port=None))
+
+    def names(value):
+        if isinstance(value, dict):
+            return {k: names(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [names(v) for v in value]
+        if not isinstance(value, str):
+            return value
+        value = re.sub(r"\d{4}-\d\d-\d\dT[\d:.]+", "<time>", value.replace(str(tmp_path), "<tmp>"))
+        return re.sub(r"\d{8}_\d{6}", "<session>", value)
+
+    def request(method, url, body=None, situation=None):
+        _given(situation, world, monkeypatch)
+        if isinstance(body, dict):
+            body = {k: v.replace("<tmp>", str(tmp_path)) if isinstance(v, str) else v for k, v in body.items()}
+            response = getattr(client, method)(url, json=body)
+        else:
+            response = getattr(client, method)(url, data=body, content_type="text/plain" if body else None)
+        return response.status_code, names(response.get_json(silent=True))
+
+    request.job = world.job
+    return request
+
+
+ANSWERS = [
+    # training
+    pytest.param("get", "/api/finetune/jobs", None, None, 200, {"success": True, "jobs": [JOB]},
+                 id="jobs"),
+    pytest.param("get", "/api/finetune/job/j/status", None, None, 200, {"success": True, **JOB},
+                 id="status"),
+    pytest.param("get", "/api/finetune/job/nope/status", None, None, 404, _refused("Job not found"),
+                 id="status of an unknown job"),
+    pytest.param("get", "/api/finetune/job/j/logs", None, None, 200,
+                 {"success": True, "logs": "line 1\nline 2\n", "offset": 14}, id="logs"),
+    pytest.param("get", "/api/finetune/job/j/logs", None, "no log yet", 200,
+                 {"success": True, "logs": "Log file not yet created...", "offset": 0}, id="logs before the log"),
+    pytest.param("get", "/api/finetune/job/nope/logs", None, None, 404, _refused("Job not found"),
+                 id="logs of an unknown job"),
+    pytest.param("post", "/api/finetune/job/j/cancel", None, "on LSF", 200,
+                 {"success": True, "message": "Job j cancelled"}, id="cancel"),
+    pytest.param("post", "/api/finetune/job/j/cancel", None, None, 400, _refused("Failed to cancel job"),
+                 id="cancel a job not on LSF"),
+    pytest.param("post", "/api/finetune/job/nope/cancel", None, None, 400, _refused("Failed to cancel job"),
+                 id="cancel an unknown job"),
+    pytest.param("post", "/api/finetune/job/j/stop-early", None, None, 200, {"success": True, "message": STOP},
+                 id="stop early"),
+    pytest.param("post", "/api/finetune/job/j/stop-early", None, "no output dir", 400,
+                 _refused("Job output dir missing: <tmp>/gone"), id="stop early without an output dir"),
+    pytest.param("post", "/api/finetune/job/nope/stop-early", None, None, 404, _refused("Job nope not found"),
+                 id="stop an unknown job early"),
+    pytest.param("post", "/api/finetune/job/j/restart", {}, "waiting", 200,
+                 {"success": True, "job_id": "j", "annotations_synced": 0,
+                  "message": "Restart request sent. No new annotations to pull; training will restart on the "
+                             "same GPU."}, id="restart"),
+    pytest.param("post", "/api/finetune/job/j/restart", {}, None, 500, _refused(NOT_RESTARTABLE),
+                 id="restart a job that is not waiting"),
+    pytest.param("post", "/api/finetune/job/nope/restart", {}, None, 500, _refused("Job nope not found"),
+                 id="restart an unknown job"),
+    pytest.param("post", "/api/finetune/submit", {}, None, 400, _refused("model_name is required"),
+                 id="submit without a model"),
+    pytest.param("post", "/api/finetune/submit", {"model_name": "m"}, None, 400, _refused(NO_CORRECTIONS_PATH),
+                 id="submit without a corrections path"),
+    pytest.param("post", "/api/finetune/submit", {"model_name": "x", "corrections_path": "<tmp>/c"}, None, 404,
+                 _refused("Model x not found"), id="submit an unknown model"),
+    pytest.param("post", "/api/finetune/submit",
+                 {"model_name": "x", "corrections_path": "<tmp>/c", "num_epochs": "ten"}, None, 404,
+                 _refused("Model x not found"), id="submit an unknown model with a bad number"),
+    pytest.param("post", "/api/finetune/submit", {"model_name": "m", "corrections_path": "<tmp>/none"}, None, 400,
+                 _refused("Corrections path does not exist: <tmp>/none/<session>/corrections. Please create "
+                          "annotation crops first."), id="submit without corrections"),
+    # annotation volumes and the user's settings
+    pytest.param("get", "/api/finetune/models", None, "a saved pipeline", 200,
+                 {"models": [{"name": "m", "write_shape": [64] * 3, "output_voxel_size": [16] * 3,
+                              "output_channels": 2}], "selected_model": "m"}, id="models"),
+    pytest.param("post", "/api/finetune/create-volume", {"model_name": "m"}, "no models", 400,
+                 _refused("No models loaded"), id="create a volume without models"),
+    pytest.param("post", "/api/finetune/create-volume", {"model_name": "x"}, None, 404,
+                 _refused("Model x not found"), id="create a volume for an unknown model"),
+    pytest.param("post", "/api/finetune/create-volume", {}, None, 404, _refused("Model None not found"),
+                 id="create a volume without a model"),
+    pytest.param("post", "/api/finetune/create-volume", {"model_name": "m"}, "its geometry is known", 400,
+                 _refused("No dataset path configured"), id="create a volume without data"),
+    pytest.param("get", "/api/finetune/user-prefs", None, None, 200, {"success": True, "prefs": {}},
+                 id="user prefs"),
+    pytest.param("post", "/api/finetune/user-prefs", {"outputPath": "/out", "unset": None}, None, 200,
+                 {"success": True, "prefs": {"outputPath": "/out"}}, id="set user prefs"),
+    pytest.param("post", "/api/finetune/load-crops", {}, None, 400, _refused("Missing 'yaml' field"),
+                 id="load crops without a yaml"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": CROPS}, None, 400, _refused("Missing 'model_name' field"),
+                 id="load crops without a model"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": "crops: []", "model_name": "m"}, None, 400,
+                 _refused("No crops listed in YAML"), id="load no crops"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": "crops: [\n", "model_name": "m"}, None, 400,
+                 _refused(_Starting("YAML parse error: while parsing a flow node")),
+                 id="load crops from a yaml that does not parse"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": "crops:\n  - {}\n", "model_name": "m"}, None, 400,
+                 {"success": False, "error": "YAML validation failed", "details": ANY}, id="load invalid crops"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": CROPS, "model_name": "x"}, None, 404,
+                 _refused("Model x not found"), id="load crops for an unknown model"),
+    pytest.param("post", "/api/finetune/load-crops", {"yaml": CROPS, "model_name": "m"}, None, 400,
+                 _refused("No raw dataset path configured"), id="load crops without data"),
+    pytest.param("get", "/api/finetune/load-crops-progress", None, None, 400,
+                 _refused("Missing 'load_id' query param"), id="crop progress without an id"),
+    pytest.param("get", "/api/finetune/load-crops-progress?load_id=nope", None, None, 404,
+                 _refused("Unknown load_id nope"), id="crop progress of an unknown load"),
+    pytest.param("get", "/api/finetune/read-yaml", None, None, 400, _refused("Missing 'path' query param"),
+                 id="read a yaml without a path"),
+    pytest.param("post", "/api/finetune/list-existing-sessions", {}, None, 400, _refused("output_path required"),
+                 id="list sessions without a path"),
+    pytest.param("post", "/api/finetune/list-existing-sessions", {"output_path": "<tmp>/none"}, None, 200,
+                 {"success": True, "sessions": []}, id="list the sessions of a path that is not there"),
+    pytest.param("post", "/api/finetune/load-existing-volume", {"output_path": "<tmp>/o"}, None, 400,
+                 _refused("source_session_path and output_path required"), id="resume without a session"),
+    pytest.param("post", "/api/finetune/load-existing-volume",
+                 {"source_session_path": "<tmp>/s", "output_path": "<tmp>/o"}, None, 404,
+                 _refused("No corrections found in <tmp>/s"), id="resume a session without corrections"),
+    pytest.param("post", "/api/finetune/load-existing-volume",
+                 {"source_session_path": "<tmp>/s", "output_path": "<tmp>/o"}, "an empty session", 404,
+                 _refused("No annotation volume found in <tmp>/s/corrections"), id="resume a session without a volume"),
+    pytest.param("get", "/api/finetune/load-existing-volume-progress", None, None, 400,
+                 _refused("Missing 'load_id' query param"), id="resume progress without an id"),
+    pytest.param("get", "/api/finetune/load-existing-volume-progress?load_id=nope", None, None, 404,
+                 _refused("Unknown load_id nope"), id="resume progress of an unknown load"),
+    # the viewer's overlays
+    pytest.param("post", "/api/finetune/add-to-viewer", {"crop_id": "c", "minio_url": "http://m:9000/a/c.zarr"},
+                 None, 200, {"success": True, "message": "Layer added to viewer", "layer_name": "annotation_c"},
+                 id="add a volume's layer"),
+    pytest.param("post", "/api/finetune/add-to-viewer", {"crop_id": "c"}, "no viewer", 400,
+                 _refused("Viewer not initialized"), id="add a volume's layer without a viewer"),
+    pytest.param("post", "/api/finetune/sync-annotations", {}, None, 400, _refused("MinIO not initialized"),
+                 id="sync without MinIO"),
+    pytest.param("post", "/api/finetune/refresh-annotated-regions", {}, None, 200, {"success": True, "count": 0},
+                 id="refresh the annotated regions"),
+    pytest.param("post", "/api/finetune/refresh-annotated-regions", {}, "no viewer", 400,
+                 _refused("Viewer not initialized"), id="refresh the annotated regions without a viewer"),
+    pytest.param("get", "/api/finetune/good-regions", None, None, 200, {"success": True, "regions": [], "count": 0},
+                 id="good regions"),
+    pytest.param("post", "/api/finetune/good-regions/mark-view", {}, "the viewer has a position", 409,
+                 _refused(NO_GOOD_REGIONS_SESSION), id="mark a good region without a session"),
+    pytest.param("post", "/api/finetune/good-regions/mark-view", {}, None, 400, _refused("Viewer has no position"),
+                 id="mark a good region where the viewer has no position"),
+    pytest.param("post", "/api/finetune/good-regions/mark-view", None, "no viewer", 400,
+                 _refused("Viewer not initialized"), id="mark a good region without a viewer"),
+    pytest.param("post", "/api/finetune/good-regions/delete", {"id": "nope"}, None, 404, _refused("No region nope"),
+                 id="delete an unknown good region"),
+    pytest.param("post", "/api/finetune/good-regions/delete", None, None, 200, {"success": True, "count": 0},
+                 id="delete every good region"),
+    pytest.param("post", "/api/viewer/add-image-layer", {"name": "n"}, None, 400, _refused("Missing path or name"),
+                 id="add an image layer without a path"),
+    pytest.param("post", "/api/viewer/add-segmentation-layer", {"path": "/p", "name": "n"}, "no viewer", 400,
+                 _refused("viewer not initialized"), id="add a segmentation layer without a viewer"),
+    pytest.param("post", "/api/viewer/remove-layer", {}, None, 400, _refused("Missing name"),
+                 id="remove a layer without a name"),
+    pytest.param("post", "/api/viewer/rename-layer", {"old_name": "a", "new_name": "a"}, None, 200,
+                 {"success": True, "renamed": False, "old_name": "a", "new_name": "a", "reload_page": False},
+                 id="rename a layer to its name"),
+]
+
+
+@pytest.mark.parametrize("method, url, body, situation, status, answer", ANSWERS)
+def test_what_each_route_answers(routes, method, url, body, situation, status, answer):
+    assert routes(method, url, body, situation) == (status, answer)
+
+
+def test_a_stop_early_leaves_the_trainer_a_signal(routes):
+    routes("post", "/api/finetune/job/j/stop-early")
+    signal = json.loads((routes.job.output_dir / "stop_signal.json").read_text())
+    assert signal == {"requested_at": ANY, "reason": "user_requested_stop_early"}
+
+
+@pytest.mark.parametrize("start, progress", [
+    pytest.param("/api/finetune/load-crops", "/api/finetune/load-crops-progress", id="loading crops"),
+    pytest.param("/api/finetune/load-existing-volume", "/api/finetune/load-existing-volume-progress",
+                 id="resuming a session"),
+])
+def test_a_long_request_reports_its_progress_from_the_start(routes, start, progress):
+    """The tab polls under the load_id it sent; the first phase is recorded
+    before the request is even checked."""
+    assert routes("post", start, {"load_id": "L1"})[0] == 400
+    status, answer = routes("get", f"{progress}?load_id=L1")
+    assert status == 200 and answer["success"]
+    assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": "starting", "done": False}
+    assert {"created_at", "updated_at"} <= set(answer["progress"])
+
+
+# The routes that take a body without insisting it is JSON.
+LENIENT = {"/api/finetune/good-regions/mark-view", "/api/finetune/good-regions/delete"}
+NO_BODY = {"/api/finetune/job/<job_id>/cancel", "/api/finetune/job/<job_id>/stop-early"}
+
+
+def test_a_body_that_is_not_json_is_refused_by_flask(routes):
+    """Every POST route but these reads its body with request.get_json(),
+    which answers a body of another type with 415 before the route runs."""
+    from cellmap_flow.dashboard.app import app
+
+    posts = sorted(rule.rule for rule in app.url_map.iter_rules()
+                   if rule.endpoint.startswith("finetune.") and "POST" in rule.methods)
+    assert len(posts) == 21
+    for url in posts:
+        status, _ = routes("post", url.replace("<job_id>", "j"), "not json")
+        assert (status == 415) == (url not in LENIENT | NO_BODY), url
