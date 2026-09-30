@@ -17,7 +17,9 @@ const STATUS_COLORS = {
   WAITING_FOR_RESTART: "info",
 };
 
-const TERMINAL = ["FAILED", "CANCELLED", "COMPLETED"];
+// The job manager's final statuses (its TERMINAL_STATUSES): once a job has
+// one, nothing changes it again.
+export const TERMINAL = ["FAILED", "CANCELLED", "COMPLETED"];
 
 // lossPlot: the Training Logs card's plot, which a new run empties and each
 // epoch's loss goes into.

@@ -3,10 +3,10 @@
 // a page reload. What the Training Status card shows is job-card.js's.
 import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
-import { createJobCard } from "./job-card.js";
+import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
-import { getAnswer, postAnswer } from "./requests.js";
+import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
 
 function showNotification(title, message) {
   // Browser notification
@@ -109,34 +109,46 @@ export function initJobMonitor({ picker, form }) {
     }
   });
 
-  // The job's status, every 3 seconds (the first after 3 s), until it fails
-  // or is cancelled; this replaces the poller running before, if any. The
-  // poll asks once at a time and stops at once when the job is over, so a
-  // failed job notifies once, not once per tick that was waiting. Unlike the
-  // tab's other polls it goes on while the page is hidden: that is when the
-  // browser notification of a failed job is useful.
+  // The job's status, every 3 seconds (the first after 3 s); this replaces
+  // the poller running before, if any. It stops once the answer cannot
+  // change any more:
+  // - the job is over: COMPLETED, FAILED or CANCELLED. Its monitor in the
+  //   job manager has stopped, and a restart only goes to a job waiting for
+  //   one, so a finished job's status is final;
+  // - the server does not know the job (a 404), e.g. the dashboard was
+  //   restarted since this page was loaded.
+  // An error, or no answer at all, is skipped, and the next tick asks again.
+  // The poll asks once at a time and stops at once when the job is over, so
+  // a failed job notifies once, not once per tick that was waiting. Unlike
+  // the tab's other polls it goes on while the page is hidden: that is when
+  // the browser notification of a failed job is useful.
   function startStatusPolling(jobId) {
     if (statusPoller) statusPoller.stop();
     statusPoller = poll(async ({ stale }) => {
       try {
-        const data = await getAnswer(`/api/finetune/job/${jobId}/status`);
+        const data = await getAnswerIfFound(`/api/finetune/job/${jobId}/status`);
         if (stale()) return;
 
+        if (data === null) {
+          appendLog(`Status updates stopped: the dashboard does not know job ${jobId}. ` +
+            "If it was restarted, reload the page to find the job again.");
+          return false;
+        }
         if (!data.success) {
           console.error("Error getting job status:", data.error);
           return;
         }
         card.polled(data);
 
-        if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "COMPLETED") {
+        if (TERMINAL.includes(data.status)) {
           // The stream normally ends itself with "done"; see jobLog.closeSoon.
           jobLog.closeSoon();
-        }
-        if (data.status === "FAILED" || data.status === "CANCELLED") {
-          showNotification(
-            "Training " + data.status,
-            "Check the job log below for the traceback."
-          );
+          if (data.status !== "COMPLETED") {
+            showNotification(
+              "Training " + data.status,
+              "Check the job log below for the traceback."
+            );
+          }
           return false;
         }
       } catch (error) {
@@ -308,8 +320,8 @@ export function initJobMonitor({ picker, form }) {
         // Nothing more will be written, but a restart reopens the stream from
         // here (jobLog.resume).
         jobLog.resumeFrom(restoredLogOffset);
-        // Finished but still serving: keep the status current, so Restart
-        // (and a later training run) shows up here as it happens.
+        // Finished, and its model was served: one poll brings the card up to
+        // date, and the poll stops there, as the status is final.
         startStatusPolling(jobId);
       }
 

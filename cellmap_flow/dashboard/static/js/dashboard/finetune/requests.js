@@ -12,6 +12,13 @@ export function getAnswer(url) {
   return fetch(url).then((response) => response.json());
 }
 
+// getAnswer, except that a 404 resolves to null: the route saying that what
+// was asked about does not exist (a job the dashboard does not know), or no
+// such route at all. Its body is not read, as the second is not JSON.
+export function getAnswerIfFound(url) {
+  return fetch(url).then((response) => (response.status === 404 ? null : response.json()));
+}
+
 // The body is sent as JSON. With no body (undefined) the request has none,
 // and no Content-Type either.
 export function postAnswer(url, body) {

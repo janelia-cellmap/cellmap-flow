@@ -75,7 +75,7 @@ export function createJobLog({ onLine }) {
     // never comes, e.g. a stream stuck reconnecting.
     closeSoon() {
       if (closeTimer || !stream || stream.closed) {
-        return;  // already closed, or closing (the status poll calls this every tick)
+        return;  // already closed (by "done", as a rule), or closing
       }
       const closing = stream;
       closeTimer = setTimeout(() => {
