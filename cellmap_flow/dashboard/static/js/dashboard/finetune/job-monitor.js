@@ -1,6 +1,7 @@
 // The Training panel's job: submitting it, following it (the status poll and
 // the log stream), Restart, Stop Early and Cancel, and finding it again
 // after a page reload.
+import { poll } from "../../lib/poll.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot, EPOCH_LOSS } from "./loss-plot.js";
 import { getAnswer, postAnswer } from "./requests.js";
@@ -29,7 +30,7 @@ function showNotification(title, message) {
 
 // picker: the model picker; form: the training form.
 export function initJobMonitor({ picker, form }) {
-  let statusPollingInterval = null;
+  let statusPoller = null;
   let liveEpochState = null;
   let restartEpochResetPending = false;
   let isServingReady = false;
@@ -265,26 +266,16 @@ export function initJobMonitor({ picker, form }) {
     progressBar.textContent = "0%";
   }
 
-  // Status polling (every 3 seconds)
+  // The job's status, every 3 seconds (the first after 3 s), until it fails
+  // or is cancelled; this replaces the poller running before, if any. The
+  // poll asks once at a time and stops at once when the job is over, so a
+  // failed job notifies once, not once per tick that was waiting.
   function startStatusPolling(jobId) {
-    // Clear existing interval
-    if (statusPollingInterval) {
-      clearInterval(statusPollingInterval);
-    }
-
-    // The callback below is async, so clearInterval does not stop ticks that
-    // are already suspended on their fetch. Without these guards a failed job
-    // produced one modal per in-flight tick, each of which had to be
-    // dismissed. terminalNotified makes the notification fire once; pollBusy
-    // stops ticks from overlapping in the first place.
-    let terminalNotified = false;
-    let pollBusy = false;
-
-    statusPollingInterval = setInterval(async () => {
-      if (pollBusy) return;
-      pollBusy = true;
+    if (statusPoller) statusPoller.stop();
+    statusPoller = poll(async ({ stale }) => {
       try {
         const data = await getAnswer(`/api/finetune/job/${jobId}/status`);
+        if (stale()) return;
 
         if (!data.success) {
           console.error("Error getting job status:", data.error);
@@ -364,22 +355,16 @@ export function initJobMonitor({ picker, form }) {
           jobLog.closeSoon();
         }
         if (data.status === "FAILED" || data.status === "CANCELLED") {
-          clearInterval(statusPollingInterval);
-
-          if (!terminalNotified) {
-            terminalNotified = true;
-            showNotification(
-              "Training " + data.status,
-              "Check the job log below for the traceback."
-            );
-          }
+          showNotification(
+            "Training " + data.status,
+            "Check the job log below for the traceback."
+          );
+          return false;
         }
       } catch (error) {
         console.error("Status polling error:", error);
-      } finally {
-        pollBusy = false;
       }
-    }, 3000);  // Poll every 3 seconds
+    }, { intervalMs: 3000, immediate: false });
   }
 
   // Cancel button

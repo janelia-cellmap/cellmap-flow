@@ -2,7 +2,22 @@
 // annotation volume, crops loaded from a YAML manifest, the annotated-region
 // boxes, and saving the annotations to disk.
 import { esc } from "../../lib/dom.js";
-import { getAnswer, postAnswer } from "./requests.js";
+import { getAnswer, postAnswer, watchProgress } from "./requests.js";
+
+// A crop import's progress, as the status line shows it.
+function describeCropImport(p) {
+  if (p.phase === "starting" || p.phase === "setup") {
+    return p.message || "Starting...";
+  } else if (p.phase === "crop_start") {
+    return `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
+  } else if (p.phase === "tile") {
+    const pct = p.tile_total ? ((p.tile_done / p.tile_total) * 100).toFixed(0) : 0;
+    return `Crop ${p.crop_index + 1}/${p.n_crops}: writing slab ${p.tile_done}/${p.tile_total} (${pct}%) — ${p.current_path}`;
+  } else if (p.phase === "done") {
+    return `Finishing... ${p.n_crops_imported || 0} crop(s) imported`;
+  }
+  return p.message || JSON.stringify(p);
+}
 
 // log: the panel's log; picker: the model picker; form: the training form
 // (its state is saved once a volume exists).
@@ -166,48 +181,18 @@ export function initCrops({ log, picker, form }) {
     status.textContent = "Starting...";
     loadCropsSubmitBtn.disabled = true;
 
-    // Generate a load_id so the server can publish progress under that key
-    // and we can poll it while the POST is in flight.
-    const loadId = (crypto.randomUUID && crypto.randomUUID()) ||
-      (Math.random().toString(36).slice(2) + Date.now());
-
-    let pollHandle = null;
-    const pollProgress = async () => {
-      try {
-        const res = await fetch(`/api/finetune/load-crops-progress?load_id=${encodeURIComponent(loadId)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.success || !data.progress) return;
-        const p = data.progress;
-        let msg;
-        if (p.phase === "starting" || p.phase === "setup") {
-          msg = p.message || "Starting...";
-        } else if (p.phase === "crop_start") {
-          msg = `Crop ${p.crop_index + 1}/${p.n_crops}: opening ${p.current_path}`;
-        } else if (p.phase === "tile") {
-          const pct = p.tile_total ? ((p.tile_done / p.tile_total) * 100).toFixed(0) : 0;
-          msg = `Crop ${p.crop_index + 1}/${p.n_crops}: writing slab ${p.tile_done}/${p.tile_total} (${pct}%) — ${p.current_path}`;
-        } else if (p.phase === "done") {
-          msg = `Finishing... ${p.n_crops_imported || 0} crop(s) imported`;
-        } else {
-          msg = p.message || JSON.stringify(p);
-        }
-        status.textContent = msg;
-      } catch (_) {
-        // Poll errors are non-fatal — keep going.
-      }
-    };
-    pollHandle = setInterval(pollProgress, 1000);
-    pollProgress();
+    const progress = watchProgress("/api/finetune/load-crops-progress", (p) => {
+      status.textContent = describeCropImport(p);
+    });
 
     postAnswer("/api/finetune/load-crops", {
       model_name: selectedModel.name,
       output_path: outputPath,
       yaml: yamlPayload,
-      load_id: loadId,
+      load_id: progress.loadId,
     })
       .then(data => {
-        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+        progress.stop();
         loadCropsSubmitBtn.disabled = false;
         if (!data.success) {
           status.textContent = `Error: ${data.error || "load failed"}`;
@@ -234,7 +219,7 @@ export function initCrops({ log, picker, form }) {
         if (loadCropsModal) loadCropsModal.hide();
       })
       .catch(err => {
-        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+        progress.stop();
         loadCropsSubmitBtn.disabled = false;
         status.textContent = `Request failed: ${err}`;
         log.add(`✗ Load crops request failed: ${err}`);

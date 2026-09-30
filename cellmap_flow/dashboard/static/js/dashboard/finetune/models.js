@@ -1,12 +1,13 @@
 // The model picker at the top of the Annotation Crops panel: the served
 // models that can be finetuned (/api/finetune/models), and the one picked.
 import { esc } from "../../lib/dom.js";
+import { poll } from "../../lib/poll.js";
 import { getAnswer } from "./requests.js";
 
 // Models only appear in g.models_config once a pipeline has been submitted
 // on the main tab. The finetune tab is usually opened first, so a single
-// load on page load almost always finds nothing. So the list is polled
-// quietly in the background, and polling stops as soon as models show up.
+// load on page load almost always finds nothing: the list is polled quietly
+// in the background instead, and polling stops as soon as models show up.
 const MODEL_POLL_INTERVAL_MS = 2000;
 const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
 
@@ -38,34 +39,19 @@ export function initModelPicker({ log, savedModelName }) {
   let models = [];
   let selectedModel = null;
 
-  let modelPollTimer = null;
-  let modelPollAttempts = 0;
   let loggedNoModels = false;
   let lastLoadedCount = null;
 
-  function cancelModelPoll() {
-    if (modelPollTimer) {
-      clearTimeout(modelPollTimer);
-      modelPollTimer = null;
-    }
-  }
-
-  function scheduleModelPoll() {
-    if (modelPollTimer || modelPollAttempts >= MODEL_POLL_MAX_ATTEMPTS) return;
-    modelPollTimer = setTimeout(function() {
-      modelPollTimer = null;
-      modelPollAttempts += 1;
-      loadModels({ quiet: true });
-    }, MODEL_POLL_INTERVAL_MS);
-  }
-
-  function loadModels(opts) {
-    const quiet = !!(opts && opts.quiet);
-    getAnswer("/api/finetune/models")
+  // One load of the list. The first load, and a Refresh, say what they
+  // found; the polls in between are quiet unless the number of models
+  // changes. Resolves to false once models are listed, which stops the poll.
+  function loadModels({ tick, stale }) {
+    const quiet = tick > 1;
+    return getAnswer("/api/finetune/models")
       .then(data => {
+        if (stale()) return;
         if (data.error) {
           if (!quiet) log.add(`Error: ${data.error}`);
-          scheduleModelPoll();
           return;
         }
 
@@ -79,11 +65,9 @@ export function initModelPicker({ log, savedModelName }) {
           }
           modelSelect.innerHTML = "";
           lastLoadedCount = 0;
-          scheduleModelPoll();
           return;
         }
-        // Rebuild the options from this response alone: a background poll
-        // and a Refresh click can both be in flight.
+        // Rebuild the options from this response alone.
         const previousName = modelSelect.value;
         modelSelect.innerHTML = "";
         models.forEach(model => {
@@ -110,17 +94,16 @@ export function initModelPicker({ log, savedModelName }) {
         selectedModel = models.find(m => m.name === modelSelect.value) || models[0];
         displayModelInfo(selectedModel);
 
-        cancelModelPoll();
         loggedNoModels = false;
         if (!quiet || models.length !== lastLoadedCount) {
           log.add(`Loaded ${models.length} model(s)`);
         }
         lastLoadedCount = models.length;
+        return false;
       })
       .catch(err => {
         if (!quiet) log.add(`Error loading models: ${err}`);
         console.error(err);
-        scheduleModelPoll();
       });
   }
 
@@ -130,7 +113,11 @@ export function initModelPicker({ log, savedModelName }) {
     displayModelInfo(selectedModel);
   });
 
-  loadModels();
+  // The first load, then the polls: MODEL_POLL_MAX_ATTEMPTS after it.
+  const modelPoll = poll(loadModels, {
+    intervalMs: MODEL_POLL_INTERVAL_MS,
+    maxTicks: 1 + MODEL_POLL_MAX_ATTEMPTS,
+  });
 
   document.getElementById("refreshModelsBtn").addEventListener("click", function() {
     log.add("Refreshing model list...");
@@ -138,9 +125,7 @@ export function initModelPicker({ log, savedModelName }) {
     // pick; it rebuilds them from the response.
     models = [];
     selectedModel = null;
-    cancelModelPoll();
-    modelPollAttempts = 0;
-    loadModels();
+    modelPoll.restart();
   });
 
   return { selected: () => selectedModel };

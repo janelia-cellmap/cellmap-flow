@@ -1,7 +1,28 @@
 // Resume Existing Volume: find the sessions under a directory, and copy one
 // into a new session to carry on annotating (the original stays as it was).
 import { esc } from "../../lib/dom.js";
-import { postAnswer } from "./requests.js";
+import { postAnswer, watchProgress } from "./requests.js";
+
+// A session copy's progress, as the status line shows it.
+function describeCopy(p) {
+  if (p.phase === "starting" || p.phase === "setup") {
+    return p.message || "Starting...";
+  } else if (p.phase === "copying") {
+    const filePart = p.files_total
+      ? ` — ${p.files_done}/${p.files_total} files`
+      : "";
+    return `Copying ${p.parent_done + 1}/${p.parent_total}: ${p.current}${filePart}`;
+  } else if (p.phase === "copying_minio") {
+    return `Copying MinIO storage (${p.files_done || 0}/${p.files_total || "?"} files)`;
+  } else if (p.phase === "mirroring_minio") {
+    return `Mirroring volume to MinIO (${p.current})`;
+  } else if (p.phase === "done") {
+    return `Finalizing... ${p.copied_count || 0} entries copied`;
+  } else if (p.phase === "error") {
+    return `Error: ${p.error || "load failed"}`;
+  }
+  return p.message || JSON.stringify(p);
+}
 
 // log: the Annotation Crops panel's log; addToViewer: shows the copied
 // volume in the viewer (crops.js).
@@ -95,54 +116,17 @@ export function initSessions({ log, addToViewer }) {
     log.add(`Loading existing volume from: ${sessionPath}`);
     status.textContent = "Starting...";
 
-    // Generate a load_id for live progress polling.
-    const loadId = (crypto.randomUUID && crypto.randomUUID()) ||
-      (Math.random().toString(36).slice(2) + Date.now());
-
-    let pollHandle = null;
-    const pollProgress = async () => {
-      try {
-        const res = await fetch(
-          `/api/finetune/load-existing-volume-progress?load_id=${encodeURIComponent(loadId)}`
-        );
-        if (!res.ok) return;
-        const payload = await res.json();
-        if (!payload.success || !payload.progress) return;
-        const p = payload.progress;
-        let msg;
-        if (p.phase === "starting" || p.phase === "setup") {
-          msg = p.message || "Starting...";
-        } else if (p.phase === "copying") {
-          const filePart = p.files_total
-            ? ` — ${p.files_done}/${p.files_total} files`
-            : "";
-          msg = `Copying ${p.parent_done + 1}/${p.parent_total}: ${p.current}${filePart}`;
-        } else if (p.phase === "copying_minio") {
-          msg = `Copying MinIO storage (${p.files_done || 0}/${p.files_total || "?"} files)`;
-        } else if (p.phase === "mirroring_minio") {
-          msg = `Mirroring volume to MinIO (${p.current})`;
-        } else if (p.phase === "done") {
-          msg = `Finalizing... ${p.copied_count || 0} entries copied`;
-        } else if (p.phase === "error") {
-          msg = `Error: ${p.error || "load failed"}`;
-        } else {
-          msg = p.message || JSON.stringify(p);
-        }
-        status.textContent = msg;
-      } catch (_) {
-        // poll errors are non-fatal
-      }
-    };
-    pollHandle = setInterval(pollProgress, 1000);
-    pollProgress();
+    const progress = watchProgress("/api/finetune/load-existing-volume-progress", (p) => {
+      status.textContent = describeCopy(p);
+    });
 
     postAnswer("/api/finetune/load-existing-volume", {
       source_session_path: sessionPath,
       output_path: outputPath,
-      load_id: loadId,
+      load_id: progress.loadId,
     })
       .then(data => {
-        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+        progress.stop();
         loadExistingConfirmBtn.disabled = false;
         loadExistingConfirmBtn.innerHTML = 'Load Selected';
         if (!data.success) {
@@ -166,7 +150,7 @@ export function initSessions({ log, addToViewer }) {
         );
       })
       .catch(err => {
-        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+        progress.stop();
         loadExistingConfirmBtn.disabled = false;
         loadExistingConfirmBtn.innerHTML = 'Load Selected';
         status.textContent = `Request failed: ${err}`;
