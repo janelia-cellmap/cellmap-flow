@@ -1,7 +1,8 @@
 """
 Preflight check for the cellmap-flow environment.
 
-Run as ``cellmap_flow_doctor``. Reports what is installed, what is missing,
+Run as ``python -m cellmap_flow.cli.doctor`` (``--core-only`` skips the
+finetune checks). Reports what is installed, what is missing,
 and the exact command to fix each gap -- so a broken finetune environment
 surfaces up front rather than as a FileNotFoundError deep in an annotation
 route after you have already loaded a dataset and started painting.
