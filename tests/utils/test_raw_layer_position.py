@@ -105,3 +105,19 @@ def test_the_viewer_takes_its_dimensions_from_the_finest_raw_level(tmp_path, mon
     neuroglancer_utils.generate_neuroglancer_url(_janelia_pyramid(tmp_path) + level)
 
     assert state.dimensions.to_json() == {axis: [8e-9, "m"] for axis in "zyx"}
+
+
+@pytest.mark.parametrize(
+    "fmt, scales, translation",
+    [("zarr3", [4e-9] * 3, [2.0, 4.5, 7.0]), ("precomputed", [16e-9, 8e-9, 4e-9], [1.0, 2.0, 3.0])],
+)
+def test_zarr_v3_and_precomputed_layers_are_placed_by_their_metadata(fmt, scales, translation, ome_pyramid,
+                                                                      write_array):
+    if fmt == "zarr3":  # voxel 0's centre at (10, 20, 30): its corner is (8, 18, 28)
+        path = ome_pyramid(((4, (10, 20, 30)), (8, (12, 22, 32))), zarr_format=3)
+    else:  # x, y, z voxels (3, 2, 1)
+        path = write_array("precomputed", np.zeros((2, 10, 20), np.uint8),
+                           {"resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]})
+    layer = get_raw_layer(path, normalize=False)
+    assert [v[0] for v in _source(layer)["transform"]["outputDimensions"].values()] == pytest.approx(scales)
+    assert _translation(layer) == translation
