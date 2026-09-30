@@ -282,8 +282,11 @@ def failed(error):
     pytest.param("submit", {"json": {"pipeline": pipeline(blockwise_config=[{"params": NO_MASTER_CORES}])}},
                  failed("pipeline.blockwise_config.0.params.nb_cores_master: Field required"),
                  id="submit/no-master-cores"),
-    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": [None]}}, {"success": True},
-                 id="submit/a-path-not-text"),
+    # Refused as precheck refuses them; submit generated a task anew and ran that.
+    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": "/tasks/t.yaml"}},
+                 failed("yaml_paths: Input should be a valid list"), id="submit/a-path-not-in-a-list"),
+    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": [None]}},
+                 failed("yaml_paths.0: Input should be a valid string"), id="submit/a-path-not-text"),
 ])
 def test_what_each_route_answers(dashboard, tasks, fake_lsf, route, sent, answer):
     fake_lsf.answers["bsub"] = [ACCEPTED]
@@ -333,7 +336,6 @@ def test_the_precheck_answers_a_config_error(dashboard, tmp_path):
     pytest.param("prechecked", True, id="prechecked-yamls-as-they-are"),
     pytest.param(None, False, id="none-given"),
     pytest.param([], False, id="empty"),
-    pytest.param("not-a-list", False, id="not-a-list"),
     pytest.param(["/no/such/task.yaml"], False, id="missing"),
 ])
 def test_submit_runs_the_prechecked_yamls_or_else_generates_them(dashboard, tasks, fake_lsf, yaml_paths, as_given):

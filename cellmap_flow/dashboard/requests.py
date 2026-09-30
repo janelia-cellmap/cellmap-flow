@@ -382,7 +382,9 @@ class BlockwisePrecheck(BaseModel):
 
 class BlockwiseSubmit(BlockwiseGenerate):
     """The task to submit: the YAMLs precheck passed and the name generate gave
-    them, or else, if they are not all there, ``pipeline``'s, generated anew."""
+    them, or else, when none are given or they are not all there,
+    ``pipeline``'s, generated anew. ``yaml_paths`` is a list of paths, as for
+    precheck."""
 
-    yaml_paths: Any = None
+    yaml_paths: Optional[list[str]] = None
     task_name: Any = None

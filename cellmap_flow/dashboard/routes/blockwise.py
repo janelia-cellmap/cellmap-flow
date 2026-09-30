@@ -60,10 +60,8 @@ def _make_task_name(requested_name: str, timestamp: str) -> str:
 
 
 def _existing_task_paths(paths):
-    """``paths`` if it is a non-empty list of existing files, else None."""
-    if not isinstance(paths, list) or not paths:
-        return None
-    if not all(isinstance(p, str) and os.path.isfile(p) for p in paths):
+    """``paths`` if there are some and each is a file, else None."""
+    if not paths or not all(os.path.isfile(p) for p in paths):
         return None
     return list(paths)
 
