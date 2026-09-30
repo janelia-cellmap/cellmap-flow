@@ -665,31 +665,3 @@ def save_lora_adapter(
     logger.info(f"Saving LoRA adapter to: {output_path}")
     model.save_pretrained(output_path)
     logger.info("Adapter saved successfully")
-
-
-def merge_lora_into_base(model: nn.Module) -> nn.Module:
-    """
-    Merge LoRA weights back into the base model: ``adaptation.LoraStrategy.merge``.
-
-    This creates a standalone model with LoRA weights merged in,
-    removing the need for PEFT at inference time. Kept under this name for
-    its callers. It used to call peft's merge_and_unload() directly, which
-    fails on a 1x1x1 Conv3d head; LoraStrategy.merge computes that layer's
-    delta itself.
-
-    Warning: This increases model size back to the full model size.
-    Only use if you need a standalone model without PEFT dependency.
-
-    Args:
-        model: PEFT model with LoRA adapters
-
-    Returns:
-        Base model with merged weights
-
-    Examples:
-        >>> merged_model = merge_lora_into_base(lora_model)
-        >>> torch.save(merged_model.state_dict(), "merged_model.pt")
-    """
-    from cellmap_flow.finetune.adaptation import LoraStrategy
-
-    return LoraStrategy.merge(model)
