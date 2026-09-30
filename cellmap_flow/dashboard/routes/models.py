@@ -3,9 +3,9 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
+from cellmap_flow.dashboard.requests import ServerConfigUpdate, parse
 from cellmap_flow.dashboard.services.launch import update_run_models
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.globals import SERVER_CONFIG_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -188,27 +188,13 @@ def export_config():
 @models_bp.route("/api/server-config", methods=["POST"])
 def update_server_config():
     """Update server configuration and save to cache."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"success": False, "error": "expected a JSON object"}), 400
-    int_fields = {"nb_cores_master", "nb_cores_worker", "nb_workers"}
-    # Validate everything first: a bad number is the client's mistake (400),
-    # and must not leave half the settings applied.
-    updates = {}
-    for key in SERVER_CONFIG_KEYS:
-        if key in data:
-            value = data[key]
-            if key in int_fields:
-                try:
-                    value = int(value)
-                except (TypeError, ValueError):
-                    return jsonify({
-                        "success": False,
-                        "error": f"{key} must be a whole number, got {value!r}",
-                    }), 400
-            updates[key] = value
+    # Validated whole first: a bad number is the client's mistake (400), and
+    # must not leave half the settings applied.
+    body, error = parse(ServerConfigUpdate, request.get_json(silent=True))
+    if error:
+        return error
     session = get_session()
-    for key, value in updates.items():
+    for key, value in body.updates().items():
         setattr(session, key, value)
     session.save_server_config()
     logger.info(f"Server config updated and cached: {session.server_config}")

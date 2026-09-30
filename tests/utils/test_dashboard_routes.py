@@ -43,6 +43,7 @@ def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
                      id="blockwise-empty"),
         pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": "twelve"}, 400,
                      id="blockwise-word"),
+        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12}, 400, id="blockwise-missing"),
         pytest.param("/api/blockwise-config", {"nb_cores_master": "4", "nb_cores_worker": "12", "nb_workers": "3"}, 200,
                      id="blockwise-numeric-strings-accepted"),
         pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": "lots"}, 400, id="server-word"),

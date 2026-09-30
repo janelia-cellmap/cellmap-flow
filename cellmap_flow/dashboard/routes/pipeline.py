@@ -4,6 +4,7 @@ import logging
 import numpy as np
 from flask import Blueprint, request, jsonify
 
+from cellmap_flow.dashboard.requests import BlockwiseSettings, parse
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -201,48 +202,19 @@ def process():
 def blockwise_config_api():
     """Get or set the blockwise settings."""
     session = get_session()
+    if request.method == "POST":
+        # Parsed whole before anything changes, so a bad value is a 400 that
+        # leaves the settings as they were, not a 500 halfway through.
+        body, error = parse(BlockwiseSettings, request.get_json(silent=True))
+        if error:
+            return error
+        for key, value in body.model_dump().items():
+            setattr(session, key, value)
+    settings = {key: getattr(session, key) for key in BlockwiseSettings.model_fields}
     if request.method == "GET":
-        return jsonify({
-            'queue': session.queue,
-            'charge_group': session.charge_group,
-            'nb_cores_master': session.nb_cores_master,
-            'nb_cores_worker': session.nb_cores_worker,
-            'nb_workers': session.nb_workers,
-            'tmp_dir': session.tmp_dir,
-            'blockwise_tasks_dir': session.blockwise_tasks_dir
-        })
-    elif request.method == "POST":
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return jsonify({'success': False, 'error': 'expected a JSON object'}), 400
-        # Parse every number before changing anything, so a bad value is a
-        # 400 that leaves the settings as they were, not a 500 halfway through.
-        counts = {}
-        for key in ('nb_cores_master', 'nb_cores_worker', 'nb_workers'):
-            try:
-                counts[key] = int(data.get(key))
-            except (TypeError, ValueError):
-                return jsonify({
-                    'success': False,
-                    'error': f'{key} must be a whole number, got {data.get(key)!r}',
-                }), 400
-        session.queue = data.get('queue')
-        session.charge_group = data.get('charge_group')
-        session.nb_cores_master = counts['nb_cores_master']
-        session.nb_cores_worker = counts['nb_cores_worker']
-        session.nb_workers = counts['nb_workers']
-        session.tmp_dir = data.get('tmp_dir')
-        session.blockwise_tasks_dir = data.get('blockwise_tasks_dir')
-        logger.debug(f"Blockwise config updated: queue={session.queue}, charge_group={session.charge_group}, cores_master={session.nb_cores_master}, cores_worker={session.nb_cores_worker}, workers={session.nb_workers}, tmp_dir={session.tmp_dir}, blockwise_tasks_dir={session.blockwise_tasks_dir}")
-        return jsonify({'success': True, 'config': {
-            'queue': session.queue,
-            'charge_group': session.charge_group,
-            'nb_cores_master': session.nb_cores_master,
-            'nb_cores_worker': session.nb_cores_worker,
-            'nb_workers': session.nb_workers,
-            'tmp_dir': session.tmp_dir,
-            'blockwise_tasks_dir': session.blockwise_tasks_dir
-        }})
+        return jsonify(settings)
+    logger.debug(f"Blockwise config updated: {settings}")
+    return jsonify({"success": True, "config": settings})
 
 
 @pipeline_bp.route("/api/pipeline/apply", methods=["POST"])
