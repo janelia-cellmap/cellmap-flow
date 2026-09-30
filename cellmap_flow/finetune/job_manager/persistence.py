@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
-from cellmap_flow.finetune.job_manager.submit import MODEL_ENTRY_TYPES
+from cellmap_flow.finetune.job_manager.submit import model_entry
 from cellmap_flow.finetune.job_manager.tailer import finished_iterations
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob
@@ -79,7 +79,8 @@ def submission_metadata(
         "model_script": str(model_config.script_path) if hasattr(model_config, "script_path") else None,
         "repo": model_config.repo if model_type == "huggingface" else None,
         "revision": getattr(model_config, "revision", None) if model_type == "huggingface" else None,
-        "model_entry": model_config.to_dict() if model_type in MODEL_ENTRY_TYPES else None,
+        # What the trainer was given as --model-entry, if it went that way.
+        "model_entry": model_entry(model_config, model_type, checkpoint_path),
         "corrections_path": str(corrections_path),
         "num_corrections": num_corrections,
         "output_dir": str(output_dir),

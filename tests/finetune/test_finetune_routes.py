@@ -18,13 +18,22 @@ OFFSETS = "offsets = [[1, 0, 0], [0, 1, 0]]\nmodel = None\n"
 CROP = {"annotation_offset_voxels": [0, 0, 0], "annotation_shape_voxels": [16, 16, 16]}
 
 
+class _Script:
+    """A script model, as the job manager tells a model's type (by its class's cli_name)."""
+
+    cli_name = "script"
+
+    def __init__(self, name, script_path):
+        self.name, self.script_path = name, script_path
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """The dashboard's test client, a model "m" (a script with affinity offsets) and billing to "my_lab"."""
     from cellmap_flow.dashboard.app import app
 
     (tmp_path / "model.py").write_text(OFFSETS)
-    for key, value in dict(models_config=[SimpleNamespace(name="m", script_path=str(tmp_path / "model.py"))],
+    for key, value in dict(models_config=[_Script("m", str(tmp_path / "model.py"))],
                            charge_group="my_lab", annotation_volumes={}, output_sessions={}).items():
         monkeypatch.setattr(g, key, value, raising=False)
     return app.test_client()

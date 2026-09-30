@@ -4,7 +4,8 @@ The manager's submit_finetuning_job validates a request and writes the
 run's directory; this module answers the questions on the way:
 
 - ``resolve_model_type``: the trainer's ``--model-type`` for a model
-  config, refusing one it cannot train;
+  config, refusing one it cannot train; ``model_entry``: the model as the
+  trainer takes it with ``--model-entry``, for the types that go that way;
 - ``find_checkpoint``, ``count_corrections``: the checkpoint to start from,
   and whether the session has anything to train on;
 - ``model_settings``: the channels and voxel sizes to train with;
@@ -36,10 +37,12 @@ logger = logging.getLogger(__name__)
 
 
 # The --model-type values finetune_cli accepts, and the ones among them that
-# it takes as --model-entry (the model's to_dict()) because they have no
-# dedicated flags.
+# it takes as --model-entry (the model's to_dict()): cellmap and finetune
+# have no dedicated flags, and fly's flags (its checkpoint and voxel sizes)
+# leave out its input and output sizes, which the trainer then took to be
+# 178 and 56 whatever the model's were.
 TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "cellmap", "finetune"})
-MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune"})
+MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune", "fly"})
 
 
 def resolve_model_type(model_config) -> str:
@@ -57,6 +60,22 @@ def resolve_model_type(model_config) -> str:
             f"supports {sorted(TRAINABLE_MODEL_TYPES)}."
         )
     return model_type
+
+
+def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) -> Optional[dict]:
+    """The model as the trainer takes it with --model-entry, or None for a type
+    that goes by its own flags (MODEL_ENTRY_TYPES).
+
+    The entry is the model's to_dict(), so the trainer builds the model the
+    dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
+    entry's own checkpoint, which is how an override reaches a Fly model.
+    """
+    if model_type not in MODEL_ENTRY_TYPES:
+        return None
+    entry = model_config.to_dict()
+    if checkpoint_path and "checkpoint_path" in entry:
+        entry["checkpoint_path"] = str(checkpoint_path)
+    return entry
 
 
 def find_checkpoint(model_config, override=None) -> Optional[Path]:
@@ -313,12 +332,12 @@ def build_command(
         "--model-type", model_type,
     ]
 
-    if model_type in MODEL_ENTRY_TYPES:
-        # No dedicated flags: hand the trainer the model's own entry.
+    entry = model_entry(model_config, model_type, checkpoint_path)
+    if entry is not None:
         # encode_to_str() is URL-safe base64, so it needs no quoting.
         from cellmap_flow.serving.protocol import encode_to_str
 
-        command_parts += ["--model-entry", encode_to_str(model_config.to_dict())]
+        command_parts += ["--model-entry", encode_to_str(entry)]
     elif model_type == "huggingface":
         command_parts += ["--repo", str(model_config.repo)]
         if getattr(model_config, "revision", None):

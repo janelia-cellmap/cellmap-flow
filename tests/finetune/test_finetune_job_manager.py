@@ -5,6 +5,7 @@ dashboard's listener does test_finetune_layers'."""
 
 import json
 import os
+import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -128,6 +129,28 @@ def test_a_model_without_flags_of_its_own_goes_as_its_entry(submit):
     tokens = submit(_Exported()).command.split()
     assert tokens[tokens.index("--model-type") + 1] == "cellmap"
     assert decode_model_entry(tokens[tokens.index("--model-entry") + 1]) == _Exported().to_dict()
+
+
+@pytest.mark.parametrize("override", [pytest.param(False, id="its own checkpoint"),
+                                      pytest.param(True, id="a checkpoint override")])
+def test_the_trainer_builds_a_fly_model_as_the_dashboard_has_it(submit, tmp_path, override):
+    """A Fly model went as its checkpoint and voxel sizes, so the trainer gave it
+    the 178/56 default sizes: the finetune was served, and written into its
+    YAML, at those. The trainer's model is the job's own now, and the run's
+    record says what it was given."""
+    from cellmap_flow.finetune.cli import model_config_from_args, parse_args
+    from cellmap_flow.models.models_config import FlyModelConfig
+
+    for name in ("own.ts", "override.ts"):
+        (tmp_path / name).write_bytes(b"")
+    fly = FlyModelConfig(checkpoint_path=str(tmp_path / "own.ts"), channels=["mito"], input_voxel_size=(8, 8, 8),
+                         output_voxel_size=(8, 8, 8), name="fly", input_size=(216,) * 3, output_size=(128,) * 3)
+    job = submit(fly, checkpoint_path_override=tmp_path / "override.ts" if override else None)
+    tokens = shlex.split(job.command)
+    argv = tokens[tokens.index("cellmap_flow.finetune.finetune_cli") + 1:tokens.index("2>&1")]
+    trained = model_config_from_args(parse_args(argv)).to_dict()
+    assert trained == {**fly.to_dict(), "checkpoint_path": str(tmp_path / ("override.ts" if override else "own.ts"))}
+    assert job.metadata["model_entry"] == trained
 
 
 def test_the_geometry_comes_from_the_models_server_without_building_it(submit):

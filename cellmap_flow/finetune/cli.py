@@ -490,7 +490,8 @@ def model_config_from_args(args) -> ModelConfig:
     """The ModelConfig the command line describes."""
     if args.model_entry:
         # The model's own to_dict(), as the job manager passes it for the
-        # types that have no dedicated flags (cellmap, finetune).
+        # types whose flags cannot say all of it (cellmap, finetune, fly;
+        # job_manager.submit.MODEL_ENTRY_TYPES).
         entry = decode_model_entry(args.model_entry)
         logger.info(f"Using model entry of type {entry.get('type')!r}")
         return model_config_from_entry(entry, name=args.model_name)
@@ -508,6 +509,9 @@ def model_config_from_args(args) -> ModelConfig:
             raise ValueError(
                 "For fly models, either --model-checkpoint or --model-script must be provided"
             )
+        # No flag gives its input and output sizes, so this is
+        # fly_organelles' StandardUnet (178 in, 56 out). The job manager
+        # sends a Fly model as --model-entry instead, sizes and all.
         return FlyModelConfig(
             checkpoint_path=args.model_checkpoint,
             channels=args.channels,
