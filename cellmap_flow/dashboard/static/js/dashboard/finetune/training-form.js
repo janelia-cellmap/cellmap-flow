@@ -1,6 +1,7 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, and the GPU queue picker.
+import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
 const FINETUNE_STATE_KEY = "finetuneFormState";
@@ -119,55 +120,19 @@ function updateAugmentAdvice() {
   }
 }
 
-// Show what the GPU queues actually look like right now.
-//
-// A training job is not cycled onto another queue if the one you picked is
-// busy -- it just waits -- so the only thing that helps is seeing the wait
-// before you submit rather than after.
-const FINETUNE_GPU_QUEUE_POLL_MS = 60000;
-
-function renderFinetuneGpuQueues(data) {
-  const sel = document.getElementById("gpuQueue");
-  const queues = (data && data.queues) || [];
-  if (!queues.length) return;  // Keep the hardcoded options rather than emptying the picker.
-
-  const chosen = sel.value;
-  sel.innerHTML = "";
-  queues.forEach(function (q) {
-    const opt = document.createElement("option");
-    opt.value = q.queue;
-    // textContent, not innerHTML -- assembled from LSF output.
-    opt.textContent = q.label + (q.description ? " — " + q.description : "");
-    // A closed queue accepts submissions and never starts them, which looks
-    // exactly like a very slow job. Don't offer it.
-    opt.disabled = q.open === false;
-    sel.appendChild(opt);
-  });
-  // Keep what the user picked, even if LSF no longer lists it.
-  if (chosen) {
-    if (!queues.some(function (q) { return q.queue === chosen; })) {
-      const opt = document.createElement("option");
-      opt.value = chosen;
-      opt.textContent = chosen + " (selected)";
-      sel.appendChild(opt);
-    }
-    sel.value = chosen;
-  }
-
-  document.getElementById("finetuneGpuQueueHint").textContent =
-    data && data.available === false
-      ? data.reason || "Queue availability is unavailable."
-      : "";
-}
-
-function refreshFinetuneGpuQueues() {
-  fetch("/api/gpu-queues")
-    .then(function (r) { return r.json(); })
-    .then(renderFinetuneGpuQueues)
-    .catch(function () {
-      // Transient; the next poll retries. Leave the options as they are
-      // rather than blanking the picker under the user.
-    });
+// The GPU queue picker shows what the queues look like right now. A training
+// job is not cycled onto another queue if the one picked is busy -- it just
+// waits -- so the only thing that helps is seeing the wait before submitting
+// rather than after. The answers come from the poller the Models tab's
+// pickers share.
+function showGpuQueues(data) {
+  // An answer with no queues leaves the options (at first the template's)
+  // and the note as they are, rather than emptying the picker.
+  if (!((data && data.queues) || []).length) return;
+  const select = document.getElementById("gpuQueue");
+  // The queue picked stays, even if LSF no longer lists it.
+  fillQueueSelect(select, data, { preferred: select.value, missingSuffix: " (selected)" });
+  document.getElementById("finetuneGpuQueueHint").textContent = queueHint(data);
 }
 
 // Returns { saved, save(), readPatchesPerEpochOverride(),
@@ -225,8 +190,7 @@ export function initTrainingForm() {
     }
   }
 
-  refreshFinetuneGpuQueues();
-  setInterval(refreshFinetuneGpuQueues, FINETUNE_GPU_QUEUE_POLL_MS);
+  subscribeGpuQueues(showGpuQueues);
 
   ["numEpochs", "batchSize", "patchesPerEpoch"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", updateAugmentAdvice);
