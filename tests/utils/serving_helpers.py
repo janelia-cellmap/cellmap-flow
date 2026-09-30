@@ -1,4 +1,4 @@
-"""Small datasets and script models for exercising CellMapFlowServer in tests."""
+"""Small datasets, script models and requests for serving tests; conftest.py's fixtures use them."""
 
 import json
 import os
@@ -50,6 +50,28 @@ class Identity(torch.nn.Module):
 
 
 model = Identity()
+"""
+
+# $in_vs nm in, $out_vs nm out, channels "a" and "b": each output voxel is
+# the mean of the input voxels it covers, once per channel.
+POOLING_MODEL = """
+input_voxel_size = Coordinate($in_vs, $in_vs, $in_vs)
+output_voxel_size = Coordinate($out_vs, $out_vs, $out_vs)
+write_shape = Coordinate(4, 4, 4) * output_voxel_size
+read_shape = write_shape
+channels = ["a", "b"]
+output_channels = 2
+block_shape = np.array((4, 4, 4, 2))
+
+
+class Pool(torch.nn.Module):
+    def forward(self, x):
+        if $out_vs > $in_vs:
+            x = torch.nn.functional.avg_pool3d(x, $out_vs // $in_vs)
+        return x.repeat(1, 2, 1, 1, 1)
+
+
+model = Pool()
 """
 
 
