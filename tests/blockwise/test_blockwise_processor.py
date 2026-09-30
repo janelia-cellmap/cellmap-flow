@@ -61,23 +61,24 @@ def ome(axes, scale, translation):
 # worker opens (ROI, voxel size, dtype), the zarr chunks of s0, the attributes
 # blockwise gives funlib for s0 (FUNLIB_ATTRS; funlib versions add others of
 # their own), the OME multiscales on the group (the translation is voxel
-# 0's centre; a channel axis has none), and the sum and hash of what one block
-# writes. ONE_CHANNEL holds one model channel; STACKED holds both, on a
-# leading channel axis.
+# 0's centre; a channel axis has none), and the sum and hash of what two
+# blocks write: one at the output's corner, and the 32 nm inside the output of
+# one overhanging its end in z. ONE_CHANNEL holds one model channel; STACKED
+# holds both, on a leading channel axis.
 FUNLIB_ATTRS = ("axis_names", "offset", "units", "voxel_size")
 ONE_CHANNEL = (
     daisy.Roi((8, 16, 24), (128, 128, 128)), Coordinate(16, 16, 16), np.uint8, (4, 4, 4),
     {"axis_names": ["z", "y", "x"], "offset": [8, 16, 24], "units": ["nanometer"] * 3,
      "voxel_size": [16, 16, 16]},
     ome(SPACE, [16, 16, 16], [16.0, 24.0, 32.0]),
-    (7, "f8b67fe4a95c8a04"),
+    [(7, "f8b67fe4a95c8a04"), (16, "de50b53da232c274")],
 )
 STACKED = (
     daisy.Roi((0, 8, 16, 24), (2, 128, 128, 128)), Coordinate(1, 16, 16, 16), np.uint8, (2, 4, 4, 4),
     {"axis_names": ["c", "z", "y", "x"], "offset": [0, 8, 16, 24], "units": ["", *["nanometer"] * 3],
      "voxel_size": [1, 16, 16, 16]},
     ome([{"name": "c", "type": "channel"}, *SPACE], [1, 16, 16, 16], [0.0, 16.0, 24.0, 32.0]),
-    (14, "ae5ec9ead2c8d143"),
+    [(14, "ae5ec9ead2c8d143"), (32, "5e5e84fe00189cd0")],
 )
 
 
@@ -86,10 +87,10 @@ STACKED = (
     pytest.param({"both": [0, 1], "second": 1}, {"both": STACKED, "second": ONE_CHANNEL},
                  id="a-dict-of-channel-indices"),
 ])
-def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, task_yaml, output_channels,
-                                                       outputs):
+def test_the_outputs_and_the_blocks_written_are_unchanged(raw_zarr, pooling_model, task_yaml,
+                                                          output_channels, outputs):
     """Where blockwise writes: each output's array and attributes, and what a
-    worker writes there for one block through a json_data chain. Without
+    worker writes there for two blocks through a json_data chain. Without
     output_channels there is one output per model channel; a dict names each
     output's channel indices, and one listing several stacks them. The output
     starts at the raw data's corner (8, 16, 24); it was created at 0 and the
@@ -98,15 +99,16 @@ def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, 
     path = task_yaml(raw_zarr(offset=(8, 16, 24)), pooling_model(8, 16), json_data=JSON_DATA, **overrides)
     master = CellMapFlowBlockwiseProcessor(path, create=True)
     worker = CellMapFlowBlockwiseProcessor(path, create=False)
-    roi = daisy.Roi((8, 16, 24), (64, 64, 64))
-    worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
+    for offset in ((8, 16, 24), (104, 16, 24)):  # at the output's corner; overhanging its end in z by 32 nm
+        roi = daisy.Roi(offset, (64, 64, 64))
+        worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
 
     assert master.output_channels == list(outputs)
     for (channel, expected), array in zip(outputs.items(), worker.output_arrays):
         s0 = zarr.open(str(master.output_path / channel / "s0"), mode="r")
         attrs = zarr.open_group(str(master.output_path / channel), mode="r").attrs
-        block = s0[..., :4, :4, :4]  # the block's 64 nm at 16 nm, at the output's corner
-        written = (int(block.sum()), hashlib.sha256(block.tobytes()).hexdigest()[:16])
+        corner, far = s0[..., :4, :4, :4], s0[..., 6:, :4, :4]  # 16 nm voxels
+        written = [(int(v.sum()), hashlib.sha256(v.tobytes()).hexdigest()[:16]) for v in (corner, far)]
         funlib = {key: s0.attrs[key] for key in FUNLIB_ATTRS}
         assert (array.roi, array.voxel_size, array.dtype, s0.chunks, funlib, attrs["multiscales"],
                 written) == expected, channel
