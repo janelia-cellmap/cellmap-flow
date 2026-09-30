@@ -455,18 +455,10 @@ class CellMapFlowBlockwiseProcessor:
         if not self.inferencers:
             raise RuntimeError("Only a blockwise worker (--client) builds the models' inferencers")
 
-        # Handle 4D vs 3D array ROI intersection
-        first_array = self.output_arrays[0]
-        if len(first_array.roi.shape) == 4:
-            # For 4D arrays, create spatial ROI by skipping the channel dimension
-            array_spatial_roi = daisy.Roi(
-                first_array.roi.offset[1:], first_array.roi.shape[1:]
-            )
-            write_roi = block.write_roi.intersect(array_spatial_roi)
-        else:
-            # For 3D arrays, use normal intersection
-            write_roi = block.write_roi.intersect(first_array.roi)
-
+        # Every output covers the same z, y, x (a stacked one has its channel
+        # axis in front): a block overhanging them writes only what is inside.
+        outputs = self.output_arrays[0].roi
+        write_roi = block.write_roi.intersect(daisy.Roi(outputs.offset[-3:], outputs.shape[-3:]))
         if write_roi.empty:
             logger.warning(f"empty write roi: {write_roi}")
             return
@@ -502,65 +494,35 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        for i, array in enumerate(self.output_arrays):
-            if not self.output_channels or i >= len(self.output_channels):
-                continue
+        for channel, array in zip(self.output_channels, self.output_arrays):
+            prediction = Array(
+                self._output_data(chunk_data, channel), block.write_roi.offset, self.output_voxel_size
+            )
+            array_roi = write_roi
+            if array.roi.dims == 4:  # stacked: its whole channel axis, which starts at 0
+                array_roi = daisy.Roi((0, *write_roi.offset), (array.roi.shape[0], *write_roi.shape))
+            array[array_roi] = prediction.to_ndarray(write_roi)
 
-            channel_name = self.output_channels[i]
+    def _output_data(self, chunk_data, channel):
+        """The part of a block's prediction ``chunk_data`` (channels first)
+        that output ``channel`` holds.
 
-            if chunk_data.ndim == 3:
-                if len(self.output_channels) > 1:
-                    raise ValueError("output channels should be 1")
-                predictions = Array(
-                    chunk_data,
-                    block.write_roi.offset,
-                    self.output_voxel_size,
-                )
-            else:
-                if self.output_channels_is_dict and self.output_channel_indices:
-                    # Dictionary format: extract multiple channels for this output
-                    channel_indices = self._channel_indices(channel_name)
-                    if len(channel_indices) == 1:
-                        # Single channel output
-                        channel_data = chunk_data[channel_indices[0]]
-                    else:
-                        # Multi-channel output - stack channels
-                        channel_data = np.stack(
-                            [chunk_data[idx] for idx in channel_indices], axis=0
-                        )
-
-                    predictions = Array(
-                        channel_data,
-                        block.write_roi.offset,
-                        self.output_voxel_size,
-                    )
-                else:
-                    # List format: original behavior
-                    index = self.channels.index(channel_name)
-                    predictions = Array(
-                        chunk_data[index],
-                        block.write_roi.offset,
-                        self.output_voxel_size,
-                    )
-            # Handle writing to 4D vs 3D arrays
-            if len(array.roi.shape) == 4:
-                # For 4D arrays, create spatial ROI and then full ROI for writing
-                array_spatial_roi = daisy.Roi(array.roi.offset[1:], array.roi.shape[1:])
-                spatial_write_roi = write_roi.intersect(array_spatial_roi)
-                if spatial_write_roi.empty:
-                    continue
-                # For 4D array writing, we need to include the channel dimension
-                full_write_roi = daisy.Roi(
-                    (0,) + spatial_write_roi.offset,
-                    (array.roi.shape[0],) + spatial_write_roi.shape,
-                )
-                array[full_write_roi] = predictions.to_ndarray(spatial_write_roi)
-            else:
-                # For 3D arrays, use normal intersection and writing
-                array_write_roi = write_roi.intersect(array.roi)
-                if array_write_roi.empty:
-                    continue
-                array[array_write_roi] = predictions.to_ndarray(array_write_roi)
+        With a dict of output_channels, the model channels its entry
+        indexes: an entry listing several stacks them, in its order, on a
+        leading axis. Otherwise, the model channel of that name. A
+        prediction the chain has already made 3-D is one channel, and can
+        fill only one output.
+        """
+        if chunk_data.ndim == 3:
+            if len(self.output_channels) > 1:
+                raise ValueError("output channels should be 1")
+            return chunk_data
+        if self.output_channels_is_dict and self.output_channel_indices:
+            indices = self._channel_indices(channel)
+            if len(indices) == 1:
+                return chunk_data[indices[0]]
+            return np.stack([chunk_data[index] for index in indices])
+        return chunk_data[self.channels.index(channel)]
 
     def client(self):
         client = daisy.Client()
