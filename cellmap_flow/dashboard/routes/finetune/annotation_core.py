@@ -28,13 +28,23 @@ logger = logging.getLogger(__name__)
 
 
 def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
-    """Write a new volume with ``geometry`` into ``corrections_dir``, with the
-    dashboard's current chains, and serve it; ``(volume_id, zarr_path, url)``."""
+    """Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
+
+    The volume records the dashboard's current normalization and
+    postprocessing chains, so the trainer can reproduce the inference-side
+    normalization and the finetuned model's YAML the postprocessing. Returns
+    ``(volume_id, zarr_path, url)``, the URL as the browser reaches MinIO.
+    Registering the volume is the caller's.
+    """
     volume_id = new_volume_id()
     zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
     create_volume_zarr(
-        zarr_path, geometry, dataset_path=dataset_path, model_name=model_name,
-        input_norm=current_input_norm_config(), postprocess=current_postprocess_config(),
+        zarr_path,
+        geometry,
+        dataset_path=dataset_path,
+        model_name=model_name,
+        input_norm=current_input_norm_config(),
+        postprocess=current_postprocess_config(),
     )
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
@@ -182,10 +192,15 @@ def create_annotation_volume_response(data):
         volume_id, zarr_path, minio_url = serve_new_volume(
             geometry, corrections_dir, dataset_path, model_name
         )
-        session_store().register_volume(volume_id, **geometry.record(
-            zarr_path, dataset_path=dataset_path, model_name=model_name,
-            corrections_dir=corrections_dir,
-        ))
+        session_store().register_volume(
+            volume_id,
+            **geometry.record(
+                zarr_path,
+                dataset_path=dataset_path,
+                model_name=model_name,
+                corrections_dir=corrections_dir,
+            ),
+        )
         # The trainer finds the volume only through this manifest.
         write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()

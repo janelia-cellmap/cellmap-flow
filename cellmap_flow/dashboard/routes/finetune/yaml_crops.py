@@ -96,16 +96,25 @@ def _create_session_annotation_volume(
     model_name,
     config,
 ):
-    """Create, serve and register a fresh volume in ``corrections_dir``, as
-    create-volume does; returns ``(volume_id, record)``."""
+    """Create, serve and register a fresh volume in ``corrections_dir``.
+
+    What create-volume does, less the HTTP response: returns
+    ``(volume_id, record)``.
+    """
     geometry = plan_volume(raw_dataset_path, config)
     volume_id, zarr_path, minio_url = serve_new_volume(
         geometry, corrections_dir, raw_dataset_path, model_name
     )
-    record = session_store().register_volume(volume_id, minio_url=minio_url, **geometry.record(
-        zarr_path, dataset_path=raw_dataset_path, model_name=model_name,
-        corrections_dir=corrections_dir,
-    ))
+    record = session_store().register_volume(
+        volume_id,
+        minio_url=minio_url,
+        **geometry.record(
+            zarr_path,
+            dataset_path=raw_dataset_path,
+            model_name=model_name,
+            corrections_dir=corrections_dir,
+        ),
+    )
     return volume_id, record
 
 

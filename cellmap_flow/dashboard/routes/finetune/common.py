@@ -323,12 +323,18 @@ def rewrite_minio_url_for_proxy(minio_url, request=None):
 
 
 def write_volume_manifest(volume):
-    """Write the manifest that makes a volume trainable: ``create_dataloader``
-    finds the volume, the patch geometry and the chains only through it.
+    """Mark an annotation volume as trainable by writing its manifest.
 
-    Returns its path, or None when the record lacks what the manifest needs
-    (a resumed volume whose .zattrs predates those attrs, say); nothing is
-    guessed, and submit refuses such a session.
+    ``create_dataloader`` requires this manifest: it is what points the
+    trainer at the volume zarr to stream patches from, and it carries the
+    patch geometry, the dense/sparse ratio and the dashboard's chains. The
+    good regions beside it are honoured through the same dataset. Without
+    one, training raises rather than fall back to anything.
+
+    Returns the manifest path, or None when the volume record is too
+    incomplete to describe (a resumed session whose .zattrs predates these
+    fields, say). Nothing is guessed: such a session cannot be trained, and
+    submit refuses it.
     """
     from cellmap_flow.finetune.session.manifest import write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
