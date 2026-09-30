@@ -10,7 +10,6 @@ from cellmap_flow.utils.scale_pyramid import (
     prediction_shader,
 )
 from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.utils.ds import find_closest_scale, get_scale_info, _open_zarr
 from cellmap_flow.utils import zarr_v3
 from cellmap_flow.globals import g
 

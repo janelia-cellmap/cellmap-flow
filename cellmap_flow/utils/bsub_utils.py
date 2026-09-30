@@ -8,22 +8,15 @@ Supports:
 """
 
 import os
-import re
-import subprocess
-import shlex
+import subprocess  # tests patch bsub_utils.subprocess.run; the module object is shared with jobs/
 import logging
 import sys
 import signal
-import tempfile
 import threading
-import time
 from pathlib import Path
 from typing import Optional
-from abc import ABC, abstractmethod
-from enum import Enum
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils.web_utils import IP_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +57,8 @@ from cellmap_flow.jobs.spec import (
     JobSpec,
     JobStartError,
     JobStatus,
-    extract_host_from_output,
     tail,
 )
-from cellmap_flow.jobs.spec import log_stem as _log_stem
 
 parse_bsub_job_id = _lsf.parse_job_id
 _job_ids_named = _lsf.job_ids_named
