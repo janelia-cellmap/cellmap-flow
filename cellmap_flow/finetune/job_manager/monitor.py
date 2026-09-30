@@ -70,13 +70,13 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
                 try:
                     # Whole lines only, each read once; see LogTailer. It
                     # keeps count of the finished iterations as it reads, so
-                    # counting them does not read the log from the start.
+                    # nothing here reads the log from the start.
                     new_content = log.read()
                     if new_content:
                         # Parse for epoch and loss information
                         _parse_training_progress(finetune_job, new_content)
                         # Parse for inference server ready marker
-                        _parse_inference_server_ready(finetune_job, new_content, listeners)
+                        _parse_inference_server_ready(finetune_job, new_content, log.iterations, listeners)
                         _parse_training_restart(finetune_job, new_content, log.iterations, listeners)
                 except Exception as e:
                     logger.debug(f"Error reading log file: {e}")
@@ -158,7 +158,8 @@ def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
             pass
 
 
-def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, listeners: Listeners):
+def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, iterations: Iterations,
+                                  listeners: Listeners):
     """
     Parse log for CELLMAP_FLOW_SERVER_IP marker and tell the listeners
     the job's inference server is up.
@@ -166,6 +167,8 @@ def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, l
     Args:
         finetune_job: Job to update
         log_content: New log content to parse
+        iterations: What the log read so far, ``log_content`` included, says
+            of the finished iterations (LogTailer.iterations)
         listeners: Whom to tell
     """
     if finetune_job.inference_server_ready:
@@ -178,29 +181,20 @@ def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, l
 
     server_url = matches[-1]
     finetune_job.inference_server_url = server_url
-    finetune_job.inference_server_ready = True
     logger.info(f"Finetuned inference server detected at {server_url}")
 
-    try:
-        # Read the FULL log file to find TRAINING_ITERATION_COMPLETE marker.
-        # This marker is printed BEFORE the server starts, so it's typically
-        # in an earlier log chunk than the server IP marker.
-        full_log = finetune_job.log_file.read_text()
-        iter_matches = markers.ITERATION_COMPLETE_RE.findall(full_log)
-        if iter_matches:
-            model_name = iter_matches[-1]
-        else:
-            model_name = f"{finetune_job.model_name}_finetuned"
-        _read_trainer_outputs(finetune_job, set_name=False)
-    except Exception as e:
-        logger.error(f"Could not read the served model's name from {finetune_job.log_file}: {e}",
-                     exc_info=True)
-        return
+    # The model it serves is the last iteration's: the trainer announces it
+    # before it starts the server, usually in an earlier read than this one.
+    model_name = iterations.name or f"{finetune_job.model_name}_finetuned"
+    if iterations.yaml_path:
+        finetune_job.model_yaml_path = Path(iterations.yaml_path)
 
     listeners.notify("on_server_ready", finetune_job, server_url, model_name)
     # Whatever the listeners managed (see FinetuneJobListener), and so
     # that the iteration it serves is not announced again.
     finetune_job.finetuned_model_name = model_name
+    # Only now: ready means the listeners have been told.
+    finetune_job.inference_server_ready = True
 
 
 def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, iterations: Iterations,
@@ -249,20 +243,20 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, iterati
             finetune_job.finetuned_model_name = new_model_name
 
 
-def _read_trainer_outputs(finetune_job: FinetuneJob, set_name: bool = True):
+def _read_trainer_outputs(finetune_job: FinetuneJob):
     """Take the latest iteration's model name and serving YAML from the log.
 
     The trainer prints "FINETUNED_MODEL_YAML: <path>" and then
     "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it
-    finishes. ``set_name=False`` leaves finetuned_model_name alone, for the
-    monitor, whose listeners use the old name (see FinetuneJobListener).
+    finishes. It reads the whole log: the monitor calls it once the job has
+    ended, when it may not have read the last lines yet.
     """
     try:
         log_text = finetune_job.log_file.read_text()
     except OSError:
         return
     name, yaml_path = trainer_outputs_from_log(log_text)
-    if set_name and name:
+    if name:
         finetune_job.finetuned_model_name = name
     if yaml_path:
         finetune_job.model_yaml_path = Path(yaml_path)

@@ -420,6 +420,32 @@ def test_what_the_monitor_has_read_of_the_log_it_does_not_read_again(make_job, m
     assert heard == ["m_finetuned_1", "m_finetuned_2"]
 
 
+def test_the_server_is_announced_from_what_the_monitor_has_read(make_job, monkeypatch):
+    """The model it serves was taken from the whole log, read again. When that
+    read failed, the server was marked ready and no listener was ever told. It
+    is ready only once they have been."""
+    heard = []
+
+    class Recording:
+        def on_server_ready(self, job, url, model_name):
+            heard.append((url, model_name, job.inference_server_ready))
+
+    manager = FinetuneJobManager()
+    manager.add_listener(Recording())
+    job = make_job(lsf_job=_lsf(LSF.RUNNING, LSF.RUNNING, LSF.FAILED))
+    read_text = Path.read_text
+
+    def failing(path, *args, **kwargs):
+        if path == job.log_file:
+            raise OSError("read failed")
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", failing)
+    _monitor(manager, job, ITERATIONS[:2], monkeypatch)
+    assert heard == [(URL, "m_finetuned_1", False)]
+    assert job.inference_server_ready
+
+
 CREATED = "2026-01-01T12:00:00"
 PARAMS = {"lora_r": 8, "lora_alpha": 16, "num_epochs": 5, "learning_rate": 0.0001}
 TWO_ITERATIONS = ("FINETUNED_MODEL_YAML: /s/models/m_finetuned_1.yaml\nTRAINING_ITERATION_COMPLETE: m_finetuned_1\n"
