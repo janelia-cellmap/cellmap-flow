@@ -48,10 +48,10 @@ from cellmap_flow.finetune.model_loading import (
 )
 from cellmap_flow.finetune.virtual_dataset import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
-# Moved to target_transforms; the dashboard still imports it from here.
-from cellmap_flow.finetune.target_transforms import (  # noqa: F401
-    read_offsets_from_script as _read_offsets_from_script,
-)
+from cellmap_flow.finetune.target_transforms import read_offsets_from_script
+
+# The dashboard's import of it (routes/finetune/common.py), until W4-A moves it.
+_read_offsets_from_script = read_offsets_from_script
 
 logger = logging.getLogger(__name__)
 
@@ -702,7 +702,7 @@ def _build_target_transform(args, model_config):
 
         # Try reading from model script
         if offsets is None and args.model_script:
-            offsets = _read_offsets_from_script(args.model_script)
+            offsets = read_offsets_from_script(args.model_script)
 
         if offsets is None:
             raise ValueError(
@@ -1143,7 +1143,7 @@ def build_arg_parser():
 
 
 def main():
-    # Here, not at import: importing this module (the dashboard did, for
+    # Here, not at import: importing this module (the dashboard does, for
     # _read_offsets_from_script) reconfigured the importing process's logging.
     logging.basicConfig(
         level=logging.INFO,

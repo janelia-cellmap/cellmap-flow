@@ -69,7 +69,7 @@ def test_a_full_finetune_resets_to_its_starting_weights(tmp_path):
 
 def test_a_restart_resets_a_full_finetune(tmp_path):
     from cellmap_flow.finetune.finetune_cli import _reset_for_restart
-    from cellmap_flow.finetune.lora_trainer import cpu_state_copy
+    from cellmap_flow.finetune.adaptation import cpu_state_copy
 
     model = _model()
     initial = cpu_state_copy(model)

@@ -53,7 +53,7 @@ def test_full_finetune_trains_with_distillation(tmp_path):
 
 
 def test_a_given_teacher_is_reused(tmp_path):
-    from cellmap_flow.finetune.lora_trainer import frozen_teacher_copy
+    from cellmap_flow.finetune.adaptation import frozen_teacher_copy
 
     model = _model()
     teacher = frozen_teacher_copy(model)

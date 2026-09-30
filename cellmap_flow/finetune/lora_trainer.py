@@ -16,10 +16,11 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
 
-from cellmap_flow.finetune import markers
+from torch.utils.data import DataLoader
 
-# The losses live in losses.py; these names stay importable from here.
-from cellmap_flow.finetune.losses import (  # noqa: F401
+from cellmap_flow.finetune import markers
+from cellmap_flow.finetune.adaptation import strategy_for
+from cellmap_flow.finetune.losses import (
     CombinedLoss,
     DiceLoss,
     MarginLoss,
@@ -29,15 +30,6 @@ from cellmap_flow.finetune.losses import (  # noqa: F401
     masked_mean,
     soft_target_entropy,
 )
-# So do the strategy helpers that used to live here.
-from cellmap_flow.finetune.adaptation import (  # noqa: F401
-    cpu_state_copy,
-    frozen_teacher_copy,
-    strategy_for,
-)
-
-
-from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
 

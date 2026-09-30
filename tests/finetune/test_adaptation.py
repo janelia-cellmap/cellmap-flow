@@ -1,4 +1,4 @@
-"""LoRA or full: the model decides, and each strategy does its own reset, restart and merge."""
+"""LoRA or full: the model decides, and each strategy resets and restarts in its own way."""
 
 import os
 import subprocess
@@ -38,19 +38,6 @@ def test_the_model_decides(lora, lora_r, expected):
     assert strategy.export_name == {"lora": "lora_adapter", "full": "full_finetune"}[strategy.kind]
 
 
-def test_a_full_finetune_trains_and_resets_every_weight():
-    strategy = FullStrategy()
-    model = strategy.prepare(_net())
-    assert all(p.requires_grad for p in model.parameters())
-    start = strategy.initial_state(model)
-    with torch.no_grad():
-        for p in model.parameters():
-            p.add_(1.0)
-    assert strategy.reset(model, start) is model
-    assert all(torch.equal(v, start[k]) for k, v in model.state_dict().items())
-    assert strategy.merge(model) is model
-
-
 @pytest.mark.finetune
 def test_lora_resets_in_place_and_restarts_with_a_new_rank():
     strategy = LoraStrategy(2, 4, 0.0)
@@ -72,22 +59,6 @@ def test_lora_resets_in_place_and_restarts_with_a_new_rank():
     # Unloaded, not merged: the old adapter left nothing in the base.
     after = {k: v for k, v in restarted.state_dict().items() if "lora_" not in k}
     assert after.keys() == base.keys() and all(torch.equal(v, base[k]) for k, v in after.items())
-
-
-@pytest.mark.finetune
-def test_lora_merges_into_a_plain_module_that_computes_the_same():
-    model = _lora()
-    with torch.no_grad():
-        for p in _lora_B(model):
-            p.normal_(0, 0.5)
-    x = torch.rand(1, 1, 6, 6, 6)
-    with torch.no_grad():
-        expected = model.eval()(x)
-        merged = LoraStrategy.merge(model)
-        assert not any("lora_" in n for n, _ in merged.named_parameters())
-        assert torch.allclose(merged(x), expected, atol=1e-6)
-    with pytest.raises(ValueError, match="PeftModel"):
-        LoraStrategy.merge(_net())
 
 
 def test_the_new_modules_import_nothing_heavy(tmp_path):

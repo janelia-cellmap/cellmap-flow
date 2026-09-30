@@ -328,10 +328,10 @@ def test_distance_rejects_bad_sigma():
 
 
 # ---------------------------------------------------------------------------
-# BCE-on-soft-targets helpers (lora_trainer)
+# BCE-on-soft-targets helpers (losses)
 # ---------------------------------------------------------------------------
 
-from cellmap_flow.finetune.lora_trainer import as_probabilities, soft_target_entropy
+from cellmap_flow.finetune.losses import as_probabilities, soft_target_entropy
 
 
 def test_soft_target_entropy_is_the_bce_floor():
@@ -362,10 +362,8 @@ def test_as_probabilities_does_not_double_sigmoid():
     ("offsets = [[1, 0, 0]\n", None),  # does not parse
 ])
 def test_read_offsets_from_script(tmp_path, script, expected):
-    from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
     from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 
     path = tmp_path / "model.py"
     path.write_text(script)
     assert read_offsets_from_script(path) == expected
-    assert _read_offsets_from_script is read_offsets_from_script  # the dashboard's import

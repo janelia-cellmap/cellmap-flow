@@ -3,7 +3,6 @@
 import pytest
 import torch
 
-from cellmap_flow.finetune import losses, lora_trainer
 from cellmap_flow.finetune.losses import (
     CombinedLoss,
     DiceLoss,
@@ -16,6 +15,8 @@ from cellmap_flow.finetune.losses import (
 X = torch.tensor([1.0, 2.0, 3.0, 10.0])
 TARGET = torch.tensor([1.0, 0.0, 0.0, 1.0])
 MASK = torch.tensor([1.0, 1.0, 1.0, 0.0])  # the last voxel is unannotated
+TWO_CHANNELS = torch.arange(8.0).reshape(1, 2, 4)
+ONE_CHANNEL = torch.tensor([[[1.0, 0.0, 0.0, 0.0]]])
 
 
 @pytest.mark.parametrize("value, expected", [
@@ -25,15 +26,11 @@ MASK = torch.tensor([1.0, 1.0, 1.0, 0.0])  # the last voxel is unannotated
     (distillation_loss(X, torch.zeros(4), "all"), (1 + 4 + 9 + 100) / 4),
     (distillation_loss(X, torch.zeros(4), "unlabeled", unlabeled_mask=1.0 - MASK), 100.0),
     (distillation_loss(X, torch.zeros(4), "anchor", anchor_mask=TARGET), (1 + 100) / 2),
+    # a good region is about location: one channel, broadcast over the output's
+    (distillation_loss(TWO_CHANNELS, torch.zeros(1, 2, 4), "anchor", anchor_mask=ONE_CHANNEL), (0 + 16) / 2),
 ])
 def test_the_means(value, expected):
     assert value.item() == pytest.approx(expected)
-
-
-def test_an_anchor_mask_is_broadcast_over_channels():
-    student = torch.arange(8.0).reshape(1, 2, 4)  # two channels
-    anchor = torch.tensor([[[1.0, 0.0, 0.0, 0.0]]])  # one
-    assert distillation_loss(student, torch.zeros_like(student), "anchor", anchor_mask=anchor).item() == 8.0
 
 
 def test_an_unknown_scope_is_refused():
@@ -50,8 +47,3 @@ def test_an_unannotated_voxel_does_not_count(loss):
     moved[..., 3] = -30.0
     assert torch.equal(loss(pred, target, mask), loss(moved, target, mask))
     assert not torch.equal(loss(pred, target), loss(moved, target))
-
-
-def test_the_trainer_still_exports_the_losses():
-    for name in losses.__all__:
-        assert getattr(lora_trainer, name) is getattr(losses, name)
