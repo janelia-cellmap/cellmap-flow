@@ -22,7 +22,7 @@ Four parsers produce it:
 
 Each format's reader keeps the lookup order and fallbacks the old
 per-format readers had (``utils.ds.read_ds_meta`` and friends, now wrappers
-over this module); tests/utils/test_io_matrix.py pins them.
+over this module); tests/utils/test_io_metadata.py pins them.
 """
 
 from __future__ import annotations
