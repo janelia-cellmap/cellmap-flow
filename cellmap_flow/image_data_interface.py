@@ -1,13 +1,14 @@
 import copy
 
 from cellmap_flow.io import multiscale
+from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
+from cellmap_flow.io.metadata import snap_integral
 from cellmap_flow.utils.ds import (
     LazyNormalization,
     open_ds_tensorstore,
     read_ds_meta,
     to_ndarray_tensorstore,
 )
-from cellmap_flow.utils import zarr_v3
 import logging
 from funlib.geometry import Coordinate
 
@@ -71,22 +72,22 @@ class ImageDataInterface:
             self.filetype,
         ) = read_ds_meta(dataset_path)
         self.shape = Coordinate(shape)
-        actual_voxel_size = zarr_v3.snap_integral(actual_voxel_size)
-        actual_offset = zarr_v3.snap_integral(actual_offset)
+        actual_voxel_size = snap_integral(actual_voxel_size)
+        actual_offset = snap_integral(actual_offset)
         # What the data really is, and what the caller asked for; voxel_size
         # below is the one reads are done in.
-        self.actual_voxel_size = zarr_v3.coordinate_or_floats(
+        self.actual_voxel_size = coordinate_or_floats(
             actual_voxel_size, "voxel size", dataset_path
         )
         self.requested_voxel_size = (
             None
             if voxel_size is None
-            else zarr_v3.coordinate_or_floats(voxel_size, "voxel size", dataset_path)
+            else coordinate_or_floats(voxel_size, "voxel size", dataset_path)
         )
         voxel_size_f, offset_f = actual_voxel_size, actual_offset
         if voxel_size is not None:
-            requested = zarr_v3.snap_integral(voxel_size)
-            if not zarr_v3.same_voxel_size(requested, actual_voxel_size):
+            requested = snap_integral(voxel_size)
+            if not multiscale.same_voxel_size(requested, actual_voxel_size):
                 message = (
                     f"{dataset_path} is at {tuple(actual_voxel_size.tolist())} nm "
                     f"but {tuple(requested.tolist())} nm was requested"
@@ -112,13 +113,15 @@ class ImageDataInterface:
                 # of an offset dataset.
                 offset_f = actual_offset / actual_voxel_size * requested
             voxel_size_f = requested
-        self._voxel_size_f = voxel_size_f
-        self._offset_f = offset_f
-        self.voxel_size = zarr_v3.coordinate_or_floats(
-            voxel_size_f, "voxel size", dataset_path
+        # The grid reads are done on, in exact floats: voxel_size and offset
+        # below are Coordinates when whole, and roi is the whole-nm box
+        # around the data.
+        self._grid = Grid(
+            tuple(float(v) for v in voxel_size_f), tuple(float(v) for v in offset_f)
         )
-        self.offset = zarr_v3.coordinate_or_floats(offset_f, "offset", dataset_path)
-        self.roi = zarr_v3.covering_roi(offset_f, voxel_size_f, shape)
+        self.voxel_size = coordinate_or_floats(voxel_size_f, "voxel size", dataset_path)
+        self.offset = coordinate_or_floats(offset_f, "offset", dataset_path)
+        self.roi = self._grid.box_to_world(Box((0,) * len(shape), tuple(shape)))
         self.custom_fill_value = custom_fill_value
         self.concurrency_limit = concurrency_limit
         self.cache_bytes = cache_bytes
@@ -190,8 +193,8 @@ class ImageDataInterface:
         return to_ndarray_tensorstore(
             view.selected(),
             roi,
-            self._voxel_size_f,
-            self._offset_f,
+            self._grid.voxel_size,
+            self._grid.translation,
             self.output_voxel_size,
             self.axes_names,
             self.custom_fill_value,

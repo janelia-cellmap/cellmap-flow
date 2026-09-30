@@ -20,9 +20,10 @@ import os
 from typing import Tuple
 
 import numpy as np
-from funlib.geometry import Coordinate, Roi
+from funlib.geometry import Coordinate
 
 from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metadata)
     attrs_from_meta,
     is_integral,
@@ -50,42 +51,6 @@ logger = logging.getLogger(__name__)
 def to_nm(values, units):
     """``values`` (one per spatial axis) converted to nanometers."""
     return list(metadata.to_nm(values, units))
-
-
-_warned_non_integral = set()
-
-
-def coordinate_or_floats(values, what="voxel size", where=""):
-    """A Coordinate when every value is a whole number, else a tuple of floats.
-
-    Coordinate truncates: Coordinate(5.24) is 5, and a dataset at 5.24 nm
-    then read 5% of the wrong voxels. Non-integer values are kept as floats
-    (with a one-time warning) instead.
-    """
-    if values is None:
-        return None
-    snapped = snap_integral(values)
-    if is_integral(snapped):
-        return Coordinate(int(v) for v in snapped)
-    key = (what, where, tuple(snapped.tolist()))
-    if key not in _warned_non_integral:
-        _warned_non_integral.add(key)
-        logger.warning(
-            f"{where or 'dataset'}: {what} {tuple(snapped.tolist())} is not a whole "
-            "number of nanometers; keeping it as floats"
-        )
-    return tuple(float(v) for v in snapped)
-
-
-def covering_roi(offset, voxel_size, shape):
-    """The integer-nm Roi covering ``shape`` voxels at ``offset``.
-
-    Exactly Roi(offset, voxel_size * shape) when everything is integral.
-    """
-    begin = snap_integral(offset)
-    end = snap_integral(begin + snap_integral(voxel_size) * np.asarray(shape, dtype=float))
-    begin, end = np.floor(begin).astype(int), np.ceil(end).astype(int)
-    return Roi(Coordinate(begin), Coordinate(end - begin))
 
 
 class _TensorstoreArray:
@@ -209,11 +174,12 @@ def legacy_ds_info(meta, where=""):
     filetype)`` from a ``(voxel_size, offset, chunk_shape, shape, axes_names,
     filetype)`` metadata tuple with float voxel size and offset."""
     voxel_size, offset, chunk_shape, shape, axes_names, filetype = meta
+    grid = Grid(tuple(float(v) for v in voxel_size), tuple(float(v) for v in offset))
     return (
         coordinate_or_floats(voxel_size, "voxel size", where),
         chunk_shape,
         Coordinate(shape),
-        covering_roi(offset, voxel_size, shape),
+        grid.box_to_world(Box((0,) * len(shape), tuple(shape))),
         axes_names,
         filetype,
     )

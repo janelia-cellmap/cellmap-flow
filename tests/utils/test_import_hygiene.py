@@ -35,7 +35,7 @@ check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "lsf", "local", "queue
       LIGHT + ["huggingface_hub", "peft", "torch"])
 """,
     "io": """
-check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome")],
+check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome", "geometry")],
       LIGHT + ["torch", "huggingface_hub", "peft"])
 """,
     # torch only once a runner is built.

@@ -4,8 +4,8 @@ cellmap-flow serves PyTorch, TensorFlow, DaCapo and bioimage.io models to Neurog
 
 **Geometry**
 - World coordinates are in nm. A `Roi` is (lower corner, shape) in nm, and voxel `i` covers `[corner + i*vs, corner + (i+1)*vs)` along each axis.
-- An OME-NGFF `translation` is the centre of voxel 0, not its corner: read it with `zarr_v3.ome_corner` and write it with `zarr_v3.ome_translation`. Legacy `resolution`/`offset` attributes and N5 `transform` are already corners.
-- Voxel sizes can be fractional (5.24 nm), and a corner need not lie on the voxel grid (Janelia raw has a -4 nm corner at 8 nm). `Coordinate` truncates to integers, so use `zarr_v3.coordinate_or_floats` or keep floats.
+- An OME-NGFF `translation` is the centre of voxel 0, not its corner: read it with `io.ome.ome_corner` and write it with `io.ome.ome_translation`. Legacy `resolution`/`offset` attributes and N5 `transform` are already corners.
+- Voxel sizes can be fractional (5.24 nm), and a corner need not lie on the voxel grid (Janelia raw has a -4 nm corner at 8 nm). `Coordinate` truncates to integers, so use `io.geometry` (`Grid`, `coordinate_or_floats`) or keep floats.
 - A model's forward takes `(batch, 1, z, y, x)` and returns `(batch, C, z, y, x)`. A processed chunk is `(c, z, y, x)` unless the config sets `chunk_output_axes`; the served zarr array puts the channel axis last.
 
 **Code**
