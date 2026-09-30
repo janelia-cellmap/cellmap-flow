@@ -2,7 +2,7 @@
 
 The trainer's inference server, in the same process as its training loop,
 takes ``POST <server>/__control__/restart`` with the job's restart token
-(written into the run's directory at submit; utils.restart_token) in the
+(written into the run's directory at submit; serving.restart_token) in the
 ``X-Restart-Token`` header. The body is ``{"restart": true, "timestamp",
 "params"}``, ``params`` being the settings to change. When the server cannot
 be reached, or has no URL yet, the same body goes into the run's
