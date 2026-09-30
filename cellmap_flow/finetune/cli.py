@@ -17,6 +17,7 @@ from pathlib import Path
 
 from cellmap_flow.finetune.model_loading import decode_model_entry, model_config_from_entry
 from cellmap_flow.finetune.target_transforms import read_offsets_from_script
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.models.models_config import (
     DaCapoModelConfig,
     FlyModelConfig,
@@ -189,13 +190,15 @@ def build_arg_parser():
         "--queue",
         type=str,
         default=None,
-        help="LSF queue written into the generated serving YAMLs (default: gpu_h100)"
+        help="LSF queue written into the generated serving YAMLs "
+             f"(default: {current_site().default_queue})"
     )
     parser.add_argument(
         "--charge-group",
         type=str,
         default=None,
-        help="LSF charge group written into the generated serving YAMLs (default: cellmap)"
+        help="LSF charge group written into the generated serving YAMLs "
+             f"(default: {current_site().default_charge_group})"
     )
     parser.add_argument(
         "--batch-size",

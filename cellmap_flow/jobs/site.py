@@ -32,6 +32,9 @@ class SiteProfile:
     # overridable per-yaml, per-submission, or from the dashboard. The queues
     # allow up to 20160 minutes (14 days).
     default_walltime: str = "08:00"
+    # Cores a job asks for: an inference server, and the blockwise master
+    # (the dashboard's nb_cores_master); and each blockwise worker
+    # (nb_cores_worker).
     server_cpus: int = 4
     worker_cpus: int = 12
     # How long a job may sit PENDING before we give up on that queue and try

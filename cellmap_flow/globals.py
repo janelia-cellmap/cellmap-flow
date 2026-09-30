@@ -6,6 +6,7 @@ from collections import deque
 from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.pipeline_spec import (
     PipelineSpec,
     chain_output_dtype,
@@ -22,20 +23,25 @@ configure_logging()
 
 SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
 
+# The dashboard's job settings until the user saves their own. The queue,
+# run limit and core counts are the site's (jobs/site.py says why each is
+# what it is); no charge group is assumed, so a YAML without one is refused
+# rather than billed to someone.
+_SITE = current_site()
 SERVER_CONFIG_DEFAULTS = {
-    "queue": "gpu_h100",
+    "queue": _SITE.default_queue,
     "charge_group": "",
     # LSF's own default on the GPU queues is 120 minutes, which killed
     # inference servers two hours into a session. See default_walltime in
     # jobs/site.py for why this matches the Fileglancer app's own 8 hours.
-    "walltime": "08:00",
+    "walltime": _SITE.default_walltime,
     # Try other GPU queues when the requested one is busy or closed. On by
     # default because a job that starts elsewhere beats one that never
     # starts; turn it off when the queue itself matters (a benchmark pinned
     # to one GPU model, a charge group valid on only one queue).
     "cycle_gpu_queues": True,
-    "nb_cores_master": 4,
-    "nb_cores_worker": 12,
+    "nb_cores_master": _SITE.server_cpus,
+    "nb_cores_worker": _SITE.worker_cpus,
     "nb_workers": 14,
 }
 

@@ -8,6 +8,8 @@ finetuned models using FinetuneModelConfig (type: finetune).
 import logging
 from pathlib import Path
 
+from cellmap_flow.jobs.site import current_site
+
 logger = logging.getLogger(__name__)
 
 # The finetune CLI prints this with the path of each serving YAML it writes,
@@ -28,8 +30,8 @@ def generate_finetuned_model_yaml(
     model_name: str = None,
     output_path: Path = None,
     data_path: str = None,
-    queue: str = "gpu_h100",
-    charge_group: str = "cellmap",
+    queue: str = None,
+    charge_group: str = None,
     json_data: dict = None,
     scale: str = "s0",
     weights_path: str = None,
@@ -49,8 +51,8 @@ def generate_finetuned_model_yaml(
         model_name: Name of the finetuned model
         output_path: Where to write the .yaml file
         data_path: Path to actual dataset (REQUIRED - no placeholders)
-        queue: LSF queue name
-        charge_group: LSF charge group
+        queue: LSF queue name; None is the site's default queue
+        charge_group: LSF charge group; None is the site's default one
         json_data: Optional dict with input_norm and postprocess from base model
         scale: Scale level (e.g., "s0", "s1") from base model
 
@@ -58,6 +60,10 @@ def generate_finetuned_model_yaml(
         Path to the generated YAML file
     """
     import yaml as yaml_lib
+
+    site = current_site()
+    queue = site.default_queue if queue is None else queue
+    charge_group = site.default_charge_group if charge_group is None else charge_group
 
     if not data_path or str(data_path) in PLACEHOLDER_DATA_PATHS:
         raise ValueError(
@@ -122,8 +128,8 @@ def generate_finetuned_model_yaml(
 def generate_current_config_yaml(
     models: list,
     data_path: str,
-    queue: str = "gpu_h100",
-    charge_group: str = "cellmap",
+    queue: str = None,
+    charge_group: str = None,
     walltime: str = None,
     json_data: dict = None,
 ) -> str:
@@ -140,8 +146,8 @@ def generate_current_config_yaml(
     Args:
         models: list of model entry dicts (each from ModelConfig.to_dict())
         data_path: current dataset path
-        queue: LSF queue name
-        charge_group: LSF charge group
+        queue: LSF queue name; None is the site's default queue
+        charge_group: LSF charge group; None is the site's default one
         walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
             the reloaded config falls back to the built-in default
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
@@ -151,6 +157,10 @@ def generate_current_config_yaml(
         YAML text (str) ready to write to a file.
     """
     import yaml as yaml_lib
+
+    site = current_site()
+    queue = site.default_queue if queue is None else queue
+    charge_group = site.default_charge_group if charge_group is None else charge_group
 
     yaml_dict = {
         "data_path": data_path,
