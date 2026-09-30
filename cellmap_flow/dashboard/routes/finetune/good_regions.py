@@ -22,7 +22,6 @@ from flask import jsonify
 
 from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
 from cellmap_flow.finetune.session import manifest as session_manifest
-from cellmap_flow.finetune.session.manifest import GOOD_REGIONS_FILENAME  # noqa: F401  (kept name)
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)

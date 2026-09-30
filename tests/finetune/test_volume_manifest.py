@@ -107,8 +107,8 @@ def test_backfill_declines_when_no_volume_belongs_to_that_session(
 
 
 def test_good_regions_live_beside_the_corrections_dir_not_inside_it(corrections):
-    """load_good_regions_for looks one level up; keep the writer in step."""
-    from cellmap_flow.dashboard.routes.finetune import good_regions as gr
+    """load_good_regions_for looks one level up, where the dashboard writes them
+    (session.manifest.good_regions_path, for both)."""
     from cellmap_flow.finetune.session.manifest import GOOD_REGIONS_FILENAME, load_good_regions_for
 
     session_dir = os.path.dirname(corrections)
@@ -120,8 +120,6 @@ def test_good_regions_live_beside_the_corrections_dir_not_inside_it(corrections)
         )
 
     assert len(load_good_regions_for(corrections)) == 1
-    # And the dashboard writes to that same place.
-    assert os.path.basename(gr.GOOD_REGIONS_FILENAME) == GOOD_REGIONS_FILENAME
 
 
 class TestRehearsalFractionOverride:
