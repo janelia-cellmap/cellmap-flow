@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, jsonify
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
+from cellmap_flow.dashboard.requests import SetData, parse
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
 
@@ -127,12 +128,11 @@ def index():
 @index_bp.route("/api/set-data", methods=["POST"])
 def set_data():
     """Set up neuroglancer viewer with a dataset path."""
+    body, error = parse(SetData, request.get_json(silent=True))
+    if error:
+        return error
+    dataset_path = body.dataset_path
     try:
-        data = request.get_json()
-        dataset_path = data.get("dataset_path", "").strip()
-        if not dataset_path:
-            return jsonify({"error": "dataset_path is required"}), 400
-
         session = get_session()
         session.dataset_path = dataset_path
         # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it

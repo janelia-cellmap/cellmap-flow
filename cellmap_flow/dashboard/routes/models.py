@@ -3,7 +3,7 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.dashboard.requests import ServerConfigUpdate, parse
+from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, parse
 from cellmap_flow.dashboard.services.launch import update_run_models
 from cellmap_flow.dashboard.state import get_session
 
@@ -31,16 +31,13 @@ def create_model_config():
     """Create a ModelConfig instance from user-provided parameters"""
     from cellmap_flow.models.model_registry import instantiate_model_config
 
+    body, error = parse(CreateModelConfig, request.get_json(silent=True))
+    if error:
+        return error
+    class_name = body.class_name
     try:
-        data = request.get_json()
-        class_name = data.get('class_name')
-        params = data.get('params', {})
-
-        if not class_name:
-            return jsonify({'error': 'class_name is required'}), 400
-
-        # Instantiate the model config
-        model_config = instantiate_model_config(class_name, params)
+        # The form's values are strings; the registry parses them.
+        model_config = instantiate_model_config(class_name, body.params)
 
         # Configured, for the pipeline builder and blockwise.
         get_session().models_config.append(model_config)
@@ -54,7 +51,7 @@ def create_model_config():
         })
     except Exception as e:
         logger.error(f"Error creating model config: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 @models_bp.route("/api/huggingface-models")

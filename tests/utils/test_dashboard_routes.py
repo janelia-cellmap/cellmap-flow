@@ -35,34 +35,41 @@ def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "url, payload, status",
+    "url, payload, error",
     [
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": None}, 400,
-                     id="blockwise-null"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": ""}, 400,
-                     id="blockwise-empty"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": "twelve"}, 400,
-                     id="blockwise-word"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12}, 400, id="blockwise-missing"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": "4", "nb_cores_worker": "12", "nb_workers": "3"}, 200,
-                     id="blockwise-numeric-strings-accepted"),
-        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": "lots"}, 400, id="server-word"),
-        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": None}, 400, id="server-null"),
-        pytest.param("/api/server-config", "not json", 400, id="server-not-json"),
+        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": None},
+                     "nb_workers must be a whole number, got None", id="blockwise-null"),
+        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": ""},
+                     "nb_workers must be a whole number, got ''", id="blockwise-empty"),
+        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": "twelve"},
+                     "nb_workers must be a whole number, got 'twelve'", id="blockwise-word"),
+        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12},
+                     "nb_workers must be a whole number, got None", id="blockwise-missing"),
+        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": "lots"},
+                     "nb_workers must be a whole number, got 'lots'", id="server-word"),
+        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": None},
+                     "nb_workers must be a whole number, got None", id="server-null"),
+        pytest.param("/api/server-config", "not json", "expected a JSON object", id="server-not-json"),
+        pytest.param("/api/create-model-config", {"params": {"name": "m"}}, "class_name is required",
+                     id="model-form-without-a-class"),
+        pytest.param("/api/set-data", {"dataset_path": "  "}, "dataset_path is required", id="set-data-blank"),
+        pytest.param("/api/set-data", "not json", "expected a JSON object", id="set-data-not-json"),
     ],
 )
-def test_a_bad_setting_is_a_400_that_changes_nothing(dashboard, monkeypatch, url, payload, status):
+def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, monkeypatch, url, payload, error):
+    """The shape every form reads: {"success": false, "error": ...}."""
     monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
-    g.queue, g.nb_workers = "gpu_h100", 14
+    g.queue, g.nb_workers, g.dataset_path, g.models_config = "gpu_h100", 14, "/data/raw.zarr", []
     kwargs = {"data": payload} if isinstance(payload, str) else {"json": payload}
     response = dashboard.post(url, **kwargs)
-    assert response.status_code == status
-    if status == 400:  # the shape the settings forms read, and nothing applied
-        body = response.get_json()
-        assert body["success"] is False and (isinstance(payload, str) or "nb_workers" in body["error"])
-        assert (g.queue, g.nb_workers) == ("gpu_h100", 14)
-    else:
-        assert g.nb_workers == 3
+    assert (response.status_code, response.get_json()) == (400, {"success": False, "error": error})
+    assert (g.queue, g.nb_workers, g.dataset_path, g.models_config) == ("gpu_h100", 14, "/data/raw.zarr", [])
+
+
+def test_a_count_sent_as_a_string_is_a_number(dashboard):
+    response = dashboard.post("/api/blockwise-config", json={"nb_cores_master": "4", "nb_cores_worker": "12",
+                                                             "nb_workers": "3"})
+    assert response.status_code == 200 and g.nb_workers == 3
 
 
 def _annotations():
