@@ -1,6 +1,13 @@
+"""Start the models picked on the Models tab, and show each in the viewer.
+
+- ``update_run_models()``: stop and forget the models no longer picked,
+  start the ones newly picked, each in its own thread.
+- ``run_model()`` / ``run_hf_model()``: start one catalog or Hugging Face
+  model's inference server (``start_hosts``, which records the job) and add
+  its layer, the one Submit would give it.
+"""
+
 from cellmap_flow.globals import g
-
-
 from cellmap_flow.serving.launch import server_argv_for
 from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts
 from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS

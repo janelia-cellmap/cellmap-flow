@@ -1231,7 +1231,7 @@ class FinetuneJobManager:
         """
         Add (or replace) the finetuned model's neuroglancer layer.
 
-        Mirrors run_model() from cellmap_flow/models/run.py:
+        Mirrors run_model() from cellmap_flow/dashboard/services/launch.py:
         1. Create/update Job object in g.jobs
         2. Add neuroglancer ImageLayer with pre/post processing args
 

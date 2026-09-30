@@ -218,7 +218,7 @@ def test_submit_shows_a_labelling_chain_as_segmentations(submit):
 
 @pytest.mark.parametrize("launch", ["catalog", "huggingface"])
 def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launch):
-    from cellmap_flow.models import run
+    from cellmap_flow.dashboard.services import launch
 
     started = []
 
@@ -228,14 +228,14 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
         g.jobs = g.jobs + [job]
         return job
 
-    monkeypatch.setattr(run, "start_hosts", start_hosts)
+    monkeypatch.setattr(launch, "start_hosts", start_hosts)
     g.jobs = []
     blob = get_norms_post_args(INPUT_NORM, [])
     for name in MODELS:
         if launch == "catalog":
-            run.run_model(f"/models/{name}", name, blob)
+            launch.run_model(f"/models/{name}", name, blob)
         else:
-            run.run_hf_model(f"cellmap/{name}", name, blob)
+            launch.run_hf_model(f"cellmap/{name}", name, blob)
 
     assert started == list(MODELS)
     assert _viewer(viewer, MODELS) == {

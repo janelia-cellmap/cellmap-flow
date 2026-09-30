@@ -9,7 +9,7 @@ from cellmap_flow.globals import (
     current_input_norm_config,
     current_postprocess_config,
 )
-from cellmap_flow.models.run import update_run_models
+from cellmap_flow.dashboard.services.launch import update_run_models
 
 logger = logging.getLogger(__name__)
 

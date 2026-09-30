@@ -17,7 +17,7 @@ from click.testing import CliRunner
 from cellmap_flow.cli import cli as cli_module
 from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
-from cellmap_flow.models import run
+from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.serving import launch
 from cellmap_flow.utils import bsub_utils
@@ -42,11 +42,11 @@ LAUNCHERS = {
         ["script", "--script-path", "/s.py", "--name", "m", "--scale", "s3"],
     ),
     "dashboard-catalog": (
-        lambda data: run.run_model("/models/mito v2", "mito", "blob"),
+        lambda data: dashboard_launch.run_model("/models/mito v2", "mito", "blob"),
         ["cellmap", "--folder-path", "/models/mito v2", "--name", "mito"],
     ),
     "dashboard-huggingface": (
-        lambda data: run.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
+        lambda data: dashboard_launch.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
         ["huggingface", "--repo", "cellmap/mito-v1", "--name", "mito_v1"],
     ),
 }
@@ -72,7 +72,7 @@ def launched(monkeypatch, tmp_path):
     monkeypatch.setattr(bsub_utils, "SERVER_COMMAND", "pixi run cellmap_flow_server")
     monkeypatch.setattr(cli_module, "start_hosts", started)
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
-    monkeypatch.setattr(run, "start_hosts", refused)
+    monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
     monkeypatch.setattr(neuroglancer_utils, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
     g.dataset_path = data
