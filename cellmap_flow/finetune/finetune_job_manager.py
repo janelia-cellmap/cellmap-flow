@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Any
 
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_manager import state
+from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
 from cellmap_flow.finetune.job_manager.tailer import LogTailer, finished_iterations, trainer_outputs_from_log
 from cellmap_flow.jobs import lsf as jobs_lsf
@@ -102,25 +103,6 @@ def finetune_export_kwargs(output_dir, params=None) -> dict:
     return {"lora_adapter_path": str(adapter)}
 
 
-class FinetuneJobListener:
-    """What the job manager tells its listeners (FinetuneJobManager.add_listener).
-
-    Both are called on the job's monitor thread. A listener need not define
-    both; one that raises is logged and does not stop the others.
-
-    While listeners run, ``job.finetuned_model_name`` is still the name the
-    job's model had before the event (None before the first), so one that
-    replaces a viewer layer can find the old one. The manager sets it to
-    ``model_name`` once they have all run.
-    """
-
-    def on_server_ready(self, job: FinetuneJob, url: str, model_name: str) -> None:
-        """The job's inference server is up at ``url``, serving ``model_name``."""
-
-    def on_iteration_complete(self, job: FinetuneJob, model_name: str) -> None:
-        """The job finished a training iteration and named its model ``model_name``."""
-
-
 class FinetuneJobManager:
     """
     Orchestrate finetuning jobs from submission to completion.
@@ -139,27 +121,16 @@ class FinetuneJobManager:
         # Told when a job's server comes up and when an iteration finishes.
         # None by default: what a job's model looks like in the dashboard is
         # the dashboard's (dashboard.finetune_layers).
-        self._listeners: List[Any] = []
+        self._listeners = Listeners()
 
     def add_listener(self, listener) -> None:
-        """Tell ``listener`` about job events; see FinetuneJobListener.
+        """Tell ``listener`` about job events; see listener.FinetuneJobListener.
         Adding one already added does nothing."""
-        if not any(other is listener for other in self._listeners):
-            self._listeners.append(listener)
+        self._listeners.add(listener)
 
     def remove_listener(self, listener) -> None:
         """Stop telling ``listener``."""
-        self._listeners = [other for other in self._listeners if other is not listener]
-
-    def _notify(self, event: str, *args) -> None:
-        for listener in list(self._listeners):
-            handler = getattr(listener, event, None)
-            if handler is None:
-                continue
-            try:
-                handler(*args)
-            except Exception as e:
-                self.logger.error(f"Finetune listener {listener!r} failed in {event}: {e}", exc_info=True)
+        self._listeners.remove(listener)
 
     def _get_model_metadata(self, model_config, attr_name: str, default=None):
         """
@@ -1084,7 +1055,7 @@ class FinetuneJobManager:
                               exc_info=True)
             return
 
-        self._notify("on_server_ready", finetune_job, server_url, model_name)
+        self._listeners.notify("on_server_ready", finetune_job, server_url, model_name)
         # Whatever the listeners managed (see FinetuneJobListener), and so
         # that the iteration it serves is not announced again.
         finetune_job.finetuned_model_name = model_name
@@ -1131,7 +1102,7 @@ class FinetuneJobManager:
             self._read_trainer_outputs(finetune_job, set_name=False)
             if new_model_name != finetune_job.finetuned_model_name:
                 self.logger.info(f"New training iteration complete: {new_model_name}")
-                self._notify("on_iteration_complete", finetune_job, new_model_name)
+                self._listeners.notify("on_iteration_complete", finetune_job, new_model_name)
                 # Whatever the listeners managed -- without a server no layer
                 # is added -- show the new name, and don't retry every poll.
                 finetune_job.finetuned_model_name = new_model_name

@@ -20,7 +20,8 @@ import logging
 import threading
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune.finetune_job_manager import FinetuneJobListener, finetune_export_kwargs
+from cellmap_flow.finetune.finetune_job_manager import finetune_export_kwargs
+from cellmap_flow.finetune.job_manager.listener import FinetuneJobListener
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig

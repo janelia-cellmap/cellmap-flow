@@ -3,6 +3,8 @@
 - ``state``: a job's record (``FinetuneJob``), its statuses, and what moves
   a job from one to another.
 - ``tailer``: the trainer's log as the manager reads it.
+- ``listener``: what the manager tells its listeners (the dashboard's
+  viewer) of each job, and how.
 
 Nothing here imports torch, Flask, neuroglancer or ``cellmap_flow.globals``
 at module level. Import the submodule you need; this package imports none
