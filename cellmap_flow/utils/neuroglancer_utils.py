@@ -8,20 +8,13 @@ imports ``dashboard.app`` and ``viewer`` does not.
 import itertools
 import logging
 
-import neuroglancer
-
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.globals import g
 from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
 from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import get_norms_post_args
 from cellmap_flow.viewer.bootstrap import new_viewer
-from cellmap_flow.viewer.layers import (
-    prediction_shader_for,
-    prediction_source,
-    prediction_voxel_override,
-    raw_layer,
-)
+from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +52,12 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
             continue
         # One round trip, for both the contrast range and the voxel size.
         info = fetch_model_info(host)
-        default_shader = prediction_shader_for(model, host, g.postprocess, color=next(colors), info=info)
-        g.shaders.setdefault(model, default_shader)
-        override = prediction_voxel_override(host, dataset_path, info, _configured_output_voxel_size(model, info))
-        layer = {"source": prediction_source(host, model, st_data, override), "shader": g.shaders[model]}
-        if g.shader_controls.get(model):
-            layer["shaderControls"] = g.shader_controls[model]
-        layers[model] = neuroglancer.ImageLayer(**layer)
+        g.shaders.setdefault(model, prediction_shader_for(model, host, g.postprocess, color=next(colors), info=info))
+        layers[model] = prediction_layer(
+            model, host, st_data, dataset_path=dataset_path, postprocess=g.postprocess,
+            shader=g.shaders[model], shader_controls=g.shader_controls.get(model), info=info,
+            fallback_output_voxel_size=_configured_output_voxel_size(model, info),
+        )
     # The YAML's extra_layers (cellmap_flow_yaml builds them).
     layers.update(g.extra_layers)
 

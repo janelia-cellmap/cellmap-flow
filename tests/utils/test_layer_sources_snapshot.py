@@ -157,7 +157,7 @@ def test_the_startup_viewer(servers, monkeypatch):
     }
 
 
-def test_the_startup_viewer_shows_a_labelling_chain_as_images(servers, monkeypatch):
+def test_the_startup_viewer_shows_a_labelling_chain_as_segmentations(servers, monkeypatch):
     from cellmap_flow.utils import neuroglancer_utils
 
     monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda neuroglancer_url: None)
@@ -166,10 +166,11 @@ def test_the_startup_viewer_shows_a_labelling_chain_as_images(servers, monkeypat
     neuroglancer_utils.generate_neuroglancer_url(servers)
 
     assert _viewer(g.viewer, ["old"]) == {
-        "layers": [("data", "image"), ("old", "image"), ("new", "image"), ("flat", "image"), ("silent", "image")],
+        "layers": [("data", "image"), ("old", "segmentation"), ("new", "segmentation"), ("flat", "segmentation"),
+                   ("silent", "segmentation")],
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
         "chain": dict(CHAIN, postprocess=THRESHOLD),
-        "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
+        "old": ("segmentation", "zarr://http://old:8000/old", OVERLAID, None),
     }
 
 

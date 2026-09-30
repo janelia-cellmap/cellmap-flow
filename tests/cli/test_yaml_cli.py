@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 
+import neuroglancer
 import numpy as np
 import pytest
 import yaml
@@ -107,7 +108,7 @@ def test_a_bad_config_is_reported_and_exits_non_zero(tmp_path, models, extra_lay
 def test_extra_layers_are_shown_beside_the_raw_data(tmp_path, monkeypatch):
     from neuroglancer.viewer_base import ViewerBase
 
-    monkeypatch.setattr(neuroglancer_utils.neuroglancer, "Viewer", ViewerBase)
+    monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
     monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: "url")
     monkeypatch.setattr(yaml_cli, "install_cleanup_handlers", lambda: None)
     config = _config(tmp_path, extra_layers=[
