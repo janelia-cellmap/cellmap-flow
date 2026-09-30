@@ -125,10 +125,25 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the raw layer finds a pyramid's levels from its multiscales metadata, so OME-Zarr pyramids with numeric level paths work;
     - an N5 `units` string applies to every axis. It used to be reversed letter by letter, so `units: "um"` data was read 1000× too small;
     - a level path missing under a zarr v3 group is treated as missing, as under v2. A mistyped v3 level used to silently read s0.
+  - Wave 4:
+    - finetune training draws its patches in chunk order, so the same seed draws the same patches on every machine. Before, the pools followed the filesystem's listing order, which differs between machines and between copies of a session;
+    - a finetuned model's layer is built like every other prediction layer: a labelling chain shows as a segmentation, and the server's reported voxel size and channel axis place it;
+    - a restart the model refuses (a LoRA job asked for rank 0, or a full finetune asked for a rank) records the rank and alpha actually kept in `metadata.json`;
+    - a malformed finetune request is refused with a 400 before anything is done. A restart with a bad override was a 500, and submit rewrote the manifest before rejecting a bad number;
+    - the pipeline builder reads and writes its YAML with js-yaml. Exports keep `separate_bounding_boxes_zarrs`, a second input's dataset path, channel names with commas, nested arrays and paths that need quoting; the exported text style changes;
+    - the pipeline builder's unload beacon only fires when there is an unsent change;
+    - the dashboard's GPU-queue poll pauses while the page is hidden.
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `78743c7` a malformed finetune request is refused before anything is done
+- `bebd1a2` a restart that cannot change the rank records the rank kept
+- `1267947` a finetuned model's layer is the layer every model gets
+- `ceb4102` the dashboard's GPU queue poll pauses while the page is hidden
+- `05ea8ee` the pipeline builder's unload beacon only sends a change
+- `aec6f7a` the pipeline builder reads and writes its YAML with js-yaml
+- `2b58b67` build the sampling pools in chunk order, not listing order
 - `dbfd27e` a missing path under a zarr v3 group is missing
 - `0a49912` an N5 units string is every axis's unit
 - `f421525` the raw layer takes a pyramid's levels from its multiscales
