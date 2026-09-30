@@ -76,6 +76,21 @@ def _validate_settings(config):
             )
 
 
+def _load_task(yaml_config) -> dict:
+    """The task YAML at the path ``yaml_config``, checked by _validate_settings.
+
+    Anything but a path is refused: open() takes an int as a file
+    descriptor, so a number read the task through whatever the process had
+    open under it, and then closed that. A request's yaml_paths of [1]
+    closed the dashboard's stdout.
+    """
+    if not isinstance(yaml_config, (str, bytes, os.PathLike)):
+        raise ConfigError(f"A task YAML is named by its path, not by {yaml_config!r}")
+    config = load_config(yaml_config)
+    _validate_settings(config)
+    return config
+
+
 def precheck(yaml_config: str) -> dict:
     """Check a blockwise task YAML without side effects.
 
@@ -93,8 +108,7 @@ def precheck(yaml_config: str) -> dict:
     Raises:
         ConfigError: with the reason, when the file is not usable.
     """
-    config = load_config(yaml_config)
-    _validate_settings(config)
+    config = _load_task(yaml_config)
 
     # Constructing a ModelConfig does not load the model; that happens when
     # .config is first read, which nothing here does.
@@ -123,8 +137,7 @@ class CellMapFlowBlockwiseProcessor:
 
     def __init__(self, yaml_config: str, create=False):
         """Run the CellMapFlow server with a Fly model."""
-        self.config = load_config(yaml_config)
-        _validate_settings(self.config)
+        self.config = _load_task(yaml_config)
         self.yaml_config = yaml_config
 
         self.input_path = self.config["data_path"]
