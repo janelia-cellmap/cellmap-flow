@@ -16,9 +16,9 @@ from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
 from cellmap_flow.finetune.session.volume import volume_corner_nm
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -127,21 +127,23 @@ def refresh_annotated_regions_layer(corrections_path=None):
     on a timer: see the note on _last_annotated_regions for why a push the
     user did not ask for is destructive.
     """
-    if not hasattr(g, "viewer") or g.viewer is None:
+    session = get_session()
+    viewer = session.viewer
+    if viewer is None:
         return 0
 
     scan_dirs = []
     if corrections_path:
         scan_dirs.append(corrections_path)
     else:
-        for volume in (getattr(g, "annotation_volumes", {}) or {}).values():
+        for volume in (session.annotation_volumes or {}).values():
             corrections_dir = volume.get("corrections_dir")
             if corrections_dir and corrections_dir not in scan_dirs:
                 scan_dirs.append(corrections_dir)
         # Also scan corrections dirs from active output sessions so
         # YAML-loaded crops show up even when no annotation_volume
         # has been registered for the session.
-        for session_path in (getattr(g, "output_sessions", {}) or {}).values():
+        for session_path in (session.output_sessions or {}).values():
             session_corrections = os.path.join(session_path, "corrections")
             if session_corrections not in scan_dirs and os.path.isdir(session_corrections):
                 scan_dirs.append(session_corrections)
@@ -259,8 +261,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
     if not boxes:
         try:
             # Only open a transaction if there is actually something to remove.
-            if layer_name in g.viewer.state.layers:
-                with g.viewer.txn() as s:
+            if layer_name in viewer.state.layers:
+                with viewer.txn() as s:
                     if layer_name in s.layers:
                         del s.layers[layer_name]
         except Exception:
@@ -270,8 +272,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
 
     axes_names = ["z", "y", "x"]
     try:
-        if hasattr(g, "raw") and g.raw is not None:
-            source = getattr(g.raw, "source", None)
+        if session.raw is not None:
+            source = getattr(session.raw, "source", None)
             if source is not None and hasattr(source, "dimensions"):
                 axes_names = list(source.dimensions.names)
     except Exception:
@@ -294,13 +296,13 @@ def refresh_annotated_regions_layer(corrections_path=None):
         (tuple(box["lo"]), tuple(box["hi"]), box["label"]) for box in boxes
     ))
     try:
-        if signature == _last_annotated_regions and layer_name in g.viewer.state.layers:
+        if signature == _last_annotated_regions and layer_name in viewer.state.layers:
             return len(boxes)
     except Exception:
         pass
 
     try:
-        with g.viewer.txn() as s:
+        with viewer.txn() as s:
             # Whether the layer is shown is the user's call, not ours.
             #
             # This used to force visible=True on every refresh, and the
@@ -349,7 +351,7 @@ def refresh_annotated_regions():
     """
     data = request.get_json() or {}
     try:
-        if not hasattr(g, "viewer") or g.viewer is None:
+        if get_session().viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
         count = refresh_annotated_regions_layer(corrections_path=data.get("corrections_path"))
         return jsonify({"success": True, "count": count})
@@ -364,10 +366,11 @@ def add_crop_to_viewer():
     try:
         crop_id = data.get("crop_id")
         minio_url = data.get("minio_url")
-        if not hasattr(g, "viewer") or g.viewer is None:
+        viewer = get_session().viewer
+        if viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
 
-        with g.viewer.txn() as s:
+        with viewer.txn() as s:
             layer_name = data.get("layer_name", f"annotation_{crop_id}")
             source_config = {
                 "url": f"s3+{minio_url}",

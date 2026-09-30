@@ -27,7 +27,6 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import sync as session_sync
 from cellmap_flow.finetune.session.manifest import read_manifest
 from cellmap_flow.finetune.session.volume import read_volume
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +216,8 @@ def list_existing_sessions():
 def load_existing_volume():
     data = request.get_json() or {}
     try:
-        minio_state = get_session().minio_state
+        session = get_session()
+        minio_state = session.minio_state
         source_session_path = data.get("source_session_path")
         output_path = data.get("output_path")
         load_id = data.get("load_id")
@@ -353,7 +353,7 @@ def load_existing_volume():
         # geometry comes from the copied .zattrs, so a volume written before
         # those keys existed gets no manifest and cannot be trained --
         # write_volume_manifest says so in the log.
-        write_volume_manifest(g.annotation_volumes[volume_id])
+        write_volume_manifest(session.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
         if load_id:

@@ -23,7 +23,8 @@ raises rather than being stored beside ``g``.
   ``save_server_config()``; and blockwise's ``tmp_dir`` and
   ``blockwise_tasks_dir``.
 - The finetune tab's MinIO and volumes: ``minio_state``,
-  ``annotation_volumes``, ``output_sessions``; the Review tab's ``review``.
+  ``annotation_volumes``, ``output_sessions``; its training jobs'
+  ``finetune_job_manager``; the Review tab's ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
   ``bbx_generator_state``.
 """
@@ -116,6 +117,8 @@ class Session:
     minio_state = _on_g("minio_state", "The dashboard's MinIO: its process, address, bucket and session directory.")
     annotation_volumes = _on_g("annotation_volumes", "{volume id: its record}, the volumes served through MinIO.")
     output_sessions = _on_g("output_sessions", "{output base directory: its session directory}.")
+    finetune_job_manager = _on_g("finetune_job_manager",
+                                 "The training jobs' FinetuneJobManager, made when first asked for.")
     review = _on_g("review", "The Review tab's open index (review_routes.ReviewSession), or None.")
 
     # The log panel and the box tool

@@ -27,13 +27,13 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
     autodetect_output_type,
     build_restart_params,
+    current_chain,
     detect_sparse_annotations,
     find_model_config,
     get_lsf_job_id,
     resolve_finetune_session,
 )
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def _backfill_manifest(corrections_dir):
     from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
     from cellmap_flow.finetune.session.manifest import read_manifest
 
-    volumes = getattr(g, "annotation_volumes", {}) or {}
+    volumes = get_session().annotation_volumes or {}
     for volume in reversed(list(volumes.values())):
         if str(volume.get("corrections_dir") or "") != str(corrections_dir):
             continue
@@ -145,9 +145,8 @@ def _backfill_manifest(corrections_dir):
 def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
     """Apply dashboard-owned training-time settings to a virtual manifest."""
     from cellmap_flow.finetune.session.manifest import write_manifest
-    from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
 
-    current_norm = current_input_norm_config()
+    current_norm, current_postprocess = current_chain()
     if current_norm and manifest.get("input_norm") != current_norm:
         logger.info(
             "Refreshing manifest input_norm before %s "
@@ -158,7 +157,6 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
         )
     manifest["input_norm"] = current_norm
 
-    current_postprocess = current_postprocess_config()
     if current_postprocess and manifest.get("postprocess") != current_postprocess:
         logger.info(
             "Refreshing manifest postprocess before %s "
@@ -204,7 +202,7 @@ def _rehydrate_jobs():
     """
     from cellmap_flow.dashboard.routes.finetune.common import load_user_prefs
 
-    manager = g.finetune_job_manager
+    manager = get_session().finetune_job_manager
     rehydrate = getattr(manager, "rehydrate_session", None)
     if rehydrate is None:
         return
@@ -231,7 +229,7 @@ def _rehydrate_jobs():
 def get_finetuning_jobs():
     try:
         _rehydrate_jobs()
-        return jsonify({"success": True, "jobs": g.finetune_job_manager.list_jobs()})
+        return jsonify({"success": True, "jobs": get_session().finetune_job_manager.list_jobs()})
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -240,7 +238,7 @@ def get_finetuning_jobs():
 @finetune_bp.route("/api/finetune/job/<job_id>/status", methods=["GET"])
 def get_job_status(job_id):
     try:
-        status = g.finetune_job_manager.get_job_status(job_id)
+        status = get_session().finetune_job_manager.get_job_status(job_id)
         if status is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
         return jsonify({"success": True, **status})
@@ -252,7 +250,7 @@ def get_job_status(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/logs", methods=["GET"])
 def get_job_logs(job_id):
     try:
-        manager = g.finetune_job_manager
+        manager = get_session().finetune_job_manager
         job = (getattr(manager, "jobs", {}) or {}).get(job_id)
         if job is not None and Path(job.log_file).exists():
             # Whole lines only, with the byte offset they end at: the client
@@ -369,7 +367,8 @@ def submit_finetuning():
             loss_type = "bce"
             label_smoothing = 0.0
 
-        finetune_job = g.finetune_job_manager.submit_finetuning_job(
+        session = get_session()
+        finetune_job = session.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
             lora_r=_number(data, "lora_r", 8, int),
@@ -397,7 +396,7 @@ def submit_finetuning():
             # to bill "cellmap", the job manager's default, whatever the
             # dashboard was started with.
             charge_group=(
-                data.get("charge_group") or getattr(g, "charge_group", None) or "cellmap"
+                data.get("charge_group") or session.charge_group or "cellmap"
             ),
             output_type=output_type,
             select_channel=_number(data, "select_channel", None, int),
@@ -512,7 +511,7 @@ def stream_job_logs(job_id):
         heartbeat_interval_s = 1.0
         last_heartbeat = time.perf_counter()
 
-        fjm = g.finetune_job_manager
+        fjm = get_session().finetune_job_manager
         if job_id not in fjm.jobs:
             yield f"data: Job {job_id} not found\n\n"
             yield sse_done("NOT_FOUND")
@@ -647,7 +646,7 @@ def stream_job_logs(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/cancel", methods=["POST"])
 def cancel_job(job_id):
     try:
-        success = g.finetune_job_manager.cancel_job(job_id)
+        success = get_session().finetune_job_manager.cancel_job(job_id)
         if success:
             return jsonify({"success": True, "message": f"Job {job_id} cancelled"})
         return jsonify({"success": False, "error": "Failed to cancel job"}), 400
@@ -659,7 +658,7 @@ def cancel_job(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
     try:
-        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
+        jobs = getattr(get_session().finetune_job_manager, "jobs", {}) or {}
         job = jobs.get(job_id)
         if job is None:
             return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
@@ -716,8 +715,8 @@ def restart_finetuning_job(job_id):
         # the chunk diff now.
         from cellmap_flow.finetune.session.manifest import read_manifest
 
-        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
-        job_record = jobs.get(job_id)
+        manager = get_session().finetune_job_manager
+        job_record = (getattr(manager, "jobs", {}) or {}).get(job_id)
         corrections_dir = (
             str(getattr(job_record, "corrections_path", "") or "")
             if job_record is not None
@@ -763,7 +762,7 @@ def restart_finetuning_job(job_id):
         except Exception as e:
             logger.warning(f"Error syncing annotations before restart: {e}")
 
-        job = g.finetune_job_manager.restart_finetuning_job(
+        job = manager.restart_finetuning_job(
             job_id=job_id,
             updated_params=build_restart_params(data),
         )

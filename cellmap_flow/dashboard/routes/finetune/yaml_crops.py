@@ -65,10 +65,12 @@ from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     serve_new_volume,
 )
 from cellmap_flow.dashboard.routes.finetune.common import (
+    current_chain,
     ensure_corrections_storage,
     session_store,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.crop_loader import parse_crops_yaml
 from cellmap_flow.finetune.session.volume import (
     build_manifest,
@@ -76,7 +78,6 @@ from cellmap_flow.finetune.session.volume import (
     write_crop_into_volume,
 )
 from cellmap_flow.finetune.session.manifest import write_manifest
-from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ logger = logging.getLogger(__name__)
 def _find_session_annotation_volume(corrections_dir):
     """Return ``(volume_id, meta)`` for the annotation_volume in this corrections
     dir, or ``(None, None)`` if none is registered yet."""
-    for vid, meta in (getattr(g, "annotation_volumes", {}) or {}).items():
+    for vid, meta in (get_session().annotation_volumes or {}).items():
         if meta.get("corrections_dir") == corrections_dir:
             return vid, meta
     return None, None
@@ -127,11 +128,12 @@ def _ensure_editable_layer(volume_id, minio_url):
     """Add the volume's MinIO-backed annotation layer to the viewer if absent."""
     import neuroglancer
 
-    if not getattr(g, "viewer", None) or not minio_url:
+    viewer = get_session().viewer
+    if not viewer or not minio_url:
         return
     layer_name = f"annotation_{volume_id}"
     try:
-        with g.viewer.txn() as s:
+        with viewer.txn() as s:
             if layer_name in s.layers:
                 return
             source_config = {
@@ -225,7 +227,7 @@ def load_crops_from_yaml():
         if error_response is not None:
             return error_response
 
-        raw_dataset_path = getattr(g, "dataset_path", None)
+        raw_dataset_path = get_session().dataset_path
         if not raw_dataset_path:
             return jsonify({"success": False, "error": "No raw dataset path configured"}), 400
 
@@ -321,15 +323,16 @@ def load_crops_from_yaml():
 
         # Manifest: trainer reads from this single volume zarr. The
         # ``input_norm`` block carries the dashboard's current normalization
-        # so VirtualPatchDataset (running in the LSF trainer process where
-        # g.input_norms is empty) can apply the same normalization the
+        # so VirtualPatchDataset (running in the LSF trainer process, which
+        # has no chain of the dashboard's) can apply the same normalization the
         # dashboard does at inference time. Without this the trainer feeds
         # the model raw uint8 while inference feeds it [-1, 1] -- the
         # trained adapter is then nonsense at inference time.
+        input_norm, postprocess = current_chain()
         manifest = build_manifest(
             volume_meta,
-            input_norm=current_input_norm_config(),
-            postprocess=current_postprocess_config(),
+            input_norm=input_norm,
+            postprocess=postprocess,
             overrides={
                 "raw_dataset_path": raw_dataset_path,
                 # None tells VirtualPatchDataset "one patch per populated

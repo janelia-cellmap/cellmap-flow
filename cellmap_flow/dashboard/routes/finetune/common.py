@@ -8,7 +8,6 @@ import zarr
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -45,21 +44,33 @@ RESTART_PASSTHROUGH_KEYS = [
 
 
 def find_model_config(model_name):
-    for model_config in getattr(g, "models_config", []) or []:
+    for model_config in get_session().models_config or []:
         if model_config.name == model_name:
             return model_config
     return None
 
 
+def current_chain():
+    """The dashboard's chains as step lists, ``(input_norm, postprocess)``.
+
+    A new volume and a training manifest record them, so that the trainer
+    normalizes its input as inference does, and the finetuned model's YAML
+    postprocesses as the dashboard does.
+    """
+    spec = get_session().pipeline_spec
+    return list(spec.input_norm), list(spec.postprocess)
+
+
 def viewer_position_and_scales():
-    if not hasattr(g, "viewer") or g.viewer is None:
+    viewer = get_session().viewer
+    if viewer is None:
         raise ValueError("Viewer not initialized")
 
     # .state, not .txn(): this only reads. txn() calls set_state() on exit
     # unconditionally, so using it here pushed a full viewer state -- built
     # from a snapshot that may predate a browser-side tool selection -- on
     # every crop creation, for no reason.
-    s = g.viewer.state
+    s = viewer.state
     position = s.position
     dimensions = s.dimensions
     scales_nm = None
@@ -339,14 +350,12 @@ def write_volume_manifest(volume):
     """
     from cellmap_flow.finetune.session.manifest import write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
-    from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
 
     try:
         if not volume.get("corrections_dir"):
             raise ValueError(f"The record of volume {volume.get('zarr_path')} has no corrections_dir.")
-        manifest = build_manifest(
-            volume, input_norm=current_input_norm_config(), postprocess=current_postprocess_config()
-        )
+        input_norm, postprocess = current_chain()
+        manifest = build_manifest(volume, input_norm=input_norm, postprocess=postprocess)
     except ValueError as e:
         logger.warning(f"Not writing a virtual-sources manifest: {e} The session cannot be trained without one.")
         return None

@@ -28,7 +28,6 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ DEFAULT_REGION_SIZE_NM = 896.0
 
 def _active_volume():
     """The annotation volume currently being worked on, or None."""
-    volumes = getattr(g, "annotation_volumes", {}) or {}
+    volumes = get_session().annotation_volumes or {}
     for volume in reversed(list(volumes.values())):
         if volume.get("corrections_dir"):
             return volume
@@ -57,7 +56,7 @@ def _minio_corrections_dir():
 
     A second, independent witness to which session is live. The sync thread
     runs off this, so it stays true for as long as annotations are flowing --
-    including after a dashboard restart clears g.annotation_volumes.
+    including after a dashboard restart clears the session's annotation_volumes.
     """
     return get_session().minio_state.get("output_base") or None
 
@@ -66,7 +65,7 @@ def _store_path():
     """Where this session's good regions live, or None if there is no session.
 
     Falls back to MinIO's record when no volume is registered in-process.
-    The two can disagree: g.annotation_volumes is in-process state that a
+    The two can disagree: annotation_volumes is in-process state that a
     dashboard restart wipes, while the MinIO sync keeps going from its own
     copy. When they did disagree, every mark was lost in a way that looked
     like success -- the save failed, so the next load returned [], so each
@@ -189,14 +188,15 @@ def delete_good_region():
 
 def refresh_good_regions_layer(regions=None):
     """Draw the good regions in the viewer so you can see what you marked."""
-    if not hasattr(g, "viewer") or g.viewer is None:
+    session = get_session()
+    if session.viewer is None:
         return 0
     regions = load_good_regions() if regions is None else regions
 
     axes_names = ["z", "y", "x"]
     try:
-        if getattr(g, "raw", None) is not None:
-            source = getattr(g.raw, "source", None)
+        if session.raw is not None:
+            source = getattr(session.raw, "source", None)
             if source is not None and hasattr(source, "dimensions"):
                 axes_names = list(source.dimensions.names)
     except Exception:
@@ -219,7 +219,7 @@ def refresh_good_regions_layer(regions=None):
         )
 
     try:
-        with g.viewer.txn() as s:
+        with session.viewer.txn() as s:
             # Keep whatever visibility the user chose, but start visible when
             # creating the layer: unlike annotated_regions, which appears on
             # its own and was asked to stay out of the way, these boxes only

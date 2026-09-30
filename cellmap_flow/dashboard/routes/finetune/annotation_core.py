@@ -13,6 +13,7 @@ from flask import jsonify, request
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
+    current_chain,
     ensure_corrections_storage,
     find_model_config,
     load_user_prefs,
@@ -22,8 +23,8 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import create_volume_zarr, new_volume_id, plan_volume
-from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 from cellmap_flow.utils.server_info import (
     fetch_model_info,
@@ -45,20 +46,21 @@ def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
     """
     volume_id = new_volume_id()
     zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
+    input_norm, postprocess = current_chain()
     create_volume_zarr(
         zarr_path,
         geometry,
         dataset_path=dataset_path,
         model_name=model_name,
-        input_norm=current_input_norm_config(),
-        postprocess=current_postprocess_config(),
+        input_norm=input_norm,
+        postprocess=postprocess,
     )
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
 
 
 def _get_selected_model_config(model_name):
-    if not getattr(g, "models_config", None):
+    if not get_session().models_config:
         return None, (jsonify({"success": False, "error": "No models loaded"}), 400)
 
     model_config = find_model_config(model_name)
@@ -94,8 +96,7 @@ def _geometry_from_server(name):
 
 
 def _geometry_from_saved_pipeline(name):
-    configs = getattr(g, "pipeline_model_configs", None) or {}
-    cfg = configs.get(name)
+    cfg = get_session().builder_model_configs.get(name)
     if not cfg:
         return None
     return {
@@ -139,13 +140,14 @@ def get_finetune_models():
 
         # Every name we might report on: configured models first, then any job
         # running without a matching config (a yaml-launched model, say).
+        session = get_session()
         configs_by_name = {}
-        for mc in getattr(g, "models_config", []) or []:
+        for mc in session.models_config or []:
             name = getattr(mc, "name", None)
             if name:
                 configs_by_name[name] = mc
         names = list(configs_by_name)
-        for job in getattr(g, "jobs", []) or []:
+        for job in session.jobs or []:
             job_name = getattr(job, "model_name", None)
             if job_name and job_name not in configs_by_name:
                 names.append(job_name)
@@ -193,7 +195,8 @@ def create_annotation_volume():
         # fallback for when no server is up.
         config = resolve_model_geometry(model_name, model_config)
 
-        dataset_path = getattr(g, "dataset_path", None)
+        session = get_session()
+        dataset_path = session.dataset_path
         if not dataset_path:
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
 
@@ -212,7 +215,7 @@ def create_annotation_volume():
             ),
         )
         # The trainer finds the volume only through this manifest.
-        write_volume_manifest(g.annotation_volumes[volume_id])
+        write_volume_manifest(session.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
         return jsonify(
