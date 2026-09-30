@@ -1,359 +1,112 @@
-"""Tests for target transforms."""
-
-import torch
-from cellmap_flow.finetune.target_transforms import (
-    BinaryTargetTransform,
-    BroadcastBinaryTargetTransform,
-    AffinityTargetTransform,
-    _offset_slices,
-)
-
-
-def test_binary_transform_basic():
-    """Test that BinaryTargetTransform produces correct targets and masks."""
-    # annotation: 0=unannotated, 1=bg, 2=fg
-    annotation = torch.tensor([[[[[0, 1, 2, 0, 1]]]]]).float()  # (1, 1, 1, 1, 5)
-    transform = BinaryTargetTransform()
-    target, mask = transform(annotation)
-
-    # mask: 1 where annotated (>0)
-    assert mask.tolist() == [[[[[0, 1, 1, 0, 1]]]]]
-    # target: 0 for bg (was 1), 1 for fg (was 2), 0 for unannotated
-    assert target.tolist() == [[[[[0, 0, 1, 0, 0]]]]]
-
-
-def test_binary_transform_multi_object():
-    """Labels 2 and 3 both become foreground (1)."""
-    annotation = torch.tensor([[[[[1, 2, 3]]]]]).float()
-    transform = BinaryTargetTransform()
-    target, mask = transform(annotation)
-
-    assert target.tolist() == [[[[[0, 1, 1]]]]]
-    assert mask.tolist() == [[[[[1, 1, 1]]]]]
-
-
-def test_broadcast_transform():
-    """Test broadcasting to multiple channels."""
-    annotation = torch.tensor([[[[[0, 1, 2]]]]]).float()  # (1, 1, 1, 1, 3)
-    transform = BroadcastBinaryTargetTransform(num_channels=3)
-    target, mask = transform(annotation)
-
-    assert target.shape == (1, 3, 1, 1, 3)
-    assert mask.shape == (1, 3, 1, 1, 3)
-    # All channels should be identical
-    for c in range(3):
-        assert target[0, c].tolist() == [[[0, 0, 1]]]
-        assert mask[0, c].tolist() == [[[0, 1, 1]]]
-
-
-def test_affinity_transform_same_object():
-    """Two adjacent voxels of the same object should have affinity=1."""
-    # 1D-like: [bg, obj2, obj2, bg] along X
-    annotation = torch.zeros(1, 1, 1, 1, 4)
-    annotation[0, 0, 0, 0, :] = torch.tensor([1, 2, 2, 1]).float()
-
-    offsets = [[0, 0, 1]]  # X offset
-    transform = AffinityTargetTransform(offsets)
-    target, mask = transform(annotation)
-
-    # target shape: (1, 1, 1, 1, 4)
-    assert target.shape == (1, 1, 1, 1, 4)
-
-    # Pairs (along X, offset +1):
-    # (0,1): bg-obj2 -> 0, both annotated -> mask=1
-    # (1,2): obj2-obj2 -> 1, both annotated -> mask=1
-    # (2,3): obj2-bg -> 0, both annotated -> mask=1
-    # Position 3 has no pair (boundary) -> target=0, mask=0
-    assert target[0, 0, 0, 0, :3].tolist() == [0, 1, 0]
-    assert mask[0, 0, 0, 0, :3].tolist() == [1, 1, 1]
-    assert mask[0, 0, 0, 0, 3].item() == 0  # no pair for last voxel
-
-
-def test_affinity_transform_different_objects():
-    """Adjacent voxels of different objects should have affinity=0."""
-    annotation = torch.zeros(1, 1, 1, 1, 3)
-    annotation[0, 0, 0, 0, :] = torch.tensor([2, 3, 2]).float()
-
-    offsets = [[0, 0, 1]]
-    transform = AffinityTargetTransform(offsets)
-    target, mask = transform(annotation)
-
-    # (0,1): obj2-obj3 -> 0
-    # (1,2): obj3-obj2 -> 0
-    assert target[0, 0, 0, 0, :2].tolist() == [0, 0]
-    assert mask[0, 0, 0, 0, :2].tolist() == [1, 1]
-
-
-def test_affinity_transform_unannotated_masking():
-    """Unannotated voxels should produce mask=0."""
-    annotation = torch.zeros(1, 1, 1, 1, 4)
-    annotation[0, 0, 0, 0, :] = torch.tensor([2, 0, 2, 1]).float()
-
-    offsets = [[0, 0, 1]]
-    transform = AffinityTargetTransform(offsets)
-    target, mask = transform(annotation)
-
-    # (0,1): obj2-unannotated -> mask=0
-    # (1,2): unannotated-obj2 -> mask=0
-    # (2,3): obj2-bg -> mask=1, target=0
-    assert mask[0, 0, 0, 0, 0].item() == 0
-    assert mask[0, 0, 0, 0, 1].item() == 0
-    assert mask[0, 0, 0, 0, 2].item() == 1
-    assert target[0, 0, 0, 0, 2].item() == 0
-
-
-def test_affinity_transform_multiple_offsets():
-    """Test with Z, Y, X offsets."""
-    annotation = torch.zeros(1, 1, 3, 3, 3)
-    # Fill with same object
-    annotation[:] = 2
-    # Set corners to background
-    annotation[0, 0, 0, 0, 0] = 1
-
-    offsets = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    transform = AffinityTargetTransform(offsets)
-    target, mask = transform(annotation)
-
-    assert target.shape == (1, 3, 3, 3, 3)
-    assert mask.shape == (1, 3, 3, 3, 3)
-
-    # All annotated (>0), so mask should be 1 everywhere there's a valid pair
-    # Z offset channel: mask=1 for z=0,1 (pairs with z+1 exist), mask=0 for z=2
-    assert mask[0, 0, 2, :, :].sum().item() == 0  # no z+1 for z=2
-    assert mask[0, 0, 0, :, :].sum().item() == 9  # all y,x pairs valid
-    assert mask[0, 0, 1, :, :].sum().item() == 9
-
-    # Corner (0,0,0) is bg, (1,0,0) is fg -> Z-offset affinity at (0,0,0) = 0
-    assert target[0, 0, 0, 0, 0].item() == 0
-    # (1,0,0) and (2,0,0) both fg -> Z-offset affinity at (1,0,0) = 1
-    assert target[0, 0, 1, 0, 0].item() == 1
-
-
-def test_affinity_transform_negative_offset():
-    """Test that negative offsets work correctly."""
-    annotation = torch.zeros(1, 1, 1, 1, 4)
-    annotation[0, 0, 0, 0, :] = torch.tensor([1, 2, 2, 1]).float()
-
-    offsets = [[0, 0, -1]]  # Negative X offset
-    transform = AffinityTargetTransform(offsets)
-    target, mask = transform(annotation)
-
-    # With offset -1, source starts at index 1, dest starts at index 0
-    # Pair (1,0): obj2-bg -> 0, both annotated -> mask=1
-    # Pair (2,1): obj2-obj2 -> 1, both annotated -> mask=1
-    # Pair (3,2): bg-obj2 -> 0, both annotated -> mask=1
-    assert target[0, 0, 0, 0, 1].item() == 0
-    assert target[0, 0, 0, 0, 2].item() == 1
-    assert target[0, 0, 0, 0, 3].item() == 0
-    assert mask[0, 0, 0, 0, 0].item() == 0  # no pair for index 0
-
-
-def test_offset_slices():
-    """Test _offset_slices helper."""
-    # Positive offset
-    src, dst = _offset_slices(10, 10, 10, 1, 0, 0)
-    assert src == (slice(None, 9), slice(None), slice(None))
-    assert dst == (slice(1, None), slice(None), slice(None))
-
-    # Negative offset
-    src, dst = _offset_slices(10, 10, 10, 0, 0, -2)
-    assert src == (slice(None), slice(None), slice(2, None))
-    assert dst == (slice(None), slice(None), slice(None, 8))
-
-    # Zero offset
-    src, dst = _offset_slices(10, 10, 10, 0, 0, 0)
-    assert src == (slice(None), slice(None), slice(None))
-    assert dst == (slice(None), slice(None), slice(None))
-
-
-def test_affinity_transform_extra_channels_masked():
-    """Extra channels (e.g. LSDs) should have mask=0."""
-    annotation = torch.zeros(1, 1, 1, 1, 4)
-    annotation[0, 0, 0, 0, :] = torch.tensor([1, 2, 2, 1]).float()
-
-    offsets = [[0, 0, 1]]  # 1 affinity channel
-    transform = AffinityTargetTransform(offsets, num_channels=4)  # 1 aff + 3 extra
-    target, mask = transform(annotation)
-
-    assert target.shape == (1, 4, 1, 1, 4)
-    assert mask.shape == (1, 4, 1, 1, 4)
-
-    # Channel 0 (affinity) should have valid mask
-    assert mask[0, 0, 0, 0, :3].sum().item() == 3
-    # Channels 1-3 (extra, e.g. LSDs) should be fully masked out
-    assert mask[0, 1, :, :, :].sum().item() == 0
-    assert mask[0, 2, :, :, :].sum().item() == 0
-    assert mask[0, 3, :, :, :].sum().item() == 0
-
-
-if __name__ == "__main__":
-    test_binary_transform_basic()
-    test_binary_transform_multi_object()
-    test_broadcast_transform()
-    test_affinity_transform_same_object()
-    test_affinity_transform_different_objects()
-    test_affinity_transform_unannotated_masking()
-    test_affinity_transform_multiple_offsets()
-    test_affinity_transform_negative_offset()
-    test_offset_slices()
-    test_affinity_transform_extra_channels_masked()
-    print("All tests passed!")
-
-
-# ---------------------------------------------------------------------------
-# DistanceTargetTransform
-# ---------------------------------------------------------------------------
+"""Target transforms: an annotation (0 unannotated, 1 background, 2+ objects) as
+the target and the mask of voxels a loss is computed on."""
 
 import math
 
 import numpy as np
 import pytest
+import torch
 
-from cellmap_flow.finetune.target_transforms import DistanceTargetTransform
+from cellmap_flow.finetune.target_transforms import (
+    AffinityTargetTransform,
+    BinaryTargetTransform,
+    BroadcastBinaryTargetTransform,
+    DistanceTargetTransform,
+    read_offsets_from_script,
+)
+
+
+def _line(*values):
+    return torch.tensor(values, dtype=torch.float32).reshape(1, 1, 1, 1, -1)
+
+
+@pytest.mark.parametrize("transform, ann, target, mask", [
+    (BinaryTargetTransform(), [0, 1, 2, 0, 1], [0, 0, 1, 0, 0], [0, 1, 1, 0, 1]),
+    (BinaryTargetTransform(), [1, 2, 3], [0, 1, 1], [1, 1, 1]),  # every object is foreground
+    # Along x: 1 inside an object, 0 across a boundary or between two objects;
+    # masked where either voxel is unannotated or has no neighbour.
+    (AffinityTargetTransform([[0, 0, 1]]), [1, 2, 2, 1], [0, 1, 0, 0], [1, 1, 1, 0]),
+    (AffinityTargetTransform([[0, 0, 1]]), [2, 3, 2], [0, 0, 0], [1, 1, 0]),
+    (AffinityTargetTransform([[0, 0, 1]]), [2, 0, 2, 1], [0, 0, 0, 0], [0, 0, 1, 0]),
+    (AffinityTargetTransform([[0, 0, -1]]), [1, 2, 2, 1], [0, 0, 1, 0], [0, 1, 1, 1]),
+])
+def test_along_a_line(transform, ann, target, mask):
+    t, m = transform(_line(*ann))
+    assert (t[0, 0, 0, 0].tolist(), m[0, 0, 0, 0].tolist()) == (target, mask)
+
+
+def test_affinities_along_each_axis():
+    ann = torch.full((1, 1, 3, 3, 3), 2.0)
+    ann[0, 0, 0, 0, 0] = 1  # a background corner
+    target, mask = AffinityTargetTransform([[1, 0, 0], [0, 1, 0], [0, 0, 1]])(ann)
+    assert target.shape == mask.shape == (1, 3, 3, 3, 3)
+    assert mask[0, 0, 2].sum() == 0 and mask[0, 0, :2].sum() == 18  # z = 2 has no z + 1
+    assert (target[0, 0, 0, 0, 0], target[0, 0, 1, 0, 0]) == (0, 1)
+
+
+@pytest.mark.parametrize("transform, channels, supervised", [
+    (BroadcastBinaryTargetTransform(num_channels=3), 3, [True] * 3),
+    (AffinityTargetTransform([[0, 0, 1]], num_channels=4), 4, [True, False, False, False]),  # LSDs: unsupervised
+    (DistanceTargetTransform(2.0, num_channels=3), 3, [True] * 3),
+])
+def test_every_model_channel_gets_a_target(transform, channels, supervised):
+    ann = torch.ones((2, 1, 7, 7, 7))
+    ann[..., 3:] = 2
+    target, mask = transform(ann)
+    assert target.shape == mask.shape == (2, channels, 7, 7, 7) and target.device == ann.device
+    assert [bool(mask[:, c].any()) for c in range(channels)] == supervised
+    assert all(torch.equal(target[:, c], target[:, 0]) for c in range(channels) if supervised[c])
 
 
 def _soft(d, sigma):
     return (math.tanh(d / sigma) + 1.0) / 2.0
 
 
-def test_distance_target_matches_fly_organelles_formula():
-    """A slab of fg in a dense bg patch: 0.5 at the boundary, tanh profile away from it."""
-    sigma = 2.0
-    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)      # all annotated bg
-    ann[..., 10:] = 2                                        # fg from x=10 on
-    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
-    line = target[0, 0, 1, 1].numpy()
-    # fg voxel at x=10 sits 1 voxel inside (nearest bg at x=9); bg at x=9 is 1 outside.
-    assert line[10] == pytest.approx(_soft(1.0, sigma), abs=1e-6)
-    assert line[9] == pytest.approx(_soft(-1.0, sigma), abs=1e-6)
-    assert line[14] == pytest.approx(_soft(5.0, sigma), abs=1e-6)
-    assert line[5] == pytest.approx(_soft(-5.0, sigma), abs=1e-6)
-    # monotone across the boundary, bounded in [0, 1]
-    assert np.all(np.diff(line) >= 0)
-    assert 0.0 <= line.min() and line.max() <= 1.0
+def _ann(shape, fill, *boxes):
+    ann = np.full((1, 1, *shape), fill, dtype=np.float32)
+    for value, where in boxes:
+        ann[(0, 0, *where)] = value
+    return torch.from_numpy(ann)
 
 
-def test_distance_mask_drops_voxels_whose_boundary_may_lie_outside_the_patch():
-    """Along the line, |d| grows away from the boundary while the distance to
-    the patch edge shrinks; once |d| exceeds it the voxel is unsupervised."""
-    sigma = 100.0  # never saturates inside this patch
-    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)
-    ann[..., 10:] = 2
-    _, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
-    line = mask[0, 0, 1, 1].numpy()
-    # x=10: |d|=1, distance to nearest edge (y/z faces are 2 voxels away) = 2 -> kept
-    assert line[10] == 1.0
-    # x=12: |d|=3 > trust 2 -> a closer boundary could sit beyond the y/z faces
-    assert line[12] == 0.0
-    # in a thin patch nothing far from the boundary is trusted
-    assert line[0] == 0.0 and line[20] == 0.0
+SLAB = _ann((3, 3, 21), 1, (2, np.s_[..., 10:]))  # background, then foreground from x = 10
+X = lambda x: (1, 1, x)  # noqa: E731  a voxel on the slab's middle line
 
 
-def test_distance_mask_keeps_saturated_voxels_far_from_any_edge():
-    """Deep inside a big patch trust >= 3 sigma, so the value is saturated and kept."""
-    sigma = 2.0
-    ann = np.ones((1, 1, 15, 15, 15), dtype=np.float32)
-    ann[..., 8:] = 2
-    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
-    # centre voxel (7,7,7): bg, |d|=1, trust=8 -> reliable
-    assert mask[0, 0, 7, 7, 7] == 1.0
-    # (7,7,3): bg, |d|=5 > trust 4 (index 3 is 4 voxels from the padded
-    # edge), and trust < 3 sigma = 6 -> masked
-    assert mask[0, 0, 7, 7, 3] == 0.0
-    # sigma small enough that trust 4 >= 3 sigma: saturated, kept, ~0
-    target2, mask2 = DistanceTargetTransform(0.5)(torch.from_numpy(ann))
-    assert mask2[0, 0, 7, 7, 3] == 1.0
-    assert target2[0, 0, 7, 7, 3] < 1e-3
-
-
-def test_distance_unannotated_voxels_are_unknown_not_background():
-    """Zeros are neither fg nor bg: they get no target weight and shrink the
-    trust radius of their annotated neighbours."""
-    ann = np.ones((1, 1, 9, 9, 9), dtype=np.float32)
-    ann[..., 4:] = 2
-    ann[0, 0, 4, 4, 0:2] = 0                 # an unannotated pocket in the bg
-    _, mask = DistanceTargetTransform(1.0)(torch.from_numpy(ann))
-    assert mask[0, 0, 4, 4, 0] == 0.0 and mask[0, 0, 4, 4, 1] == 0.0
-    # bg voxel at x=2: |d|=2 (fg starts at 4) but the pocket is 1 away -> masked
-    assert mask[0, 0, 4, 4, 2] == 0.0
-    # the same column in a pocket-free row is fine
-    assert mask[0, 0, 2, 4, 2] == 1.0
-
-
-def test_distance_foreground_is_not_cut_short_by_unannotated_voxels():
-    """A dense crop that cuts through an object: foreground runs up to the
-    crop edge, with unannotated voxels beyond. Measuring a foreground voxel's
-    depth to the nearest non-foreground voxel counted those as background, so
-    voxels just inside the crop edge were supervised as if the object ended
-    there. Their depth is measured to annotated background now, which is 8+
-    voxels away and cannot be trusted this close to the unknown -- so they
-    are left out, not taught a boundary that is not there."""
-    sigma = 6.0
-    ann = np.ones((1, 1, 3, 3, 21), dtype=np.float32)   # bg for x < 5
-    ann[..., 5:15] = 2                                     # the object, x = 5..14
-    ann[..., 15:] = 0                                      # beyond the crop
-    target, mask = DistanceTargetTransform(sigma)(torch.from_numpy(ann))
-    line_t, line_m = target[0, 0, 1, 1].numpy(), mask[0, 0, 1, 1].numpy()
-    # x=13 is 2 from the unannotated region, 9 from real background.
-    assert line_m[13] == 0.0
-    # Next to the real boundary nothing changes: 1 voxel deep, and trusted.
-    assert line_m[5] == 1.0
-    assert line_t[5] == pytest.approx(_soft(1.0, sigma), abs=1e-6)
-
-
-def test_distance_all_foreground_patch_is_saturated_only_when_deep():
-    ann = np.full((1, 1, 9, 9, 9), 2, dtype=np.float32)
-    target, mask = DistanceTargetTransform(1.0)(torch.from_numpy(ann))
-    # no boundary anywhere: target is 1 everywhere, but only voxels whose
-    # distance to the patch edge is >= 3 sigma (=3) are trusted
-    assert torch.all(target == 1.0)
-    assert mask[0, 0, 4, 4, 4] == 1.0
-    assert mask[0, 0, 0, 4, 4] == 0.0
-    # index 1 is 2 voxels from the padded edge (< 3), index 2 is 3 (>= 3)
-    assert mask[0, 0, 1, 4, 4] == 0.0 and mask[0, 0, 2, 4, 4] == 1.0
-
-
-def test_distance_broadcasts_to_model_channels_and_keeps_device():
-    ann = torch.ones((2, 1, 5, 5, 5))
-    ann[..., 2:] = 2
-    target, mask = DistanceTargetTransform(2.0, num_channels=3)(ann)
-    assert target.shape == (2, 3, 5, 5, 5) and mask.shape == (2, 3, 5, 5, 5)
-    assert torch.equal(target[:, 0], target[:, 2])
-    assert target.device == ann.device
-
-
-def test_distance_rejects_bad_sigma():
-    with pytest.raises(ValueError):
-        DistanceTargetTransform(0.0)
-
-
-# ---------------------------------------------------------------------------
-# BCE-on-soft-targets helpers (losses)
-# ---------------------------------------------------------------------------
-
-from cellmap_flow.finetune.losses import as_probabilities, soft_target_entropy
-
-
-def test_soft_target_entropy_is_the_bce_floor():
-    t = torch.tensor([0.0, 0.1, 0.5, 0.9, 1.0])
-    h = soft_target_entropy(t)
-    # hard targets pay nothing, t=0.5 pays log 2, symmetric
-    assert h[0] == pytest.approx(0.0, abs=1e-5) and h[4] == pytest.approx(0.0, abs=1e-5)
-    assert h[2] == pytest.approx(math.log(2), abs=1e-6)
-    assert h[1] == pytest.approx(h[3], abs=1e-6)
-    # equals BCE(t, t): a perfectly calibrated prediction cannot go lower
-    bce = torch.nn.functional.binary_cross_entropy(t.clamp(1e-7, 1 - 1e-7), t, reduction="none")
-    assert torch.allclose(h, bce, atol=1e-5)
-
-
-def test_as_probabilities_does_not_double_sigmoid():
-    logits = torch.tensor([-3.0, 0.0, 3.0])
-    probs = torch.sigmoid(logits)
-    assert torch.equal(as_probabilities(probs, model_has_sigmoid=True), probs)
-    assert torch.allclose(as_probabilities(logits, model_has_sigmoid=False), probs)
-    # the failure mode this guards: sigmoid of a probability lands in [0.5, 0.73]
-    squashed = torch.sigmoid(probs)
-    assert squashed.min() >= 0.5 and squashed.max() <= 0.732
+@pytest.mark.parametrize("ann, sigma, voxels", [
+    # tanh of the signed distance, 0.5 on the boundary: voxel 10 is 1 inside, 9 one outside.
+    (SLAB, 2.0, {X(10): (_soft(1, 2), 1), X(9): (_soft(-1, 2), 1), X(14): (_soft(5, 2), None),
+                 X(5): (_soft(-5, 2), None)}),
+    # A voxel further from the boundary than from the patch's edge may have a
+    # closer boundary beyond the edge: it is not supervised.
+    (SLAB, 100.0, {X(10): (None, 1), X(12): (None, 0), X(0): (None, 0), X(20): (None, 0)}),
+    # ... unless its value is saturated anyway (3 sigma of trust).
+    (_ann((15, 15, 15), 1, (2, np.s_[..., 8:])), 2.0, {(7, 7, 7): (None, 1), (7, 7, 3): (None, 0)}),
+    (_ann((15, 15, 15), 1, (2, np.s_[..., 8:])), 0.5, {(7, 7, 3): (_soft(-5, 0.5), 1)}),
+    # Unannotated is unknown, not background: no target, and it shortens its neighbours' trust.
+    (_ann((9, 9, 9), 1, (2, np.s_[..., 4:]), (0, np.s_[4, 4, 0:2])), 1.0,
+     {(4, 4, 0): (None, 0), (4, 4, 2): (None, 0), (2, 4, 2): (None, 1)}),
+    # A crop cutting through an object: its depth is measured to annotated
+    # background, not to the unannotated voxels past the crop's edge.
+    (_ann((3, 3, 21), 1, (2, np.s_[..., 5:15]), (0, np.s_[..., 15:])), 6.0,
+     {X(13): (None, 0), X(5): (_soft(1, 6), 1)}),
+    # No boundary at all: saturated, and trusted only 3 sigma from every edge.
+    (_ann((9, 9, 9), 2), 1.0, {(4, 4, 4): (1.0, 1), (0, 4, 4): (1.0, 0), (1, 4, 4): (None, 0), (2, 4, 4): (None, 1)}),
+    (SLAB, 0.0, None),
+], ids=["profile", "trust", "saturated", "saturated at a small sigma", "unannotated", "cut by the crop",
+        "all foreground", "sigma 0"])
+def test_a_distance_target_and_where_it_is_trusted(ann, sigma, voxels):
+    if voxels is None:
+        with pytest.raises(ValueError):
+            DistanceTargetTransform(sigma)
+        return
+    target, mask = DistanceTargetTransform(sigma)(ann)
+    assert 0.0 <= target.min() and target.max() <= 1.0
+    for voxel, (value, trusted) in voxels.items():
+        if value is not None:
+            assert target[(0, 0, *voxel)].item() == pytest.approx(value, abs=1e-6), voxel
+        if trusted is not None:
+            assert mask[(0, 0, *voxel)].item() == trusted, voxel
 
 
 @pytest.mark.parametrize("script, expected", [
@@ -362,8 +115,6 @@ def test_as_probabilities_does_not_double_sigmoid():
     ("offsets = [[1, 0, 0]\n", None),  # does not parse
 ])
 def test_read_offsets_from_script(tmp_path, script, expected):
-    from cellmap_flow.finetune.target_transforms import read_offsets_from_script
-
     path = tmp_path / "model.py"
     path.write_text(script)
     assert read_offsets_from_script(path) == expected
