@@ -33,6 +33,18 @@ def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, mes
     assert not isinstance(raised.value, SystemExit)  # the dashboard's handlers answer it
 
 
+def test_a_yaml_file_is_named_by_its_path_only(tmp_path):
+    """open() takes an int as a file descriptor: handed a number, the loader
+    read the YAML through whatever the process had open under it, and then
+    closed it. A blockwise request's yaml_paths of [1] closed the
+    dashboard's stdout."""
+    (tmp_path / "c.yaml").write_text("data_path: /d.zarr\ncharge_group: g\nqueue: q\n")
+    with open(tmp_path / "c.yaml") as config:
+        with pytest.raises(ConfigError, match="named by its path"):
+            load_config(config.fileno())
+        os.fstat(config.fileno())  # still open
+
+
 def test_one_rule_for_data_path_and_scale(tmp_path, caplog):
     """An array is used as it is, warning when scale names another level; a
     group gets the scale appended. The launchers used to append it always

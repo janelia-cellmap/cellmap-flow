@@ -77,15 +77,8 @@ def _validate_settings(config):
 
 
 def _load_task(yaml_config) -> dict:
-    """The task YAML at the path ``yaml_config``, checked by _validate_settings.
-
-    Anything but a path is refused: open() takes an int as a file
-    descriptor, so a number read the task through whatever the process had
-    open under it, and then closed that. A request's yaml_paths of [1]
-    closed the dashboard's stdout.
-    """
-    if not isinstance(yaml_config, (str, bytes, os.PathLike)):
-        raise ConfigError(f"A task YAML is named by its path, not by {yaml_config!r}")
+    """The task YAML at the path ``yaml_config`` (load_config refuses
+    anything else), checked by _validate_settings."""
     config = load_config(yaml_config)
     _validate_settings(config)
     return config

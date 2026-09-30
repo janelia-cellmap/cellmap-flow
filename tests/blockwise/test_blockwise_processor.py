@@ -5,7 +5,6 @@ worker bsub argv itself is pinned in test_bsub_argv_snapshot."""
 import contextlib
 import hashlib
 import logging
-import os
 import subprocess
 
 import daisy
@@ -251,20 +250,6 @@ def test_the_precheck_reports_a_bad_setting(raw_zarr, pooling_model, task_yaml, 
     data = overrides.pop("data_path", None) or raw_zarr()
     with pytest.raises(ConfigError, match=message):
         precheck(task_yaml(data, pooling_model(), **overrides))
-
-
-@pytest.mark.parametrize("load", [
-    pytest.param(precheck, id="precheck"),
-    pytest.param(lambda path: CellMapFlowBlockwiseProcessor(path, create=True), id="the-processor"),
-])
-def test_a_task_yaml_is_named_by_its_path_only(raw_zarr, pooling_model, task_yaml, load):
-    """open() takes an int as a file descriptor: handed a number, both read the
-    task through whatever the process had open under it, and then closed it.
-    A request's yaml_paths of [1] closed the dashboard's stdout."""
-    with open(task_yaml(raw_zarr(), pooling_model())) as task:
-        with pytest.raises(ConfigError, match="named by its path"):
-            load(task.fileno())
-        os.fstat(task.fileno())  # still open
 
 
 def test_the_processor_refuses_the_same_settings(raw_zarr, pooling_model, task_yaml):

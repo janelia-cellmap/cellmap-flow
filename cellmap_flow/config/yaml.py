@@ -88,16 +88,22 @@ def resolve_data_path(data_path: str, scale: Optional[str]) -> str:
 def load_config(path: str) -> Dict[str, Any]:
     """
     Load and validate the YAML configuration.
-    
+
     Args:
-        path: Path to YAML configuration file
-        
+        path: Path to YAML configuration file: a str, bytes or os.PathLike.
+            Anything else is refused, because open() takes an int as a file
+            descriptor: it would read through whatever the process has open
+            under that number, and then close it.
+
     Returns:
         Validated configuration dictionary
 
     Raises:
-        ConfigError: a required field is missing or malformed
+        ConfigError: ``path`` is not a path, or a required field is missing
+            or malformed
     """
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise ConfigError(f"A YAML file is named by its path, not by {path!r}")
     with open(path, "r") as f:
         config = yaml.safe_load(f)
 
