@@ -167,3 +167,16 @@ def test_each_model_node_carries_its_config(dashboard, applied):
     assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
                                       "path": "/models/er"},
                        "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
+
+
+@pytest.mark.parametrize("page", ["/", "/pipeline-builder"])
+def test_both_pages_hand_their_scripts_each_ops_schema(dashboard, page):
+    from cellmap_flow.norm.input_normalize import get_input_normalizers
+    from cellmap_flow.post.postprocessors import get_postprocessors_list
+
+    html = dashboard.get(page).get_data(as_text=True)
+    data = json.loads(re.search(r'<script type="application/json" id="page-data">(.*?)</script>', html, re.S).group(1))
+    schemas = data["op_schemas"]
+    assert [s["name"] for s in schemas["input_norm"]] == [op["name"] for op in get_input_normalizers()]
+    assert [s["name"] for s in schemas["postprocess"]] == [op["name"] for op in get_postprocessors_list()]
+    assert all(s["schema"]["type"] == "object" for kind in schemas.values() for s in kind)

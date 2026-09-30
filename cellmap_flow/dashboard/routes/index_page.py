@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, request, jsonify
 
 from cellmap_flow.norm.input_normalize import get_input_normalizers
+from cellmap_flow.pipeline_spec import op_schemas
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.dashboard.requests import SetData, parse
@@ -33,6 +34,12 @@ def viewer_url_for(viewer_url, headers, scheme):
         return viewer_url
     proto = (headers.get("X-Forwarded-Proto") or scheme).split(",")[0].strip()
     return parsed._replace(scheme=proto, netloc=forwarded_host).geturl()
+
+
+def page_op_schemas():
+    """``{"input_norm": [...], "postprocess": [...]}``: each registered op's
+    JSON Schema (pipeline_spec.op_schemas), for the pages' forms."""
+    return {kind: op_schemas(kind) for kind in ("input_norm", "postprocess")}
 
 
 def _form_value(value):
@@ -122,6 +129,7 @@ def index():
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         server_config_cached=session.server_config_cached,
+        op_schemas=page_op_schemas(),
     )
 
 
