@@ -13,7 +13,7 @@ they all place and shade it the same way:
   ends in labels and an image otherwise.
 - ``raw_layer()``: the raw data, with the user's shader put back.
 
-A model's ``info`` is its server's ``model_info`` (utils.server_info). A
+A model's ``info`` is its server's ``model_info`` (serving.client). A
 caller that already asked for it passes it in, so building a layer asks the
 server once.
 """
@@ -25,9 +25,9 @@ import neuroglancer
 
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.pipeline_spec import chain_is_segmentation
-from cellmap_flow.utils.output_probe import output_display_range
+from cellmap_flow.serving.probe import output_display_range
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, get_raw_layer, prediction_shader
-from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.protocol import ARGS_KEY
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
 
     Unlike the raw there is nothing to sample, since reading the output means
     running the model, but nothing needs sampling: the chain's last step fixes
-    the range (output_probe.output_display_range). The colour is the one in
+    the range (serving.probe.output_display_range). The colour is the one in
     ``previous_shader`` if it has one, so a recomputed range does not also
     change the colours the user navigates by; else ``color``; else the first
     prediction colour.

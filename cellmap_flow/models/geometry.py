@@ -8,7 +8,7 @@ stays 5.24), and the shapes in voxels, the context and the block shape
 derived from them.
 
 ``from_config`` reads anything with the config attributes: a built config, or
-the stand-ins ``utils.server_info`` and ``utils.model_geometry`` build from a
+the stand-ins ``serving.client`` and ``models.geometry_cache`` build from a
 server's ``model_info`` or the cache, which carry no block shape.
 
 Importing this module is cheap: numpy and funlib.geometry only.

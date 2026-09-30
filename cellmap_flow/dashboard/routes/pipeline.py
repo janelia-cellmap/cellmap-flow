@@ -23,7 +23,7 @@ from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
-from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.viewer.layers import prediction_layer, raw_layer
 
 logger = logging.getLogger(__name__)

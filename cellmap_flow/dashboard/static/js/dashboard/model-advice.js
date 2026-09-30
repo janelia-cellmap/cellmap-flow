@@ -1,7 +1,7 @@
 // The model-advice banner above the dashboard tabs.
 //
 // Asks the server what activation the model's output actually has (see
-// cellmap_flow/utils/output_probe.py) and compares it against the chain
+// cellmap_flow/serving/probe.py) and compares it against the chain
 // currently configured. Only renders when there is something to say.
 import { getJSON } from "../lib/api.js";
 import { esc } from "../lib/dom.js";

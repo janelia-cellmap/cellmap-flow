@@ -27,9 +27,9 @@ def followed(make_job, viewer, monkeypatch):
     iteration 2; the manager's name for the job's model is set after each
     event. The viewer's layer names after each."""
     from cellmap_flow.post.postprocessors import SigmoidPostprocessor
-    from cellmap_flow.utils import server_info
+    from cellmap_flow.serving import client
 
-    monkeypatch.setattr(server_info.requests, "get", lambda url, timeout=None: _Answer())
+    monkeypatch.setattr(client.requests, "get", lambda url, timeout=None: _Answer())
     for key, value in dict(jobs=[], models_config=[], input_norms=[], postprocess=[SigmoidPostprocessor()]).items():
         monkeypatch.setattr(g, key, value)
     job = make_job(lsf_job=SimpleNamespace(process=SimpleNamespace(pid=99)))

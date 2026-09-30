@@ -35,7 +35,7 @@ from cellmap_flow.globals import g
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import ThresholdPostprocessor
-from cellmap_flow.utils import server_info
+from cellmap_flow.serving import client
 from cellmap_flow.serving.protocol import ARGS_KEY, decode_to_json
 
 RAW_VOXEL_SIZE = (24, 12, 12)
@@ -81,7 +81,7 @@ class _Answer:
 @pytest.fixture
 def servers(monkeypatch, ome_pyramid):
     """The four model servers, the raw data as g.dataset_path, and viewers without a web server."""
-    monkeypatch.setattr(server_info.requests, "get",
+    monkeypatch.setattr(client.requests, "get",
                         lambda url, timeout=None: _Answer(MODEL_INFO[url.split("/__control__")[0]]))
     monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
     g.dataset_path = ome_pyramid(((RAW_VOXEL_SIZE, None),))

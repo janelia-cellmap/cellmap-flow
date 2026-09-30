@@ -126,10 +126,10 @@ def test_affinities_are_agglomerated_from_probabilities_or_uint8():
     pytest.param("unbounded", ["AffinityPostprocessor"], "warn", id="logits"),
 ])
 def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain, level):
-    from cellmap_flow.utils import output_probe
+    from cellmap_flow.serving import probe
 
-    output_class = {"unbounded": output_probe.UNBOUNDED, "unit": output_probe.UNIT}[output_class]
-    assert output_probe.review_postprocess(output_class, chain, out_channels=3, model_name="aff")["level"] == level
+    output_class = {"unbounded": probe.UNBOUNDED, "unit": probe.UNIT}[output_class]
+    assert probe.review_postprocess(output_class, chain, out_channels=3, model_name="aff")["level"] == level
 
 
 def test_the_merger_survives_concurrent_chunks():

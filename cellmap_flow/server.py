@@ -26,7 +26,7 @@ from cellmap_flow.serving.protocol import (
     decode_to_json,
     split_dataset_url,
 )
-from cellmap_flow.utils.restart_token import TOKEN_HEADER, tokens_match
+from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 
 from cellmap_flow.globals import g
 

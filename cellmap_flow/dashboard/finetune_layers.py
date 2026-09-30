@@ -25,7 +25,7 @@ from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.viewer.layers import prediction_layer
 
 logger = logging.getLogger(__name__)

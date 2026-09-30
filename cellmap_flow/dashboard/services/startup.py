@@ -14,7 +14,7 @@ import logging
 from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
-from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.bootstrap import new_viewer
 from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer

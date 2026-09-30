@@ -14,7 +14,7 @@ import pytest
 from cellmap_flow.finetune.session_loop import RestartController
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.utils.restart_token import TOKEN_HEADER, read_or_create_restart_token, read_restart_token
+from cellmap_flow.serving.restart_token import TOKEN_HEADER, read_or_create_restart_token, read_restart_token
 
 SCRIPT_TEST = os.path.join(os.path.dirname(__file__), os.pardir, "script_test")
 RAW = os.path.join(SCRIPT_TEST, "dummy.zarr", "raw")

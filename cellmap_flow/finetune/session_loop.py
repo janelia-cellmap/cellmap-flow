@@ -34,7 +34,7 @@ from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 from cellmap_flow.io.paths import is_remote
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.restart_token import read_or_create_restart_token
+from cellmap_flow.serving.restart_token import read_or_create_restart_token
 
 logger = logging.getLogger(__name__)
 

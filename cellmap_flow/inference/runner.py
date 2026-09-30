@@ -364,7 +364,7 @@ class ModelRunner:
         Stored on the instance so the server can report it to the dashboard,
         which uses it to suggest (or sanity-check) the postprocessing chain.
         """
-        from cellmap_flow.utils.output_probe import classify_output_range
+        from cellmap_flow.serving.probe import classify_output_range
 
         try:
             lo, hi = float(out.min()), float(out.max())

@@ -28,7 +28,7 @@ import tempfile
 import threading
 
 from cellmap_flow.models.geometry import channel_names_of, number
-from cellmap_flow.utils.server_info import (
+from cellmap_flow.serving.client import (
     GEOMETRY_FIELDS,
     geometry_stand_in,
     model_geometry_config,

@@ -23,8 +23,8 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.utils.output_probe import review_postprocess, suggest_input_norm
-from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.serving.probe import review_postprocess, suggest_input_norm
+from cellmap_flow.serving.client import fetch_model_info
 
 logger = logging.getLogger(__name__)
 

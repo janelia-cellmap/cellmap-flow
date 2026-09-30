@@ -68,7 +68,7 @@ def test_the_geometry_cache_is_read_and_written_as_before(tmp_path, monkeypatch)
 
 def test_the_geometry_read_from_model_info_keeps_fractional_sizes():
     """The finetune tab's geometry, from a running server: whole numbers stay ints."""
-    from cellmap_flow.utils.server_info import model_geometry as from_model_info
+    from cellmap_flow.serving.client import model_geometry as from_model_info
 
     assert from_model_info({"write_shape": [448.0, 448, 448], "output_voxel_size": [5.24, 8, 8.0],
                             "output_channels": 2}) == {"write_shape": [448, 448, 448],
