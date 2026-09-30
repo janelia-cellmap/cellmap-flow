@@ -139,20 +139,28 @@ def ends_with_scale(path: str) -> bool:
     return bool(re.search(r"s\d+$", path))
 
 
+def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
+    """``(volume, scale index)`` for a precomputed path: a last component
+    ``s<N>`` names scale N of the volume above it; a path without one is
+    the volume itself, with index None."""
+    if not ends_with_scale(path):
+        return path, None
+    return path.rsplit("/s")[0], int(path.rsplit("/s")[1])
+
+
 def precomputed_kvstore(path: str) -> Tuple[object, int]:
     """``(kvstore, scale_index)`` for a ``precomputed://`` or ``gs://`` path.
 
-    A trailing ``/s<N>`` names the scale; ``precomputed://`` is a local
-    directory and ``gs://`` is handed to tensorstore as a URL.
+    A trailing ``/s<N>`` names the scale (``precomputed_scale``), else it is
+    scale 0; ``precomputed://`` is a local directory and ``gs://`` is handed
+    to tensorstore as a URL.
     """
     if path.startswith("precomputed://"):
         location = "/" + path[len("precomputed://"):].lstrip("/")
     else:
         location = path
-    scale_index = 0
-    if ends_with_scale(location):
-        scale_index = int(location.rsplit("/s")[1])
-        location = location.rsplit("/s")[0]
+    location, scale_index = precomputed_scale(location)
+    scale_index = scale_index or 0
     if path.startswith("precomputed://"):
         return {"driver": "file", "path": os.path.normpath(location)}, scale_index
     return location, scale_index
