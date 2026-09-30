@@ -1,10 +1,17 @@
+"""The models to annotate for, a new annotation volume, and the user's settings.
+
+Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
+and GET and POST ``/api/finetune/user-prefs``.
+"""
+
 import logging
 import os
 import time
 
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     find_model_config,
@@ -124,7 +131,8 @@ def _geometry_from_local_load(name, model_config):
         return None
 
 
-def get_finetune_models_response():
+@finetune_bp.route("/api/finetune/models", methods=["GET"])
+def get_finetune_models():
     try:
         models = []
         seen = set()
@@ -166,7 +174,9 @@ def get_finetune_models_response():
         return jsonify({"error": str(e)}), 500
 
 
-def create_annotation_volume_response(data):
+@finetune_bp.route("/api/finetune/create-volume", methods=["POST"])
+def create_annotation_volume():
+    data = request.get_json() or {}
     try:
         model_name = data.get("model_name")
         output_path = data.get("output_path")
@@ -226,11 +236,14 @@ def create_annotation_volume_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_user_prefs_response():
+@finetune_bp.route("/api/finetune/user-prefs", methods=["GET"])
+def get_user_prefs():
     return jsonify({"success": True, "prefs": load_user_prefs()})
 
 
-def set_user_prefs_response(data):
+@finetune_bp.route("/api/finetune/user-prefs", methods=["POST"])
+def set_user_prefs():
+    data = request.get_json() or {}
     try:
         prefs = load_user_prefs()
         prefs.update({key: value for key, value in data.items() if value is not None})

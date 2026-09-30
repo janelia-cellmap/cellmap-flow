@@ -11,6 +11,10 @@ term against the frozen teacher).
 Kept deliberately separate from ``imported_crops``: those carry real labels,
 these carry only a human's assertion that the model's own output is
 acceptable there. Both are evidence, but not the same kind.
+
+Routes: GET ``/api/finetune/good-regions`` (the session's regions), POST
+``/api/finetune/good-regions/mark-view`` (a box where the viewer looks) and
+POST ``/api/finetune/good-regions/delete`` (one region by ``id``, or all).
 """
 
 import logging
@@ -18,8 +22,9 @@ import uuid
 
 import neuroglancer
 import numpy as np
-from flask import jsonify
+from flask import jsonify, request
 
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
@@ -100,9 +105,10 @@ def _default_size_nm():
     return [DEFAULT_REGION_SIZE_NM] * 3
 
 
-def mark_current_view_response(data):
+@finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
+def mark_current_view_good():
     """Record a box centred on wherever the viewer is looking right now."""
-    data = data or {}
+    data = request.get_json(silent=True) or {}
     try:
         position, scales_nm = viewer_position_and_scales()
         if position is None:
@@ -160,13 +166,15 @@ def mark_current_view_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def list_good_regions_response():
+@finetune_bp.route("/api/finetune/good-regions", methods=["GET"])
+def list_good_regions():
     regions = load_good_regions()
     return jsonify({"success": True, "regions": regions, "count": len(regions)})
 
 
-def delete_good_region_response(data):
-    region_id = (data or {}).get("id")
+@finetune_bp.route("/api/finetune/good-regions/delete", methods=["POST"])
+def delete_good_region():
+    region_id = (request.get_json(silent=True) or {}).get("id")
     regions = load_good_regions()
     if region_id is None:
         kept = []

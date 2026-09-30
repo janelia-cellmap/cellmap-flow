@@ -1,12 +1,12 @@
 """HTTP handlers for instance-correction workflows.
 
-Three ``*_response(data)`` handlers:
+Three routes:
 
-- ``create_instance_correction_response``: seed or reattach a paintable
-  annotation layer for a ROI (fresh-seed or reuse-existing modes)
-- ``sync_instance_correction_response``: snapshot the paintable zarr
+- POST ``/api/viewer/create-instance-correction``: seed or reattach a
+  paintable annotation layer for a ROI (fresh-seed or reuse-existing modes)
+- POST ``/api/viewer/sync-instance-correction``: snapshot the paintable zarr
   from MinIO to a local destination
-- ``cc3d_relabel_annotation_response``: split a fused label via
+- POST ``/api/viewer/cc3d-relabel-annotation``: split a fused label via
   26-connectivity cc3d
 
 The volumes are ordinary annotation volumes (``type: annotation_volume``),
@@ -21,10 +21,11 @@ import re
 import neuroglancer
 import numpy as np
 import zarr
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy, session_store
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
@@ -147,7 +148,8 @@ def _register_volume(volume_id, zarr_path, corrections_dir, minio_url):
     )
 
 
-def create_instance_correction_response(data):
+@finetune_bp.route("/api/viewer/create-instance-correction", methods=["POST"])
+def create_instance_correction():
     """Create or reattach a paintable annotation layer for a ROI.
 
     Two modes:
@@ -201,6 +203,7 @@ def create_instance_correction_response(data):
       {success, volume_id, zarr_path, minio_url, neuroglancer_url,
        layer_name, reload_page, mode: "fresh_seed" or "reuse_existing"}
     """
+    data = request.get_json() or {}
     try:
         instance_zarr_path = data.get("instance_zarr_path")
         roi_name = data.get("roi_name")
@@ -441,7 +444,8 @@ def create_instance_correction_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def sync_instance_correction_response(data):
+@finetune_bp.route("/api/viewer/sync-instance-correction", methods=["POST"])
+def sync_instance_correction():
     """Snapshot a paintable instance-correction zarr from MinIO to a local
     destination.
 
@@ -463,6 +467,7 @@ def sync_instance_correction_response(data):
     Returns:
       {success, zarr_path, dst_path, keys_copied, keys_skipped, bytes_copied}
     """
+    data = request.get_json() or {}
     try:
         zarr_path = _zarr_target(data.get("zarr_path"), "zarr_path")
         dst_path = data.get("dst_path")
@@ -486,7 +491,8 @@ def sync_instance_correction_response(data):
 
 
 
-def cc3d_relabel_annotation_response(data):
+@finetune_bp.route("/api/viewer/cc3d-relabel-annotation", methods=["POST"])
+def cc3d_relabel_annotation():
     """Split a single label in a paintable instance-correction zarr via
     26-connectivity cc3d.
 
@@ -513,6 +519,7 @@ def cc3d_relabel_annotation_response(data):
        splits: [{new_label, voxels}, ...], snapshot_path,
        reload_hint: "hard reload NG tab to see split"}
     """
+    data = request.get_json() or {}
     try:
         if not data.get("zarr_path") or data.get("target_label") is None:
             return _error("zarr_path and target_label are required")

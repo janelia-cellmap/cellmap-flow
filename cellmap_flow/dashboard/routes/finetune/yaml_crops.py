@@ -14,6 +14,10 @@ Painted scribbles + imported GT crops therefore share one source of truth
 (the volume zarr). The user can paint over imports to fix GT errors or to
 add corrections in regions the GT doesn't cover. The trainer sees the
 union by construction.
+
+Routes: POST ``/api/finetune/load-crops`` (the import), GET
+``/api/finetune/load-crops-progress`` (how far an import has got) and GET
+``/api/finetune/read-yaml`` (a YAML file's text, for the editor).
 """
 
 import logging
@@ -21,7 +25,7 @@ import os
 import threading
 import time
 
-from flask import jsonify
+from flask import jsonify, request
 from pydantic import ValidationError
 
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
@@ -55,6 +59,7 @@ from cellmap_flow.dashboard.finetune_utils import (
     ensure_minio_serving,
     sync_annotation_volume_from_minio,
 )
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
     serve_new_volume,
@@ -142,7 +147,8 @@ def _ensure_editable_layer(volume_id, minio_url):
 # Endpoint
 # ---------------------------------------------------------------------------
 
-def load_crops_from_yaml_response(data):
+@finetune_bp.route("/api/finetune/load-crops", methods=["POST"])
+def load_crops_from_yaml():
     """Import crops from a YAML manifest into the session's annotation_volume.
 
     Request JSON:
@@ -151,6 +157,7 @@ def load_crops_from_yaml_response(data):
         - ``yaml``: required, YAML text (or path to a YAML file)
         - ``load_id``: optional UUID for live progress polling
     """
+    data = request.get_json() or {}
     try:
         model_name = data.get("model_name")
         output_path = data.get("output_path")
@@ -365,7 +372,7 @@ def load_crops_from_yaml_response(data):
             }
         )
     except Exception as e:
-        logger.exception("load_crops_from_yaml_response failed")
+        logger.exception("Loading crops from a YAML failed")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -373,8 +380,10 @@ def load_crops_from_yaml_response(data):
 # Auxiliary endpoints (file read + progress polling) — unchanged behavior
 # ---------------------------------------------------------------------------
 
-def get_load_crops_progress_response(load_id):
+@finetune_bp.route("/api/finetune/load-crops-progress", methods=["GET"])
+def get_load_crops_progress():
     """Return current progress for an in-flight ``/api/finetune/load-crops`` call."""
+    load_id = request.args.get("load_id")
     if not load_id:
         return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
     with _PROGRESS_LOCK:
@@ -385,7 +394,8 @@ def get_load_crops_progress_response(load_id):
     return jsonify({"success": True, "progress": snapshot})
 
 
-def read_yaml_file_response(path):
+@finetune_bp.route("/api/finetune/read-yaml", methods=["GET"])
+def read_yaml_file():
     """Return the contents of a YAML file so the dashboard can preview/edit it.
 
     The dashboard listens on every interface, and this used to return any
@@ -393,6 +403,7 @@ def read_yaml_file_response(path):
     name after resolving symlinks. The name is checked before existence so
     the route cannot be used to probe for other files either.
     """
+    path = request.args.get("path")
     if not path:
         return jsonify({"success": False, "error": "Missing 'path' query param"}), 400
     real = os.path.realpath(os.path.expanduser(path))

@@ -1,3 +1,10 @@
+"""Earlier sessions: listing them, and resuming one's volume in a new session.
+
+Routes: POST ``/api/finetune/list-existing-sessions``, POST
+``/api/finetune/load-existing-volume`` (the resume) and GET
+``/api/finetune/load-existing-volume-progress`` (how far a resume has got).
+"""
+
 import json
 import logging
 import os
@@ -5,9 +12,10 @@ import threading
 import time
 from datetime import datetime
 
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     rewrite_minio_url_for_proxy,
@@ -49,7 +57,9 @@ def _set_resume_progress(load_id, **fields):
             _RESUME_PROGRESS.pop(k, None)
 
 
-def get_resume_progress_response(load_id):
+@finetune_bp.route("/api/finetune/load-existing-volume-progress", methods=["GET"])
+def load_existing_volume_progress():
+    load_id = request.args.get("load_id")
     if not load_id:
         return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
     with _RESUME_PROGRESS_LOCK:
@@ -161,7 +171,9 @@ def _populated_chunk_count(volume_path):
         return 0
 
 
-def list_existing_sessions_response(data):
+@finetune_bp.route("/api/finetune/list-existing-sessions", methods=["POST"])
+def list_existing_sessions():
+    data = request.get_json() or {}
     try:
         output_path = data.get("output_path", "")
         if not output_path:
@@ -201,7 +213,9 @@ def list_existing_sessions_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def load_existing_volume_response(data):
+@finetune_bp.route("/api/finetune/load-existing-volume", methods=["POST"])
+def load_existing_volume():
+    data = request.get_json() or {}
     try:
         minio_state = get_session().minio_state
         source_session_path = data.get("source_session_path")

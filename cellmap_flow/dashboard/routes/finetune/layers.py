@@ -1,12 +1,12 @@
 """Add, remove and rename layers of the running viewer over HTTP.
 
 For scripts and the command line; the dashboard's own pages do not call
-these. Each takes a pre-parsed JSON body:
+these. Each is a POST with a JSON body:
 
-- ``add_image_layer_to_viewer_response``: ``/api/viewer/add-image-layer``
-- ``add_segmentation_layer_to_viewer_response``: ``/api/viewer/add-segmentation-layer``
-- ``remove_layer_from_viewer_response``: ``/api/viewer/remove-layer``
-- ``rename_layer_in_viewer_response``: ``/api/viewer/rename-layer``
+- ``/api/viewer/add-image-layer``
+- ``/api/viewer/add-segmentation-layer``
+- ``/api/viewer/remove-layer``
+- ``/api/viewer/rename-layer``
 
 Idempotency: add-* replaces a same-named layer; remove-layer is a no-op
 when the name is absent; rename-layer answers 409 rather than overwrite
@@ -22,8 +22,9 @@ precomputed store the dashboard's user can read.
 
 import logging
 
-from flask import jsonify
+from flask import jsonify, request
 
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
 
 logger = logging.getLogger(__name__)
@@ -52,11 +53,13 @@ def _add_layer(name, layer, layer_type, path):
     )
 
 
-def add_segmentation_layer_to_viewer_response(data):
+@finetune_bp.route("/api/viewer/add-segmentation-layer", methods=["POST"])
+def add_segmentation_layer_to_viewer():
     """Register a static segmentation zarr on the running NG viewer.
 
     Required: path, name. Optional: blend, disable_meshes.
     """
+    data = request.get_json() or {}
     try:
         path = data.get("path")
         name = data.get("name")
@@ -80,11 +83,13 @@ def add_segmentation_layer_to_viewer_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def add_image_layer_to_viewer_response(data):
+@finetune_bp.route("/api/viewer/add-image-layer", methods=["POST"])
+def add_image_layer_to_viewer():
     """Register a static image zarr on the running NG viewer.
 
     Required: path, name. Optional: shader, blend.
     """
+    data = request.get_json() or {}
     try:
         path = data.get("path")
         name = data.get("name")
@@ -108,11 +113,13 @@ def add_image_layer_to_viewer_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def remove_layer_from_viewer_response(data):
+@finetune_bp.route("/api/viewer/remove-layer", methods=["POST"])
+def remove_layer_from_viewer():
     """Drop a layer from the running NG viewer state by name.
 
     Idempotent: returns success with removed=false if the name is absent.
     """
+    data = request.get_json() or {}
     try:
         name = data.get("name")
         if not name:
@@ -146,13 +153,15 @@ def remove_layer_from_viewer_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def rename_layer_in_viewer_response(data):
+@finetune_bp.route("/api/viewer/rename-layer", methods=["POST"])
+def rename_layer_in_viewer():
     """Rename a layer in the running NG viewer state.
 
     Required: old_name, new_name. 404s if old_name is absent; 409s if
     new_name already exists (refuses to silently overwrite). The layer
     keeps its place in the layer list and its visibility.
     """
+    data = request.get_json() or {}
     try:
         old_name = data.get("old_name")
         new_name = data.get("new_name")

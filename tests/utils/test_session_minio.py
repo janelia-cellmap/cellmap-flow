@@ -232,8 +232,7 @@ def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path)
     monkeypatch.setattr(yaml_crops, "refresh_annotated_regions_layer", lambda **k: None)
     monkeypatch.setattr(g, "dataset_path", "/data/raw.zarr", raising=False)
 
-    with app.test_request_context():
-        response = yaml_crops.load_crops_from_yaml_response({"model_name": "m", "yaml": "crops: []"})
+    response = app.test_client().post("/api/finetune/load-crops", json={"model_name": "m", "yaml": "crops: []"})
 
     assert response.get_json()["success"], response.get_json()
     assert events[:3] == [("pull", "vol-1"), ("write", "/crop.zarr"), ("mirror",)]

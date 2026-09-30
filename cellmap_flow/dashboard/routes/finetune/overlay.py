@@ -1,12 +1,21 @@
+"""What the viewer shows of the annotations: a volume's editable layer, and
+boxes around the regions that have annotations in them.
+
+Routes: POST ``/api/finetune/add-to-viewer`` (a volume's paintable layer),
+POST ``/api/finetune/refresh-annotated-regions`` (redraw the boxes) and POST
+``/api/finetune/sync-annotations`` (pull the annotations from MinIO now).
+"""
+
 import json
 import logging
 import os
 
 import neuroglancer
 import numpy as np
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.globals import g
@@ -329,7 +338,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
     return len(boxes)
 
 
-def refresh_annotated_regions_response(data):
+@finetune_bp.route("/api/finetune/refresh-annotated-regions", methods=["POST"])
+def refresh_annotated_regions():
     """Redraw the annotated-regions boxes because the user asked for it.
 
     This is the only way the boxes update during a session. It pushes viewer
@@ -337,19 +347,20 @@ def refresh_annotated_regions_response(data):
     button: you click it when you want to see where you have painted, not
     while you are in the middle of painting.
     """
+    data = request.get_json() or {}
     try:
         if not hasattr(g, "viewer") or g.viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
-        count = refresh_annotated_regions_layer(
-            corrections_path=(data or {}).get("corrections_path")
-        )
+        count = refresh_annotated_regions_layer(corrections_path=data.get("corrections_path"))
         return jsonify({"success": True, "count": count})
     except Exception as e:
         logger.error(f"Error refreshing annotated regions: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def add_crop_to_viewer_response(data):
+@finetune_bp.route("/api/finetune/add-to-viewer", methods=["POST"])
+def add_crop_to_viewer():
+    data = request.get_json() or {}
     try:
         crop_id = data.get("crop_id")
         minio_url = data.get("minio_url")
@@ -382,7 +393,9 @@ def add_crop_to_viewer_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def sync_annotations_manually_response(data):
+@finetune_bp.route("/api/finetune/sync-annotations", methods=["POST"])
+def sync_annotations_manually():
+    data = request.get_json() or {}
     try:
         force = data.get("force", True)
         synced = sync_all_annotations_from_minio(force=force)

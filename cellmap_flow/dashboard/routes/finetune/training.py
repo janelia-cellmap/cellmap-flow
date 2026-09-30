@@ -1,3 +1,15 @@
+"""Training jobs: submitting one, restarting it, and following it.
+
+Routes:
+- POST ``/api/finetune/submit``: a job for a model over a session's corrections;
+- POST ``/api/finetune/job/<job_id>/restart``: the next iteration, with new settings;
+- GET ``/api/finetune/jobs``: every job, including those a dashboard before
+  this one started (they are looked for first);
+- GET ``/api/finetune/job/<job_id>/status`` and ``.../logs``;
+- GET ``/api/finetune/job/<job_id>/logs/stream``: the log as server-sent events;
+- POST ``/api/finetune/job/<job_id>/cancel`` and ``.../stop-early``.
+"""
+
 import os
 import json
 import logging
@@ -7,9 +19,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from flask import Response, jsonify
+from flask import Response, jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
     autodetect_output_type,
@@ -214,7 +227,8 @@ def _rehydrate_jobs():
                 logger.warning(f"Could not look for running jobs in {session}: {e}")
 
 
-def list_finetuning_jobs_response():
+@finetune_bp.route("/api/finetune/jobs", methods=["GET"])
+def get_finetuning_jobs():
     try:
         _rehydrate_jobs()
         return jsonify({"success": True, "jobs": g.finetune_job_manager.list_jobs()})
@@ -223,7 +237,8 @@ def list_finetuning_jobs_response():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_job_status_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/status", methods=["GET"])
+def get_job_status(job_id):
     try:
         status = g.finetune_job_manager.get_job_status(job_id)
         if status is None:
@@ -234,7 +249,8 @@ def get_job_status_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_job_logs_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/logs", methods=["GET"])
+def get_job_logs(job_id):
     try:
         manager = g.finetune_job_manager
         job = (getattr(manager, "jobs", {}) or {}).get(job_id)
@@ -253,7 +269,9 @@ def get_job_logs_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def submit_finetuning_response(data):
+@finetune_bp.route("/api/finetune/submit", methods=["POST"])
+def submit_finetuning():
+    data = request.get_json() or {}
     try:
         model_name = data.get("model_name")
         corrections_path_str = data.get("corrections_path")
@@ -439,7 +457,8 @@ def _requested_offset(request):
 _LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
 
 
-def stream_job_logs_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/logs/stream", methods=["GET"])
+def stream_job_logs(job_id):
     """Server-sent log stream.
 
     Every block of lines carries ``id: <byte offset>``, the position in the
@@ -451,8 +470,6 @@ def stream_job_logs_response(job_id):
     log, plus "=== Training COMPLETED ===", every few seconds for as long as
     the page stayed open.
     """
-    from flask import request
-
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
     start_offset = _requested_offset(request)
 
@@ -627,7 +644,8 @@ def stream_job_logs_response(job_id):
     )
 
 
-def cancel_job_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/cancel", methods=["POST"])
+def cancel_job(job_id):
     try:
         success = g.finetune_job_manager.cancel_job(job_id)
         if success:
@@ -638,7 +656,8 @@ def cancel_job_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def stop_training_early_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
+def stop_training_early(job_id):
     try:
         jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
         job = jobs.get(job_id)
@@ -675,7 +694,9 @@ def stop_training_early_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def restart_finetuning_job_response(job_id, data):
+@finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
+def restart_finetuning_job(job_id):
+    data = request.get_json() or {}
     try:
         restart_t0 = time.perf_counter()
 
