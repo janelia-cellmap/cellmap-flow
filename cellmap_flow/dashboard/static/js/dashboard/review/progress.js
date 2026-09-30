@@ -1,9 +1,13 @@
 // The Review tab's Progress card, and the queue list (the "order" picker),
 // which is part of the same answer: /api/review/progress, for the index
 // that is open.
+import { poll } from "../../lib/poll.js";
+
+const PROGRESS_POLL_MS = 5000;
+
 export function createProgress() {
   const $ = (id) => document.getElementById(id);
-  let pollTimer = null;
+  let poller = null;  // the refresh every PROGRESS_POLL_MS, once an index is open
 
   async function refresh() {
     try {
@@ -56,18 +60,27 @@ export function createProgress() {
     }
   }
 
+  // Every 5 s, the first 5 s from now (the callers have just refreshed). A
+  // tick that comes while the last refresh is unanswered is skipped, so a
+  // slow server gets one request at a time. While the page is hidden nobody
+  // sees the card, so the refreshes wait, and one runs as soon as it is
+  // shown again.
+  function startPolling() {
+    return poll(refresh, { intervalMs: PROGRESS_POLL_MS, immediate: false, pauseWhenHidden: true });
+  }
+
   return {
     // Once, now: after a verdict or an undo, say.
     refresh,
     // Every 5 s from now on, for an index just opened; this replaces the
     // refresh running before, if any.
     restartPolling() {
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(refresh, 5000);
+      if (poller) poller.stop();
+      poller = startPolling();
     },
     // Every 5 s, unless that is already happening.
     keepPolling() {
-      if (!pollTimer) pollTimer = setInterval(refresh, 5000);
+      if (!poller) poller = startPolling();
     },
   };
 }
