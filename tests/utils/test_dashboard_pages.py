@@ -136,3 +136,34 @@ def test_before_anything_is_applied_the_builder_starts_from_the_live_chain(dashb
     state = _builder_state(dashboard)
     assert [(n["name"], n["params"]) for n in state["normalizers"]] == [("ZScoreNormalizer", {"mean": 1.0, "std": 2.0})]
     assert [m["name"] for m in state["models"]] == ["mito"] and state["inputs"] == state["edges"] == []
+
+
+class _Configured(SimpleNamespace):
+    def to_dict(self):
+        return {"type": "script", "script_path": f"/{self.name}.py"}
+
+
+@pytest.mark.parametrize("applied", [pytest.param(False, id="nothing-applied"), pytest.param(True, id="applied")])
+def test_each_model_node_carries_its_config(dashboard, applied):
+    """From the configured model of its name, else (nothing applied yet) from
+    the YAML the builder imported; the palette lists both kinds of model."""
+    g.models_config = [_Configured(name="mito")]
+    g.pipeline_model_configs = {"nuc": {"type": "script", "script_path": "/imported.py"}}
+    g.model_catalog = {"catalog": {"er": "/models/er"}}
+    if applied:
+        g.pipeline_inputs = [{"id": "input-1", "params": {}}]
+        g.pipeline_models = [{"id": "model-1", "name": "mito", "params": {}},
+                             {"id": "model-2", "name": "nuc", "params": {}, "config": {"type": "given"}}]
+    else:
+        g.jobs = [_job("mito"), _job("nuc"), _job("unknown")]
+    html = dashboard.get("/pipeline-builder").get_data(as_text=True)
+
+    models = _builder_state(dashboard)["models"]
+    configs = {m["name"]: m.get("config") for m in models}
+    assert configs == ({"mito": {"type": "script", "script_path": "/mito.py"}, "nuc": {"type": "given"}} if applied else
+                       {"mito": {"type": "script", "script_path": "/mito.py"},
+                        "nuc": {"type": "script", "script_path": "/imported.py"}, "unknown": None})
+    palette = json.loads(re.search(r"^\s*availableModels: (.*?),?$", html, re.M).group(1))
+    assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
+                                      "path": "/models/er"},
+                       "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
