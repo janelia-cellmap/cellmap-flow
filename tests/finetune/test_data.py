@@ -56,6 +56,30 @@ def test_consecutive_patches_are_different_draws(annotation_volume):
     assert len({dataset[i][0].numpy().tobytes() for i in range(8)}) > 1
 
 
+def test_the_draws_do_not_depend_on_the_order_the_filesystem_lists_chunks(annotation_volume, monkeypatch):
+    """The pools were built in ``os.listdir`` order, which differs between
+    filesystems (ext4 orders names by a per-filesystem hash): the same seed drew
+    different patches on another machine, or in a copy of the session."""
+    import os
+    from types import SimpleNamespace as Namespace
+
+    from cellmap_flow.finetune.data import sampler
+
+    labels = _labels(48, a=(2, np.s_[1:9, 1:9, 1:9]), b=(2, np.s_[17:25, 17:25, 17:25]),
+                     c=(2, np.s_[33:41, 33:41, 33:41]))
+    raw = np.random.default_rng(0).integers(0, 255, (48,) * 3, dtype=np.uint8)  # every patch distinct
+
+    def raw_patches(volume):
+        dataset = volume.dataset(patches_per_epoch=16)
+        return [dataset[i][0].numpy().tobytes() for i in range(16)]
+
+    as_listed = raw_patches(annotation_volume(labels, raw=raw))
+    reversed_os = Namespace(**{**vars(os), "listdir": lambda path: list(reversed(os.listdir(path)))})
+    monkeypatch.setattr(sampler, "os", reversed_os)
+    listed_backwards = raw_patches(annotation_volume(labels, raw=raw, name="copy"))
+    assert as_listed == listed_backwards
+
+
 CROP16 = {"annotation_offset_voxels": [0, 0, 0], "annotation_shape_voxels": [16, 16, 16]}
 FAR_APART = _labels(64, fg=(2, np.s_[2:4, 2:4, 2:4]), fix=(1, np.s_[50:52, 50:52, 50:52]))
 SCRIBBLE = _labels(32, s=(2, np.s_[2:6, 2:6, 2:6]))

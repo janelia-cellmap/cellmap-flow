@@ -175,7 +175,13 @@ class PatchSampler:
         self.shape_voxels = np.array(arr.shape, dtype=int)
         chunk_shape = np.array(arr.chunks, dtype=int)
 
-        chunk_keys = [name for name in os.listdir(s0_path) if CHUNK_KEY_RE.match(name)]
+        # In chunk-index order, not os.listdir's: that order differs between
+        # filesystems (ext4 orders names by a per-filesystem hash), so the same
+        # seed drew different patches on another machine or in a copied session.
+        chunk_keys = sorted(
+            (name for name in os.listdir(s0_path) if CHUNK_KEY_RE.match(name)),
+            key=lambda name: tuple(int(i) for i in name.split(".")),
+        )
         if not chunk_keys:
             raise ValueError(
                 f"Volume zarr at {self.volume_zarr_path} has no populated chunks. "
