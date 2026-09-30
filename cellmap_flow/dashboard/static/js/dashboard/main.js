@@ -2,12 +2,16 @@
 // includes).
 //
 // A module runs once the page is parsed and before DOMContentLoaded: the
-// page's elements are all there, and the inline scripts still in the tab
-// partials, which wait for DOMContentLoaded, have not started yet.
+// page's elements are all there, and the Finetune tab's inline script,
+// which waits for DOMContentLoaded, has not started yet. So the Models
+// tab's requests still go first, as they did when its own script was the
+// first to run.
 import { ApiError, postJSON } from "../lib/api.js";
 import { mountOpChain } from "../shared/op-chain.js";
+import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
+import { initModelsTab } from "./models-tab.js";
 
 // The header's "Toggle Dashboard" button. The Neuroglancer column's inline
 // flex style makes it fill whatever width the dashboard column leaves, so
@@ -77,9 +81,7 @@ function initServerConfigModal() {
       statusEl.style.color = "#f87171";
       statusEl.textContent = message;
     }
-    // Counts go as numbers (the inputs hold strings, and "" reached int("")
-    // on the server); a blank one or a blank queue is left out so the server
-    // keeps its default.
+    // A blank count or queue is left out so the server keeps its default.
     const payload = {
       charge_group: document.getElementById("modal_charge_group").value.trim(),
     };
@@ -89,22 +91,17 @@ function initServerConfigModal() {
       ["modal_nb_cores_worker", "nb_cores_worker", "Cores per Worker"],
       ["modal_nb_workers", "nb_workers", "Number of Workers"],
     ];
-    for (const [id, key, label] of counts) {
-      const raw = document.getElementById(id).value.trim();
-      if (raw === "") continue;
-      const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) {
-        fail(label + " must be a whole number of at least 1.");
-        return;
+    try {
+      for (const [id, key, label] of counts) {
+        const n = readCount(document.getElementById(id).value, label);
+        if (n !== undefined) payload[key] = n;
       }
-      payload[key] = n;
+    } catch (err) {
+      fail(err.message);
+      return;
     }
-    postJSON("/api/server-config", payload)
-      .then(function (data) {
-        if (!data.success) {
-          fail("Error saving config: " + (data.error || "HTTP 200"));
-          return;
-        }
+    saveServerConfig(payload)
+      .then(function () {
         statusEl.style.color = "#4ade80";
         statusEl.textContent = "Saved!";
         setTimeout(function () { modal.hide(); }, 500);
@@ -116,6 +113,11 @@ function initServerConfigModal() {
 }
 
 initConnect();
+// Loading a model is the point at which advice is most useful, and that
+// path never goes through /api/process. The jobs start on background
+// threads, so refreshModelAdvice polls rather than assuming the server is
+// already up.
+initModelsTab({ onModelsSubmitted: refreshModelAdvice });
 document.getElementById("toggleDashboardBtn").addEventListener("click", toggleDashboard);
 const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind: "input" });
 const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });
@@ -123,6 +125,3 @@ initModelAdvice({ input: inputChain, postprocess: postChain });
 document.addEventListener("keydown", submitOnEnter);
 initSubmitAll(inputChain, postChain);
 initServerConfigModal();
-
-// The Models tab's inline script calls this by name after a submit.
-window.refreshModelAdvice = refreshModelAdvice;
