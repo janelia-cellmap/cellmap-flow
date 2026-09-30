@@ -161,6 +161,7 @@ def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, l
     Args:
         finetune_job: Job to update
         log_content: New log content to parse
+        listeners: Whom to tell
     """
     if finetune_job.inference_server_ready:
         return
@@ -208,6 +209,7 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, listene
     Args:
         finetune_job: Job to update
         log_content: New log content to parse
+        listeners: Whom to tell
     """
     # Status markers, in the order they were printed: a restart that
     # follows a divergence in the same chunk leaves the job running, and

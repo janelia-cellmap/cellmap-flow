@@ -410,7 +410,8 @@ def build_command(
 def launch(job_name: str, command: str, queue: Optional[str], charge_group: Optional[str]):
     """Start ``command`` (build_command's) as the job ``job_name``.
 
-    On LSF with one GPU when bsub is available, else as a process here.
+    On LSF with one GPU when bsub is available, for the dashboard's walltime
+    (``g.walltime``) or else the site's; otherwise as a process here.
     Returns its LSFJob or LocalJob; raises RuntimeError if it did not start.
     """
     # Check if bsub is available
