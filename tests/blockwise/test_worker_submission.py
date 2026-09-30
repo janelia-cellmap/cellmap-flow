@@ -84,3 +84,16 @@ def test_only_the_workers_run_the_model(raw_array, model_script, task_yaml, monk
     assert master.inferencers == [] and master.output_arrays, "it still creates the outputs"
     with pytest.raises(RuntimeError, match="worker"):
         master.process_fn(None)
+
+
+def test_a_worker_checks_its_model_on_the_warmup_only(raw_array, model_script, task_yaml, monkeypatch):
+    from cellmap_flow.models.models_config import ModelConfig
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a forward besides the warmup")
+
+    monkeypatch.setattr(ModelConfig, "_validate_model_shapes", refuse)
+    path = task_yaml(raw_array(), model_script())
+    CellMapFlowBlockwiseProcessor(path, create=True)  # creates the outputs a worker opens
+    (inferencer,) = CellMapFlowBlockwiseProcessor(path, create=False).inferencers
+    assert inferencer.output_class is not None, "the warmup forward ran"

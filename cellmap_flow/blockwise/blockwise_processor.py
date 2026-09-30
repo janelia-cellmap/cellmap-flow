@@ -193,10 +193,13 @@ class CellMapFlowBlockwiseProcessor:
         # Build model configuration objects
         models = build_models(self.config["models"])
         # The master (create) only needs the models' geometry, to schedule
-        # blocks and create the outputs; the workers run the model, so only
-        # they build Inferencers and run the dummy forward pass.
+        # blocks and create the outputs, so it runs no forward at all. The
+        # workers run the model: each Inferencer's warmup forward checks the
+        # declared shapes, and building a config (the first one is read below,
+        # before its Inferencer exists) runs no forward of its own.
         for model in models:
             model.validate_model_shapes = not create
+            model.check_shapes_on_warmup = not create
             logger.info(str(model))
 
         if len(models) == 0:
