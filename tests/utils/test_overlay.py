@@ -100,3 +100,11 @@ def test_annotation_layers_come_with_the_draw_tools_bound(dashboard, viewer):
 
     assert (tool(bindings["A"]), tool(bindings["F"])) == ("vox-brush", "vox-flood-fill")
     assert all(k.isupper() and len(k) == 1 for k in bindings)
+
+
+def test_a_new_annotation_layer_is_selected_with_its_panel_open(dashboard, viewer):
+    """Creating or loading a volume switches the viewer to its layer, ready to paint."""
+    body = dashboard.post("/api/finetune/add-to-viewer", json={"crop_id": "c1", "minio_url": "http://minio/x.zarr"}).get_json()
+    assert body["success"]
+    selected = viewer.state.selected_layer
+    assert (selected.layer, selected.visible) == ("annotation_c1", True)

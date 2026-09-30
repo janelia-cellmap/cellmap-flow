@@ -370,6 +370,11 @@ def add_crop_to_viewer_response(data):
                 # its layer; the keys just will not be pre-bound.
                 logger.warning(f"Could not pre-bind annotation tools: {e}")
             s.layers[layer_name] = layer
+            # Select the new layer and open its panel, so the user can start
+            # painting into the volume they just created or loaded without
+            # hunting for it in the layer list.
+            s.selected_layer.layer = layer_name
+            s.selected_layer.visible = True
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:
