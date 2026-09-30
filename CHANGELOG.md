@@ -99,7 +99,9 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - behind a reverse proxy, the iframe loads the viewer through it.
   - Latency:
     - chunk requests use the GPU one at a time in arrival order (`CELLMAP_FLOW_GPU_SLOTS`, default 1);
-    - a chunk whose client hung up before its turn gets 499 and isn't computed.
+    - a chunk whose client hung up before its turn gets 499 and isn't computed;
+    - a served model's shapes are checked on its warmup forward, on the serving device, instead of in a separate forward when its config is built. A mismatch raises the same `ValueError`, still before the server prints its address. Server start goes from 26–34 s to 14–16 s;
+    - fp16 is opt-in (`CELLMAP_FLOW_HALF_PRECISION=1`, or `half_precision = True` in a model script), checked against fp32 at warmup; a model that differs by more than 1% of its output range is served in fp32.
   - Round 1's 5 s bpeek backoff is reverted (`94e8de5`). NFS can hide the new ready file for up to 30 s, and the backoff then delayed server detection.
   - A blockwise worker checks its first model's shapes once, on the warmup forward. It used to run the check a second time, on whatever device the loader left the model on.
   - The pipeline builder builds its nodes from elements, not HTML strings (`00e9034`, X2). Ids, names and parameters in an imported YAML or JSON file can no longer run as script in the dashboard, and a node whose id holds a quote now works.
