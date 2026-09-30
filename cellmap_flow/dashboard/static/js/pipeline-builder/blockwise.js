@@ -53,14 +53,14 @@ function invalidateBlockwiseSteps() {
   blockwiseState.yaml_paths = null;
   blockwiseState.task_name = null;
   setDisabled({ generate: true, precheck: true, submit: true });
-  if (started) setStatus("Pipeline changed: validate again", "var(--text-secondary)");
+  if (started) setStatus("Pipeline changed: validate again", "var(--pb-text-secondary)");
 }
 
 // True, after telling the user, when the pipeline was edited while a step
 // started at edit count `editsAtStart` was waiting on the server.
 function blockwiseEditedSince(editsAtStart) {
   if (editsAtStart === blockwiseEdits) return false;
-  setStatus("Pipeline changed: validate again", "var(--text-secondary)");
+  setStatus("Pipeline changed: validate again", "var(--pb-text-secondary)");
   showMessage("Pipeline changed during that step; validate again", "info");
   return true;
 }
@@ -113,14 +113,14 @@ async function validateBlockwise() {
     if (blockwiseEditedSince(editsAtStart)) return;
     if (data.valid) {
       showMessage("✓ Pipeline valid for blockwise processing", "success");
-      setStatus("✓ Step 1: Validated", "var(--accent-green)");
+      setStatus("✓ Step 1: Validated", "var(--accent)");
       blockwiseState.validated = true;
       blockwiseState.generated = false;
       blockwiseState.prechecked = false;
       setDisabled({ generate: false, precheck: true, submit: true });
     } else {
       showMessage("✗ " + data.error, "error");
-      setStatus("✗ Validation failed", "var(--accent-red)");
+      setStatus("✗ Validation failed", "var(--pb-accent-red)");
       blockwiseState.validated = false;
       setDisabled({ generate: true, precheck: true, submit: true });
     }
@@ -150,7 +150,7 @@ async function generateBlockwiseTask() {
     if (data.success) {
       const taskPath = (data.task_paths && data.task_paths[0]) || data.task_name || "Task";
       showMessage(`✓ Task generated: ${taskPath}`, "success");
-      setStatus("✓ Step 2: Generated", "var(--accent-green)");
+      setStatus("✓ Step 2: Generated", "var(--accent)");
       blockwiseState.generated = true;
       blockwiseState.prechecked = false;
       blockwiseState.yaml_paths = data.task_paths;  // what Precheck checks and Submit runs
@@ -161,7 +161,7 @@ async function generateBlockwiseTask() {
       console.log("Task YAML:", data.task_yaml);
     } else {
       showMessage("✗ " + data.error, "error");
-      setStatus("✗ Generation failed", "var(--accent-red)");
+      setStatus("✗ Generation failed", "var(--pb-accent-red)");
       blockwiseState.generated = false;
       setDisabled({ precheck: true, submit: true });
     }
@@ -186,13 +186,13 @@ async function precheckBlockwiseTask() {
     if (blockwiseEditedSince(editsAtStart)) return;
     if (data.success) {
       showMessage(`✓ Precheck passed: ${data.message}`, "success");
-      setStatus("✓ Step 3: Prechecked", "var(--accent-green)");
+      setStatus("✓ Step 3: Prechecked", "var(--accent)");
       blockwiseState.prechecked = true;
       setDisabled({ submit: false });
       console.log("Precheck result:", data.message);
     } else {
       showMessage(`✗ Precheck failed: ${data.error}`, "error");
-      setStatus("✗ Precheck failed", "var(--accent-red)");
+      setStatus("✗ Precheck failed", "var(--pb-accent-red)");
       blockwiseState.prechecked = false;
       setDisabled({ submit: true });
       console.error("Precheck error:", data.error);
@@ -220,10 +220,10 @@ async function submitBlockwiseTask() {
     const data = await response.json();
     if (data.success) {
       showMessage("✓ Task submitted: " + data.job_id + " (" + data.task_name + ")", "success");
-      setStatus("✓ Submitted - Job: " + data.job_id + " - " + data.task_name, "var(--accent-green)");
+      setStatus("✓ Submitted - Job: " + data.job_id + " - " + data.task_name, "var(--accent)");
     } else {
       showMessage("✗ " + data.error, "error");
-      setStatus("✗ Submission failed", "var(--accent-red)");
+      setStatus("✗ Submission failed", "var(--pb-accent-red)");
     }
   } catch (error) {
     showMessage("Error submitting task: " + error.message, "error");

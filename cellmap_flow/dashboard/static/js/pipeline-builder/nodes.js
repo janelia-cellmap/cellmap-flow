@@ -81,11 +81,11 @@ function ioContent(node) {
       h("label", { class: "param-label" }, "Bounding Boxes"),
       h("div", { style: "display: flex; gap: 8px; align-items: center; margin-bottom: 8px;" },
         h("button", { class: "configure-btn", onClick: () => openBBXGeneratorModal(node.id) }, `📦 Generate (${bboxDisplay})`),
-        h("button", { class: "configure-btn", style: "background: var(--accent-blue); flex: 0;", onClick: () => fileInput.click() }, "📂 Load"),
-        h("button", { class: "configure-btn", style: "background: var(--accent-green); flex: 0; padding: 6px 10px;", onClick: showBBXJsonHelp }, "?"),
+        h("button", { class: "configure-btn", style: "background: var(--pb-accent-blue); flex: 0;", onClick: () => fileInput.click() }, "📂 Load"),
+        h("button", { class: "configure-btn", style: "background: var(--accent); flex: 0; padding: 6px 10px;", onClick: showBBXJsonHelp }, "?"),
       ),
       fileInput,
-      h("div", { class: "selected-channels", style: "font-size: 11px; color: var(--text-secondary); margin-top: 4px;" }, bboxDisplay),
+      h("div", { class: "selected-channels", style: "font-size: 11px; color: var(--pb-text-secondary); margin-top: 4px;" }, bboxDisplay),
       h("div", { style: "margin-top: 10px; display: flex; align-items: center; gap: 8px;" },
         h("input", {
           type: "checkbox", id: separateId, checked: !!params.separate_bounding_boxes_zarrs, style: "cursor: pointer;",
@@ -101,7 +101,7 @@ function ioContent(node) {
       h("label", { class: "param-label" }, "Output Channels"),
       h("button", { class: "configure-btn", onClick: () => openOutputChannelsModal(node.id) },
         `🔧 Configure (${selectedChannels.length || 0} selected)`),
-      h("div", { class: "selected-channels", style: "font-size: 11px; color: var(--text-secondary); margin-top: 4px;" },
+      h("div", { class: "selected-channels", style: "font-size: 11px; color: var(--pb-text-secondary); margin-top: 4px;" },
         selectedDisplay || "Click configure to select"),
     ));
   }

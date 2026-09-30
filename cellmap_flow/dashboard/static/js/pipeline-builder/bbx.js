@@ -66,7 +66,7 @@ async function startBBXGeneration() {
       if (result.existing_bounding_boxes && result.existing_bounding_boxes.length > 0) {
         document.getElementById("bbx-existing-boxes").style.display = "block";
         document.getElementById("bbx-boxes-list").replaceChildren(...result.existing_bounding_boxes.map((bbox, idx) => h("div",
-          { style: "background: var(--bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--accent-blue);" },
+          { style: "background: var(--pb-bg-tertiary); padding: 6px 10px; border-radius: 4px; font-size: 10px; border-left: 3px solid var(--pb-accent-blue);" },
           h("div", {}, h("strong", {}, `Box ${idx + 1}`)),
           h("div", {}, `Offset: [${(bbox.offset || []).join(", ")}]`),
           h("div", {}, `Shape: [${(bbox.shape || []).join(", ")}]`),

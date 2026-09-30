@@ -58,7 +58,7 @@ function populateOutputChannelsModal() {
   const available = modalState.availableChannels;
   const selected = modalState.selectedChannels;
   if (available.length === 0) {
-    body.innerHTML = '<p style="color: var(--text-secondary);">No channels detected from models</p>';
+    body.innerHTML = '<p style="color: var(--pb-text-secondary);">No channels detected from models</p>';
     return;
   }
   // Channel names come from model configs, which an imported YAML sets:

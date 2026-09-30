@@ -1,8 +1,8 @@
 /* ============================================
    CellMap Flow — design tokens
    The dashboard's one palette, and its radii, shadows and timing.
-   dark.css imports this first. pipeline_builder.css still defines a
-   palette of its own; it is to use this one instead.
+   dark.css and pipeline_builder.css import this first; the pipeline
+   builder adds the few colours of its own this has not (--pb-*).
    ============================================ */
 
 :root {

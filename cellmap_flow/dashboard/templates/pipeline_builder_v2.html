@@ -25,8 +25,8 @@
         </div>
 
         <!-- Blockwise Configuration Section -->
-        <div id="blockwise-bar" class="blockwise-bar" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px 24px; display: none; gap: 12px; align-items: center;">
-            <span style="font-weight: 600; color: var(--text-secondary);"> Blockwise:</span>
+        <div id="blockwise-bar" class="blockwise-bar" style="background: var(--bg-muted); border-bottom: 1px solid var(--pb-border-color); padding: 12px 24px; display: none; gap: 12px; align-items: center;">
+            <span style="font-weight: 600; color: var(--pb-text-secondary);"> Blockwise:</span>
             <button id="btn-validate" class="action-btn" title="Step 1: Validate if pipeline is ready for blockwise processing">✓ 1- Validate</button>
             <button id="btn-generate" class="action-btn" title="Step 2: Generate blockwise task YAML files" disabled>📋 2- Generate Task</button>
             <button id="btn-precheck" class="action-btn" title="Step 3: Precheck blockwise task configuration" disabled>🔍 3- Precheck</button>
@@ -34,13 +34,13 @@
             
             <!-- Model Merge Mode Selector -->
             <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-                <label for="model-merge-mode" style="color: var(--text-secondary); font-size: 12px; white-space: nowrap;">Model Merge:</label>
-                <select id="model-merge-mode" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                <label for="model-merge-mode" style="color: var(--pb-text-secondary); font-size: 12px; white-space: nowrap;">Model Merge:</label>
+                <select id="model-merge-mode" style="background: var(--pb-bg-tertiary); color: var(--text-primary); border: 1px solid var(--pb-border-color); padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">
                     <option value="">None (Single Model)</option>
                 </select>
             </div>
             
-            <div id="blockwise-status" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"></div>
+            <div id="blockwise-status" style="font-size: 12px; color: var(--pb-text-secondary); white-space: nowrap;"></div>
 
         </div>
 
@@ -74,7 +74,7 @@
                         <span id="models-toggle">▼</span>
                     </button>
                     <div class="library-items" id="models-items"></div>
-                    <button id="create-model-config-open-btn" class="action-btn" style="width: 100%; margin-top: 8px; background: var(--accent-blue);"
+                    <button id="create-model-config-open-btn" class="action-btn" style="width: 100%; margin-top: 8px; background: var(--pb-accent-blue);"
                             title="Create a custom model configuration">
                         ➕ Create Custom
                     </button>
@@ -132,21 +132,21 @@
             </div>
             <div class="modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
                 <div id="bbx-viewer-content" style="flex: 1; overflow: hidden; position: relative;">
-                    <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                    <div style="padding: 20px; text-align: center; color: var(--pb-text-secondary);">
                         Loading Neuroglancer viewer...
                     </div>
                 </div>
-                <div id="bbx-existing-boxes" style="padding: 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); max-height: 120px; overflow-y: auto; display: none;">
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">📦 Existing Bounding Boxes (you can delete them in Neuroglancer):</div>
+                <div id="bbx-existing-boxes" style="padding: 12px; background: var(--bg-muted); border-top: 1px solid var(--pb-border-color); max-height: 120px; overflow-y: auto; display: none;">
+                    <div style="font-size: 11px; color: var(--pb-text-secondary); margin-bottom: 8px; font-weight: 600;">📦 Existing Bounding Boxes (you can delete them in Neuroglancer):</div>
                     <div id="bbx-boxes-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
                 </div>
-                <div id="bbx-status" style="padding: 12px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);">
+                <div id="bbx-status" style="padding: 12px; background: var(--pb-bg-tertiary); border-top: 1px solid var(--pb-border-color); font-size: 12px; color: var(--pb-text-secondary);">
                     Waiting for bounding boxes...
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="action-btn" data-close>Cancel</button>
-                <button id="bbx-done-btn" class="action-btn" style="background: var(--accent-green); color: white;">✓ Done - Save Boxes</button>
+                <button id="bbx-done-btn" class="action-btn" style="background: var(--accent); color: white;">✓ Done - Save Boxes</button>
             </div>
         </div>
     </div>
@@ -163,7 +163,7 @@
             </div>
             <div class="modal-footer">
                 <button class="action-btn" data-close>Cancel</button>
-                <button id="save-output-channels-btn" class="action-btn" style="background: var(--accent-green); color: white;">✓ Save Channels</button>
+                <button id="save-output-channels-btn" class="action-btn" style="background: var(--accent); color: white;">✓ Save Channels</button>
             </div>
         </div>
     </div>
@@ -177,7 +177,7 @@
             </div>
             <div id="bbx-json-template-content" class="modal-body">
                 <!-- Loaded dynamically from bbox_json_template.html -->
-                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading template...</div>
+                <div style="text-align: center; color: var(--pb-text-secondary); padding: 20px;">Loading template...</div>
             </div>
             <div class="modal-footer">
                 <button class="action-btn" data-close>Close</button>
@@ -206,7 +206,7 @@
             </div>
             <div class="modal-footer">
                 <button class="action-btn" data-close>Cancel</button>
-                <button id="create-model-config-btn" class="action-btn" style="background: var(--accent-green); color: white;">✓ Create Model</button>
+                <button id="create-model-config-btn" class="action-btn" style="background: var(--accent); color: white;">✓ Create Model</button>
             </div>
         </div>
     </div>

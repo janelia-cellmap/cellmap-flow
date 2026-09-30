@@ -54,7 +54,7 @@ function updateModelConfigForm(className) {
   }
   if (optional.length > 0) {
     const optionalDiv = document.createElement("div");
-    optionalDiv.innerHTML = '<h3 style="margin-top: 16px; margin-bottom: 12px; color: var(--text-secondary);">Optional Parameters</h3>';
+    optionalDiv.innerHTML = '<h3 style="margin-top: 16px; margin-bottom: 12px; color: var(--pb-text-secondary);">Optional Parameters</h3>';
     optional.forEach(([paramName, paramInfo]) => optionalDiv.appendChild(createParameterField(paramName, paramInfo)));
     formDiv.appendChild(optionalDiv);
   }
