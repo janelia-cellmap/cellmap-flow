@@ -287,22 +287,32 @@ def test_a_cancelled_job_stays_cancelled(make_job, monkeypatch, cancel):
     assert job.status == JobStatus.CANCELLED
 
 
+SERVER = f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n"
 # Iteration 1 completes before its server is up (the trainer announces the
 # model first), then the server comes up, then a restart completes iteration 2.
-ITERATIONS = ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n", f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n",
+ITERATIONS = ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n", SERVER,
               "RESTARTING_TRAINING\nTRAINING_ITERATION_COMPLETE: m_finetuned_2\n"]
 
 
-def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatch):
+@pytest.mark.parametrize("chunks, events", [
+    pytest.param(ITERATIONS, [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1", "m_finetuned_1"),
+                              ("iteration", "m_finetuned_2", "m_finetuned_1")], id="the server after its model"),
+    # Iteration 1 was announced again as it came up: only the dashboard's own
+    # listener used to set the job's name.
+    pytest.param(["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n" + SERVER, ITERATIONS[2]],
+                 [("server", URL, "m_finetuned_1", None), ("iteration", "m_finetuned_2", "m_finetuned_1")],
+                 id="the server and its model in one read"),
+])
+def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatch, chunks, events):
     """What the dashboard does about a job is a listener. While listeners run
-    the job still has the previous iteration's name, so one can replace that
-    iteration's layer; and a listener that raises stops neither the others nor
+    the job still has its model's previous name, so one can replace that
+    model's layer; and a listener that raises stops neither the others nor
     the monitor."""
     heard = []
 
     class Recording:
         def on_server_ready(self, job, url, model_name):
-            heard.append(("server", url, model_name))
+            heard.append(("server", url, model_name, job.finetuned_model_name))
 
         def on_iteration_complete(self, job, model_name):
             heard.append(("iteration", model_name, job.finetuned_model_name))
@@ -315,10 +325,9 @@ def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatc
     manager.remove_listener(manager.viewer_listener)
     manager.add_listener(Broken())
     manager.add_listener(Recording())
-    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * 3, LSF.FAILED))
-    _monitor(manager, job, ITERATIONS, monkeypatch)
-    assert heard == [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1"),
-                     ("iteration", "m_finetuned_2", "m_finetuned_1")]
+    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * len(chunks), LSF.FAILED))
+    _monitor(manager, job, chunks, monkeypatch)
+    assert heard == events
     assert job.finetuned_model_name == "m_finetuned_2"
 
 

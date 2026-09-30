@@ -238,18 +238,18 @@ class FinetuneJobListener:
 
     Both are called on the job's monitor thread. A listener need not define
     both; one that raises is logged and does not stop the others.
+
+    While listeners run, ``job.finetuned_model_name`` is still the name the
+    job's model had before the event (None before the first), so one that
+    replaces a viewer layer can find the old one. The manager sets it to
+    ``model_name`` once they have all run.
     """
 
     def on_server_ready(self, job: FinetuneJob, url: str, model_name: str) -> None:
         """The job's inference server is up at ``url``, serving ``model_name``."""
 
     def on_iteration_complete(self, job: FinetuneJob, model_name: str) -> None:
-        """The job finished a training iteration and named its model ``model_name``.
-
-        ``job.finetuned_model_name`` is still the previous iteration's name
-        (None before the first) while listeners run, so one that replaces a
-        viewer layer can find the old one; the manager updates it after.
-        """
+        """The job finished a training iteration and named its model ``model_name``."""
 
 
 class ViewerListener(FinetuneJobListener):
@@ -1332,8 +1332,6 @@ class FinetuneJobManager:
                 shader=self._finetuned_shader(server_url),
             )
 
-        # Update the stored name
-        finetune_job.finetuned_model_name = model_name
         self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
 
     def _finetuned_shader(self, server_url):
@@ -1403,6 +1401,9 @@ class FinetuneJobManager:
             return
 
         self._notify("on_server_ready", finetune_job, server_url, model_name)
+        # Whatever the listeners managed (see FinetuneJobListener), and so
+        # that the iteration it serves is not announced again.
+        finetune_job.finetuned_model_name = model_name
 
     def _register_finetune_model_config(
         self, finetune_job: FinetuneJob, finetuned_model_name: str
