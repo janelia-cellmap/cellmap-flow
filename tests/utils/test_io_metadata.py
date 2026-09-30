@@ -294,6 +294,17 @@ def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(pyramid, tmp_
     assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
 
 
+def test_choosing_a_precomputed_scale_opens_none_of_them(write_array, monkeypatch):
+    """One read of the volume's info gives every scale's voxel size; opening each
+    scale took about 50 ms on gs://, and a volume there can have a dozen."""
+    import tensorstore
+
+    volume = write_array("precomputed", np.zeros((32,) * 3, np.uint8), {"resolution": [8] * 3}, scales=3)
+    monkeypatch.setattr(tensorstore, "open", lambda *args, **kwargs: pytest.fail("a scale was opened"))
+    assert select_dataset(volume, (16, 16, 16)) == (volume + "/s1", "s1")
+    assert closest_raw_scale(volume, (20,) * 3) == (16.0,) * 3
+
+
 @pytest.mark.parametrize("volume", [pytest.param("precomputed:///d/pc", id="local"), pytest.param("gs://b/pc", id="gs")])
 def test_a_precomputed_path_with_no_scale_to_choose_is_not_opened(volume, caplog):
     """A named scale is read as it is, and a volume without a voxel size at scale 0,

@@ -18,7 +18,7 @@ Four parsers produce it:
   its rounding of the offset onto the voxel grid (``regularize_offset``).
 - ``legacy_attrs``: ``transform`` or ``resolution``/``offset`` on a v3
   array itself (and on crops), taken as written.
-- ``_precomputed``: tensorstore's dimension units.
+- ``_precomputed``: the volume's ``info`` JSON, as tensorstore reads it.
 
 ``list_levels(path)`` gives the levels of an OME multiscale group, or the
 scales of a precomputed volume.
@@ -775,51 +775,55 @@ def _read_v3(path: str) -> ArrayMeta:
     raise RuntimeError(f"No array found under Zarr v3 group: {container}")
 
 
-def _open_precomputed(path: str):
-    """The tensorstore of the scale of a precomputed volume ``path`` names
-    (``paths.precomputed_kvstore``), in the driver's order."""
+def _precomputed_info(path: str) -> dict:
+    """The ``info`` JSON of the precomputed volume ``path`` is, or is a scale
+    of: one read."""
     import tensorstore as ts
 
     # Not GCE's metadata server: probing it for credentials stalls a gs://
     # open off Google Cloud (io.source sets the same before opening one).
     os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
-    kvstore, scale_index = paths.precomputed_kvstore(path)
-    return ts.open(
-        {"driver": "neuroglancer_precomputed", "kvstore": kvstore, "scale_index": scale_index},
-        read=True,
-        write=False,
-    ).result()
+    kvstore, _ = paths.precomputed_kvstore(path)
+    result = (ts.KvStore.open(kvstore).result() / "info").read("").result()
+    if result.state != "value":
+        raise FileNotFoundError(f"{path} is not a precomputed volume: it has no info file")
+    return json.loads(result.value)
 
 
-def _precomputed(path: str) -> ArrayMeta:
-    """A neuroglancer precomputed volume, in C order (c, z, y, x).
+def _precomputed(path: str, info: Optional[dict] = None) -> ArrayMeta:
+    """The scale of a neuroglancer precomputed volume ``path`` names (the
+    volume is scale 0, ``…/s<N>`` scale N; ``paths.precomputed_kvstore``),
+    in C order (channel, z, y, x), from the volume's ``info`` (read here
+    unless given) as tensorstore's neuroglancer_precomputed driver reads it,
+    so that choosing a scale opens none of them:
 
-    ``voxel_offset`` is where voxel 0 is, in voxels, so the translation is
-    ``voxel_offset * resolution``. tensorstore starts the volume's domain at
-    it; io.source opens it with the domain moved to 0.
+    - the shape is ``num_channels`` and the scale's ``size``;
+    - the voxel size is its ``resolution``, in nm;
+    - the chunk shape is its first ``chunk_sizes`` entry, tensorstore's read
+      chunk whether the scale is sharded or not;
+    - ``voxel_offset`` (0 when left out) is where voxel 0 is, in voxels, so
+      the translation is ``voxel_offset * resolution``. tensorstore starts
+      the volume's domain at it; io.source opens it with the domain moved
+      to 0.
+
+    ``info`` lists each per-axis value x, y, z.
     """
-    import tensorstore as ts
-
-    # The driver's order is x, y, z, channel.
-    store = _open_precomputed(path)[ts.d[:].transpose[::-1]]
-    labels = list(store.domain.labels)
-    spatial = [i for i, name in enumerate(labels) if name not in _NON_SPATIAL_AXIS_NAMES]
-    voxel_size = []
-    for i in spatial:
-        unit = store.dimension_units[i]
-        voxel_size.append(
-            float(unit.to_json()[0] * nm_per_unit(unit.to_json()[1])) if unit is not None else 1.0
-        )
+    info = _precomputed_info(path) if info is None else info
+    _, index = paths.precomputed_kvstore(path)
+    if index >= len(info["scales"]):
+        raise ValueError(f"{path}: the volume has {len(info['scales'])} scales")
+    scale = info["scales"][index]
+    channels = (int(info["num_channels"]),)
     header = _Header(
-        tuple(store.shape),
-        np.dtype(store.dtype.numpy_dtype),
-        tuple(store.chunk_layout.read_chunk.shape),
+        channels + tuple(int(v) for v in reversed(scale["size"])),
+        np.dtype(info["data_type"]),
+        channels + tuple(int(v) for v in reversed(scale["chunk_sizes"][0])),
     )
-    names = dict(enumerate(labels))
-    corner = [
-        float(store.domain.inclusive_min[i]) * vs for i, vs in zip(spatial, voxel_size)
-    ]
-    return _meta(path, "precomputed", header, spatial, names, voxel_size, corner)
+    voxel_size = [float(v) for v in reversed(scale["resolution"])]
+    voxel_offset = reversed(scale.get("voxel_offset", [0, 0, 0]))
+    corner = [float(v) * size for v, size in zip(voxel_offset, voxel_size)]
+    names = {0: "channel", 1: "z", 2: "y", 3: "x"}
+    return _meta(path, "precomputed", header, [1, 2, 3], names, voxel_size, corner)
 
 
 def read_array_meta(path: str) -> ArrayMeta:
@@ -864,14 +868,16 @@ def levels_from_zarr_group(group, group_path: str = "") -> List[Tuple[str, Array
 def _precomputed_levels(path: str) -> List[Tuple[str, ArrayMeta]]:
     """``list_levels`` of a precomputed volume: every scale its ``info``
     lists, in that order, as ``s<N>``, the path under the volume that opens
-    scale N. The path of one scale (``…/s2``) is not the volume, and raises
-    ValueError."""
+    scale N, all from one read of the info (a gs:// volume can have a
+    dozen scales, and opening each took about 50 ms). The path of one scale
+    (``…/s2``) is not the volume, and raises ValueError."""
     _, scale = paths.precomputed_scale(path)
     if scale is not None:
         raise ValueError(f"{path} is scale {scale} of a precomputed volume, not the volume")
-    info = json.loads(_open_precomputed(path).kvstore.read("info").result().value)
+    info = _precomputed_info(path)
     return [
-        (f"s{i}", _precomputed(paths.join(path, f"s{i}"))) for i in range(len(info["scales"]))
+        (f"s{i}", _precomputed(paths.join(path, f"s{i}"), info))
+        for i in range(len(info["scales"]))
     ]
 
 
