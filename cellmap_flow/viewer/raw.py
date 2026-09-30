@@ -22,9 +22,8 @@ import neuroglancer
 import numpy as np
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.io import paths
-from cellmap_flow.io.metadata import multiscales_from_group, open_zarr
-from cellmap_flow.utils.ds import check_for_multiscale
+from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.metadata import open_zarr
 
 logger = logging.getLogger(__name__)
 
@@ -162,39 +161,65 @@ def _layer(source, shader, segmentation, disable_meshes):
     return neuroglancer.SegmentationLayer(source=source)
 
 
+def _is_sn(name):
+    return name.startswith("s") and name[1:].isdigit()
+
+
+def _sn_arrays(group):
+    """The sN children of ``group``, s0 first; none when it has none or is
+    not a directory or group."""
+    try:
+        if paths.is_remote(group):
+            names = list(open_zarr(group, mode="r").keys())
+        else:
+            names = os.listdir(group)
+    except Exception:
+        return []
+    return sorted((name for name in names if _is_sn(name)), key=lambda name: int(name[1:]))
+
+
+def _pyramid(dataset_path):
+    """``(group, level paths)`` when ``dataset_path`` is a multiscale pyramid
+    or one of its levels, else None.
+
+    An OME-Zarr group's levels are the arrays its multiscales list, by their
+    ``datasets[].path`` in the order listed, whatever they are named ("s0"
+    or "0"); the path of one of them finds the others. A pyramid without
+    OME multiscales (N5, funlib) is a group's sN arrays, and an sN path is
+    one of its parent's.
+    """
+    parent, _, leaf = dataset_path.rstrip("/").rpartition("/")
+    for group, level in ((dataset_path, None), (parent, leaf)):
+        try:
+            levels = [path.strip("/") for path, _ in metadata.list_levels(group)]
+        except Exception:
+            continue  # no OME multiscales there
+        # An array an OME group does not list is not one of its levels.
+        return (group, levels) if level is None or level in levels else None
+    group = parent if _is_sn(leaf) else dataset_path
+    levels = _sn_arrays(group)
+    return (group, levels) if levels else None
+
+
 def get_raw_layer(
     dataset_path, normalize=True, wrap_raw=True, segmentation=False, disable_meshes=False
 ):
     """A neuroglancer layer showing a zarr, n5 or precomputed volume.
 
-    ``segmentation`` gives a SegmentationLayer over the same source, placed
-    the same way, for a label volume; its ids are served as stored, never
-    through the input normalizers. ``disable_meshes`` then turns off its
-    meshes subsource (see _layer).
+    A multiscale pyramid, or any of its levels, is shown as the whole
+    pyramid (see _pyramid for what its levels are). ``segmentation`` gives a
+    SegmentationLayer over the same source, placed the same way, for a
+    label volume; its ids are served as stored, never through the input
+    normalizers. ``disable_meshes`` then turns off its meshes subsource
+    (see _layer).
     """
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
-    # if multiscale dataset
-    if is_precomputed:
-        # precomputed format handles scales internally via tensorstore
-        is_multiscale = False
-    elif (
-        dataset_path.split("/")[-1].startswith("s")
-        and dataset_path.split("/")[-1][1:].isdigit()
-    ):
-        dataset_path = dataset_path.rsplit("/", 1)[0]
-        is_multiscale = True
-    else:
-        try:
-            v3_container = paths.find_v3_container(dataset_path)
-            if v3_container is not None:
-                is_multiscale = multiscales_from_group(v3_container) is not None
-            else:
-                is_multiscale = check_for_multiscale(open_zarr(dataset_path, mode="r"))[0]
-        except Exception as e:
-            logger.error(e)
-            is_multiscale = False
+    # A precomputed volume's scales are tensorstore's business.
+    pyramid = None if is_precomputed else _pyramid(dataset_path)
+    if pyramid is not None:
+        dataset_path, scales = pyramid
 
     if is_precomputed:
         filetype = "precomputed"
@@ -220,23 +245,8 @@ def get_raw_layer(
             disable_meshes,
         )
 
-    if is_multiscale:
+    if pyramid is not None:
         try:
-            if paths.is_remote(dataset_path):
-                grp = open_zarr(dataset_path, mode="r")
-                multiscales = grp.attrs.get("multiscales", None)
-                if multiscales:
-                    scales = [d["path"] for d in multiscales[0]["datasets"]]
-                else:
-                    scales = sorted(
-                        [k for k in grp.keys() if k.startswith("s") and k[1:].isdigit()],
-                        key=lambda x: int(x[1:]),
-                    )
-            else:
-                scales = [
-                    f for f in os.listdir(dataset_path) if f[0] == "s" and f[1:].isdigit()
-                ]
-                scales.sort(key=lambda x: int(x[1:]))
             images = [
                 ImageDataInterface(
                     paths.join(dataset_path, scale), normalize=normalize and not segmentation
@@ -263,20 +273,18 @@ def get_raw_layer(
             )
         except Exception as e:
             logger.error(e)
-            is_multiscale = False
 
-    if not is_multiscale:
-        # An image here reads through the input chain whatever normalize
-        # says, as it always has.
-        image = ImageDataInterface(original_dataset_path, normalize=not segmentation)
-        return _layer(
-            neuroglancer.LayerDataSource(
-                url=_local_volume(image), transform=_corner_transform(image)
-            ),
-            lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image),
-            segmentation,
-            disable_meshes,
-        )
+    # One array, or a pyramid that could not be shown as one. An image here
+    # reads through the input chain whatever normalize says, as it always has.
+    image = ImageDataInterface(original_dataset_path, normalize=not segmentation)
+    return _layer(
+        neuroglancer.LayerDataSource(
+            url=_local_volume(image), transform=_corner_transform(image)
+        ),
+        lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image),
+        segmentation,
+        disable_meshes,
+    )
 
 
 def _dimensions(image):

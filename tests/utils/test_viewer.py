@@ -50,6 +50,52 @@ def test_the_raw_layer_is_drawn_where_its_data_is(ome_pyramid, raw_zarr, write_a
     assert got_scales == pytest.approx(scales) and got_translation == translation
 
 
+def _named(pyramid, names):
+    """``pyramid`` with its levels renamed to ``names`` on disk and in its multiscales."""
+    import os
+
+    import zarr
+
+    group = zarr.open_group(pyramid, mode="r+")
+    multiscales = group.attrs["multiscales"]
+    for dataset, name in zip(multiscales[0]["datasets"], names):
+        os.rename(os.path.join(pyramid, dataset["path"]), os.path.join(pyramid, name))
+        dataset["path"] = name
+    group.attrs["multiscales"] = multiscales
+    return pyramid
+
+
+def _unlisted_s2(pyramid):
+    """``pyramid`` with its last level left out of its multiscales, though still on disk."""
+    import zarr
+
+    group = zarr.open_group(pyramid, mode="r+")
+    multiscales = group.attrs["multiscales"]
+    multiscales[0]["datasets"] = multiscales[0]["datasets"][:-1]
+    group.attrs["multiscales"] = multiscales
+    return pyramid
+
+
+def _funlib_pyramid(f):
+    """s0 and s1 of 8 and 16 nm, with funlib attributes and no multiscales."""
+    f.raw_zarr(np.zeros((8, 8, 8), np.uint8), voxel_size=(16, 16, 16), name="pyramid/s1")
+    return f.raw_zarr(np.zeros((16, 16, 16), np.uint8), name="pyramid/s0")
+
+
+@pytest.mark.parametrize("write", [
+    pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))), id="named-sN"),
+    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]), id="named-by-number"),
+    pytest.param(lambda f: _named(f.ome_pyramid(((8, 0), (16, 4))), ["0", "1"]) + "/1", id="one-numbered-level"),
+    pytest.param(lambda f: _unlisted_s2(f.ome_pyramid(((8, 0), (16, 4), (32, 12)))), id="a-level-not-listed"),
+    # Without OME multiscales, an sN level's siblings are the pyramid.
+    pytest.param(_funlib_pyramid, id="funlib-sN-without-multiscales"),
+])
+def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_zarr, write):
+    layer = get_raw_layer(write(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr)), normalize=False)
+    assert sorted(layer.source[0].url.volume_layers) == [(1, 1, 1), (2, 2, 2)]
+    assert _placement(layer)[0] == pytest.approx([8e-9] * 3)
+
+
 def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 

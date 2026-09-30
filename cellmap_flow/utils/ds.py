@@ -178,26 +178,6 @@ def _self_and_parent(array):
     return [array] if parent is None else [array, parent]
 
 
-def check_for_multiscale(group):
-    """check if multiscale attribute exists in the input group and for any parent level group
-
-    Args:
-        group (zarr.hierarchy.Group): group to check
-
-    Returns:
-        tuple({}, zarr.hierarchy.Group): (multiscales attribute body, zarr group where multiscales was found)
-    """
-    multiscales = group.attrs.get("multiscales", None)
-
-    if multiscales:
-        return (multiscales, group)
-
-    if group.path == "":
-        return (multiscales, group)
-
-    return check_for_multiscale(access_parent(group))
-
-
 def _items(array):
     """The attributes of ``array`` and of its parent group, if it has one."""
     return [dict(item.attrs) for item in _self_and_parent(array)]
