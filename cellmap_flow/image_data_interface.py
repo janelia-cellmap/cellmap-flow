@@ -63,16 +63,16 @@ class ImageDataInterface:
         ``requested_voxel_size`` record both.
         """
         dataset_path = dataset_path.replace("\\ ", " ")
-        if not dataset_path.startswith("precomputed://"):
-            # A multiscale group is read at its level for voxel_size.
-            try:
-                resolved, scale = multiscale.select_dataset(dataset_path, voxel_size)
-                if scale is not None:
-                    logger.info(f"found scale {scale} for voxel size {voxel_size}")
-                    dataset_path = resolved
-                    logger.info(f"using dataset path {dataset_path}")
-            except Exception as e:
-                logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
+        # A multiscale group is read at its level for voxel_size; a
+        # precomputed path at the scale it names.
+        try:
+            resolved, scale = multiscale.select_dataset(dataset_path, voxel_size)
+            if scale is not None:
+                logger.info(f"found scale {scale} for voxel size {voxel_size}")
+                dataset_path = resolved
+                logger.info(f"using dataset path {dataset_path}")
+        except Exception as e:
+            logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         self.input_norms = None if input_norms is None else list(input_norms)
         (

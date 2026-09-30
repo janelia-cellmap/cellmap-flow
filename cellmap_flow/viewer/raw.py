@@ -216,8 +216,9 @@ def get_raw_layer(
     dataset_path = dataset_path.replace("\\ ", " ")
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
-    # A precomputed volume's scales are tensorstore's business.
-    pyramid = None if is_precomputed else _pyramid(dataset_path)
+    # A precomputed volume's scales are tensorstore's business, and it is
+    # not zarr to look for levels in.
+    pyramid = None if paths.is_precomputed(dataset_path) else _pyramid(dataset_path)
     if pyramid is not None:
         dataset_path, scales = pyramid
 

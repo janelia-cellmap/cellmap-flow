@@ -119,7 +119,13 @@ def select_dataset(
     A multiscale group resolves to its level for ``voxel_size`` (see
     ``select_level``); an array is read as it is, with level None. Raises
     when a group has no multiscales it can read.
+
+    A precomputed path is read at the scale it names (``…/s<N>``, else
+    scale 0), whatever ``voxel_size`` is: its scales are not chosen by
+    voxel size, and it is never opened as zarr to look for levels.
     """
+    if paths.is_precomputed(dataset_path):
+        return dataset_path, None
     group = _level_group(dataset_path)
     if group is None:
         return dataset_path, None
@@ -153,8 +159,12 @@ def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:
     that ``select_level`` picks for ``target_voxel_size``, or None if it
     can't be determined.
 
-    ``dataset_path`` may be the multiscale group or one of its levels.
+    ``dataset_path`` may be the multiscale group or one of its levels. A
+    precomputed path has no level to choose (see ``select_dataset``), so
+    None, without a warning.
     """
+    if paths.is_precomputed(dataset_path):
+        return None
     try:
         levels: List[Level] = metadata.list_levels(_pyramid_of(dataset_path))
         return tuple(_voxel_size(select_level(levels, target_voxel_size)))

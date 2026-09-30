@@ -10,6 +10,7 @@ an OME translation is voxel 0's centre.
 import functools
 import http.server
 import json
+import logging
 import os
 import threading
 from types import SimpleNamespace
@@ -265,6 +266,16 @@ def test_a_group_resolves_to_a_level_and_an_array_is_read_as_it_is(janelia):
 def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(janelia, tmp_path):
     assert closest_raw_scale(janelia, (16, 16, 16)) == closest_raw_scale(janelia + "/s0", (20,) * 3) == (16.0,) * 3
     assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
+
+
+@pytest.mark.parametrize("path", [pytest.param("precomputed:///d/pc", id="local"), pytest.param("gs://b/pc", id="gs")])
+def test_a_precomputed_path_is_read_at_the_scale_it_names(path, caplog):
+    """Nothing looks for zarr levels there: a gs:// URL had fsspec ask for gcsfs, in a
+    warning on every ImageDataInterface opened on it."""
+    with caplog.at_level(logging.WARNING):
+        assert select_dataset(path, (16, 16, 16)) == (path, None)
+        assert closest_raw_scale(path, (16, 16, 16)) is None
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize("zarr_format", [pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
