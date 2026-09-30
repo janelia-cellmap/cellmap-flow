@@ -6,8 +6,6 @@ from typing import Sequence, Union
 import numpy as np
 import tensorstore as ts
 import zarr
-from funlib.geometry import Coordinate
-from skimage.measure import block_reduce
 from zarr.n5 import N5FSStore
 
 from cellmap_flow.globals import g
@@ -165,129 +163,6 @@ class LazyNormalization:
                     return np.dtype(norm.dtype)
             return np.dtype(at.numpy_dtype)
         return at
-
-
-def to_ndarray_tensorstore(
-    dataset,
-    roi=None,
-    voxel_size=None,
-    offset=None,
-    output_voxel_size=None,
-    axes_names=["z", "y", "x"],
-    custom_fill_value=None,
-    input_norms=None,
-):
-    """Read a region of a tensorstore dataset and return it as a numpy array
-
-    Args:
-        dataset ('tensorstore.dataset'): Tensorstore dataset, or the
-            LazyNormalization view ImageDataInterface.ts returns
-        roi ('funlib.geometry.Roi'): Region of interest to read
-        input_norms: normalizers to apply to what is read. ``None`` means the
-            view's own chain for a LazyNormalization, and ``g.input_norms``
-            for a bare tensorstore; pass ``[]`` for raw values.
-
-    Returns:
-        Numpy array of the region
-    """
-    if isinstance(dataset, LazyNormalization):
-        if input_norms is None:
-            input_norms = dataset.norms_to_apply()
-        dataset = dataset.selected()
-    elif input_norms is None:
-        input_norms = g.input_norms
-
-    if roi is None:
-        with ts.Transaction() as txn:
-            data = dataset.with_transaction(txn).read().result()
-        for norm in input_norms:
-            data = norm(data)
-        return data
-
-    if offset is None:
-        offset = np.zeros(roi.dims)
-
-    if output_voxel_size is None:
-        output_voxel_size = voxel_size
-
-    rescale_factor = 1
-    if not zarr_v3.same_voxel_size(voxel_size, output_voxel_size):
-        # in the case where there is a mismatch in voxel sizes, we may need to extra pad to ensure that the output is a multiple of the output voxel size
-        voxel_size = Coordinate(voxel_size)
-        output_voxel_size = Coordinate(output_voxel_size)
-        original_roi = roi
-        roi = original_roi.snap_to_grid(voxel_size)
-        rescale_factor = voxel_size[0] / output_voxel_size[0]
-        snapped_offset = (original_roi.begin - roi.begin) / output_voxel_size
-        snapped_end = (original_roi.end - roi.begin) / output_voxel_size
-        snapped_slices = tuple(
-            slice(snapped_offset[i], snapped_end[i]) for i in range(3)
-        )
-
-    # World nm -> voxel indices, in floats: dividing a Roi by a Coordinate
-    # first truncated a 5.24 nm voxel size to 5. Rounding is unchanged for
-    # integer sizes (truncation, except that float noise like 9.9999999 is 10).
-    voxel_size_f = np.asarray(voxel_size, dtype=float)
-    begin = np.trunc(
-        zarr_v3.snap_integral(
-            (np.asarray(roi.begin, dtype=float) - np.asarray(offset, dtype=float))
-            / voxel_size_f
-        )
-    )
-    size = np.trunc(zarr_v3.snap_integral(np.asarray(roi.shape, dtype=float) / voxel_size_f))
-
-    # Specify the range
-    roi_slices = tuple(slice(int(b), int(b + s)) for b, s in zip(begin, size))
-
-    domain = dataset.domain
-    # Compute the valid range
-    valid_slices = tuple(
-        slice(max(s.start, inclusive_min), min(s.stop, exclusive_max))
-        for s, inclusive_min, exclusive_max in zip(
-            roi_slices, domain.inclusive_min, domain.exclusive_max
-        )
-    )
-
-    # Create an array to hold the requested data, filled with a default value (e.g., zeros)
-    # output_shape = [s.stop - s.start for s in roi_slices]
-
-    # Padding for the part of the ROI outside the array. It was only assigned
-    # when the array's own fill_value was falsy, so every border read of an
-    # array with, say, fill_value=255 raised UnboundLocalError.
-    fill_value = custom_fill_value if custom_fill_value else 0
-    with ts.Transaction() as txn:
-        data = dataset.with_transaction(txn)[valid_slices].read().result()
-    for norm in input_norms:
-        data = norm(data)
-    pad_width = [
-        [valid_slice.start - s.start, s.stop - valid_slice.stop]
-        for s, valid_slice in zip(roi_slices, valid_slices)
-    ]
-    if np.any(np.array(pad_width)):
-        if fill_value == "edge":
-            data = np.pad(
-                data,
-                pad_width=pad_width,
-                mode="edge",
-            )
-        else:
-            data = np.pad(
-                data,
-                pad_width=pad_width,
-                mode="constant",
-                constant_values=fill_value,
-            )
-
-    if rescale_factor > 1:
-        rescale_factor = int(voxel_size[0] / output_voxel_size[0])
-        data = np.kron(data, np.ones((rescale_factor, rescale_factor, rescale_factor), dtype=data.dtype))
-        data = data[snapped_slices]
-
-    elif rescale_factor < 1:
-        data = block_reduce(data, block_size=int(1 / rescale_factor), func=np.median)
-        data = data[snapped_slices]
-
-    return data
 
 
 def get_url(node: Union[zarr.Group, zarr.Array]) -> str:

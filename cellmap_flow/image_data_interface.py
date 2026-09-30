@@ -1,16 +1,15 @@
 import copy
+import functools
+import logging
+
+import numpy as np
+from funlib.geometry import Coordinate
 
 from cellmap_flow.io import multiscale
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import snap_integral
-from cellmap_flow.io.source import open_array
-from cellmap_flow.utils.ds import (
-    LazyNormalization,
-    read_ds_meta,
-    to_ndarray_tensorstore,
-)
-import logging
-from funlib.geometry import Coordinate
+from cellmap_flow.io.source import open_array, read_padded
+from cellmap_flow.utils.ds import LazyNormalization, apply_norms, read_ds_meta
 
 logger = logging.getLogger(__name__)
 
@@ -179,14 +178,50 @@ class ImageDataInterface:
         return info
 
     def to_ndarray_ts(self, roi=None):
+        """``roi`` (world nm; all of the array when None) read through the
+        input chain, as a numpy array.
+
+        Where the ROI runs past the array it is padded with
+        ``custom_fill_value`` (0 when unset; "edge" repeats the border
+        voxels), after the chain: padding is never normalized. A ROI is read
+        at ``output_voxel_size`` when that differs from the voxel size (see
+        ``_read_resampled``); the whole array never is.
+        """
         view = self._view()
-        return to_ndarray_tensorstore(
-            view.selected(),
-            roi,
-            self._grid.voxel_size,
-            self._grid.translation,
-            self.output_voxel_size,
-            self.axes_names,
-            self.custom_fill_value,
-            input_norms=view.norms_to_apply(),
-        )
+        store = view.selected()
+        through_chain = functools.partial(apply_norms, input_norms=view.norms_to_apply())
+        fill = self.custom_fill_value if self.custom_fill_value else 0
+        if roi is None:
+            return read_padded(store, None, fill, through_chain)
+        if multiscale.same_voxel_size(self._grid.voxel_size, self.output_voxel_size):
+            return read_padded(store, self._grid.world_to_box(roi), fill, through_chain)
+        return self._read_resampled(store, roi, fill, through_chain)
+
+    def _read_resampled(self, store, roi, fill, through_chain):
+        """``roi`` at ``output_voxel_size`` (the K18 resampling kwargs).
+
+        Both voxel sizes are taken as whole nanometers, and the factor is the
+        z axis's, applied to every axis: a finer output repeats each voxel, a
+        coarser one takes each block's median, and the same z voxel size
+        resamples nothing (the widened read is returned as it is). The read
+        is widened to whole voxels of the grid anchored at 0 nm, not at the
+        dataset's corner, and cropped back to ``roi`` after resampling.
+        """
+        voxel_size = Coordinate(self._grid.voxel_size)
+        output_voxel_size = Coordinate(self.output_voxel_size)
+        widened = roi.snap_to_grid(voxel_size)
+        factor = voxel_size[0] / output_voxel_size[0]
+        begin = (roi.begin - widened.begin) / output_voxel_size
+        end = (roi.end - widened.begin) / output_voxel_size
+        crop = tuple(slice(begin[i], end[i]) for i in range(3))
+
+        grid = Grid(tuple(float(v) for v in voxel_size), self._grid.translation)
+        data = read_padded(store, grid.world_to_box(widened), fill, through_chain)
+        if factor > 1:
+            repeat = int(voxel_size[0] / output_voxel_size[0])
+            return np.kron(data, np.ones((repeat,) * 3, dtype=data.dtype))[crop]
+        if factor < 1:
+            from skimage.measure import block_reduce
+
+            return block_reduce(data, block_size=int(1 / factor), func=np.median)[crop]
+        return data
