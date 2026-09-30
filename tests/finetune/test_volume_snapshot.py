@@ -57,7 +57,7 @@ def world(tmp_path, monkeypatch):
     """A raw pyramid, a crop, a segmentation, a viewer and a MinIO that has nothing yet."""
     from cellmap_flow.dashboard.app import app
     from cellmap_flow.globals import g
-    from cellmap_flow.utils import model_geometry
+    from cellmap_flow.models import geometry_cache
 
     # Janelia-style: every level's corner is -4 nm. s1 has 21 voxels a side,
     # so the volume (4^3 chunks) is padded to 24.
@@ -98,7 +98,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(s3fs, "S3FileSystem", lambda **kw: SimpleNamespace(exists=lambda path: False))
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
-    monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: GEOMETRY)
+    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: GEOMETRY)
     for name, value in dict(
         minio_state=state, annotation_volumes=volumes, output_sessions=sessions, viewer=neuroglancer.Viewer(),
         raw=None, dataset_path=str(tmp_path / "raw.zarr" / "em"),

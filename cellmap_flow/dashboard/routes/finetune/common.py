@@ -218,7 +218,7 @@ def autodetect_output_type(model_config, output_type, offsets):
                 # so _config is normally None here and this check silently
                 # fell through to "binary" for an affinity model. Ask the same
                 # sources, which now carry the channel names.
-                from cellmap_flow.utils.model_geometry import resolve_model_geometry
+                from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
                 try:
                     geometry = resolve_model_geometry(

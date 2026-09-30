@@ -52,7 +52,7 @@ from cellmap_flow.finetune.session.volume import (
     write_crop_into_volume,
 )
 from cellmap_flow.finetune.session.manifest import write_manifest
-from cellmap_flow.utils.model_geometry import resolve_model_geometry
+from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
 

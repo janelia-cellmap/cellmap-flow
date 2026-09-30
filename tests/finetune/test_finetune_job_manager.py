@@ -59,13 +59,13 @@ def submit(local_jobs, session, monkeypatch):
     from a session, locally. ``geometry`` is what the model's server reports
     (None: the real lookup, which finds nothing for these configs). Returns the
     job, its metadata.json and command, and the models the geometry was asked for."""
-    from cellmap_flow.utils import model_geometry
+    from cellmap_flow.models import geometry_cache
 
     record = SimpleNamespace(asked=[], runs=local_jobs.runs)
-    resolve = model_geometry.resolve_model_geometry
+    resolve = geometry_cache.resolve_model_geometry
 
     def run(config, geometry=None, manifest=None, **settings):
-        monkeypatch.setattr(model_geometry, "resolve_model_geometry",
+        monkeypatch.setattr(geometry_cache, "resolve_model_geometry",
                             lambda name, c: record.asked.append(name) or geometry or resolve(name, c))
         record.base = session(manifest=manifest)
         record.job = FinetuneJobManager().submit_finetuning_job(

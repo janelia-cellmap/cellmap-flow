@@ -26,7 +26,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import create_volume_zarr, new_volume_id, plan_volume
-from cellmap_flow.utils.model_geometry import resolve_model_geometry
+from cellmap_flow.models.geometry_cache import resolve_model_geometry
 from cellmap_flow.serving.client import (
     fetch_model_info,
     model_geometry,

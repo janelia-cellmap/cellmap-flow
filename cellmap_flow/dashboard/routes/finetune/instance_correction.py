@@ -30,7 +30,7 @@ from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
 from cellmap_flow.io.multiscale import closest_raw_scale
-from cellmap_flow.utils.model_geometry import resolve_model_geometry
+from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
 

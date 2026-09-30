@@ -47,22 +47,22 @@ def test_what_follows_from_a_configs_sizes(config, expected):
 
 def test_the_geometry_cache_is_read_and_written_as_before(tmp_path, monkeypatch):
     """~/.cellmap_flow/model_geometry_cache.json, fractional sizes kept, as the code before ModelGeometry wrote it."""
-    from cellmap_flow.utils import model_geometry
+    from cellmap_flow.models import geometry_cache
 
     cache = tmp_path / "cache.json"
-    monkeypatch.setattr(model_geometry, "CACHE_PATH", str(cache))
+    monkeypatch.setattr(geometry_cache, "CACHE_PATH", str(cache))
     (tmp_path / "model.py").write_text("")
     model_config = SimpleNamespace(script_path=str(tmp_path / "model.py"))
     entry = {"read_shape": [52.4, 40, 40], "write_shape": [26.2, 24, 24], "input_voxel_size": [5.24, 4, 4],
              "output_voxel_size": [5.24, 4, 4], "output_channels": 2, "channels": ["mito", "er"]}
-    old_file = {model_geometry.cache_key(model_config): entry}
+    old_file = {geometry_cache.cache_key(model_config): entry}
     cache.write_text(json.dumps(old_file))
 
-    geometry = ModelGeometry.from_config(model_geometry.load_cached_geometry(model_config))
+    geometry = ModelGeometry.from_config(geometry_cache.load_cached_geometry(model_config))
     assert geometry == ModelGeometry((5.24, 4, 4), (5.24, 4, 4), (52.4, 40, 40), (26.2, 24, 24), 2,
                                      channel_names=("mito", "er"))
     cache.unlink()
-    model_geometry.store_geometry(model_config, geometry)
+    geometry_cache.store_geometry(model_config, geometry)
     assert json.loads(cache.read_text()) == old_file
 
 

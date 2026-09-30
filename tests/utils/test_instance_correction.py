@@ -128,11 +128,11 @@ def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path
 
     from cellmap_flow.dashboard.routes.finetune import instance_correction
     from cellmap_flow.globals import g
-    from cellmap_flow.utils import model_geometry
+    from cellmap_flow.models import geometry_cache
 
     geometry = SimpleNamespace(read_shape=[192] * 3, write_shape=[64] * 3,
                                input_voxel_size=[16] * 3, output_voxel_size=[16] * 3)
-    monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: geometry)
+    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: geometry)
     served = []
     monkeypatch.setattr(instance_correction, "ensure_minio_serving",
                         lambda *a, **k: served.append((a, k)) or "http://m:9000/annotations/roi_annotation.zarr")

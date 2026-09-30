@@ -40,7 +40,7 @@ check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome"
 """,
     # torch only once a runner is built.
     "serving": """
-check(["cellmap_flow.models.geometry", "cellmap_flow.inference.runner"]
+check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "cellmap_flow.inference.runner"]
       + [f"cellmap_flow.serving.{m}" for m in ("virtual_zarr", "protocol", "client", "probe", "restart_token")],
       LIGHT + ["torch"])
 """,

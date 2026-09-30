@@ -419,7 +419,7 @@ GEOMETRY = SimpleNamespace(read_shape=[96] * 3, write_shape=[64] * 3, input_voxe
 def _given(situation, world, monkeypatch):
     """Change the world ``routes`` sets up to ``situation``."""
     from cellmap_flow.finetune.finetune_job_manager import JobStatus
-    from cellmap_flow.utils import model_geometry
+    from cellmap_flow.models import geometry_cache
 
     job = world.job
     if situation == "no viewer":
@@ -430,7 +430,7 @@ def _given(situation, world, monkeypatch):
     elif situation == "no models":
         g.models_config = []
     elif situation == "its geometry is known":
-        monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: GEOMETRY)
+        monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: GEOMETRY)
     elif situation == "a saved pipeline":
         g.pipeline_model_configs = {"m": {"write_shape": [64] * 3, "output_voxel_size": [16] * 3,
                                           "output_channels": 2}}
