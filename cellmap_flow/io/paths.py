@@ -55,10 +55,12 @@ def is_v3_container(path: str) -> bool:
 def find_v3_container(path: str) -> Optional[str]:
     """The nearest directory at or above ``path`` holding a ``zarr.json``.
 
-    None if there is none (a v2 store) or ``path`` is a URL: zarr v3 is
-    read from the local filesystem only.
+    None if there is none (a v2 store), ``path`` is a URL (zarr v3 is read
+    from the local filesystem only), or ``path`` does not exist: a missing
+    level is not the group above it, whose zarr.json would otherwise answer
+    for it.
     """
-    if "://" in path:
+    if "://" in path or not os.path.exists(path):
         return None
     current = os.path.normpath(path)
     while current and current != os.path.dirname(current):

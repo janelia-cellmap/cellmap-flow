@@ -267,9 +267,11 @@ def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(janelia, tmp_
     assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
 
 
-def test_a_missing_level_of_a_v2_pyramid_has_no_closest_scale(ome_pyramid):
-    # (Under a v3 group the group's own levels answer, missing level or not.)
-    assert closest_raw_scale(ome_pyramid(((8, 0), (16, 4))) + "/missing", (8, 8, 8)) is None
+@pytest.mark.parametrize("zarr_format", [pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
+def test_a_missing_level_has_no_closest_scale(ome_pyramid, zarr_format):
+    """Not the scale of the group above it, whose zarr.json a v3 lookup found."""
+    missing = ome_pyramid(((8, 0), (16, 4)), zarr_format=zarr_format) + "/missing"
+    assert closest_raw_scale(missing, (8, 8, 8)) is None
 
 
 @pytest.mark.parametrize("zarr_format, error", [pytest.param(2, KeyError, id="zarr2"),
@@ -358,6 +360,7 @@ def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expecte
 ])
 def test_a_paths_format(tmp_path, path, fmt):
     _v3_group(tmp_path / "v3.zarr")
+    os.makedirs(tmp_path / "v3.zarr" / "s0")
     assert paths.detect_format(path.format(tmp=tmp_path)) == fmt
 
 
