@@ -157,7 +157,14 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page. That note names the job's log file from the start, not only after the next line arrives;
     - the Review tab's script is ES modules, with the same behaviour. Its Progress card refreshes on the shared poller: no requests while the page is hidden, one when it is shown again, and no request on top of an unanswered one;
     - the pipeline builder opens on the live chain. Its normalizer and postprocessor nodes come from the chain as it was last set, from anywhere (a dashboard Submit, say). It used to open on its own last canvas, so its first edit sent the old steps back and undid the other change without a word. Inputs, outputs, models, edges and node positions are still the builder's own.
-  - **Finetune jobs:** a job is shown as COMPLETED only once its export has been found. Before, it was COMPLETED first and turned FAILED if the export check then failed, so a poll in between showed a success that wasn't one.
+  - **Finetune jobs:**
+    - a job is shown as COMPLETED only once its export has been found. Before, it was COMPLETED first and turned FAILED if the export check then failed, so a poll in between showed a success that wasn't one;
+    - a finetune of a Fly model trains and serves at the model's own input and output sizes. The trainer used to get only the checkpoint and build it at 178/56;
+    - a finetuned model with no serving YAML, whose base has left the session, is registered in the pipeline builder on the model its run recorded. It used to be registered on a Fly model rebuilt at 178/56;
+    - a finetune whose export is on disk stays COMPLETED even when its `metadata.json` cannot be read, where it was shown as FAILED. The record is written atomically;
+    - the monitor reads each line of the training log once, and only once it is whole. It no longer re-reads the whole log every 3 s, and no longer announces an iteration under a name cut short mid-write (`m_fi`), so no layer, registered model or `metadata.json` entry gets such a name;
+    - the dashboard is told when a finetune's inference server comes up even if the log cannot be re-read at that moment. A failed read used to leave the server marked ready but never announced, so no layer was added;
+    - a finetune job's walltime is passed to the job manager (`submit_finetuning_job(walltime=)`), not read from `g`.
   - **`cellmap_flow.utils` is dissolved** into the packages that own each piece: `io/`, `jobs/`, `serving/`, `config/yaml.py`, `models/registry`, `models/hf_catalog`, `models/geometry_cache`, `norm/safe_expression`, `dashboard/services/`, and `cellmap_flow.plugins` and `cellmap_flow.logging_setup` at the package root. The three names the docs used keep deprecated aliases for one release: `utils.bsub_utils.install_cleanup_handlers` (now `jobs.launch`), `utils.serialize_config.Config` (now `models.models_config.Config`), and `models.model_registry.list_huggingface_models`/`refresh_huggingface_models` (now `models.hf_catalog`). `python -m cellmap_flow.utils.doctor` is `python -m cellmap_flow.cli.doctor`.
   - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
   - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
@@ -166,6 +173,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `1bf82c7` the server is announced from what the monitor has read
+- `6ebc046` the monitor reads each log line once, and only once it is whole
+- `79e11ee` a finished job whose record cannot be read stays COMPLETED
+- `987a0f3` without its YAML, a finetune is registered on the base its run recorded
+- `d08eb4c` a Fly model reaches the trainer as its entry, sizes and all
 - `886bc0f` blockwise refuses a task YAML that is not a path
 - `ccf6501` blockwise takes a model's channel names from its geometry
 - `bb1980d` the pipeline builder opens on the live chain
