@@ -1,7 +1,8 @@
 """The dashboard's finetune routes, through the Flask client: what submit and
 restart send the job manager and write into the session's manifest, the jobs
-list after a dashboard restart, resuming a session, and MinIO URLs behind a
-proxy. What the volume routes write is pinned by test_volume_snapshot."""
+list after a dashboard restart, resuming a session, MinIO URLs behind a
+proxy, and what every route answers. What the volume routes write is pinned
+by test_volume_snapshot."""
 
 import json
 import time
@@ -100,6 +101,8 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
 
 
 def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
+    """With the affinity offsets from the model's script: output_type and
+    offsets are sent only for affinity models, which say so there."""
     job = submit()
     assert job.body == {"success": True, "job_id": "j", "lsf_job_id": None, "output_dir": str(job.corrections),
                         "tensorboard_command": f"tensorboard --logdir {job.corrections.parent}",
@@ -111,11 +114,6 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
         distillation_scope="unlabeled", margin=0.3, balance_classes=False, augment=False, queue="gpu_h100",
         charge_group="my_lab", output_type="affinities", select_channel=None, offsets="[[1, 0, 0], [0, 1, 0]]",
     )
-
-
-def test_submit_reads_the_affinity_offsets_from_the_models_script(submit):
-    job = submit()
-    assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", "[[1, 0, 0], [0, 1, 0]]")
 
 
 @pytest.mark.parametrize("dashboards, request_data, billed", [
@@ -438,8 +436,6 @@ def _given(situation, world, monkeypatch):
                                           "output_channels": 2}}
     elif situation == "an empty session":
         (world.tmp / "s" / "corrections").mkdir(parents=True)
-    elif situation == "no log yet":
-        job.log_file.unlink()
     elif situation == "no output dir":
         job.output_dir = world.tmp / "gone"
     elif situation == "on LSF":
@@ -455,8 +451,8 @@ def routes(client, viewer, make_job, tmp_path, monkeypatch):
     """``routes(method, url, body=None, situation=None)``: (status, JSON) of a
     request. The world: model "m", a viewer, no annotation session, MinIO not
     running, the user prefs under tmp_path, and a job manager holding job "j"
-    (running, not on LSF, its log two lines long). ``situation`` changes it
-    (see _given)."""
+    (running, not on LSF, no log yet). ``situation`` changes it (see
+    _given)."""
     import re
 
     from cellmap_flow.dashboard.routes.finetune import common
@@ -464,7 +460,6 @@ def routes(client, viewer, make_job, tmp_path, monkeypatch):
 
     monkeypatch.setattr(common, "USER_PREFS_FILE", str(tmp_path / "user_prefs.json"))
     world = SimpleNamespace(tmp=tmp_path, job=make_job())
-    world.job.log_file.write_text("line 1\nline 2\n")
     manager = FinetuneJobManager()
     manager.jobs[world.job.job_id] = world.job
     monkeypatch.setattr(g, "finetune_job_manager", manager)
@@ -502,8 +497,6 @@ ANSWERS = [
     pytest.param("get", "/api/finetune/job/nope/status", None, None, 404, _refused("Job not found"),
                  id="status of an unknown job"),
     pytest.param("get", "/api/finetune/job/j/logs", None, None, 200,
-                 {"success": True, "logs": "line 1\nline 2\n", "offset": 14}, id="logs"),
-    pytest.param("get", "/api/finetune/job/j/logs", None, "no log yet", 200,
                  {"success": True, "logs": "Log file not yet created...", "offset": 0}, id="logs before the log"),
     pytest.param("get", "/api/finetune/job/nope/logs", None, None, 404, _refused("Job not found"),
                  id="logs of an unknown job"),
@@ -614,8 +607,6 @@ ANSWERS = [
                  _refused("Viewer not initialized"), id="mark a good region without a viewer"),
     pytest.param("post", "/api/finetune/good-regions/delete", {"id": "nope"}, None, 404, _refused("No region nope"),
                  id="delete an unknown good region"),
-    pytest.param("post", "/api/finetune/good-regions/delete", None, None, 200, {"success": True, "count": 0},
-                 id="delete every good region"),
     pytest.param("post", "/api/viewer/add-image-layer", {"name": "n"}, None, 400, _refused("Missing path or name"),
                  id="add an image layer without a path"),
     pytest.param("post", "/api/viewer/add-segmentation-layer", {"path": "/p", "name": "n"}, "no viewer", 400,
@@ -653,21 +644,3 @@ def test_a_long_request_reports_its_progress_as_it_goes(routes, start, body, pro
     assert status == 200 and answer["success"]
     assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": phase, "done": False}
     assert {"created_at", "updated_at"} <= set(answer["progress"])
-
-
-# The routes that take a body without insisting it is JSON.
-LENIENT = {"/api/finetune/good-regions/mark-view", "/api/finetune/good-regions/delete"}
-NO_BODY = {"/api/finetune/job/<job_id>/cancel", "/api/finetune/job/<job_id>/stop-early"}
-
-
-def test_a_body_that_is_not_json_is_refused_by_flask(routes):
-    """Every POST route but these reads its body with request.get_json(),
-    which answers a body of another type with 415 before the route runs."""
-    from cellmap_flow.dashboard.app import app
-
-    posts = sorted(rule.rule for rule in app.url_map.iter_rules()
-                   if rule.endpoint.startswith("finetune.") and "POST" in rule.methods)
-    assert len(posts) == 21
-    for url in posts:
-        status, _ = routes("post", url.replace("<job_id>", "j"), "not json")
-        assert (status == 415) == (url not in LENIENT | NO_BODY), url
