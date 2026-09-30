@@ -9,8 +9,8 @@ import logging
 
 import neuroglancer
 
+from cellmap_flow.image_data_interface import legacy_meta
 from cellmap_flow.io import metadata
-from cellmap_flow.utils import zarr_v3
 from cellmap_flow.viewer.layers import raw_layer
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def raw_dimensions(dataset_path):
             levels = [metadata.read_array_meta(dataset_path)]
         finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
         # The names and sizes ImageDataInterface gives the raw layer's volume.
-        voxel_size, _, _, _, names, _ = zarr_v3.legacy_meta(finest)
+        voxel_size, _, _, _, names, _ = legacy_meta(finest)
         return neuroglancer.CoordinateSpace(names=names, units="nm", scales=voxel_size)
     except Exception as e:
         logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")

@@ -25,7 +25,7 @@ from cellmap_flow.utils.config_utils import (
     load_config,
     resolve_data_path,
 )
-from cellmap_flow.utils.ds import generate_singlescale_metadata
+from cellmap_flow.io.ome import singlescale_attrs
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME, submit_bsub_job
 
@@ -434,7 +434,7 @@ class CellMapFlowBlockwiseProcessor:
                         metadata_units = ["nanometer"] * 3
                         metadata_axes = ["z", "y", "x"]
 
-                    zattrs = generate_singlescale_metadata(
+                    zattrs = singlescale_attrs(
                         arr_name="s0",
                         voxel_size=metadata_voxel_size,
                         offset=metadata_offset,

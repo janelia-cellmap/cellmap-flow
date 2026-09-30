@@ -21,11 +21,10 @@ import tensorstore as ts
 from funlib.geometry import Coordinate
 
 from cellmap_flow.globals import g
-from cellmap_flow.io import multiscale
+from cellmap_flow.io import multiscale, paths
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
-from cellmap_flow.io.metadata import read_array_meta, snap_integral
+from cellmap_flow.io.metadata import ArrayMeta, read_array_meta, snap_integral
 from cellmap_flow.io.source import open_array, read_padded
-from cellmap_flow.utils.zarr_v3 import legacy_meta
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,38 @@ _DEPRECATED = {
     "output_voxel_size": "read at the dataset's voxel size and resample what is read",
     "custom_fill_value": "read within the dataset's roi and pad what is read",
 }
+
+
+def legacy_meta(meta: ArrayMeta):
+    """``(voxel_size, offset, chunk_shape, shape, axes_names, filetype)``, the
+    tuple the old readers returned, from an ArrayMeta: spatial axes only,
+    voxel size and offset as lists of nanometer floats.
+
+    The local zarr v2/N5 reader always took the *last* n axes (n spatial
+    ones) and called them z, y, x, whatever the metadata said; the others
+    take the spatial axes by name. Both are kept.
+    """
+    spatial = meta.spatial()
+    n = len(spatial.voxel_size)
+    if meta.format in ("zarr2", "n5") and not paths.is_remote(meta.path):
+        chunk_shape = tuple(meta.chunk_shape[-n:])
+        shape = tuple(meta.shape[-n:])
+        axes_names = ["z", "y", "x"][-n:]
+    else:
+        chunk_shape, shape = spatial.chunk_shape, spatial.shape
+        axes_names = [a for a in spatial.axes if a != ""]
+    if meta.format == "precomputed":
+        filetype = "gs" if meta.path.startswith("gs://") else "precomputed"
+    else:
+        filetype = "n5" if meta.format == "n5" else "zarr"
+    return (
+        list(spatial.voxel_size),
+        list(spatial.translation),
+        chunk_shape,
+        shape,
+        axes_names,
+        filetype,
+    )
 
 
 class ImageDataInterface:
