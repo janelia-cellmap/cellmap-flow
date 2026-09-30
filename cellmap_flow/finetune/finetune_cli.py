@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 
 def main():
     # Here, not at import, so that importing this module leaves the importing
-    # process's logging alone.
+    # process's logging alone. cellmap_flow.globals installs the shared log
+    # format when it is first imported, replacing whatever was set before,
+    # and the job imports it on its first raw read (ImageDataInterface) and
+    # when it serves (the inference server). Imported first, so that the
+    # format set here holds for the whole run.
+    import cellmap_flow.globals  # noqa: F401
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
