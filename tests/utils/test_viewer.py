@@ -78,7 +78,7 @@ def new_viewer(monkeypatch):
 @pytest.mark.parametrize("dataset", [
     pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))), id="pyramid"),
     pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))) + "/s1", id="its-coarser-level"),
-    pytest.param(lambda f: f.raw_zarr(np.zeros((4, 4, 4), np.uint8)), id="plain-array"),  # flat: no contrast range
+    pytest.param(lambda f: f.raw_zarr(np.zeros((16, 16, 16), np.uint8)), id="plain-array"),  # flat: no contrast range
 ])
 def test_the_viewer_takes_its_dimensions_from_the_finest_raw_level(new_viewer, ome_pyramid, raw_zarr, dataset):
     new_viewer(dataset(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr)))
@@ -91,3 +91,7 @@ def test_a_job_without_a_host_gets_no_layer(new_viewer, ome_pyramid):
               [("ghost", None), ("real", "http://node:3")]]
     new_viewer(ome_pyramid(((8, 0),)))
     assert [layer.name for layer in g.viewer.state.layers] == ["data", "real"]
+
+
+def test_an_unreadable_dataset_leaves_the_viewers_dimensions_to_neuroglancer(tmp_path):
+    assert neuroglancer_utils.raw_dimensions(str(tmp_path / "missing.zarr")) is None

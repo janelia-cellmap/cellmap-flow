@@ -16,7 +16,7 @@ import pytest
 
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, JobStatus
 from cellmap_flow.jobs import lsf as jobs_lsf
-from cellmap_flow.jobs.lsf import LSFJob
+from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.ready import READY_ENV, read_ready_file, ready_path, write_ready_file
 from cellmap_flow.jobs.spec import JobSpec, JobStatus as LSFJobStatus
 from cellmap_flow.utils.web_utils import IP_PATTERN
@@ -34,19 +34,23 @@ def _bjobs(job_id, stat="RUN", name="m"):
     "bsub, bjobs, expected",
     [
         # Anything printed before "Job <id> is submitted" (an esub notice) is not the id.
-        (["Your job requests 12 slots per GPU.\nJob <4242> is submitted to queue <gpu_h100>.\n"], [], "4242"),
-        (["Request aborted by esub. Job not submitted.\n"], [], RuntimeError),
+        pytest.param(["Your job requests 12 slots per GPU.\nJob <4242> is submitted to queue <gpu_h100>.\n"], [],
+                     "4242", id="after-a-notice"),
+        pytest.param(["Request aborted by esub. Job not submitted.\n"], [], (RuntimeError, "job id"), id="no-id"),
         # bsub timed out, but LSF made the job: the new one, not an older one of that name.
-        ([subprocess.TimeoutExpired("bsub", 30)], [_bjobs(111), _bjobs(111) + _bjobs(4243)], "4243"),
+        pytest.param([subprocess.TimeoutExpired("bsub", 30)], [_bjobs(111), _bjobs(111) + _bjobs(4243)], "4243",
+                     id="timed-out-and-made"),
+        # Or it can't be found: LSF may still make it, so the caller must not submit again.
+        pytest.param([subprocess.TimeoutExpired("bsub", 30)], [_bjobs(111)], (BsubTimeoutError, "bjobs -a -J m"),
+                     id="timed-out-and-not-found"),
     ],
-    ids=["after-a-notice", "no-id", "timed-out"],
 )
 def test_a_submissions_job_id(fake_lsf, tmp_path, bsub, bjobs, expected):
     fake_lsf.answers["bsub"] = bsub
     fake_lsf.answers["bjobs"] = bjobs or [(255, "", "not found")]
     spec = JobSpec(name="m", shell="serve", queue="gpu_h100", log_dir=tmp_path)
-    if expected is RuntimeError:
-        with pytest.raises(RuntimeError, match="job id"):
+    if isinstance(expected, tuple):
+        with pytest.raises(expected[0], match=expected[1]):
             jobs_lsf.submit(spec)
         return
     job = jobs_lsf.submit(spec)
@@ -85,31 +89,47 @@ def test_one_bjobs_call_answers_for_every_job(fake_lsf, ids, answer, expected):
     assert fake_lsf.calls == ([["bjobs", "-noheader", *asked]] if ids else [])
 
 
-def test_a_job_lsf_has_forgotten_is_recorded_as_over_and_not_asked_about_again(fake_lsf, tmp_path, monkeypatch):
+def _session(tmp_path, runs):
+    """A finetune session's runs on disk: {name: (LSF job id, status)}."""
     session = tmp_path / "20260101_120000"
-    for name, lsf_id, status in [("alive", "301", "RUNNING"), ("forgotten", "302", "RUNNING"),
-                                 ("unanswered", "303", "RUNNING"), ("done", "401", "COMPLETED"),
-                                 ("local", "PID:12", "RUNNING")]:
+    for name, (lsf_id, status) in runs.items():
         (session / "runs" / name).mkdir(parents=True)
         (session / "runs" / name / "metadata.json").write_text(json.dumps({
             "job_id": name, "model_name": "m", "created_at": datetime.now().isoformat(),
             "params": {"num_epochs": 5}, "lsf_job_id": lsf_id, "status": status,
         }))
-    fake_lsf.answers["bjobs"] = [(255, _bjobs(301), "Job <302> is not found\n")]
+    return session
+
+
+def _manager(monkeypatch):
     manager = FinetuneJobManager()
     monkeypatch.setattr(manager, "_start_monitor", lambda job: None)
+    return manager
+
+
+def test_a_job_lsf_has_forgotten_is_recorded_as_over_and_not_asked_about_again(fake_lsf, tmp_path, monkeypatch):
+    session = _session(tmp_path, {"alive": ("301", "RUNNING"), "forgotten": ("302", "RUNNING"),
+                                  "unanswered": ("303", "RUNNING")})
+    fake_lsf.answers["bjobs"] = [(255, _bjobs(301), "Job <302> is not found\n")]
+    manager = _manager(monkeypatch)
 
     assert manager.rehydrate_session(session) == 1
 
     def status(name):
         return json.loads((session / "runs" / name / "metadata.json").read_text())
 
-    assert fake_lsf.calls == [["bjobs", "-noheader", "301", "302", "303"]], "one call; finished and local runs not asked"
+    assert fake_lsf.calls == [["bjobs", "-noheader", "301", "302", "303"]], "one call for the session"
     assert manager.jobs["alive"].status == JobStatus.RUNNING
     assert status("forgotten")["status"] == "FAILED" and "302" in status("forgotten")["status_detail"]
     assert status("unanswered")["status"] == "RUNNING", "bjobs said nothing: ask again next time"
     manager.rehydrate_session(session)
     assert fake_lsf.calls[1:] == [["bjobs", "-noheader", "303"]]
+
+
+def test_a_session_with_nothing_unfinished_asks_lsf_nothing(fake_lsf, tmp_path, monkeypatch):
+    session = _session(tmp_path, {"done": ("401", "COMPLETED"), "local": ("PID:12", "RUNNING")})
+    assert _manager(monkeypatch).rehydrate_session(session) == 0
+    assert fake_lsf.calls == []
 
 
 # --- waiting for a server's address ---------------------------------------------

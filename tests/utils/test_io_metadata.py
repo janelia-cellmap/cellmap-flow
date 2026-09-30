@@ -261,6 +261,11 @@ def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(janelia, tmp_
     assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
 
 
+def test_a_missing_level_of_a_v2_pyramid_has_no_closest_scale(ome_pyramid):
+    # (Under a v3 group the group's own levels answer, missing level or not.)
+    assert closest_raw_scale(ome_pyramid(((8, 0), (16, 4))) + "/missing", (8, 8, 8)) is None
+
+
 @pytest.mark.parametrize("zarr_format, error", [pytest.param(2, KeyError, id="zarr2"),
                                                 pytest.param(3, ValueError, id="zarr3")])
 def test_a_group_without_multiscales_has_no_levels(tmp_path, zarr_format, error):
