@@ -111,19 +111,50 @@ def _builder_state(dashboard):
     return _page_data(dashboard.get("/pipeline-builder").get_data(as_text=True))["pipeline"]
 
 
-def test_the_builder_keeps_a_saved_pipeline_that_has_no_normalizers(dashboard):
-    # What /api/pipeline/apply stores for INPUT -> model -> OUTPUT.
-    g.pipeline_inputs = [{"id": "input-1", "position": {"x": 11, "y": 22}, "params": {
-        "dataset_path": "/data/raw.zarr", "bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8, 8]}]}}]
-    g.pipeline_outputs = [{"id": "output-1", "params": {"dataset_path": "/out.zarr"}, "position": {"x": 900, "y": 22}}]
-    g.pipeline_models = [{"id": "model-1", "name": "mito", "params": {}, "position": {"x": 400, "y": 22}}]
-    g.pipeline_edges = [{"id": "e1", "from": "input-1", "to": "model-1"}, {"id": "e2", "from": "model-1", "to": "output-1"}]
-    g.pipeline_normalizers, g.pipeline_postprocessors = [], []
-    g.jobs = [_job("other_model")]
+def _edges(*pairs):
+    return [{"id": f"e{i}", "from": a, "to": b} for i, (a, b) in enumerate(pairs, 1)]
 
-    state = _builder_state(dashboard)
-    assert (state["inputs"], state["outputs"], state["edges"]) == (g.pipeline_inputs, g.pipeline_outputs, g.pipeline_edges)
-    assert [m["id"] for m in state["models"]] == ["model-1"] and state["normalizers"] == []
+
+# A canvas as the builder's apply leaves it (PUT /api/pipeline's "builder"):
+# INPUT -> Lambda -> MinMax -> mito -> Threshold -> OUTPUT, with the INPUT's
+# boxes and the OUTPUT's channels, and the chain those nodes stand for.
+CANVAS = {
+    "inputs": [{"id": "input-1", "position": {"x": 11, "y": 22}, "params": {
+        "dataset_path": "/data/raw.zarr", "bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8, 8]}]}}],
+    "outputs": [{"id": "output-1", "params": {"dataset_path": "/out.zarr", "output_channels": ["mito"]},
+                 "position": {"x": 900, "y": 22}}],
+    "edges": _edges(("input-1", "norm-1"), ("norm-1", "norm-2"), ("norm-2", "model-1"),
+                    ("model-1", "post-1"), ("post-1", "output-1")),
+    "normalizers": [
+        {"id": "norm-1", "name": "LambdaNormalizer", "params": {"expression": "x*2"}, "position": {"x": 200, "y": 20}},
+        {"id": "norm-2", "name": "MinMaxNormalizer", "params": {"min_value": 0, "max_value": 255},
+         "position": {"x": 580, "y": 20}},
+    ],
+    "models": [{"id": "model-1", "name": "mito", "params": {}, "position": {"x": 400, "y": 22}}],
+    "postprocessors": [{"id": "post-1", "name": "ThresholdPostprocessor", "params": {"threshold": 0.5},
+                        "position": {"x": 600, "y": 20}}],
+}
+APPLY = {"input_norm": [{"expression": "x*2", "name": "LambdaNormalizer"},
+                        {"min_value": 0, "max_value": 255, "name": "MinMaxNormalizer"}],
+         "postprocess": [{"threshold": 0.5, "name": "ThresholdPostprocessor"}],
+         "builder": CANVAS}
+# INPUT -> mito -> OUTPUT: a canvas with no steps, whose chain is empty.
+NO_STEPS = {**CANVAS, "normalizers": [], "postprocessors": [],
+            "edges": _edges(("input-1", "model-1"), ("model-1", "output-1"))}
+APPLY_NO_STEPS = {"input_norm": [], "postprocess": [], "builder": NO_STEPS}
+
+
+@pytest.mark.parametrize("sent, expected", [
+    pytest.param([APPLY], CANVAS, id="the-builders-own-apply"),
+    # Any saved node counts as a saved canvas, not only a normalizer.
+    pytest.param([APPLY_NO_STEPS], NO_STEPS, id="an-apply-with-no-steps"),
+])
+def test_the_builder_opens_on_the_live_chain_and_its_last_canvas(dashboard, sent, expected):
+    """``sent`` are the PUT /api/pipeline bodies that set the chain, in order."""
+    g.jobs = [_job("other_model")]
+    for body in sent:
+        assert dashboard.put("/api/pipeline", json=body).status_code == 200
+    assert _builder_state(dashboard) == expected
 
 
 def test_before_anything_is_applied_the_builder_starts_from_the_live_chain(dashboard):
