@@ -173,9 +173,9 @@ POSTED = {
 }
 
 
-def _post(dashboard, url, payload):
+def _send(dashboard, url, payload, method="POST"):
     # As a browser sends it: the test client's json= sorts the keys.
-    response = dashboard.post(url, data=json.dumps(payload), content_type="application/json")
+    response = dashboard.open(url, method=method, data=json.dumps(payload), content_type="application/json")
     assert response.status_code == 200, response.data
     return response.get_json()
 
@@ -195,7 +195,7 @@ def submit(dashboard, viewer, ome_pyramid, monkeypatch):
     g.dataset_path = ome_pyramid((((24, 12, 12), None),))
     g.jobs = [type("Job", (), {"model_name": name, "host": host})() for name, host in
               [("mito", "http://gpu:8000"), ("pending", None)]]
-    return lambda payload=POSTED: _post(dashboard, "/api/process", payload)["received_data"]
+    return lambda payload=POSTED: _send(dashboard, "/api/pipeline", payload, method="PUT")
 
 
 def test_submit_keeps_the_posted_chain_as_the_config(submit):
@@ -248,7 +248,7 @@ def test_apply_keeps_the_builders_steps_in_order_with_the_name_last(dashboard):
         "postprocessors": [{"id": "p1", "name": "SigmoidPostprocessor"}],
         "models": [{"id": "m1", "name": "mito", "config": {"type": "script", "script_path": "/m.py"}}],
     }
-    _post(dashboard, "/api/pipeline/apply", nodes)
+    _send(dashboard, "/api/pipeline/apply", nodes)
     assert _ordered(current_input_norm_config()) == [
         [("min_value", 0), ("max_value", 255), ("name", "MinMaxNormalizer")],
         [("expression", "x+1"), ("name", "LambdaNormalizer")],

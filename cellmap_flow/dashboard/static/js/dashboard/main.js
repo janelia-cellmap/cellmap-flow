@@ -37,8 +37,8 @@ function submitOnEnter(event) {
   if (button) button.click();
 }
 
-// Submit All, in each of the Input and Postprocess tabs: send both chains to
-// /api/process, which rebuilds the viewer's layers.
+// Submit All, in each of the Input and Postprocess tabs: PUT both chains to
+// /api/pipeline, which sets them and redraws the viewer's layers.
 function initSubmitAll(inputChain, postChain) {
   function handleSubmitAll() {
     const finalPayload = {
@@ -46,7 +46,7 @@ function initSubmitAll(inputChain, postChain) {
       postprocess: postChain.getChain(),
     };
     console.log("Combined Payload:", finalPayload);
-    postJSON("/api/process", finalPayload)
+    postJSON("/api/pipeline", finalPayload, { method: "PUT" })
       .then((data) => {
         console.log("Server response:", data);
         ["submissionLog_inputNorm", "submissionLog_postProcess"].forEach((id) => {
@@ -57,7 +57,10 @@ function initSubmitAll(inputChain, postChain) {
       })
       .catch((err) => {
         console.error("Error:", err);
-        alert("Error submitting combined data");
+        // A chain the server refused comes back with why (a parameter its
+        // op's class does not take, say); no answer, or an error page, does not.
+        const why = err instanceof ApiError && err.body && err.body.error ? ": " + err.body.error : "";
+        alert("Error submitting combined data" + why);
       });
   }
   // Both partials' buttons have id="submitAll".
@@ -112,7 +115,7 @@ function initServerConfigModal() {
 
 initConnect();
 // Loading a model is the point at which advice is most useful, and that
-// path never goes through /api/process. The jobs start on background
+// path never goes through Submit. The jobs start on background
 // threads, so refreshModelAdvice polls rather than assuming the server is
 // already up.
 initModelsTab({ onModelsSubmitted: refreshModelAdvice });

@@ -8,9 +8,10 @@
 // routes read. The keys and shapes are what /api/blockwise/* take.
 //
 // Whatever edits the pipeline calls edited(): the change is applied to the
-// server (POST /api/pipeline/apply, 2 s after the last edit) and the blockwise
-// steps, which ran on the pipeline as it was, start over. Leaving the page
-// with a change the server has not had sends it by beacon.
+// server (PUT /api/pipeline, 2 s after the last edit, which also redraws the
+// viewer's layers) and the blockwise steps, which ran on the pipeline as it
+// was, start over. Leaving the page with a change the server has not had
+// sends it in a request that outlives the page.
 import { pageData } from "../lib/page-data.js";
 
 const PAGE = pageData();
@@ -331,17 +332,35 @@ export function edited({ apply = true } = {}) {
   editListeners.forEach((listener) => listener());
 }
 
-// The pipeline as /api/pipeline/apply takes it. It is also what the page
-// starts from on its next load. Model configs are left out.
-function buildApplyPayload() {
+// The pipeline as PUT /api/pipeline takes it: the two chains, and the
+// builder's canvas, which the server keeps for the page's next load. A step
+// is its node's params and then its name, so the name wins over a param of
+// that name. Model configs are left out.
+function buildPipelineBody() {
+  const step = (node) => ({ ...node.params, name: node.name });
   return {
-    input_normalizers: pipeline.normalizers.map((n) => ({ id: n.id, name: n.name, params: n.params, position: n.position })),
-    postprocessors: pipeline.postprocessors.map((p) => ({ id: p.id, name: p.name, params: p.params, position: p.position })),
-    models: pipeline.models.map((m) => ({ id: m.id, name: m.name, params: m.params || {}, position: m.position })),
-    inputs: pipeline.inputs.map((i) => ({ id: i.id, params: i.params, position: i.position })),
-    outputs: pipeline.outputs.map((o) => ({ id: o.id, params: o.params, position: o.position })),
-    edges: pipeline.edges.map((e) => ({ id: e.id, from: e.from, to: e.to })),
+    input_norm: pipeline.normalizers.map(step),
+    postprocess: pipeline.postprocessors.map(step),
+    builder: {
+      inputs: pipeline.inputs.map((i) => ({ id: i.id, params: i.params, position: i.position })),
+      outputs: pipeline.outputs.map((o) => ({ id: o.id, params: o.params, position: o.position })),
+      edges: pipeline.edges.map((e) => ({ id: e.id, from: e.from, to: e.to })),
+      normalizers: pipeline.normalizers.map((n) => ({ id: n.id, name: n.name, params: n.params, position: n.position })),
+      models: pipeline.models.map((m) => ({ id: m.id, name: m.name, params: m.params || {}, position: m.position })),
+      postprocessors: pipeline.postprocessors.map((p) => ({ id: p.id, name: p.name, params: p.params, position: p.position })),
+    },
   };
+}
+
+// keepalive lets the request finish after the page is gone, as a beacon
+// would; a beacon can only POST.
+function putPipeline({ keepalive = false } = {}) {
+  return fetch("/api/pipeline", {
+    method: "PUT",
+    keepalive,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildPipelineBody()),
+  });
 }
 
 let applyTimer = null;
@@ -353,14 +372,9 @@ export function scheduleApply() {
 }
 
 async function applyPipeline() {
-  const payload = buildApplyPayload();
   const sending = changes;
   try {
-    const response = await fetch("/api/pipeline/apply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const response = await putPipeline();
     const result = await response.json();
     if (!response.ok) {
       console.error("Pipeline sync error:", result.error || "Unknown error");
@@ -374,7 +388,7 @@ async function applyPipeline() {
 
 // On leaving the page (the back button, a link) with changes the server has
 // not had -- an apply still pending, or one that failed, or an edit that
-// does not apply on its own -- send the pipeline by beacon, which outlives
+// does not apply on its own -- send the pipeline in a request that outlives
 // the page, instead of any apply still pending. A page left unchanged sends
 // nothing: its pipeline is what the server gave it (moved by the layout at
 // most), and sending it back would undo whatever changed the server's
@@ -383,7 +397,7 @@ export function syncOnUnload() {
   window.addEventListener("beforeunload", () => {
     if (applyTimer) clearTimeout(applyTimer);
     if (changes === appliedChanges) return;
-    const payload = buildApplyPayload();
-    navigator.sendBeacon("/api/pipeline/apply", new Blob([JSON.stringify(payload)], { type: "application/json" }));
+    // Nothing is left to report a failure to.
+    putPipeline({ keepalive: true }).catch(() => {});
   });
 }

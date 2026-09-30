@@ -1,8 +1,21 @@
+"""The dashboard's chain, and the settings the pipeline builder keeps here.
+
+- ``PUT /api/pipeline``: set the chain and redraw the viewer through it (the
+  dashboard page's Submit, and the pipeline builder after each edit).
+- ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
+  replaced, kept for one release as its deprecated aliases.
+- ``/api/blockwise-config``: the builder's blockwise settings.
+- ``/update/equivalences``: a segmentation layer's merged ids.
+"""
+
+import functools
 import json
 import logging
+from typing import Optional
 
 import numpy as np
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, make_response, request
+from pydantic import BaseModel, ValidationInfo, field_validator
 
 from cellmap_flow.dashboard.requests import BlockwiseSettings, parse
 from cellmap_flow.dashboard.state import get_session
@@ -58,29 +71,65 @@ def _chain_signature(steps) -> str:
         return repr(steps)
 
 
+def _unknown_op(kind, names):
+    """"Unknown <kind>: <name>" for the first of ``names`` that no registered
+    op of ``kind`` ("normalizer" or "postprocessor") is called; else None."""
+    ops = get_input_normalizers() if kind == "normalizer" else get_postprocessors_list()
+    known = {op["name"] for op in ops}
+    for name in names:
+        if name not in known:
+            return f"Unknown {kind}: {name}"
+    return None
+
+
 def validate_pipeline_config(config):
-    """Helper function to validate pipeline configuration"""
+    """/api/pipeline/apply's check of the builder's nodes: ``{"valid": True}``,
+    or ``{"valid": False, "error"}`` for the first node that names no
+    registered op, or for a body it cannot read."""
     try:
-        normalizer_names = [n.get("name") for n in config.get("input_normalizers", [])]
-        available_norms = get_input_normalizers()
-        # Extract just the normalizer names from the list of dicts
-        available_norm_names = [norm["name"] for norm in available_norms]
-        for norm_name in normalizer_names:
-            if norm_name not in available_norm_names:
-                return {"valid": False, "error": f"Unknown normalizer: {norm_name}"}
-
-        processor_names = [p.get("name") for p in config.get("postprocessors", [])]
-        available_procs = get_postprocessors_list()
-        # Extract just the postprocessor names from the list of dicts
-        available_proc_names = [proc["name"] for proc in available_procs]
-        for proc_name in processor_names:
-            if proc_name not in available_proc_names:
-                return {"valid": False, "error": f"Unknown postprocessor: {proc_name}"}
-
-        return {"valid": True}
-
+        error = (_unknown_op("normalizer", [n.get("name") for n in config.get("input_normalizers", [])])
+                 or _unknown_op("postprocessor", [p.get("name") for p in config.get("postprocessors", [])]))
     except Exception as e:
         return {"valid": False, "error": str(e)}
+    return {"valid": False, "error": error} if error else {"valid": True}
+
+
+class BuilderCanvas(BaseModel):
+    """The pipeline builder's canvas as it sends it: its nodes by type, and
+    its edges, each a list (a missing one is empty). The dashboard keeps it
+    for the builder's next load, and each model node's ``config`` for a
+    model node that comes back without one; the chain is not read from it."""
+
+    inputs: list[dict] = []
+    outputs: list[dict] = []
+    edges: list[dict] = []
+    normalizers: list[dict] = []
+    models: list[dict] = []
+    postprocessors: list[dict] = []
+
+
+class PipelineUpdate(BaseModel):
+    """The body of PUT /api/pipeline.
+
+    ``input_norm`` and ``postprocess`` are the two chains, each a list of
+    ``{"name": <op class>, **its parameters}`` steps in the order they run
+    (pipeline_spec's form). Both are required, ``[]`` for none, and every
+    step must name a registered op of its kind. ``builder`` is the pipeline
+    builder's canvas (BuilderCanvas); only the builder sends it.
+    """
+
+    input_norm: list[dict]
+    postprocess: list[dict]
+    builder: Optional[BuilderCanvas] = None
+
+    @field_validator("input_norm", "postprocess")
+    @classmethod
+    def _registered_ops(cls, steps, info: ValidationInfo):
+        kind = "normalizer" if info.field_name == "input_norm" else "postprocessor"
+        error = _unknown_op(kind, [step.get("name") for step in steps])
+        if error:
+            raise ValueError(error)
+        return steps
 
 
 @pipeline_bp.route("/update/equivalences", methods=["POST"])
@@ -100,15 +149,21 @@ def update_equivalences():
     return jsonify({"message": "Equivalences updated successfully"})
 
 
-def _set_chain_and_redraw(spec, dashboard_url) -> None:
+def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> list:
     """Make ``spec`` the dashboard's chain, and redraw the viewer through it.
 
-    set_pipeline() builds every step before it assigns anything, so a step
-    its class refuses raises here with nothing changed. Then the raw layer
-    and each prediction layer are rebuilt: a prediction layer's URL carries
-    the chain (the args blob, with ``dashboard_url`` and the chain's digest),
-    and its server runs the chain of the layer it is asked for. A job with
-    no host yet gets no layer.
+    What PUT /api/pipeline and both its aliases do. set_pipeline() builds
+    every step (or takes ``built``, the steps already built) before it
+    assigns anything, so a step its class refuses raises here with nothing
+    changed. ``builder``, the pipeline builder's canvas as a BuilderCanvas
+    dict, is kept when given. Then the raw layer and each prediction layer
+    are rebuilt: a prediction layer's URL carries the chain (the args blob,
+    with ``dashboard_url`` and the chain's digest), and its server runs the
+    chain of the layer it is asked for.
+
+    Returns the names of the prediction layers drawn. A job with no host
+    yet gets no layer, and with no viewer yet (no dataset opened) nothing
+    is drawn.
     """
     session = get_session()
     # Capture which normalization the *currently displayed* raw layer was built
@@ -120,7 +175,14 @@ def _set_chain_and_redraw(spec, dashboard_url) -> None:
     # manifest and the exported YAML hand the trainer the normalization
     # inference uses. Without it the trainer reads raw uint8 from /nrs while
     # inference normalizes to the model's expected range.
-    session.set_pipeline(spec)
+    session.set_pipeline(spec, built=built)
+    if builder is not None:
+        session.builder_state = builder
+        for model in builder["models"]:
+            if model.get("name") and model.get("config"):
+                session.builder_model_configs[model["name"]] = model["config"]
+    if session.viewer is None:
+        return []
     # Named by content rather than stamped with the time: resubmitting the
     # same settings gives the same layer source, so neuroglancer keeps the
     # chunks it has and each server reuses the chain it already built (with
@@ -162,6 +224,7 @@ def _set_chain_and_redraw(spec, dashboard_url) -> None:
                 )
             session.shader_controls.pop(name, None)
 
+    drawn = []
     with session.viewer.txn() as s:
         # The user's raw-layer contrast/shader, instead of the fresh default
         # get_raw_layer() always builds, which otherwise resets it every time
@@ -185,12 +248,69 @@ def _set_chain_and_redraw(spec, dashboard_url) -> None:
                 previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
                 info=fetch_model_info(host),
             )
+            drawn.append(model)
 
     logger.debug(f"Input normalizers: {session.input_norms}")
+    return drawn
+
+
+@pipeline_bp.route("/api/pipeline", methods=["PUT"])
+def put_pipeline():
+    """Set the chain, and redraw the viewer through it.
+
+    The body is a PipelineUpdate. The answer is ``{"success": true,
+    "pipeline": {"input_norm", "postprocess"}, "digest", "layers"}``: the
+    chain as it is now configured, its digest (which names the layers'
+    source, so the same chain sent again leaves neuroglancer's chunks and
+    each server's built chain as they are), and the prediction layers drawn.
+    A body that is not a PipelineUpdate, or a step its op's class refuses,
+    is a 400 ``{"success": false, "error"}`` that changes nothing.
+    """
+    body, error = parse(PipelineUpdate, request.get_json(silent=True))
+    if error:
+        return error
+    spec = PipelineSpec(body.input_norm, body.postprocess)
+    try:
+        built = spec.build()
+    except (TypeError, ValueError) as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    builder = body.builder.model_dump() if body.builder is not None else None
+    layers = _set_chain_and_redraw(spec, request.host_url, built=built, builder=builder)
+    return jsonify({"success": True, "pipeline": spec.to_json_data(), "digest": spec.digest(), "layers": layers})
+
+
+# The routes PUT /api/pipeline replaced, kept for one release as its aliases.
+# The Deprecation header is RFC 9745's: the date the route was deprecated.
+_DEPRECATED_SINCE = "@1790726400"  # 2026-09-30
+
+
+def _deprecated_alias(view):
+    """A route kept for one release as an alias of PUT /api/pipeline. Each
+    call is logged as a warning, and each answer carries a Deprecation
+    header and a Link to PUT /api/pipeline; the answer is otherwise the
+    route's own."""
+    @functools.wraps(view)
+    def alias(*args, **kwargs):
+        logger.warning(f"{request.method} {request.path} is deprecated and goes in the next release; "
+                       "use PUT /api/pipeline")
+        response = make_response(view(*args, **kwargs))
+        response.headers["Deprecation"] = _DEPRECATED_SINCE
+        response.headers["Link"] = '</api/pipeline>; rel="successor-version"'
+        return response
+    return alias
 
 
 @pipeline_bp.route("/api/process", methods=["POST"])
+@_deprecated_alias
 def process():
+    """Submit's route before PUT /api/pipeline, answering as it did.
+
+    The body is ``{"input_norm", "postprocess"}``, either chain in the list
+    or the older dict form. The answer is ``{"message", "received_data"}``,
+    the body with the dashboard's address and the chain's digest added. An
+    op it does not know is kept in the chain and skipped where it is built;
+    a body without both chains, or a step its class refuses, is a 500.
+    """
     data = request.get_json()
 
     # add dashboard url to data so we can update the state from the server
@@ -207,6 +327,56 @@ def process():
             "received_data": data,
         }
     )
+
+
+@pipeline_bp.route("/api/pipeline/apply", methods=["POST"])
+@_deprecated_alias
+def apply_pipeline():
+    """The pipeline builder's route before PUT /api/pipeline, answering as it did.
+
+    The body is the builder's nodes by type (``input_normalizers``,
+    ``postprocessors``, ``models``, ``inputs``, ``outputs``) and its
+    ``edges``. The chain is taken from the normalizer and postprocessor
+    nodes, each ``{"name", "params"}``; everything is kept as the builder's
+    canvas. The answer is ``{"message", "normalizers_applied",
+    "postprocessors_applied"}``. A node that names no registered op is a 400
+    ``{"valid": false, "error"}``, and anything else that goes wrong a 500
+    ``{"error"}``.
+    """
+    try:
+        session = get_session()
+        data = request.get_json()
+        logger.debug(f"Apply pipeline: {data}")
+
+        # Validate first
+        validation = validate_pipeline_config(data)
+        if not validation["valid"]:
+            return jsonify(validation), 400
+
+        # Ordered lists, not dicts keyed by name: two steps of the same class
+        # (two LambdaNormalizers, say) collapsed into one under a dict.
+        spec = PipelineSpec.from_builder(
+            data.get("input_normalizers", []), data.get("postprocessors", [])
+        )
+        _set_chain_and_redraw(spec, request.host_url, builder={
+            "inputs": data.get("inputs", []),
+            "outputs": data.get("outputs", []),
+            "edges": data.get("edges", []),
+            "normalizers": data.get("input_normalizers", []),
+            "models": data.get("models", []),
+            "postprocessors": data.get("postprocessors", []),
+        })
+        logger.debug(f"Applied: input_norms={session.input_norms}, postprocess={session.postprocess}")
+
+        return jsonify({
+            "message": "Pipeline applied successfully",
+            "normalizers_applied": len(session.input_norms),
+            "postprocessors_applied": len(session.postprocess),
+        })
+
+    except Exception as e:
+        logger.error(f"Error applying pipeline: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @pipeline_bp.route("/api/blockwise-config", methods=["GET", "POST"])
@@ -226,49 +396,3 @@ def blockwise_config_api():
         return jsonify(settings)
     logger.debug(f"Blockwise config updated: {settings}")
     return jsonify({"success": True, "config": settings})
-
-
-@pipeline_bp.route("/api/pipeline/apply", methods=["POST"])
-def apply_pipeline():
-    """Apply a pipeline configuration to the current inference"""
-    try:
-        session = get_session()
-        data = request.get_json()
-        logger.debug(f"Apply pipeline: {data}")
-
-        # Validate first
-        validation = validate_pipeline_config(data)
-        if not validation["valid"]:
-            return jsonify(validation), 400
-
-        # Ordered lists, not dicts keyed by name: two steps of the same class
-        # (two LambdaNormalizers, say) collapsed into one under a dict.
-        spec = PipelineSpec.from_builder(
-            data.get("input_normalizers", []), data.get("postprocessors", [])
-        )
-        session.set_pipeline(spec)
-
-        # The builder's whole pipeline, as it sent it, for its next load.
-        session.builder_state = {
-            "inputs": data.get("inputs", []),
-            "outputs": data.get("outputs", []),
-            "edges": data.get("edges", []),
-            "normalizers": data.get("input_normalizers", []),
-            "models": data.get("models", []),
-            "postprocessors": data.get("postprocessors", []),
-        }
-        # And each model's config, for a model node that comes back without one.
-        for model in data.get("models", []):
-            if 'config' in model and model['config']:
-                session.builder_model_configs[model['name']] = model['config']
-        logger.debug(f"Applied: input_norms={session.input_norms}, postprocess={session.postprocess}")
-
-        return jsonify({
-            "message": "Pipeline applied successfully",
-            "normalizers_applied": len(session.input_norms),
-            "postprocessors_applied": len(session.postprocess),
-        })
-
-    except Exception as e:
-        logger.error(f"Error applying pipeline: {e}")
-        return jsonify({"error": str(e)}), 500
