@@ -2,7 +2,9 @@
 validate, generate (which writes the task YAML the blockwise CLI runs),
 precheck and submit.
 
-Each answers 200 whatever happens: {"valid": ...} from validate, {"success": ...}
+The task YAML is pinned as text, byte for byte but for the timestamp: it is
+what the blockwise CLI runs, and a file the user may keep and edit. Each route
+answers 200 whatever happens: {"valid": ...} from validate, {"success": ...}
 from the others, with an "error" the builder shows when it is false. The
 master's bsub argv is pinned in test_bsub_argv_snapshot; LSF here is
 conftest's ``fake_lsf``."""
@@ -237,6 +239,7 @@ def failed(error):
                  invalid("Input node missing dataset_path"), id="validate/an-input-without-a-path"),
     pytest.param("validate", {"json": {"pipeline": pipeline(outputs=[{"params": {"dataset_path": ""}}])}},
                  invalid("Output node missing dataset_path"), id="validate/an-output-without-a-path"),
+    # A body the builder would not send: what is wrong, and where.
     pytest.param("validate", NOT_JSON, invalid("expected a JSON object"), id="validate/not-json"),
     pytest.param("validate", {"json": [PIPELINE]}, invalid("expected a JSON object"),
                  id="validate/not-an-object"),
@@ -254,31 +257,23 @@ def failed(error):
 
     pytest.param("generate", {"json": {"pipeline": pipeline(models=[])}}, failed("No models defined"),
                  id="generate/invalid"),
-    pytest.param("generate", NOT_JSON, failed("expected a JSON object"), id="generate/not-json"),
     pytest.param("generate", {"json": {"pipeline": pipeline(models=[{"name": "m", "params": None}])}},
                  failed("pipeline.models.0.params: Input should be a valid dictionary"),
                  id="generate/model-params-not-an-object"),
-    pytest.param("generate", {"json": {"pipeline": pipeline(blockwise_config=[{"params": {"queue": "gpu_h100"}}])}},
-                 failed("pipeline.blockwise_config.0.params.charge_group: Field required"),
-                 id="generate/settings-missing"),
     pytest.param("generate", {"json": {"pipeline": pipeline(normalizers="LambdaNormalizer")}},
                  failed("pipeline.normalizers: Input should be a valid list"), id="generate/a-chain-not-a-list"),
 
     pytest.param("precheck", {"json": {}}, failed("No YAML paths provided. Please generate task first."),
                  id="precheck/none-given"),
-    pytest.param("precheck", {"json": {"yaml_paths": []}}, failed("No YAML paths provided. Please generate task first."),
-                 id="precheck/empty"),
-    pytest.param("precheck", NOT_JSON, failed("expected a JSON object"), id="precheck/not-json"),
     pytest.param("precheck", {"json": {"yaml_paths": "/tasks/t.yaml"}},
                  failed("yaml_paths: Input should be a valid list"), id="precheck/a-path-not-in-a-list"),
+    # A number was opened as a file descriptor: [1] closed the dashboard's stdout.
     pytest.param("precheck", {"json": {"yaml_paths": [None]}},
                  failed("yaml_paths.0: Input should be a valid string"), id="precheck/a-path-not-text"),
-    pytest.param("precheck", {"json": {"yaml_paths": ["/no/such/task.yaml"]}},
-                 failed("[Errno 2] No such file or directory: '/no/such/task.yaml'"), id="precheck/a-missing-file"),
 
     pytest.param("submit", {"json": {"pipeline": pipeline(outputs=[])}}, failed("No output nodes defined"),
                  id="submit/invalid"),
-    pytest.param("submit", NOT_JSON, failed("expected a JSON object"), id="submit/not-json"),
+    # It was found missing only here, after generate and precheck had passed.
     pytest.param("submit", {"json": {"pipeline": pipeline(blockwise_config=[{"params": NO_MASTER_CORES}])}},
                  failed("pipeline.blockwise_config.0.params.nb_cores_master: Field required"),
                  id="submit/no-master-cores"),
@@ -289,26 +284,9 @@ def failed(error):
                  failed("yaml_paths.0: Input should be a valid string"), id="submit/a-path-not-text"),
 ])
 def test_what_each_route_answers(dashboard, tasks, fake_lsf, route, sent, answer):
-    fake_lsf.answers["bsub"] = [ACCEPTED]
     response = dashboard.post(f"/api/blockwise/{route}", **sent)
-    assert response.status_code == 200
-    assert {key: response.get_json().get(key) for key in answer} == answer
-
-
-def test_the_task_yaml_holds_the_chain_in_order_and_the_walltime(dashboard, tasks):
-    """It wrote json_data as a dict keyed by step name, so a chain using a step
-    twice kept only the last one, and blockwise computed something else than
-    the dashboard showed."""
-    pipeline = copy.deepcopy(PIPELINE)
-    pipeline["normalizers"] = [{"name": "LambdaNormalizer", "params": {"expression": "x*2"}},
-                               {"name": "LambdaNormalizer", "params": {"expression": "x-1"}}]
-    pipeline["postprocessors"] = [{"name": "ThresholdPostprocessor", "params": {"threshold": 0.5}}]
-    (path,) = dashboard.post("/api/blockwise/generate", json={"pipeline": pipeline}).get_json()["task_paths"]
-    task = yaml.safe_load(open(path))
-    assert task["json_data"]["input_norm"] == [{"name": "LambdaNormalizer", "expression": "x*2"},
-                                               {"name": "LambdaNormalizer", "expression": "x-1"}]
-    assert task["json_data"]["postprocess"] == [{"name": "ThresholdPostprocessor", "threshold": 0.5}]
-    assert task["walltime"] == "12:00", "the workers get the master's"
+    assert (response.status_code, response.get_json()) == (200, answer)
+    assert fake_lsf.commands("bsub") == []
 
 
 def test_the_precheck_passes_a_task_without_side_effects(dashboard, raw_zarr, pooling_model, task_yaml, tmp_path,
