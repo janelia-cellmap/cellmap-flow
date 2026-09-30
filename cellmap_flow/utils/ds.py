@@ -3,12 +3,15 @@ import logging
 import os
 from typing import Sequence, Union
 
-import numpy as np
-import tensorstore as ts
 import zarr
 from zarr.n5 import N5FSStore
 
-from cellmap_flow.globals import g
+# Loaded for its side effect only: importing globals loads the Flow and
+# configures logging. finetune_cli loads it only through this module (for
+# _is_remote_path), before its main() sets the trainer's log format; loaded
+# later instead, its configure_logging(force=True) would replace that format
+# mid-run. Drop this once finetune_cli imports what it uses from io.paths.
+import cellmap_flow.globals  # noqa: F401
 from cellmap_flow.io import metadata, multiscale, ome, paths
 from cellmap_flow.io.metadata import (  # noqa: F401  (kept names; see io.metadata)
     open_zarr as _open_zarr,
@@ -72,97 +75,6 @@ def split_dataset_path(dataset_path, scale=None) -> tuple[str, str]:
         else:
             dataset = f"{dataset}/s{scale}" if dataset else f"s{scale}"
     return filename, dataset
-
-
-def apply_norms(data, input_norms=None):
-    """Read ``data`` if it is a tensorstore view and run it through the chain.
-
-    ``input_norms=None`` means the process-wide ``g.input_norms``.
-    """
-    if hasattr(data, "read"):
-        data = data.read().result()
-    for norm in g.input_norms if input_norms is None else input_norms:
-        data = norm(data)
-    return data
-
-
-_CHANNEL_LABELS = ("c", "c^", "channel")
-
-
-def selected_channel(input_norms) -> int:
-    """The input channel a chain asks for: its first ChannelSelector, else 0."""
-    from cellmap_flow.norm.input_normalize import ChannelSelector
-
-    for norm in input_norms or []:
-        if isinstance(norm, ChannelSelector):
-            return norm.channel
-    return 0
-
-
-def select_channel(ts_dataset, channel=0, spatial_ndim=3):
-    """Index one channel out of a multichannel tensorstore.
-
-    The channel axis is the one labelled c/c^/channel when the store labels its
-    dimensions, and otherwise the first one (the OME-Zarr convention).
-    Arrays with no more than ``spatial_ndim`` dimensions are returned as is.
-    """
-    if ts_dataset.ndim <= spatial_ndim:
-        return ts_dataset
-    labels = list(getattr(ts_dataset.domain, "labels", None) or [])
-    axis = next((i for i, lab in enumerate(labels) if lab in _CHANNEL_LABELS), 0)
-    if axis == 0:
-        return ts_dataset[channel]
-    return ts_dataset[ts.d[axis][channel]]
-
-
-class LazyNormalization:
-    """A tensorstore seen through the input chain, for neuroglancer to index.
-
-    The channel and the normalizers are looked up on every access rather than
-    fixed when the store was opened: a server that has already read one chunk
-    must still follow a ChannelSelector that changes afterwards.
-
-    ``input_norms=None`` follows the process-wide ``g.input_norms``.
-    ``normalize=False`` selects the channel but applies no normalizers.
-    """
-
-    def __init__(self, ts_dataset, input_norms=None, normalize=True, spatial_ndim=3):
-        self.ts_dataset = ts_dataset
-        self.input_norms = input_norms
-        self.normalize = normalize
-        self.spatial_ndim = spatial_ndim
-
-    def chain(self):
-        return list(g.input_norms if self.input_norms is None else self.input_norms)
-
-    def norms_to_apply(self):
-        return self.chain() if self.normalize else []
-
-    def selected(self):
-        """The raw (unnormalized) tensorstore for the channel the chain selects."""
-        return select_channel(
-            self.ts_dataset, selected_channel(self.chain()), self.spatial_ndim
-        )
-
-    def __getitem__(self, index):
-        result = self.selected()[index]
-        if not self.normalize:
-            return result
-        return apply_norms(result, self.norms_to_apply())
-
-    def __getattr__(self, attr):
-        if attr in ("ts_dataset", "input_norms", "normalize", "spatial_ndim"):
-            # Not set yet (e.g. while unpickling); don't recurse.
-            raise AttributeError(attr)
-        at = getattr(self.selected(), attr)
-        if attr == "dtype":
-            # The last step that declares a dtype decides; steps without one
-            # (ChannelSelector) pass their input's through.
-            for norm in reversed(self.norms_to_apply()):
-                if norm.dtype is not None:
-                    return np.dtype(norm.dtype)
-            return np.dtype(at.numpy_dtype)
-        return at
 
 
 def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
