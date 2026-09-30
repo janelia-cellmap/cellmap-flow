@@ -22,6 +22,9 @@ class SiteProfile:
     # choose from than a complete one.
     gpu_queues: Tuple[Tuple[str, str, str], ...]
     default_queue: str = "gpu_h100"
+    # Who a job is billed to when neither the request nor the dashboard's
+    # settings say.
+    default_charge_group: str = "cellmap"
     # LSF's own default run limit on the GPU queues is 120 minutes, and no -W
     # used to be passed, so every inference server was killed two hours in --
     # while the Fileglancer app job that spawns them asks for 8 hours, so the

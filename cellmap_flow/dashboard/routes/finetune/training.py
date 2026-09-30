@@ -35,6 +35,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     resolve_finetune_session,
 )
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs.site import current_site
 
 logger = logging.getLogger(__name__)
 
@@ -398,12 +399,10 @@ def submit_finetuning():
             # steps, where augmentation adds variance without the many
             # repeat views it needs to pay for itself.
             augment=data.get("augment", False),
-            queue=data.get("queue", "gpu_h100"),
-            # The request's, else the dashboard's own; every finetune job used
-            # to bill "cellmap", the job manager's default, whatever the
-            # dashboard was started with.
+            queue=data.get("queue", current_site().default_queue),
+            # The request's, else the dashboard's own, else the site's.
             charge_group=(
-                data.get("charge_group") or session.charge_group or "cellmap"
+                data.get("charge_group") or session.charge_group or current_site().default_charge_group
             ),
             output_type=output_type,
             select_channel=_number(data, "select_channel", None, int),

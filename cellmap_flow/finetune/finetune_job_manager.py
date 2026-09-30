@@ -613,8 +613,8 @@ class FinetuneJobManager:
         batch_size: int = 8,
         learning_rate: float = 1e-4,
         output_base: Optional[Path] = None,
-        queue: str = "gpu_h100",
-        charge_group: str = "cellmap",
+        queue: Optional[str] = None,
+        charge_group: Optional[str] = None,
         checkpoint_path_override: Optional[Path] = None,
         auto_serve: bool = True,
         mask_unannotated: bool = False,
@@ -641,8 +641,8 @@ class FinetuneJobManager:
             batch_size: Training batch size (default: 8)
             learning_rate: Learning rate (default: 1e-4)
             output_base: Base directory for outputs (default: output/finetuning)
-            queue: LSF queue name (default: gpu_h100)
-            charge_group: LSF charge group (default: cellmap)
+            queue: LSF queue name (default: the site's, gpu_h100 at Janelia)
+            charge_group: LSF charge group (default: the site's, cellmap at Janelia)
             checkpoint_path_override: Optional path to override checkpoint detection (default: None)
             auto_serve: Automatically start inference server after training (default: True)
 
@@ -658,6 +658,9 @@ class FinetuneJobManager:
         # 1. Check model config
         if not model_config:
             raise ValueError("Model config is required")
+        site = current_site()
+        queue = site.default_queue if queue is None else queue
+        charge_group = site.default_charge_group if charge_group is None else charge_group
 
         # Get model type from the config class's cli_name (e.g., "fly",
         # "dacapo", "huggingface"); refuses types the trainer cannot train.
@@ -855,7 +858,7 @@ class FinetuneJobManager:
                     charge_group=charge_group,
                     gpus=1,
                     cpus=4,
-                    walltime=getattr(_g, "walltime", None) or current_site().default_walltime,
+                    walltime=getattr(_g, "walltime", None) or site.default_walltime,
                 ))
                 self.logger.info(f"Submitted LSF job {lsf_job.job_id} for finetuning")
             except Exception as e:

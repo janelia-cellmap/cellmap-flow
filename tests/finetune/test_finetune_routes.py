@@ -118,9 +118,15 @@ def test_submit_reads_the_affinity_offsets_from_the_models_script(submit):
     assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", "[[1, 0, 0], [0, 1, 0]]")
 
 
-def test_submit_bills_the_dashboards_charge_group(submit):
+@pytest.mark.parametrize("dashboards, request_data, billed", [
+    pytest.param("my_lab", {}, "my_lab", id="the dashboard's"),
+    pytest.param("my_lab", {"charge_group": "other_lab"}, "other_lab", id="the request's"),
+    pytest.param("", {}, "cellmap", id="the site's, when the dashboard has none"),
+])
+def test_submit_bills_the_dashboards_charge_group(submit, dashboards, request_data, billed):
     """Every finetune job billed "cellmap", the job manager's default."""
-    assert submit().sent["charge_group"] == "my_lab"
+    g.charge_group = dashboards
+    assert submit(**request_data).sent["charge_group"] == billed
 
 
 @pytest.mark.parametrize("value, status, epochs", [
