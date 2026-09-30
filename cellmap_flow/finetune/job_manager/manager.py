@@ -293,13 +293,9 @@ class FinetuneJobManager:
         metadata.json now records its LSF job id and status; a run whose
         recorded status is not final and that bjobs still reports as pending
         or running is monitored again, which also tells the listeners again
-        once the log shows its server. Local runs (a PID, not an LSF
-        job) are not reattached. Returns how many jobs were picked up.
-
-        All the session's candidates are asked about in one bjobs call, and
-        whatever bjobs says has ended -- including a job it no longer knows
-        at all -- is recorded as final, so it is not asked about again. This
-        runs on every load of the finetune tab.
+        once the log shows its server. persistence.rehydrate says which runs
+        those are, with one bjobs call per session, and records the others
+        that have ended as final. Returns how many jobs were picked up.
         """
         jobs = persistence.rehydrate(session_path, known=self.jobs)
         for job in jobs:
