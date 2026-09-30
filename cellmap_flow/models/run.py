@@ -3,13 +3,13 @@ from cellmap_flow.globals import g
 
 from cellmap_flow.serving.launch import server_argv_for
 from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts
+from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
 from cellmap_flow.utils.web_utils import (
-    ARGS_KEY,
     kill_n_remove_from_neuroglancer,
     get_norms_post_args,
 )
 from cellmap_flow.models.models_config import HuggingFaceModelConfig
-import neuroglancer
+from cellmap_flow.viewer.layers import prediction_layer
 import threading
 from typing import List
 import re
@@ -39,6 +39,19 @@ def _start(command, name):
         return None
 
 
+def _show(job, st_data):
+    """Add the started model's layer, the one Submit would give it."""
+    names = [j.model_name for j in g.jobs]
+    index = names.index(job.model_name) if job.model_name in names else 0
+    layer = prediction_layer(
+        job.model_name, job.host, st_data, dataset_path=g.dataset_path, postprocess=g.postprocess,
+        shader=g.shaders.get(job.model_name), shader_controls=g.shader_controls.get(job.model_name),
+        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
+    )
+    with g.viewer.txn() as s:
+        s.layers[job.model_name] = layer
+
+
 def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
@@ -48,15 +61,8 @@ def run_model(model_path, name, st_data):
     )
     logger.info(f"To be submitted command : {command}")
     job = _start(command, name)
-    if job is None:
-        return
-    with g.viewer.txn() as s:
-        s.layers[job.model_name] = neuroglancer.ImageLayer(
-            source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
-            shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-                    #uicontrol vec3 color color(default="red");
-                    void main(){{emitRGB(color * normalized());}}""",
-        )
+    if job is not None:
+        _show(job, st_data)
 
 
 def run_hf_model(repo, name, st_data):
@@ -67,15 +73,8 @@ def run_hf_model(repo, name, st_data):
     )
     logger.info(f"To be submitted HF command : {command}")
     job = _start(command, name)
-    if job is None:
-        return
-    with g.viewer.txn() as s:
-        s.layers[job.model_name] = neuroglancer.ImageLayer(
-            source=f"zarr://{job.host}/{job.model_name}{ARGS_KEY}{st_data}{ARGS_KEY}",
-            shader=f"""#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);
-                    #uicontrol vec3 color color(default="red");
-                    void main(){{emitRGB(color * normalized());}}""",
-        )
+    if job is not None:
+        _show(job, st_data)
 
 
 def update_run_models(names: List[str], hf_repos: List[str] = None):

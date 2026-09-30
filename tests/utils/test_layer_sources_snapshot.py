@@ -59,10 +59,6 @@ EIGHT_NM = {"z": 8.0, "y": 8.0, "x": 8.0}
 CHAIN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}],
          "postprocess": []}
 THRESHOLD = [{"name": "ThresholdPostprocessor", "threshold": 0.5}]
-# What the Models tab's layers had, whitespace and all.
-FIXED_SHADER = ('#uicontrol invlerp normalized(range=[0, 255], window=[0, 255]);\n'
-                '                    #uicontrol vec3 color color(default="red");\n'
-                '                    void main(){emitRGB(color * normalized());}')
 
 
 def _unit(color):
@@ -244,7 +240,10 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
         "layers": [(name, "image") for name in MODELS],
         "dimensions": EIGHT_NM,
         "chain": CHAIN,
-        **{name: ("image", f"zarr://http://{name}:8000/{name}", None, FIXED_SHADER) for name in MODELS},
+        "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
+        "new": ("image", "zarr://http://new:8000/new", OVERLAID, _unit("green")),
+        "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID, _unit("blue")),
+        "silent": ("image", "zarr://http://silent:8000/silent", None, _unit("yellow")),
     }
 
 
