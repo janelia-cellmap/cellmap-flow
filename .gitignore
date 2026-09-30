@@ -178,3 +178,5 @@ test_corrections.zarr/
 correction_slices/
 corrections/
 output/
+# pixi environments (pixi.toml and pixi.lock are tracked)
+.pixi/

@@ -2,6 +2,8 @@
 Simple CLI for viewing datasets with CellMap Flow without requiring model configs.
 """
 
+import os
+
 import click
 import logging
 from cellmap_flow.utils.logging_setup import configure_logging
@@ -20,6 +22,12 @@ logger = logging.getLogger(__name__)
     help="Path to the dataset (zarr or n5)",
 )
 @click.option(
+    "-P",
+    "--project",
+    default=None,
+    help="Charge group (LSF project) billed for the models launched from the dashboard",
+)
+@click.option(
     "--log-level",
     type=click.Choice(
         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
@@ -27,7 +35,7 @@ logger = logging.getLogger(__name__)
     default="INFO",
     help="Set the logging level",
 )
-def main(dataset, log_level):
+def main(dataset, project, log_level):
     """
     Start CellMap Flow viewer with a dataset.
 
@@ -59,6 +67,14 @@ def main(dataset, log_level):
 
     # Create viewer
     viewer = neuroglancer.Viewer()
+
+    # Fileglancer runs the viewer as an LSF job, and the models picked in the
+    # dashboard should be billed where that job is: LSB_PROJECT_NAME is the
+    # job's project. An explicit -P wins over it.
+    if os.environ.get("LSB_PROJECT_NAME"):
+        g.charge_group = os.environ["LSB_PROJECT_NAME"]
+    if project:
+        g.charge_group = project
 
     # Set dataset path in globals
     g.dataset_path = dataset

@@ -190,17 +190,5 @@ def generate_neuroglancer_url(dataset_path,wrap_raw=True):
     viewer_url = str(g.viewer)
     # .replace("zouinkhim-lm1", "192.168.1.167")
     print("viewer", viewer_url)
-    url = create_and_run_app(neuroglancer_url=viewer_url)
-    show(url)
-    return url
-
-
-def show(viewer):
-    print()
-    print()
-    print("**********************************************")
-    print("LINK:")
-    print(viewer)
-    print("**********************************************")
-    print()
-    print()
+    # Serves the dashboard; does not return.
+    create_and_run_app(neuroglancer_url=viewer_url)

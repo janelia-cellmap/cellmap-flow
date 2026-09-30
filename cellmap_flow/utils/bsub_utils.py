@@ -31,7 +31,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_SECURITY = "http"
 DEFAULT_QUEUE = "gpu_h100"
 DEFAULT_CHARGE_GROUP = "cellmap"
-SERVER_COMMAND = "cellmap_flow_server"
+# How an inference server is started on a compute node. A deployment whose
+# environment is not on PATH sets this: Fileglancer's pixi checkout uses
+# "pixi run cellmap_flow_server" (see pixi.toml's activation env), so the
+# server runs from the lockfile's environment.
+SERVER_COMMAND = os.environ.get("CELLMAP_FLOW_SERVER_COMMAND", "cellmap_flow_server")
 SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
 
 

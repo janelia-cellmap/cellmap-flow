@@ -1,0 +1,90 @@
+# The environment cellmap-flow is deployed from. Fileglancer's runnables.yaml
+# launches `pixi run cellmap_flow_view` and `pixi run cellmap_flow_yaml` from
+# this checkout, and the dashboard then starts inference servers on the
+# cluster with `pixi run cellmap_flow_server` (CELLMAP_FLOW_SERVER_COMMAND
+# below). Python dependencies come from pyproject.toml through the editable
+# install; this file adds what PyPI cannot provide: CUDA, and the MinIO
+# server and client that annotation painting needs.
+[workspace]
+name = "cellmap-flow"
+version = "0.2.3"
+description = "Realtime prediction using neuroglancer"
+channels = ["nvidia", "conda-forge", "pytorch"]
+platforms = ["linux-64"]
+
+[activation.env]
+# The neuroglancer fork's C++ extension declares `uint64_t` while including
+# only <cstddef>/<memory>/<string>. GCC 13+ stopped pulling <cstdint> in
+# transitively and this environment resolves GCC 15, so the build fails with
+# "'uint64_t' has not been declared". Force the include instead of carrying a
+# patched fork; harmless for every other compile.
+CXXFLAGS = "-include cstdint"
+# Inference servers are LSF jobs on other nodes, where this environment is
+# not on PATH; bsub_utils reads this to start them from the lockfile's env.
+CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow_server"
+
+[dependencies]
+python = ">=3.11,<4.0"
+pip = "*"
+cuda-toolkit = ">=12.0"
+numpy = "*"
+pyyaml = "*"
+scikit-image = "*"
+flask = "*"
+flask-cors = "*"
+pydantic = "*"
+s3fs = "*"
+zarr = "==2.18.4"
+numcodecs = "==0.15.0"
+
+[pypi-dependencies]
+# finetune: peft and tensorboard; postprocess: edt. The MinIO binaries the
+# finetune extra also needs are conda packages, in the finetune feature.
+cellmap-flow = { path = ".", editable = true, extras = ["finetune", "postprocess"] }
+
+[feature.finetune.dependencies]
+# MinIO no longer publishes prebuilt binaries; conda-forge builds them.
+minio-server = "*"
+minio-client = "*"
+
+[feature.cellpose.dependencies]
+numpy = "<2.1"
+
+[feature.cellpose.pypi-dependencies]
+cellpose = "==3.1.1.1"
+
+[feature.dacapo.pypi-dependencies]
+dacapo-ml = "*"
+
+[feature.bioimageio.pypi-dependencies]
+bioimageio-core = { version = "==0.7.0", extras = ["onnx", "pytorch"] }
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+
+[feature.dev.dependencies]
+black = "*"
+mypy = "*"
+ruff = "*"
+pre-commit = "*"
+
+[feature.dev.pypi-dependencies]
+pdbpp = "*"
+rich = "*"
+
+[feature.docs.pypi-dependencies]
+sphinx-autodoc-typehints = "*"
+sphinx-autoapi = "*"
+sphinx-click = "*"
+sphinx-rtd-theme = "*"
+myst-parser = "*"
+
+[environments]
+# What Fileglancer deploys: dashboard, catalog and cellpose models, finetuning.
+default = { features = ["finetune", "cellpose"], solve-group = "default" }
+test = { features = ["finetune", "cellpose", "test"], solve-group = "default" }
+dev = { features = ["finetune", "cellpose", "test", "dev"], solve-group = "default" }
+docs = { features = ["docs"] }
+dacapo = { features = ["finetune", "dacapo"] }
+bioimageio = { features = ["finetune", "bioimageio"] }

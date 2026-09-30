@@ -285,6 +285,7 @@ def _require_minio_binaries():
     MinIO no longer publishes prebuilt community server binaries (dl.min.io is
     410 Gone and the GitHub releases carry no assets), so conda-forge -- which
     still builds from source -- is the only practical way to install them.
+    A pixi checkout gets them from pixi.toml's finetune feature.
     """
     missing = [name for name in ("minio", "mc") if shutil.which(name) is None]
     if missing:
@@ -292,7 +293,9 @@ def _require_minio_binaries():
             f"Required MinIO binaries not found on PATH: {', '.join(missing)}. "
             "Annotation volumes are served to Neuroglancer through a local MinIO "
             "server, so painting cannot start without them.\n\n"
-            "Install with:\n"
+            "In a pixi checkout they are part of the default environment:\n"
+            "    pixi install\n"
+            "otherwise:\n"
             "    mamba install minio-server minio-client -c conda-forge"
         )
 

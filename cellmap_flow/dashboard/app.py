@@ -59,12 +59,38 @@ app.register_blueprint(model_advice_bp)
 app.register_blueprint(review_bp)
 
 
+def _announce_service_url(url):
+    """Tell whoever launched the dashboard where it is.
+
+    Fileglancer runs the dashboard as a service job and reads its URL from
+    the file named by SERVICE_URL_PATH; without the variable this is a no-op.
+    Never raises: a bad path must not take the dashboard down with it.
+    """
+    path = os.environ.get("SERVICE_URL_PATH")
+    if not path:
+        return
+    try:
+        with open(path, "w") as f:
+            f.write(url)
+    except OSError as e:
+        logger.warning(f"Could not write the dashboard URL to {path}: {e}")
+
+
 def create_and_run_app(neuroglancer_url=None):
+    from werkzeug.serving import make_server
+
     g.NEUROGLANCER_URL = neuroglancer_url
     hostname = socket.gethostname()
-    port = 0
-    logger.debug(f"Host name: {hostname}")
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    # threaded=True is not optional. make_server defaults to one request at a
+    # time, and the dashboard has long POSTs (a YAML crop load ran for three
+    # minutes) and open SSE log streams, each of which would then block every
+    # other request. app.run() used to default to threaded=True; this keeps it.
+    server = make_server("0.0.0.0", 0, app, threaded=True)
+    url = f"http://{hostname}:{server.socket.getsockname()[1]}"
+    logger.info(f"Dashboard running at: {url}")
+    print(f"\n * Dashboard URL: {url}\n", flush=True)
+    _announce_service_url(url)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
