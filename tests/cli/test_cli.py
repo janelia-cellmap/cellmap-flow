@@ -14,7 +14,7 @@ import cellmap_flow.globals as G
 from cellmap_flow.cli import cli as cli_module
 from cellmap_flow.globals import g
 from cellmap_flow.utils import neuroglancer_utils
-from cellmap_flow.utils.bsub_utils import JobStartError
+from cellmap_flow.jobs.spec import JobStartError
 
 HERE = os.path.dirname(os.path.dirname(__file__))
 SCRIPT = os.path.join(HERE, "script_test", "fake_model_script.py")

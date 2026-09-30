@@ -312,9 +312,9 @@ class FakeLSF:
 @pytest.fixture
 def fake_lsf(monkeypatch, tmp_path):
     """LSF as ``FakeLSF`` answers it, with server logs under tmp_path."""
-    from cellmap_flow.utils import bsub_utils
+    from cellmap_flow.jobs import launch
 
-    monkeypatch.setattr(bsub_utils, "SERVER_LOG_DIR", tmp_path / "server_logs")
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path / "server_logs")
     return FakeLSF(monkeypatch)
 
 

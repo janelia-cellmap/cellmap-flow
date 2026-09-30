@@ -9,7 +9,8 @@ import pytest
 
 from cellmap_flow.dashboard.services import launch
 from cellmap_flow.globals import g
-from cellmap_flow.utils.bsub_utils import BsubTimeoutError, JobStartError
+from cellmap_flow.jobs.lsf import BsubTimeoutError
+from cellmap_flow.jobs.spec import JobStartError
 
 
 @pytest.mark.parametrize("error", [pytest.param(JobStartError("no GPU queue took it"), id="no-queue-took-it"),

@@ -18,7 +18,7 @@ from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.utils import neuroglancer_utils
-from cellmap_flow.utils.bsub_utils import JobStartError
+from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.utils.config_utils import ConfigError
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

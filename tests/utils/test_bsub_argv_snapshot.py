@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils import bsub_utils
+from cellmap_flow.jobs import launch
 
 BSUB_ANSWER = "Job <4242> is submitted to queue <gpu_a100>.\n"
 
@@ -86,7 +86,7 @@ class Recorder:
 @pytest.fixture
 def log_dir(tmp_path, monkeypatch):
     path = tmp_path / "server_logs"
-    monkeypatch.setattr(bsub_utils, "SERVER_LOG_DIR", path)
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", path)
     return path
 
 
@@ -111,7 +111,7 @@ def test_a_server_submission(monkeypatch, tmp_path, log_dir):
     g.walltime = "12:00"
     g.jobs = []
 
-    bsub_utils.start_hosts(
+    launch.start_hosts(
         SERVER_COMMAND, queue="gpu_a100", charge_group="grp", job_name="mito model",
         wait_for_host=False, cycle_queues=False,
     )
@@ -282,7 +282,7 @@ def test_a_local_server_run(monkeypatch, tmp_path, log_dir):
     rec = Recorder(monkeypatch, tmp_path)
     g.jobs = []
 
-    job = bsub_utils.start_hosts(SERVER_COMMAND, job_name="mito model", local=True, wait_for_host=False)
+    job = launch.start_hosts(SERVER_COMMAND, job_name="mito model", local=True, wait_for_host=False)
 
     assert rec.runs == []
     assert rec.popens == [{

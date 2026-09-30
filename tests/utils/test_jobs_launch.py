@@ -1,5 +1,5 @@
-"""bsub_utils' policy: where start_hosts runs a server, and the job cleanup the
-entry points install.
+"""jobs.launch's policy: where start_hosts runs a server, and the job cleanup
+the entry points install.
 
 start_hosts' submissions are replaced where it calls them (submit_bsub_job,
 run_locally, the queue list), and each fake job says what bjobs would have
@@ -19,9 +19,11 @@ import pytest
 from click.testing import CliRunner
 
 from cellmap_flow.globals import g
+from cellmap_flow.jobs import launch
+from cellmap_flow.jobs.launch import start_hosts
+from cellmap_flow.jobs.lsf import BsubTimeoutError
 from cellmap_flow.jobs.ready import READY_ENV
-from cellmap_flow.utils import bsub_utils
-from cellmap_flow.utils.bsub_utils import BsubTimeoutError, JobStartError, JobStatus, start_hosts
+from cellmap_flow.jobs.spec import JobStartError, JobStatus
 from tests.utils.serving_helpers import write_raw
 
 QUEUES = ("gpu_h100", "gpu_a100", "gpu_h200")
@@ -96,14 +98,14 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
             raise jobs[queue]
         return jobs[queue]
 
-    monkeypatch.setattr(bsub_utils, "is_bsub_available", lambda: bsub)
-    monkeypatch.setattr(bsub_utils, "submit_bsub_job", submit)
-    monkeypatch.setattr(bsub_utils, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
-    monkeypatch.setattr(bsub_utils, "gpu_queue_candidates",
+    monkeypatch.setattr(launch, "is_bsub_available", lambda: bsub)
+    monkeypatch.setattr(launch, "submit_bsub_job", submit)
+    monkeypatch.setattr(launch, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
+    monkeypatch.setattr(launch, "gpu_queue_candidates",
                         lambda preferred, cycle=True: [preferred] + [q for q in QUEUES if q != preferred])
     g.jobs, g.queue, g.charge_group = [], "gpu_h100", "saved_group"
 
-    with caplog.at_level(logging.ERROR, logger=bsub_utils.logger.name):
+    with caplog.at_level(logging.ERROR, logger=launch.logger.name):
         if isinstance(result, tuple):
             with pytest.raises(result[0], match=result[1]) as raised:
                 start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
@@ -127,7 +129,7 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
 
     def bsub(argv, kwargs):
         target = Path(kwargs["env"][READY_ENV])
-        assert target.parent == bsub_utils.SERVER_LOG_DIR
+        assert target.parent == launch.SERVER_LOG_DIR
         target.write_text(json.dumps({"url": "http://10.1.2.3:8123", "job_id": "4242"}))
         return "Job <4242> is submitted to queue <gpu_h100>.\n"
 
@@ -140,7 +142,7 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
 
 def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
     outcome = []
-    thread = threading.Thread(target=lambda: outcome.append(bsub_utils.install_cleanup_handlers()))
+    thread = threading.Thread(target=lambda: outcome.append(launch.install_cleanup_handlers()))
     thread.start()
     thread.join()
     assert outcome == [False], "off the main thread it leaves the handlers alone"
@@ -148,7 +150,7 @@ def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
     job = FakeJob("1")
     g.jobs = [job]
     with pytest.raises(SystemExit) as exited:
-        bsub_utils.cleanup_handler(signal.SIGTERM, None)
+        launch.cleanup_handler(signal.SIGTERM, None)
     assert job.killed and exited.value.code == 128 + signal.SIGTERM, "not 0, as if the run had succeeded"
 
 
@@ -180,7 +182,7 @@ def _cellmap_flow_view(monkeypatch, tmp_path, order):
     monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
     monkeypatch.setattr(neuroglancer, "set_server_bind_address", lambda *a: None)
     monkeypatch.setattr(app, "create_and_run_app", lambda **k: order.append("run"))
-    monkeypatch.setattr(bsub_utils, "install_cleanup_handlers", lambda: order.append("install"))
+    monkeypatch.setattr(launch, "install_cleanup_handlers", lambda: order.append("install"))
     result = CliRunner().invoke(viewer_cli.main, ["-d", write_raw(tmp_path, np.zeros((4, 4, 4), np.uint8))])
     assert result.exit_code == 0, result.output + repr(result.exception)
 
@@ -188,7 +190,7 @@ def _cellmap_flow_view(monkeypatch, tmp_path, order):
 @pytest.mark.parametrize("entry_point", [_cellmap_flow, _cellmap_flow_yaml, _cellmap_flow_view],
                          ids=lambda f: f.__name__[1:])
 def test_the_entry_points_install_the_cleanup_before_starting_jobs(entry_point, monkeypatch, tmp_path):
-    """Importing bsub_utils used to set them, for every importer, and failed off the main thread."""
+    """Importing the launcher used to set them, for every importer, and failed off the main thread."""
     order = []
     entry_point(monkeypatch, tmp_path, order)
     assert order == ["install", "run"]

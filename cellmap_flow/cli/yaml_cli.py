@@ -13,11 +13,8 @@ import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from cellmap_flow.utils.bsub_utils import (
-    JobStartError,
-    install_cleanup_handlers,
-    start_hosts,
-)
+from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
+from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.utils.config_utils import ConfigError, load_config, resolve_data_path
 from cellmap_flow.globals import g
@@ -278,8 +275,8 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     charge_group = config["charge_group"]
     queue = config["queue"]
     wrap_raw = config.get("wrap_raw", True)
-    # Optional; falls back to the cached dashboard setting, then to
-    # bsub_utils.DEFAULT_WALLTIME. Accepts "08:00" or plain minutes.
+    # Optional; falls back to the cached dashboard setting, then to the
+    # site's default_walltime (jobs/site.py). Accepts "08:00" or plain minutes.
     walltime = config.get("walltime")
     # Optional; None means "leave whatever the dashboard setting is". Only an
     # explicit false pins submissions to `queue`.

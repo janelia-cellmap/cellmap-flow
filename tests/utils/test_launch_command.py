@@ -19,9 +19,9 @@ from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
 from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
+from cellmap_flow.jobs import launch as jobs_launch
+from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving import launch
-from cellmap_flow.utils import bsub_utils
-from cellmap_flow.utils.bsub_utils import JobStartError
 
 def _cli(*argv):
     result = CliRunner().invoke(cli_module.cli, list(argv))
@@ -69,7 +69,7 @@ def launched(monkeypatch, tmp_path):
         commands.append(command)
         raise JobStartError("recorded")
 
-    monkeypatch.setattr(bsub_utils, "SERVER_COMMAND", "pixi run cellmap_flow_server")
+    monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow_server")
     monkeypatch.setattr(cli_module, "start_hosts", started)
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
@@ -91,7 +91,7 @@ def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):
     monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {})
     config = HuggingFaceModelConfig(repo="cellmap/mito", name="m v1")
     argv = launch.server_argv_for("huggingface", {"repo": "cellmap/mito", "name": "m v1"}, "/d/my raw.zarr")
-    assert argv == launch.server_argv(config, "/d/my raw.zarr") == shlex.split(bsub_utils.SERVER_COMMAND) + [
+    assert argv == launch.server_argv(config, "/d/my raw.zarr") == shlex.split(jobs_launch.SERVER_COMMAND) + [
         "huggingface", "--repo", "cellmap/mito", "--name", "m v1", "-d", "/d/my raw.zarr",
     ]
     assert launch.server_command(config, "/d/my raw.zarr") == shlex.join(argv)

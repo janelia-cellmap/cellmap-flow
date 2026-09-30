@@ -15,7 +15,7 @@ import pytest
 
 from cellmap_flow.jobs import local
 from cellmap_flow.jobs.spec import JobStatus
-from cellmap_flow.utils import bsub_utils
+from cellmap_flow.jobs import launch
 from cellmap_flow.utils.web_utils import IP_PATTERN
 
 MARKER = f"{IP_PATTERN[0]}http://10.0.0.1:1234{IP_PATTERN[1]}"
@@ -23,7 +23,7 @@ MARKER = f"{IP_PATTERN[0]}http://10.0.0.1:1234{IP_PATTERN[1]}"
 
 @pytest.fixture(autouse=True)
 def _log_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(bsub_utils, "SERVER_LOG_DIR", tmp_path / "server_logs")
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path / "server_logs")
 
 
 def _wait_for(predicate, timeout=15):

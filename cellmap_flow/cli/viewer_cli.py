@@ -53,7 +53,7 @@ def main(dataset, project, log_level):
     import neuroglancer
 
     from cellmap_flow.dashboard.app import create_and_run_app
-    from cellmap_flow.utils.bsub_utils import install_cleanup_handlers
+    from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.viewer.raw import get_raw_layer
 
     configure_logging(getattr(logging, log_level.upper()))

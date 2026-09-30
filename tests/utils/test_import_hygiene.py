@@ -30,7 +30,7 @@ LIGHT = ["cellmap_flow.globals", "flask", "neuroglancer"]
 
 ROWS = {
     "jobs": """
-check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "lsf", "local", "queues", "ready")]
+check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "lsf", "local", "queues", "ready", "launch")]
       + ["cellmap_flow.finetune.markers", "cellmap_flow.finetune.job_log"],
       LIGHT + ["huggingface_hub", "peft", "torch"])
 """,
@@ -83,12 +83,12 @@ check(["cellmap_flow.blockwise.blockwise_processor", "cellmap_flow.blockwise.cli
        "cellmap_flow.blockwise.multiple_cli"], [])
 assert (root.level, root.handlers) == (logging.WARNING, handlers)
 """,
-    # The lazy g.finetune_job_manager imports it on a request thread.
-    "bsub_utils-signals": """
+    # A dashboard request can be the first to import it, off the main thread.
+    "launch-signals": """
 import signal, threading
 before = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
 errors = []
-thread = threading.Thread(target=lambda: errors.append(check(["cellmap_flow.utils.bsub_utils"], [])))
+thread = threading.Thread(target=lambda: errors.append(check(["cellmap_flow.jobs.launch"], [])))
 thread.start()
 thread.join()
 assert errors == [None], errors

@@ -26,8 +26,8 @@ SERVER_CONFIG_DEFAULTS = {
     "queue": "gpu_h100",
     "charge_group": "",
     # LSF's own default on the GPU queues is 120 minutes, which killed
-    # inference servers two hours into a session. See DEFAULT_WALLTIME in
-    # bsub_utils for why this matches the Fileglancer app's own 8 hours.
+    # inference servers two hours into a session. See default_walltime in
+    # jobs/site.py for why this matches the Fileglancer app's own 8 hours.
     "walltime": "08:00",
     # Try other GPU queues when the requested one is busy or closed. On by
     # default because a job that starts elsewhere beats one that never

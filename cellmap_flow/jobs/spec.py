@@ -41,7 +41,7 @@ class JobSpec:
     ``queue`` None asks for none (``-q`` is left out, so LSF's default
     queue), and ``gpus`` 0 asks for no GPU. ``walltime`` is LSF's
     ``[hours:]minutes``; None leaves the queue's default. ``log_dir`` None is
-    ``bsub_utils.SERVER_LOG_DIR``, read when the job is submitted. ``env`` is
+    ``jobs.launch.SERVER_LOG_DIR``, read when the job is submitted. ``env`` is
     added to this process's environment, which the job inherits either way.
     """
 
@@ -69,14 +69,13 @@ class JobSpec:
 def default_log_dir() -> Path:
     """Where job logs go unless the spec says otherwise.
 
-    ``bsub_utils.SERVER_LOG_DIR``, read at call time rather than copied: it
-    is the one setting of it (tests and deployments point it elsewhere), and
-    importing bsub_utils at module level here would pull in
-    ``cellmap_flow.globals``.
+    ``jobs.launch.SERVER_LOG_DIR``, read at call time rather than copied: it
+    is the one setting of it (tests and deployments point it elsewhere).
+    Imported here because launch imports this module.
     """
-    from cellmap_flow.utils import bsub_utils
+    from cellmap_flow.jobs import launch
 
-    return Path(bsub_utils.SERVER_LOG_DIR)
+    return Path(launch.SERVER_LOG_DIR)
 
 
 class JobStatus(Enum):

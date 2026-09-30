@@ -135,7 +135,7 @@ def gpu_queues():
     Polled about once a minute by the models tab; the underlying LSF query is
     cached server-side, so this is cheap to call.
     """
-    from cellmap_flow.utils.lsf_queues import gpu_queue_availability
+    from cellmap_flow.jobs.queues import gpu_queue_availability
 
     return jsonify(gpu_queue_availability())
 

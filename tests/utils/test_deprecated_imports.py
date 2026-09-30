@@ -1,0 +1,24 @@
+"""Import paths the docs used to show still work for one release, and warn.
+
+Each row is a name docs/ told users to import from a module that has since
+been dissolved; the docs name its new home now, and scripts and plugins
+written against the old docs get a DeprecationWarning pointing there. The
+aliases go in the release after 0.3.0 (cleanup_review/WRAPPERS.md).
+"""
+
+import importlib
+
+import pytest
+
+# old module, name, new module
+ALIASES = {
+    "install_cleanup_handlers": ("cellmap_flow.utils.bsub_utils", "install_cleanup_handlers", "cellmap_flow.jobs.launch"),
+}
+
+
+@pytest.mark.parametrize("alias", ALIASES)
+def test_an_old_documented_import_still_works_and_warns(alias):
+    old, name, new = ALIASES[alias]
+    with pytest.warns(DeprecationWarning, match=new):
+        value = getattr(importlib.import_module(old), name)
+    assert value is getattr(importlib.import_module(new), name)

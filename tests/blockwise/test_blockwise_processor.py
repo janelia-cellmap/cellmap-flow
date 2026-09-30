@@ -22,7 +22,7 @@ from cellmap_flow.blockwise.blockwise_processor import (
 )
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
-from cellmap_flow.utils import bsub_utils
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.utils.config_utils import ConfigError
 
 JSON_DATA = {
@@ -207,7 +207,7 @@ def test_a_worker_submitted_without_a_walltime_gets_the_default(fake_lsf, tmp_pa
     fake_lsf.answers["bsub"] = ["Job <77> is submitted to queue <gpu_h100>.\n"]
     spawn_worker("w", "/t.yaml", "grp", "gpu_h100", log_dir=tmp_path)()
     (argv,) = fake_lsf.commands("bsub")
-    assert argv[argv.index("-W") + 1] == bsub_utils.DEFAULT_WALLTIME
+    assert argv[argv.index("-W") + 1] == current_site().default_walltime
 
 
 def test_a_refused_worker_submission_raises(fake_lsf, tmp_path):

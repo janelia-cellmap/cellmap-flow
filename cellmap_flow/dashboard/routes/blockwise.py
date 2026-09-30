@@ -29,8 +29,8 @@ from cellmap_flow.dashboard.requests import (
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf as jobs_lsf
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import JobSpec
-from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME
 from cellmap_flow.utils.web_utils import INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
 from cellmap_flow.globals import get_blockwise_tasks_dir
 
@@ -45,7 +45,7 @@ def _task_walltime():
     The dashboard's walltime setting, as for inference servers. Without -W a
     GPU worker is killed at the queue's two-hour default.
     """
-    return get_session().walltime or DEFAULT_WALLTIME
+    return get_session().walltime or current_site().default_walltime
 
 
 def _sanitize_job_name(name) -> str:

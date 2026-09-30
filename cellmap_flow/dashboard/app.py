@@ -32,7 +32,7 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 #
 # This was attached to logging.getLogger(__name__), so the panel only ever
 # received records emitted by app.py itself -- which is almost nothing.
-# Everything from finetune_utils, bsub_utils and the route modules went to
+# Everything from finetune_utils, the job launcher and the route modules went to
 # the terminal and nowhere else, so reading a failure meant having shell
 # access to whatever machine the dashboard happened to land on.
 #

@@ -18,7 +18,7 @@ Script
     from cellmap_flow.globals import g
     from cellmap_flow.models.models_config import FlyModelConfig
     from cellmap_flow.norm.input_normalize import LambdaNormalizer, MinMaxNormalizer
-    from cellmap_flow.utils.bsub_utils import install_cleanup_handlers
+    from cellmap_flow.jobs.launch import install_cleanup_handlers
 
     DATA_PATH = "/path/to/dataset.zarr/recon-1/em/fibsem-uint8/s1"
 

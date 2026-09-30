@@ -20,7 +20,7 @@ export function readCount(raw, label) {
   return n;
 }
 
-// LSF's run limit, HH:MM or minutes: the rule bsub_utils applies before it
+// LSF's run limit, HH:MM or minutes: the rule jobs.lsf applies before it
 // passes -W to bsub (it drops a value it cannot parse, and the job gets the
 // queue's default).
 export const WALLTIME_RE = /^\d+(:\d{1,2})?$/;

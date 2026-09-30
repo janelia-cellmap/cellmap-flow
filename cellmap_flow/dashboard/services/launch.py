@@ -9,7 +9,8 @@
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.serving.launch import server_argv_for
-from cellmap_flow.utils.bsub_utils import JobStartError, start_hosts
+from cellmap_flow.jobs.launch import start_hosts
+from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.utils.web_utils import (
     kill_n_remove_from_neuroglancer,

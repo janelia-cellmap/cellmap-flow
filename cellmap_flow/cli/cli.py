@@ -9,11 +9,8 @@ from cellmap_flow.utils.logging_setup import configure_logging
 import inspect
 import sys
 from typing import Type
-from cellmap_flow.utils.bsub_utils import (
-    JobStartError,
-    install_cleanup_handlers,
-    start_hosts,
-)
+from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
+from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models import registry
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig

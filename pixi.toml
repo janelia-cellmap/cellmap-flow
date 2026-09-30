@@ -20,7 +20,7 @@ platforms = ["linux-64"]
 # patched fork; harmless for every other compile.
 CXXFLAGS = "-include cstdint"
 # Inference servers are LSF jobs on other nodes, where this environment is
-# not on PATH; bsub_utils reads this to start them from the lockfile's env.
+# not on PATH; jobs/launch.py reads this to start them from the lockfile's env.
 CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow_server"
 
 [dependencies]

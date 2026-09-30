@@ -3,23 +3,20 @@
 Every launcher builds it here: ``cellmap_flow <type>``, ``cellmap_flow run``,
 ``cellmap_flow_yaml`` and the dashboard's catalog and Hugging Face models.
 
-The serve program is ``bsub_utils.SERVER_COMMAND``, and deployments change
+The serve program is ``jobs.launch.SERVER_COMMAND``, and deployments change
 it: the fileglancer deploy sets ``"pixi run cellmap_flow_server"``. So it is
 read each time a command is built, never copied at import (a copy misses
 the override), and split into words (quoted as one token, the shell looks
 for a program called "pixi run cellmap_flow_server").
-
-bsub_utils imports ``cellmap_flow.globals``, so it is imported only when a
-command is built; importing this module stays cheap.
 """
 
 import shlex
 
+from cellmap_flow.jobs import launch as jobs_launch
+
 
 def _serve_words():
-    from cellmap_flow.utils import bsub_utils
-
-    return shlex.split(bsub_utils.SERVER_COMMAND)
+    return shlex.split(jobs_launch.SERVER_COMMAND)
 
 
 def server_argv(model_config, data_path: str) -> list:

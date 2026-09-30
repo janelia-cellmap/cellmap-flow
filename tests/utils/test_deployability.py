@@ -74,7 +74,7 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
 
 
 def test_the_server_command_is_read_from_the_environment():
-    code = "from cellmap_flow.utils.bsub_utils import SERVER_COMMAND; print(SERVER_COMMAND)"
+    code = "from cellmap_flow.jobs.launch import SERVER_COMMAND; print(SERVER_COMMAND)"
     env = {**os.environ, "CELLMAP_FLOW_SERVER_COMMAND": "pixi run cellmap_flow_server"}
     out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "pixi run cellmap_flow_server"
@@ -86,7 +86,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
 
     from cellmap_flow.cli import viewer_cli
     from cellmap_flow.dashboard import app as dashboard
-    from cellmap_flow.utils import bsub_utils
+    from cellmap_flow.jobs import launch
     from cellmap_flow.viewer import raw
 
     class FakeViewer:
@@ -97,7 +97,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
     monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
     raw_layers = []
     monkeypatch.setattr(raw, "get_raw_layer", lambda path: raw_layers.append(path) or "raw")
-    monkeypatch.setattr(bsub_utils, "install_cleanup_handlers", lambda: True)
+    monkeypatch.setattr(launch, "install_cleanup_handlers", lambda: True)
     started = []
     monkeypatch.setattr(dashboard, "create_and_run_app", lambda **k: started.append(k))
     monkeypatch.setenv("LSB_PROJECT_NAME", "cellmap-fileglancer")

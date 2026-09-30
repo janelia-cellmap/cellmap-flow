@@ -7,9 +7,11 @@
 - ``queues``: which GPU queues are usable, and the order to try them in.
 - ``site``: the site's numbers (queues, cores, walltime, timeouts).
 - ``ready``: the file a server writes once it knows its address.
+- ``launch``: the policy over them. ``start_hosts`` starts an inference
+  server, falling back through the GPU queues, and records it in the
+  dashboard's ``g.jobs``; the deployment's ``SERVER_COMMAND`` and
+  ``SERVER_LOG_DIR``.
 
-The policy of what to launch, and when (``start_hosts``, which reads the
-dashboard's settings), stays in ``cellmap_flow.utils.bsub_utils``. Nothing
-in this package imports ``cellmap_flow.globals``, Flask or torch at module
-level, so launching a job does not pull in the dashboard or a model.
+Nothing in this package imports ``cellmap_flow.globals``, Flask or torch at
+module level, so launching a job does not pull in the dashboard or a model.
 """
