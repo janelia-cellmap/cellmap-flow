@@ -14,8 +14,9 @@
 //   dialogs.js, messages.js   the dialogs' backdrop, and toasts
 //
 // The modules use each other's functions freely (the canvas draws nodes
-// whose buttons redraw the canvas), which is safe because none of them runs
-// anything when it is imported: this module starts the page. A module runs
+// whose buttons redraw the canvas). That is safe because importing one only
+// defines things (state.js also reads the page data): this module starts
+// the page. A module runs
 // once the page is parsed and before DOMContentLoaded, so every element is
 // there.
 import { initBbx } from "./bbx.js";

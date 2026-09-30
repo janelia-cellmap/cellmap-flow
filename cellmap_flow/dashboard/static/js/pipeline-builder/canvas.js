@@ -215,7 +215,7 @@ function getDotPosition(dot) {
 }
 
 // Redraw every edge (not one being drawn), and grow the canvas to hold every node.
-export function renderConnections() {
+function renderConnections() {
   const svg = document.querySelector(".connections-svg");
   if (!svg) return;
   svg.querySelectorAll(".connection-path:not(.dragging-connection)").forEach((p) => p.remove());

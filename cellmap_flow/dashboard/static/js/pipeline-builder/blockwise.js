@@ -69,7 +69,7 @@ function blockwiseEditedSince(editsAtStart) {
 // which always needs exactly one config node: one is placed if there is
 // none, and the palette section it comes from is opened so it is visible
 // there too. (The node's palette section starts collapsed.)
-export async function toggleBlockwiseBar() {
+async function toggleBlockwiseBar() {
   const blockwiseBar = document.getElementById("blockwise-bar");
   const isHidden = blockwiseBar.style.display === "none";
   blockwiseBar.style.display = isHidden ? "flex" : "none";

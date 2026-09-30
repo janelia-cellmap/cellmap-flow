@@ -59,7 +59,7 @@ const LISTS = {
 export const NODE_TYPES = Object.keys(LISTS);
 
 export function nodesOf(type) {
-  return pipeline[LISTS[type]];
+  return Object.hasOwn(LISTS, type) ? pipeline[LISTS[type]] : undefined;
 }
 
 export function findNode(type, id) {
@@ -80,7 +80,7 @@ export function addNodeTo(type, node) {
 // Take a node out, with every edge to or from it.
 export function removeNodeFrom(type, id) {
   pipeline.edges = pipeline.edges.filter((e) => e.from !== id && e.to !== id);
-  if (LISTS[type]) pipeline[LISTS[type]] = nodesOf(type).filter((n) => n.id !== id);
+  if (nodesOf(type)) pipeline[LISTS[type]] = nodesOf(type).filter((n) => n.id !== id);
 }
 
 // Where the i-th node of a type goes when nothing says otherwise: INPUT and
