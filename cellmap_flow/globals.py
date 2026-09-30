@@ -191,7 +191,7 @@ class Flow:
     @property
     def finetune_job_manager(self):
         if self._finetune_job_manager is None:
-            from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+            from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
             self._finetune_job_manager = FinetuneJobManager()
         return self._finetune_job_manager
 

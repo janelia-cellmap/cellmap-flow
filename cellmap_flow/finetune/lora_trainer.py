@@ -586,7 +586,7 @@ class LoRAFinetuner:
             Timestamped like the logger's lines so epoch duration can be read
             off the log: the 2026-09-23 A/B runs had none on the per-epoch
             summaries, and per-arm speed had to come from LSF's start/end
-            times instead. The progress parsers in finetune_job_manager use
+            times instead. The progress parsers in finetune/job_manager use
             unanchored re.findall, so the prefix does not affect them.
             """
             stamp = time.strftime("%Y-%m-%d %H:%M:%S")

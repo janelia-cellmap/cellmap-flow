@@ -13,8 +13,8 @@ from unittest.mock import ANY
 
 import pytest
 
-from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
 from cellmap_flow.finetune.job_manager import monitor, restart
+from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry

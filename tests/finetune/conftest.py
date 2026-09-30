@@ -229,8 +229,7 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
 @pytest.fixture
 def local_jobs(monkeypatch):
     """The job manager runs jobs locally, and starts neither a process nor a monitor thread."""
-    from cellmap_flow.finetune import finetune_job_manager as fjm
-    from cellmap_flow.finetune.job_manager import submit
+    from cellmap_flow.finetune.job_manager import manager, submit
 
     record = SimpleNamespace(runs=[], monitors=[])
 
@@ -243,7 +242,7 @@ def local_jobs(monkeypatch):
 
     monkeypatch.setattr(submit, "is_bsub_available", lambda: False)
     monkeypatch.setattr(submit, "run_locally", run_locally)
-    monkeypatch.setattr(fjm, "threading", SimpleNamespace(Thread=thread))
+    monkeypatch.setattr(manager, "threading", SimpleNamespace(Thread=thread))
     return record
 
 

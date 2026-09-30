@@ -1,9 +1,21 @@
-"""
-Job manager for orchestrating finetuning jobs on LSF cluster.
+"""FinetuneJobManager: the finetune jobs a dashboard follows.
 
-This module provides:
-- FinetuneJob: Track metadata and status of a single finetuning job
-- FinetuneJobManager: Orchestrate job lifecycle from submission to completion
+The finetune routes call it, as the session's ``finetune_job_manager``. It
+holds the jobs by job id, and their listeners, and puts the package's
+modules together:
+
+- ``submit_finetuning_job``: check the request and work out what to run
+  (submit), make the run's directory and its record (persistence), launch
+  the trainer, and follow the job;
+- ``rehydrate_session``: follow again the jobs an earlier dashboard left
+  running (persistence.rehydrate);
+- ``monitor_job``: what each job's monitor thread runs (monitor);
+- ``restart_finetuning_job`` (restart) and ``cancel_job``;
+- ``get_job_status``, ``list_jobs``, ``get_job_logs``, ``get_job``;
+- ``add_listener``, ``remove_listener`` (listener).
+
+Stopping a job early is between the finetune route and the trainer: the
+route writes the run's ``stop_signal.json``.
 """
 
 import logging
@@ -27,15 +39,14 @@ class FinetuneJobManager:
 
     Manages the full lifecycle:
     1. Validation and job submission to LSF
-    2. Background monitoring of training progress
-    3. Post-training model registration
-    4. Job cancellation and cleanup
+    2. Background monitoring of training progress, told to the listeners
+    3. Post-training checks, and the job's record in its metadata.json
+    4. Restarts and cancellation
     """
 
     def __init__(self):
         """Initialize the job manager."""
         self.jobs: Dict[str, FinetuneJob] = {}
-        self.logger = logging.getLogger(__name__)
         # Told when a job's server comes up and when an iteration finishes.
         # None by default: what a job's model looks like in the dashboard is
         # the dashboard's (dashboard.finetune_layers).
@@ -144,7 +155,7 @@ class FinetuneJobManager:
         # serving YAML goes.
         models_dir = output_base / "models"
 
-        self.logger.info(f"Output directory: {output_dir}")
+        logger.info(f"Output directory: {output_dir}")
 
         # === Build training command ===
 
@@ -157,10 +168,10 @@ class FinetuneJobManager:
         if auto_serve:
             try:
                 serve_data_path = submit.extract_data_path_from_corrections(corrections_path)
-                self.logger.info(f"Extracted dataset path for inference: {serve_data_path}")
+                logger.info(f"Extracted dataset path for inference: {serve_data_path}")
             except Exception as e:
-                self.logger.warning(f"Could not extract dataset path from corrections: {e}")
-                self.logger.warning("Auto-serve will be disabled")
+                logger.warning(f"Could not extract dataset path from corrections: {e}")
+                logger.warning("Auto-serve will be disabled")
                 auto_serve = False
 
         cli_command = submit.build_command(
@@ -195,7 +206,7 @@ class FinetuneJobManager:
             charge_group=charge_group,
         )
 
-        self.logger.info(f"Training command: {cli_command}")
+        logger.info(f"Training command: {cli_command}")
 
         # === Save job metadata ===
 
@@ -271,7 +282,7 @@ class FinetuneJobManager:
             daemon=True
         )
         monitor_thread.start()
-        self.logger.info(f"Started monitoring thread for job {finetune_job.job_id}")
+        logger.info(f"Started monitoring thread for job {finetune_job.job_id}")
 
     def rehydrate_session(self, session_path) -> int:
         """Pick up the jobs of a session that are still alive on the cluster.
@@ -293,7 +304,7 @@ class FinetuneJobManager:
         jobs = persistence.rehydrate(session_path, known=self.jobs)
         for job in jobs:
             self.jobs[job.job_id] = job
-            self.logger.info(f"Reattached to job {job.job_id} (LSF {job.lsf_job.job_id}) from {job.output_dir}")
+            logger.info(f"Reattached to job {job.job_id} (LSF {job.lsf_job.job_id}) from {job.output_dir}")
             self._start_monitor(job)
         return len(jobs)
 
@@ -312,29 +323,29 @@ class FinetuneJobManager:
             True if successfully cancelled, False otherwise
         """
         if job_id not in self.jobs:
-            self.logger.error(f"Job {job_id} not found")
+            logger.error(f"Job {job_id} not found")
             return False
 
         finetune_job = self.jobs[job_id]
 
         if finetune_job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
-            self.logger.warning(f"Job {job_id} already finished with status {finetune_job.status}")
+            logger.warning(f"Job {job_id} already finished with status {finetune_job.status}")
             return False
 
-        self.logger.info(f"Cancelling job {job_id}...")
+        logger.info(f"Cancelling job {job_id}...")
 
         if finetune_job.lsf_job:
             try:
                 finetune_job.cancel_requested = True
                 finetune_job.lsf_job.kill()
                 finetune_job.status = JobStatus.CANCELLED
-                self.logger.info(f"Successfully cancelled job {job_id}")
+                logger.info(f"Successfully cancelled job {job_id}")
                 return True
             except Exception as e:
-                self.logger.error(f"Error cancelling job {job_id}: {e}")
+                logger.error(f"Error cancelling job {job_id}: {e}")
                 return False
         else:
-            self.logger.error(f"No LSF job associated with {job_id}")
+            logger.error(f"No LSF job associated with {job_id}")
             return False
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -393,7 +404,7 @@ class FinetuneJobManager:
             with open(finetune_job.log_file, "r") as f:
                 return f.read()
         except Exception as e:
-            self.logger.error(f"Error reading log file: {e}")
+            logger.error(f"Error reading log file: {e}")
             return f"Error reading log file: {e}"
 
     def get_job(self, job_id: str) -> Optional[FinetuneJob]:

@@ -1,6 +1,6 @@
 """What the dashboard shows of a finetune job's model as it trains.
 
-The job manager (finetune.finetune_job_manager) knows nothing of the viewer:
+The job manager (finetune.job_manager) knows nothing of the viewer:
 it tells its listeners when a job's inference server is up and when an
 iteration finishes (FinetuneJobListener). The dashboard's listener,
 ``FinetuneLayerListener``, answers each event with the dashboard's two

@@ -209,7 +209,7 @@ def restart(client, local_jobs, session, monkeypatch):
     pulling ``pulled`` volumes. Returns the response's status and body, the
     syncs asked for, what the trainer is sent, and the session."""
     from cellmap_flow.dashboard.routes.finetune import training
-    from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+    from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 
     def run(pulled=0, **request):
         base = session()
@@ -456,7 +456,7 @@ def routes(client, viewer, make_job, tmp_path, monkeypatch):
     import re
 
     from cellmap_flow.dashboard.routes.finetune import common
-    from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+    from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 
     monkeypatch.setattr(common, "USER_PREFS_FILE", str(tmp_path / "user_prefs.json"))
     world = SimpleNamespace(tmp=tmp_path, job=make_job())
