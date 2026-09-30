@@ -8,11 +8,12 @@
 // - sessions.js: Resume Existing Volume;
 // - good-regions.js: Mark This View as Good, Clear, and the rehearsal hint;
 // - job-monitor.js: submit, the status poll, Restart, Stop Early, Cancel,
-//   and the job restored after a reload, with log-stream.js (the Training
-//   Logs text) and loss-plot.js (the loss plot).
+//   and the job restored after a reload, with job-card.js (the Training
+//   Status card), log-stream.js (the Training Logs text) and loss-plot.js
+//   (the loss plot).
 // They start in this order, which is the order of the tab's first requests:
-// the saved output path, the GPU queues, the models, the good-region count,
-// and the job to restore.
+// the saved output path, the models, the good-region count, and the job to
+// restore. (The GPU queue picker joins the Models tab's poller.)
 import { initCrops } from "./crops.js";
 import { initGoodRegions } from "./good-regions.js";
 import { initJobMonitor } from "./job-monitor.js";

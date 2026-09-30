@@ -1,23 +1,12 @@
 // The Training panel's job: submitting it, following it (the status poll and
-// the log stream), Restart, Stop Early and Cancel, and finding it again
-// after a page reload.
+// the log stream), Restart, Stop Early and Cancel, and finding it again after
+// a page reload. What the Training Status card shows is job-card.js's.
 import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
+import { createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
-import { createLossPlot, EPOCH_LOSS } from "./loss-plot.js";
+import { createLossPlot } from "./loss-plot.js";
 import { getAnswer, postAnswer } from "./requests.js";
-
-function getStatusColor(status) {
-  const colors = {
-    "PENDING": "warning",
-    "RUNNING": "primary",
-    "COMPLETED": "success",
-    "FAILED": "danger",
-    "CANCELLED": "secondary",
-    "WAITING_FOR_RESTART": "info"
-  };
-  return colors[status] || "secondary";
-}
 
 function showNotification(title, message) {
   // Browser notification
@@ -32,12 +21,10 @@ function showNotification(title, message) {
 // picker: the model picker; form: the training form.
 export function initJobMonitor({ picker, form }) {
   let statusPoller = null;
-  let liveEpochState = null;
-  let restartEpochResetPending = false;
-  let isServingReady = false;
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
-  const jobLog = createJobLog({ onLine: updateProgressFromLogLine });
+  const card = createJobCard(lossPlot);
+  const jobLog = createJobLog({ onLine: card.logLine });
   const appendLog = jobLog.append;
 
   // Start Finetuning button
@@ -86,29 +73,11 @@ export function initJobMonitor({ picker, form }) {
     }, 3000);
 
     try {
-      // Submit job
       const result = await postAnswer("/api/finetune/submit", params);
 
       if (result.success) {
-        // Show training status card
-        document.getElementById("trainingStatusCard").style.display = "block";
-        document.getElementById("jobId").textContent = result.job_id;
-        document.getElementById("jobModelName").textContent = params.model_name;
-        const outputType = result.output_type || "binary";
-        document.getElementById("jobOutputType").textContent = outputType;
-        document.getElementById("jobOutputType").className = "badge " + (outputType === "affinities" ? "bg-warning" : "bg-info");
-        document.getElementById("jobStatus").textContent = "SUBMITTED";
-        document.getElementById("jobStatus").className = "badge bg-warning";
-
-        // Clear logs and start streaming
+        card.submitted(result.job_id, params.model_name, result.output_type || "binary");
         jobLog.clear();
-        liveEpochState = null;
-        restartEpochResetPending = false;
-        isServingReady = false;
-        resetProgressBarToWaiting();
-        lossPlot.reset();
-        document.getElementById('inferenceServerStatus').style.display = 'none';
-        document.getElementById('restartJobBtn').style.display = 'none';
         appendLog("Finetuning job submitted successfully!");
         appendLog(`Job ID: ${result.job_id}`);
         appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
@@ -140,101 +109,6 @@ export function initJobMonitor({ picker, form }) {
     }
   });
 
-  function updateProgressFromLogLine(line) {
-    if (!line) return;
-
-    if (line.includes("RESTARTING_TRAINING")) {
-      restartEpochResetPending = true;
-      isServingReady = false;
-      liveEpochState = null;
-      document.getElementById('inferenceServerStatus').style.display = 'none';
-      document.getElementById("jobProgress").textContent = "Restarting training...";
-      resetProgressBarToWaiting();
-      lossPlot.reset();
-      return;
-    }
-
-    // Show restart sub-status updates (e.g. "Loading corrections...", "Preparing trainer...")
-    const restartStatusMatch = line.match(/RESTART_STATUS:\s*(.+)/);
-    if (restartStatusMatch) {
-      document.getElementById("jobProgress").textContent = restartStatusMatch[1].trim();
-      return;
-    }
-
-    // Parse "Epoch X/Y" anywhere in the line.
-    const epochMatch = line.match(/Epoch\s+(\d+)\/(\d+)/i);
-    if (epochMatch) {
-      const current = parseInt(epochMatch[1], 10);
-      const total = parseInt(epochMatch[2], 10);
-      if (!Number.isNaN(current) && !Number.isNaN(total) && total > 0 && shouldAcceptEpochProgress(current, total)) {
-        renderEpochProgress(current, total);
-        document.getElementById("jobProgress").textContent = `Epoch ${current}/${total}`;
-      }
-    }
-
-    // Only update progress text and plot from epoch-level summary lines
-    // (e.g. "Epoch 18/20 - Loss: 0.011371"), not per-batch lines.
-    const epochLossMatch = line.match(EPOCH_LOSS);
-    if (epochLossMatch) {
-      const epochVal = parseInt(epochLossMatch[1], 10);
-      const totalVal = parseInt(epochLossMatch[2], 10);
-      const lossVal = parseFloat(epochLossMatch[3]);
-      if (!Number.isNaN(epochVal) && !Number.isNaN(lossVal)) {
-        document.getElementById("jobProgress").textContent =
-          `Epoch ${epochVal}/${totalVal} - Loss: ${lossVal.toFixed(4)}`;
-        lossPlot.add(epochVal, lossVal);
-      }
-    }
-  }
-
-  function shouldAcceptEpochProgress(current, total) {
-    if (isServingReady && !restartEpochResetPending) {
-      return false;
-    }
-    if (!liveEpochState) {
-      return true;
-    }
-    if (restartEpochResetPending) {
-      return true;
-    }
-    if (total !== liveEpochState.total) {
-      return true;
-    }
-    if (current < liveEpochState.current) {
-      return false;
-    }
-    return true;
-  }
-
-  function renderEpochProgress(current, total) {
-    const safeTotal = total > 0 ? total : 1;
-    const progressPercent = Math.max(0, Math.min(100, (current / safeTotal) * 100));
-    const progressBar = document.getElementById("trainingProgressBar");
-    progressBar.style.width = progressPercent + "%";
-    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
-    progressBar.textContent = `${current}/${safeTotal} epochs`;
-    liveEpochState = { current, total: safeTotal };
-    if (current > 0 || restartEpochResetPending) {
-      restartEpochResetPending = false;
-    }
-  }
-
-  function renderServingReadyProgress() {
-    const progressBar = document.getElementById("trainingProgressBar");
-    progressBar.style.width = "100%";
-    progressBar.className = "progress-bar bg-success";
-    progressBar.textContent = "Serving - Ready for inference";
-    isServingReady = true;
-    restartEpochResetPending = false;
-  }
-
-  function resetProgressBarToWaiting() {
-    const progressBar = document.getElementById("trainingProgressBar");
-    progressBar.style.width = "0%";
-    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
-    progressBar.textContent = "0%";
-  }
-
   // The job's status, every 3 seconds (the first after 3 s), until it fails
   // or is cancelled; this replaces the poller running before, if any. The
   // poll asks once at a time and stops at once when the job is over, so a
@@ -250,76 +124,9 @@ export function initJobMonitor({ picker, form }) {
           console.error("Error getting job status:", data.error);
           return;
         }
+        card.polled(data);
 
-        // Update output type from job params
-        if (data.params && data.params.output_type) {
-          const ot = data.params.output_type;
-          document.getElementById("jobOutputType").textContent = ot;
-          document.getElementById("jobOutputType").className = "badge " + (ot === "affinities" ? "bg-warning" : "bg-info");
-        }
-
-        // Update status display
-        const statusBadge = document.getElementById("jobStatus");
-        statusBadge.textContent = data.status;
-
-        // Color code status
-        statusBadge.className = "badge bg-" + getStatusColor(data.status);
-
-        // Surface status transitions even if log stream is temporarily delayed
-        if (data.status === "PENDING") {
-          document.getElementById("jobProgress").textContent = "Queued and waiting for worker";
-          isServingReady = false;
-        } else if (data.status === "RUNNING" && !(data.current_epoch && data.total_epochs) && !liveEpochState) {
-          document.getElementById("jobProgress").textContent = "Worker started; waiting for first epoch log...";
-          isServingReady = false;
-        }
-
-        // Update progress
-        if (data.current_epoch && data.total_epochs && shouldAcceptEpochProgress(data.current_epoch, data.total_epochs)) {
-          renderEpochProgress(data.current_epoch, data.total_epochs);
-
-          document.getElementById("jobProgress").textContent =
-            `Epoch ${data.current_epoch}/${data.total_epochs}` +
-            (data.loss ? ` - Loss: ${data.loss.toFixed(4)}` : "");
-          if (Number.isFinite(data.loss)) {
-            lossPlot.add(data.current_epoch, data.loss);
-          }
-        }
-
-        // Show restart button when the model is serving, or the trainer is
-        // waiting for a restart (an iteration finished, or diverged)
-        const restartBtn = document.getElementById("restartJobBtn");
-        if (data.inference_server_ready || data.status === "WAITING_FOR_RESTART") {
-          restartBtn.style.display = "inline-block";
-        }
-
-        // Stop Early is only meaningful while a training loop is actively
-        // running. Enable on RUNNING + no inference server yet; disable
-        // otherwise. Skip the toggle while the user has explicitly requested
-        // a stop (the click handler set its own disabled+label).
-        const stopEarlyBtnPoll = document.getElementById("stopEarlyBtn");
-        if (stopEarlyBtnPoll.textContent.indexOf("requested") === -1) {
-          const trainingActive = data.status === "RUNNING" && !data.inference_server_ready;
-          stopEarlyBtnPoll.disabled = !trainingActive;
-        }
-
-        // Handle inference server becoming ready (training iteration complete)
-        if (data.inference_server_ready && data.finetuned_model_name) {
-          // Update inference server status display
-          document.getElementById('inferenceServerStatus').style.display = 'block';
-          document.getElementById('neuroglancerLayer').textContent = data.finetuned_model_name;
-
-          // Update progress bar to show serving state
-          renderServingReadyProgress();
-
-          // Training loop has exited (either naturally or via stop-early) and
-          // inference is up — clear any lingering "Stop requested..." state.
-          resetStopEarlyButton();
-        }
-
-        // Handle terminal states
         if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "COMPLETED") {
-          resetStopEarlyButton();
           // The stream normally ends itself with "done"; see jobLog.closeSoon.
           jobLog.closeSoon();
         }
@@ -338,7 +145,7 @@ export function initJobMonitor({ picker, form }) {
 
   // Cancel button
   document.getElementById("cancelJobBtn").addEventListener("click", async function() {
-    const jobId = document.getElementById("jobId").textContent;
+    const jobId = card.jobId();
     if (!jobId || jobId === '-') {
       alert("No active job to cancel");
       return;
@@ -361,18 +168,9 @@ export function initJobMonitor({ picker, form }) {
     }
   });
 
-  // Stop Early — graceful, keeps the job alive for Restart.
-  // Reset clears the "requested" label, then leaves the button DISABLED.
-  // The status-polling loop re-enables it when training is actually running.
-  function resetStopEarlyButton() {
-    const btn = document.getElementById("stopEarlyBtn");
-    btn.textContent = "⏸ Stop Early";
-    btn.disabled = true;
-  }
-
-  const stopEarlyBtn = document.getElementById("stopEarlyBtn");
-  stopEarlyBtn.addEventListener("click", async function() {
-    const jobId = document.getElementById("jobId").textContent;
+  // Stop Early: graceful, the job stays alive for Restart.
+  document.getElementById("stopEarlyBtn").addEventListener("click", async function() {
+    const jobId = card.jobId();
     if (!jobId || jobId === "-") {
       alert("No active job to stop.");
       return;
@@ -385,19 +183,18 @@ export function initJobMonitor({ picker, form }) {
     )) {
       return;
     }
-    stopEarlyBtn.disabled = true;
-    stopEarlyBtn.textContent = "⏸ Stop requested...";
+    card.stopRequested();
     try {
       const result = await postAnswer(`/api/finetune/job/${jobId}/stop-early`);
       if (result.success) {
         appendLog("\n=== STOP EARLY REQUESTED — exiting after current epoch ===\n");
       } else {
         alert(`Failed to request stop: ${result.error}`);
-        resetStopEarlyButton();
+        card.resetStopEarly();
       }
     } catch (error) {
       alert(`Error: ${error.message}`);
-      resetStopEarlyButton();
+      card.resetStopEarly();
     }
   });
 
@@ -434,23 +231,14 @@ export function initJobMonitor({ picker, form }) {
     setBusy(restartJobBtn, true);
     restartJobBtn.textContent = 'Restarting...';
 
-    const jobId = document.getElementById('jobId').textContent;
+    const jobId = card.jobId();
     try {
       const data = await postAnswer(`/api/finetune/job/${jobId}/restart`, requestBody);
 
       if (data.success) {
         jobLog.clear();
         appendLog('Restart request sent - training will restart on same GPU...\n');
-        isServingReady = false;
-        restartEpochResetPending = true;
-        liveEpochState = null;
-        document.getElementById('jobProgress').textContent = 'Restarting training...';
-        document.getElementById('inferenceServerStatus').style.display = 'none';
-        resetStopEarlyButton();
-        lossPlot.reset();
-        resetProgressBarToWaiting();
-
-        restartJobBtn.style.display = 'none';
+        card.restarted();
         // A card restored after a reload has no poller running, so start
         // one (this replaces the poller if one is already running).
         startStatusPolling(jobId);
@@ -468,8 +256,8 @@ export function initJobMonitor({ picker, form }) {
     }
   });
 
-  // === RESTORE ACTIVE JOB ON PAGE LOAD ===
-
+  // After a page reload, the most recent live job's card, log and plot, and
+  // its status poll and log stream again.
   async function restoreActiveJob() {
     try {
       const data = await getAnswer('/api/finetune/jobs');
@@ -491,41 +279,7 @@ export function initJobMonitor({ picker, form }) {
       if (!activeJob) return;
 
       const jobId = activeJob.job_id;
-
-      // Show the training status card
-      document.getElementById('trainingStatusCard').style.display = 'block';
-      document.getElementById('jobId').textContent = jobId;
-      document.getElementById('jobModelName').textContent = activeJob.model_name;
-
-      const outputType = (activeJob.params && activeJob.params.output_type) || 'binary';
-      document.getElementById('jobOutputType').textContent = outputType;
-      document.getElementById('jobOutputType').className = 'badge ' + (outputType === 'affinities' ? 'bg-warning' : 'bg-info');
-
-      // Restore status badge
-      const statusBadge = document.getElementById('jobStatus');
-      statusBadge.textContent = activeJob.status;
-      statusBadge.className = 'badge bg-' + getStatusColor(activeJob.status);
-
-      // Restore progress
-      if (activeJob.current_epoch && activeJob.total_epochs) {
-        renderEpochProgress(activeJob.current_epoch, activeJob.total_epochs);
-        document.getElementById('jobProgress').textContent =
-          `Epoch ${activeJob.current_epoch}/${activeJob.total_epochs}` +
-          (activeJob.loss ? ` - Loss: ${activeJob.loss.toFixed(4)}` : '');
-      }
-
-      if (activeJob.status === 'WAITING_FOR_RESTART') {
-        document.getElementById('restartJobBtn').style.display = 'inline-block';
-      }
-      // Restore inference server ready state
-      if (activeJob.inference_server_ready) {
-        renderServingReadyProgress();
-        document.getElementById('restartJobBtn').style.display = 'inline-block';
-        if (activeJob.finetuned_model_name) {
-          document.getElementById('inferenceServerStatus').style.display = 'block';
-          document.getElementById('neuroglancerLayer').textContent = activeJob.finetuned_model_name;
-        }
-      }
+      card.restored(activeJob);
 
       // Restore logs and loss plot from the log file. The live stream below
       // then starts where this ends (logData.offset), instead of sending the
