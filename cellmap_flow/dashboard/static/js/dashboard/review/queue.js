@@ -74,9 +74,12 @@ export function initQueue({ current, progress }) {
   $("reviewBlessBtn").addEventListener("click", () => postVerdict("blessed", null));
   $("reviewEraseBtn").addEventListener("click", () => postVerdict("erased", null));
 
+  // The Edit dialog's Bootstrap Modal, made at the first Edit and kept.
+  let editDialog = null;
   $("reviewEditBtn").addEventListener("click", () => {
+    if (!editDialog) editDialog = new bootstrap.Modal($("reviewEditModal"));
     $("reviewEditDetails").value = "";
-    new bootstrap.Modal($("reviewEditModal")).show();
+    editDialog.show();
   });
 
   $("reviewEditSaveBtn").addEventListener("click", () => {
@@ -89,7 +92,7 @@ export function initQueue({ current, progress }) {
         alert("edit_details must be a JSON object (not array or primitive)"); return;
       }
     }
-    bootstrap.Modal.getInstance($("reviewEditModal")).hide();
+    editDialog.hide();
     postVerdict("edited", parsed);
   });
 
