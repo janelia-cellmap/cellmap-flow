@@ -38,7 +38,9 @@ def _v3_array(path, data, chunks=None, attributes=None):
     return str(path)
 
 
-# lead: dedupe with tests/conftest.py (an OME-NGFF raw pyramid, v2 or v3)
+# Not the root conftest's ``ome_pyramid``: that one generates its own data (each
+# voxel holds its z index + 1, to show which voxels a read hit), while the
+# finetune tests need to write the exact labels and raw they then train on.
 @pytest.fixture
 def ome_zarr():
     """``ome_zarr(path, (name, data, scale, translation), ...)``: a group with OME
