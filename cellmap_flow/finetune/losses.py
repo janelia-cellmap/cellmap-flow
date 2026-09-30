@@ -1,9 +1,13 @@
 """The finetune losses, and the masked means they are all made of.
 
-Every loss is averaged over the voxels a mask supervises, not the patch: a
-correction labels few of them. ``masked_mean`` is that average,
-``balanced_mean`` weighs foreground and background equally. The float
-operations keep the trainer's order, so a run's numbers are bit-identical
+Every loss here is averaged over the voxels a mask supervises, not over the
+patch: a correction labels a few voxels of it, and the rest must not count.
+``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
+the background half the weight each, and the losses and the distillation
+term below are built from the two.
+
+The float operations are kept in the order the trainer always used, so a
+run computes the same numbers bit for bit
 (tests/finetune/test_training_snapshot.py).
 """
 
