@@ -185,16 +185,20 @@ def test_a_restart_cannot_turn_a_full_finetune_into_lora(run_cli, tmp_path):
 
 
 @pytest.mark.finetune
-def test_raising_the_lora_rank_on_restart_keeps_the_adapters_scaling(run_cli, tmp_path):
+@pytest.mark.parametrize("restart, adapter", [
+    pytest.param({"lora_r": 4}, (4, 8), id="alpha follows the rank"),
+    pytest.param({"lora_r": 4, "lora_alpha": 4}, (4, 4), id="an alpha given with it is kept"),
+])
+def test_a_lora_restarts_alpha_keeps_the_adapters_scaling(run_cli, tmp_path, restart, adapter):
     """peft scales an adapter by lora_alpha / r, and a restart carried only the
     rank: going from r=8 to r=64 took the scaling from 2 to 0.25, and every
-    update to an eighth of its size. alpha now follows the rank."""
+    update to an eighth of its size."""
     cli = run_cli("--lora-r", "2", "--auto-serve", "--serve-data-path", str(tmp_path),
-                  restarts=[{"params": {"lora_r": 4}}])
-    adapter = Path(_served_entry(cli)["lora_adapter_path"])
-    assert adapter.parent.name.startswith("002_")
-    config = json.loads((adapter / "adapter_config.json").read_text())
-    assert (config["r"], config["lora_alpha"]) == (4, 8)
+                  restarts=[{"params": restart}])
+    path = Path(_served_entry(cli)["lora_adapter_path"])
+    assert path.parent.name.startswith("002_")
+    config = json.loads((path / "adapter_config.json").read_text())
+    assert (config["r"], config["lora_alpha"]) == adapter
 
 
 @pytest.mark.skipif(importlib.util.find_spec("tensorboard") is None, reason="tensorboard is not installed")
