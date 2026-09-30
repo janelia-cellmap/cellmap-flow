@@ -19,19 +19,14 @@ earlier dashboard) call it first.
 import logging
 import threading
 
-import neuroglancer
-
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobListener, finetune_export_kwargs
-from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
-from cellmap_flow.utils.output_probe import output_display_range
 from cellmap_flow.utils.server_info import fetch_model_info
 from cellmap_flow.utils.web_utils import get_norms_post_args
-from cellmap_flow.viewer.layers import prediction_source
-from cellmap_flow.viewer.raw import prediction_shader
+from cellmap_flow.viewer.layers import prediction_layer
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +39,12 @@ def _is_finetuned_from(model_name, base_model_name):
 def add_finetuned_layer(job, model_name):
     """Add (or replace) the layer of ``job``'s model, ``model_name``.
 
-    The layer is the one the model's inference server serves, with the
-    dashboard's chain in its URL, like any model's; the previous
-    iteration's layer (``job.finetuned_model_name``) goes. The session's
-    jobs get a job for the server in place of any earlier iteration's, so
-    Submit and the pipeline builder see the model as running. Nothing is
-    added before the server is up.
+    The layer is the one every model gets (viewer.layers.prediction_layer),
+    over the job's inference server, in red; the previous iteration's layer
+    (``job.finetuned_model_name``) goes. The session's jobs get a job for
+    the server in place of any earlier iteration's, so Submit and the
+    pipeline builder see the model as running. Nothing is added before the
+    server is up.
     """
     session = get_session()
     server_url = job.inference_server_url
@@ -84,28 +79,15 @@ def add_finetuned_layer(job, model_name):
         logger.error("The viewer is None - neuroglancer not initialized yet")
         return
 
-    # Lie about the model's voxel size so the layer overlays the raw at
-    # the closest available scale (e.g. trained at 16nm but raw is
-    # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
-    override_scales = None
-    try:
-        output_voxel_size = tuple(job.params.get("output_voxel_size") or ())
-        dataset_path = session.dataset_path
-        if output_voxel_size and dataset_path:
-            closest = closest_raw_scale(dataset_path, output_voxel_size)
-            if closest is not None and tuple(closest) != tuple(output_voxel_size):
-                override_scales = closest
-                logger.info(
-                    f"Finetuned model '{model_name}' output_voxel_size="
-                    f"{output_voxel_size} overridden to closest raw scale "
-                    f"{closest} for viewer overlay"
-                )
-    except Exception as e:
-        logger.warning(f"Could not compute override scales for finetuned '{model_name}': {e}")
-
-    source_spec = prediction_source(inference_job.host, model_name, st_data, override_scales)
+    # The server is asked at the address the dashboard reaches it by; the
+    # layer's source is the viewers' address. The job's record of its voxel
+    # size stands in for a server too old to report one.
+    layer = prediction_layer(
+        model_name, inference_job.host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
+        color="red", info=fetch_model_info(server_url),
+        fallback_output_voxel_size=job.params.get("output_voxel_size"),
+    )
     logger.info(f"Adding neuroglancer layer: {model_name}")
-    logger.info(f"  source: {source_spec}")
 
     with viewer.txn() as s:
         # Remove old finetuned layer if it exists (exact name match)
@@ -118,31 +100,9 @@ def add_finetuned_layer(job, model_name):
         if model_name in s.layers:
             del s.layers[model_name]
 
-        s.layers[model_name] = neuroglancer.ImageLayer(source=source_spec, shader=_finetuned_shader(server_url))
+        s.layers[model_name] = layer
 
     logger.info(f"Successfully added neuroglancer layer: {model_name}")
-
-
-def _finetuned_shader(server_url):
-    """The same display range an ordinary model layer gets.
-
-    This used to be hardcoded to range=[0, 255]. A sigmoid output lives in
-    [0, 1], so the finetuned layer rendered as near-black however good the
-    predictions were, while the identical model added through the normal
-    path looked fine -- an unfair comparison built into the viewer.
-
-    Falls back to the old fixed range only if the server cannot be asked.
-    """
-    try:
-        info = fetch_model_info(server_url)
-        steps = [p.to_dict() for p in (get_session().postprocess or []) if hasattr(p, "to_dict")]
-        value_range = output_display_range(steps, info.get("output_class"))
-    except Exception as e:
-        logger.warning(
-            f"Could not work out a display range for the finetuned layer ({e}); falling back to 0-255."
-        )
-        value_range = (0.0, 255.0)
-    return prediction_shader("red", value_range)
 
 
 def _yaml_model_entry(yaml_path):

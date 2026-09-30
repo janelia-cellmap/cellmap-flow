@@ -249,18 +249,27 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
     }
 
 
-def test_a_finetuned_models_layer(servers, viewer):
+@pytest.mark.parametrize("server, postprocess, layer", [
+    pytest.param("old", [], ("image", OVERLAID, _unit("red")), id="old"),
+    pytest.param("new", [], ("image", None, _unit("red")), id="new"),
+    pytest.param("flat", [], ("image", OVERLAID_3D, _unit("red")), id="flat"),
+    pytest.param("old", [ThresholdPostprocessor(0.5)], ("segmentation", OVERLAID, None), id="a labelling chain"),
+])
+def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
     from cellmap_flow.dashboard.finetune_layers import add_finetuned_layer
 
-    job = SimpleNamespace(model_name="old", lsf_job=SimpleNamespace(job_id="7"), finetuned_model_name=None,
-                          inference_server_url="http://old:8000", params={"output_voxel_size": [16, 16, 16]})
-    add_finetuned_layer(job, "old_finetuned_1")
+    g.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, postprocess))
+    job = SimpleNamespace(model_name=server, lsf_job=SimpleNamespace(job_id="7"), finetuned_model_name=None,
+                          inference_server_url=f"http://{server}:8000", params={"output_voxel_size": [16, 16, 16]})
+    add_finetuned_layer(job, f"{server}_finetuned_1")
 
-    assert _viewer(viewer, ["old_finetuned_1"]) == {
-        "layers": [("old_finetuned_1", "image")],
+    kind, scales, shader = layer
+    name = f"{server}_finetuned_1"
+    assert _viewer(viewer, [name]) == {
+        "layers": [(name, kind)],
         "dimensions": EIGHT_NM,
-        "chain": CHAIN,
-        "old_finetuned_1": ("image", "zarr://http://old:8000/old_finetuned_1", OVERLAID, _unit("red")),
+        "chain": dict(CHAIN, postprocess=[step.to_dict() for step in postprocess]),
+        name: (kind, f"zarr://http://{server}:8000/{name}", scales, shader),
     }
 
 
