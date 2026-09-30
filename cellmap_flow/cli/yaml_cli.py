@@ -65,7 +65,7 @@ def build_extra_layers(entries) -> dict:
     its ids itself, and has no blend. An entry whose volume cannot be opened
     is logged and left out, rather than stopping the dashboard.
     """
-    from cellmap_flow.utils.scale_pyramid import get_raw_layer
+    from cellmap_flow.viewer.raw import get_raw_layer
 
     layers = {}
     for entry in entries:

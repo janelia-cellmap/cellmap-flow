@@ -86,7 +86,8 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
 
     from cellmap_flow.cli import viewer_cli
     from cellmap_flow.dashboard import app as dashboard
-    from cellmap_flow.utils import bsub_utils, scale_pyramid
+    from cellmap_flow.utils import bsub_utils
+    from cellmap_flow.viewer import raw
 
     class FakeViewer:
         def txn(self):
@@ -94,7 +95,8 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
             return contextlib.nullcontext(types.SimpleNamespace(layers={}, dimensions=None))
 
     monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
-    monkeypatch.setattr(scale_pyramid, "get_raw_layer", lambda path: "raw")
+    raw_layers = []
+    monkeypatch.setattr(raw, "get_raw_layer", lambda path: raw_layers.append(path) or "raw")
     monkeypatch.setattr(bsub_utils, "install_cleanup_handlers", lambda: True)
     started = []
     monkeypatch.setattr(dashboard, "create_and_run_app", lambda **k: started.append(k))
@@ -102,7 +104,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
 
     result = CliRunner().invoke(viewer_cli.main, ["-d", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert g.charge_group == "cellmap-fileglancer" and started
+    assert g.charge_group == "cellmap-fileglancer" and started and raw_layers == [str(tmp_path)]
 
     result = CliRunner().invoke(viewer_cli.main, ["-d", str(tmp_path), "-P", "explicit"])
     assert result.exit_code == 0 and g.charge_group == "explicit"

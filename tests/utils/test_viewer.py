@@ -1,4 +1,4 @@
-"""The viewer's raw layer (scale_pyramid.get_raw_layer).
+"""The viewer's raw layer (viewer.raw.get_raw_layer).
 
 get_raw_layer handed LocalVolume the offset in nm as ``voxel_offset``, which
 counts whole voxels: a dataset at 80 nm on 8 nm voxels was drawn at 640 nm,
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.viewer.raw import get_raw_layer
 
 
 def _source(layer):

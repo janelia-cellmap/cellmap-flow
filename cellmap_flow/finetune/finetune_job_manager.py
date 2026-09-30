@@ -1348,7 +1348,7 @@ class FinetuneJobManager:
         """
         from cellmap_flow.globals import g
         from cellmap_flow.utils.output_probe import output_display_range
-        from cellmap_flow.utils.scale_pyramid import prediction_shader
+        from cellmap_flow.viewer.raw import prediction_shader
         from cellmap_flow.utils.server_info import fetch_model_info
 
         try:
