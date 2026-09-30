@@ -10,7 +10,7 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
 from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
+from cellmap_flow.viewer.layers import prediction_layer, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -176,16 +176,13 @@ def process():
                 # and not up yet: there is no URL to point a layer at.
                 logger.info(f"Skipping layer for {model}: its job has no host yet")
                 continue
-            info = fetch_model_info(host)
-            # The user's shader, else one over the chain's range in the
-            # layer's colour (the one it had, if its shader was dropped above).
-            shader = g.shaders.get(model) or prediction_shader_for(
-                model, host, g.postprocess, previous_shader=dropped_shaders.get(model),
-                color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], info=info,
-            )
+            # Without a shader of the user's, one over the chain's range in
+            # the colour the layer had, if its shader was dropped above.
             s.layers[model] = prediction_layer(
                 model, host, st_data, dataset_path=g.dataset_path, postprocess=g.postprocess,
-                shader=shader, shader_controls=g.shader_controls.get(model), info=info,
+                shader=g.shaders.get(model), shader_controls=g.shader_controls.get(model),
+                previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
+                info=fetch_model_info(host),
             )
 
     logger.debug(f"Input normalizers: {g.input_norms}")

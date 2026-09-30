@@ -110,19 +110,21 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
 
 
 def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader=None, shader_controls=None,
-                     info=None, fallback_output_voxel_size=None):
+                     color=None, previous_shader=None, info=None, fallback_output_voxel_size=None):
     """``model``'s layer, overlaid on the raw at ``dataset_path``.
 
     A SegmentationLayer when ``postprocess`` ends in labels. Otherwise an
-    ImageLayer with ``shader`` (else prediction_shader_for's) and
-    ``shader_controls``.
+    ImageLayer with ``shader_controls`` and ``shader``, the user's; without
+    one, prediction_shader_for's in ``previous_shader``'s colour or
+    ``color``.
     """
     info = fetch_model_info(host) if info is None else info
     override = prediction_voxel_override(host, dataset_path, info, fallback_output_voxel_size)
     source = prediction_source(host, model, url_blob, override)
     if chain_is_segmentation(postprocess):
         return neuroglancer.SegmentationLayer(source=source)
-    layer = {"source": source, "shader": shader or prediction_shader_for(model, host, postprocess, info=info)}
+    shader = shader or prediction_shader_for(model, host, postprocess, previous_shader, color, info=info)
+    layer = {"source": source, "shader": shader}
     if shader_controls:
         layer["shaderControls"] = shader_controls
     return neuroglancer.ImageLayer(**layer)
