@@ -11,6 +11,7 @@ import time
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.requests import CreateVolume, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     current_chain,
@@ -178,10 +179,12 @@ def get_finetune_models():
 
 @finetune_bp.route("/api/finetune/create-volume", methods=["POST"])
 def create_annotation_volume():
-    data = request.get_json() or {}
+    body, refused = parse(CreateVolume, request.get_json() or {})
+    if refused:
+        return refused
     try:
-        model_name = data.get("model_name")
-        output_path = data.get("output_path")
+        model_name = body.model_name
+        output_path = body.output_path
 
         model_config, error_response = _get_selected_model_config(model_name)
         if error_response is not None:

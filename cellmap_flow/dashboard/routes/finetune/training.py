@@ -23,6 +23,7 @@ from flask import Response, jsonify, request
 
 from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
+from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -38,69 +39,6 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.site import current_site
 
 logger = logging.getLogger(__name__)
-
-
-def _number(data, key, default, kind=float):
-    """A number from the request; ``default`` when it is absent or blank.
-
-    The form sends what its fields hold, so an emptied "epochs" box arrived
-    as null or "" and reached the trainer as "--num-epochs None", which
-    failed only once the job was running on the cluster. A value that is
-    not a number is a 400 here instead.
-    """
-    value = data.get(key)
-    if value is None or value == "":
-        return default
-    try:
-        number = float(value)
-        if kind is int:
-            if not number.is_integer():
-                raise ValueError
-            return int(number)
-        return number
-    except (TypeError, ValueError):
-        raise ValueError(f"{key} must be {'a whole number' if kind is int else 'a number'}, got {value!r}")
-
-
-def _parse_patches_per_epoch_override(data):
-    """Return ``(provided, value)`` for the optional virtual-dataset override.
-
-    ``0`` means "auto" (manifest ``None``); blank/missing means leave the
-    existing manifest value untouched.
-    """
-    if "patches_per_epoch" not in data:
-        return False, None
-    raw = data.get("patches_per_epoch")
-    if raw is None or raw == "":
-        return False, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        raise ValueError("patches_per_epoch must be a non-negative integer")
-    if value < 0:
-        raise ValueError("patches_per_epoch must be a non-negative integer")
-    return True, (None if value == 0 else value)
-
-
-def _parse_rehearsal_fraction_override(data):
-    """Return ``(provided, value)`` for the optional rehearsal-fraction override.
-
-    Blank/missing leaves the manifest alone. ``0`` is meaningful and distinct
-    from blank: it turns rehearsal off for this run without discarding the
-    regions, so you can compare with and without them.
-    """
-    if "rehearsal_fraction" not in data:
-        return False, None
-    raw = data.get("rehearsal_fraction")
-    if raw is None or raw == "":
-        return False, None
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
-    if not 0.0 <= value <= 1.0:
-        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
-    return True, value
 
 
 def _step_names(config):
@@ -144,8 +82,10 @@ def _backfill_manifest(corrections_dir):
     return None
 
 
-def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
-    """Apply dashboard-owned training-time settings to a virtual manifest."""
+def _refresh_virtual_manifest_for_training(corrections_dir, manifest, overrides, context):
+    """Write the dashboard's chains and the run's ``overrides`` (see
+    requests._ManifestOverrides) into a session's manifest before ``context``,
+    a submit or a restart."""
     from cellmap_flow.finetune.session.manifest import write_manifest
 
     current_norm, current_postprocess = current_chain()
@@ -169,30 +109,11 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
         )
     manifest["postprocess"] = current_postprocess
 
-    override_given, patches_per_epoch = _parse_patches_per_epoch_override(data)
-    if override_given:
-        old_value = manifest.get("patches_per_epoch")
-        manifest["patches_per_epoch"] = patches_per_epoch
-        logger.info(
-            "Applying patches_per_epoch override before %s: %s -> %s",
-            context,
-            old_value,
-            "auto" if patches_per_epoch is None else patches_per_epoch,
-        )
-
-    rehearsal_given, rehearsal_fraction = _parse_rehearsal_fraction_override(data)
-    if rehearsal_given:
-        old_value = manifest.get("rehearsal_fraction")
-        manifest["rehearsal_fraction"] = rehearsal_fraction
-        logger.info(
-            "Applying rehearsal_fraction override before %s: %s -> %s",
-            context,
-            "auto" if old_value is None else old_value,
-            rehearsal_fraction,
-        )
+    for key, value in overrides.items():
+        logger.info(f"Applying the {key} override before {context}: {manifest.get(key)} -> {value}")
+        manifest[key] = value
 
     write_manifest(str(corrections_dir), manifest)
-    return override_given, patches_per_epoch
 
 
 def _rehydrate_jobs():
@@ -274,25 +195,15 @@ def get_job_logs(job_id):
 
 @finetune_bp.route("/api/finetune/submit", methods=["POST"])
 def submit_finetuning():
-    data = request.get_json() or {}
+    body, refused = parse(FinetuneSubmit, request.get_json() or {})
+    if refused:
+        return refused
     try:
-        model_name = data.get("model_name")
-        corrections_path_str = data.get("corrections_path")
-        if not model_name:
-            return jsonify({"success": False, "error": "model_name is required"}), 400
-        if not corrections_path_str:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "corrections_path is required. Please specify the output path where annotation crops are saved.",
-                }
-            ), 400
-
-        model_config = find_model_config(model_name)
+        model_config = find_model_config(body.model_name)
         if not model_config:
-            return jsonify({"success": False, "error": f"Model {model_name} not found"}), 404
+            return jsonify({"success": False, "error": f"Model {body.model_name} not found"}), 404
 
-        session_path, actual_corrections_path = resolve_finetune_session(corrections_path_str)
+        session_path, actual_corrections_path = resolve_finetune_session(body.corrections_path)
         if not actual_corrections_path.exists():
             return jsonify(
                 {
@@ -319,12 +230,11 @@ def submit_finetuning():
 
         if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
-                actual_corrections_path, existing_manifest, data, "submit"
+                actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
 
-        loss_type = data.get("loss_type", "mse")
-        # None (not sent) leaves the weight to the trainer; 0 switches it off.
-        distillation_lambda = _number(data, "distillation_lambda", None)
+        loss_type = body.loss_type
+        distillation_lambda = body.distillation_lambda
         has_sparse = detect_sparse_annotations(actual_corrections_path)
         sparse_auto_switched = False
         if has_sparse and loss_type == "mse":
@@ -335,13 +245,9 @@ def submit_finetuning():
                 "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
             )
 
-        output_type, offsets = autodetect_output_type(
-            model_config,
-            data.get("output_type", None),
-            data.get("offsets", None),
-        )
+        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
 
-        label_smoothing = _number(data, "label_smoothing", 0.1)
+        label_smoothing = body.label_smoothing
         if output_type == "distance" and has_sparse:
             # A distance target needs the 3D object boundary. Scribbles are
             # strokes with unannotated voxels all around them, so the safe
@@ -379,33 +285,26 @@ def submit_finetuning():
         finetune_job = session.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
-            lora_r=_number(data, "lora_r", 8, int),
-            num_epochs=_number(data, "num_epochs", 10, int),
-            batch_size=_number(data, "batch_size", 2, int),
-            learning_rate=_number(data, "learning_rate", 1e-4),
+            lora_r=body.lora_r,
+            num_epochs=body.num_epochs,
+            batch_size=body.batch_size,
+            learning_rate=body.learning_rate,
             output_base=Path(session_path),
-            checkpoint_path_override=(
-                Path(data["checkpoint_path"]) if data.get("checkpoint_path") else None
-            ),
-            auto_serve=data.get("auto_serve", True),
+            checkpoint_path_override=Path(body.checkpoint_path) if body.checkpoint_path else None,
+            auto_serve=body.auto_serve,
             mask_unannotated=has_sparse,
             loss_type=loss_type,
             label_smoothing=label_smoothing,
             distillation_lambda=distillation_lambda,
-            distillation_scope=data.get("distillation_scope", "unlabeled"),
-            margin=_number(data, "margin", 0.3),
-            balance_classes=data.get("balance_classes", False),
-            # Default off: these interactive runs are a few dozen gradient
-            # steps, where augmentation adds variance without the many
-            # repeat views it needs to pay for itself.
-            augment=data.get("augment", False),
-            queue=data.get("queue", current_site().default_queue),
+            distillation_scope=body.distillation_scope,
+            margin=body.margin,
+            balance_classes=body.balance_classes,
+            augment=body.augment,
+            queue=body.queue,
             # The request's, else the dashboard's own, else the site's.
-            charge_group=(
-                data.get("charge_group") or session.charge_group or current_site().default_charge_group
-            ),
+            charge_group=body.charge_group or session.charge_group or current_site().default_charge_group,
             output_type=output_type,
-            select_channel=_number(data, "select_channel", None, int),
+            select_channel=body.select_channel,
             offsets=offsets,
         )
 
@@ -702,6 +601,9 @@ def stop_training_early(job_id):
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
 def restart_finetuning_job(job_id):
     data = request.get_json() or {}
+    body, refused = parse(FinetuneRestart, data)
+    if refused:
+        return refused
     try:
         restart_t0 = time.perf_counter()
 
@@ -739,7 +641,7 @@ def restart_finetuning_job(job_id):
 
         if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
-                corrections_dir, existing_manifest, data, "restart"
+                corrections_dir, existing_manifest, body.overrides(), "restart"
             )
 
         pulled = 0

@@ -32,6 +32,7 @@ from cellmap_flow.dashboard.finetune_utils import (
     sync_annotation_volume_from_minio,
 )
 from cellmap_flow.dashboard.progress import Progress
+from cellmap_flow.dashboard.requests import LoadCrops, parse
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
     serve_new_volume,
@@ -131,18 +132,13 @@ def _ensure_editable_layer(volume_id, minio_url):
 def load_crops_from_yaml():
     """Import crops from a YAML manifest into the session's annotation_volume.
 
-    Request JSON:
-        - ``model_name``: required
-        - ``output_path``: optional, base path for the session corrections dir
-        - ``yaml``: required, YAML text (or path to a YAML file)
-        - ``load_id``: optional UUID for live progress polling
+    Request JSON: see requests.LoadCrops.
     """
-    data = request.get_json() or {}
+    body, refused = parse(LoadCrops, request.get_json() or {})
+    if refused:
+        return refused
+    model_name, output_path, yaml_input, load_id = body.model_name, body.output_path, body.yaml, body.load_id
     try:
-        model_name = data.get("model_name")
-        output_path = data.get("output_path")
-        yaml_input = data.get("yaml")
-        load_id = data.get("load_id")
         _PROGRESS.update(
             load_id,
             phase="starting",
@@ -172,11 +168,6 @@ def load_crops_from_yaml():
             stamped = f"[{elapsed:.0f}s] {message}"
             logger.info(stamped)
             _PROGRESS.update(load_id, phase=phase, message=stamped, **extra)
-
-        if not yaml_input:
-            return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400
-        if not model_name:
-            return jsonify({"success": False, "error": "Missing 'model_name' field"}), 400
 
         step("setup", "Reading the crop manifest...")
         try:

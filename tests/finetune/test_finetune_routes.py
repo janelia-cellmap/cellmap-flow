@@ -156,10 +156,16 @@ def test_the_runs_overrides_reach_the_manifest(submit, request_data, manifest):
     assert {key: job.manifest.get(key, ABSENT) for key in manifest} == manifest
 
 
-@pytest.mark.parametrize("fraction", [pytest.param(1.5, id="out of range"), pytest.param("abc", id="not a number")])
-def test_a_rehearsal_fraction_that_is_not_one_is_refused(submit, fraction):
-    job = submit(rehearsal_fraction=fraction)
-    assert job.status == 400 and job.sent is None and "rehearsal_fraction" not in job.manifest
+@pytest.mark.parametrize("request_data", [
+    pytest.param({"rehearsal_fraction": 1.5}, id="a fraction out of range"),
+    pytest.param({"rehearsal_fraction": "abc"}, id="a fraction that is not a number"),
+    # The manifest was given the dashboard's chains before the counts were read.
+    pytest.param({"num_epochs": "ten"}, id="a count that is not a number"),
+])
+def test_a_refused_submit_leaves_the_session_as_it_was(submit, request_data):
+    job = submit(**request_data)
+    assert job.status == 400 and job.sent is None
+    assert set(job.manifest) == {"kind", "volume_zarr_path", "raw_dataset_path"}
 
 
 def test_submit_after_a_dashboard_restart_finds_the_session_on_disk(submit):
@@ -254,11 +260,12 @@ def test_a_restart_sends_the_trainer_its_own_flags(restart):
                          "distillation_all_voxels": True, "loss_type": "margin"}]
 
 
-def test_a_restart_with_an_override_that_is_not_one_fails(restart):
+def test_a_restart_with_an_override_that_is_not_one_is_refused(restart):
+    """It failed with a 500, as if the dashboard were broken."""
     run = restart(rehearsal_fraction="abc")
-    assert (run.status, run.body) == (500, {"success": False,
+    assert (run.status, run.body) == (400, {"success": False,
                                             "error": "rehearsal_fraction must be a number between 0 and 1"})
-    assert run.sent == []
+    assert run.sent == [] and run.syncs == []
 
 
 @pytest.fixture
@@ -527,8 +534,8 @@ ANSWERS = [
     pytest.param("post", "/api/finetune/submit", {"model_name": "x", "corrections_path": "<tmp>/c"}, None, 404,
                  _refused("Model x not found"), id="submit an unknown model"),
     pytest.param("post", "/api/finetune/submit",
-                 {"model_name": "x", "corrections_path": "<tmp>/c", "num_epochs": "ten"}, None, 404,
-                 _refused("Model x not found"), id="submit an unknown model with a bad number"),
+                 {"model_name": "x", "corrections_path": "<tmp>/c", "num_epochs": "ten"}, None, 400,
+                 _refused("num_epochs must be a whole number, got 'ten'"), id="submit a bad number"),
     pytest.param("post", "/api/finetune/submit", {"model_name": "m", "corrections_path": "<tmp>/none"}, None, 400,
                  _refused("Corrections path does not exist: <tmp>/none/<session>/corrections. Please create "
                           "annotation crops first."), id="submit without corrections"),
@@ -540,7 +547,7 @@ ANSWERS = [
                  _refused("No models loaded"), id="create a volume without models"),
     pytest.param("post", "/api/finetune/create-volume", {"model_name": "x"}, None, 404,
                  _refused("Model x not found"), id="create a volume for an unknown model"),
-    pytest.param("post", "/api/finetune/create-volume", {}, None, 404, _refused("Model None not found"),
+    pytest.param("post", "/api/finetune/create-volume", {}, None, 400, _refused("model_name is required"),
                  id="create a volume without a model"),
     pytest.param("post", "/api/finetune/create-volume", {"model_name": "m"}, "its geometry is known", 400,
                  _refused("No dataset path configured"), id="create a volume without data"),
@@ -632,18 +639,19 @@ def test_a_stop_early_leaves_the_trainer_a_signal(routes):
     assert signal == {"requested_at": ANY, "reason": "user_requested_stop_early"}
 
 
-@pytest.mark.parametrize("start, progress", [
-    pytest.param("/api/finetune/load-crops", "/api/finetune/load-crops-progress", id="loading crops"),
-    pytest.param("/api/finetune/load-existing-volume", "/api/finetune/load-existing-volume-progress",
-                 id="resuming a session"),
+@pytest.mark.parametrize("start, body, progress, phase", [
+    pytest.param("/api/finetune/load-crops", {"yaml": CROPS, "model_name": "x"}, "/api/finetune/load-crops-progress",
+                 "setup", id="loading crops"),
+    pytest.param("/api/finetune/load-existing-volume", {}, "/api/finetune/load-existing-volume-progress",
+                 "starting", id="resuming a session"),
 ])
-def test_a_long_request_reports_its_progress_from_the_start(routes, start, progress):
-    """The tab polls under the load_id it sent; the first phase is recorded
-    before the request is even checked."""
-    assert routes("post", start, {"load_id": "L1"})[0] == 400
+def test_a_long_request_reports_its_progress_as_it_goes(routes, start, body, progress, phase):
+    """The tab polls under the load_id it sent; each step is recorded as the
+    request reaches it, up to the one that failed here."""
+    assert routes("post", start, {"load_id": "L1", **body})[0] in (400, 404)
     status, answer = routes("get", f"{progress}?load_id=L1")
     assert status == 200 and answer["success"]
-    assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": "starting", "done": False}
+    assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": phase, "done": False}
     assert {"created_at", "updated_at"} <= set(answer["progress"])
 
 
