@@ -3,12 +3,15 @@ import logging
 import shlex
 import warnings
 import copy
+from typing import TYPE_CHECKING
 
-from cellmap_flow.image_data_interface import ImageDataInterface
 from funlib.geometry import Roi, Coordinate
 import numpy as np
 from cellmap_flow.models.geometry import ModelGeometry
 from cellmap_flow.utils.serialize_config import Config
+
+if TYPE_CHECKING:
+    from cellmap_flow.image_data_interface import ImageDataInterface
 
 logger = logging.getLogger(__name__)
 
@@ -851,7 +854,7 @@ def reorder_axes(
     return arr, axes
 
 
-def process_chunk_bioimage(self, idi: ImageDataInterface, input_roi: Roi):
+def process_chunk_bioimage(self, idi: "ImageDataInterface", input_roi: Roi):
     from bioimageio.core import predict, Sample, Tensor
 
     input_image = idi.to_ndarray_ts(input_roi.grow(self.context, self.context))
