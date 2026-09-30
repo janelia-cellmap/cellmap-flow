@@ -211,8 +211,7 @@ def _precomputed_pyramid(dataset_path):
 
     Its levels are s0, s1, ..., each scale its info lists, in that order
     (io.metadata.list_levels). A volume of one scale is shown as one array,
-    as it always was: neuroglancer downsamples one array on the fly when
-    zoomed out, but a ScalePyramid never past its coarsest level.
+    as it always was.
     """
     volume, scale = paths.precomputed_scale(dataset_path)
     try:
@@ -370,9 +369,12 @@ class ScalePyramid(neuroglancer.LocalVolume):
     neuroglancer's python data source asks only for power-of-two
     downsamplings of the volume it sees (a ``scale_key`` such as "2,2,2").
     Each level is kept under its downsampling factor, its voxel size over the
-    finest's per axis ((1, 1, 1) for the finest), and a request is served by
-    the coarsest level at or below it on every axis, which downsamples the
-    rest of the way itself.
+    finest's per axis ((1, 1, 1) for the finest). A request is served by the
+    level at or below it on every axis that leaves the smallest factor on
+    any one axis (in a pyramid whose levels are each coarser than the last on
+    every axis, the coarsest such level), and that level's LocalVolume
+    downsamples the rest of the way, up to its own limit; neuroglancer is
+    told to ask no further (``_max_downsampling``).
 
     A level that is not a power-of-two multiple of the finest on every axis
     (1.5×, 3×) could never answer a request exactly, so it is left out, as is
@@ -436,13 +438,24 @@ class ScalePyramid(neuroglancer.LocalVolume):
             "voxelOffset": reference_info["voxelOffset"],
             "chunkLayout": reference_info["chunkLayout"],
             "downsamplingLayout": reference_info["downsamplingLayout"],
-            # The coarsest level's factor: how far neuroglancer may ask.
-            "maxDownsampling": int(max(np.prod(factor) for factor in self.volume_layers)),
+            "maxDownsampling": self._max_downsampling(),
             "maxDownsampledSize": reference_info["maxDownsampledSize"],
             "maxDownsamplingScales": reference_info["maxDownsamplingScales"],
         }
 
         return info
+
+    def _max_downsampling(self):
+        """How far neuroglancer may downsample the finest level, as the
+        product of the factors over the axes (its ``maxDownsampling``): the
+        coarsest level's factor times as far as that level's own
+        LocalVolume downsamples (64 by default, 4x4x4), so that zooming out
+        past the coarsest level works as it does for one array; a one-level
+        pyramid gets exactly that 64. None, no limit, when the LocalVolume
+        has none."""
+        coarsest = max(self.volume_layers, key=np.prod)
+        own = self.volume_layers[coarsest].max_downsampling
+        return None if math.isinf(own) else int(np.prod(coarsest)) * int(own)
 
     def get_encoded_subvolume(self, data_format, start, end, scale_key=None):
         if scale_key is None:

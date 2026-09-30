@@ -130,24 +130,33 @@ def _level(voxel_size):
     )
 
 
-@pytest.mark.parametrize("voxel_sizes, kept", [
+@pytest.mark.parametrize("voxel_sizes, kept, max_downsampling", [
+    # neuroglancer may ask as far past the coarsest level as its LocalVolume
+    # downsamples (4x4x4, 64), so a one-level pyramid zooms out like one array.
     pytest.param([(8,) * 3, (16,) * 3, (32,) * 3],
-                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3, (4, 4, 4): (32,) * 3}, id="powers-of-two"),
+                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3, (4, 4, 4): (32,) * 3}, 64 * 64, id="powers-of-two"),
     # neuroglancer asks only for power-of-two downsamplings, which these never answer.
     pytest.param([(8,) * 3, (12,) * 3, (16,) * 3, (24,) * 3],
-                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3}, id="1.5x-and-3x-dropped"),
+                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3}, 8 * 64, id="1.5x-and-3x-dropped"),
+    pytest.param([(8,) * 3, (24,) * 3], {(1, 1, 1): (8,) * 3}, 64, id="only-the-finest-left"),
     pytest.param([(8, 8, 8), (8, 16, 16), (8, 24, 24)],
-                 {(1, 1, 1): (8, 8, 8), (1, 2, 2): (8, 16, 16)}, id="anisotropic"),
+                 {(1, 1, 1): (8, 8, 8), (1, 2, 2): (8, 16, 16)}, 4 * 64, id="anisotropic"),
     pytest.param([(4,) * 3, (7.999999999,) * 3],
-                 {(1, 1, 1): (4,) * 3, (2, 2, 2): (7.999999999,) * 3}, id="float-noise"),
+                 {(1, 1, 1): (4,) * 3, (2, 2, 2): (7.999999999,) * 3}, 8 * 64, id="float-noise"),
 ])
-def test_a_scale_pyramid_keeps_the_power_of_two_downsamplings_of_its_finest_level(caplog, voxel_sizes, kept):
+def test_a_scale_pyramids_levels_and_how_far_neuroglancer_may_zoom_out(
+    caplog, voxel_sizes, kept, max_downsampling
+):
     with caplog.at_level(logging.WARNING, logger="cellmap_flow.viewer.raw"):
         pyramid = ScalePyramid([_level(voxel_size) for voxel_size in voxel_sizes])
     got = {key: tuple(np.round(level.dimensions.scales * 1e9, 9)) for key, level in pyramid.volume_layers.items()}
     assert got == kept
     # One warning when a level is dropped, naming them all; none when none is.
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == (len(kept) < len(voxel_sizes))
+    assert pyramid.info()["maxDownsampling"] == max_downsampling
+    # ...and the furthest request that allows is served.
+    furthest = np.multiply(max(pyramid.volume_layers, key=np.prod), 4)
+    pyramid.get_encoded_subvolume("npz", np.zeros(3, int), np.ones(3, int), ",".join(map(str, furthest)))
 
 
 def _contrast(layer):
