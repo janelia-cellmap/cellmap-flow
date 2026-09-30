@@ -84,6 +84,39 @@ function readRehearsalFractionOverride() {
   return value;
 }
 
+// The training parameters in the form, as both the submit and the restart
+// routes take them. A blank patches-per-epoch or rehearsal field is left out,
+// so the manifest keeps its value, and the margin goes only with the margin
+// loss. Throws an Error, with a message for the user, for a value the trainer
+// would refuse.
+function trainingParams() {
+  const patchesPerEpoch = readPatchesPerEpochOverride();
+  const rehearsalFraction = readRehearsalFractionOverride();
+  const params = {
+    lora_r: parseInt(document.getElementById("loraRank").value),
+    num_epochs: parseInt(document.getElementById("numEpochs").value),
+    batch_size: parseInt(document.getElementById("batchSize").value),
+    learning_rate: parseFloat(document.getElementById("learningRate").value),
+    loss_type: document.getElementById("lossType").value,
+    distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
+    distillation_scope: document.getElementById("distillationScope").value,
+    balance_classes: document.getElementById("balanceClasses").checked,
+    augment: document.getElementById("augment").checked,
+    label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
+  };
+  if (patchesPerEpoch !== undefined) {
+    params.patches_per_epoch = patchesPerEpoch;
+  }
+  if (rehearsalFraction !== undefined) {
+    params.rehearsal_fraction = rehearsalFraction;
+  }
+  if (params.loss_type === "margin") {
+    const margin = parseFloat(document.getElementById("marginValue").value);
+    if (Number.isFinite(margin)) params.margin = margin;
+  }
+  return params;
+}
+
 // Whether augmentation is worth enabling depends on how many times the run
 // revisits the same patches, which is epochs x batches-per-epoch. Static
 // advice cannot say that, so compute it from the form as it is edited.
@@ -135,11 +168,8 @@ function showGpuQueues(data) {
   document.getElementById("finetuneGpuQueueHint").textContent = queueHint(data);
 }
 
-// Returns { saved, save(), readPatchesPerEpochOverride(),
-// readRehearsalFractionOverride() }: saved is the state restored at load
-// (null if none); save() stores the form's state now; the two readers
-// return a blank field as undefined, and throw an Error, with a message for
-// the user, for a value the trainer would refuse.
+// Returns { saved, save(), trainingParams() }: saved is the state restored
+// at load (null if none); save() stores the form's state now.
 export function initTrainingForm() {
   const outputPathInput = document.getElementById("outputPath");
 
@@ -200,7 +230,6 @@ export function initTrainingForm() {
   return {
     saved,
     save: saveFinetuneState,
-    readPatchesPerEpochOverride,
-    readRehearsalFractionOverride,
+    trainingParams,
   };
 }

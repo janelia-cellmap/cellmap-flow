@@ -56,46 +56,20 @@ export function initJobMonitor({ picker, form }) {
       return;
     }
 
-    let patchesPerEpochOverride;
-    let rehearsalFractionOverride;
+    let training;
     try {
-      patchesPerEpochOverride = form.readPatchesPerEpochOverride();
-      rehearsalFractionOverride = form.readRehearsalFractionOverride();
+      training = form.trainingParams();
     } catch (error) {
       alert(error.message);
       return;
     }
-
-    // Get training parameters from form
     const params = {
       model_name: selectedModel.name,
       corrections_path: correctionsPath,
-      lora_r: parseInt(document.getElementById("loraRank").value),
-      num_epochs: parseInt(document.getElementById("numEpochs").value),
-      batch_size: parseInt(document.getElementById("batchSize").value),
-      learning_rate: parseFloat(document.getElementById("learningRate").value),
+      ...training,
       auto_serve: document.getElementById("autoServeCheck").checked,
-      loss_type: document.getElementById("lossType").value,
-      distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
-      distillation_scope: document.getElementById("distillationScope").value,
-      balance_classes: document.getElementById("balanceClasses").checked,
-      augment: document.getElementById("augment").checked,
-      label_smoothing: parseFloat(document.getElementById("labelSmoothing").value) || 0,
-      queue: document.getElementById("gpuQueue").value
+      queue: document.getElementById("gpuQueue").value,
     };
-    if (patchesPerEpochOverride !== undefined) {
-      params.patches_per_epoch = patchesPerEpochOverride;
-    }
-    if (rehearsalFractionOverride !== undefined) {
-      params.rehearsal_fraction = rehearsalFractionOverride;
-    }
-
-    // Forward margin value when using margin loss
-    if (params.loss_type === "margin") {
-      const m = parseFloat(document.getElementById("marginValue").value);
-      if (Number.isFinite(m)) params.margin = m;
-    }
-
     // Add optional checkpoint path override if provided
     const checkpointPath = document.getElementById("checkpointPath").value.trim();
     if (checkpointPath) {
@@ -432,37 +406,12 @@ export function initJobMonitor({ picker, form }) {
   // Restart, confirms.
   const restartJobBtn = document.getElementById('restartJobBtn');
   restartJobBtn.addEventListener('click', async () => {
-    const lossType = document.getElementById('lossType').value;
-    let patchesPerEpochOverride;
-    let rehearsalFractionOverride;
+    let requestBody;
     try {
-      patchesPerEpochOverride = form.readPatchesPerEpochOverride();
-      rehearsalFractionOverride = form.readRehearsalFractionOverride();
+      requestBody = form.trainingParams();
     } catch (error) {
       alert(error.message);
       return;
-    }
-    const requestBody = {
-      lora_r: parseInt(document.getElementById('loraRank').value),
-      num_epochs: parseInt(document.getElementById('numEpochs').value),
-      batch_size: parseInt(document.getElementById('batchSize').value),
-      learning_rate: parseFloat(document.getElementById('learningRate').value),
-      loss_type: lossType,
-      distillation_lambda: parseFloat(document.getElementById('distillationLambda').value),
-      distillation_scope: document.getElementById('distillationScope').value,
-      balance_classes: document.getElementById('balanceClasses').checked,
-      augment: document.getElementById('augment').checked,
-      label_smoothing: parseFloat(document.getElementById('labelSmoothing').value) || 0,
-    };
-    if (patchesPerEpochOverride !== undefined) {
-      requestBody.patches_per_epoch = patchesPerEpochOverride;
-    }
-    if (rehearsalFractionOverride !== undefined) {
-      requestBody.rehearsal_fraction = rehearsalFractionOverride;
-    }
-    if (lossType === 'margin') {
-      const m = parseFloat(document.getElementById('marginValue').value);
-      if (Number.isFinite(m)) requestBody.margin = m;
     }
 
     // Build a short summary so user can sanity-check before confirming.
