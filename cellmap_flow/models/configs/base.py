@@ -328,8 +328,10 @@ class ModelConfig:
         """Returns the output dtype of the model. Defaults to np.float32."""
         if hasattr(self.config, "output_dtype"):
             return self.config.output_dtype
+        # ModelConfig does not set name; a plugin type need not either.
+        label = getattr(self, "name", None) or type(self).__name__
         logger.warning(
-            f"Model {self.name} does not define output_dtype, defaulting to np.float32"
+            f"Model {label} does not define output_dtype, defaulting to np.float32"
         )
         return np.float32
 

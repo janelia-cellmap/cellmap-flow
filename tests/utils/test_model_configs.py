@@ -148,6 +148,13 @@ def test_a_plugin_config_without_its_own_to_dict_exports_its_constructor_argumen
     assert "_init_params" not in str(config)
 
 
+def _declared(**attrs):
+    """A Config declaring 8 voxels in and out at 1 nm, one channel, and ``attrs``."""
+    return SimpleNamespace(read_shape=(8, 8, 8), write_shape=(8, 8, 8), input_voxel_size=(1, 1, 1),
+                           output_voxel_size=(1, 1, 1), output_channels=1, block_shape=np.array((8, 8, 8, 1)),
+                           **attrs)
+
+
 def test_a_config_can_skip_the_dummy_forward():
     class ForwardRaises(torch.nn.Module):
         def forward(self, x):
@@ -155,10 +162,17 @@ def test_a_config_can_skip_the_dummy_forward():
 
     class NoForwardModelConfig(ModelConfig):
         def _get_config(self):
-            return SimpleNamespace(model=ForwardRaises(), read_shape=(8, 8, 8), write_shape=(8, 8, 8),
-                                   input_voxel_size=(1, 1, 1), output_voxel_size=(1, 1, 1), output_channels=1,
-                                   block_shape=np.array((8, 8, 8, 1)))
+            return _declared(model=ForwardRaises())
 
     config = NoForwardModelConfig()
     config.validate_model_shapes = False
     assert config.config.read_shape == (8, 8, 8)
+
+
+def test_a_config_without_a_name_or_an_output_dtype_serves_float32():
+    """The fallback's warning read self.name, which ModelConfig does not set."""
+    class UnnamedModelConfig(ModelConfig):
+        def _get_config(self):
+            return _declared(predict=lambda *args: None)
+
+    assert UnnamedModelConfig().geometry.output_dtype == np.float32
