@@ -14,7 +14,7 @@ import re
 from cellmap_flow.finetune.finetuned_model_templates import (
     FINETUNED_MODEL_YAML_MARKER as FINETUNED_MODEL_YAML,
 )
-from cellmap_flow.utils.web_utils import IP_PATTERN
+from cellmap_flow.serving.protocol import IP_PATTERN
 
 __all__ = [
     "TRAINING_ITERATION_COMPLETE",

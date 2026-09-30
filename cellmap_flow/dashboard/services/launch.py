@@ -12,11 +12,8 @@ from cellmap_flow.serving.launch import server_argv_for
 from cellmap_flow.jobs.launch import start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
-from cellmap_flow.utils.web_utils import (
-    kill_n_remove_from_neuroglancer,
-    get_norms_post_args,
-)
 from cellmap_flow.models.models_config import HuggingFaceModelConfig
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.layers import prediction_layer
 import threading
 from typing import List
@@ -87,6 +84,14 @@ def run_hf_model(repo, name, st_data):
         _show(job, st_data)
 
 
+def kill_n_remove_from_neuroglancer(jobs, s):
+    """Kill ``jobs`` and drop their layers from the viewer state ``s``."""
+    for job in jobs:
+        if job.model_name in s.layers:
+            del s.layers[job.model_name]
+        job.kill()
+
+
 def update_run_models(names: List[str], hf_repos: List[str] = None):
     session = get_session()
     if hf_repos is None:
@@ -97,7 +102,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
     names_running = [j.model_name for j in session.jobs]
 
     threads = []
-    st_data = get_norms_post_args(session.input_norms, session.postprocess)
+    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
 
     print(f"Current catalog: {session.model_catalog}")
     with session.viewer.txn() as s:

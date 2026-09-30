@@ -265,9 +265,9 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     if "json_data" in config:
         json_data = config["json_data"]
         logger.info(f"Loading normalization/postprocessing from: {json_data}")
-        from cellmap_flow.utils.serilization_utils import get_process_dataset
+        from cellmap_flow.pipeline_spec import PipelineSpec
 
-        g.input_norms, g.postprocess = get_process_dataset(json_data)
+        g.input_norms, g.postprocess = PipelineSpec.from_json_data(json_data, strict=True).build()
     else:
         logger.info("Using default normalization and postprocessing")
 

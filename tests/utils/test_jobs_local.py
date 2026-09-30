@@ -13,10 +13,8 @@ import time
 
 import pytest
 
-from cellmap_flow.jobs import local
-from cellmap_flow.jobs.spec import JobStatus
-from cellmap_flow.jobs import launch
-from cellmap_flow.utils.web_utils import IP_PATTERN
+from cellmap_flow.jobs import launch, local
+from cellmap_flow.jobs.spec import IP_PATTERN, JobStatus
 
 MARKER = f"{IP_PATTERN[0]}http://10.0.0.1:1234{IP_PATTERN[1]}"
 

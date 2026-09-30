@@ -18,8 +18,7 @@ from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, JobSt
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.ready import READY_ENV, read_ready_file, ready_path, write_ready_file
-from cellmap_flow.jobs.spec import JobSpec, JobStatus as LSFJobStatus
-from cellmap_flow.utils.web_utils import IP_PATTERN
+from cellmap_flow.jobs.spec import IP_PATTERN, JobSpec, JobStatus as LSFJobStatus
 
 URL = "http://node7:4321"
 MARKER = f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}"

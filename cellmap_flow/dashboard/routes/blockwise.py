@@ -31,7 +31,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import JobSpec
-from cellmap_flow.utils.web_utils import INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
+from cellmap_flow.serving.protocol import INPUT_NORM_KEY, POSTPROCESS_KEY
 from cellmap_flow.globals import get_blockwise_tasks_dir
 
 logger = logging.getLogger(__name__)
@@ -194,8 +194,8 @@ def _generate(pipeline, job_name):
         task["model_mode"] = pipeline.model_mode
     if pipeline.normalizers or pipeline.postprocessors:
         task["json_data"] = {
-            INPUT_NORM_DICT_KEY: _chain_steps(pipeline.normalizers),
-            POSTPROCESS_DICT_KEY: _chain_steps(pipeline.postprocessors),
+            INPUT_NORM_KEY: _chain_steps(pipeline.normalizers),
+            POSTPROCESS_KEY: _chain_steps(pipeline.postprocessors),
         }
     output_channels = output_params.get("output_channels", [])
     if output_channels and isinstance(output_channels, list):

@@ -32,7 +32,7 @@ from cellmap_flow.post.postprocessors import (
     SimpleBlockwiseMerger,
     ThresholdPostprocessor,
 )
-from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json, get_norms_post_args
+from cellmap_flow.serving.protocol import ARGS_KEY, decode_to_json
 
 MINMAX = {"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}
 SHIFT = {"name": "LambdaNormalizer", "expression": "x*2-1"}
@@ -83,7 +83,7 @@ def test_url_blob_bytes(norms, posts, text):
     Older servers pass every key but "name" to the constructor, so the steps
     must never be nested as {"name", "params"}.
     """
-    blob = get_norms_post_args(norms, posts)
+    blob = PipelineSpec.from_steps(norms, posts).to_url_blob()
     assert base64.urlsafe_b64decode(blob + "=" * (-len(blob) % 4)).decode() == text
 
 

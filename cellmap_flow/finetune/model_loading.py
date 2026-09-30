@@ -29,7 +29,7 @@ def decode_model_entry(text: str) -> dict:
     text = text.strip()
     if text.startswith("{"):
         return json.loads(text)
-    from cellmap_flow.utils.web_utils import decode_to_json
+    from cellmap_flow.serving.protocol import decode_to_json
 
     return decode_to_json(text)
 

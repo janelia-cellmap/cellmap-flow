@@ -25,18 +25,14 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from cellmap_flow.utils.web_utils import (
-    ARGS_KEY,
-    INPUT_NORM_DICT_KEY as INPUT_NORM_KEY,
-    POSTPROCESS_DICT_KEY as POSTPROCESS_KEY,
+from cellmap_flow.serving.protocol import (
+    INPUT_NORM_KEY,
+    POSTPROCESS_KEY,
     decode_to_json,
     encode_to_str,
-    list_cls_to_dict,
 )
 
 __all__ = [
-    "INPUT_NORM_KEY",
-    "POSTPROCESS_KEY",
     "PipelineSpec",
     "builder_steps",
     "chain_is_segmentation",
@@ -44,7 +40,6 @@ __all__ = [
     "chain_output_dtype",
     "normalize_steps",
     "op_schemas",
-    "split_dataset_url",
 ]
 
 _CHAIN_KEYS = (INPUT_NORM_KEY, POSTPROCESS_KEY)
@@ -80,6 +75,24 @@ def normalize_steps(steps) -> tuple:
     raise ValueError(f"Expected dict or list, got {type(steps)}")
 
 
+def _step_dicts(ops) -> list:
+    """Live normalizers or postprocessors as ``[{name, **params}]`` steps.
+
+    A list, not a dict keyed by class name: two steps of the same class (e.g.
+    two LambdaPostprocessors) collapsed into one under a dict. Values keep
+    their types -- stringifying them made bool("False") read back as True.
+    """
+    steps = []
+    for n in ops:
+        name = n.name()
+        elms = dict(n.to_dict())
+        if "name" not in elms:
+            raise ValueError(f"Normalizer {name} does not have a name key. {elms}")
+        elms["name"] = name
+        steps.append(elms)
+    return steps
+
+
 def builder_steps(nodes) -> tuple:
     """Steps from the pipeline builder's ``[{"name", "params", ...}]`` nodes.
 
@@ -94,22 +107,6 @@ def builder_steps(nodes) -> tuple:
             continue
         steps.append({**(node.get("params") or {}), "name": node["name"]})
     return tuple(steps)
-
-
-def split_dataset_url(dataset: str) -> Optional[str]:
-    """The args blob between a layer URL's two ``ARGS_KEY`` markers.
-
-    ``None`` when the URL carries no blob at all. Any other number of markers
-    than two is a malformed URL.
-    """
-    if ARGS_KEY not in dataset:
-        return None
-    parts = dataset.split(ARGS_KEY)
-    if len(parts) != 3:
-        raise ValueError(
-            f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(parts)} {dataset}"
-        )
-    return parts[1]
 
 
 @dataclass(frozen=True)
@@ -154,10 +151,7 @@ class PipelineSpec:
     @classmethod
     def from_steps(cls, input_norms=(), postprocess=()) -> "PipelineSpec":
         """From live normalizer/postprocessor instances, via their to_dict()."""
-        return cls(
-            list_cls_to_dict(input_norms or ()),
-            list_cls_to_dict(postprocess or ()),
-        )
+        return cls(_step_dicts(input_norms or ()), _step_dicts(postprocess or ()))
 
     @classmethod
     def from_builder(cls, input_normalizers=(), postprocessors=()) -> "PipelineSpec":

@@ -36,7 +36,7 @@ from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import ThresholdPostprocessor
 from cellmap_flow.utils import server_info
-from cellmap_flow.utils.web_utils import ARGS_KEY, decode_to_json, get_norms_post_args
+from cellmap_flow.serving.protocol import ARGS_KEY, decode_to_json
 
 RAW_VOXEL_SIZE = (24, 12, 12)
 MODEL_INFO = {
@@ -230,7 +230,7 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
 
     monkeypatch.setattr(launch, "start_hosts", start_hosts)
     g.jobs = []
-    blob = get_norms_post_args(INPUT_NORM, [])
+    blob = PipelineSpec.from_steps(INPUT_NORM, []).to_url_blob()
     for name in MODELS:
         if launch == "catalog":
             launch.run_model(f"/models/{name}", name, blob)

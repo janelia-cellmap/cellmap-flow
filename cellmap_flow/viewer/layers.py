@@ -28,7 +28,7 @@ from cellmap_flow.pipeline_spec import chain_is_segmentation
 from cellmap_flow.utils.output_probe import output_display_range
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, get_raw_layer, prediction_shader
 from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.utils.web_utils import ARGS_KEY
+from cellmap_flow.serving.protocol import ARGS_KEY
 
 logger = logging.getLogger(__name__)
 

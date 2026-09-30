@@ -18,7 +18,7 @@ from cellmap_flow.finetune.model_loading import decode_model_entry
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus as LSF
-from cellmap_flow.utils.web_utils import IP_PATTERN
+from cellmap_flow.serving.protocol import IP_PATTERN
 
 URL = "http://node7:8123"
 

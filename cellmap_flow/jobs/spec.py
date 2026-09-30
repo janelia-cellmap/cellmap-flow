@@ -16,9 +16,12 @@ from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
-from cellmap_flow.utils.web_utils import IP_PATTERN
-
 logger = logging.getLogger(__name__)
+
+#: The markers an inference server prints its address between, so that a
+#: launcher can find it in the job's log (``extract_host_from_output``).
+#: Servers of every version print them, so they never change.
+IP_PATTERN = ["CELLMAP_FLOW_SERVER_IP(", ")CELLMAP_FLOW_SERVER_IP"]
 
 #: A template for the address viewers use for an inference server, for
 #: servers that are reached through a reverse proxy. For example

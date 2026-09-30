@@ -17,7 +17,7 @@ from cellmap_flow.finetune.model_loading import (
     root_base_model_dict,
 )
 from cellmap_flow.models.models_config import CellMapModelConfig, FinetuneModelConfig, ScriptModelConfig
-from cellmap_flow.utils.web_utils import encode_to_str
+from cellmap_flow.serving.protocol import encode_to_str
 
 
 def _trains_on(text, base, trained):

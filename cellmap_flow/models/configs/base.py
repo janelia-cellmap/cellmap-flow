@@ -97,7 +97,7 @@ def _cli_value(value):
     """One constructor argument as the server CLI parses it back."""
     if isinstance(value, dict):
         # FinetuneModelConfig decodes this back into the dict.
-        from cellmap_flow.utils.web_utils import encode_to_str
+        from cellmap_flow.serving.protocol import encode_to_str
 
         return encode_to_str(value)
     if isinstance(value, (list, tuple, np.ndarray)):

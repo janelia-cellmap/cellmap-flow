@@ -40,7 +40,8 @@ check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome"
 """,
     # torch only once a runner is built.
     "serving": """
-check(["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr", "cellmap_flow.inference.runner"],
+check(["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr", "cellmap_flow.serving.protocol",
+       "cellmap_flow.inference.runner"],
       LIGHT + ["torch"])
 """,
     # describe_types() runs when the dashboard opens its model form. It

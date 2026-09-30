@@ -42,7 +42,7 @@ class FinetuneModelConfig(ModelConfig):
             base_model: Dict describing the base model (same format as a YAML
                 model entry, e.g. {"type": "fly", "checkpoint_path": "...", ...}).
                 May also be passed as a string produced by
-                ``cellmap_flow.utils.web_utils.encode_to_str`` -- the
+                ``cellmap_flow.serving.protocol.encode_to_str`` -- the
                 dynamic server CLI (see ``command`` below) can only pass
                 plain strings, so ``command`` encodes the dict and this
                 constructor decodes it back on the receiving end.
@@ -62,7 +62,7 @@ class FinetuneModelConfig(ModelConfig):
         if base_model is None:
             raise ValueError("FinetuneModelConfig requires base_model (a model entry dict)")
         if isinstance(base_model, str):
-            from cellmap_flow.utils.web_utils import decode_to_json
+            from cellmap_flow.serving.protocol import decode_to_json
 
             base_model = decode_to_json(base_model)
         self.base_model_dict = base_model

@@ -17,16 +17,16 @@ from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inference.runner import ChunkCancelled, DeviceSlots
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.pipeline_spec import chain_num_channels, chain_output_dtype
+from cellmap_flow.pipeline_spec import PipelineSpec, chain_num_channels, chain_output_dtype
 from cellmap_flow.serving import virtual_zarr
-from cellmap_flow.utils.web_utils import (
+from cellmap_flow.serving.protocol import (
     ARGS_KEY,
-    get_public_ip,
+    INPUT_NORM_KEY,
     IP_PATTERN,
-    get_free_port,
+    decode_to_json,
+    split_dataset_url,
 )
 from cellmap_flow.utils.restart_token import TOKEN_HEADER, tokens_match
-from cellmap_flow.utils.serilization_utils import get_process_dataset_url
 
 from cellmap_flow.globals import g
 
@@ -63,6 +63,86 @@ def _env_flag(name):
     if value in ("1", "true", "yes", "on"):
         return True
     raise ValueError(f"{name} must be 1 or 0, got {os.environ[name]!r}")
+
+
+def get_free_port():
+    """A TCP port free on this machine now, for a server to bind."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("0.0.0.0", 0))
+    free_port = s.getsockname()[1]
+    s.close()
+    return free_port
+
+
+def get_public_ip():
+    """
+    Return the local/private IP address in use on this machine
+    (e.g., 10.x.x.x or 192.168.x.x if behind NAT).
+    This *does not* return the real Internet-facing public IP
+    if you're behind NAT.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # 8.8.8.8 doesn't need to be reachable;
+        # the connect() call will assign a local IP regardless.
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        # Fallback if something fails
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+
+def _chain_from_url(dataset: str):
+    """``(dashboard_url, input_norms, postprocess)`` from a layer URL's args blob.
+
+    Logs, loudly, when the URL carries no chain or one that builds no input
+    normalizers: the model is then fed raw voxel values.
+    """
+    blob = split_dataset_url(dataset)
+    if blob is None:
+        # A layer URL without the args blob means this request carries no
+        # normalization and no postprocessing, and the model is about to be
+        # fed raw voxel values. For a model trained on, say, [-1, 1] that is
+        # not a subtle degradation -- the output is unrecognizable, and it
+        # looks exactly like a model that "trained badly" rather than one
+        # that is being served wrong. Returning three empty values in silence
+        # is what made that indistinguishable, so say it out loud.
+        logger.warning(
+            "Serving WITHOUT normalization or postprocessing: the layer URL "
+            f"has no {ARGS_KEY} block. Raw voxel values go to the model "
+            "unmodified. If the model expects normalized input (e.g. [-1, 1]) "
+            "its output will be meaningless. Re-add the layer from the "
+            "dashboard so the URL carries the current Input/Postprocess "
+            "configuration."
+        )
+        return None, [], []
+    # Decoded here rather than through PipelineSpec.from_url_blob so the
+    # messages below can show the chain exactly as the URL spelled it.
+    result = decode_to_json(blob)
+    logger.debug(f"Decoded dataset args: {result}")
+    dashboard_url = result.get("dashboard_url", None)
+    input_norm_fns, postprocess_fns = PipelineSpec.from_json_data(
+        result, strict=True
+    ).build()
+    # Log what actually got built, not the raw dict -- an args block that
+    # decodes fine but produces no normalizers is the same silent failure as
+    # having no args block at all.
+    if not input_norm_fns:
+        logger.warning(
+            "Dataset args decoded but produced NO input normalizers "
+            f"(input_norm={result.get(INPUT_NORM_KEY)!r}). The model "
+            "will see raw voxel values."
+        )
+    else:
+        logger.info(
+            f"Serving with input normalizers: "
+            f"{[type(fn).__name__ for fn in input_norm_fns]}, postprocessors: "
+            f"{[type(fn).__name__ for fn in postprocess_fns]}"
+        )
+    return dashboard_url, input_norm_fns, postprocess_fns
 
 
 def _client_gone_check():
@@ -349,7 +429,7 @@ class CellMapFlowServer:
             if not self._warned_no_chain:
                 self._warned_no_chain = True
                 if not (g.input_norms or g.postprocess):
-                    get_process_dataset_url(dataset or "")  # logs the warning
+                    _chain_from_url(dataset or "")  # logs the warning
             return ServedChain(None, None, None)
 
         parts = dataset.split(ARGS_KEY)
@@ -359,7 +439,7 @@ class CellMapFlowServer:
             if chain is not None:
                 self._chains.move_to_end(key)
                 return chain
-            dashboard_url, input_norms, postprocess = get_process_dataset_url(dataset)
+            dashboard_url, input_norms, postprocess = _chain_from_url(dataset)
             chain = ServedChain(dashboard_url, list(input_norms), list(postprocess))
             self._chains[key] = chain
             while len(self._chains) > CHAIN_CACHE_SIZE:
