@@ -12,6 +12,7 @@
    plugins
    review
    viewer_api
+   architecture
    autoapi/index
    
 
