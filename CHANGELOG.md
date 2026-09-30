@@ -149,12 +149,18 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a malformed validate/generate/precheck/submit body is answered with what is wrong (still a 200 with the failure flag the builder reads);
     - validate now refuses pipelines missing a required setting, which used to fail later at submit;
     - submit refuses a `yaml_paths` that is not a list of paths. A number there used to be opened as a file descriptor.
+  - **Dashboard tabs:**
+    - the Finetune tab stops polling a job once it is COMPLETED, FAILED or CANCELLED, or once the server answers 404, which also logs a line saying so;
+    - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page;
+    - the Review tab's script is ES modules, with the same behaviour.
   - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
   - **Deprecated (K18):** `ImageDataInterface`'s `output_voxel_size` and `custom_fill_value` arguments warn; they still work this release. `concurrency_limit` stays, because the inference server uses it.
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `447df64` the training logs keep the last 1,000 lines
+- `` the finetune status poll stops at a final status or a 404
 - `390520e` a read wholly outside the array is padding
 - `b2fde02` a precomputed volume of several scales is shown as their pyramid
 - `21681ac` a precomputed path's scale is its last /s<N>
