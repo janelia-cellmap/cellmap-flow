@@ -22,6 +22,17 @@ from cellmap_flow.norm.input_normalize import ChannelSelector, LambdaNormalizer,
 Z = np.arange(1, 11, dtype=np.uint8)[:, None, None]  # z index + 1
 
 
+def _at_the_origin(f):
+    """16^3 voxels of 8 nm, voxel 0's corner at the origin."""
+    return f.ome_pyramid(((8, 4),)) + "/s0"
+
+
+def _two_channels(f):
+    """(c, z, y, x): 2 channels of 16^3 voxels of 8 nm; channel c holds z index + 1 + 100 c."""
+    z = np.broadcast_to(np.arange(1, 17, dtype=np.uint8)[:, None, None], (16, 16, 16))
+    return f.write_array("zarr2", np.stack([z, z + 100]), {"resolution": [8] * 3, "offset": [0] * 3})
+
+
 def _extra_compressor_field(f):
     """Newer numcodecs write compressor fields, such as zstd's checksum, that
     tensorstore's zarr driver rejects as extra members."""
@@ -36,60 +47,169 @@ def _extra_compressor_field(f):
     return path
 
 
-# layout: (how it is written, ImageDataInterface arguments, where it starts, read ROI, (shape read, its z column))
+# layout: (how it is written, ImageDataInterface arguments, where it starts, read ROI,
+#          (shape read, its dtype, its z column))
 READS = {
     # N5 attributes are x, y, z; the data is z, y, x like its metadata says.
     "n5": (
         lambda f: f.write_array("n5", np.broadcast_to(Z, (10, 20, 30)), {"resolution": [3, 2, 1], "offset": [0] * 3}),
-        {}, (0, 0, 0), Roi((0, 0, 0), (2, 4, 6)), ((2, 2, 2), [1, 2]),
+        {}, (0, 0, 0), Roi((0, 0, 0), (2, 4, 6)), ((2, 2, 2), "uint8", [1, 2]),
     ),
     # Stored x, y, z: read back z, y, x, where voxel_offset puts it.
     "precomputed": (
         lambda f: f.write_array("precomputed", np.broadcast_to(Z[:2], (2, 10, 20)), {
             "resolution": [4, 8, 16], "chunk_size": [20, 10, 2], "voxel_offset": [3, 2, 1]}),
-        {}, (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), ((2, 10, 20), [1, 2]),
+        {}, (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), ((2, 10, 20), "uint8", [1, 2]),
     ),
-    # Outside the array a read is padded with 0, not the array's fill value.
+    "interior": (_at_the_origin, {}, (0, 0, 0), Roi((32, 8, 8), (32, 8, 8)), ((4, 1, 1), "uint8", [5, 6, 7, 8])),
+    "whole-array": (_at_the_origin, {}, (0, 0, 0), None, ((16, 16, 16), "uint8", list(range(1, 17)))),
+    # A start inside a voxel reads from that voxel.
+    "off-grid-start": (_at_the_origin, {}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2])),
+    "negative-start": (_at_the_origin, {}, (0, 0, 0), Roi((-16, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [0, 0, 1, 2])),
+    # Half a voxel before the array: rounded toward zero, to voxel 0.
+    "negative-off-grid-start": (
+        _at_the_origin, {}, (0, 0, 0), Roi((-4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2]),
+    ),
+    "past-the-end": (_at_the_origin, {}, (0, 0, 0), Roi((112, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [15, 16, 0, 0])),
+    # Outside the array a read is padded with 0, not the array's fill value...
     "border": (
         lambda f: f.write_array("zarr2", np.ones((4, 4, 4), np.uint8), {"resolution": [1] * 3, "offset": [0] * 3},
                                 fill_value=7),
-        {}, (0, 0, 0), Roi((-1, 0, 0), (2, 1, 1)), ((2, 1, 1), [0, 1]),
+        {}, (0, 0, 0), Roi((-1, 0, 0), (2, 1, 1)), ((2, 1, 1), "uint8", [0, 1]),
     ),
-    "extra-compressor-field": (_extra_compressor_field, {}, (0, 0, 0), Roi((0, 0, 0), (4, 4, 4)), ((4, 4, 4), [1, 2, 3, 4])),
+    # ...or with custom_fill_value, or the border voxels repeated...
+    "custom-fill-value": (
+        _at_the_origin, {"custom_fill_value": 9}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [9, 1]),
+    ),
+    "edge-fill": (
+        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "uint8", [1, 1]),
+    ),
+    # ...and the padding is added after the chain: it is never normalized.
+    "chain-then-padding": (
+        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "float32", [0.0, 2.0]),
+    ),
+    "not-normalized": (
+        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")], "normalize": False}, (0, 0, 0),
+        Roi((0, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2]),
+    ),
+    "channel-selected": (
+        _two_channels, {"input_norms": [ChannelSelector(1)]}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "uint8", [101, 102]),
+    ),
+    # output_voxel_size resamples by the z factor: finer repeats each voxel...
+    "upsampled": (
+        _at_the_origin, {"output_voxel_size": (4, 4, 4)}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
+        ((4, 2, 2), "uint8", [1, 1, 2, 2]),
+    ),
+    "upsampled-off-grid": (
+        _at_the_origin, {"output_voxel_size": (4, 4, 4)}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)),
+        ((4, 2, 2), "uint8", [1, 2, 2, 3]),
+    ),
+    # ...coarser takes each block's median...
+    "downsampled": (
+        _at_the_origin, {"output_voxel_size": (16, 16, 16)}, (0, 0, 0), Roi((0, 0, 0), (32, 16, 16)),
+        ((2, 1, 1), "float64", [1.5, 3.5]),
+    ),
+    # ...and the same z voxel size resamples nothing, even when y and x differ.
+    "resampled-z-unchanged": (
+        _at_the_origin, {"output_voxel_size": (8, 4, 4)}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
+        ((2, 1, 1), "uint8", [1, 2]),
+    ),
+    "extra-compressor-field": (
+        _extra_compressor_field, {}, (0, 0, 0), Roi((0, 0, 0), (4, 4, 4)), ((4, 4, 4), "uint8", [1, 2, 3, 4]),
+    ),
     # z = 524 nm is voxel 100 at 5.24 nm (it was voxel 104 at 5 nm).
     "fractional-voxel-size": (
         lambda f: f.ome_pyramid((((5.24, 4, 4), (2.62, 2, 2)),), shape=(200, 4, 4)) + "/s0",
-        {}, (0, 0, 0), Roi((524, 0, 0), (52, 4, 4)), ((9, 1, 1), list(range(101, 110))),
+        {}, (0, 0, 0), Roi((524, 0, 0), (52, 4, 4)), ((9, 1, 1), "uint8", list(range(101, 110))),
     ),
     # Every Janelia level's corner is -4 nm: world [-4, 28) is exactly s2's voxel 0.
     "janelia-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32)) + "/s2",
-        {}, (-4, -4, -4), Roi((60, -4, -4), (64, 32, 32)), ((2, 1, 1), [3, 4]),
+        {}, (-4, -4, -4), Roi((60, -4, -4), (64, 32, 32)), ((2, 1, 1), "uint8", [3, 4]),
     ),
     "ome-v3-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), zarr_format=3),
-        {"voxel_size": (16, 16, 16)}, (-4, -4, -4), Roi((-4, -4, -4), (32, 16, 16)), ((2, 1, 1), [1, 2]),
+        {"voxel_size": (16, 16, 16)}, (-4, -4, -4), Roi((-4, -4, -4), (32, 16, 16)), ((2, 1, 1), "uint8", [1, 2]),
     ),
     # Relabelled voxel for voxel: s1's first voxel, at 120 nm on 12 nm voxels, is at 160 on 16.
     "relabelled-level": (
         lambda f: f.ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4)),
-        {"voxel_size": (16, 16, 16)}, (160, 160, 160), Roi((160, 160, 160), (48, 16, 16)), ((3, 1, 1), [1, 2, 3]),
+        {"voxel_size": (16, 16, 16)}, (160, 160, 160), Roi((160, 160, 160), (48, 16, 16)),
+        ((3, 1, 1), "uint8", [1, 2, 3]),
     ),
     "exact-level": (
         lambda f: f.ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4)),
-        {"voxel_size": (12, 12, 12)}, (120, 120, 120), Roi((120, 120, 120), (12, 12, 12)), ((1, 1, 1), [1]),
+        {"voxel_size": (12, 12, 12)}, (120, 120, 120), Roi((120, 120, 120), (12, 12, 12)), ((1, 1, 1), "uint8", [1]),
     ),
 }
 
 
+def _open(write, kwargs, ome_pyramid, write_array):
+    path = write(SimpleNamespace(ome_pyramid=ome_pyramid, write_array=write_array))
+    return ImageDataInterface(path, **{"input_norms": [], **kwargs})
+
+
 @pytest.mark.parametrize("layout", READS)
 def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
-    write, kwargs, corner, roi, (shape, column) = READS[layout]
-    idi = ImageDataInterface(write(SimpleNamespace(ome_pyramid=ome_pyramid, write_array=write_array)),
-                             input_norms=[], **kwargs)
+    write, kwargs, corner, roi, (shape, dtype, column) = READS[layout]
+    idi = _open(write, kwargs, ome_pyramid, write_array)
     assert tuple(idi.roi.offset) == corner
     got = idi.to_ndarray_ts(roi)
-    assert (got.shape, got[:, 0, 0].tolist()) == (shape, column)
+    assert (got.shape, str(got.dtype), got[:, 0, 0].tolist()) == (shape, dtype, column)
+
+
+# layout: (what ImageDataInterface reports: voxel size, offset, roi, shape, chunk shape, axes, file type)
+OPENED = {
+    "n5": ((1, 2, 3), (0, 0, 0), Roi((0, 0, 0), (10, 40, 90)), (10, 20, 30), (5, 10, 15), ["z", "y", "x"], "n5"),
+    "precomputed": (
+        (16, 8, 4), (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), (2, 10, 20), (2, 10, 20), ["z", "y", "x"],
+        "precomputed",
+    ),
+    # A local zarr v2 array reports its last three axes, whatever is before them.
+    "channel-selected": (
+        (8, 8, 8), (0, 0, 0), Roi((0, 0, 0), (128, 128, 128)), (16, 16, 16), (8, 8, 8), ["z", "y", "x"], "zarr",
+    ),
+    "fractional-voxel-size": (
+        (5.24, 4.0, 4.0), (0, 0, 0), Roi((0, 0, 0), (1048, 16, 16)), (200, 4, 4), (100, 2, 2), ["z", "y", "x"], "zarr",
+    ),
+    "ome-v3-level": ((16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (8, 8, 8), (4, 4, 4),
+                     ["z", "y", "x"], "zarr"),
+    "relabelled-level": ((16, 16, 16), (160, 160, 160), Roi((160, 160, 160), (64, 32, 32)), (4, 2, 2), (2, 1, 1),
+                         ["z", "y", "x"], "zarr"),
+}
+
+
+@pytest.mark.parametrize("layout", OPENED)
+def test_what_a_dataset_opens_as(layout, ome_pyramid, write_array):
+    write, kwargs = READS[layout][:2]
+    idi = _open(write, kwargs, ome_pyramid, write_array)
+    assert (tuple(idi.voxel_size), tuple(idi.offset), idi.roi, tuple(idi.shape), tuple(idi.chunk_shape), idi.axes_names,
+            idi.filetype) == OPENED[layout]
+    assert idi.output_voxel_size == idi.voxel_size
+
+
+# layout: (what ts is, its dtype, domain origin and shape, ts[:2, 0, 0])
+TS_VIEWS = {
+    "n5": ("LazyNormalization", np.uint8, ((0, 0, 0), (10, 20, 30)), [1, 2]),
+    # C order, indexed from 0 though tensorstore starts the volume at voxel_offset.
+    "precomputed": ("LazyNormalization", np.uint8, ((0, 0, 0), (2, 10, 20)), [1, 2]),
+    "chain-then-padding": ("LazyNormalization", np.float32, ((0, 0, 0), (16, 16, 16)), [2.0, 4.0]),
+    "not-normalized": ("TensorStore", np.uint8, ((0, 0, 0), (16, 16, 16)), [1, 2]),
+    "channel-selected": ("LazyNormalization", np.uint8, ((0, 0, 0), (16, 16, 16)), [101, 102]),
+}
+
+
+@pytest.mark.parametrize("layout", TS_VIEWS)
+def test_ts_is_one_channel_of_the_dataset_through_the_chain(layout, ome_pyramid, write_array):
+    """What neuroglancer indexes, and what process_chunk scripts may read directly."""
+    write, kwargs = READS[layout][:2]
+    ts = _open(write, kwargs, ome_pyramid, write_array).ts
+    dtype = np.dtype(getattr(ts.dtype, "numpy_dtype", ts.dtype))
+    assert (type(ts).__name__, dtype, (tuple(ts.domain.inclusive_min), tuple(ts.shape)),
+            np.asarray(ts[:2, 0, 0]).tolist()) == TS_VIEWS[layout]
 
 
 def test_without_a_voxel_size_the_finest_level_is_opened(ome_pyramid):
