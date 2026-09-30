@@ -5,7 +5,7 @@ from pathlib import Path
 
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import output_sessions
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.globals import g
@@ -90,8 +90,9 @@ def viewer_position_and_scales():
 
 
 def session_store():
-    """The dashboard's sessions and volume registry (``g``'s dicts)."""
-    return SessionStore(output_sessions, g.annotation_volumes)
+    """The dashboard's sessions and volume registry (its session's dicts)."""
+    session = get_session()
+    return SessionStore(session.output_sessions, session.annotation_volumes)
 
 
 def ensure_corrections_storage(output_path):
@@ -137,7 +138,7 @@ def resolve_finetune_session(corrections_path_str):
     # training: creating volumes still starts a session of its own.
     store = session_store()
     base = os.path.expanduser(str(base_corrections_path))
-    if base not in output_sessions:
+    if base not in get_session().output_sessions:
         latest = store.latest_on_disk(base)
         if latest is not None:
             logger.info(f"No session for {base} in this dashboard; using the latest on disk: {latest}")

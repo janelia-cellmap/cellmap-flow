@@ -19,6 +19,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     get_lsf_job_id,
     resolve_finetune_session,
 )
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
@@ -188,14 +189,13 @@ def _rehydrate_jobs():
     ones it made sessions for, and the output path saved in the user prefs,
     which is what a freshly restarted dashboard starts with.
     """
-    from cellmap_flow.dashboard.finetune_utils import output_sessions
     from cellmap_flow.dashboard.routes.finetune.common import load_user_prefs
 
     manager = g.finetune_job_manager
     rehydrate = getattr(manager, "rehydrate_session", None)
     if rehydrate is None:
         return
-    bases = {os.path.expanduser(b) for b in output_sessions}
+    bases = {os.path.expanduser(b) for b in get_session().output_sessions}
     saved = load_user_prefs().get("outputPath")
     if saved:
         bases.add(os.path.expanduser(saved))

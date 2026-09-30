@@ -21,6 +21,7 @@ import pytest
 from cellmap_flow.dashboard import finetune_utils as fu
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync as session_sync
+from cellmap_flow.globals import g
 
 
 class _Proc:
@@ -68,7 +69,7 @@ def fake_minio(monkeypatch, tmp_path):
         return lambda *a, **k: calls.append(name) or value
 
     _Proc.started = 0
-    monkeypatch.setattr(fu, "minio_state", {"process": None, "bucket": "annotations",
+    monkeypatch.setattr(g, "minio_state", {"process": None, "bucket": "annotations",
                                             "output_base": None, "sync_thread": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", recorded("preflight"))
     monkeypatch.setattr(session_minio, "get_local_ip", recorded("ip", "127.0.0.1"))
@@ -95,7 +96,7 @@ def test_minio_logs_to_a_file_and_mc_uses_its_own_alias(fake_minio, tmp_path):
     assert not any(cmd[:3] == ["mc", "alias", "set"] for cmd, _ in runs), "no shared ~/.mc config"
     for cmd, env in runs:
         assert env.get(f"MC_HOST_{session_minio.MC_ALIAS}") == "http://minio:minio123@127.0.0.1:9123", cmd
-    assert fu.minio_state["process"] is procs[0]
+    assert g.minio_state["process"] is procs[0]
     assert fake_run.calls == ["preflight", "ip", "port", "ready", "sync thread", "exists"]
 
 
@@ -113,7 +114,7 @@ def test_a_minio_that_does_not_come_up_is_not_left_running(fake_minio, tmp_path,
         raises = pytest.raises(RuntimeError, match="did not become ready")
     with raises:
         fu.ensure_minio_serving(str(tmp_path / "vol.zarr"), "vol", output_base_dir=str(tmp_path))
-    assert fu.minio_state["process"] is None and procs[0].terminated
+    assert g.minio_state["process"] is None and procs[0].terminated
 
 
 def test_two_requests_start_one_server(fake_minio, tmp_path, monkeypatch):
@@ -179,7 +180,7 @@ class _Alive:
 @pytest.fixture
 def order(monkeypatch):
     events = []
-    monkeypatch.setattr(fu, "minio_state", {"process": _Alive(), "ip": "127.0.0.1", "port": 9000,
+    monkeypatch.setattr(g, "minio_state", {"process": _Alive(), "ip": "127.0.0.1", "port": 9000,
                                             "bucket": "annotations", "output_base": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
     monkeypatch.setattr(
@@ -208,7 +209,6 @@ def test_painted_chunks_are_pulled_before_the_mirror(order, monkeypatch, tmp_pat
 def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path):
     from cellmap_flow.dashboard.app import app
     from cellmap_flow.dashboard.routes.finetune import yaml_crops
-    from cellmap_flow.globals import g
 
     events = []
     meta = {

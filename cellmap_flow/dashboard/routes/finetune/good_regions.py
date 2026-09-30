@@ -21,6 +21,7 @@ import numpy as np
 from flask import jsonify
 
 from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
 from cellmap_flow.globals import g
 
@@ -53,13 +54,7 @@ def _minio_corrections_dir():
     runs off this, so it stays true for as long as annotations are flowing --
     including after a dashboard restart clears g.annotation_volumes.
     """
-    try:
-        from cellmap_flow.dashboard.finetune_utils import minio_state
-
-        return minio_state.get("output_base") or None
-    except Exception as e:
-        logger.debug(f"Could not read minio_state for the session path: {e}")
-        return None
+    return get_session().minio_state.get("output_base") or None
 
 
 def _store_path():

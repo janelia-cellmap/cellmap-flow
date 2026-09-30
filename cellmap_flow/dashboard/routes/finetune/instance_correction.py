@@ -23,10 +23,10 @@ import numpy as np
 import zarr
 from flask import jsonify
 
-from cellmap_flow.dashboard import finetune_utils
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy, session_store
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.io.multiscale import closest_raw_scale
@@ -340,7 +340,7 @@ def create_instance_correction_response(data):
             # <minio>` to overwrite those edits with the stale seed. Refuse
             # and point at the sync route.
             if session_instance.backing_store_populated(
-                finetune_utils.minio_state, output_dir, mc_target_name
+                get_session().minio_state, output_dir, mc_target_name
             ):
                 return (
                     jsonify({
@@ -470,7 +470,7 @@ def sync_instance_correction_response(data):
             dst_path = _zarr_target(dst_path, "dst_path", beside=zarr_path)
 
         success, info = session_instance.snapshot_from_minio(
-            finetune_utils.minio_state, zarr_path, dst_path=dst_path
+            get_session().minio_state, zarr_path, dst_path=dst_path
         )
         if not success:
             return jsonify({"success": False, "error": info}), 500
@@ -528,7 +528,7 @@ def cc3d_relabel_annotation_response(data):
             return _error(f"snapshot_dir is not a directory: {snapshot_dir}")
 
         success, info = session_instance.cc3d_relabel(
-            finetune_utils.minio_state,
+            get_session().minio_state,
             zarr_path=zarr_path,
             target_label=target_label,
             snapshot_dir=snapshot_dir,

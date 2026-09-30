@@ -19,16 +19,11 @@ CROP = {"annotation_offset_voxels": [0, 0, 0], "annotation_shape_voxels": [16, 1
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """The dashboard's test client, a model "m" (a script with affinity offsets) and billing to "my_lab"."""
-    from cellmap_flow.dashboard import finetune_utils
     from cellmap_flow.dashboard.app import app
-    from cellmap_flow.dashboard.routes.finetune import common
 
-    # The tests-only aliases (WRAPPERS.md): W3-A's Session facade replaces them.
-    monkeypatch.setattr(finetune_utils, "output_sessions", {})
-    monkeypatch.setattr(common, "output_sessions", finetune_utils.output_sessions)
     (tmp_path / "model.py").write_text(OFFSETS)
     for key, value in dict(models_config=[SimpleNamespace(name="m", script_path=str(tmp_path / "model.py"))],
-                           charge_group="my_lab", annotation_volumes={}).items():
+                           charge_group="my_lab", annotation_volumes={}, output_sessions={}).items():
         monkeypatch.setattr(g, key, value, raising=False)
     return app.test_client()
 

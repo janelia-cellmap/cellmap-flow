@@ -1,21 +1,16 @@
 """The dashboard's side of cellmap_flow.finetune.session.
 
-The session code takes its state as arguments. The dashboard's is ``g``'s
-dicts, bound here at import -- ``minio_state``, ``annotation_volumes`` and
-``output_sessions`` -- and the MinIO and sync entry points below pass them
-on; serving a volume checks first that MinIO is installed. Tests replace the
-three dicts here.
+The session code takes its state as arguments. The dashboard's is its
+session's MinIO state and volume records (dashboard.state), which the MinIO
+and sync entry points below read when they are called and pass on; serving a
+volume checks first that MinIO is installed.
 """
 
 import shutil
 
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync as session_sync
-from cellmap_flow.globals import g
-
-minio_state = g.minio_state
-annotation_volumes = g.annotation_volumes
-output_sessions = g.output_sessions
 
 
 # ---------------------------------------------------------------------------
@@ -47,31 +42,26 @@ def _require_minio_binaries():
         )
 
 
-# The mc alias for this dashboard's MinIO. It is defined per call through
-# MC_HOST_<alias> (see _mc_env), not with `mc alias set`, which writes
-# ~/.mc/config.json: that file is shared by every dashboard the user runs,
-# so two of them repointed each other's alias and one's uploads went to the
-# other's server.
-MC_ALIAS = "myserver"
-
-
 def ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_name=None):
     """Serve the volume at ``zarr_path`` through the dashboard's MinIO, starting
     it if needed; returns its URL. ``crop_id`` is the volume id, its bucket key
     without ".zarr". See ``session.minio.MinioServer.ensure_serving``."""
     _require_minio_binaries()
-    server = session_minio.MinioServer(minio_state, volumes=annotation_volumes)
+    session = get_session()
+    server = session_minio.MinioServer(session.minio_state, volumes=session.annotation_volumes)
     return server.ensure_serving(zarr_path, crop_id, output_base_dir, mc_target_name=mc_target_name)
 
 
 def sync_all_annotations_from_minio(force: bool = True):
     """``session.sync.sync_all`` for the dashboard's MinIO: how many volumes
     changed, or -1 if MinIO is not running."""
-    return session_sync.sync_all(force, state=minio_state, volumes=annotation_volumes)
+    session = get_session()
+    return session_sync.sync_all(force, state=session.minio_state, volumes=session.annotation_volumes)
 
 
 def sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None):
     """``session.sync.sync_volume`` for the dashboard's MinIO."""
+    session = get_session()
     return session_sync.sync_volume(
-        volume_id, force, zarr_path, state=minio_state, volumes=annotation_volumes
+        volume_id, force, zarr_path, state=session.minio_state, volumes=session.annotation_volumes
     )

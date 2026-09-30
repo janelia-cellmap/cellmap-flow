@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # The mc alias for this dashboard's MinIO, defined per call through
 # MC_HOST_<alias> (see MinioServer.mc_env) rather than with `mc alias set`,
 # whose ~/.mc/config.json every dashboard of the user shares: two dashboards
-# would repoint each other's alias. finetune_utils.MC_ALIAS repeats it.
+# would repoint each other's alias.
 MC_ALIAS = "myserver"
 MINIO_READY_TIMEOUT = 30.0
 _CREDENTIALS = ("minio", "minio123")

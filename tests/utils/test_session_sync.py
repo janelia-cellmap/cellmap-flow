@@ -133,11 +133,11 @@ def test_strokes_go_to_the_volumes_own_zarr(tmp_path, monkeypatch):
     vol_b = other_session / "vol-b.zarr"
     s3 = FakeS3()
     s3.put("annotations/vol-b.zarr/annotation/s0/0.0.0", b"stroke", "e1")
-    monkeypatch.setattr(fu, "minio_state", {
+    monkeypatch.setattr(g, "minio_state", {
         "ip": "127.0.0.1", "port": 9000, "bucket": "annotations",
         "output_base": str(first_session),
     })
-    monkeypatch.setattr(fu, "annotation_volumes", {
+    monkeypatch.setattr(g, "annotation_volumes", {
         "vol-b": {"zarr_path": str(vol_b), "corrections_dir": str(other_session),
                   "chunk_sync_state": {}},
     })
@@ -162,7 +162,7 @@ def test_only_one_sync_runs_at_a_time(monkeypatch):
             calls.append(path)
             return []
 
-    monkeypatch.setattr(fu, "minio_state", {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations"})
+    monkeypatch.setattr(g, "minio_state", {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations"})
     monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: _Listing())
 
     with sync._sync_lock:

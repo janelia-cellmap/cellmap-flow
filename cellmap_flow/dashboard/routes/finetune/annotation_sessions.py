@@ -15,6 +15,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import sync as session_sync
 from cellmap_flow.finetune.session.manifest import read_manifest
 from cellmap_flow.finetune.session.volume import read_volume
@@ -202,8 +203,7 @@ def list_existing_sessions_response(data):
 
 def load_existing_volume_response(data):
     try:
-        from cellmap_flow.dashboard.finetune_utils import minio_state
-
+        minio_state = get_session().minio_state
         source_session_path = data.get("source_session_path")
         output_path = data.get("output_path")
         load_id = data.get("load_id")

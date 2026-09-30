@@ -56,7 +56,6 @@ class _Alive:
 def world(tmp_path, monkeypatch):
     """A raw pyramid, a crop, a segmentation, a viewer and a MinIO that has nothing yet."""
     from cellmap_flow.dashboard.app import app
-    from cellmap_flow.dashboard.routes.finetune import common
     from cellmap_flow.globals import g
     from cellmap_flow.utils import model_geometry
 
@@ -99,13 +98,9 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(s3fs, "S3FileSystem", lambda **kw: SimpleNamespace(exists=lambda path: False))
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
-    monkeypatch.setattr(fu, "minio_state", state)
-    monkeypatch.setattr(fu, "annotation_volumes", volumes)
-    monkeypatch.setattr(fu, "output_sessions", sessions)
-    monkeypatch.setattr(common, "output_sessions", sessions)
     monkeypatch.setattr(model_geometry, "model_geometry_config", lambda name: GEOMETRY)
     for name, value in dict(
-        annotation_volumes=volumes, output_sessions=sessions, viewer=neuroglancer.Viewer(),
+        minio_state=state, annotation_volumes=volumes, output_sessions=sessions, viewer=neuroglancer.Viewer(),
         raw=None, dataset_path=str(tmp_path / "raw.zarr" / "em"),
         models_config=[SimpleNamespace(name="m")], input_norm_config=NORM, postprocess_config=POST,
     ).items():
