@@ -432,7 +432,7 @@ class LoRAFinetuner:
         new_bs = max(1, old_bs // 2)
         if new_bs >= old_bs:
             return False
-        from cellmap_flow.finetune.virtual_dataset import rebuild_loader
+        from cellmap_flow.finetune.data import rebuild_loader
 
         old_accum = self.gradient_accumulation_steps
         self.gradient_accumulation_steps = old_accum * (old_bs // new_bs)

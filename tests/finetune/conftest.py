@@ -79,7 +79,7 @@ def annotation_volume(tmp_path, ome_zarr):
     """``annotation_volume(labels, raw=None, crops=())``: a 16 nm volume holding
     ``labels`` over a raw of the same grid (constant 128 unless given), and
     ``.dataset(**kw)``, the VirtualPatchDataset over them (8^3 in, 4^3 out)."""
-    from cellmap_flow.finetune.virtual_dataset import VirtualPatchDataset
+    from cellmap_flow.finetune.data import VirtualPatchDataset
 
     def make(labels, raw=None, crops=(), name="vol"):
         raw = np.full(labels.shape, 128, np.uint8) if raw is None else raw

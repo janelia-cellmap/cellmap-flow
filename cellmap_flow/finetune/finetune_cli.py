@@ -46,7 +46,7 @@ from cellmap_flow.finetune.model_loading import (
     model_config_from_entry,
     root_base_model_dict,
 )
-from cellmap_flow.finetune.virtual_dataset import create_dataloader
+from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 

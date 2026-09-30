@@ -1,5 +1,6 @@
-"""VirtualPatchDataset, through the patches it draws: where they are centred,
-what they hold, what good regions add, and the loaders it is read through."""
+"""cellmap_flow.finetune.data: VirtualPatchDataset through the patches it draws
+(where they are centred, what they hold, what good regions add), and the
+loaders it is read through."""
 
 import json
 import pickle
@@ -12,7 +13,7 @@ import zarr
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
 from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
-from cellmap_flow.finetune.virtual_dataset import (
+from cellmap_flow.finetune.data import (
     VirtualPatchDataset,
     dataset_from_manifest,
     make_training_loader,
