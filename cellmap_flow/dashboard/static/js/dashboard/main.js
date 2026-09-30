@@ -1,15 +1,13 @@
 // The dashboard page (templates/index.html and the tab partials it
 // includes).
 //
-// A module runs once the page is parsed and before DOMContentLoaded: the
-// page's elements are all there, and the Finetune tab's inline script,
-// which waits for DOMContentLoaded, has not started yet. So the Models
-// tab's requests still go first, as they did when its own script was the
-// first to run.
+// A module runs once the page is parsed and before DOMContentLoaded, so the
+// page's elements are all there.
 import { ApiError, postJSON } from "../lib/api.js";
 import { mountOpChain } from "../shared/op-chain.js";
 import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
+import { initFinetuneTab } from "./finetune/index.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 import { initModelsTab } from "./models-tab.js";
 
@@ -125,3 +123,7 @@ initModelAdvice({ input: inputChain, postprocess: postChain });
 document.addEventListener("keydown", submitOnEnter);
 initSubmitAll(inputChain, postChain);
 initServerConfigModal();
+// The Finetune tab starts on DOMContentLoaded, as its inline script did, so
+// its first requests still go after the other tabs' (the Models tab asks for
+// the GPU queues only once the server config has answered).
+document.addEventListener("DOMContentLoaded", () => initFinetuneTab());
