@@ -74,17 +74,6 @@ SYNC = "/api/viewer/sync-instance-correction"
 CC3D = "/api/viewer/cc3d-relabel-annotation"
 
 
-class _Viewer:
-    def __init__(self):
-        self.layers = {}
-
-    def txn(self):
-        from contextlib import nullcontext
-        from types import SimpleNamespace
-
-        return nullcontext(SimpleNamespace(layers=self.layers))
-
-
 class _Unbuildable:
     name = "model"
 
@@ -94,18 +83,16 @@ class _Unbuildable:
 
 
 @pytest.fixture
-def client(monkeypatch, tmp_path):
-    from cellmap_flow.dashboard.app import app
+def client(monkeypatch, tmp_path, viewer, dashboard):
     from cellmap_flow.globals import g
 
     make_instances(tmp_path / "instances.zarr", s0_attrs={"resolution": [16] * 3, "offset": [0] * 3})
     zarr.open_group(str(tmp_path / "vols" / "roi_annotation.zarr"), mode="w")
     (tmp_path / "vols" / "plain.zarr").mkdir()
     (tmp_path / "elsewhere").mkdir()
-    monkeypatch.setattr(g, "viewer", _Viewer())
     monkeypatch.setattr(g, "models_config", [_Unbuildable()])
     monkeypatch.setattr(g, "dataset_path", "/raw.zarr")
-    return app.test_client()
+    return dashboard
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-"""Syncing painted chunks from MinIO to disk: what used to go missing.
+"""Syncing painted chunks from MinIO to disk (finetune/session/sync): what used to go missing.
 
 - Change detection keyed on LastModified (one-second resolution) from a HEAD
   per chunk; two strokes to one chunk within a second lost the second.
@@ -12,6 +12,7 @@
 - Concurrent syncs ran at once, and periodic-sync failures logged at DEBUG.
 """
 
+import json
 import logging
 import threading
 import time
@@ -21,6 +22,7 @@ import pytest
 import zarr
 
 from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.globals import g
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync
 
@@ -60,6 +62,9 @@ class FakeS3:
         if src in self.fail:
             raise OSError("connection reset")
         Path(dst).write_bytes(data)
+
+    def cat(self, path):
+        return self.objects[path][0]
 
     def exists(self, path):
         return any(p == path or p.startswith(path.rstrip("/") + "/") for p in self.objects)
@@ -181,9 +186,35 @@ def test_a_failing_periodic_sync_warns_once_per_interval(monkeypatch, caplog):
         sync.periodic_sync_once(state=state, volumes={})
         sync.periodic_sync_once(state=state, volumes={})
 
-    warnings = [r for r in caplog.records if "Periodic annotation sync failed" in r.getMessage()]
-    assert len(warnings) == 1
+    assert [r.levelno for r in caplog.records if r.name == sync.logger.name] == [logging.WARNING]
     assert sync._sync_failures["count"] == 2
+
+
+def test_a_periodic_round_pulls_strokes_and_leaves_the_viewer_alone(tmp_path, monkeypatch, viewer):
+    """Any push to the viewer takes the brush out of the user's hand, and the
+    round runs every 30 s while they draw; the boxes are redrawn from a button."""
+    pushes = []
+    real_txn = viewer.txn
+    monkeypatch.setattr(viewer, "txn", lambda *a, **k: pushes.append(1) or real_txn(*a, **k))
+    s3 = FakeS3()
+    s3.put("annotations/vol.zarr/.zattrs", b'{"type": "annotation_volume"}', "e0")
+    s3.put("annotations/vol.zarr/annotation/s0/0.0.0", b"stroke", "e1")
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: s3)
+    monkeypatch.setattr(sync, "sync_zarr_group_metadata", lambda *a: set())
+    corrections = tmp_path / "corrections"
+    (corrections / "vol.zarr").mkdir(parents=True)
+    (corrections / "vol.zarr" / ".zattrs").write_text(json.dumps({  # so a redraw would have a box to draw
+        "type": "annotation_volume", "output_voxel_size": [16] * 3, "chunk_size": [56] * 3,
+        "dataset_offset_nm": [8] * 3}))
+    state = {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations", "output_base": str(corrections)}
+    volumes = {"vol": {"zarr_path": str(corrections / "vol.zarr"), "corrections_dir": str(corrections),
+                       "chunk_sync_state": {}}}
+    monkeypatch.setattr(g, "annotation_volumes", volumes)
+
+    sync.periodic_sync_once(state=state, volumes=volumes)
+
+    assert (corrections / "vol.zarr" / "annotation" / "s0" / "0.0.0").read_bytes() == b"stroke"
+    assert pushes == []
 
 
 @pytest.fixture(autouse=True)
