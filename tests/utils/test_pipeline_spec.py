@@ -281,7 +281,7 @@ def test_set_pipeline_writes_all_four_attributes_or_none():
     g.set_pipeline(spec, built=([MinMaxNormalizer()], [merger]))
     assert g.postprocess[0] is merger, "the stateful instances given are kept"
     assert (g.input_norm_config, g.postprocess_config) == ([MINMAX], [{"name": "SimpleBlockwiseMerger"}])
-    assert g.pipeline_spec == spec and "pipeline_spec" not in vars(g)  # derived: conftest's restore covers it
+    assert g.pipeline_spec == spec
     with pytest.raises(ValueError):
         g.set_pipeline(PipelineSpec([SHIFT], [dict(THRESHOLD, threshold="high")]))
     assert g.postprocess[0] is merger and g.input_norm_config == [MINMAX]

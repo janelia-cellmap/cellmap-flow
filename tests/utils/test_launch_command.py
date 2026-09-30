@@ -22,6 +22,7 @@ from cellmap_flow.globals import g
 from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.jobs import launch as jobs_launch
+from cellmap_flow.jobs.settings import LauncherSettings
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving import launch
 
@@ -76,7 +77,7 @@ def launched(monkeypatch, tmp_path):
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
-    monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
+    monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     g.dataset_path = data
     return commands, data
 

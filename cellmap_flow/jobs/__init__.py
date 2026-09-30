@@ -6,10 +6,12 @@
 - ``local``: running a job here, LocalJob.
 - ``queues``: which GPU queues are usable, and the order to try them in.
 - ``site``: the site's numbers (queues, cores, walltime, timeouts).
+- ``settings``: the launcher settings saved in
+  ~/.cellmap_flow/server_config.yaml, ``launcher_settings()``.
 - ``ready``: the file a server writes once it knows its address.
 - ``launch``: the policy over them. ``start_hosts`` starts an inference
-  server, falling back through the GPU queues, and records it in the
-  dashboard's ``g.jobs``; the deployment's ``SERVER_COMMAND`` and
+  server, falling back through the GPU queues, and records it in
+  ``started_jobs()``; the deployment's ``SERVER_COMMAND`` and
   ``SERVER_LOG_DIR``.
 
 Nothing in this package imports ``cellmap_flow.globals``, Flask or torch at

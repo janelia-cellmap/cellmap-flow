@@ -1,136 +1,243 @@
 """The dashboard's state, read and written through one object: ``get_session()``.
 
-Routes use the session's attributes rather than reaching into
-``cellmap_flow.globals.g``. For now each attribute *is* an attribute of
-``g``: the storage stays there because tests/conftest.py restores
-``vars(g)`` after every test, and because the CLIs, the inference servers
-and the finetune job manager still use ``g`` directly. When the storage
-moves (Phase 4, K16), this module is what changes. A Session holds nothing
-itself, and has no attributes but these (``__slots__``), so a misspelt one
-raises rather than being stored beside ``g``.
+One Session per process, made at import and filled by the CLIs,
+``services/startup`` and ``create_and_run_app``. It lives in this module
+rather than in Flask's ``app.extensions`` because the CLIs fill it before
+``dashboard.app`` is imported (they import it lazily so ``--help`` stays
+fast); because launch threads, job-monitor listeners, the MinIO sync thread
+and the log panel's handler run with no app context; and so that this module
+imports without Flask.
+
+The Session forwards three parts to their owners, which also serve processes
+that have no dashboard:
+
+- The launcher settings in ~/.cellmap_flow/server_config.yaml, one
+  attribute per key of ``jobs.settings.SERVER_CONFIG_DEFAULTS`` (``queue``,
+  ``charge_group``, ``walltime``, ...), and ``settings``, ``server_config``,
+  ``server_config_cached`` and ``save_server_config()``:
+  ``jobs.settings.launcher_settings()``.
+- The chain: ``input_norms`` and ``postprocess`` (the live steps, read-only),
+  ``pipeline_spec`` (the same as data), and ``set_pipeline()``, the one way
+  to change them: ``process_chain.process_chain()``.
+- ``jobs``, the running inference servers' jobs: ``jobs.launch.started_jobs()``.
+
+The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
+rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``viewer``, ``raw``,
   ``neuroglancer_url``, ``shaders``, ``shader_controls``, ``extra_layers``.
-- The models: ``jobs``, ``models_config``, ``model_catalog``.
-- The chain: ``input_norms`` and ``postprocess`` (the live steps),
-  ``pipeline_spec`` (the same as data), and ``set_pipeline()``, the one way
-  to change them.
+- The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
-- The job settings in ~/.cellmap_flow/server_config.yaml, one attribute per
-  key of ``globals.SERVER_CONFIG_DEFAULTS`` (``queue``, ``charge_group``,
-  ``walltime``, ...), ``server_config``, ``server_config_cached`` and
-  ``save_server_config()``; and blockwise's ``tmp_dir`` and
-  ``blockwise_tasks_dir``.
+- Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``,
   ``annotation_volumes``, ``output_sessions``; its training jobs'
   ``finetune_job_manager``; the Review tab's ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
   ``bbx_generator_state``.
+
+Read the session through ``get_session()`` when it is needed, never into a
+module global: tests/conftest.py installs a fresh Session for every test.
 """
 
-from cellmap_flow.globals import SERVER_CONFIG_KEYS, g
+import os
+from collections import deque
+from importlib.resources import files
 
-# The builder's node lists, as /api/pipeline/apply stores them on g.
+import yaml
+
+from cellmap_flow.jobs.launch import started_jobs
+from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS, launcher_settings
+from cellmap_flow.process_chain import process_chain
+
+# The builder's node lists, as /api/pipeline/apply stores them.
 _BUILDER_KEYS = ("inputs", "outputs", "edges", "normalizers", "models", "postprocessors")
-
-
-def _on_g(name, doc, writable=True):
-    """A session attribute that is ``g.<name>``."""
-    def get(self):
-        return getattr(g, name)
-
-    def set(self, value):
-        setattr(g, name, value)
-
-    return property(get, set if writable else None, doc=doc)
 
 
 class Session:
     """The dashboard's state; see the module docstring."""
 
-    __slots__ = ()
+    # _builder_state and _finetune_job_manager hold what the builder_state
+    # and finetune_job_manager properties serve: a slot and a property of one
+    # name cannot coexist.
+    __slots__ = ("dataset_path", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
+                 "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
+                 "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
+                 "_finetune_job_manager", "log_buffer", "log_clients", "bbx_generator_state")
 
-    # The data and the viewer
-    dataset_path = _on_g("dataset_path", "The raw data as the user gave it: a multiscale group or one level of it.")
-    viewer = _on_g("viewer", "The neuroglancer viewer; None until a dataset is opened.")
-    raw = _on_g("raw", "The raw data's layer, as last built.")
-    neuroglancer_url = _on_g("NEUROGLANCER_URL", "The viewer's own address, which the index page embeds.")
-    shaders = _on_g("shaders", "{layer name: shader}: the user's, put back when a layer is rebuilt.")
-    shader_controls = _on_g("shader_controls", "{layer name: shaderControls}, likewise.")
-    extra_layers = _on_g("extra_layers", "{name: layer} shown beside the raw data: a YAML's extra_layers.")
+    def __init__(self):
+        # The data and the viewer
+        # The raw data as the user gave it: a multiscale group or one level of it.
+        self.dataset_path = None
+        # The neuroglancer viewer; None until a dataset is opened.
+        self.viewer = None
+        # The raw data's layer, as last built.
+        self.raw = None
+        # The viewer's own address, which the index page embeds.
+        self.neuroglancer_url = None
+        # {layer name: shader}: the user's, put back when a layer is rebuilt.
+        self.shaders = {}
+        # {layer name: shaderControls}, likewise.
+        self.shader_controls = {}
+        # {name: neuroglancer layer} that the viewer shows beside the raw
+        # data: a YAML's extra_layers, built by cellmap_flow_yaml. The
+        # viewer-layer routes drop or rename their entries.
+        self.extra_layers = {}
+
+        # The models
+        # The configured models (ModelConfig).
+        self.models_config = []
+        # {group: {model name: path}}, the Models tab's catalog.
+        self.model_catalog = yaml.safe_load(files("cellmap_flow.models").joinpath("models.yaml").read_text()) or {}
+
+        # The pipeline builder's last apply
+        self._builder_state = {key: [] for key in _BUILDER_KEYS}
+        # {model name: config}, from every model node the builder applied with one.
+        self.builder_model_configs = {}
+
+        # Blockwise
+        # Where blockwise tasks keep their progress.
+        self.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
+        # Where blockwise task YAMLs and master logs go.
+        self.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
+
+        # The finetune and review tabs. The MinIO sync thread keeps the
+        # minio_state and annotation_volumes dicts it started with, so they
+        # are changed in place and never replaced.
+        # The dashboard's MinIO: its process, address, bucket and session directory.
+        self.minio_state = {
+            "process": None,
+            "port": None,
+            "ip": None,
+            "bucket": "annotations",
+            "output_base": None,
+            "sync_thread": None,
+        }
+        # {volume id: its record}, the volumes served through MinIO.
+        self.annotation_volumes = {}
+        # {output base directory: its session directory}.
+        self.output_sessions = {}
+        # The Review tab's open index (review_routes.ReviewSession), or None
+        # until /api/review/open.
+        self.review = None
+        self._finetune_job_manager = None
+
+        # The log panel and the box tool
+        # The last log lines, for a log panel that connects late.
+        self.log_buffer = deque(maxlen=1000)
+        # Each open log stream's queue.
+        self.log_clients = []
+        # The bounding-box tool's viewer and boxes.
+        self.bbx_generator_state = {
+            "dataset_path": None,
+            "num_boxes": 0,
+            "bounding_boxes": [],
+            "viewer": None,
+            "viewer_process": None,
+            "viewer_url": None,
+            "viewer_state": None,
+        }
 
     # The models
-    jobs = _on_g("jobs", "The running inference servers' jobs, each with its model_name and host.")
-    models_config = _on_g("models_config", "The configured models (ModelConfig).")
-    model_catalog = _on_g("model_catalog", "{group: {model name: path}}, the Models tab's catalog.")
+    @property
+    def jobs(self):
+        """The running inference servers' jobs, each with its model_name and
+        host: jobs.launch.started_jobs(). Assigning replaces the list's
+        contents, so start_hosts and cleanup_handler keep seeing it."""
+        return started_jobs()
+
+    @jobs.setter
+    def jobs(self, jobs):
+        started_jobs()[:] = jobs
 
     # The chain
-    input_norms = _on_g("input_norms", "The live input normalizers. Changed only by set_pipeline().", writable=False)
-    postprocess = _on_g("postprocess", "The live postprocessors. Changed only by set_pipeline().", writable=False)
+    @property
+    def input_norms(self):
+        """The live input normalizers. Changed only by set_pipeline()."""
+        return process_chain().input_norms
+
+    @property
+    def postprocess(self):
+        """The live postprocessors. Changed only by set_pipeline()."""
+        return process_chain().postprocess
 
     @property
     def pipeline_spec(self):
         """The chain as data (PipelineSpec), derived on every read."""
-        return g.pipeline_spec
+        return process_chain().spec
 
     def set_pipeline(self, spec, built=None):
-        """Replace the chain; see Flow.set_pipeline."""
-        g.set_pipeline(spec, built=built)
+        """Replace the chain; see ProcessChain.set."""
+        process_chain().set(spec, built=built)
 
     # The pipeline builder's last apply
     @property
     def builder_state(self):
         """What the builder last applied, as it sent it: ``{inputs, outputs,
         edges, normalizers, models, postprocessors}``, each a list of its
-        nodes, all empty until the first apply."""
-        return {key: getattr(g, f"pipeline_{key}") for key in _BUILDER_KEYS}
+        nodes, all empty until the first apply. A new dict on every read."""
+        return dict(self._builder_state)
 
     @builder_state.setter
     def builder_state(self, state):
-        for key in _BUILDER_KEYS:
-            setattr(g, f"pipeline_{key}", state[key])
-
-    @property
-    def builder_model_configs(self):
-        """{model name: config}, from every model node the builder applied with one."""
-        if not hasattr(g, "pipeline_model_configs"):
-            g.pipeline_model_configs = {}
-        return g.pipeline_model_configs
+        self._builder_state = {key: state[key] for key in _BUILDER_KEYS}
 
     # The job settings (one attribute per key is added below the class)
-    server_config_cached = _on_g("_server_config_cached", "Whether the settings came from, or were saved to, the file.",
-                                 writable=False)
-    tmp_dir = _on_g("tmp_dir", "Where blockwise tasks keep their progress.")
-    blockwise_tasks_dir = _on_g("blockwise_tasks_dir", "Where blockwise task YAMLs and master logs go.")
+    @property
+    def settings(self):
+        """The launcher settings themselves (jobs.settings.LauncherSettings)."""
+        return launcher_settings()
 
     @property
     def server_config(self):
         """{key: value} of the saved settings."""
-        return {key: getattr(g, key) for key in SERVER_CONFIG_KEYS}
+        return launcher_settings().as_dict()
+
+    @property
+    def server_config_cached(self):
+        """Whether the settings came from, or were saved to, the file."""
+        return launcher_settings().cached
 
     def save_server_config(self):
         """Write the settings to ~/.cellmap_flow/server_config.yaml."""
-        g.save_server_config()
+        launcher_settings().save()
 
-    # The finetune and review tabs
-    minio_state = _on_g("minio_state", "The dashboard's MinIO: its process, address, bucket and session directory.")
-    annotation_volumes = _on_g("annotation_volumes", "{volume id: its record}, the volumes served through MinIO.")
-    output_sessions = _on_g("output_sessions", "{output base directory: its session directory}.")
-    finetune_job_manager = _on_g("finetune_job_manager",
-                                 "The training jobs' FinetuneJobManager, made when first asked for.")
-    review = _on_g("review", "The Review tab's open index (review_routes.ReviewSession), or None.")
+    def tasks_dir(self) -> str:
+        """``blockwise_tasks_dir``, made if it is missing."""
+        tasks_dir = self.blockwise_tasks_dir or os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
+        os.makedirs(tasks_dir, exist_ok=True)
+        return tasks_dir
 
-    # The log panel and the box tool
-    log_buffer = _on_g("log_buffer", "The last log lines, for a log panel that connects late.")
-    log_clients = _on_g("log_clients", "Each open log stream's queue.")
-    bbx_generator_state = _on_g("bbx_generator_state", "The bounding-box tool's viewer and boxes.")
+    # The finetune tab
+    @property
+    def finetune_job_manager(self):
+        """The training jobs' FinetuneJobManager, made when first asked for."""
+        if self._finetune_job_manager is None:
+            from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
+
+            self._finetune_job_manager = FinetuneJobManager()
+        return self._finetune_job_manager
+
+    @finetune_job_manager.setter
+    def finetune_job_manager(self, manager):
+        self._finetune_job_manager = manager
+
+
+def _setting(key):
+    """A session attribute that is ``launcher_settings().<key>``."""
+    def get(self):
+        return getattr(launcher_settings(), key)
+
+    def set(self, value):
+        setattr(launcher_settings(), key, value)
+
+    return property(get, set, doc=f"The saved setting {key!r}.")
 
 
 # The saved settings, one attribute per key, so that the list cannot drift from
-# the defaults (globals.SERVER_CONFIG_DEFAULTS is the one place a key is added).
+# the defaults (jobs.settings.SERVER_CONFIG_DEFAULTS is the one place a key is added).
 for _key in SERVER_CONFIG_KEYS:
-    setattr(Session, _key, _on_g(_key, f"The saved setting {_key!r}."))
+    setattr(Session, _key, _setting(_key))
 del _key
 
 _session = Session()

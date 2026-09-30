@@ -14,8 +14,8 @@ import os
 import pytest
 import zarr
 
-import cellmap_flow.globals as G
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
+from cellmap_flow.jobs import settings
 
 
 @pytest.mark.parametrize("yaml_text, message", [
@@ -25,8 +25,8 @@ from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
     pytest.param("data_path: /d.zarr\n", "charge_group", id="no-charge-group-and-none-saved"),
 ])
 def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, message):
-    monkeypatch.setattr(G, "load_server_config_cache", lambda: None)
-    monkeypatch.setitem(G.SERVER_CONFIG_DEFAULTS, "charge_group", "")
+    monkeypatch.setattr(settings, "load_server_config_cache", lambda: None)
+    monkeypatch.setitem(settings.SERVER_CONFIG_DEFAULTS, "charge_group", "")
     (tmp_path / "c.yaml").write_text(yaml_text)
     with pytest.raises(ConfigError, match=message) as raised:
         load_config(str(tmp_path / "c.yaml"))

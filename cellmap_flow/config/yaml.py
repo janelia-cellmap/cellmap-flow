@@ -110,7 +110,7 @@ def load_config(path: str) -> Dict[str, Any]:
     if not isinstance(config, dict):
         raise ConfigError(f"{path} does not contain a YAML mapping")
 
-    from cellmap_flow.globals import load_server_config_cache, SERVER_CONFIG_DEFAULTS
+    from cellmap_flow.jobs.settings import load_server_config_cache, SERVER_CONFIG_DEFAULTS
 
     # Required top-level fields
     if "data_path" not in config:

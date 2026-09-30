@@ -8,6 +8,7 @@ import zarr
 from neuroglancer import AxisAlignedBoundingBoxAnnotation as Box
 
 from cellmap_flow.globals import g
+from cellmap_flow.jobs.settings import LauncherSettings
 
 READ_YAML = "/api/finetune/read-yaml"
 
@@ -58,7 +59,7 @@ def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
 )
 def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, monkeypatch, url, payload, error):
     """The shape every form reads: {"success": false, "error": ...}."""
-    monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
+    monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     g.queue, g.nb_workers, g.dataset_path, g.models_config = "gpu_h100", 14, "/data/raw.zarr", []
     kwargs = {"data": payload} if isinstance(payload, str) else {"json": payload}
     response = dashboard.post(url, **kwargs)

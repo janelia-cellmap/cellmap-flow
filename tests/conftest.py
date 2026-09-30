@@ -1,7 +1,7 @@
 """Shared test setup, and the stand-ins most areas need.
 
 HOME is redirected before anything imports cellmap_flow: importing the package
-executes ~/.cellmap_flow/plugins/*.py and the Flow singleton reads
+executes ~/.cellmap_flow/plugins/*.py, and saving the launcher settings writes
 ~/.cellmap_flow/server_config.yaml, so otherwise the suite depends on (and can
 write to) the developer's real config.
 
@@ -18,7 +18,6 @@ import string
 import subprocess
 import sys
 import tempfile
-from collections import deque
 from types import SimpleNamespace
 
 os.environ["HOME"] = tempfile.mkdtemp(prefix="cellmap_flow_test_home_")
@@ -70,6 +69,17 @@ _REQUIREMENTS = {
 }
 
 
+def pytest_configure(config):
+    # K16 moves the package and its tests off the deprecated
+    # cellmap_flow.globals.g one area at a time. Until the last lands, every
+    # use left warns, hundreds per run, which would bury the summary; so only
+    # the facade's own warnings are hidden, and only here. Its test still sees
+    # them (pytest.warns records past filters), and adding
+    #   -W "default:cellmap_flow.globals.:DeprecationWarning"
+    # to a run lists the uses that remain. Delete this once nothing uses g.
+    config.addinivalue_line("filterwarnings", r"ignore:cellmap_flow\.globals\.:DeprecationWarning")
+
+
 def pytest_collection_modifyitems(config, items):
     available = {}
     for item in items:
@@ -85,17 +95,25 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(autouse=True)
-def _restore_flow_state():
-    """Undo whatever a test does to the process-wide Flow singleton."""
-    from cellmap_flow.globals import g
+def _fresh_process_state(monkeypatch):
+    """Give every test the state a new process starts with: the launcher
+    settings at their defaults (not the HOME file, so a test that saved them
+    cannot leak into later ones), an empty chain, no started jobs and a new
+    dashboard session.
 
-    saved = {
-        key: value.copy() if isinstance(value, (list, dict, set, deque)) else value
-        for key, value in vars(g).items()
-    }
-    yield
-    vars(g).clear()
-    vars(g).update(saved)
+    The owners are swapped for new ones rather than copied back afterwards.
+    That holds only because every reader asks for them when it needs them;
+    nothing may keep ``get_session()`` or ``launcher_settings()`` in a module
+    global.
+    """
+    from cellmap_flow import process_chain
+    from cellmap_flow.dashboard import state
+    from cellmap_flow.jobs import launch, settings
+
+    monkeypatch.setattr(settings, "_current", settings.LauncherSettings())
+    monkeypatch.setattr(process_chain, "_current", process_chain.ProcessChain())
+    monkeypatch.setattr(launch, "_started", [])
+    monkeypatch.setattr(state, "_session", state.Session())
 
 
 @pytest.fixture(autouse=True)
@@ -335,16 +353,17 @@ def fake_lsf(monkeypatch, tmp_path):
 
 @pytest.fixture
 def viewer():
-    """A neuroglancer viewer without its web server, as ``g.viewer``: z, y, x in 8 nm voxels."""
+    """A neuroglancer viewer without its web server, as the session's viewer: z, y, x in 8 nm voxels."""
     import neuroglancer
     from neuroglancer.viewer_base import ViewerBase
 
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
-    g.viewer = ViewerBase()
-    with g.viewer.txn() as s:
+    session = get_session()
+    session.viewer = ViewerBase()
+    with session.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[8, 8, 8])
-    return g.viewer
+    return session.viewer
 
 
 @pytest.fixture

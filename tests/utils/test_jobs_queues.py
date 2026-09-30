@@ -2,7 +2,7 @@
 
 import pytest
 
-from cellmap_flow.globals import SERVER_CONFIG_DEFAULTS
+from cellmap_flow.jobs.settings import SERVER_CONFIG_DEFAULTS
 from cellmap_flow.jobs import queues
 
 HEADER = "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP\n"

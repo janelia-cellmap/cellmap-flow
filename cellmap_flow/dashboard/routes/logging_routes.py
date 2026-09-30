@@ -11,6 +11,25 @@ logger = logging.getLogger(__name__)
 logging_bp = Blueprint("logging", __name__)
 
 
+class LogHandler(logging.Handler):
+    """Feeds the log panel: each record into the session's log_buffer, and
+    to every open stream's queue.
+
+    It runs on whichever thread logged, often one with no app context (a
+    launch, a job monitor), so it asks for the session at emit time.
+    """
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        session = get_session()
+        session.log_buffer.append(log_entry)
+        for client_queue in session.log_clients:
+            try:
+                client_queue.put_nowait(log_entry)
+            except queue.Full:
+                pass
+
+
 @logging_bp.route("/api/logs/stream")
 def stream_logs():
     """Stream logs via Server-Sent Events (SSE)"""

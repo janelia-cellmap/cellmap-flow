@@ -10,11 +10,11 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-import cellmap_flow.globals as G
 from cellmap_flow.cli import infer
 from cellmap_flow.cli.main import cli
 from cellmap_flow.globals import g
 from cellmap_flow.dashboard.services import startup
+from cellmap_flow.jobs import settings
 from cellmap_flow.jobs.spec import JobStartError
 
 HERE = os.path.dirname(os.path.dirname(__file__))
@@ -31,7 +31,7 @@ def test_without_q_the_saved_queue_is_used_and_kept(monkeypatch, tmp_path, argv,
     """-q defaulted to gpu_h100, unlike -P, and that was then saved: running a
     model without -q replaced the queue chosen in the dashboard or a YAML."""
     launched = []
-    monkeypatch.setattr(G, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
+    monkeypatch.setattr(settings, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
     monkeypatch.setattr(infer, "start_hosts", lambda command, queue, project, name: launched.append(queue))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
     g.queue = "gpu_a100"

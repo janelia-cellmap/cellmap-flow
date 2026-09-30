@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 import requests
 
+from cellmap_flow.jobs.launch import started_jobs
 from cellmap_flow.models.geometry import number
 
 logger = logging.getLogger(__name__)
@@ -78,9 +79,7 @@ def model_geometry(info: dict):
 
 def running_job_host(model_name):
     """The host serving ``model_name``, if a job for it is up."""
-    from cellmap_flow.globals import g  # local: globals pulls in a lot
-
-    for job in getattr(g, "jobs", []) or []:
+    for job in started_jobs():
         if getattr(job, "model_name", None) == model_name:
             return getattr(job, "host", None)
     return None

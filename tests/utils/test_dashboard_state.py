@@ -1,8 +1,9 @@
-"""The dashboard's session (dashboard.state) keeps its state on g, and only there.
+"""The dashboard's session (dashboard.state): what it forwards to the owners it
+shares with processes that have no dashboard, and what it refuses.
 
-conftest restores ``vars(g)`` after each test, and the CLIs and the job
-manager still read g, so anything stored beside it would outlive a test and
-disagree with them.
+The launcher settings, the started jobs and the chain are read by
+start_hosts, cleanup_handler and the servers from their owners; a session
+that kept its own copy would disagree with them.
 """
 
 from types import SimpleNamespace
@@ -10,24 +11,30 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.globals import SERVER_CONFIG_KEYS, g
+from cellmap_flow.jobs.launch import started_jobs
+from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS, launcher_settings
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.pipeline_spec import PipelineSpec
 
 
-@pytest.mark.parametrize("name, on_g", [
-    pytest.param("viewer", "viewer", id="viewer"),
-    pytest.param("neuroglancer_url", "NEUROGLANCER_URL", id="neuroglancer-url"),
-    pytest.param("minio_state", "minio_state", id="minio-state"),
-    *[pytest.param(key, key, id=f"setting-{key}") for key in SERVER_CONFIG_KEYS],
+@pytest.mark.parametrize("name, owner", [
+    *[pytest.param(key, lambda key=key: getattr(launcher_settings(), key), id=f"setting-{key}")
+      for key in SERVER_CONFIG_KEYS],
+    pytest.param("jobs", started_jobs, id="jobs"),
 ])
-def test_the_session_reads_and_writes_g(name, on_g):
-    value = object()
+def test_the_session_reads_and_writes_the_owners_state(name, owner):
+    value = [object()]
     setattr(get_session(), name, value)
-    assert getattr(g, on_g) is value and getattr(get_session(), name) is value
+    assert owner() == value and getattr(get_session(), name) == value
 
 
-def test_the_session_stores_nothing_of_its_own():
+def test_assigning_the_jobs_keeps_the_list_start_hosts_appends_to():
+    started = started_jobs()
+    get_session().jobs = [SimpleNamespace(model_name="mito")]
+    assert started_jobs() is started and [job.model_name for job in started] == ["mito"]
+
+
+def test_a_misspelt_or_read_only_attribute_raises():
     with pytest.raises(AttributeError):
         get_session().dataset_pth = "/a/misspelt/attribute"
     with pytest.raises(AttributeError):

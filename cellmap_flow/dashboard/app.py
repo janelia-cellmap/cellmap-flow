@@ -4,9 +4,9 @@ import logging
 
 from flask import Flask
 
-from cellmap_flow.globals import g, LogHandler
+from cellmap_flow.globals import g
 from cellmap_flow.logging_setup import LOG_DATEFMT, LOG_FORMAT, configure_logging
-from cellmap_flow.dashboard.routes.logging_routes import logging_bp
+from cellmap_flow.dashboard.routes.logging_routes import LogHandler, logging_bp
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
 from cellmap_flow.dashboard.routes.models import models_bp

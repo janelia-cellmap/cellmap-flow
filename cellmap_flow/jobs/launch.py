@@ -2,8 +2,9 @@
 
 The policy over ``jobs.lsf`` and ``jobs.local``: ``start_hosts`` runs a
 server on LSF or on this machine, tries the other GPU queues when one does
-not start it, waits for its address and records the job in ``g.jobs``;
-``install_cleanup_handlers`` kills the recorded jobs on Ctrl+C.
+not start it, waits for its address and records the job in
+``started_jobs()``; ``install_cleanup_handlers`` kills the recorded jobs on
+Ctrl+C.
 
 Two deployment settings are read here, once, at import:
 
@@ -13,8 +14,9 @@ Two deployment settings are read here, once, at import:
 - ``SERVER_LOG_DIR``, where job logs go; tests and deployments point it
   elsewhere, and ``jobs.spec.default_log_dir`` reads it at submit time.
 
-``cellmap_flow.globals`` is imported only when a job is started or killed,
-so importing this module does not load the dashboard's state.
+The job settings a start falls back on (the run limit, whether to try
+other queues) are ``jobs.settings.launcher_settings()``, read when a job is
+started.
 """
 
 import logging
@@ -33,6 +35,7 @@ from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.lsf import available as is_bsub_available
 from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.ready import READY_ENV, ready_path
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
 
@@ -63,16 +66,27 @@ def _logged(error: Exception) -> Exception:
     return error
 
 
+# The jobs start_hosts started in this process, oldest first. Read it
+# through started_jobs(), which looks it up at call time, so tests can give
+# each test its own list here.
+_started: list = []
+
+
+def started_jobs() -> list:
+    """The jobs this process started: the live list, which start_hosts
+    appends to, cleanup_handler kills from, and the dashboard lists (its
+    Session.jobs replaces the contents rather than the list)."""
+    return _started
+
+
 def cleanup_handler(signum: int, frame) -> None:
     """
     Signal handler for graceful shutdown.
     Kills all tracked jobs, then exits with the conventional 128 + signal
     status, so a stopped run does not report success.
     """
-    from cellmap_flow.globals import g
-
     logger.warning(f"Received signal {signum}. Cleaning up jobs...")
-    for job in list(g.jobs):
+    for job in list(started_jobs()):
         logger.info(f"Killing job: {job.model_name}")
         try:
             job.kill()
@@ -87,7 +101,7 @@ def install_cleanup_handlers() -> bool:
     For entry points that launch jobs, called from their main thread. This
     used to happen when the module was imported, which set the handlers for
     every importer, and raised ValueError when the first import happened off
-    the main thread (the lazy g.finetune_job_manager, a dashboard request).
+    the main thread (the lazy Session.finetune_job_manager, a dashboard request).
     """
     if threading.current_thread() is not threading.main_thread():
         logger.debug("Not on the main thread; leaving signal handlers alone")
@@ -179,32 +193,32 @@ def start_hosts(
         job_name: Name for the job
         use_https: Whether to use HTTPS (adds cert/key flags)
         wait_for_host: Whether to wait for host information before returning
-        walltime: LSF run limit ("HH:MM" or minutes); defaults to g.walltime
+        walltime: LSF run limit ("HH:MM" or minutes); defaults to the
+            launcher settings' walltime, then the site's
         cycle_queues: Try other GPU queues when the requested one is busy or
-            closed. Defaults to g.cycle_gpu_queues, which defaults to True.
+            closed. Defaults to the launcher settings' cycle_gpu_queues,
+            which defaults to True.
         local: Run on this machine even if bsub is available.
 
     Returns:
         Job object (LSFJob or LocalJob) with job information. ``job.queue``
-        is the queue it landed on. The globals are left alone: the queue the
-        job fell back to is not what the next submission should ask for.
+        is the queue it landed on. The settings are left alone: the queue
+        the job fell back to is not what the next submission should ask for.
 
     Raises:
         JobStartError: bsub is available but no queue accepted the job.
     """
-    from cellmap_flow.globals import g
-
     # An explicit argument wins; otherwise whatever the dashboard or yaml set;
     # otherwise the shared default. Never None, or the job silently inherits
     # the queue's two hours.
     if walltime is None:
-        walltime = getattr(g, "walltime", None) or _SITE.default_walltime
+        walltime = launcher_settings().walltime or _SITE.default_walltime
 
     # Same precedence as walltime: explicit argument, then the dashboard/yaml
-    # setting, then the default. Cycling is on by default because a job that
-    # starts on a different GPU queue beats one that never starts.
+    # setting, whose default is True. Cycling is on by default because a job
+    # that starts on a different GPU queue beats one that never starts.
     if cycle_queues is None:
-        cycle_queues = getattr(g, "cycle_gpu_queues", True)
+        cycle_queues = launcher_settings().cycle_gpu_queues
 
     # Add HTTPS flags if needed
     if use_https:
@@ -245,7 +259,7 @@ def start_hosts(
             job.queue = candidate
 
             if not wait_for_host:
-                g.jobs.append(job)
+                started_jobs().append(job)
                 return job
 
             # Give an unstarted job less patience while there is somewhere
@@ -276,7 +290,7 @@ def start_hosts(
                     )
                 else:
                     logger.info(f"Running on {candidate}")
-                g.jobs.append(job)
+                started_jobs().append(job)
                 return job
 
             # Only a job that never started is a queue problem. One that ran
@@ -331,5 +345,5 @@ def start_hosts(
             f"see {getattr(job, 'log_file', None)}"
         ))
 
-    g.jobs.append(job)
+    started_jobs().append(job)
     return job

@@ -60,6 +60,9 @@ Reading data and running a model
        ``digest()`` and ``build()``. Also ``chain_output_dtype``,
        ``chain_num_channels``, ``chain_is_segmentation`` and the
        ``op_schemas`` the pages build their forms from.
+   * - ``process_chain.py``
+     - ``process_chain()``: the process's chain, its live steps and their
+       configured ``spec``, changed only by ``set()``. See `Where state lives`_.
    * - ``inference/runner.py``
      - ``ModelRunner``: a model on its device, the warmup forward (which
        checks the declared shapes, probes the output range and decides on
@@ -149,9 +152,12 @@ Serving and jobs
        - ``queues``: which GPU queues are usable, and the order to try them;
        - ``site``: ``SiteProfile``, the cluster's numbers (queues, cores,
          walltime, timeouts); only ``JANELIA`` exists;
+       - ``settings``: ``launcher_settings()``, the settings saved in
+         ``~/.cellmap_flow/server_config.yaml`` (queue, charge group,
+         walltime, ...), with their defaults;
        - ``ready``: the file a server writes once it knows its address;
        - ``launch``: ``start_hosts`` (the policy over the others),
-         ``submit_bsub_job``, ``install_cleanup_handlers``,
+         ``submit_bsub_job``, ``started_jobs``, ``install_cleanup_handlers``,
          ``SERVER_COMMAND`` and ``SERVER_LOG_DIR``.
 
 The viewer and the dashboard
@@ -352,9 +358,10 @@ Entry points and process-wide modules
    * - ``logging_setup.py``
      - ``configure_logging``: the one log format, applied with ``force=True``.
    * - ``globals.py``
-     - ``Flow``, the ``g`` singleton; the saved settings' defaults
-       (``SERVER_CONFIG_DEFAULTS``); the log panel's ``LogHandler``. Importing
-       it configures logging and reads ``~/.cellmap_flow/server_config.yaml``.
+     - Deprecated, and gone after 0.3.0: ``g`` (and its type ``Flow``), which
+       forwards each name it had to that name's owner with a
+       ``DeprecationWarning``. Importing it configures logging, as it always
+       has. See `Where state lives`_.
    * - ``review.py``, ``review_index.py``
      - The Review tab's SQLite index: reading it, and building one
        (``python -m cellmap_flow.review_index``). See :doc:`review`.
@@ -455,13 +462,14 @@ Launching a model server
    queue does not start the job it tries the next of
    ``jobs.queues.candidates``. The caller gives the queue and charge group
    (the CLIs default to the saved settings); the walltime is the caller's,
-   else the saved setting in ``g``, else ``jobs.site``'s. It runs the server
+   else the saved setting (``jobs.settings.launcher_settings()``), else
+   ``jobs.site``'s. It runs the server
    on this machine (``jobs.local``) only when bsub is not installed; when
    bsub is there and every queue fails, it raises ``JobStartError``.
 #. It waits for the server's address: from the ready file named in the
    job's environment (``jobs.ready``), else from the
    ``CELLMAP_FLOW_SERVER_IP(...)`` marker in the job's output, through
-   bpeek. Then it adds the job to ``g.jobs``.
+   bpeek. Then it adds the job to ``jobs.launch.started_jobs()``.
 #. On the GPU node, ``cellmap_flow serve --model <entry> -d <data path>``
    (``cli/server_cli.py``) rebuilds the config with ``registry.build_model``,
    as a YAML's model entry is rebuilt, and starts ``CellMapFlowServer``. Its ``Inferencer`` loads the model, and the
@@ -597,53 +605,71 @@ Annotation volumes and MinIO sync
 Where state lives
 -----------------
 
-The ``g`` singleton
-~~~~~~~~~~~~~~~~~~~
+Its owners
+~~~~~~~~~~
 
-``cellmap_flow.globals.g`` is the one ``Flow`` instance in the process. It
-holds:
+Four objects hold what a process shares. Each is read through a function, at
+call time and never into a module global, because ``tests/conftest.py``
+swaps in fresh ones for every test (``_fresh_process_state``).
+
+- ``jobs.settings.launcher_settings()``: the launcher settings, one attribute
+  per key of ``SERVER_CONFIG_DEFAULTS`` (``queue``, ``charge_group``,
+  ``walltime``, ...), loaded from ``~/.cellmap_flow/server_config.yaml`` the
+  first time the process asks, and ``save()``. The CLIs and
+  ``/api/server-config`` write them; ``start_hosts``, the job manager's
+  submit and blockwise read them.
+- ``process_chain.process_chain()``: the process's chain. ``input_norms``
+  and ``postprocess`` are the live steps, which can hold state;
+  ``input_norm_config`` and ``postprocess_config`` the steps as the dashboard
+  received them; ``spec`` the chain as data, from the configs or else the
+  live steps; ``set(spec, built=None)`` the one way to change it. In the
+  dashboard it is the chain the user submitted. In a server or a blockwise
+  worker it is the fallback for a layer URL or model script that gives no
+  chain.
+- ``jobs.launch.started_jobs()``: the servers this process started, which
+  ``start_hosts`` appends to, ``cleanup_handler`` kills, and
+  ``serving.client.running_job_host`` looks a model's host up in.
+- ``dashboard.state.get_session()``: the dashboard's own state (below).
+
+The dashboard's ``Session``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Dashboard code reads and writes its state through
+``dashboard.state.get_session()``, a module registry rather than Flask's
+``app.extensions``: the CLIs fill it before ``dashboard.app`` is imported,
+and launch threads, job monitors, the MinIO sync thread and the log panel's
+handler run without an app context. It holds:
 
 - the dataset and the viewer: ``dataset_path``, ``viewer``, ``raw``,
-  ``shaders``, ``shader_controls``, ``extra_layers``, ``NEUROGLANCER_URL``;
-- the models: ``jobs`` (the running servers), ``models_config``,
-  ``model_catalog``;
-- the chain: ``input_norms`` and ``postprocess`` (the live steps), their
-  configs, and ``set_pipeline``, the one way to change them;
-- the pipeline builder's canvas (``pipeline_*``);
-- the saved settings, one attribute per key of ``SERVER_CONFIG_DEFAULTS``
-  (``queue``, ``charge_group``, ``walltime``, ...), and blockwise's
-  ``tmp_dir`` and ``blockwise_tasks_dir``;
+  ``shaders``, ``shader_controls``, ``extra_layers``, ``neuroglancer_url``;
+- the models: ``models_config``, ``model_catalog``;
+- the pipeline builder's last apply: ``builder_state``,
+  ``builder_model_configs``;
+- blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``;
 - the finetune and review tabs: ``minio_state``, ``annotation_volumes``,
   ``output_sessions``, ``finetune_job_manager`` (made when first asked for),
   ``review``;
 - the log panel's ``log_buffer`` and ``log_clients``, and the box tool's
   ``bbx_generator_state``.
 
-Outside the dashboard, ``g`` is still read directly by the CLIs,
-``jobs.launch.start_hosts`` (it appends to ``g.jobs`` and reads the saved
-walltime and queue cycling), ``serving.client.running_job_host``
-(``g.jobs``), the job manager's ``submit.launch`` (walltime), the blockwise
-processor, and ``server.py``, ``inferencer.py`` and
-``ImageDataInterface``, for a process-wide chain when a layer URL or a model
-script gives none. Tests can change it freely: ``tests/conftest.py``
-restores ``vars(g)`` after every test.
+It forwards the rest to the owners above: each setting, ``settings``,
+``server_config`` and ``save_server_config()``; ``input_norms`` and
+``postprocess`` (read-only), ``pipeline_spec`` and ``set_pipeline(spec)``;
+and ``jobs``, whose assignment replaces the started list's contents. It has
+``__slots__``, so a misspelt attribute raises instead of being stored.
 
-The dashboard's ``Session``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The deprecated ``g``
+~~~~~~~~~~~~~~~~~~~~
 
-Dashboard code reads and writes its state through
-``dashboard.state.get_session()``. A ``Session`` holds nothing itself: each
-attribute is a property onto ``g``, so the storage can move without touching
-the routes. It has ``__slots__ = ()``, so a misspelt attribute raises instead
-of being stored. ``input_norms`` and ``postprocess`` are read-only; change the
-chain with ``set_pipeline(spec)``. Every route module,
-``dashboard/services/``, ``finetune_layers`` and ``finetune_utils`` use it.
-Within ``dashboard/`` only ``state.py`` and ``app.py`` (the log handler and
-the viewer's address) import ``g``, and ``routes/blockwise.py`` finds its
-directory with ``globals.get_blockwise_tasks_dir()``.
-
-``g`` is being replaced (K16): its state moves into explicit objects, and
-``g`` stays for one release as a facade that warns when used. Until then:
+``cellmap_flow.globals.g`` stays for one release, for scripts and plugins.
+Each name it had forwards to its owner with a ``DeprecationWarning`` that
+names the replacement; ``pytest`` hides these while the package's own
+modules move off it (K16), and they are silent in the servers and the
+dashboard, whose code is not ``__main__``. Until the move is done, ``g`` is
+still used by the CLIs, the blockwise processor, the job manager's
+``submit.launch`` (walltime), ``dashboard/app.py`` (the viewer's address),
+and ``server.py``, ``inferencer.py`` and ``ImageDataInterface`` (the chain).
+New code uses the owners:
 
 - add no attribute to ``g``, and no ``g.x`` read in a module that doesn't
   already have one;
@@ -662,7 +688,8 @@ On disk
    * - Where
      - What
    * - ``~/.cellmap_flow/server_config.yaml``
-     - The saved job settings, read when ``g`` is made.
+     - The saved job settings: read by ``launcher_settings()`` the first time
+       a process asks, and by ``config.yaml.load_config``.
    * - ``~/.cellmap_flow/plugins/``
      - Registered plugins.
    * - ``~/.cellmap_flow/server_logs/``

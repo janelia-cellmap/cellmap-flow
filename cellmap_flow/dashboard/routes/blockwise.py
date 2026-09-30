@@ -32,7 +32,6 @@ from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import JobSpec
 from cellmap_flow.serving.protocol import INPUT_NORM_KEY, POSTPROCESS_KEY
-from cellmap_flow.globals import get_blockwise_tasks_dir
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +200,7 @@ def _generate(pipeline, job_name):
     if output_channels and isinstance(output_channels, list):
         task["output_channels"] = output_channels
 
-    tasks_dir = get_blockwise_tasks_dir()
+    tasks_dir = get_session().tasks_dir()
     if separate_zarrs and bounding_boxes:
         # One task per box, each writing its own box_<n> zarr in the output.
         task_paths = [
@@ -319,7 +318,7 @@ def submit_blockwise_task():
             cpus=settings.nb_cores_master,
             charge_group=settings.charge_group,
             walltime=_task_walltime(),
-            log_dir=get_blockwise_tasks_dir(),
+            log_dir=get_session().tasks_dir(),
         )
         bsub_cmd = jobs_lsf.bsub_argv(spec)
         log_pattern = str(jobs_lsf.log_pattern(spec))

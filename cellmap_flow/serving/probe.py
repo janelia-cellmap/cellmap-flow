@@ -308,9 +308,8 @@ DACAPO_FRAMEWORKS = ("dacapo",)
 # Models published by the CellMap project. Their metadata.json does not always
 # say "dacapo" -- cellmap/mito-aff-unet-setup-16 reports a bare "torch" -- but
 # the collection is trained on EM rescaled to [-1, 1]. The repo agrees with
-# itself on this: the commented-out default in globals.py, every example yaml,
-# and the training input_norm used for the finetuning runs all use
-# MinMax(0,255) then x*2-1.
+# itself on this: every example yaml and the training input_norm used for the
+# finetuning runs use MinMax(0,255) then x*2-1.
 # The HF org prefix must be anchored: every model on this filesystem lives
 # under /nrs/cellmap/models/, including other groups' (saalfeldlab's fly
 # models), so a bare "cellmap/" substring matches far too much.

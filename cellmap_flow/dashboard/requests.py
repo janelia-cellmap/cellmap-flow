@@ -35,7 +35,7 @@ from pydantic import (
     model_validator,
 )
 
-from cellmap_flow.globals import SERVER_CONFIG_KEYS
+from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 
 
@@ -84,7 +84,7 @@ def parse(model, body):
 
 
 class ServerConfigUpdate(BaseModel):
-    """Any of the saved settings (globals.SERVER_CONFIG_DEFAULTS); only those
+    """Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
     sent change. The counts must be whole numbers; the rest are kept as sent,
     and keys that are not settings are ignored."""
 
