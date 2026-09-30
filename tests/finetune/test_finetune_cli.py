@@ -244,7 +244,7 @@ def test_the_cli_takes_every_model_type_the_job_manager_submits():
     """argparse knew fly, dacapo, huggingface and script, so a job for an exported
     (cellmap) or finetuned (finetune) model died on the GPU node with exit 2."""
     from cellmap_flow.finetune.cli import build_arg_parser
-    from cellmap_flow.finetune.finetune_job_manager import TRAINABLE_MODEL_TYPES
+    from cellmap_flow.finetune.job_manager.submit import TRAINABLE_MODEL_TYPES
 
     for model_type in TRAINABLE_MODEL_TYPES:
         args = ["--corrections", "/c", "--output-dir", "/o", "--model-type", model_type]
