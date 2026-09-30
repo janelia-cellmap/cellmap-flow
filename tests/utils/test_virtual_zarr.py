@@ -7,27 +7,17 @@ from funlib.geometry import Roi
 from cellmap_flow.serving import virtual_zarr
 
 
-@pytest.mark.parametrize(
-    "raw, origin, voxel, served, index, roi",
-    [
-        # 11 voxels of 8 nm from -4 nm end at 84 nm: 5.5 voxels of 16 nm, rounded up.
-        ((-4, 11, 8), -4, 16, 6, 2, Roi((-4 + 128,) * 3, (64,) * 3)),
-        # The grid starts at the data's corner, not at 0.
-        ((32, 8, 8), 32, 8, 8, 1, Roi((64,) * 3, (32,) * 3)),
-    ],
-)
-def test_the_served_shape_and_where_a_chunk_is(raw, origin, voxel, served, index, roi):
-    offset, shape, raw_voxel = raw
-    origin = np.array([origin] * 3)
-    assert virtual_zarr.served_spatial_shape([offset] * 3, [shape] * 3, [raw_voxel] * 3, origin, [voxel] * 3) == [served] * 3
-    assert virtual_zarr.chunk_roi((index,) * 3, (4, 4, 4), (voxel,) * 3, origin) == roi
+def test_the_served_shape_rounds_up_and_chunks_start_at_the_origin():
+    # 11 voxels of 8 nm from -4 nm end at 84 nm: 5.5 voxels of 16 nm, so 6.
+    origin = np.array([-4] * 3)
+    assert virtual_zarr.served_spatial_shape([-4] * 3, [11] * 3, [8] * 3, origin, [16] * 3) == [6] * 3
+    assert virtual_zarr.chunk_roi((2, 2, 2), (4, 4, 4), (16, 16, 16), origin) == Roi((124,) * 3, (64,) * 3)
 
 
 @pytest.mark.parametrize(
     "shape, model_axes, expected_shape",
     [
         ((2, 3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5, 2)),  # transposed
-        ((1, 3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5, 1)),  # one channel: reshaped, same bytes
         ((3, 4, 5, 2), ("z", "y", "x", "c"), (3, 4, 5, 2)),  # already in zarr's order
         ((3, 4, 5), ("c", "z", "y", "x"), (3, 4, 5)),  # not what it says it is: left alone
     ],

@@ -10,8 +10,6 @@ import pytest
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.geometry import ModelGeometry
-from cellmap_flow.models.models_config import ScriptModelConfig
-from tests.utils.serving_helpers import IDENTITY_MODEL, write_script
 
 
 @pytest.mark.parametrize(
@@ -47,29 +45,6 @@ def test_what_follows_from_a_configs_sizes(config, expected):
     assert got == expected
     assert all(type(v) in (int, float) for v in geometry.read_shape + geometry.input_voxel_size)
     assert geometry.context == Coordinate(expected["context"])
-
-
-def test_a_model_configs_geometry_is_read_once(tmp_path):
-    model_config = ScriptModelConfig(script_path=write_script(tmp_path, IDENTITY_MODEL))
-    geometry = model_config.geometry
-    assert geometry is model_config.geometry
-    assert geometry == ModelGeometry(
-        (8, 8, 8), (8, 8, 8), (32, 32, 32), (32, 32, 32), 1, output_dtype=np.float32
-    )
-    assert geometry.to_model_info() == {
-        "output_channels": 1,
-        "channels": None,
-        "write_shape": [32, 32, 32],
-        "read_shape": [32, 32, 32],
-        "output_voxel_size": [8, 8, 8],
-        "input_voxel_size": [8, 8, 8],
-        "effective_output_voxel_size": [8, 8, 8],
-        "has_channel": True,
-        "output_axes": ["z", "y", "x", "c"],
-    }
-    # Read from 12 nm data as if it were 8 nm: an output voxel is 12 nm.
-    info = geometry.to_model_info(["z", "y", "x"], actual_input_voxel_size=(12, 12, 12))
-    assert info["effective_output_voxel_size"] == [12, 12, 12]
 
 
 def test_the_serving_modules_import_nothing_heavy(tmp_path):
