@@ -216,7 +216,7 @@
 
     {# What the page's scripts need from the server (static/js/lib/page-data.js):
        the palette's ops, models and mergers, the dataset, and the pipeline to
-       start from (what the builder last applied, or the live chain). #}
+       start from (the live chain, on the builder's last canvas). #}
     <script type="application/json" id="page-data">{{ {
         "op_schemas": op_schemas,
         "input_normalizers": input_normalizers,

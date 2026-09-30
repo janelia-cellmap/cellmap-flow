@@ -97,10 +97,12 @@ export function defaultPosition(type, i) {
   }
 }
 
-// The page's starting pipeline: what the builder last applied, or the live
-// chain (pageData().pipeline). Every node gets an id and a position, and
-// there is always an INPUT node, with the dashboard's dataset if it has no
-// path of its own. The edges are then rebuilt from the node order.
+// The page's starting pipeline (pageData().pipeline): the live chain's
+// steps as normalizer and postprocessor nodes, and the rest of what the
+// builder last applied (routes/pipeline_builder_page.py). Every node gets an
+// id and a position, and there is always an INPUT node, with the dashboard's
+// dataset if it has no path of its own. The edges are then rebuilt from the
+// node order.
 export function loadPipeline() {
   const start = PAGE.pipeline;
   const inputs = (start.inputs || []).map((n, i) => ({

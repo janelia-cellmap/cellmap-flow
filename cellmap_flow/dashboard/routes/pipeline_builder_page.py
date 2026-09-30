@@ -8,6 +8,7 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.dashboard.routes.index_page import page_op_schemas
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.pipeline_spec import builder_steps
 
 logger = logging.getLogger(__name__)
 
@@ -38,24 +39,58 @@ def _configured(model_name):
     return None
 
 
-def _step_nodes(kind, steps):
-    """Builder nodes for a live chain: ``{id, name, params}`` per step."""
+def _chain_nodes(prefix, steps, saved):
+    """The builder's nodes for one live chain: an ``{id, name, params,
+    position}`` node per step of ``steps`` (pipeline_spec's ``{name,
+    **params}`` steps), given ``saved``, the nodes the builder last applied
+    for that chain.
+
+    If the saved nodes are that chain, which they are unless something other
+    than the builder has set it since, they are returned exactly as saved.
+    Otherwise each step takes the id and position of the first saved node of
+    the same op not already taken, so a step whose parameters changed stays
+    where it was. A step with no such node gets a new id and no position,
+    and the page gives it a place. Saved nodes left over were steps that
+    have since gone, and are dropped.
+    """
+    if builder_steps(saved) == tuple(steps):
+        return list(saved)
+    unused = list(saved)
+    stamp = int(time.time() * 1000)
     nodes = []
-    for idx, step in enumerate(steps):
-        step_dict = step.to_dict() if hasattr(step, "to_dict") else {"name": str(step)}
-        nodes.append({
-            "id": f"{kind}-{idx}-{int(time.time()*1000)}",
-            "name": step_dict.get("name", str(step)),
-            "params": {k: v for k, v in step_dict.items() if k != "name"},
-        })
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict) or "name" not in step:
+            continue  # not a step; the op readers skip it too
+        node = {"id": f"{prefix}-{index}-{stamp}", "name": step["name"],
+                "params": {key: value for key, value in step.items() if key != "name"}}
+        same_op = next((n for n in unused if n.get("name") == step["name"]), None)
+        if same_op is not None:
+            unused.remove(same_op)
+            node["id"] = same_op.get("id", node["id"])
+            if "position" in same_op:
+                node["position"] = same_op["position"]
+        nodes.append(node)
     return nodes
 
 
 @pipeline_builder_bp.route("/pipeline-builder")
 def pipeline_builder():
-    """Render the drag-and-drop pipeline builder interface with current state from globals"""
+    """The pipeline builder, starting from the dashboard's live chain.
+
+    The pipeline the page starts from (its page data's ``pipeline``) comes
+    from two places. Its normalizer and postprocessor nodes are the live
+    chain, ``session.pipeline_spec``, however that was last set: by the
+    builder's own apply, Submit on the dashboard page, a YAML, or any other
+    PUT /api/pipeline. The page sends the chain back with its first edit,
+    so nodes taken from anywhere else would undo whatever set the chain
+    since. Everything else is the builder's last canvas
+    (``session.builder_state``): the INPUT and OUTPUT nodes with their
+    paths, boxes and channels, the model nodes, the edges, and each node's
+    position. _chain_nodes says how the chain's nodes reuse the canvas's.
+    """
     session = get_session()
     available_models = _available_models()
+    spec = session.pipeline_spec
 
     # Use the state the builder last applied, if it has applied any (an apply
     # sends at least the INPUT node, unless the user deleted it). Testing for
@@ -66,8 +101,6 @@ def pipeline_builder():
     if any(saved.values()):
         # The stored nodes, with their ids, positions and params. A model
         # node applied without its config gets the configured model's.
-        current_normalizers = saved["normalizers"]
-        current_postprocessors = saved["postprocessors"]
         current_models = saved["models"]
         for model_dict in current_models:
             if "config" not in model_dict:
@@ -78,11 +111,9 @@ def pipeline_builder():
         current_outputs = saved["outputs"]
         current_edges = saved["edges"]
     else:
-        # Nothing applied yet: the live chain, and a node per running model
-        # with its config, from the configured models or else from a YAML
-        # the builder imported.
-        current_normalizers = _step_nodes("norm", session.input_norms)
-        current_postprocessors = _step_nodes("post", session.postprocess)
+        # Nothing applied yet: a node per running model with its config,
+        # from the configured models or else from a YAML the builder
+        # imported.
         current_models = []
         saved_configs = session.builder_model_configs
         for idx, job in enumerate(session.jobs):
@@ -100,6 +131,13 @@ def pipeline_builder():
         current_inputs = []
         current_outputs = []
         current_edges = []
+
+    current_normalizers = _chain_nodes("norm", spec.input_norm, saved["normalizers"])
+    current_postprocessors = _chain_nodes("post", spec.postprocess, saved["postprocessors"])
+    # An edge to or from a saved step that has gone goes with it.
+    gone = ({node.get("id") for node in saved["normalizers"] + saved["postprocessors"]}
+            - {node.get("id") for node in current_normalizers + current_postprocessors})
+    current_edges = [edge for edge in current_edges if edge.get("from") not in gone and edge.get("to") not in gone]
 
     return render_template(
         "pipeline_builder_v2.html",

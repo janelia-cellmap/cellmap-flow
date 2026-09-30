@@ -142,19 +142,66 @@ APPLY = {"input_norm": [{"expression": "x*2", "name": "LambdaNormalizer"},
 NO_STEPS = {**CANVAS, "normalizers": [], "postprocessors": [],
             "edges": _edges(("input-1", "model-1"), ("model-1", "output-1"))}
 APPLY_NO_STEPS = {"input_norm": [], "postprocess": [], "builder": NO_STEPS}
+# What Submit on the dashboard page sends (every parameter as its field's
+# text): one parameter changed, and then other steps.
+SUBMIT_A_PARAMETER = {"input_norm": [{"name": "LambdaNormalizer", "expression": "x*2"},
+                                     {"name": "MinMaxNormalizer", "min_value": "0", "max_value": "200"}],
+                      "postprocess": [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]}
+SUBMIT_OTHER_STEPS = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"},
+                                     {"name": "ZScoreNormalizer", "mean": "1", "std": "2"}],
+                      "postprocess": []}
+LAMBDA, MINMAX = CANVAS["normalizers"]
+
+
+def _new_ids(state):
+    """``state`` with each id the page made up (``<prefix>-<i>-<ms>``) as ``<prefix>-<i>-new``."""
+    return json.loads(re.sub(r'"((?:norm|post|model)-\d+)-\d{13}"', r'"\1-new"', json.dumps(state)))
 
 
 @pytest.mark.parametrize("sent, expected", [
     pytest.param([APPLY], CANVAS, id="the-builders-own-apply"),
     # Any saved node counts as a saved canvas, not only a normalizer.
     pytest.param([APPLY_NO_STEPS], NO_STEPS, id="an-apply-with-no-steps"),
+    # A step whose parameters changed keeps its node's id and position.
+    pytest.param([APPLY, SUBMIT_A_PARAMETER], {
+        **CANVAS,
+        "normalizers": [LAMBDA, {**MINMAX, "params": {"min_value": "0", "max_value": "200"}}],
+        "postprocessors": [{**CANVAS["postprocessors"][0], "params": {"threshold": "0.5"}}],
+    }, id="then-submit-changed-a-parameter"),
+    # A new step gets a new node, with no position (the page places it); a
+    # step that went takes its node's edges with it.
+    pytest.param([APPLY, SUBMIT_OTHER_STEPS], {
+        **CANVAS,
+        "normalizers": [{**MINMAX, "params": {"min_value": "0", "max_value": "255"}},
+                        {"id": "norm-1-new", "name": "ZScoreNormalizer", "params": {"mean": "1", "std": "2"}}],
+        "postprocessors": [],
+        "edges": [edge for edge in CANVAS["edges"] if edge["id"] == "e3"],  # norm-2 -> model-1
+    }, id="then-submit-changed-the-steps"),
+    # With nothing applied, the steps as Submit sent them, not as the live
+    # ops' to_dict() has them (typed, with every default).
+    pytest.param([SUBMIT_A_PARAMETER], {
+        "inputs": [], "outputs": [], "edges": [],
+        "normalizers": [{"id": "norm-0-new", "name": "LambdaNormalizer", "params": {"expression": "x*2"}},
+                        {"id": "norm-1-new", "name": "MinMaxNormalizer",
+                         "params": {"min_value": "0", "max_value": "200"}}],
+        "models": [{"id": "model-0-new", "name": "other_model", "params": {}}],
+        "postprocessors": [{"id": "post-0-new", "name": "ThresholdPostprocessor", "params": {"threshold": "0.5"}}],
+    }, id="submit-before-any-apply"),
 ])
 def test_the_builder_opens_on_the_live_chain_and_its_last_canvas(dashboard, sent, expected):
-    """``sent`` are the PUT /api/pipeline bodies that set the chain, in order."""
+    """The normalizer and postprocessor nodes are the live chain, however it
+    was last set; everything else is the builder's last canvas. ``sent`` are
+    the PUT /api/pipeline bodies that set the chain, in order."""
+    from cellmap_flow.pipeline_spec import PipelineSpec, builder_steps
+
     g.jobs = [_job("other_model")]
     for body in sent:
         assert dashboard.put("/api/pipeline", json=body).status_code == 200
-    assert _builder_state(dashboard) == expected
+    state = _builder_state(dashboard)
+
+    assert _new_ids(state) == expected
+    # So the page's first edit, which sends its nodes' steps, sends the live chain back.
+    assert PipelineSpec(builder_steps(state["normalizers"]), builder_steps(state["postprocessors"])) == g.pipeline_spec
 
 
 def test_before_anything_is_applied_the_builder_starts_from_the_live_chain(dashboard):
