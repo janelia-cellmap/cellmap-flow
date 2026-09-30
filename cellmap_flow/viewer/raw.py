@@ -3,7 +3,8 @@
 ``get_raw_layer`` shows a zarr, N5 or precomputed volume. By default it is
 served from this process: a multiscale pyramid (an OME-Zarr group's
 levels, a precomputed volume's scales) as one ``ScalePyramid`` (each level
-a ``LocalVolume``, served as a downsampling of the finest), a single array
+a ``LocalVolume``, served as a power-of-two downsampling of the finest; a
+level that is not one is left out), a single array
 as a ``LocalVolume``, both read through ImageDataInterface so that the
 input chain applies to what is drawn (never to a segmentation's ids), and
 placed by a source transform that puts voxel 0's lower corner where the
@@ -16,7 +17,7 @@ shaders, their contrast windows sampled from the data where it can be read.
 """
 
 import logging
-import operator
+import math
 import os
 
 import neuroglancer
@@ -341,44 +342,74 @@ def _corner_transform(image):
     )
 
 
+def _downsampling_factor(voxel_size, finest):
+    """``voxel_size`` over ``finest``, per axis, when each ratio is a power
+    of two (1, 2, 4, ...), as whole numbers; else None. A ratio within 1e-6
+    of one counts as it, so float noise in a voxel size (7.999999999 nm)
+    does not drop its level."""
+    factor = []
+    for size, fine in zip(voxel_size, finest):
+        ratio = size / fine
+        power = round(math.log2(ratio)) if ratio > 0 else -1
+        if power < 0 or not math.isclose(ratio, 2**power, rel_tol=1e-6):
+            return None
+        factor.append(2**power)
+    return tuple(factor)
+
+
+def _nm(layer):
+    """A LocalVolume's voxel size as text, such as "8×8×8 nm" (neuroglancer
+    holds it in metres)."""
+    return "×".join(f"{scale * 1e9:g}" for scale in layer.dimensions.scales) + " nm"
+
+
 class ScalePyramid(neuroglancer.LocalVolume):
-    """A neuroglancer layer that provides volume data on different scales.
-    Mimics a LocalVolume.
+    """One neuroglancer volume served from a ``LocalVolume`` per pyramid level.
+    Mimics a LocalVolume: neuroglancer sees the finest level.
+
+    neuroglancer's python data source asks only for power-of-two
+    downsamplings of the volume it sees (a ``scale_key`` such as "2,2,2").
+    Each level is kept under its downsampling factor, its voxel size over the
+    finest's per axis ((1, 1, 1) for the finest), and a request is served by
+    the coarsest level at or below it on every axis, which downsamples the
+    rest of the way itself.
+
+    A level that is not a power-of-two multiple of the finest on every axis
+    (1.5×, 3×) could never answer a request exactly, so it is left out, as is
+    a second level at a factor already kept; one warning names them. The
+    finest level is always kept, so the pyramid is never empty.
 
     Args:
 
             volume_layers (``list`` of ``LocalVolume``):
 
-                One ``LocalVolume`` per provided resolution.
+                One ``LocalVolume`` per level.
     """
 
     def __init__(self, volume_layers):
-        volume_layers = volume_layers
-
         super(neuroglancer.LocalVolume, self).__init__()
 
-        logger.info("Creating scale pyramid...")
+        finest = min(volume_layers, key=lambda layer: tuple(layer.dimensions.scales))
+        self.dims = len(finest.dimensions.scales)
+        self.volume_layers = {}
+        dropped = []
+        for layer in [finest] + [layer for layer in volume_layers if layer is not finest]:
+            factor = _downsampling_factor(layer.dimensions.scales, finest.dimensions.scales)
+            if factor is None or factor in self.volume_layers:
+                dropped.append(layer)
+            else:
+                self.volume_layers[factor] = layer
+        if dropped:
+            logger.warning(
+                "Leaving out the pyramid levels at %s: neuroglancer asks only for "
+                "power-of-two downsamplings of the finest level, %s, which a level that "
+                "is not a power-of-two multiple of it on every axis (or repeats one) "
+                "can never answer exactly.",
+                ", ".join(_nm(layer) for layer in dropped),
+                _nm(finest),
+            )
 
-        self.min_voxel_size = min(
-            [tuple(layer.dimensions.scales) for layer in volume_layers]
-        )
-        self.max_voxel_size = max(
-            [tuple(layer.dimensions.scales) for layer in volume_layers]
-        )
-
-        self.dims = len(volume_layers[0].dimensions.scales)
-        self.volume_layers = {
-            tuple(
-                int(x)
-                for x in map(
-                    operator.truediv, layer.dimensions.scales, self.min_voxel_size
-                )
-            ): layer
-            for layer in volume_layers
-        }
-
-        logger.info("min_voxel_size: %s", self.min_voxel_size)
-        logger.info("scale keys: %s", self.volume_layers.keys())
+        logger.info("scale keys: %s", list(self.volume_layers))
         logger.info(self.info())
 
     @property
@@ -405,9 +436,8 @@ class ScalePyramid(neuroglancer.LocalVolume):
             "voxelOffset": reference_info["voxelOffset"],
             "chunkLayout": reference_info["chunkLayout"],
             "downsamplingLayout": reference_info["downsamplingLayout"],
-            "maxDownsampling": int(
-                np.prod(np.array(self.max_voxel_size) // np.array(self.min_voxel_size))
-            ),
+            # The coarsest level's factor: how far neuroglancer may ask.
+            "maxDownsampling": int(max(np.prod(factor) for factor in self.volume_layers)),
             "maxDownsampledSize": reference_info["maxDownsampledSize"],
             "maxDownsamplingScales": reference_info["maxDownsamplingScales"],
         }

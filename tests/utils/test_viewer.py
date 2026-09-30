@@ -6,9 +6,11 @@ and an OME corner such as -4 nm could not be expressed at all. The position
 now goes in the source transform, in voxels of the layer's own dimensions.
 """
 
+import logging
 import re
 from types import SimpleNamespace
 
+import neuroglancer
 import numpy as np
 import pytest
 
@@ -106,6 +108,9 @@ TWO_LEVELS = [(1, 1, 1), (2, 2, 2)]
     pytest.param(lambda f: _precomputed_scales(f) + "/s1", TWO_LEVELS, id="one-precomputed-scale"),
     # ...but one scale stays one array, which neuroglancer downsamples on the fly.
     pytest.param(lambda f: _precomputed_scales(f, count=1), None, id="precomputed-of-one-scale"),
+    # A level 1.5x or 3x the finest is not shown; the finest always is.
+    pytest.param(lambda f: f.ome_pyramid(((8, 0), (12, 2), (16, 4))), TWO_LEVELS, id="a-1.5x-level-dropped"),
+    pytest.param(lambda f: f.ome_pyramid(((8, 0), (24, 8))), [(1, 1, 1)], id="a-3x-level-dropped"),
 ])
 def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_zarr, write_array, write, levels):
     path = write(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr, write_array=write_array))
@@ -113,6 +118,36 @@ def test_a_pyramids_levels_are_the_ones_its_multiscales_list(ome_pyramid, raw_za
     url = layer.source[0].url
     assert (sorted(url.volume_layers) if isinstance(url, ScalePyramid) else None) == levels
     assert _placement(layer)[0] == pytest.approx([8e-9] * 3)
+    # Each level is served as the finest one (8 nm) downsampled by its key.
+    for key, level in getattr(url, "volume_layers", {}).items():
+        assert level.dimensions.scales == pytest.approx(np.multiply(key, 8e-9)), key
+
+
+def _level(voxel_size):
+    return neuroglancer.LocalVolume(
+        np.zeros((8, 8, 8), np.uint8),
+        dimensions=neuroglancer.CoordinateSpace(names=list("zyx"), units="nm", scales=voxel_size),
+    )
+
+
+@pytest.mark.parametrize("voxel_sizes, kept", [
+    pytest.param([(8,) * 3, (16,) * 3, (32,) * 3],
+                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3, (4, 4, 4): (32,) * 3}, id="powers-of-two"),
+    # neuroglancer asks only for power-of-two downsamplings, which these never answer.
+    pytest.param([(8,) * 3, (12,) * 3, (16,) * 3, (24,) * 3],
+                 {(1, 1, 1): (8,) * 3, (2, 2, 2): (16,) * 3}, id="1.5x-and-3x-dropped"),
+    pytest.param([(8, 8, 8), (8, 16, 16), (8, 24, 24)],
+                 {(1, 1, 1): (8, 8, 8), (1, 2, 2): (8, 16, 16)}, id="anisotropic"),
+    pytest.param([(4,) * 3, (7.999999999,) * 3],
+                 {(1, 1, 1): (4,) * 3, (2, 2, 2): (7.999999999,) * 3}, id="float-noise"),
+])
+def test_a_scale_pyramid_keeps_the_power_of_two_downsamplings_of_its_finest_level(caplog, voxel_sizes, kept):
+    with caplog.at_level(logging.WARNING, logger="cellmap_flow.viewer.raw"):
+        pyramid = ScalePyramid([_level(voxel_size) for voxel_size in voxel_sizes])
+    got = {key: tuple(np.round(level.dimensions.scales * 1e9, 9)) for key, level in pyramid.volume_layers.items()}
+    assert got == kept
+    # One warning when a level is dropped, naming them all; none when none is.
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == (len(kept) < len(voxel_sizes))
 
 
 def _contrast(layer):
