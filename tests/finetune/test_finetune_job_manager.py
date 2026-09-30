@@ -9,8 +9,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import ANY
 
 import pytest
+import requests
 
 from cellmap_flow.finetune import finetune_job_manager as fjm
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
@@ -516,26 +518,45 @@ def test_rehydrating_a_session_snapshot(fake_lsf, local_jobs, tmp_path):
     assert manager.rehydrate_session(session) == 0 and len(fake_lsf.calls) == 2
 
 
-@pytest.mark.parametrize("status, restarted", [
-    pytest.param("WAITING_FOR_RESTART", True, id="waiting, with no server: through the signal file"),
-    pytest.param("COMPLETED", False, id="completed: the trainer has exited"),
+@pytest.mark.parametrize("status, server, sent", [
+    pytest.param("WAITING_FOR_RESTART", "answers", "over HTTP", id="waiting, its server answers: over HTTP"),
+    pytest.param("WAITING_FOR_RESTART", "refuses", "in the signal file",
+                 id="waiting, its server refuses: through the signal file"),
+    pytest.param("WAITING_FOR_RESTART", None, "in the signal file", id="waiting, with no server: through the signal file"),
+    pytest.param("COMPLETED", "answers", None, id="completed: the trainer has exited"),
 ])
-def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, status, restarted):
+def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, monkeypatch, status, server, sent):
     """Only a job whose server was marked ready could be restarted, which a
     restart resets and a diverged iteration never sets. A COMPLETED trainer has
-    exited: the request went nowhere, and the job showed RUNNING for ever."""
+    exited: the request went nowhere, and the job showed RUNNING for ever.
+    The request goes to the job's server with the job's token, else into a
+    file the trainer also watches: a protocol with jobs already running."""
     manager = FinetuneJobManager()
-    job = make_job(status, inference_server_ready=True)
+    job = make_job(status, inference_server_ready=True, inference_server_url=URL if server else None)
     manager.jobs[job.job_id] = job
-    signal = job.output_dir / "restart_signal.json"  # no server to send it to
-    if restarted:
-        manager.restart_finetuning_job(job.job_id, {"learning_rate": 5e-5})
-        assert json.loads(signal.read_text())["params"] == {"learning_rate": 5e-5}
-        assert job.status == JobStatus.RUNNING
-    else:
+    (job.output_dir / "restart_token").write_text("the-job-token")  # as submit writes it
+    posted = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        posted.append((url, json, headers))
+        return SimpleNamespace(raise_for_status=lambda: None,
+                               json=lambda: {"success": server == "answers", "error": "refused"})
+
+    monkeypatch.setattr(requests, "post", post)
+    signal = job.output_dir / "restart_signal.json"
+    if sent is None:
         with pytest.raises(ValueError):
             manager.restart_finetuning_job(job.job_id, {})
+        assert not posted and not signal.exists()
+        return
+    manager.restart_finetuning_job(job.job_id, {"learning_rate": 5e-5})
+    request = {"restart": True, "timestamp": ANY, "params": {"learning_rate": 5e-5}}
+    assert posted == ([(f"{URL}/__control__/restart", request, {"X-Restart-Token": "the-job-token"})] if server else [])
+    if sent == "in the signal file":
+        assert json.loads(signal.read_text()) == request
+    else:
         assert not signal.exists()
+    assert (job.status, job.params["learning_rate"]) == (JobStatus.RUNNING, 5e-5)
 
 
 @pytest.mark.parametrize("on_disk, params, served_from", [
