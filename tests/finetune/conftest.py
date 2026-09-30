@@ -3,6 +3,7 @@
 - ``ome_zarr``: an OME-NGFF group with the given levels.
 - ``annotation_volume``: an annotation volume over a raw zarr, and the
   VirtualPatchDataset that reads it.
+- ``make_trainer``: a LoRAFinetuner on the CPU, in fp32, without TensorBoard.
 - ``tiny_script``: a script model that the trainer and the CLI can load.
 """
 
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import zarr
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def _triple(value):
@@ -88,6 +90,21 @@ def annotation_volume(tmp_path, ome_zarr):
             return VirtualPatchDataset(**{**args, **kw})
 
         return SimpleNamespace(path=path, raw=raw_path, dataset=dataset)
+
+    return make
+
+
+@pytest.fixture
+def make_trainer(tmp_path):
+    """``make_trainer(model, data, **kw)``: ``data`` is a DataLoader, or (raw, annotation[, anchor]) tensors."""
+    from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+
+    def make(model, data, batch_size=1, **kw):
+        if not isinstance(data, DataLoader):
+            data = DataLoader(TensorDataset(*data), batch_size=batch_size)
+        args = dict(output_dir=str(tmp_path / "run"), num_epochs=1, device="cpu",
+                    use_mixed_precision=False, loss_type="bce", tensorboard=False)
+        return LoRAFinetuner(model, data, **{**args, **kw})
 
     return make
 
