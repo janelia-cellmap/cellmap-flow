@@ -58,11 +58,13 @@ def ome(axes, scale, translation):
 
 
 # What an output is, written from raw whose corner is (8, 16, 24): the array a
-# worker opens (ROI, voxel size, dtype), the zarr chunks of s0, funlib's
-# attributes on s0, the OME multiscales on the group (the translation is voxel
+# worker opens (ROI, voxel size, dtype), the zarr chunks of s0, the attributes
+# blockwise gives funlib for s0 (FUNLIB_ATTRS; funlib versions add others of
+# their own), the OME multiscales on the group (the translation is voxel
 # 0's centre; a channel axis has none), and the sum and hash of what one block
 # writes. ONE_CHANNEL holds one model channel; STACKED holds both, on a
 # leading channel axis.
+FUNLIB_ATTRS = ("axis_names", "offset", "units", "voxel_size")
 ONE_CHANNEL = (
     daisy.Roi((8, 16, 24), (128, 128, 128)), Coordinate(16, 16, 16), np.uint8, (4, 4, 4),
     {"axis_names": ["z", "y", "x"], "offset": [8, 16, 24], "units": ["nanometer"] * 3,
@@ -105,7 +107,8 @@ def test_the_outputs_and_a_block_written_are_unchanged(raw_zarr, pooling_model, 
         attrs = zarr.open_group(str(master.output_path / channel), mode="r").attrs
         block = s0[..., :4, :4, :4]  # the block's 64 nm at 16 nm, at the output's corner
         written = (int(block.sum()), hashlib.sha256(block.tobytes()).hexdigest()[:16])
-        assert (array.roi, array.voxel_size, array.dtype, s0.chunks, dict(s0.attrs), attrs["multiscales"],
+        funlib = {key: s0.attrs[key] for key in FUNLIB_ATTRS}
+        assert (array.roi, array.voxel_size, array.dtype, s0.chunks, funlib, attrs["multiscales"],
                 written) == expected, channel
 
 
