@@ -3,9 +3,10 @@
 //
 // LSF is the only thing that knows, and that changes without anyone here
 // doing something (an admin takes nodes out, a thousand jobs land), so the
-// answer is re-read every minute. Every picker on the page shares this one
-// poller, and the server caches its answer, so several open dashboards don't
-// multiply into a query storm.
+// answer is re-read every minute -- while the page is visible: a hidden page
+// shows no picker, and asks once as soon as it is shown again. Every picker
+// on the page shares this one poller, and the server caches its answer, so
+// several open dashboards don't multiply into a query storm.
 import { getJSON } from "../lib/api.js";
 import { poll } from "../lib/poll.js";
 
@@ -33,7 +34,7 @@ function refresh() {
 export function subscribeGpuQueues(render) {
   subscribers.add(render);
   if (latest !== undefined) render(latest);
-  if (!poller) poller = poll(refresh, { intervalMs: GPU_QUEUE_POLL_MS });
+  if (!poller) poller = poll(refresh, { intervalMs: GPU_QUEUE_POLL_MS, pauseWhenHidden: true });
   return () => {
     subscribers.delete(render);
     if (!subscribers.size && poller) {
