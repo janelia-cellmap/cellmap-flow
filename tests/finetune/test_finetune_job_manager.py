@@ -349,11 +349,16 @@ SERVER = f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\n"
 # model first), then the server comes up, then a restart completes iteration 2.
 ITERATIONS = ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n", SERVER,
               "RESTARTING_TRAINING\nTRAINING_ITERATION_COMPLETE: m_finetuned_2\n"]
+HEARD = [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1", "m_finetuned_1"),
+         ("iteration", "m_finetuned_2", "m_finetuned_1")]
 
 
 @pytest.mark.parametrize("chunks, events", [
-    pytest.param(ITERATIONS, [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1", "m_finetuned_1"),
-                              ("iteration", "m_finetuned_2", "m_finetuned_1")], id="the server after its model"),
+    pytest.param(ITERATIONS, HEARD, id="the server after its model"),
+    # A line is read once it is whole. Iteration 1 was announced as m_fi, and,
+    # counted already, never under its name.
+    pytest.param(["TRAINING_ITERATION_COMPLETE: m_fi", "netuned_1\n", *ITERATIONS[1:]], HEARD,
+                 id="a line read before it was finished"),
     # Iteration 1 was announced again as it came up: only the dashboard's own
     # listener used to set the job's name.
     pytest.param(["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n" + SERVER, ITERATIONS[2]],
@@ -386,6 +391,33 @@ def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatc
     _monitor(manager, job, chunks, monkeypatch)
     assert heard == events
     assert job.finetuned_model_name == "m_finetuned_2"
+
+
+def test_what_the_monitor_has_read_of_the_log_it_does_not_read_again(make_job, monkeypatch):
+    """It read the whole log again on every poll, every 3 s for the job's life,
+    to count the finished iterations. Here the first iteration's line is blanked
+    once read (a log is never rewritten; this only shows the monitor does not
+    look back), and the next one is still the second."""
+    heard = []
+
+    class Recording:
+        def on_iteration_complete(self, job, model_name):
+            heard.append(model_name)
+
+    manager = FinetuneJobManager()
+    manager.add_listener(Recording())
+    job = make_job(lsf_job=_lsf(LSF.RUNNING, LSF.RUNNING, LSF.FAILED))
+    first = "TRAINING_ITERATION_COMPLETE: m_finetuned_1\n"
+    job.log_file.write_text(first)
+
+    def sleep(seconds):  # after the first poll only
+        if job.log_file.stat().st_size == len(first):
+            with open(job.log_file, "r+") as f:  # in place, so the log does not shrink
+                f.write(" " * (len(first) - 1) + "\nTRAINING_ITERATION_COMPLETE: m_finetuned_2\n")
+
+    monkeypatch.setattr(monitor.time, "sleep", sleep)
+    manager.monitor_job(job)
+    assert heard == ["m_finetuned_1", "m_finetuned_2"]
 
 
 CREATED = "2026-01-01T12:00:00"

@@ -5,12 +5,15 @@ and the lines the manager reads are the markers in ``finetune.markers``. A
 job outlives a dashboard upgrade, so both sides of those lines are a
 protocol.
 
-- ``LogTailer``: the lines appended since the last read, whole lines only;
-  the monitor follows a running job's log with it.
-- ``trainer_outputs_from_log``: the model name and serving YAML of the last
-  iteration a log reports.
-- ``finished_iterations``: how many iterations a log says finished, which
-  is what rehydration has to go on for a job LSF no longer knows.
+- ``LogTailer``: the lines appended since the last read, whole lines only,
+  and what all the lines read so far say of the finished iterations; the
+  monitor follows a running job's log with it, reading each line once.
+- ``Iterations``: what a log's lines, read in order, say of the iterations
+  the trainer finished: how many, and the last one's model name and
+  serving YAML.
+- ``trainer_outputs_from_log``: that model name and YAML, for a whole log.
+- ``finished_iterations``: how many iterations a log file says finished,
+  which is what rehydration has to go on for a job LSF no longer knows.
 """
 
 import logging
@@ -21,6 +24,34 @@ from cellmap_flow.finetune import markers
 logger = logging.getLogger(__name__)
 
 
+class Iterations:
+    """What a log's lines say of the iterations the trainer finished.
+
+    ``feed`` takes the lines in the order they were printed, in as many
+    calls as they come in. Then ``count`` is how many
+    TRAINING_ITERATION_COMPLETE markers they held, ``name`` the last one's
+    model name, and ``yaml_path`` its serving YAML: the trainer prints
+    FINETUNED_MODEL_YAML just before the marker, and skips it when it could
+    not write one, so a YAML is only the iteration's if it came after the
+    iteration before. Both are None before the first.
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.name = None
+        self.yaml_path = None
+        self._yaml = None  # printed since the last iteration finished
+
+    def feed(self, lines) -> None:
+        for line in lines:
+            yaml = markers.MODEL_YAML_RE.search(line)
+            if yaml:
+                self._yaml = yaml.group(1)
+            for name in markers.ITERATION_COMPLETE_RE.findall(line):
+                self.count += 1
+                self.name, self.yaml_path, self._yaml = name, self._yaml, None
+
+
 class LogTailer:
     """The lines appended to a log since the last read, whole lines only.
 
@@ -29,14 +60,23 @@ class LogTailer:
     short. The incomplete end is held back until the rest of the line is
     written.
 
+    ``iterations`` (Iterations) holds what every line handed out so far says
+    of the finished iterations, so what depends on the whole log never needs
+    it read again.
+
     tee writes one log for the job's whole life, restarts included, so it only
-    grows. If it shrinks, something replaced it, and reading starts over.
+    grows. If it shrinks, something replaced it, and reading starts over,
+    ``iterations`` with it.
     """
 
     def __init__(self, path):
         self.path = Path(path)
+        self._start_over()
+
+    def _start_over(self):
         self.position = 0
         self._partial = ""
+        self.iterations = Iterations()
 
     def read(self) -> str:
         """The complete lines written since the last call, or "" if none.
@@ -47,8 +87,7 @@ class LogTailer:
         size = self.path.stat().st_size
         if size < self.position:
             logger.info(f"Log file truncated (size {size} < position {self.position}), resetting")
-            self.position = 0
-            self._partial = ""
+            self._start_over()
 
         with open(self.path, "r") as f:
             f.seek(self.position)
@@ -58,25 +97,18 @@ class LogTailer:
         text = self._partial + new_content
         cut = text.rfind("\n") + 1
         text, self._partial = text[:cut], text[cut:]
+        self.iterations.feed(text.splitlines())
         return text
 
 
 def trainer_outputs_from_log(log_text: str):
     """(model name, serving YAML path) of the last iteration the log reports.
 
-    Either is None when the log has none. The YAML is only taken when it
-    belongs to that iteration: the trainer prints it just before the
-    iteration's completion marker, and skips it when it could not write one.
+    Either is None when the log has none; see Iterations.
     """
-    names = list(markers.ITERATION_COMPLETE_RE.finditer(log_text))
-    if not names:
-        return None, None
-    last = names[-1]
-    previous_end = names[-2].end() if len(names) > 1 else 0
-    yamls = [
-        m for m in markers.MODEL_YAML_RE.finditer(log_text, previous_end, last.start())
-    ]
-    return last.group(1), (yamls[-1].group(1) if yamls else None)
+    iterations = Iterations()
+    iterations.feed(log_text.splitlines())
+    return iterations.name, iterations.yaml_path
 
 
 def finished_iterations(log_file):
@@ -85,12 +117,10 @@ def finished_iterations(log_file):
     Read a line at a time, since the log is everything the run printed. A log
     that is missing or cannot be read is no evidence: (0, None).
     """
-    count, last = 0, None
+    iterations = Iterations()
     try:
         with open(log_file, errors="replace") as f:
-            for line in f:
-                for name in markers.ITERATION_COMPLETE_RE.findall(line):
-                    count, last = count + 1, name
+            iterations.feed(f)
     except OSError:
         return 0, None
-    return count, last
+    return iterations.count, iterations.name

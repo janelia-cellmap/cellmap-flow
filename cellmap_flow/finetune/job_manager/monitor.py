@@ -24,7 +24,7 @@ from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_manager import persistence, state
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
-from cellmap_flow.finetune.job_manager.tailer import LogTailer, trainer_outputs_from_log
+from cellmap_flow.finetune.job_manager.tailer import Iterations, LogTailer, trainer_outputs_from_log
 
 logger = logging.getLogger(__name__)
 
@@ -68,19 +68,16 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
 
             if finetune_job.log_file.exists():
                 try:
-                    # Whole lines only; see LogTailer.
+                    # Whole lines only, each read once; see LogTailer. It
+                    # keeps count of the finished iterations as it reads, so
+                    # counting them does not read the log from the start.
                     new_content = log.read()
                     if new_content:
                         # Parse for epoch and loss information
                         _parse_training_progress(finetune_job, new_content)
                         # Parse for inference server ready marker
                         _parse_inference_server_ready(finetune_job, new_content, listeners)
-
-                    # Always check for restart/iteration markers (reads full log).
-                    # This must run every cycle, not just when there's new content,
-                    # because the marker may have been at the end of the previous
-                    # chunk and we need to detect it even if no new output follows.
-                    _parse_training_restart(finetune_job, new_content, listeners)
+                        _parse_training_restart(finetune_job, new_content, log.iterations, listeners)
                 except Exception as e:
                     logger.debug(f"Error reading log file: {e}")
 
@@ -206,7 +203,8 @@ def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, l
     finetune_job.finetuned_model_name = model_name
 
 
-def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, listeners: Listeners):
+def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, iterations: Iterations,
+                            listeners: Listeners):
     """
     Parse log for RESTARTING_TRAINING and TRAINING_ITERATION_COMPLETE markers
     to handle iterative training restarts.
@@ -217,6 +215,8 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, listene
     Args:
         finetune_job: Job to update
         log_content: New log content to parse
+        iterations: What the log read so far, ``log_content`` included, says
+            of the finished iterations (LogTailer.iterations)
         listeners: Whom to tell
     """
     # Status markers, in the order they were printed: a restart that
@@ -225,19 +225,12 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, listene
     for marker in markers.STATUS_MARKER_RE.findall(log_content):
         state.on_status_marker(finetune_job, marker)
 
-    # Check for iteration complete marker - tell the listeners.
-    # Read full log in case the marker was in a previous chunk.
-    try:
-        full_log = finetune_job.log_file.read_text()
-    except Exception:
-        full_log = log_content
-    iter_matches = markers.ITERATION_COMPLETE_RE.findall(full_log)
     # Only process new iteration-complete markers (ignore ones already handled).
     # After a restart, _processed_iteration_count stays at the old count so
     # previously-seen markers don't re-trigger inference_server_ready or
     # the listeners.
-    if len(iter_matches) > finetune_job._processed_iteration_count:
-        finetune_job._processed_iteration_count = len(iter_matches)
+    if iterations.count > finetune_job._processed_iteration_count:
+        finetune_job._processed_iteration_count = iterations.count
 
         # For in-process restarts, the inference server usually stays on the same
         # URL and does not emit a fresh CELLMAP_FLOW_SERVER_IP marker. Mark the
@@ -245,8 +238,9 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, listene
         if finetune_job.inference_server_url:
             finetune_job.inference_server_ready = True
 
-        new_model_name = iter_matches[-1]
-        _read_trainer_outputs(finetune_job, set_name=False)
+        new_model_name = iterations.name
+        if iterations.yaml_path:
+            finetune_job.model_yaml_path = Path(iterations.yaml_path)
         if new_model_name != finetune_job.finetuned_model_name:
             logger.info(f"New training iteration complete: {new_model_name}")
             listeners.notify("on_iteration_complete", finetune_job, new_model_name)
