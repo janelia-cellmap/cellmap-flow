@@ -10,19 +10,18 @@ scribbles as well as imported crops.
 import json
 import logging
 import os
-import re
 from typing import Optional
 
 import numpy as np
 import zarr
+
+from cellmap_flow.io.geometry import list_populated_chunks
 
 logger = logging.getLogger(__name__)
 
 VIRTUAL_MANIFEST_FILENAME = "_virtual_sources.json"
 GOOD_REGIONS_FILENAME = "good_regions.json"
 
-# A chunk file of a zarr v2 array with "." separators: z.y.x.
-CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def write_manifest(corrections_dir: str, manifest: dict) -> str:
@@ -125,7 +124,7 @@ def has_painted_annotations(volume_zarr_path: str) -> bool:
         with open(os.path.join(volume_zarr_path, ".zattrs")) as f:
             imported = json.load(f).get("imported_crops", []) or []
         arr = zarr.open(s0_path, mode="r")
-        chunk_keys = [name for name in os.listdir(s0_path) if CHUNK_KEY_RE.match(name)]
+        chunks = list_populated_chunks(s0_path)
     except (OSError, ValueError, KeyError) as e:
         logger.debug(f"Could not look for painted annotations in {volume_zarr_path}: {e}")
         return False
@@ -135,15 +134,14 @@ def has_painted_annotations(volume_zarr_path: str) -> bool:
     else:
         bbox_offsets = bbox_ends = np.zeros((0, 3), dtype=np.int64)
     chunk_shape = np.array(arr.chunks, dtype=np.int64)
-    for key in chunk_keys:
-        index = np.array([int(s) for s in key.split(".")], dtype=np.int64)
-        origin = index * chunk_shape
+    for index in chunks:
+        origin = np.array(index, dtype=np.int64) * chunk_shape
         end = origin + chunk_shape
         if bbox_offsets.shape[0] and np.any(
             np.all(origin >= bbox_offsets, axis=1) & np.all(end <= bbox_ends, axis=1)
         ):
             continue  # all of it inside one crop
-        annotated = np.argwhere(arr.blocks[tuple(index)] >= 1).astype(np.int64) + origin
+        annotated = np.argwhere(arr.blocks[index] >= 1).astype(np.int64) + origin
         if not annotated.size:
             continue
         if not bbox_offsets.shape[0] or not voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends).all():

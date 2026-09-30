@@ -17,8 +17,8 @@ from flask import jsonify, request
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE as _CHUNK_KEY_RE
 from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.io.geometry import list_populated_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -223,13 +223,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     s0_path = os.path.join(corrections_dir, entry, "annotation", "s0")
                     if not os.path.isdir(s0_path):
                         continue
-                    for chunk_name in os.listdir(s0_path):
-                        if not _CHUNK_KEY_RE.match(chunk_name):
-                            continue
-                        cz, cy, cx = (int(s) for s in chunk_name.split("."))
-                        chunk_lo_vox = (
-                            np.array([cz, cy, cx], dtype=np.int64) * chunk_size_arr
-                        )
+                    for index in list_populated_chunks(s0_path):
+                        chunk_lo_vox = np.array(index, dtype=np.int64) * chunk_size_arr
                         chunk_hi_vox = chunk_lo_vox + chunk_size_arr
                         if not _chunk_outside_all_bboxes(
                             chunk_lo_vox, chunk_hi_vox, bbox_offsets, bbox_ends
@@ -245,7 +240,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         )
                         boxes.append(
                             {
-                                "label": f"painted:{chunk_name}",
+                                "label": "painted:" + ".".join(map(str, index)),
                                 "lo": lo.tolist(),
                                 "hi": hi.tolist(),
                             }

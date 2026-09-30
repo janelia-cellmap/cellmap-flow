@@ -35,8 +35,9 @@ from typing import List, Optional, Tuple
 import numpy as np
 import zarr
 
-from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE, voxels_inside_any_bbox
+from cellmap_flow.finetune.session.manifest import voxels_inside_any_bbox
 from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.io.geometry import list_populated_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -175,19 +176,15 @@ class PatchSampler:
         self.shape_voxels = np.array(arr.shape, dtype=int)
         chunk_shape = np.array(arr.chunks, dtype=int)
 
-        # In chunk-index order, not os.listdir's: that order differs between
-        # filesystems (ext4 orders names by a per-filesystem hash), so the same
-        # seed drew different patches on another machine or in a copied session.
-        chunk_keys = sorted(
-            (name for name in os.listdir(s0_path) if CHUNK_KEY_RE.match(name)),
-            key=lambda name: tuple(int(i) for i in name.split(".")),
-        )
-        if not chunk_keys:
+        # In chunk-index order, so that a seed draws the same patches on any
+        # filesystem and in a copied session.
+        chunks = list_populated_chunks(s0_path)
+        if not chunks:
             raise ValueError(
                 f"Volume zarr at {self.volume_zarr_path} has no populated chunks. "
                 "Paint annotations or import crops first."
             )
-        self.chunk_files = len(chunk_keys)
+        self.chunk_files = len(chunks)
 
         # The sparse (painted) pool holds every annotated voxel outside the
         # crops, background as well as foreground: a background-only
@@ -200,10 +197,9 @@ class PatchSampler:
         dense_rows: List[np.ndarray] = []
         sparse_rows: List[np.ndarray] = []
         n_fg_chunks = 0  # chunks that contributed voxels to a pool
-        for key in chunk_keys:
-            cz, cy, cx = (int(s) for s in key.split("."))
-            chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
-            chunk_data = arr.blocks[cz, cy, cx]
+        for index in chunks:
+            chunk_origin = np.array(index, dtype=np.int64) * chunk_shape
+            chunk_data = arr.blocks[index]
             if bbox_offsets.shape[0] == 0:
                 # No imported crops: everything is sparse (painted).
                 painted_local = np.argwhere(chunk_data >= 1).astype(np.int64)
@@ -239,7 +235,7 @@ class PatchSampler:
             # Imported crops that are all background, and nothing painted:
             # centre on the crops' annotated voxels rather than refuse.
             self.dense = _annotated_voxels_in_crops(
-                arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends
+                arr, chunks, chunk_shape, bbox_offsets, bbox_ends
             )
             n_fg_chunks = max(n_fg_chunks, 1 if self.dense.shape[0] else 0)
         self.annotated_chunks = n_fg_chunks
@@ -346,13 +342,12 @@ class PatchSampler:
             )
 
 
-def _annotated_voxels_in_crops(arr, chunk_keys, chunk_shape, bbox_offsets, bbox_ends):
+def _annotated_voxels_in_crops(arr, chunks, chunk_shape, bbox_offsets, bbox_ends):
     """Every annotated voxel inside the imported crops, as (N, 3) global indices."""
     rows = []
-    for key in chunk_keys:
-        cz, cy, cx = (int(s) for s in key.split("."))
-        chunk_origin = np.array([cz, cy, cx], dtype=np.int64) * chunk_shape
-        annotated = np.argwhere(arr.blocks[cz, cy, cx] >= 1).astype(np.int64) + chunk_origin
+    for index in chunks:
+        chunk_origin = np.array(index, dtype=np.int64) * chunk_shape
+        annotated = np.argwhere(arr.blocks[index] >= 1).astype(np.int64) + chunk_origin
         if annotated.size:
             inside = voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends)
             if inside.any():

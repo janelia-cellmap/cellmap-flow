@@ -12,11 +12,15 @@ range of voxel indices, which may start before the array or run past it.
 - ``Grid.box_to_world(box)``: the whole-nm ``Roi`` around a box.
 - ``coordinate_or_floats``: a voxel size or offset as a ``Coordinate`` when
   it is whole, else as floats.
+- ``list_populated_chunks``: the chunks of a local zarr v2 array that have a
+  file, by index.
 """
 
 import logging
+import os
+import re
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 from funlib.geometry import Coordinate, Roi
@@ -24,6 +28,9 @@ from funlib.geometry import Coordinate, Roi
 from cellmap_flow.io.metadata import is_integral, snap_integral
 
 logger = logging.getLogger(__name__)
+
+# A chunk file of a three-dimensional zarr v2 array with "." separators: z.y.x.
+CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 @dataclass(frozen=True)
@@ -100,3 +107,19 @@ def coordinate_or_floats(values, what="voxel size", where=""):
             "number of nanometers; keeping it as floats"
         )
     return tuple(float(v) for v in snapped)
+
+
+def list_populated_chunks(array_dir) -> List[Tuple[int, ...]]:
+    """The indices of the chunks of a local zarr v2 array that have a file.
+
+    ``array_dir`` is the array's directory; its chunk files are the names
+    ``CHUNK_KEY_RE`` matches, and ``.zarray`` and the rest are not chunks.
+    In index order, not ``os.listdir``'s: that order differs between
+    filesystems (ext4 orders names by a per-filesystem hash), so the same
+    seed would draw different patches on another machine.
+    """
+    return sorted(
+        tuple(int(i) for i in name.split("."))
+        for name in os.listdir(array_dir)
+        if CHUNK_KEY_RE.match(name)
+    )

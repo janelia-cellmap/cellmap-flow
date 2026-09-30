@@ -24,8 +24,8 @@ import s3fs
 import zarr
 
 from cellmap_flow.finetune.session import minio
-from cellmap_flow.finetune.session.manifest import CHUNK_KEY_RE
 from cellmap_flow.finetune.session.volume import NotAnAnnotationVolume, read_volume
+from cellmap_flow.io.geometry import CHUNK_KEY_RE
 
 logger = logging.getLogger(__name__)
 
