@@ -1,0 +1,126 @@
+# Changelog
+
+All notable changes to cellmap-flow. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow `cellmap_flow.__version__`.
+
+## Unreleased (the cleanup, PR #103)
+
+One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `serving/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
+
+### Changed
+- The wheel no longer installs top-level `tests`, `example`, `docs` and `models` packages. The model catalog moved to `cellmap_flow/models/models.yaml`.
+- Dependencies:
+  - removed `gunicorn`, `marshmallow` and the `xarray` pin;
+  - added `requests`, `scipy` and `click`;
+  - the `[finetune]` extra is `peft` + `tensorboard`, and `[postprocess]` is `edt`.
+
+- **Lambda normalizer/postprocessor expressions** must be numpy math on `x`: arithmetic, comparisons, indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods. Anything else raises `ValueError` when the op is built. Every expression in the repo and docs is `x*2-1`, which is unaffected.
+- **Custom-code postprocessing is removed**, along with the `CUSTOM_CODE_FOLDER` env var. It never ran from the UI.
+- **Seven dashboard routes are removed.** Nothing called them: `/api/available-models`, `/api/pipeline/validate`, `/api/dataset-path`, `/api/shaders`, `/api/finetune/view-center`, `/api/finetune/job/<id>/inference-server`, `/api/viewer/add-finetuned-layer`.
+- **Restarting a finetune job over HTTP needs the job's token.** The job manager writes it to `<output_dir>/restart_token`. A restart can only change training settings. Jobs started before this change fall back to the `restart_signal.json` file.
+- **The dashboard no longer sends CORS headers.** Inference servers still do.
+- **`/api/finetune/read-yaml` only serves `.yaml`/`.yml` files**, checked after resolving symlinks.
+
+- **Launching:** when bsub exists but every queue refuses a job, launching raises `JobStartError` naming each queue's error, instead of starting the GPU server on the current host. A job that never reports a host is a failure (and a still-pending one is killed), not a "ready" server.
+- **`data_path` + `scale`:** one rule in `cellmap_flow`, `cellmap_flow_yaml` and blockwise. An array path is used as is, with a warning if `scale` disagrees; a group path gets `scale` appended. The bundled `…/s3` + `scale: s3` examples no longer open `…/s3/s3`. Blockwise now honours `scale`.
+- **Config errors:** bad YAML raises `ConfigError` (a `ValueError`) instead of calling `sys.exit`. The CLIs still exit 1.
+- **Ctrl+C cleanup:** it is installed by the CLI entry points instead of on import, and exits 128+signal.
+- **`cellmap_flow <type> -q`:** defaults to the saved queue instead of `gpu_h100`.
+- **Blockwise:**
+  - Output starts at the raw data's offset.
+  - Old progress markers are ignored, so a resumed run recomputes its blocks.
+  - The master exits 1 if any block failed.
+  - Workers get a walltime (from an optional `walltime` in the task YAML) and their own logs.
+- **Local runs:** logs go to `~/.cellmap_flow/server_logs/<name>_local_*.log`.
+
+- **Chain format:** URL blobs, exported YAMLs, blockwise task YAMLs and finetune manifests use the ordered list form `[{name, **params}]` with real types. Old dict-form files still load.
+- **Outputs that were wrong and are now right:**
+  - Datasets that were misread: N5, precomputed, multichannel OME, micrometer units, fractional voxel sizes, relabelled scales with an offset.
+  - `EuclideanDistance` now applies its parameters (default output `tanh(distance)`).
+  - `LabelPostprocessor` serves uint32.
+  - Steps without a declared dtype keep their input dtype instead of float64.
+  - Bio models serve uint8, and can be launched at all.
+  - Unique label ids change for models whose output voxel size differs from the input's.
+- **Served array:** larger for datasets with an offset, and one voxel longer when the extent doesn't divide evenly (ceil, not floor).
+- **Launch commands:** quoted, and they now include name, scale, Fly sizes and Bio voxel size.
+- **DaCapo:** channel names change where the old guess had the wrong count.
+- **Dependencies:** `h5py` is no longer a core dependency.
+
+- **Finetune training results change** (K26):
+  - distance targets near unannotated voxels;
+  - background-only corrections are now sampled;
+  - `--balance-classes` combined with label smoothing;
+  - `mse` on logit models;
+  - best-epoch choice when rehearsal-only batches occur;
+  - painted (sparse) sessions are now detected, which switches distance models to binary + margin and mse to margin + distillation 0.5;
+  - base norm layers and the teacher run in eval mode;
+  - augmentation for signed, float or windowed data;
+  - a full-finetune restart now starts from the base weights;
+  - an explicit distillation weight of 0 with good regions marked is honoured.
+- **Full finetune with distillation** keeps a frozen teacher copy: one extra set of parameters on the GPU.
+- **Finetune on-disk layout:**
+  - serving YAMLs for new runs go to `<session>/models`;
+  - each iteration exports to `iterations/NNN_<ts>/`, with `lora_adapter` / `full_finetune` as symlinks to the latest (older YAMLs keep working; a full finetune keeps one state dict per iteration);
+  - `metadata.json` records `lsf_job_id`, `status`, `models_dir`, `model_entry`, `inference_server_url` and `finetuned_model_name`;
+  - MinIO writes `.minio.log`;
+  - sync uses temporary `.part` files.
+- **Finetune CLI:** new flags `--models-dir`, `--model-entry`, `--model-folder`, `--queue` and `--charge-group` (added, none removed). Bioimage models are refused at submit.
+- **Finetune dashboard:** a new `WAITING_FOR_RESTART` job status. Jobs still alive on LSF are reattached after a dashboard restart.
+
+- **OME-NGFF translation is voxel 0's centre** (1c′), as the spec and Neuroglancer have it; cellmap-flow read it as the corner.
+  - On Janelia pyramids (`translation = scale/2 − 4`), s1 and s2 were read 8 and 16 nm off. Every prediction made from those levels was misaligned, and the levels disagreed with each other. Reads from them change.
+  - The served virtual zarr and the blockwise output now start at the corner of the raw level the model reads (−4 nm on Janelia data), not at 0.
+  - Both write `translation = corner + voxel/2`, so the translation values in output metadata change. Blockwise into an output written by an older version stops, with a message to use a new output path: the two grids differ by half a voxel.
+  - Legacy `resolution`/`offset` and N5 `transform` attributes are unchanged.
+  - The raw layer is drawn at its true position. It used to pass the offset in nm as a voxel count, so any dataset not at the origin was drawn far from its data.
+  - Finetune: the volume format is unchanged, and on Janelia v3 data new volumes are identical to old ones. Existing sessions train with label/raw pairing moved by at most half a raw input voxel, toward where Neuroglancer drew the labels. Odd output sizes and good-region patches no longer pair labels with raw half an annotation voxel off. YAML crops downsampled by a factor other than 2 can land one voxel over.
+
+- **Removed in Phase 2** (nothing in the repo or on `fileglancer` used them):
+  - CLI: `cellmap_flow_server run-ui-server`.
+  - Python API: `Flow.run`, `Flow.stop`, `Flow.delete` and `Flow.to_dict` (`Flow.run` was already broken); `create_and_run_app(inference_servers=)`; `g.INFERENCE_SERVER`, `g.servers` and `g.neuroglancer_thread`; the module globals `cellmap_flow.globals.input_norms`, `postprocess` and `viewer`; `ds.get_array_path_if_needed` and `ds.find_target_scale`; `PostProcessorMethods`, `MERGE_MODE_MAP` and `Config.serialize`. The modules `utils/job_extensions.py`, `utils/generate_neuroglancer.py`, `dashboard/bbx_generator.py`, `dashboard/routes/finetune/service.py` and `dashboard/routes/finetune/annotation.py` are gone.
+  - The Python Scripts docs page now shows `run_multiple` (what `cellmap_flow_yaml` calls) instead of `Flow.run`.
+  - Inference servers: `/apidocs/`, `/api_spec.json` and `/flasgger_static/*` are gone. `/` redirects to `/__control__/model_info`.
+  - Finetune: `/api/finetune/create-crop` and its button (K10). `/api/finetune/sync-annotations` ignores `crop_id`.
+  - Existing finetune sessions: a resume or sync no longer cuts `<volume>_chunk_*.zarr` extracts (nothing read them). A restart no longer writes `training_log_<n>.txt`/`metadata_<n>.json` copies. Existing files are left alone. The job and status responses drop three always-null keys. The Load-existing dialog counts a volume's painted chunks (it showed 0 for most sessions). No training results change.
+  - Dependencies: `flasgger` and `funlib.math`; the `[docs]` extra drops `nbsphinx`, `myst_nb` and `jupytext`.
+  - Examples: `check_norm`, `dacapo_run`, `dacapo_run_retrieve`, `larissa_lsd`, `model_setup04_dacapo`, `server_check`, `generate_slider`, `serialization_json_norm`, both `run07` copies of `model_spec.py`, the two dated `example/cellmap/` shell scripts, `example/models.yaml` and `omnx_model.py`. `omnx_model_converted.py` is now `onnx_model.py`, pointed at the catalog copy of its model.
+
+- **Phase 3 so far** (each is its own "Behaviour change:" commit):
+  - Submit names a prediction layer by a hash of its chain settings instead of the time. Resubmitting identical settings no longer makes neuroglancer drop its cached chunks; any change still refreshes.
+  - The dashboard's model form offers plugin model types. A plugin subclass without its own `cli_name` gets its own type name, and no longer takes over its parent's.
+  - Finetune tab rehydration asks LSF about all of a session's jobs in one `bjobs` call. A job LSF has purged is recorded once, as `COMPLETED` if its log shows a finished iteration and `FAILED` otherwise (with `status_detail`), instead of being re-queried on every load.
+  - Server start-up detection reads a ready file the server writes, and falls back to bpeek, now with a 0.5 s → 5 s backoff.
+  - A precomputed dataset's `voxel_offset` becomes its translation.
+  - `run.py`: a multi-word `SERVER_COMMAND` (fileglancer's `pixi run cellmap_flow_server`) is split instead of being quoted as one program (`7d8d7ad`, a fix for a bug this PR introduced).
+  - PR #102 port:
+    - the blockwise master builds no inferencers (no GPU warmup on the master);
+    - blockwise task ids are `predict_{model}_{task}`, so a `track_progress` run interrupted before this and resumed after redoes its blocks;
+    - a blockwise run is named after the typed job name, which the builder now asks for at Generate;
+    - the viewer's dimensions are pinned to the raw data's finest level;
+    - behind a reverse proxy, the iframe loads the viewer through it.
+  - Latency:
+    - chunk requests use the GPU one at a time in arrival order (`CELLMAP_FLOW_GPU_SLOTS`, default 1);
+    - a chunk whose client hung up before its turn gets 499 and isn't computed.
+  - Round 1's 5 s bpeek backoff is reverted (`94e8de5`). NFS can hide the new ready file for up to 30 s, and the backoff then delayed server detection.
+
+Phase 4 will be added here as it lands.
+
+### Behaviour-change commits
+- `6329e40` check a served model's shapes on its warmup forward
+- `5c32fba` skip a chunk whose client hung up before its turn on the GPU
+- `ca73a34` let chunk requests use the GPU one at a time, in arrival order
+- `8623842` behind a reverse proxy, load the viewer through the proxy
+- `0125536` pin the viewer's dimensions to the raw data's finest level
+- `6650a2c` name a blockwise run after the job name typed for it
+- `99d3948` separate the model and task names in a blockwise task id
+- `8e8c306` the blockwise master builds no Inferencers
+- `07fcdf5` a model type's name is its own cli_name, not an inherited one
+- `39ad12c` the dashboard's model form offers plugin model types
+- `75c17da` read a precomputed volume's voxel_offset as its position
+- `55a22d5` a forgotten job that finished an iteration is recorded as completed
+- `645779b` ask bjobs about a session's jobs at once, and record forgotten ones
+- `52c1451` back off how often a waiting launcher asks LSF
+- `279bc43` name the Submit layer blob by the chain's digest, not the time
+
+## 0.2.3 and earlier
+
+Not recorded here; see the git history.
