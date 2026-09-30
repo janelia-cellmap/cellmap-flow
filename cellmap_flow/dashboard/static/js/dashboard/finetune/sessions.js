@@ -1,6 +1,6 @@
 // Resume Existing Volume: find the sessions under a directory, and copy one
 // into a new session to carry on annotating (the original stays as it was).
-import { esc } from "../../lib/dom.js";
+import { esc, setBusy } from "../../lib/dom.js";
 import { postAnswer, watchProgress } from "./requests.js";
 
 // A session copy's progress, as the status line shows it.
@@ -110,9 +110,7 @@ export function initSessions({ log, addToViewer }) {
     if (!sessionPath || !outputPath) return;
 
     const status = document.getElementById("loadExistingStatus");
-    loadExistingConfirmBtn.disabled = true;
-    loadExistingConfirmBtn.innerHTML =
-      '<span class="spinner-border spinner-border-sm"></span> Loading...';
+    setBusy(loadExistingConfirmBtn, true, "Loading...");
     log.add(`Loading existing volume from: ${sessionPath}`);
     status.textContent = "Starting...";
 
@@ -127,8 +125,7 @@ export function initSessions({ log, addToViewer }) {
     })
       .then(data => {
         progress.stop();
-        loadExistingConfirmBtn.disabled = false;
-        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        setBusy(loadExistingConfirmBtn, false);
         if (!data.success) {
           status.textContent = `Error: ${data.error}`;
           log.add(`✗ Error: ${data.error}`);
@@ -151,8 +148,7 @@ export function initSessions({ log, addToViewer }) {
       })
       .catch(err => {
         progress.stop();
-        loadExistingConfirmBtn.disabled = false;
-        loadExistingConfirmBtn.innerHTML = 'Load Selected';
+        setBusy(loadExistingConfirmBtn, false);
         status.textContent = `Request failed: ${err}`;
         log.add(`✗ Error: ${err}`);
       });

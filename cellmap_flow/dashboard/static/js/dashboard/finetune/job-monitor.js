@@ -1,6 +1,7 @@
 // The Training panel's job: submitting it, following it (the status poll and
 // the log stream), Restart, Stop Early and Cancel, and finding it again
 // after a page reload.
+import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot, EPOCH_LOSS } from "./loss-plot.js";
@@ -101,17 +102,13 @@ export function initJobMonitor({ picker, form }) {
       params.checkpoint_path = checkpointPath;
     }
 
-    // Disable button and show loading. The submit endpoint may run a
-    // pre-submit MinIO sync; if that takes a while, switch the spinner
-    // label to make it obvious that the dashboard is doing real work,
-    // not stuck.
-    startFinetuningBtn.disabled = true;
-    startFinetuningBtn.innerHTML =
-      '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+    // The submit endpoint may run a pre-submit MinIO sync; if that takes a
+    // while, the spinner's label changes to make it obvious that the
+    // dashboard is doing real work, not stuck.
+    setBusy(startFinetuningBtn, true, "Submitting...");
     const slowLabelTimer = setTimeout(() => {
-      startFinetuningBtn.innerHTML =
-        '<span class="spinner-border spinner-border-sm"></span> ' +
-        'Syncing annotations from MinIO before submit (this can take several minutes)...';
+      setBusy(startFinetuningBtn, true,
+        "Syncing annotations from MinIO before submit (this can take several minutes)...");
     }, 3000);
 
     try {
@@ -164,10 +161,8 @@ export function initJobMonitor({ picker, form }) {
       alert(`Error: ${error.message}`);
       appendLog(`✗ Error: ${error.message}\n`);
     } finally {
-      // Re-enable button
       clearTimeout(slowLabelTimer);
-      startFinetuningBtn.disabled = false;
-      startFinetuningBtn.innerHTML = '🚀 Start Finetuning';
+      setBusy(startFinetuningBtn, false);
     }
   });
 
@@ -487,8 +482,7 @@ export function initJobMonitor({ picker, form }) {
       `  augment:${requestBody.augment}\n`;
     if (!confirm(summary)) return;
 
-    const originalBtnText = restartJobBtn.textContent;
-    restartJobBtn.disabled = true;
+    setBusy(restartJobBtn, true);
     restartJobBtn.textContent = 'Restarting...';
 
     const jobId = document.getElementById('jobId').textContent;
@@ -521,8 +515,7 @@ export function initJobMonitor({ picker, form }) {
       console.error('Error restarting training:', error);
       alert('Failed to restart training');
     } finally {
-      restartJobBtn.disabled = false;
-      restartJobBtn.textContent = originalBtnText;
+      setBusy(restartJobBtn, false);
     }
   });
 

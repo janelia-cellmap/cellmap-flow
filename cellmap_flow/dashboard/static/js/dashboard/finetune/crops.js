@@ -1,7 +1,7 @@
 // The Annotation Crops panel's work on a session's annotations: a new
 // annotation volume, crops loaded from a YAML manifest, the annotated-region
 // boxes, and saving the annotations to disk.
-import { esc } from "../../lib/dom.js";
+import { esc, setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer, watchProgress } from "./requests.js";
 
 // A crop import's progress, as the status line shows it.
@@ -53,8 +53,6 @@ export function initCrops({ log, picker, form }) {
 
   // Create annotation volume (sparse, full dataset)
   const createVolumeBtn = document.getElementById("createVolumeBtn");
-  // Restored after each attempt.
-  const createVolumeBtnLabel = createVolumeBtn.textContent.trim();
   createVolumeBtn.addEventListener("click", function() {
     const selectedModel = picker.selected();
     if (!selectedModel) {
@@ -68,8 +66,7 @@ export function initCrops({ log, picker, form }) {
       return;
     }
 
-    createVolumeBtn.disabled = true;
-    createVolumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    setBusy(createVolumeBtn, true, "Creating...");
     log.add(`Creating annotation volume for full dataset...`);
     log.add(`Output path: ${outputPath}`);
 
@@ -102,15 +99,12 @@ export function initCrops({ log, picker, form }) {
         } else {
           log.add(`✗ Error: ${data.error}`);
         }
-        createVolumeBtn.disabled = false;
-        createVolumeBtn.textContent = createVolumeBtnLabel;
       })
       .catch(err => {
         log.add(`✗ Error: ${err}`);
         console.error(err);
-        createVolumeBtn.disabled = false;
-        createVolumeBtn.textContent = createVolumeBtnLabel;
-      });
+      })
+      .finally(() => setBusy(createVolumeBtn, false));
   });
 
   // Load crops from a YAML manifest (modal-driven, mirrors Resume Existing Volume)
@@ -179,7 +173,7 @@ export function initCrops({ log, picker, form }) {
     const outputPath = outputPathInput.value.trim();
     const status = loadCropsStatus;
     status.textContent = "Starting...";
-    loadCropsSubmitBtn.disabled = true;
+    setBusy(loadCropsSubmitBtn, true);
 
     const progress = watchProgress("/api/finetune/load-crops-progress", (p) => {
       status.textContent = describeCropImport(p);
@@ -193,7 +187,7 @@ export function initCrops({ log, picker, form }) {
     })
       .then(data => {
         progress.stop();
-        loadCropsSubmitBtn.disabled = false;
+        setBusy(loadCropsSubmitBtn, false);
         if (!data.success) {
           status.textContent = `Error: ${data.error || "load failed"}`;
           log.add(`✗ Load crops error: ${data.error}`);
@@ -220,7 +214,7 @@ export function initCrops({ log, picker, form }) {
       })
       .catch(err => {
         progress.stop();
-        loadCropsSubmitBtn.disabled = false;
+        setBusy(loadCropsSubmitBtn, false);
         status.textContent = `Request failed: ${err}`;
         log.add(`✗ Load crops request failed: ${err}`);
       });
@@ -231,7 +225,7 @@ export function initCrops({ log, picker, form }) {
   const showAnnotatedRegionsBtn = document.getElementById("showAnnotatedRegionsBtn");
   const annotatedRegionCount = document.getElementById("annotatedRegionCount");
   showAnnotatedRegionsBtn.addEventListener("click", function () {
-    showAnnotatedRegionsBtn.disabled = true;
+    setBusy(showAnnotatedRegionsBtn, true);
     annotatedRegionCount.textContent = "updating...";
     postAnswer("/api/finetune/refresh-annotated-regions", {})
       .then((d) => {
@@ -249,16 +243,13 @@ export function initCrops({ log, picker, form }) {
         annotatedRegionCount.textContent = "failed";
         log.add(`Could not refresh annotated regions: ${e}`);
       })
-      .finally(() => {
-        showAnnotatedRegionsBtn.disabled = false;
-      });
+      .finally(() => setBusy(showAnnotatedRegionsBtn, false));
   });
 
   // Save annotations to disk
   const saveAnnotationsBtn = document.getElementById("saveAnnotationsBtn");
   saveAnnotationsBtn.addEventListener("click", function() {
-    saveAnnotationsBtn.disabled = true;
-    const originalText = saveAnnotationsBtn.textContent;
+    setBusy(saveAnnotationsBtn, true);
     saveAnnotationsBtn.textContent = "💾 Syncing...";
     log.add(`Syncing all annotations from MinIO to local disk...`);
 
@@ -271,15 +262,12 @@ export function initCrops({ log, picker, form }) {
         } else {
           log.add(`✗ Error: ${data.error || data.message}`);
         }
-        saveAnnotationsBtn.disabled = false;
-        saveAnnotationsBtn.textContent = originalText;
       })
       .catch(err => {
         log.add(`✗ Error: ${err}`);
         console.error(err);
-        saveAnnotationsBtn.disabled = false;
-        saveAnnotationsBtn.textContent = originalText;
-      });
+      })
+      .finally(() => setBusy(saveAnnotationsBtn, false));
   });
 
   return { addToViewer };

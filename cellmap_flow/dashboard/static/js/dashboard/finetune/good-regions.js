@@ -1,6 +1,7 @@
 // Good regions: views the user marks as ones the model already gets right.
 // Training rehearses them (holds the model to what it predicts there), and
 // the rehearsal setting's hint says how much that will weigh.
+import { setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
 // log: the Annotation Crops panel's log.
@@ -51,7 +52,7 @@ export function initGoodRegions({ log }) {
   }
 
   markGoodRegionBtn.addEventListener("click", function () {
-    markGoodRegionBtn.disabled = true;
+    setBusy(markGoodRegionBtn, true);
     postAnswer("/api/finetune/good-regions/mark-view", {})
       .then((d) => {
         if (d.success) {
@@ -69,9 +70,7 @@ export function initGoodRegions({ log }) {
       .catch((e) => {
         log.add(`Could not mark region: ${e}`);
       })
-      .finally(() => {
-        markGoodRegionBtn.disabled = false;
-      });
+      .finally(() => setBusy(markGoodRegionBtn, false));
   });
 
   document.getElementById("clearGoodRegionsBtn").addEventListener("click", function () {
