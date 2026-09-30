@@ -9,6 +9,8 @@
   settings, the trainer's command line, and launching it on LSF or here.
 - ``persistence``: each run's ``metadata.json`` and export, and finding a
   session's jobs again from them (rehydration).
+- ``monitor``: following a job until it ends, from its scheduler's answers
+  and its log, and telling the listeners.
 - ``restart``: asking a job that waits for a restart to train again.
 
 Nothing here imports torch, Flask, neuroglancer or ``cellmap_flow.globals``

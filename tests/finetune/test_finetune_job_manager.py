@@ -13,9 +13,8 @@ from unittest.mock import ANY
 
 import pytest
 
-from cellmap_flow.finetune import finetune_job_manager as fjm
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
-from cellmap_flow.finetune.job_manager import restart
+from cellmap_flow.finetune.job_manager import monitor, restart
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry
@@ -195,7 +194,7 @@ def _monitor(manager, job, chunks, monkeypatch, observe=None):
         with open(job.log_file, "a") as f:
             f.write(next(rest, ""))
 
-    monkeypatch.setattr(fjm.time, "sleep", sleep)
+    monkeypatch.setattr(monitor.time, "sleep", sleep)
     manager.monitor_job(job)
     return seen
 
@@ -277,7 +276,7 @@ class _Killable:
                                     pytest.param("racing the poll", id="killed before it was marked cancelled")])
 def test_a_cancelled_job_stays_cancelled(make_job, monkeypatch, cancel):
     """LSF reports the kill as EXIT, and the next poll overwrote CANCELLED with FAILED."""
-    monkeypatch.setattr(fjm.time, "sleep", lambda s: None)
+    monkeypatch.setattr(monitor.time, "sleep", lambda s: None)
     manager, job = FinetuneJobManager(), make_job(lsf_job=_Killable())
     manager.jobs[job.job_id] = job
     if cancel == "through the manager":
