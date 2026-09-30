@@ -4,7 +4,7 @@ The paths:
 - the CLI's startup viewer (``neuroglancer_utils.generate_neuroglancer_url``);
 - Submit (``/api/process``);
 - a model started from the Models tab, from the catalog or Hugging Face;
-- a finetuned model's layer (``FinetuneJobManager``);
+- a finetuned model's layer (``dashboard.finetune_layers``);
 - the viewers ``/api/set-data`` and the bounding-box tool open.
 
 Each prediction layer is pinned as neuroglancer receives it: its type, its
@@ -250,11 +250,11 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
 
 
 def test_a_finetuned_models_layer(servers, viewer):
-    from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+    from cellmap_flow.dashboard.finetune_layers import add_finetuned_layer
 
     job = SimpleNamespace(model_name="old", lsf_job=SimpleNamespace(job_id="7"), finetuned_model_name=None,
                           inference_server_url="http://old:8000", params={"output_voxel_size": [16, 16, 16]})
-    FinetuneJobManager()._add_finetuned_neuroglancer_layer(job, "old_finetuned_1")
+    add_finetuned_layer(job, "old_finetuned_1")
 
     assert _viewer(viewer, ["old_finetuned_1"]) == {
         "layers": [("old_finetuned_1", "image")],

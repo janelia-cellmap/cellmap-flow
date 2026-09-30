@@ -63,18 +63,21 @@ def submit(client, trainable_session):
     """``submit(volume=CROPPED, via_base_path=False, **request)``: POST
     /api/finetune/submit for model "m", on a session over ``volume``. Returns
     the status and answer, what the job manager was asked for (None if
-    nothing), and the session's manifest afterwards."""
+    nothing), the listeners it was given, and the session's manifest
+    afterwards."""
 
     def run(volume=CROPPED, via_base_path=False, **request):
         corrections = trainable_session(*volume)
-        asked = []
-        g.finetune_job_manager = SimpleNamespace(jobs={}, submit_finetuning_job=lambda **kw: asked.append(kw)
-                                                 or SimpleNamespace(job_id="j", output_dir=corrections, lsf_job=None))
+        asked, listeners = [], []
+        g.finetune_job_manager = SimpleNamespace(
+            jobs={}, add_listener=listeners.append,
+            submit_finetuning_job=lambda **kw: asked.append(kw) or SimpleNamespace(
+                job_id="j", output_dir=corrections, lsf_job=None))
         path = corrections.parent.parent if via_base_path else corrections
         response = client.post("/api/finetune/submit",
                                json={"model_name": "m", "corrections_path": str(path), **request})
         return SimpleNamespace(status=response.status_code, body=response.get_json(), sent=asked[0] if asked else None,
-                               corrections=corrections,
+                               corrections=corrections, listeners=listeners,
                                manifest=json.loads((corrections / "_virtual_sources.json").read_text()))
 
     return run
@@ -178,8 +181,9 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
     if registered == "an incomplete":
         volume["output_size"] = volume["dataset_path"] = None
     g.annotation_volumes = {"vol": volume}
-    g.finetune_job_manager = SimpleNamespace(jobs={}, submit_finetuning_job=lambda **kw: SimpleNamespace(
-        job_id="j", output_dir=corrections, lsf_job=None))
+    g.finetune_job_manager = SimpleNamespace(jobs={}, add_listener=lambda listener: None,
+                                             submit_finetuning_job=lambda **kw: SimpleNamespace(
+                                                 job_id="j", output_dir=corrections, lsf_job=None))
     client.post("/api/finetune/submit", json={"model_name": "m", "corrections_path": str(corrections)})
 
     manifest = corrections / "_virtual_sources.json"
@@ -251,17 +255,43 @@ def test_a_restart_with_an_override_that_is_not_one_fails(restart):
     assert run.sent == []
 
 
-def test_the_jobs_list_looks_for_jobs_in_the_saved_output_path(client, session, monkeypatch):
-    """After a dashboard restart this dashboard has made no sessions yet; the
-    output path saved in the user prefs is where its jobs are."""
+@pytest.fixture
+def jobs_list(client, session, monkeypatch):
+    """GET /api/finetune/jobs from a dashboard started after the job in
+    ``session()``: the output path is only in the user prefs. Returns the
+    sessions the job manager was asked to look in, and the listeners it was
+    given, in the order it got them."""
     from cellmap_flow.dashboard.routes.finetune import common
 
     base = session()
-    looked = []
-    g.finetune_job_manager = SimpleNamespace(jobs={}, rehydrate_session=looked.append, list_jobs=lambda: [])
+    asked = SimpleNamespace(base=base, calls=[])
+    g.finetune_job_manager = SimpleNamespace(
+        jobs={}, list_jobs=lambda: [], rehydrate_session=lambda path: asked.calls.append(("look in", path)),
+        add_listener=lambda listener: asked.calls.append(("listener", type(listener))))
     monkeypatch.setattr(common, "load_user_prefs", lambda: {"outputPath": str(base.parent)})
     assert client.get("/api/finetune/jobs").get_json()["success"]
-    assert looked == [str(base)]
+    return asked
+
+
+def test_the_jobs_list_looks_for_jobs_in_the_saved_output_path(jobs_list):
+    """After a dashboard restart this dashboard has made no sessions yet; the
+    output path saved in the user prefs is where its jobs are."""
+    assert [path for what, path in jobs_list.calls if what == "look in"] == [str(jobs_list.base)]
+
+
+def test_the_viewer_follows_the_jobs_the_dashboard_finds(jobs_list):
+    """The job manager has no viewer code: the dashboard's listener is what
+    adds a job's layer, and it has to be there before a found job's monitor
+    starts."""
+    from cellmap_flow.dashboard.finetune_layers import FinetuneLayerListener
+
+    assert jobs_list.calls[0] == ("listener", FinetuneLayerListener)
+
+
+def test_the_viewer_follows_the_jobs_the_dashboard_submits(submit):
+    from cellmap_flow.dashboard.finetune_layers import FinetuneLayerListener
+
+    assert [type(listener) for listener in submit().listeners] == [FinetuneLayerListener]
 
 
 def _zarr(path, **attrs):

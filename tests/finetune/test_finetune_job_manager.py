@@ -1,6 +1,7 @@
 """FinetuneJobManager: the command a job runs, what the monitor reads from its
-log, what it tells listeners and the viewer, and finding jobs again after a
-dashboard restart. What the trainer prints is test_finetune_cli's."""
+log, what it tells listeners, and finding jobs again after a dashboard
+restart. What the trainer prints is test_finetune_cli's, and what the
+dashboard's listener does test_finetune_layers'."""
 
 import json
 import os
@@ -9,13 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-import neuroglancer
 import pytest
 
 from cellmap_flow.finetune import finetune_job_manager as fjm
 from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, JobStatus, finetune_export_kwargs
 from cellmap_flow.finetune.model_loading import decode_model_entry
-from cellmap_flow.globals import g
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus as LSF
@@ -213,9 +212,7 @@ def monitored(make_job, monkeypatch):
         for export in exported:  # complete_job checks that the export is there
             (job.output_dir / export).parent.mkdir(exist_ok=True)
             (job.output_dir / export).write_bytes(b"")
-        manager = FinetuneJobManager()
-        manager.remove_listener(manager.viewer_listener)
-        seen = _monitor(manager, job, chunks, monkeypatch)
+        seen = _monitor(FinetuneJobManager(), job, chunks, monkeypatch)
         return SimpleNamespace(job=job, seen=seen, metadata=json.loads((job.output_dir / "metadata.json").read_text()))
 
     return run
@@ -306,8 +303,8 @@ ITERATIONS = ["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n", SERVER,
 def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatch, chunks, events):
     """What the dashboard does about a job is a listener. While listeners run
     the job still has its model's previous name, so one can replace that
-    model's layer; and a listener that raises stops neither the others nor
-    the monitor."""
+    model's layer; a listener that raises stops neither the others nor the
+    monitor; and one added twice is told once."""
     heard = []
 
     class Recording:
@@ -321,48 +318,14 @@ def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatc
         def on_iteration_complete(self, job, model_name):
             raise RuntimeError("listener bug")
 
-    manager = FinetuneJobManager()
-    manager.remove_listener(manager.viewer_listener)
+    manager, recording = FinetuneJobManager(), Recording()
     manager.add_listener(Broken())
-    manager.add_listener(Recording())
+    manager.add_listener(recording)
+    manager.add_listener(recording)
     job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * len(chunks), LSF.FAILED))
     _monitor(manager, job, chunks, monkeypatch)
     assert heard == events
     assert job.finetuned_model_name == "m_finetuned_2"
-
-
-@pytest.fixture
-def viewer(make_job, monkeypatch):
-    """The dashboard's own listener, following ITERATIONS for a local run (a
-    process, no LSF job id): the viewer's layer names at each poll."""
-    from cellmap_flow.post.postprocessors import SigmoidPostprocessor
-    from cellmap_flow.utils import server_info
-
-    monkeypatch.setattr(server_info, "fetch_model_info", lambda *a, **k: {"output_class": None})
-    for key, value in dict(viewer=neuroglancer.Viewer(), jobs=[], models_config=[], input_norms=[],
-                           postprocess=[SigmoidPostprocessor()]).items():
-        monkeypatch.setattr(g, key, value, raising=False)
-    job = make_job(lsf_job=_lsf(*[LSF.RUNNING] * 3, LSF.FAILED, process=SimpleNamespace(pid=99)))
-    layers = _monitor(FinetuneJobManager(), job, ITERATIONS, monkeypatch,
-                      observe=lambda: [layer.name for layer in g.viewer.state.layers])
-    return SimpleNamespace(layers=layers, state=g.viewer.state)
-
-
-def test_the_viewer_gets_the_layer_once_the_server_is_up_and_each_iteration_replaces_it(viewer):
-    """A layer was added before the server existed, with the source zarr://None/...;
-    and a local run's LocalJob has no job_id, so adding its layer raised."""
-    assert viewer.layers == [[], ["m_finetuned_1"], ["m_finetuned_2"]]
-    assert [job.job_id for job in g.jobs] == ["local"]
-
-
-def test_the_finetuned_layer_shows_the_outputs_own_range(viewer):
-    """It was always [0, 255], so a sigmoid's [0, 1] rendered black, and the
-    finetuned model looked worse than the same one added the normal way."""
-    assert "range=[0, 1]" in viewer.state.layers["m_finetuned_2"].shader
-
-
-def test_the_pipeline_builder_gets_each_iterations_model(viewer):
-    assert [config.name for config in g.models_config] == ["m_finetuned_2"]
 
 
 def _run(session, name, **metadata):

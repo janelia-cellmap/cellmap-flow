@@ -21,6 +21,7 @@ from pathlib import Path
 
 from flask import Response, jsonify, request
 
+from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
@@ -206,6 +207,9 @@ def _rehydrate_jobs():
     rehydrate = getattr(manager, "rehydrate_session", None)
     if rehydrate is None:
         return
+    # Before the jobs are found: finding one starts its monitor, which tells
+    # the viewer when its server is up.
+    follow_jobs(manager)
     bases = {os.path.expanduser(b) for b in get_session().output_sessions}
     saved = load_user_prefs().get("outputPath")
     if saved:
@@ -368,6 +372,9 @@ def submit_finetuning():
             label_smoothing = 0.0
 
         session = get_session()
+        # Before the job exists: submitting starts its monitor, which tells
+        # the viewer when its server is up and when each iteration is done.
+        follow_jobs(session.finetune_job_manager)
         finetune_job = session.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,

@@ -121,21 +121,6 @@ _ITERATION_COMPLETE_RE = markers.ITERATION_COMPLETE_RE
 _MODEL_YAML_RE = markers.MODEL_YAML_RE
 
 
-def _yaml_model_entry(yaml_path) -> Optional[dict]:
-    """The first models: entry of a serving YAML, or None if it cannot be read."""
-    if not yaml_path:
-        return None
-    try:
-        import yaml
-
-        with open(yaml_path) as f:
-            models = (yaml.safe_load(f) or {}).get("models") or []
-    except Exception:
-        return None
-    entry = models[0] if models else None
-    return entry if isinstance(entry, dict) and entry.get("base_model") else None
-
-
 def _finished_iterations(log_file):
     """(how many iterations the log says finished, the last one's model name).
 
@@ -252,38 +237,6 @@ class FinetuneJobListener:
         """The job finished a training iteration and named its model ``model_name``."""
 
 
-class ViewerListener(FinetuneJobListener):
-    """What the dashboard has always done: a viewer layer and a pipeline model.
-
-    Each event adds (or replaces) the finetuned model's neuroglancer layer and
-    registers its FinetuneModelConfig, through the manager's own methods.
-    Either failing is logged, and does not stop the other.
-    """
-
-    def __init__(self, manager: "FinetuneJobManager"):
-        self.manager = manager
-
-    def _add_layer(self, job, model_name, failure):
-        try:
-            self.manager._add_finetuned_neuroglancer_layer(job, model_name)
-        except Exception as e:
-            self.manager.logger.error(f"{failure}: {e}", exc_info=True)
-
-    def _register(self, job, model_name):
-        try:
-            self.manager._register_finetune_model_config(job, model_name)
-        except Exception as e:
-            self.manager.logger.error(f"Failed to register FinetuneModelConfig: {e}", exc_info=True)
-
-    def on_server_ready(self, job, url, model_name):
-        self._add_layer(job, model_name, "Failed to add finetuned model to neuroglancer")
-        self._register(job, model_name)
-
-    def on_iteration_complete(self, job, model_name):
-        self._add_layer(job, model_name, "Failed to update neuroglancer layer")
-        self._register(job, model_name)
-
-
 class FinetuneJobManager:
     """
     Orchestrate finetuning jobs from submission to completion.
@@ -300,15 +253,18 @@ class FinetuneJobManager:
         self.jobs: Dict[str, FinetuneJob] = {}
         self.logger = logging.getLogger(__name__)
         # Told when a job's server comes up and when an iteration finishes.
-        self.viewer_listener = ViewerListener(self)
-        self._listeners: List[Any] = [self.viewer_listener]
+        # None by default: what a job's model looks like in the dashboard is
+        # the dashboard's (dashboard.finetune_layers).
+        self._listeners: List[Any] = []
 
     def add_listener(self, listener) -> None:
-        """Tell ``listener`` about job events; see FinetuneJobListener."""
-        self._listeners.append(listener)
+        """Tell ``listener`` about job events; see FinetuneJobListener.
+        Adding one already added does nothing."""
+        if not any(other is listener for other in self._listeners):
+            self._listeners.append(listener)
 
     def remove_listener(self, listener) -> None:
-        """Stop telling ``listener``, which may be the default viewer_listener."""
+        """Stop telling ``listener``."""
         self._listeners = [other for other in self._listeners if other is not listener]
 
     def _notify(self, event: str, *args) -> None:
@@ -985,8 +941,8 @@ class FinetuneJobManager:
         with auto-serve it waited for a restart until walltime. Each job's
         metadata.json now records its LSF job id and status; a run whose
         recorded status is not final and that bjobs still reports as pending
-        or running is monitored again, which also brings back its viewer
-        layer once the log shows its server. Local runs (a PID, not an LSF
+        or running is monitored again, which also tells the listeners again
+        once the log shows its server. Local runs (a PID, not an LSF
         job) are not reattached. Returns how many jobs were picked up.
 
         All the session's candidates are asked about in one bjobs call, and
@@ -1227,146 +1183,10 @@ class FinetuneJobManager:
             except ValueError:
                 pass
 
-    def _add_finetuned_neuroglancer_layer(self, finetune_job: FinetuneJob, model_name: str):
-        """
-        Add (or replace) the finetuned model's neuroglancer layer.
-
-        Mirrors run_model() from cellmap_flow/dashboard/services/launch.py:
-        1. Create/update Job object in g.jobs
-        2. Add neuroglancer ImageLayer with pre/post processing args
-
-        Args:
-            finetune_job: Job with inference_server_url set
-            model_name: Layer name (e.g. "mito_finetuned_20240101_120000")
-        """
-        from cellmap_flow.globals import g
-        from cellmap_flow.utils.web_utils import get_norms_post_args
-        import neuroglancer
-
-        server_url = finetune_job.inference_server_url
-        if not server_url:
-            # The trainer prints its completion marker before it starts the
-            # server, and with auto-serve off never starts one. A layer made
-            # now had the source zarr://None/..., and came with a g.jobs entry
-            # whose host was None -- permanently, without auto-serve.
-            self.logger.info(
-                f"No inference server for {model_name} yet; the layer is added once it is up."
-            )
-            return
-
-        # Create a Job object for the running server
-        # A local run is a LocalJob, which has a process and no job_id.
-        inference_job = LSFJob(
-            job_id=getattr(finetune_job.lsf_job, "job_id", None) or "local",
-            model_name=model_name
-        )
-        # The address viewers use (see jobs.spec.public_server_url); the
-        # dashboard's own requests and the restart control keep server_url.
-        from cellmap_flow.jobs.spec import public_server_url
-
-        inference_job.host = public_server_url(server_url)
-        inference_job.status = LSFJobStatus.RUNNING
-
-        # Replace any old finetuned jobs for this base model. One assignment
-        # of a new list, rather than filter-then-append on the shared one:
-        # this runs on the monitor thread while request threads use g.jobs.
-        g.jobs = [
-            j for j in list(g.jobs)
-            if not (hasattr(j, 'model_name') and j.model_name
-                    and j.model_name.startswith(f"{finetune_job.model_name}_finetuned"))
-        ] + [inference_job]
-        self.logger.info(f"Added finetuned job to g.jobs: {model_name}")
-
-        # Get pre/post processing args (same hash as other models)
-        st_data = get_norms_post_args(g.input_norms, g.postprocess)
-
-        if g.viewer is None:
-            self.logger.error("g.viewer is None - neuroglancer not initialized yet")
-            return
-
-        # Lie about the model's voxel size so the layer overlays the raw at
-        # the closest available scale (e.g. trained at 16nm but raw is
-        # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
-        from cellmap_flow.io.multiscale import closest_raw_scale
-        from cellmap_flow.viewer.layers import prediction_source
-
-        override_scales = None
-        try:
-            output_voxel_size = tuple(
-                finetune_job.params.get("output_voxel_size") or ()
-            )
-            dataset_path = getattr(g, "dataset_path", None)
-            if output_voxel_size and dataset_path:
-                closest = closest_raw_scale(dataset_path, output_voxel_size)
-                if closest is not None and tuple(closest) != tuple(output_voxel_size):
-                    override_scales = closest
-                    self.logger.info(
-                        f"Finetuned model '{model_name}' output_voxel_size="
-                        f"{output_voxel_size} overridden to closest raw scale "
-                        f"{closest} for viewer overlay"
-                    )
-        except Exception as e:
-            self.logger.warning(
-                f"Could not compute override scales for finetuned '{model_name}': {e}"
-            )
-
-        source_spec = prediction_source(
-            inference_job.host, model_name, st_data, override_scales
-        )
-        self.logger.info(f"Adding neuroglancer layer: {model_name}")
-        self.logger.info(f"  source: {source_spec}")
-
-        with g.viewer.txn() as s:
-            # Remove old finetuned layer if it exists (exact name match)
-            old_layer_name = finetune_job.finetuned_model_name
-            if old_layer_name and old_layer_name in s.layers:
-                self.logger.info(f"Removing old finetuned layer: {old_layer_name}")
-                del s.layers[old_layer_name]
-
-            # Also remove by current name in case of re-add
-            if model_name in s.layers:
-                del s.layers[model_name]
-
-            s.layers[model_name] = neuroglancer.ImageLayer(
-                source=source_spec,
-                shader=self._finetuned_shader(server_url),
-            )
-
-        self.logger.info(f"Successfully added neuroglancer layer: {model_name}")
-
-    def _finetuned_shader(self, server_url):
-        """The same display range an ordinary model layer gets.
-
-        This used to be hardcoded to range=[0, 255]. A sigmoid output lives in
-        [0, 1], so the finetuned layer rendered as near-black however good the
-        predictions were, while the identical model added through the normal
-        path looked fine -- an unfair comparison built into the viewer.
-
-        Falls back to the old fixed range only if the server cannot be asked.
-        """
-        from cellmap_flow.globals import g
-        from cellmap_flow.utils.output_probe import output_display_range
-        from cellmap_flow.viewer.raw import prediction_shader
-        from cellmap_flow.utils.server_info import fetch_model_info
-
-        try:
-            info = fetch_model_info(server_url)
-            steps = [
-                p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
-            ]
-            value_range = output_display_range(steps, info.get("output_class"))
-        except Exception as e:
-            self.logger.warning(
-                f"Could not work out a display range for the finetuned layer "
-                f"({e}); falling back to 0-255."
-            )
-            value_range = (0.0, 255.0)
-        return prediction_shader("red", value_range)
-
     def _parse_inference_server_ready(self, finetune_job: FinetuneJob, log_content: str):
         """
-        Parse log for CELLMAP_FLOW_SERVER_IP marker and add finetuned model
-        to neuroglancer exactly like a normal inference model.
+        Parse log for CELLMAP_FLOW_SERVER_IP marker and tell the listeners
+        the job's inference server is up.
 
         Args:
             finetune_job: Job to update
@@ -1397,7 +1217,8 @@ class FinetuneJobManager:
                 model_name = f"{finetune_job.model_name}_finetuned"
             self._read_trainer_outputs(finetune_job, set_name=False)
         except Exception as e:
-            self.logger.error(f"Failed to add finetuned model to neuroglancer: {e}", exc_info=True)
+            self.logger.error(f"Could not read the served model's name from {finetune_job.log_file}: {e}",
+                              exc_info=True)
             return
 
         self._notify("on_server_ready", finetune_job, server_url, model_name)
@@ -1405,79 +1226,13 @@ class FinetuneJobManager:
         # that the iteration it serves is not announced again.
         finetune_job.finetuned_model_name = model_name
 
-    def _register_finetune_model_config(
-        self, finetune_job: FinetuneJob, finetuned_model_name: str
-    ):
-        """Register a FinetuneModelConfig in g.models_config so it appears
-        in the pipeline builder with auto-populated parameters."""
-        from cellmap_flow.globals import g
-        from cellmap_flow.models.models_config import FinetuneModelConfig
-
-        params = finetune_job.params
-
-        # The trainer's own YAML for this iteration says exactly what it
-        # exported and on which base; registering from it keeps the pipeline
-        # builder's model identical to the one the YAML serves. Without one,
-        # fall back to the run's latest export and the base model's entry.
-        entry = _yaml_model_entry(finetune_job.model_yaml_path)
-        if entry is not None:
-            export = {
-                k: entry[k] for k in ("lora_adapter_path", "weights_path") if entry.get(k)
-            }
-            base_model_dict = entry.get("base_model")
-        else:
-            export = finetune_export_kwargs(finetune_job.output_dir, params)
-            base_model_dict = None
-
-        # Find the base model's to_dict() from g.models_config
-        if base_model_dict is None and hasattr(g, "models_config") and g.models_config:
-            for mc in g.models_config:
-                if getattr(mc, "name", None) == finetune_job.model_name:
-                    base_model_dict = mc.to_dict()
-                    break
-
-        if base_model_dict is None:
-            # Fallback: reconstruct from job params
-            base_model_dict = {"type": "fly"}
-            if params.get("model_checkpoint"):
-                base_model_dict["checkpoint_path"] = params["model_checkpoint"]
-            for key in ("channels", "input_voxel_size", "output_voxel_size"):
-                if key in params:
-                    base_model_dict[key] = params[key]
-
-        ft_config = FinetuneModelConfig(
-            base_model=base_model_dict,
-            name=finetuned_model_name,
-            scale=params.get("scale"),
-            **export,
-        )
-
-        if not hasattr(g, "models_config"):
-            g.models_config = []
-
-        # Remove any previous finetuned versions of the same base model
-        base_model_name = finetune_job.model_name
-        g.models_config = [
-            mc
-            for mc in g.models_config
-            if not (
-                hasattr(mc, "name")
-                and mc.name.startswith(f"{base_model_name}_finetuned")
-            )
-        ]
-
-        g.models_config.append(ft_config)
-        self.logger.info(
-            f"Registered FinetuneModelConfig: {finetuned_model_name}"
-        )
-
     def _parse_training_restart(self, finetune_job: FinetuneJob, log_content: str):
         """
         Parse log for RESTARTING_TRAINING and TRAINING_ITERATION_COMPLETE markers
         to handle iterative training restarts.
 
         On RESTARTING_TRAINING: reset training progress counters.
-        On TRAINING_ITERATION_COMPLETE: update the neuroglancer layer name with new timestamp.
+        On TRAINING_ITERATION_COMPLETE: tell the listeners the iteration's model.
 
         Args:
             finetune_job: Job to update
@@ -1504,7 +1259,7 @@ class FinetuneJobManager:
                 finetune_job.status = JobStatus.RUNNING
                 finetune_job.inference_server_ready = False
 
-        # Check for iteration complete marker - update neuroglancer layer.
+        # Check for iteration complete marker - tell the listeners.
         # Read full log in case the marker was in a previous chunk.
         try:
             full_log = finetune_job.log_file.read_text()
@@ -1514,7 +1269,7 @@ class FinetuneJobManager:
         # Only process new iteration-complete markers (ignore ones already handled).
         # After a restart, _processed_iteration_count stays at the old count so
         # previously-seen markers don't re-trigger inference_server_ready or
-        # neuroglancer layer updates.
+        # the listeners.
         if len(iter_matches) > finetune_job._processed_iteration_count:
             finetune_job._processed_iteration_count = len(iter_matches)
 
@@ -1539,7 +1294,7 @@ class FinetuneJobManager:
         The trainer prints "FINETUNED_MODEL_YAML: <path>" and then
         "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it
         finishes. ``set_name=False`` leaves finetuned_model_name alone, for the
-        monitor, which uses the old name to replace the old viewer layer.
+        monitor, whose listeners use the old name (see FinetuneJobListener).
         """
         try:
             log_text = finetune_job.log_file.read_text()
