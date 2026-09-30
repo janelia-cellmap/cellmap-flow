@@ -10,6 +10,13 @@ from datetime import datetime
 import yaml
 from flask import Blueprint, request
 
+from cellmap_flow.dashboard.requests import (
+    BlockwiseGenerate,
+    BlockwisePrecheck,
+    BlockwiseSubmit,
+    BlockwiseValidate,
+    check,
+)
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.spec import JobSpec
@@ -61,43 +68,24 @@ def _existing_task_paths(paths):
     return list(paths)
 
 
+def _read(model, flag):
+    """``(the request's body as model, None)``, or ``(None, the answer)`` to a
+    body it is not: a 200 with ``flag`` false and what is wrong, which is how
+    the builder learns a step failed (not requests.parse()'s 400)."""
+    body, error = check(model, request.get_json(silent=True))
+    return body, (None if error is None else {flag: False, "error": error})
+
+
 @blockwise_bp.route("/api/blockwise/validate", methods=["POST"])
 def validate_blockwise():
-    """Validate if pipeline is ready for blockwise processing"""
-    try:
-        data = request.get_json()
-        pipeline = data.get("pipeline", {})
-
-        # Check required components
-        if not pipeline.get("inputs") or len(pipeline["inputs"]) == 0:
-            return {"valid": False, "error": "No input nodes defined"}
-
-        if not pipeline.get("outputs") or len(pipeline["outputs"]) == 0:
-            return {"valid": False, "error": "No output nodes defined"}
-
-        if not pipeline.get("models") or len(pipeline["models"]) == 0:
-            return {"valid": False, "error": "No models defined"}
-
-        # Check blockwise config
-        if not pipeline.get("blockwise_config") or len(pipeline["blockwise_config"]) == 0:
-            return {"valid": False, "error": "No blockwise configuration defined"}
-
-        # Check input has dataset_path
-        input_node = pipeline["inputs"][0]
-        if not input_node.get("params", {}).get("dataset_path"):
-            return {"valid": False, "error": "Input node missing dataset_path"}
-
-        # Check output has dataset_path
-        output_node = pipeline["outputs"][0]
-        if not output_node.get("params", {}).get("dataset_path"):
-            return {"valid": False, "error": "Output node missing dataset_path"}
-
-        logger.info("Pipeline validation passed")
-        return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
-
-    except Exception as e:
-        logger.error(f"Validation error: {str(e)}")
-        return {"valid": False, "error": str(e)}
+    """Whether the builder's pipeline is ready for blockwise processing, as
+    requests.BlockwisePipeline describes it: {"valid": True, "message"}, or
+    {"valid": False, "error"}."""
+    _, refused = _read(BlockwiseValidate, "valid")
+    if refused:
+        return refused
+    logger.info("Pipeline validation passed")
+    return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
 
 
 # A model's fields that are lists, which the builder's text fields may send
@@ -130,7 +118,7 @@ def _list_from_text(value):
 def _model_entry(model):
     """A model node's entry in the task YAML: its name, then its params (or,
     without params, the config it was defined with), the list fields as lists."""
-    entry = {"name": model.get("name"), **model.get("params", model.get("config", {}))}
+    entry = {"name": model.name, **model.settings()}
     for field in _LIST_FIELDS:
         if field in entry:
             entry[field] = _list_from_text(entry[field])
@@ -141,11 +129,7 @@ def _chain_steps(steps):
     """A chain in the task YAML's ordered form, ``[{name, **params}]``. (A dict
     keyed by name kept only the last of two steps with the same name.) A node
     without a name is left out."""
-    return [
-        {"name": step["name"], **(step.get("params") or {})}
-        for step in steps
-        if isinstance(step, dict) and step.get("name")
-    ]
+    return [{"name": step.name, **(step.params or {})} for step in steps if step.name]
 
 
 def _task_text(task):
@@ -163,11 +147,11 @@ def _write_task(tasks_dir, task):
 
 
 def _generate(pipeline, job_name):
-    """Write the task YAML(s) for the builder's ``pipeline``; generate's
-    answer. A task named after ``job_name`` and the time."""
-    settings = pipeline["blockwise_config"][0]["params"]
-    input_params = pipeline["inputs"][0].get("params", {})
-    output_params = pipeline["outputs"][0].get("params", {})
+    """Write the task YAML(s) for ``pipeline`` (a requests.BlockwisePipeline);
+    generate's answer. A task named after ``job_name`` and the time."""
+    settings = pipeline.blockwise_config[0].params
+    input_params = pipeline.inputs[0].params
+    output_params = pipeline.outputs[0].params
 
     # The output is a zarr: without a trailing slash, and with .zarr added
     # when the path has none.
@@ -182,14 +166,14 @@ def _generate(pipeline, job_name):
         "data_path": input_params["dataset_path"],
         "output_path": output_path,
         "task_name": task_name,
-        "charge_group": settings["charge_group"],
-        "queue": settings["queue"],
-        "workers": settings["nb_workers"],
-        "cpu_workers": settings["nb_cores_worker"],
-        "tmp_dir": settings["tmp_dir"],
+        "charge_group": settings.charge_group,
+        "queue": settings.queue,
+        "workers": settings.nb_workers,
+        "cpu_workers": settings.nb_cores_worker,
+        "tmp_dir": settings.tmp_dir,
         # Each worker's -W; the master gets the same (see submit).
         "walltime": _task_walltime(),
-        "models": [_model_entry(model) for model in pipeline.get("models", [])],
+        "models": [_model_entry(model) for model in pipeline.models],
     }
 
     bounding_boxes = input_params.get("bounding_boxes", [])
@@ -198,22 +182,13 @@ def _generate(pipeline, job_name):
     separate_zarrs = input_params.get("separate_bounding_boxes_zarrs", False)
     if separate_zarrs:
         task["separate_bounding_boxes_zarrs"] = True
-    # How the models' outputs are merged, when there are several.
-    model_mode = pipeline.get("model_mode", "")
-    if len(pipeline.get("models", [])) > 1 and model_mode:
-        task["model_mode"] = model_mode
-
-    normalizers = pipeline.get("normalizers", [])
-    postprocessors = pipeline.get("postprocessors", [])
-    if normalizers or postprocessors:
-        try:
-            task["json_data"] = {
-                INPUT_NORM_DICT_KEY: _chain_steps(normalizers),
-                POSTPROCESS_DICT_KEY: _chain_steps(postprocessors),
-            }
-        except Exception as e:
-            logger.warning(f"Failed to create json_data: {e}")
-
+    if len(pipeline.models) > 1 and pipeline.model_mode:
+        task["model_mode"] = pipeline.model_mode
+    if pipeline.normalizers or pipeline.postprocessors:
+        task["json_data"] = {
+            INPUT_NORM_DICT_KEY: _chain_steps(pipeline.normalizers),
+            POSTPROCESS_DICT_KEY: _chain_steps(pipeline.postprocessors),
+        }
     output_channels = output_params.get("output_channels", [])
     if output_channels and isinstance(output_channels, list):
         task["output_channels"] = output_channels
@@ -252,12 +227,11 @@ def generate_blockwise_task():
     {"success": True, "task_paths", "task_name", "task_yaml", "task_config",
     "message"}, or {"success": False, "error"}.
     """
+    body, refused = _read(BlockwiseGenerate, "success")
+    if refused:
+        return refused
     try:
-        data = request.get_json()
-        validation = validate_blockwise()
-        if not validation.get("valid"):
-            return {"success": False, "error": validation.get("error")}
-        return _generate(data.get("pipeline", {}), data.get("job_name", ""))
+        return _generate(body.pipeline, body.job_name)
     except Exception as e:
         logger.error(f"Task generation error: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -268,18 +242,18 @@ def precheck_blockwise_task():
     """Check the task YAMLs generate wrote, as blockwise_processor.precheck
     does: {"success": True, "message": "success"}, or {"success": False,
     "error"} with the first one's problem."""
+    body, refused = _read(BlockwisePrecheck, "success")
+    if refused:
+        return refused
     try:
         # precheck() rather than constructing the processor: that created the
         # output arrays, loaded every model into this process, and replaced
         # the dashboard's live g.input_norms and g.postprocess.
         from cellmap_flow.blockwise.blockwise_processor import precheck
 
-        yaml_paths = request.get_json().get("yaml_paths", [])
-        if not yaml_paths:
-            return {"success": False, "error": "No YAML paths provided. Please generate task first."}
-        for yaml_path in yaml_paths:
+        for yaml_path in body.yaml_paths:
             precheck(yaml_path)
-        logger.info(f"Blockwise precheck passed for: {', '.join(yaml_paths)}")
+        logger.info(f"Blockwise precheck passed for: {', '.join(body.yaml_paths)}")
         return {"success": True, "message": "success"}
 
     except Exception as e:
@@ -289,24 +263,24 @@ def precheck_blockwise_task():
 
 @blockwise_bp.route("/api/blockwise/submit", methods=["POST"])
 def submit_blockwise_task():
-    """Submit blockwise task to LSF"""
+    """Submit the task's master to LSF, which runs the task's workers.
+
+    {"success": True, "job_id", "task_name", "task_paths", "log_path",
+    "command", "message"}, or {"success": False, "error"}; "job_id" is
+    "unknown" when bsub accepted the job without naming it.
+    """
+    body, refused = _read(BlockwiseSubmit, "success")
+    if refused:
+        return refused
     try:
-        data = request.get_json()
-        pipeline = data.get("pipeline", {})
-
-        # First validate
-        validation = validate_blockwise()
-        if not validation.get("valid"):
-            return {"success": False, "error": validation.get("error")}
-
         # Submit the YAMLs that /api/blockwise/generate wrote and
         # /api/blockwise/precheck checked, when the client sends them back.
         # Regenerating writes new files under a new task name, so what ran
         # was not what had been checked.
-        requested = data.get("yaml_paths")
+        requested = body.yaml_paths
         yaml_paths = _existing_task_paths(requested)
         # The name generate gave the YAMLs; the page sends it back with them.
-        task_name = data.get("task_name")
+        task_name = body.task_name
         if yaml_paths is not None:
             logger.info(f"Submitting the given task YAML(s): {', '.join(yaml_paths)}")
         else:
@@ -314,13 +288,13 @@ def submit_blockwise_task():
                 logger.warning(
                     f"Not every given task YAML exists ({requested}); generating new ones"
                 )
-            generated = _generate(pipeline, data.get("job_name", ""))
+            generated = _generate(body.pipeline, body.job_name)
             yaml_paths, task_name = generated["task_paths"], generated["task_name"]
-        blockwise_config = pipeline["blockwise_config"][0]
+        settings = body.pipeline.blockwise_config[0].params
 
         # The master carries the task's name, so `bjobs -J <task>` is the
         # master and `bjobs -J "predict_*_<task>*"` are its workers.
-        job_name = _sanitize_job_name(task_name or data.get("job_name")) or (
+        job_name = _sanitize_job_name(task_name or body.job_name) or (
             f"cellmap_flow_{int(time.time())}"
         )
 
@@ -334,8 +308,8 @@ def submit_blockwise_task():
             argv=(sys.executable, "-m", "cellmap_flow.blockwise.multiple_cli", *yaml_paths),
             queue=None,
             gpus=0,
-            cpus=blockwise_config["params"]["nb_cores_master"],
-            charge_group=blockwise_config["params"]["charge_group"],
+            cpus=settings.nb_cores_master,
+            charge_group=settings.charge_group,
             walltime=_task_walltime(),
             log_dir=get_blockwise_tasks_dir(),
         )

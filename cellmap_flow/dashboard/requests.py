@@ -16,6 +16,9 @@ message is pydantic's, after the field's name.
 - ``FinetuneRestart``: POST /api/finetune/job/<job_id>/restart
 - ``CreateVolume``: POST /api/finetune/create-volume
 - ``LoadCrops``: POST /api/finetune/load-crops
+- ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
+  ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
+  which answer through ``check`` instead (see there)
 """
 
 from typing import Annotated, Any, Optional
@@ -265,3 +268,121 @@ class LoadCrops(BaseModel):
         None, validate_default=True)
     output_path: Any = None
     load_id: Any = None
+
+
+# --- The pipeline builder's blockwise steps -----------------------------------------
+#
+# The blockwise routes answer a body they cannot take with a 200 whose flag,
+# "valid" from validate and "success" from the others, is false beside the
+# error: the builder reads the flag at each step. So they use check(), which
+# gives parse()'s message without its 400.
+
+
+def check(model, body):
+    """``(model instance, None)`` for a valid ``body``; else ``(None, what is
+    wrong)``, the message parse() would answer with."""
+    if not isinstance(body, dict):
+        return None, "expected a JSON object"
+    try:
+        return model.model_validate(body), None
+    except ValidationError as e:
+        return None, _message(e)
+
+
+class PipelineNode(BaseModel):
+    """A node of the builder's pipeline (state.js), ``{id, name, params,
+    position}``, of which the routes read the name and the params."""
+
+    name: Any = None
+    params: dict = {}
+
+
+class ChainNode(PipelineNode):
+    """A normalizer or postprocessor node, whose params may be null for none."""
+
+    params: Optional[dict] = None
+
+
+class ModelNode(PipelineNode):
+    """A model node. It may carry the config the model was defined with (its
+    ModelConfig.to_dict()), which stands in for params when it has none."""
+
+    config: dict = {}
+
+    def settings(self) -> dict:
+        """Its params, or its config when it was sent without params."""
+        return self.params if "params" in self.model_fields_set else self.config
+
+
+class BlockwiseTaskSettings(BaseModel):
+    """A blockwise-config node's params: what a task and its master are
+    submitted with. Each is required, and taken as sent (precheck checks
+    the task's)."""
+
+    charge_group: Any
+    queue: Any
+    nb_workers: Any
+    nb_cores_worker: Any
+    nb_cores_master: Any
+    tmp_dir: Any
+
+
+class BlockwiseConfigNode(PipelineNode):
+    params: BlockwiseTaskSettings
+
+
+class BlockwisePipeline(BaseModel):
+    """The builder's pipeline, one list of nodes per node type, as the
+    blockwise routes read it: the first input, output and blockwise-config
+    node are the ones used, and the models are run on the chain the
+    normalizers and postprocessors make. The four lists must have a node, and
+    the input and output a dataset_path, checked in that order."""
+
+    inputs: Annotated[list[PipelineNode], _required("inputs", message="No input nodes defined")] = Field(
+        None, validate_default=True)
+    outputs: Annotated[list[PipelineNode], _required("outputs", message="No output nodes defined")] = Field(
+        None, validate_default=True)
+    models: Annotated[list[ModelNode], _required("models", message="No models defined")] = Field(
+        None, validate_default=True)
+    blockwise_config: Annotated[list[BlockwiseConfigNode], _required(
+        "blockwise_config", message="No blockwise configuration defined")] = Field(None, validate_default=True)
+    normalizers: list[ChainNode] = []
+    postprocessors: list[ChainNode] = []
+    # How the models' outputs are merged, when there are several.
+    model_mode: Any = ""
+
+    @model_validator(mode="after")
+    def _dataset_paths(self):
+        if not self.inputs[0].params.get("dataset_path"):
+            raise ValueError("Input node missing dataset_path")
+        if not self.outputs[0].params.get("dataset_path"):
+            raise ValueError("Output node missing dataset_path")
+        return self
+
+
+class BlockwiseValidate(BaseModel):
+    """Whether ``pipeline`` is ready to run blockwise."""
+
+    pipeline: BlockwisePipeline = Field({}, validate_default=True)
+
+
+class BlockwiseGenerate(BlockwiseValidate):
+    """The task YAML(s) for ``pipeline``; ``job_name`` names the task."""
+
+    job_name: Any = ""
+
+
+class BlockwisePrecheck(BaseModel):
+    """The task YAMLs generate wrote, to check."""
+
+    yaml_paths: Annotated[list[str], _required(
+        "yaml_paths", message="No YAML paths provided. Please generate task first.")] = Field(
+        None, validate_default=True)
+
+
+class BlockwiseSubmit(BlockwiseGenerate):
+    """The task to submit: the YAMLs precheck passed and the name generate gave
+    them, or else, if they are not all there, ``pipeline``'s, generated anew."""
+
+    yaml_paths: Any = None
+    task_name: Any = None
