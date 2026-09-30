@@ -551,7 +551,7 @@ def _generate_model_files(
     corrections_path = Path(args.corrections)
     data_path = None
     try:
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         data_path = (read_manifest(str(corrections_path)) or {}).get("raw_dataset_path")
     except Exception as _e:
@@ -584,12 +584,12 @@ def _generate_model_files(
     #    yaml_crops.py) -- checked first, since it's kept fresh on restart.
     #  - the annotation-volume/MinIO workflow (stored directly on the
     #    correction zarr's own .zattrs, written by annotation_core.py /
-    #    finetune_utils.create_annotation_volume_zarr) -- used as a fallback
+    #    session.volume.create_volume_zarr) -- used as a fallback
     #    when no manifest exists.
     train_input_norm = None
     train_postprocess = None
     try:
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         manifest = read_manifest(str(corrections_path)) or {}
         train_input_norm = manifest.get("input_norm")
@@ -1251,7 +1251,7 @@ def main():
             # metadata.json next to the .pth and know exactly which
             # normalization was applied to the training data.
             try:
-                from cellmap_flow.finetune.virtual_dataset import read_manifest
+                from cellmap_flow.finetune.session.manifest import read_manifest
 
                 manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
                 if manifest_norm is not None and args.output_dir:
