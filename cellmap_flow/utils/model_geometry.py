@@ -26,11 +26,11 @@ import logging
 import os
 import tempfile
 import threading
-from types import SimpleNamespace
 
+from cellmap_flow.models.geometry import channel_names_of, number
 from cellmap_flow.utils.server_info import (
     GEOMETRY_FIELDS,
-    OPTIONAL_FIELDS,
+    geometry_stand_in,
     model_geometry_config,
 )
 
@@ -106,32 +106,23 @@ def _write_cache(data):
         logger.debug(f"Could not write the model geometry cache: {e}")
 
 
-def _json_number(value):
-    """An int when ``value`` is whole, else a float."""
-    value = float(value)
-    return int(value) if value.is_integer() else value
-
-
 def load_cached_geometry(model_config):
-    """Geometry remembered for this exact model, or None."""
+    """Geometry remembered for this exact model, as a geometry_stand_in, or None."""
     key = cache_key(model_config)
     if not key:
         return None
-    entry = _read_cache().get(key)
-    if not isinstance(entry, dict):
-        return None
-    if any(entry.get(f) is None for f in GEOMETRY_FIELDS):
-        return None
-    logger.info(f"Model geometry from cache for {key.split(':')[0]} model")
-    fields = {f: entry[f] for f in GEOMETRY_FIELDS}
-    for f in OPTIONAL_FIELDS:
-        if entry.get(f) is not None:
-            fields[f] = entry[f]
-    return SimpleNamespace(**fields)
+    geometry = geometry_stand_in(_read_cache().get(key))
+    if geometry is not None:
+        logger.info(f"Model geometry from cache for {key.split(':')[0]} model")
+    return geometry
 
 
 def store_geometry(model_config, config):
-    """Remember the geometry of a model we just paid to build."""
+    """Remember the geometry of a model we just paid to build.
+
+    ``config`` is its ModelConfig.config, or anything with the same
+    geometry attributes, a ModelGeometry included.
+    """
     key = cache_key(model_config)
     if not key or config is None:
         return
@@ -143,9 +134,7 @@ def store_geometry(model_config, config):
             # JSON-serializable; output_channels is a plain int. int() would
             # also truncate a 5.24 nm voxel size to 5.
             entry[field] = (
-                [_json_number(v) for v in value]
-                if hasattr(value, "__iter__")
-                else int(value)
+                [number(v) for v in value] if hasattr(value, "__iter__") else int(value)
             )
     except (AttributeError, TypeError, ValueError) as e:
         logger.debug(f"Not caching geometry for {key}: {e}")
@@ -154,11 +143,7 @@ def store_geometry(model_config, config):
     # Channel names are optional but worth keeping: the finetune tab reads
     # them to tell an affinity model from a binary one, and a cache hit that
     # dropped them would silently downgrade that to "binary".
-    channels = (
-        getattr(config, "channels", None)
-        or getattr(config, "channels_names", None)
-        or getattr(config, "classes", None)
-    )
+    channels = channel_names_of(config)
     if channels:
         try:
             entry["channels"] = [str(c) for c in channels]

@@ -105,22 +105,34 @@ def test_an_exact_scale_is_unchanged(tmp_path):
     assert idi.to_ndarray_ts(Roi((120, 120, 120), (12, 12, 12))).ravel().tolist() == [0]
 
 
-def test_model_geometry_cache_keeps_fractional_voxel_sizes(tmp_path, monkeypatch):
+def test_the_geometry_cache_reads_and_writes_the_old_format(tmp_path, monkeypatch):
+    import json
     from types import SimpleNamespace
 
+    from cellmap_flow.models.geometry import ModelGeometry
     from cellmap_flow.utils import model_geometry
 
-    monkeypatch.setattr(model_geometry, "CACHE_PATH", str(tmp_path / "cache.json"))
+    cache = tmp_path / "cache.json"
+    monkeypatch.setattr(model_geometry, "CACHE_PATH", str(cache))
     script = tmp_path / "model.py"
     script.write_text("")
     model_config = SimpleNamespace(script_path=str(script))
-    config = SimpleNamespace(
-        read_shape=(52.4, 40, 40),
-        write_shape=(52.4, 40, 40),
-        input_voxel_size=(5.24, 4, 4),
-        output_voxel_size=(5.24, 4, 4),
-        output_channels=1,
+    # An entry as the code before ModelGeometry wrote it, fractional sizes kept.
+    entry = {
+        "read_shape": [52.4, 40, 40],
+        "write_shape": [26.2, 24, 24],
+        "input_voxel_size": [5.24, 4, 4],
+        "output_voxel_size": [5.24, 4, 4],
+        "output_channels": 2,
+        "channels": ["mito", "er"],
+    }
+    old_file = {model_geometry.cache_key(model_config): entry}
+    cache.write_text(json.dumps(old_file))
+
+    geometry = ModelGeometry.from_config(model_geometry.load_cached_geometry(model_config))
+    assert geometry == ModelGeometry(
+        (5.24, 4, 4), (5.24, 4, 4), (52.4, 40, 40), (26.2, 24, 24), 2, channel_names=("mito", "er")
     )
-    model_geometry.store_geometry(model_config, config)
-    cached = model_geometry.load_cached_geometry(model_config)
-    assert cached.input_voxel_size == [5.24, 4, 4]
+    cache.unlink()
+    model_geometry.store_geometry(model_config, geometry)
+    assert json.loads(cache.read_text()) == old_file

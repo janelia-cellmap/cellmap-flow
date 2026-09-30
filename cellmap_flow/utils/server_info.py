@@ -16,6 +16,8 @@ from types import SimpleNamespace
 
 import requests
 
+from cellmap_flow.models.geometry import number
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 3
@@ -63,13 +65,6 @@ def model_geometry(info: dict):
     """
     if not info or not info.get("write_shape"):
         return None
-
-    def number(v):
-        # Whole numbers stay ints, as before; a 5.24 nm voxel size used to be
-        # truncated to 5 here, which put finetune crops on the wrong grid.
-        f = float(v)
-        return int(f) if f.is_integer() else f
-
     try:
         return {
             "write_shape": [number(v) for v in info["write_shape"]],
@@ -101,34 +96,39 @@ GEOMETRY_FIELDS = (
 
 # Reported when the server can, absent from servers predating it. Kept out of
 # GEOMETRY_FIELDS so a server that cannot supply it still satisfies the
-# all-or-nothing check above rather than forcing a local model build.
+# all-or-nothing check below rather than forcing a local model build.
 OPTIONAL_FIELDS = ("channels",)
 
 
-def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
-    """A stand-in for ``ModelConfig.config`` carrying geometry and nothing else.
+def geometry_stand_in(fields):
+    """A stand-in for ``ModelConfig.config`` with the geometry in ``fields``, or None.
 
-    Duck-types the real thing for callers that only read shapes and voxel
-    sizes, so they do not have to build the model to get them. Returns None
-    when no running server can answer, leaving the caller to fall back.
+    ``fields`` is a model_info payload or a geometry cache entry. The
+    stand-in has the config's attribute names, so callers that only read
+    shapes and voxel sizes, and ModelGeometry.from_config, take it as the
+    config. Every GEOMETRY_FIELDS entry, or nothing: callers use it as
+    ``stand_in or model_config.config``, and a SimpleNamespace missing one
+    attribute is still truthy, so a partial answer would defeat the fallback
+    and raise AttributeError deep in the caller instead.
+    """
+    if not isinstance(fields, dict) or any(fields.get(f) is None for f in GEOMETRY_FIELDS):
+        return None
+    present = {f: fields[f] for f in GEOMETRY_FIELDS}
+    present.update({f: fields[f] for f in OPTIONAL_FIELDS if fields.get(f) is not None})
+    return SimpleNamespace(**present)
+
+
+def model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS):
+    """The geometry of ``model_name``'s running server, as a geometry_stand_in.
+
+    None when no running server can answer, or an older one cannot report
+    all of it, leaving the caller to fall back.
     """
     info = fetch_model_info(running_job_host(model_name), timeout)
-    if not info:
-        return None
-    # Every field, or nothing. Callers use this as ``model_geometry_config(x)
-    # or model_config.config``, and a SimpleNamespace missing one attribute is
-    # still truthy -- so a partial answer would defeat the fallback and raise
-    # AttributeError deep in the caller instead. An older server that cannot
-    # report all of them should fall back cleanly.
-    missing = [f for f in GEOMETRY_FIELDS if info.get(f) is None]
-    if missing:
+    geometry = geometry_stand_in(info)
+    if geometry is None and info.get("available", True):
         logger.debug(
-            f"Server geometry for {model_name} is missing {missing}; "
+            f"Server geometry for {model_name} is incomplete; "
             "falling back to building the model locally."
         )
-        return None
-    fields = {f: info[f] for f in GEOMETRY_FIELDS}
-    for f in OPTIONAL_FIELDS:
-        if info.get(f) is not None:
-            fields[f] = info[f]
-    return SimpleNamespace(**fields)
+    return geometry

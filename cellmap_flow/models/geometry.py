@@ -47,9 +47,11 @@ def _voxels(extent, voxel_size) -> Tuple[int, ...]:
     return tuple(int(v) for v in np.where(np.isclose(quotient, nearest), nearest, np.floor(quotient)))
 
 
-def _channel_names(config):
-    """The first of channels, channels_names (Hugging Face) or classes a config names."""
-    for attr in ("channels", "channels_names", "classes"):
+def channel_names_of(config):
+    """The channel names a config gives, or None: the first non-empty one of
+    channels, channels_names (Hugging Face), classes, or a ModelGeometry's
+    channel_names."""
+    for attr in ("channels", "channels_names", "classes", "channel_names"):
         names = getattr(config, attr, None)
         if names is not None and len(names) > 0:
             return names
@@ -144,7 +146,7 @@ class ModelGeometry:
             read_shape=config.read_shape,
             write_shape=config.write_shape,
             output_channels=config.output_channels,
-            channel_names=_channel_names(config),
+            channel_names=channel_names_of(config),
             chunk_output_axes=chunk_output_axes,
             output_dtype=output_dtype,
             input_channels=getattr(config, "input_channels", 1),
