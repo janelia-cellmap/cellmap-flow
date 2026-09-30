@@ -40,6 +40,11 @@ from cellmap_flow.finetune.session.volume import volume_corner_nm
 
 logger = logging.getLogger(__name__)
 
+# The pools' dtype. They are the bulk of the dataset, and every loader worker
+# holds its own copy: a 40M-voxel crop is 480 MB of int32 per worker, 960 MB
+# of int64. A volume is far below 2**31 voxels along any axis.
+POOL_DTYPE = np.int32
+
 
 class PatchSampler:
     """The patch centres of one annotation volume, and the draw among them.
@@ -58,9 +63,9 @@ class PatchSampler:
     worker in the dataset's pickle.
 
     Attributes:
-        dense, sparse: (N, 3) annotation-voxel indices of the two pools, in
-            the order the chunk files are listed and scanned. Either may be
-            empty, never both.
+        dense, sparse: (N, 3) annotation-voxel indices of the two pools
+            (POOL_DTYPE), in the order the chunk files are listed and
+            scanned. Either may be empty, never both.
         effective_dense_ratio: the share of non-rehearsal patches taken from
             ``dense``; ``dense_to_sparse_ratio`` as asked (None: auto),
             clamped away from an empty pool.
@@ -201,7 +206,7 @@ class PatchSampler:
                     # writes) but holds no annotation; skip it.
                     continue
                 n_fg_chunks += 1
-                sparse_rows.append(painted_local + chunk_origin)
+                sparse_rows.append((painted_local + chunk_origin).astype(POOL_DTYPE))
                 continue
             annotated_local = np.argwhere(chunk_data >= 1).astype(np.int64)
             if not annotated_local.size:
@@ -211,18 +216,18 @@ class PatchSampler:
             in_dense = voxels_inside_any_bbox(annotated_global, bbox_offsets, bbox_ends)
             contributed = False
             if (in_dense & is_fg).any():
-                dense_rows.append(annotated_global[in_dense & is_fg])
+                dense_rows.append(annotated_global[in_dense & is_fg].astype(POOL_DTYPE))
                 contributed = True
             if (~in_dense).any():
-                sparse_rows.append(annotated_global[~in_dense])
+                sparse_rows.append(annotated_global[~in_dense].astype(POOL_DTYPE))
                 contributed = True
             n_fg_chunks += int(contributed)
 
         self.dense = (
-            np.concatenate(dense_rows, axis=0) if dense_rows else np.zeros((0, 3), dtype=np.int64)
+            np.concatenate(dense_rows, axis=0) if dense_rows else np.zeros((0, 3), dtype=POOL_DTYPE)
         )
         self.sparse = (
-            np.concatenate(sparse_rows, axis=0) if sparse_rows else np.zeros((0, 3), dtype=np.int64)
+            np.concatenate(sparse_rows, axis=0) if sparse_rows else np.zeros((0, 3), dtype=POOL_DTYPE)
         )
         if self.dense.shape[0] == 0 and self.sparse.shape[0] == 0 and bbox_offsets.shape[0]:
             # Imported crops that are all background, and nothing painted:
@@ -345,5 +350,5 @@ def _annotated_voxels_in_crops(arr, chunk_keys, chunk_shape, bbox_offsets, bbox_
         if annotated.size:
             inside = voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends)
             if inside.any():
-                rows.append(annotated[inside])
-    return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=np.int64)
+                rows.append(annotated[inside].astype(POOL_DTYPE))
+    return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=POOL_DTYPE)
