@@ -18,7 +18,6 @@ from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry
-from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus as LSF
 from cellmap_flow.serving.protocol import IP_PATTERN
@@ -331,61 +330,6 @@ def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatc
     assert job.finetuned_model_name == "m_finetuned_2"
 
 
-def _run(session, name, **metadata):
-    run = session / "runs" / name
-    run.mkdir(parents=True)
-    (run / "metadata.json").write_text(json.dumps({
-        "job_id": name, "model_name": "m", "created_at": datetime.now().isoformat(),
-        "corrections_path": str(session / "corrections"), "params": {"num_epochs": 5}, **metadata,
-    }))
-    return run
-
-
-def test_jobs_still_on_the_cluster_are_picked_up_again(local_jobs, session, monkeypatch):
-    """Jobs lived only in the dashboard's memory: after a restart a running job
-    could not be seen or cancelled, and waited for a restart until walltime."""
-    base = session()
-    _run(base, "alive", lsf_job_id="101", status="WAITING_FOR_RESTART")
-    done = _run(base, "done_meanwhile", lsf_job_id="102", status="RUNNING")
-    _run(base, "finished", lsf_job_id="103", status="COMPLETED")
-    _run(base, "local", lsf_job_id="PID:4", status="RUNNING")
-    _run(base, "from_before_this_was_recorded", status="RUNNING")
-    asked = []
-    monkeypatch.setattr(jobs_lsf, "statuses", lambda ids: asked.append(sorted(ids)) or {
-        "101": LSF.RUNNING, "102": LSF.FAILED})
-    manager = FinetuneJobManager()
-
-    assert manager.rehydrate_session(base) == 1
-    job = manager.jobs["alive"]
-    assert isinstance(job.lsf_job, LSFJob) and job.lsf_job.job_id == "101"
-    assert (job.status, job.corrections_path, job.total_epochs) == (JobStatus.RUNNING, base / "corrections", 5)
-    assert local_jobs.monitors == [job]
-    assert asked == [["101", "102"]], "one bjobs call; finished and local runs are not asked about"
-    assert json.loads((done / "metadata.json").read_text())["status"] == "FAILED"
-    # Idempotent, and with the other one recorded as final there is nothing to ask about.
-    assert manager.rehydrate_session(base) == 0 and len(asked) == 1
-
-
-@pytest.mark.parametrize("log, status, detail", [
-    pytest.param("TRAINING_ITERATION_COMPLETE: m_1\nWAITING_FOR_RESTART\nTRAINING_ITERATION_COMPLETE: m_2\n",
-                 "COMPLETED", "finished 2 iteration(s), the last m_2", id="it finished iterations"),
-    pytest.param("Starting epoch 1 of 5...\nTraceback (most recent call last):\n", "FAILED", "how is not known",
-                 id="it finished none"),
-    pytest.param(None, "FAILED", "how is not known", id="it left no log"),
-])
-def test_a_job_lsf_has_forgotten_is_judged_by_its_log(session, monkeypatch, log, status, detail):
-    """The trainer never says "done" (it waits for restarts until stopped), so a
-    finished iteration is the evidence that a model was delivered."""
-    run = _run(session(), "purged", lsf_job_id="501", status="WAITING_FOR_RESTART")
-    if log is not None:
-        (run / "training_log.txt").write_text(log)
-    monkeypatch.setattr(jobs_lsf, "statuses", lambda ids: {"501": None})
-
-    assert FinetuneJobManager().rehydrate_session(run.parent.parent) == 0
-    metadata = json.loads((run / "metadata.json").read_text())
-    assert metadata["status"] == status and detail in metadata["status_detail"] and "501" in metadata["status_detail"]
-
-
 CREATED = "2026-01-01T12:00:00"
 PARAMS = {"lora_r": 8, "lora_alpha": 16, "num_epochs": 5, "learning_rate": 0.0001}
 TWO_ITERATIONS = ("FINETUNED_MODEL_YAML: /s/models/m_finetuned_1.yaml\nTRAINING_ITERATION_COMPLETE: m_finetuned_1\n"
@@ -445,7 +389,7 @@ RECORDED = {
 }
 
 
-def test_rehydrating_a_session_snapshot(fake_lsf, local_jobs, tmp_path):
+def test_a_dashboard_started_later_finds_each_run_as_it_was_left(fake_lsf, local_jobs, tmp_path):
     """A dashboard started later finds its jobs from each run's metadata.json and
     one bjobs call. Jobs outlive dashboard upgrades, so this reading of the file
     is a format: pinned here for every state a run can be left in."""
@@ -470,7 +414,8 @@ def test_rehydrating_a_session_snapshot(fake_lsf, local_jobs, tmp_path):
     (session / "runs" / "unreadable").mkdir()
     (session / "runs" / "unreadable" / "metadata.json").write_text('{"job_id": "unreadable", "lsf_')
 
-    said = {**{lsf_job_id: stat for lsf_job_id, stat in (RUNS[n][1:3] for n in RUNS) if stat}, "114": "RUN"}
+    # bjobs's first answer: a line for each job it knows, "not found" for each purged one.
+    said = {lsf_job_id: stat for _, lsf_job_id, stat, _ in RUNS.values() if stat} | {"114": "RUN"}
     fake_lsf.answers["bjobs"] = [
         (255, "".join(f"{i}  me  {stat}  gpu_h100  login1  h10u05  finetune_m  Jan 1 12:00\n"
                       for i, stat in said.items() if stat != "not found"),
