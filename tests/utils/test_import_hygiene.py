@@ -110,6 +110,18 @@ except SystemExit:
     pass
 assert builtins.PLUGIN_RAN
 """,
+    # The owners of what a process shares, which servers, jobs and the
+    # dashboard all import: no Flask, viewer or torch, and nothing written
+    # to HOME. The deprecated g forwards to them but imports them only when
+    # a name is used.
+    "owners": """
+import os
+check(["cellmap_flow.jobs.settings", "cellmap_flow.process_chain", "cellmap_flow.dashboard.state"], LIGHT + ["torch"])
+assert os.listdir(os.environ["HOME"]) == [], os.listdir(os.environ["HOME"])
+""",
+    "globals": """
+check(["cellmap_flow.globals"], ["cellmap_flow.jobs", "cellmap_flow.process_chain", "cellmap_flow.dashboard", "flask"])
+""",
     # Every LSF job imports the package.
     "package-home": """
 import os
