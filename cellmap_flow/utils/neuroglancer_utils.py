@@ -1,193 +1,77 @@
-import neuroglancer
+"""The CLIs' last step: open the viewer on the dataset, then serve the dashboard.
+
+The viewer and its layers are built by ``cellmap_flow.viewer``; this module
+adds the session's models to it and starts the dashboard, which is why it
+imports ``dashboard.app`` and ``viewer`` does not.
+"""
+
 import itertools
 import logging
 
+import neuroglancer
+
 from cellmap_flow.dashboard.app import create_and_run_app
-from cellmap_flow.utils.output_probe import output_display_range
-from cellmap_flow.utils.scale_pyramid import (
-    PREDICTION_COLORS,
-    get_raw_layer,
-    prediction_shader,
-)
-from cellmap_flow.utils.server_info import fetch_model_info
-from cellmap_flow.utils import zarr_v3
 from cellmap_flow.globals import g
-
-from cellmap_flow.utils.web_utils import (
-    ARGS_KEY,
-    get_norms_post_args,
+from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
+from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.utils.web_utils import get_norms_post_args
+from cellmap_flow.viewer.bootstrap import new_viewer
+from cellmap_flow.viewer.layers import (
+    prediction_shader_for,
+    prediction_source,
+    prediction_voxel_override,
+    raw_layer,
 )
-
 
 logger = logging.getLogger(__name__)
 
-neuroglancer.set_server_bind_address("0.0.0.0")
 
+def _configured_output_voxel_size(model, info):
+    """The output voxel size ``model``'s config declares, for a server whose
+    ``info`` does not say (one older than model_info); else None.
 
-def get_raw_closest_scale(dataset_path, target_resolution):
-    """Return the raw multiscale scale (as a tuple of nm) closest to the
-    model's target resolution, or None if it can't be determined.
-
-    ``dataset_path`` may be the multiscale group or one of its scales."""
-    from cellmap_flow.io.multiscale import closest_raw_scale
-
-    return closest_raw_scale(dataset_path, target_resolution)
-
-
-def raw_dimensions(dataset_path):
-    """The viewer's dimensions for ``dataset_path``: the axes and voxel size
-    of the finest level of its pyramid (of the array itself, if it is none).
-
-    Set before any layer is added, so that the raw data decides the viewer's
-    coordinate space rather than whichever layer neuroglancer takes it from,
-    such as an extra layer at another voxel size. None if it cannot be read.
+    Only then: reading ``config`` builds the model, which for a script model
+    means loading its weights and taking a CUDA context here.
     """
-    from cellmap_flow.io import metadata
-
+    mc = {mc.name: mc for mc in getattr(g, "models_config", []) or []}.get(model)
+    if mc is None or info.get("output_voxel_size"):
+        return None
     try:
-        group = dataset_path
-        last = dataset_path.rstrip("/").rsplit("/", 1)[-1]
-        if last.startswith("s") and last[1:].isdigit():  # one level, as get_raw_layer reads it
-            group = dataset_path.rstrip("/").rsplit("/", 1)[0]
-        try:
-            levels = [meta for _, meta in metadata.list_levels(group)]
-        except Exception:
-            levels = [metadata.read_array_meta(dataset_path)]
-        finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
-        # The names and sizes ImageDataInterface gives the raw layer's volume.
-        voxel_size, _, _, _, names, _ = zarr_v3.legacy_meta(finest)
-        return neuroglancer.CoordinateSpace(names=names, units="nm", scales=voxel_size)
+        return mc.config.output_voxel_size
     except Exception as e:
-        logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")
+        logger.warning(f"Could not read {model}'s output voxel size from its config: {e}")
         return None
 
 
-def build_prediction_source(host, model, st_data, override_scales):
-    """Build a source spec for the prediction zarr that overrides the
-    source dimensions' scales so the layer overlays the raw at its native
-    resolution (e.g. claim a 16nm model output is actually at 12nm).
-
-    The prediction zarr is 4D (z, y, x, c). We override the spatial scales
-    and leave the channel dim as a unitless dimension.
-
-    ``override_scales`` is in z, y, x order, as get_raw_closest_scale
-    returns it.
-    """
-    url = f"zarr://{host}/{model}{ARGS_KEY}{st_data}{ARGS_KEY}"
-    if override_scales is None:
-        return url
-    sz, sy, sx = override_scales[0], override_scales[1], override_scales[2]
-    # Use a dict form so we can supply matching input/output dimensions
-    # of the same rank (neuroglancer requires equal rank on both sides).
-    return {
-        "url": url,
-        "transform": {
-            "outputDimensions": {
-                "z": [sz * 1e-9, "m"],
-                "y": [sy * 1e-9, "m"],
-                "x": [sx * 1e-9, "m"],
-                "c^": [1, ""],
-            },
-            "inputDimensions": {
-                "z": [sz * 1e-9, "m"],
-                "y": [sy * 1e-9, "m"],
-                "x": [sx * 1e-9, "m"],
-                "c^": [1, ""],
-            },
-        },
-    }
-
-
-def generate_neuroglancer_url(dataset_path,wrap_raw=True):
-    g.viewer = neuroglancer.Viewer()
+def generate_neuroglancer_url(dataset_path, wrap_raw=True):
+    """Open the viewer on ``dataset_path`` with a layer for each running model
+    and the YAML's extra layers, then serve the dashboard. Does not return."""
     g.dataset_path = dataset_path
     st_data = get_norms_post_args(g.input_norms, g.postprocess)
+    layers = {}
+    colors = itertools.cycle(PREDICTION_COLORS)
+    for job in g.jobs:
+        model, host = job.model_name, job.host
+        if not host:
+            # A zarr://None/... source never loads and nothing replaces
+            # it later, so leave the layer out rather than add a dead one.
+            logger.warning(f"No server address for '{model}'; not adding a layer")
+            continue
+        # One round trip, for both the contrast range and the voxel size.
+        info = fetch_model_info(host)
+        default_shader = prediction_shader_for(model, host, g.postprocess, color=next(colors), info=info)
+        g.shaders.setdefault(model, default_shader)
+        override = prediction_voxel_override(host, dataset_path, info, _configured_output_voxel_size(model, info))
+        layer = {"source": prediction_source(host, model, st_data, override), "shader": g.shaders[model]}
+        if g.shader_controls.get(model):
+            layer["shaderControls"] = g.shader_controls[model]
+        layers[model] = neuroglancer.ImageLayer(**layer)
+    # The YAML's extra_layers (cellmap_flow_yaml builds them).
+    layers.update(g.extra_layers)
 
-    # Map model name -> ModelConfig for voxel-size lookups
-    model_configs_by_name = {}
-    for mc in getattr(g, "models_config", []) or []:
-        model_configs_by_name[mc.name] = mc
-
-    # Add a layer to the viewer
-    dimensions = raw_dimensions(dataset_path)
-    with g.viewer.txn() as s:
-        if dimensions is not None:
-            s.dimensions = dimensions
-        g.raw = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
-        s.layers["data"] = g.raw
-        color_cycle = itertools.cycle(PREDICTION_COLORS)
-        for job in g.jobs:
-            model = job.model_name
-            host = job.host
-            if not host:
-                # A zarr://None/... source never loads and nothing replaces
-                # it later, so leave the layer out rather than add a dead one.
-                logger.warning(f"No server address for '{model}'; not adding a layer")
-                continue
-            color = next(color_cycle)
-            # Over the range the postprocessing chain actually produces. The
-            # previous default was range=[0.5, 0.5]: lo == hi turns invlerp
-            # into a step at 0.5, so after a DefaultPostprocessor (0-255) the
-            # whole prediction rendered as solid colour.
-            # One round trip, used for both the contrast range and the voxel
-            # size below.
-            info = fetch_model_info(host)
-            try:
-                steps = [
-                    p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")
-                ]
-                value_range = output_display_range(steps, info.get("output_class"))
-            except Exception as e:
-                logger.debug(f"Could not compute a display range for {model}: {e}")
-                value_range = None
-            default_shader = prediction_shader(color, value_range)
-            shader = g.shaders.get(model, default_shader)
-            if model not in g.shaders:
-                g.shaders[model] = default_shader
-
-            # Lie about the prediction's voxel size so it overlays the raw
-            # at the closest available scale (model trained at 16nm but raw
-            # is multiscale 6/12/24/...; we tell neuroglancer "treat the
-            # output as 12nm" so it lines up).
-            override_scales = None
-            try:
-                # Prefer the running server's answer. mc.config would build the
-                # model here just to read a voxel size, which for a script model
-                # means downloading weights and taking a CUDA context -- it
-                # throws on a node without a free one, and the exception was
-                # swallowed, silently leaving the overlay misaligned.
-                output_voxel_size = info.get("output_voxel_size")
-                if not output_voxel_size:
-                    mc = model_configs_by_name.get(model)
-                    if mc is not None:
-                        output_voxel_size = mc.config.output_voxel_size
-                if output_voxel_size:
-                    output_voxel_size = tuple(output_voxel_size)
-                    closest = get_raw_closest_scale(dataset_path, output_voxel_size)
-                    if closest is not None and tuple(closest) != output_voxel_size:
-                        override_scales = closest
-                        logger.info(
-                            f"Model '{model}' output_voxel_size={output_voxel_size} "
-                            f"overridden to closest raw scale {closest} for viewer overlay"
-                        )
-            except Exception as e:
-                logger.warning(f"Could not compute override scales for '{model}': {e}")
-
-            source = build_prediction_source(host, model, st_data, override_scales)
-            layer_kwargs = {
-                "source": source,
-                "shader": shader,
-            }
-            shader_controls = g.shader_controls.get(model)
-            if shader_controls:
-                layer_kwargs["shaderControls"] = shader_controls
-            s.layers[model] = neuroglancer.ImageLayer(**layer_kwargs)
-        # The YAML's extra_layers (cellmap_flow_yaml builds them).
-        for name, layer in g.extra_layers.items():
-            s.layers[name] = layer
-    # show(viewer)
+    g.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)
+    g.viewer = new_viewer(dataset_path, raw=g.raw, layers=layers)
     viewer_url = str(g.viewer)
-    # .replace("zouinkhim-lm1", "192.168.1.167")
     print("viewer", viewer_url)
     # Serves the dashboard; does not return.
     create_and_run_app(neuroglancer_url=viewer_url)

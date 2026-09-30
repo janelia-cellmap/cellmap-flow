@@ -15,7 +15,14 @@ import pytest
 
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.norm.input_normalize import EuclideanDistance, LambdaNormalizer, MinMaxNormalizer
-from cellmap_flow.pipeline_spec import PipelineSpec, builder_steps, chain_num_channels, normalize_steps, op_schemas
+from cellmap_flow.pipeline_spec import (
+    PipelineSpec,
+    builder_steps,
+    chain_is_segmentation,
+    chain_num_channels,
+    normalize_steps,
+    op_schemas,
+)
 from cellmap_flow.post.postprocessors import (
     AffinityPostprocessor,
     ChannelSelection,
@@ -297,12 +304,10 @@ def test_set_pipeline_writes_all_four_attributes_or_none():
     ],
 )
 def test_what_a_chain_outputs(chain, dtype, channels, is_segmentation):
-    import cellmap_flow.dashboard.routes.pipeline as pipeline
-
     g.postprocess = chain
     assert g.get_output_dtype(np.float16) is dtype
     assert chain_num_channels(chain, 9) == channels
-    assert pipeline.is_output_segmentation() is is_segmentation
+    assert chain_is_segmentation(chain) is is_segmentation
 
 
 @pytest.mark.parametrize("kind", [pytest.param("input_norm", id="input-norms"), pytest.param("postprocess", id="postprocessors")])

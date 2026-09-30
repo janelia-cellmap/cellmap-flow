@@ -63,6 +63,12 @@ check([], ["neuroglancer", "pymorton", "mwatershed", "fastremap", "fastmorph", "
     "review": """
 check(["cellmap_flow.review", "cellmap_flow.review_index"], LIGHT + ["torch"])
 """,
+    # A viewer never starts the dashboard. (globals still comes in with the
+    # raw layer, through utils.ds.)
+    "viewer": """
+check(["cellmap_flow.viewer.layers", "cellmap_flow.viewer.bootstrap"],
+      ["flask", "cellmap_flow.dashboard", "torch", "huggingface_hub", "peft"])
+""",
     # The dashboard imports blockwise lazily, for the precheck.
     "blockwise-logging": """
 import logging

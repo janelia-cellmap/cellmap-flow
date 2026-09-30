@@ -1,22 +1,16 @@
 import json
 import logging
-import re
 
-import neuroglancer
 import numpy as np
 from flask import Blueprint, request, jsonify
 
 from cellmap_flow.globals import g
 from cellmap_flow.norm.input_normalize import get_input_normalizers
-from cellmap_flow.pipeline_spec import PipelineSpec, chain_is_segmentation
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
-from cellmap_flow.utils.output_probe import output_display_range
-from cellmap_flow.utils.scale_pyramid import (
-    PREDICTION_COLORS,
-    get_raw_layer,
-    prediction_shader,
-)
+from cellmap_flow.utils.scale_pyramid import PREDICTION_COLORS
 from cellmap_flow.utils.server_info import fetch_model_info
+from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +56,6 @@ def _chain_signature(steps) -> str:
         return repr(steps)
 
 
-def is_output_segmentation():
-    return chain_is_segmentation(g.postprocess)
-
-
 def validate_pipeline_config(config):
     """Helper function to validate pipeline configuration"""
     try:
@@ -89,64 +79,6 @@ def validate_pipeline_config(config):
 
     except Exception as e:
         return {"valid": False, "error": str(e)}
-
-
-_COLOR_RE = re.compile(r'color\(default="([^"]+)"\)')
-
-
-def _default_prediction_shader(model, host, previous_shader=None):
-    """Build a prediction shader over the range the configured chain produces.
-
-    Unlike the raw layer there is nothing to sample here -- reading the model's
-    output means running inference -- but there is nothing to sample *for*
-    either: the chain's last step fixes the range exactly. See
-    output_probe.output_display_range.
-    """
-    # Keep whatever colour the layer already had, so a recomputed range does
-    # not also reshuffle the colours the user is navigating by.
-    match = _COLOR_RE.search(previous_shader or "")
-    if match:
-        color = match.group(1)
-    else:
-        names = [getattr(j, "model_name", None) for j in g.jobs]
-        index = names.index(model) if model in names else 0
-        color = PREDICTION_COLORS[index % len(PREDICTION_COLORS)]
-
-    try:
-        info = fetch_model_info(host)
-        steps = [p.to_dict() for p in (g.postprocess or []) if hasattr(p, "to_dict")]
-        value_range = output_display_range(steps, info.get("output_class"))
-    except Exception as e:
-        logger.debug(f"Could not compute a display range for {model}: {e}")
-        value_range = None
-    return prediction_shader(color, value_range)
-
-
-def _prediction_source(model, host, st_data):
-    """The layer source for a prediction, overlaid on the raw's closest scale.
-
-    The same voxel-size override the initial layers (neuroglancer_utils) and
-    the finetune layers use. Without it, after a Submit every model whose
-    voxel size is not in the raw pyramid was drawn at the wrong scale.
-    """
-    # Imported here: neuroglancer_utils imports the dashboard app, which
-    # imports this module.
-    from cellmap_flow.utils.neuroglancer_utils import (
-        build_prediction_source,
-        get_raw_closest_scale,
-    )
-
-    override_scales = None
-    try:
-        output_voxel_size = fetch_model_info(host).get("output_voxel_size")
-        if output_voxel_size and g.dataset_path:
-            output_voxel_size = tuple(output_voxel_size)
-            closest = get_raw_closest_scale(g.dataset_path, output_voxel_size)
-            if closest is not None and tuple(closest) != output_voxel_size:
-                override_scales = closest
-    except Exception as e:
-        logger.warning(f"Could not compute override scales for '{model}': {e}")
-    return build_prediction_source(host, model, st_data, override_scales)
 
 
 @pipeline_bp.route("/update/equivalences", methods=["POST"])
@@ -230,18 +162,13 @@ def process():
             g.shader_controls.pop(name, None)
 
     with g.viewer.txn() as s:
-        g.raw = get_raw_layer(g.dataset_path)
-        # Restore the user's raw-layer contrast/shader instead of the fresh
-        # default get_raw_layer() always builds, which otherwise resets it
-        # every time the pipeline is (re)submitted.
-        raw_shader = g.shaders.get("data")
-        if raw_shader and raw_shader != "None":
-            g.raw.shader = raw_shader
-        raw_shader_controls = g.shader_controls.get("data")
-        if raw_shader_controls:
-            g.raw.shaderControls = raw_shader_controls
+        # The user's raw-layer contrast/shader, instead of the fresh default
+        # get_raw_layer() always builds, which otherwise resets it every time
+        # the pipeline is (re)submitted.
+        g.raw = raw_layer(g.dataset_path, shader=g.shaders.get("data"),
+                          shader_controls=g.shader_controls.get("data"))
         s.layers["data"] = g.raw
-        for job in g.jobs:
+        for index, job in enumerate(g.jobs):
             model = job.model_name
             host = job.host
             if not host:
@@ -249,22 +176,17 @@ def process():
                 # and not up yet: there is no URL to point a layer at.
                 logger.info(f"Skipping layer for {model}: its job has no host yet")
                 continue
-            previous_shader = dropped_shaders.get(model)
-            shader = g.shaders.get(model)
-
-            source = _prediction_source(model, host, st_data)
-            if is_output_segmentation():
-                s.layers[model] = neuroglancer.SegmentationLayer(source=source)
-            else:
-                kwargs = {"source": source}
-                if not shader:
-                    shader = _default_prediction_shader(model, host, previous_shader)
-                if shader:
-                    kwargs["shader"] = shader
-                shader_controls = g.shader_controls.get(model)
-                if shader_controls:
-                    kwargs["shaderControls"] = shader_controls
-                s.layers[model] = neuroglancer.ImageLayer(**kwargs)
+            info = fetch_model_info(host)
+            # The user's shader, else one over the chain's range in the
+            # layer's colour (the one it had, if its shader was dropped above).
+            shader = g.shaders.get(model) or prediction_shader_for(
+                model, host, g.postprocess, previous_shader=dropped_shaders.get(model),
+                color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], info=info,
+            )
+            s.layers[model] = prediction_layer(
+                model, host, st_data, dataset_path=g.dataset_path, postprocess=g.postprocess,
+                shader=shader, shader_controls=g.shader_controls.get(model), info=info,
+            )
 
     logger.debug(f"Input normalizers: {g.input_norms}")
 

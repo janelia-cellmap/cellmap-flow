@@ -2,13 +2,12 @@ import logging
 from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, request, jsonify
-import neuroglancer
 
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.globals import g
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.viewer.bootstrap import new_viewer
 
 logger = logging.getLogger(__name__)
 
@@ -133,22 +132,11 @@ def set_data():
         if not dataset_path:
             return jsonify({"error": "dataset_path is required"}), 400
 
-        # Set up neuroglancer
-        neuroglancer.set_server_bind_address("0.0.0.0")
-        viewer = neuroglancer.Viewer()
-
         g.dataset_path = dataset_path
-        g.viewer = viewer
-
-        with viewer.txn() as s:
-            s.dimensions = neuroglancer.CoordinateSpace(
-                names=["z", "y", "x"],
-                units="nm",
-                scales=[8, 8, 8],
-            )
-            s.layers["data"] = get_raw_layer(dataset_path)
-
-        g.NEUROGLANCER_URL = str(viewer)
+        # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
+        # does not take its dimensions from the raw.
+        g.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
+        g.NEUROGLANCER_URL = str(g.viewer)
         logger.debug(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
 
         return jsonify({

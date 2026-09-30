@@ -1,4 +1,4 @@
-"""The viewer's raw and prediction layers (scale_pyramid, neuroglancer_utils).
+"""The viewer's raw layer (scale_pyramid.get_raw_layer).
 
 get_raw_layer handed LocalVolume the offset in nm as ``voxel_offset``, which
 counts whole voxels: a dataset at 80 nm on 8 nm voxels was drawn at 640 nm,
@@ -10,10 +10,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from neuroglancer.viewer_base import ViewerBase
 
 from cellmap_flow.globals import g
-from cellmap_flow.utils import neuroglancer_utils
 from cellmap_flow.utils.scale_pyramid import get_raw_layer
 
 
@@ -63,35 +61,3 @@ def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     assert _source(layer)["subsources"] == {"meshes": False}
     np.testing.assert_array_equal(np.asarray(layer.source[0].url.data[...]), ids, "ids as stored, never normalized")
     assert "subsources" not in _source(get_raw_layer(path, segmentation=True))
-
-
-@pytest.fixture
-def new_viewer(monkeypatch):
-    """generate_neuroglancer_url, with a viewer that has no web server and no dashboard after it."""
-    monkeypatch.setattr(neuroglancer_utils.neuroglancer, "Viewer", ViewerBase)
-    monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda **k: None)
-    monkeypatch.setattr(neuroglancer_utils, "fetch_model_info", lambda host: {})
-    g.jobs, g.models_config, g.input_norms, g.postprocess = [], [], [], []
-    return neuroglancer_utils.generate_neuroglancer_url
-
-
-@pytest.mark.parametrize("dataset", [
-    pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))), id="pyramid"),
-    pytest.param(lambda f: f.ome_pyramid(((8, 0), (16, 4))) + "/s1", id="its-coarser-level"),
-    pytest.param(lambda f: f.raw_zarr(np.zeros((16, 16, 16), np.uint8)), id="plain-array"),  # flat: no contrast range
-])
-def test_the_viewer_takes_its_dimensions_from_the_finest_raw_level(new_viewer, ome_pyramid, raw_zarr, dataset):
-    new_viewer(dataset(SimpleNamespace(ome_pyramid=ome_pyramid, raw_zarr=raw_zarr)))
-    assert g.viewer.state.dimensions.to_json() == {axis: [8e-9, "m"] for axis in "zyx"}
-
-
-def test_a_job_without_a_host_gets_no_layer(new_viewer, ome_pyramid):
-    """zarr://None/... is never going to load, and nothing replaces it later."""
-    g.jobs = [type("Job", (), {"model_name": name, "host": host})() for name, host in
-              [("ghost", None), ("real", "http://node:3")]]
-    new_viewer(ome_pyramid(((8, 0),)))
-    assert [layer.name for layer in g.viewer.state.layers] == ["data", "real"]
-
-
-def test_an_unreadable_dataset_leaves_the_viewers_dimensions_to_neuroglancer(tmp_path):
-    assert neuroglancer_utils.raw_dimensions(str(tmp_path / "missing.zarr")) is None

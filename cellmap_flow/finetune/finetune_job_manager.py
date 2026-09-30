@@ -1287,10 +1287,9 @@ class FinetuneJobManager:
         # Lie about the model's voxel size so the layer overlays the raw at
         # the closest available scale (e.g. trained at 16nm but raw is
         # multiscale 6/12/24 -> tell neuroglancer it's 12nm).
-        from cellmap_flow.utils.neuroglancer_utils import (
-            build_prediction_source,
-            get_raw_closest_scale,
-        )
+        from cellmap_flow.io.multiscale import closest_raw_scale
+        from cellmap_flow.viewer.layers import prediction_source
+
         override_scales = None
         try:
             output_voxel_size = tuple(
@@ -1298,7 +1297,7 @@ class FinetuneJobManager:
             )
             dataset_path = getattr(g, "dataset_path", None)
             if output_voxel_size and dataset_path:
-                closest = get_raw_closest_scale(dataset_path, output_voxel_size)
+                closest = closest_raw_scale(dataset_path, output_voxel_size)
                 if closest is not None and tuple(closest) != tuple(output_voxel_size):
                     override_scales = closest
                     self.logger.info(
@@ -1311,7 +1310,7 @@ class FinetuneJobManager:
                 f"Could not compute override scales for finetuned '{model_name}': {e}"
             )
 
-        source_spec = build_prediction_source(
+        source_spec = prediction_source(
             inference_job.host, model_name, st_data, override_scales
         )
         self.logger.info(f"Adding neuroglancer layer: {model_name}")

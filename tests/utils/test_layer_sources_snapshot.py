@@ -138,6 +138,7 @@ def test_the_startup_viewer(servers, monkeypatch):
 
     served = []
     monkeypatch.setattr(neuroglancer_utils, "create_and_run_app", lambda neuroglancer_url: served.append(neuroglancer_url))
+    # Not up yet: a zarr://None/... layer would never load, and nothing replaces it later.
     g.jobs = g.jobs + [SimpleNamespace(model_name="queued", host=None)]
     g.extra_layers = {"extra": neuroglancer.ImageLayer(source="zarr://http://files/extra.zarr")}
 

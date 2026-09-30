@@ -3,8 +3,8 @@ import logging
 import neuroglancer
 from flask import Blueprint, request, jsonify
 
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
 from cellmap_flow.globals import g
+from cellmap_flow.viewer.bootstrap import new_viewer
 
 bbx_generator_state = g.bbx_generator_state
 
@@ -55,9 +55,6 @@ def _extract_bounding_boxes(viewer):
 def start_bbx_generator():
     """Start the Neuroglancer viewer for creating bounding boxes"""
     try:
-        # Set Neuroglancer server to bind to 0.0.0.0 for external access
-        neuroglancer.set_server_bind_address("0.0.0.0")
-
         data = request.json
         dataset_path = data.get("dataset_path", "")
         num_boxes = data.get("num_boxes", 1)
@@ -66,55 +63,25 @@ def start_bbx_generator():
         if not dataset_path:
             return jsonify({"error": "Dataset path is required"}), 400
 
-        # Create Neuroglancer viewer
-        viewer = neuroglancer.Viewer()
-
-        with viewer.txn() as s:
-            # Set coordinate space
-            s.dimensions = neuroglancer.CoordinateSpace(
-                names=["z", "y", "x"],
-                units="nm",
-                scales=[8, 8, 8],
-            )
-
-            # Add image layer
-            s.layers["fibsem"] = get_raw_layer(dataset_path)
-
-            # Add annotation layer for bounding boxes
-            s.layers[BBOX_LAYER_NAME] = neuroglancer.LocalAnnotationLayer(
-                dimensions=neuroglancer.CoordinateSpace(
-                    names=["z", "y", "x"],
-                    units="nm",
-                    scales=[1, 1, 1],
-                ),
-            )
-
-            # Add existing bounding boxes to the annotations layer
-            if existing_bounding_boxes and len(existing_bounding_boxes) > 0:
-                logger.info(f"Loading {len(existing_bounding_boxes)} existing bounding box(es)")
-                from neuroglancer import AxisAlignedBoundingBoxAnnotation
-
-                for idx, bbox in enumerate(existing_bounding_boxes):
-                    offset = bbox.get("offset", [0, 0, 0])
-                    shape = bbox.get("shape", [1, 1, 1])
-
-                    # Calculate min and max points from offset and shape - MUST be floats
-                    point_a = [float(offset[0]), float(offset[1]), float(offset[2])]
-                    point_b = [
-                        float(offset[0] + shape[0]),
-                        float(offset[1] + shape[1]),
-                        float(offset[2] + shape[2])
-                    ]
-
-                    # Create bounding box annotation with id and description
-                    ann = AxisAlignedBoundingBoxAnnotation(
-                        point_a=point_a,
-                        point_b=point_b,
-                        id=f"bbox-{idx + 1}",
-                        description=f"Bounding box {idx + 1}"
-                    )
-                    s.layers[BBOX_LAYER_NAME].annotations.append(ann)
-                    logger.info(f"Added existing bbox {idx + 1}: offset={offset}, shape={shape}")
+        # The boxes drawn so far, each with an id and a description. Their
+        # corners must be floats.
+        boxes = []
+        for idx, bbox in enumerate(existing_bounding_boxes or []):
+            offset = bbox.get("offset", [0, 0, 0])
+            shape = bbox.get("shape", [1, 1, 1])
+            boxes.append(neuroglancer.AxisAlignedBoundingBoxAnnotation(
+                point_a=[float(offset[j]) for j in range(3)],
+                point_b=[float(offset[j] + shape[j]) for j in range(3)],
+                id=f"bbox-{idx + 1}",
+                description=f"Bounding box {idx + 1}",
+            ))
+            logger.info(f"Added existing bbox {idx + 1}: offset={offset}, shape={shape}")
+        box_layer = neuroglancer.LocalAnnotationLayer(
+            dimensions=neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[1, 1, 1]),
+            annotations=boxes,
+        )
+        # 8 nm z, y, x, as this viewer always had.
+        viewer = new_viewer(dataset_path, scales=(8, 8, 8), raw_name="fibsem", layers={BBOX_LAYER_NAME: box_layer})
 
         # Store state
         bbx_generator_state["dataset_path"] = dataset_path
