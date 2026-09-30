@@ -48,12 +48,18 @@ MAJORITY[1, 1, 1] = MAJORITY[1, 1, 0] = MAJORITY[1, 0, 1] = 0  # 5 of 8 foregrou
     pytest.param(MAJORITY, 8.0, 28.0, 2, 2, 2, id="by majority vote"),
     # A plain v3 array whose (legacy) transform gives its corner, 156 nm.
     pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 156.0, "v3 array", 10, 13, id="from a plain zarr v3 array"),
+    # A plain v2 array whose funlib resolution/offset give its corner, 156 nm.
+    pytest.param(np.ones((8, 8, 8), np.uint8), 8.0, 156.0, "v2 array", 10, 13, id="from a plain zarr v2 array"),
 ])
 def test_a_crop_is_written_at_its_place_and_the_volumes_resolution(tmp_path, ome_zarr, data, voxel_size,
                                                                   translation, zarr_format, first, last):
     if zarr_format == "v3 array":
         crop = ome_zarr.v3_array(tmp_path / "crop", data, attributes={
             "transform": {"scale": [voxel_size] * 3, "translate": [translation] * 3}})
+    elif zarr_format == "v2 array":
+        crop = str(tmp_path / "crop.zarr")
+        zarr.open(crop, mode="w", shape=data.shape, dtype=data.dtype)[...] = data
+        zarr.open(crop, mode="r+").attrs.update(resolution=[voxel_size] * 3, offset=[translation] * 3)
     else:
         crop = ome_zarr(tmp_path / "crop.zarr", ("s0", data, voxel_size, translation), zarr_format=zarr_format)
     volume = _volume(tmp_path, (64, 64, 64))
