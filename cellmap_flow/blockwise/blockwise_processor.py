@@ -18,7 +18,7 @@ from functools import partial
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.pipeline_spec import PipelineSpec, chain_output_dtype
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.utils.config_utils import (
     ConfigError,
     build_models,
@@ -272,12 +272,14 @@ class CellMapFlowBlockwiseProcessor:
         if not isinstance(self.output_channels, list):
             self.output_channels = [self.output_channels]
 
+        # The chain every block runs: the task's json_data, also installed as
+        # the process's, as before; without one (None), the process's own.
+        self.input_norms = self.postprocess = None
         if json_data:
-            g.set_pipeline(PipelineSpec.from_json_data(json_data, strict=True))
-        # Every block runs this chain: the task's json_data, or else the
-        # process's own.
-        self.input_norms, self.postprocess = list(g.input_norms), list(g.postprocess)
-        self.dtype = chain_output_dtype(self.postprocess, geometry.output_dtype)
+            spec = PipelineSpec.from_json_data(json_data, strict=True)
+            self.input_norms, self.postprocess = spec.build()
+            g.set_pipeline(spec, built=(self.input_norms, self.postprocess))
+        self.dtype = g.get_output_dtype(geometry.output_dtype, self.postprocess)
 
         self.inferencers = []
         self.inferencer = None
