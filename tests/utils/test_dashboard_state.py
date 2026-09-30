@@ -5,10 +5,14 @@ manager still read g, so anything stored beside it would outlive a test and
 disagree with them.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.globals import SERVER_CONFIG_KEYS, g
+from cellmap_flow.jobs.site import current_site
+from cellmap_flow.pipeline_spec import PipelineSpec
 
 
 @pytest.mark.parametrize("name, on_g", [
@@ -28,3 +32,20 @@ def test_the_session_stores_nothing_of_its_own():
         get_session().dataset_pth = "/a/misspelt/attribute"
     with pytest.raises(AttributeError):
         get_session().postprocess = []  # set_pipeline() is the one way to change the chain
+
+
+@pytest.mark.parametrize("step", ["change", "check"])
+def test_every_test_starts_from_the_state_a_new_process_has(step):
+    """A canary for conftest's isolation. "change" leaves the viewer, the
+    queue, the started jobs and the chain changed, the jobs in place as
+    start_hosts appends them; "check" runs after it and must find each as a
+    process starts with it."""
+    session = get_session()
+    if step == "change":
+        session.viewer = object()
+        session.queue = "gpu_elsewhere"
+        session.jobs.append(SimpleNamespace(model_name="leaked", host="http://leaked:8000"))
+        session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer"}], [{"name": "SigmoidPostprocessor"}]))
+        return
+    assert (session.viewer, session.queue, session.jobs) == (None, current_site().default_queue, [])
+    assert (session.input_norms, session.postprocess, session.pipeline_spec) == ([], [], PipelineSpec())
