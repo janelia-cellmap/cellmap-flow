@@ -110,7 +110,8 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a new volume's voxel count is its data's extent in output voxels, rounded up, one rule for create-volume, crop import and `build_corrections`; on every level tried it equals the old count;
     - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
     - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed, and `lora_wrapper.merge_lora_into_base` now works on 1×1×1 heads;
-    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`).
+    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`);
+    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`0fd7892`).
 
 Phase 4 will be added here as it lands.
 
