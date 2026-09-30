@@ -322,62 +322,27 @@ def rewrite_minio_url_for_proxy(minio_url, request=None):
     return proxied_url(minio_url, request)
 
 
-# Geometry the trainer cannot guess and will not run without.
-_MANIFEST_REQUIRED_FIELDS = (
-    "zarr_path",
-    "dataset_path",
-    "input_size",
-    "output_size",
-    "input_voxel_size",
-    "output_voxel_size",
-)
-
-
 def write_volume_manifest(volume):
-    """Mark a browser-painted annotation volume as trainable.
+    """Write the manifest that makes a volume trainable: ``create_dataloader``
+    finds the volume, the patch geometry and the chains only through it.
 
-    ``create_dataloader`` requires this manifest: it is what points the
-    trainer at the volume zarr to stream patches from, and it carries the
-    good regions, the dense/sparse ratio and the patch geometry. Without
-    one, training now raises rather than falling back -- the old per-chunk
-    dataset that used to serve that case honoured none of the above.
-
-    Only the YAML crop importer used to write one, so every session where
-    you painted scribbles in the browser trained on the legacy path and
-    silently ignored the regions you marked. Both volume-creating routes now
-    call this.
-
-    Returns the manifest path, or None when the volume record is too
-    incomplete to describe (a resumed session whose .zattrs predates these
-    fields, say). Such a session cannot be trained: submit refuses it.
+    Returns its path, or None when the record lacks what the manifest needs
+    (a resumed volume whose .zattrs predates those attrs, say); nothing is
+    guessed, and submit refuses such a session.
     """
     from cellmap_flow.finetune.session.manifest import write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
-    from cellmap_flow.globals import (
-        current_input_norm_config,
-        current_postprocess_config,
-    )
+    from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
 
-    missing = [f for f in _MANIFEST_REQUIRED_FIELDS if not volume.get(f)]
-    corrections_dir = volume.get("corrections_dir")
-    if missing or not corrections_dir:
-        logger.warning(
-            f"Not writing a virtual-sources manifest for {volume.get('zarr_path')}: its record "
-            f"has no {', '.join(missing or ['corrections_dir'])}, which a volume gets from its "
-            ".zattrs and which is not guessed. The session cannot be trained without one."
+    try:
+        if not volume.get("corrections_dir"):
+            raise ValueError(f"The record of volume {volume.get('zarr_path')} has no corrections_dir.")
+        manifest = build_manifest(
+            volume, input_norm=current_input_norm_config(), postprocess=current_postprocess_config()
         )
+    except ValueError as e:
+        logger.warning(f"Not writing a virtual-sources manifest: {e} The session cannot be trained without one.")
         return None
-
-    # The trainer runs on LSF where g.input_norms is empty, so the chains
-    # travel in the manifest (see build_manifest).
-    manifest = build_manifest(
-        volume,
-        input_norm=current_input_norm_config(),
-        postprocess=current_postprocess_config(),
-    )
-    path = write_manifest(str(corrections_dir), manifest)
-    logger.info(
-        f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}; "
-        "training will use VirtualPatchDataset and honour good regions."
-    )
+    path = write_manifest(str(volume["corrections_dir"]), manifest)
+    logger.info(f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}")
     return path

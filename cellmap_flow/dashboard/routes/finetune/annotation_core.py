@@ -1,8 +1,6 @@
 import logging
 import os
 import time
-import uuid
-from datetime import datetime
 
 from flask import jsonify
 
@@ -17,7 +15,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
+from cellmap_flow.finetune.session.volume import create_volume_zarr, new_volume_id, plan_volume
 from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
 from cellmap_flow.utils.model_geometry import resolve_model_geometry
 from cellmap_flow.utils.server_info import (
@@ -27,6 +25,19 @@ from cellmap_flow.utils.server_info import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
+    """Write a new volume with ``geometry`` into ``corrections_dir``, with the
+    dashboard's current chains, and serve it; ``(volume_id, zarr_path, url)``."""
+    volume_id = new_volume_id()
+    zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
+    create_volume_zarr(
+        zarr_path, geometry, dataset_path=dataset_path, model_name=model_name,
+        input_norm=current_input_norm_config(), postprocess=current_postprocess_config(),
+    )
+    minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
+    return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
 
 
 def _get_selected_model_config(model_name):
@@ -167,35 +178,14 @@ def create_annotation_volume_response(data):
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
 
         geometry = plan_volume(dataset_path, config)
-
-        volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         _, corrections_dir = ensure_corrections_storage(output_path)
-        zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
-        create_volume_zarr(
-            zarr_path,
-            geometry,
-            dataset_path=dataset_path,
-            model_name=model_name,
-            input_norm=current_input_norm_config(),
-            postprocess=current_postprocess_config(),
+        volume_id, zarr_path, minio_url = serve_new_volume(
+            geometry, corrections_dir, dataset_path, model_name
         )
-
-        minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
-        minio_url = rewrite_minio_url_for_proxy(minio_url)
-        session_store().register_volume(
-            volume_id,
-            zarr_path=zarr_path,
-            model_name=model_name,
-            output_size=list(geometry.chunk_size),
-            input_size=list(geometry.input_size),
-            input_voxel_size=list(geometry.input_voxel_size),
-            output_voxel_size=list(geometry.output_voxel_size),
-            claimed_input_voxel_size=list(geometry.claimed_input_voxel_size),
-            claimed_output_voxel_size=list(geometry.claimed_output_voxel_size),
-            dataset_path=dataset_path,
-            dataset_offset_nm=list(geometry.dataset_offset_nm),
+        session_store().register_volume(volume_id, **geometry.record(
+            zarr_path, dataset_path=dataset_path, model_name=model_name,
             corrections_dir=corrections_dir,
-        )
+        ))
         # The trainer finds the volume only through this manifest.
         write_volume_manifest(g.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()

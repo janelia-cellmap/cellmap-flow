@@ -20,8 +20,6 @@ import logging
 import os
 import threading
 import time
-import uuid
-from datetime import datetime
 
 from flask import jsonify
 from pydantic import ValidationError
@@ -57,17 +55,18 @@ from cellmap_flow.dashboard.finetune_utils import (
     ensure_minio_serving,
     sync_annotation_volume_from_minio,
 )
-from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
+from cellmap_flow.dashboard.routes.finetune.annotation_core import (
+    _get_selected_model_config,
+    serve_new_volume,
+)
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
-    rewrite_minio_url_for_proxy,
     session_store,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.finetune.crop_loader import parse_crops_yaml
 from cellmap_flow.finetune.session.volume import (
     build_manifest,
-    create_volume_zarr,
     plan_volume,
     write_crop_into_volume,
 )
@@ -97,47 +96,17 @@ def _create_session_annotation_volume(
     model_name,
     config,
 ):
-    """Create a fresh annotation_volume.zarr in ``corrections_dir`` and register it.
-
-    Mirrors the body of ``create_annotation_volume_response`` minus the
-    HTTP-shaped response wrapping; returns the freshly-built ``(volume_id, meta)``.
-    """
+    """Create, serve and register a fresh volume in ``corrections_dir``, as
+    create-volume does; returns ``(volume_id, record)``."""
     geometry = plan_volume(raw_dataset_path, config)
-    volume_id = (
-        f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    volume_id, zarr_path, minio_url = serve_new_volume(
+        geometry, corrections_dir, raw_dataset_path, model_name
     )
-    zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
-    # Snapshot whatever input_norm/postprocess the dashboard is currently
-    # using so the trainer can reproduce inference-side normalization and
-    # the generated finetuned yaml can reproduce output postprocessing.
-    create_volume_zarr(
-        zarr_path,
-        geometry,
-        dataset_path=raw_dataset_path,
-        model_name=model_name,
-        input_norm=current_input_norm_config(),
-        postprocess=current_postprocess_config(),
-    )
-
-    minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
-    minio_url = rewrite_minio_url_for_proxy(minio_url)
-    session_store().register_volume(
-        volume_id,
-        zarr_path=zarr_path,
-        model_name=model_name,
-        output_size=list(geometry.chunk_size),
-        input_size=list(geometry.input_size),
-        input_voxel_size=list(geometry.input_voxel_size),
-        output_voxel_size=list(geometry.output_voxel_size),
-        claimed_input_voxel_size=list(geometry.claimed_input_voxel_size),
-        claimed_output_voxel_size=list(geometry.claimed_output_voxel_size),
-        dataset_path=raw_dataset_path,
-        dataset_offset_nm=list(geometry.dataset_offset_nm),
+    record = session_store().register_volume(volume_id, minio_url=minio_url, **geometry.record(
+        zarr_path, dataset_path=raw_dataset_path, model_name=model_name,
         corrections_dir=corrections_dir,
-        minio_url=minio_url,
-    )
-    meta = g.annotation_volumes[volume_id]
-    return volume_id, meta
+    ))
+    return volume_id, record
 
 
 def _ensure_editable_layer(volume_id, minio_url):

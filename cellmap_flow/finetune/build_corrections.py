@@ -33,7 +33,6 @@ import logging
 import os
 import subprocess
 import sys
-import uuid
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -115,6 +114,7 @@ def build_corrections(
     from cellmap_flow.finetune.session.volume import (
         build_manifest,
         create_volume_zarr,
+        new_volume_id,
         plan_volume,
         write_crop_into_volume,
     )
@@ -152,8 +152,7 @@ def build_corrections(
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    zarr_path = os.path.join(output_dir, f"{volume_id}.zarr")
+    zarr_path = os.path.join(output_dir, f"{new_volume_id()}.zarr")
     input_norm = input_norm if input_norm is not None else DEFAULT_INPUT_NORM
 
     create_volume_zarr(
