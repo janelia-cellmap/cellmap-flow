@@ -1,5 +1,6 @@
-"""ModelGeometry: a model's sizes read once, and what follows from them."""
+"""ModelGeometry: a model's sizes read once, what follows from them, and where they are kept."""
 
+import json
 from types import SimpleNamespace
 
 import numpy as np
@@ -44,34 +45,30 @@ def test_what_follows_from_a_configs_sizes(config, expected):
     assert geometry.context == Coordinate(expected["context"])
 
 
-def test_the_geometry_cache_reads_and_writes_the_old_format(tmp_path, monkeypatch):
-    import json
-    from types import SimpleNamespace
-
-    from cellmap_flow.models.geometry import ModelGeometry
+def test_the_geometry_cache_and_a_servers_answer_keep_fractional_sizes(tmp_path, monkeypatch):
+    """~/.cellmap_flow/model_geometry_cache.json is read and written as before
+    ModelGeometry, and the finetune tab reads the same fields from model_info."""
     from cellmap_flow.utils import model_geometry
+    from cellmap_flow.utils.server_info import model_geometry as from_model_info
 
     cache = tmp_path / "cache.json"
     monkeypatch.setattr(model_geometry, "CACHE_PATH", str(cache))
-    script = tmp_path / "model.py"
-    script.write_text("")
-    model_config = SimpleNamespace(script_path=str(script))
-    # An entry as the code before ModelGeometry wrote it, fractional sizes kept.
-    entry = {
-        "read_shape": [52.4, 40, 40],
-        "write_shape": [26.2, 24, 24],
-        "input_voxel_size": [5.24, 4, 4],
-        "output_voxel_size": [5.24, 4, 4],
-        "output_channels": 2,
-        "channels": ["mito", "er"],
-    }
+    (tmp_path / "model.py").write_text("")
+    model_config = SimpleNamespace(script_path=str(tmp_path / "model.py"))
+    entry = {"read_shape": [52.4, 40, 40], "write_shape": [26.2, 24, 24], "input_voxel_size": [5.24, 4, 4],
+             "output_voxel_size": [5.24, 4, 4], "output_channels": 2, "channels": ["mito", "er"]}
     old_file = {model_geometry.cache_key(model_config): entry}
     cache.write_text(json.dumps(old_file))
 
     geometry = ModelGeometry.from_config(model_geometry.load_cached_geometry(model_config))
-    assert geometry == ModelGeometry(
-        (5.24, 4, 4), (5.24, 4, 4), (52.4, 40, 40), (26.2, 24, 24), 2, channel_names=("mito", "er")
-    )
+    assert geometry == ModelGeometry((5.24, 4, 4), (5.24, 4, 4), (52.4, 40, 40), (26.2, 24, 24), 2,
+                                     channel_names=("mito", "er"))
     cache.unlink()
     model_geometry.store_geometry(model_config, geometry)
     assert json.loads(cache.read_text()) == old_file
+
+    # Whole numbers stay ints, and a payload without geometry has none.
+    assert from_model_info({"write_shape": [448.0, 448, 448], "output_voxel_size": [5.24, 8, 8.0],
+                            "output_channels": 2}) == {"write_shape": [448, 448, 448],
+                                                       "output_voxel_size": [5.24, 8, 8], "output_channels": 2}
+    assert from_model_info({"output_activation": "sigmoid"}) is None
