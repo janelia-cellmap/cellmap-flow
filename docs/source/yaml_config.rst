@@ -75,6 +75,9 @@ A configuration file has the following top-level fields:
    * - ``separate_bounding_boxes_zarrs``
      - No
      - Write each bounding box to a separate zarr (blockwise).
+   * - ``output_channels``
+     - No
+     - Which model channels blockwise writes, and to which outputs (see :ref:`output-channels`).
 
 Model Entries
 -------------
@@ -143,6 +146,23 @@ Available Model Types
 
 Common optional parameters: ``name``, ``scale``.
 
+.. _channel-names:
+
+Channel Names
+~~~~~~~~~~~~~
+
+A model names its output channels, in order, with one of:
+
+- ``channels``: a list in a model script, or a ``fly`` entry's parameter. In a ``fly`` entry, ``classes`` is the same parameter under another name, so give one of them; a ``fly`` entry may also give its names as one comma-separated string, ``classes: mito,er``.
+- ``channels_names``: read from the ``metadata.json`` of a ``huggingface`` or ``cellmap`` model.
+- ``classes``: a list in a model script.
+
+A DaCapo model takes its names from its run's task. A ``bio`` model names none.
+
+When a model gives more than one of these, the first that is not empty wins, in the order ``channels``, ``channels_names``, ``classes``. In a model script a single string is one name: ``channels = "mito"`` is one channel called ``mito``.
+
+The inference server reports the names with the model's geometry, and blockwise names its outputs by them (see :ref:`output-channels`). A model that names no channels still serves; blockwise then needs ``output_channels`` as a mapping of channel indices.
+
 Normalizers and Postprocessors
 ------------------------------
 
@@ -208,6 +228,32 @@ For blockwise processing, you can specify regions of interest:
         shape: [11626, 12405, 26847]
 
 Set ``separate_bounding_boxes_zarrs: true`` to write each bounding box to its own zarr subdirectory (``box_1``, ``box_2``, etc).
+
+.. _output-channels:
+
+Output Channels
+---------------
+
+Blockwise writes each output to its own group, ``<output_path>/<output name>/s0``. ``output_channels`` says which of the model's channels go to which output:
+
+- **Left out**: one output per model channel, named by the model's channel names (see :ref:`channel-names`).
+- **A list of channel names** (or one name): one output for each, holding that model channel.
+
+  .. code-block:: yaml
+
+      output_channels: [mito, er]
+
+- **A mapping of output names to channel indices**, counted from 0. An index, or a list of one, gives an output holding that channel. A list of several gives one output with those channels stacked, in the list's order, on a leading channel axis ``c``: its axes are ``c, z, y, x``.
+
+  .. code-block:: yaml
+
+      output_channels:
+        affinities: [0, 1, 2]   # c, z, y, x: channels 0, 1 and 2
+        mito: 3                 # z, y, x: channel 3
+
+  A mapping names the outputs itself and picks channels by index, so it also works for a model that names no channels.
+
+Outputs are named uniquely: a list naming a channel twice is refused.
 
 Examples
 --------
