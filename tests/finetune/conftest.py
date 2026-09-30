@@ -38,6 +38,7 @@ def _v3_array(path, data, chunks=None, attributes=None):
     return str(path)
 
 
+# lead: dedupe with tests/conftest.py (an OME-NGFF raw pyramid, v2 or v3)
 @pytest.fixture
 def ome_zarr():
     """``ome_zarr(path, (name, data, scale, translation), ...)``: a group with OME
