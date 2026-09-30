@@ -15,14 +15,14 @@ import threading
 import time
 import uuid
 import requests
-from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Any
 
 from cellmap_flow.finetune import markers
+from cellmap_flow.finetune.job_manager import state
+from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
 from cellmap_flow.finetune.job_log import LogTailer
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
@@ -49,23 +49,8 @@ TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "ce
 MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune"})
 
 
-class JobStatus(Enum):
-    """Status of a finetuning job."""
-    PENDING = "PENDING"
-    RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-    # Alive and idle: an iteration finished (and is being served) or
-    # diverged, and the trainer is waiting for a restart request.
-    WAITING_FOR_RESTART = "WAITING_FOR_RESTART"
-
-
 # The trainer's markers; see finetune/markers.py.
 _STATUS_MARKER_RE = markers.STATUS_MARKER_RE
-
-
-TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
 # Values in this command survive two rounds of shell quoting: the one bsub
@@ -154,68 +139,6 @@ def trainer_outputs_from_log(log_text: str):
         m for m in _MODEL_YAML_RE.finditer(log_text, previous_end, last.start())
     ]
     return last.group(1), (yamls[-1].group(1) if yamls else None)
-
-
-@dataclass
-class FinetuneJob:
-    """Track a finetuning job with metadata, status, and training progress.
-
-    Manages lifecycle from submission through completion, including inference
-    server state.
-    """
-    job_id: str
-    lsf_job: Optional[LSFJob]
-    model_name: str
-    output_dir: Path
-    params: Dict[str, Any]
-    status: JobStatus
-    created_at: datetime
-    log_file: Path
-    finetuned_model_name: Optional[str] = None
-    model_yaml_path: Optional[Path] = None
-    current_epoch: int = 0
-    total_epochs: int = 10
-    latest_loss: Optional[float] = None
-    inference_server_url: Optional[str] = None
-    inference_server_ready: bool = False
-    # The corrections directory the job trains on. The restart route reads it
-    # to refresh the manifest; it was never set, so a restart silently kept
-    # the old patches_per_epoch, rehearsal fraction, input norm and
-    # postprocessing even though the confirm dialog showed the new ones.
-    corrections_path: Optional[Path] = None
-    # Set by cancel_job before it kills the job, so the monitor reports the
-    # exit that follows as CANCELLED rather than FAILED.
-    cancel_requested: bool = False
-    _processed_iteration_count: int = 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        # Get LSF job ID or local PID
-        lsf_job_id = None
-        if self.lsf_job:
-            if hasattr(self.lsf_job, 'job_id'):
-                lsf_job_id = self.lsf_job.job_id
-            elif hasattr(self.lsf_job, 'process'):
-                lsf_job_id = f"PID:{self.lsf_job.process.pid}"
-
-        return {
-            "job_id": self.job_id,
-            "lsf_job_id": lsf_job_id,
-            "model_name": self.model_name,
-            "output_dir": str(self.output_dir),
-            "params": self.params,
-            "status": self.status.value,
-            "created_at": self.created_at.isoformat(),
-            "log_file": str(self.log_file),
-            "finetuned_model_name": self.finetuned_model_name,
-            "model_yaml_path": str(self.model_yaml_path) if self.model_yaml_path else None,
-            "current_epoch": self.current_epoch,
-            "total_epochs": self.total_epochs,
-            "latest_loss": self.latest_loss,
-            "inference_server_url": self.inference_server_url,
-            "inference_server_ready": self.inference_server_ready,
-            "corrections_path": str(self.corrections_path) if self.corrections_path else None,
-        }
 
 
 class FinetuneJobListener:
@@ -1069,31 +992,7 @@ class FinetuneJobManager:
                 # === Check LSF job status ===
 
                 if finetune_job.lsf_job:
-                    lsf_status = finetune_job.lsf_job.get_status()
-
-                    # Map LSF status to FinetuneJob status
-                    if finetune_job.cancel_requested and lsf_status in (
-                        LSFJobStatus.COMPLETED, LSFJobStatus.FAILED, LSFJobStatus.KILLED
-                    ):
-                        finetune_job.status = JobStatus.CANCELLED
-                        break
-                    if lsf_status == LSFJobStatus.RUNNING:
-                        if finetune_job.status == JobStatus.PENDING:
-                            self.logger.info(f"Job {job_id} started running")
-                            finetune_job.status = JobStatus.RUNNING
-                    elif lsf_status == LSFJobStatus.PENDING:
-                        finetune_job.status = JobStatus.PENDING
-                    elif lsf_status == LSFJobStatus.COMPLETED:
-                        self.logger.info(f"Job {job_id} completed according to LSF")
-                        finetune_job.status = JobStatus.COMPLETED
-                        break
-                    elif lsf_status == LSFJobStatus.FAILED:
-                        self.logger.error(f"Job {job_id} failed according to LSF")
-                        finetune_job.status = JobStatus.FAILED
-                        break
-                    elif lsf_status == LSFJobStatus.KILLED:
-                        self.logger.warning(f"Job {job_id} was killed")
-                        finetune_job.status = JobStatus.CANCELLED
+                    if state.on_scheduler_status(finetune_job, finetune_job.lsf_job.get_status()):
                         break
 
                 # === Tail log file for progress updates ===
@@ -1245,22 +1144,7 @@ class FinetuneJobManager:
         # follows a divergence in the same chunk leaves the job running, and
         # the reverse leaves it waiting.
         for marker in _STATUS_MARKER_RE.findall(log_content):
-            if finetune_job.status in TERMINAL_STATUSES:
-                break
-            if marker == "TRAINING_DIVERGED":
-                # Training produced NaN/Inf loss. The trainer then waits for a
-                # restart, or exits if nothing is served yet (LSF then says so).
-                self.logger.warning(f"Training diverged for job {finetune_job.job_id}")
-                finetune_job.status = JobStatus.WAITING_FOR_RESTART
-                finetune_job.latest_loss = None
-            elif marker == "WAITING_FOR_RESTART":
-                finetune_job.status = JobStatus.WAITING_FOR_RESTART
-            else:  # RESTARTING_TRAINING: reset progress
-                self.logger.info(f"Training restart detected for job {finetune_job.job_id}")
-                finetune_job.current_epoch = 0
-                finetune_job.latest_loss = None
-                finetune_job.status = JobStatus.RUNNING
-                finetune_job.inference_server_ready = False
+            state.on_status_marker(finetune_job, marker)
 
         # Check for iteration complete marker - tell the listeners.
         # Read full log in case the marker was in a previous chunk.
@@ -1535,16 +1419,7 @@ class FinetuneJobManager:
 
         job = self.jobs[job_id]
 
-        # Only a trainer that is alive and waiting can take a restart. A
-        # COMPLETED job has exited: nothing reads the request, and the monitor
-        # that would have seen it through has stopped, so it used to sit at
-        # RUNNING forever. WAITING_FOR_RESTART also covers a later iteration
-        # that diverged: its server is up but not marked ready, and the
-        # restart the user needed was refused. A RUNNING job whose server is
-        # up is a trainer that predates the WAITING_FOR_RESTART marker.
-        waiting = job.status == JobStatus.WAITING_FOR_RESTART
-        serving = job.status == JobStatus.RUNNING and job.inference_server_ready
-        if not (waiting or serving):
+        if not state.can_restart(job):
             raise ValueError(
                 f"Job {job_id} is in state {job.status.value} - can only restart a "
                 f"job that is waiting for a restart (its training iteration has "
@@ -1590,10 +1465,7 @@ class FinetuneJobManager:
         write_elapsed = time.perf_counter() - write_t0
 
         # 3. Reset training progress (keep inference server info)
-        job.current_epoch = 0
-        job.latest_loss = None
-        job.status = JobStatus.RUNNING
-        job.inference_server_ready = False
+        state.start_iteration(job)
 
         # 4. Update stored params
         if updated_params:

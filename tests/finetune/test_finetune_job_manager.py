@@ -13,7 +13,8 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.finetune import finetune_job_manager as fjm
-from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, JobStatus, finetune_export_kwargs
+from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, finetune_export_kwargs
+from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob

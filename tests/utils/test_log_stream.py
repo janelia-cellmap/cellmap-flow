@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cellmap_flow.finetune.finetune_job_manager import FinetuneJob, JobStatus
+from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
 
 
 class _Statuses(FinetuneJob):

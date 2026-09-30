@@ -418,7 +418,7 @@ GEOMETRY = SimpleNamespace(read_shape=[96] * 3, write_shape=[64] * 3, input_voxe
 
 def _given(situation, world, monkeypatch):
     """Change the world ``routes`` sets up to ``situation``."""
-    from cellmap_flow.finetune.finetune_job_manager import JobStatus
+    from cellmap_flow.finetune.job_manager.state import JobStatus
     from cellmap_flow.models import geometry_cache
 
     job = world.job

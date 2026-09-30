@@ -14,7 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager, JobStatus
+from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
+from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.ready import READY_ENV, read_ready_file, ready_path, write_ready_file

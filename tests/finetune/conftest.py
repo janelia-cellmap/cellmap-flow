@@ -265,7 +265,7 @@ def session(tmp_path):
 @pytest.fixture
 def make_job(tmp_path):
     """``make_job(status="RUNNING", lsf_job=None, **fields)``: a FinetuneJob in <tmp>/runs/r."""
-    from cellmap_flow.finetune.finetune_job_manager import FinetuneJob, JobStatus
+    from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
 
     def make(status="RUNNING", lsf_job=None, **fields):
         out = tmp_path / "runs" / "r"
