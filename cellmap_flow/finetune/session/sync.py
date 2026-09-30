@@ -1,11 +1,14 @@
 """Bringing painted chunks from MinIO back to the volumes on disk.
 
 The browser paints into MinIO; the trainer reads the volume on disk. A sync
-lists a volume's chunks in the bucket with their ETags, copies the changed
-ones into the volume's own zarr, and records the ETags in the volume's
-registry record (``chunk_sync_state``). ``state`` (MinIO's) and ``volumes``
-(the registry) are passed to every call; only the lock and the periodic
-sync's failure counter live here.
+lists a volume's chunks in the bucket with their ETags, copies the ones that
+changed since the last sync into the volume's own zarr, and records what it
+saw in the volume's registry record (``chunk_sync_state``). Local disk is the
+source of truth: nothing on disk is ever deleted because MinIO lacks it.
+
+``state`` is the dashboard's ``minio_state`` and ``volumes`` its volume
+registry, passed to every call; only the lock and the failure counter of
+the periodic sync are kept here.
 """
 
 import json
@@ -26,9 +29,10 @@ from cellmap_flow.finetune.session.volume import NotAnAnnotationVolume, read_vol
 
 logger = logging.getLogger(__name__)
 
-# One sync at a time: the periodic thread, the Save button, submit and
-# restart all sync, and two at once raced over the same chunk state and
-# downloads. Reentrant, since a full sync syncs each volume.
+# One sync at a time. The periodic thread, the Save button, submit and
+# restart all call these, and two of them diffing the same chunk state and
+# downloading the same chunks at once would race each other over both.
+# Reentrant, since a full sync syncs each volume.
 _sync_lock = threading.RLock()
 
 SYNC_PERIOD_SECONDS = 30
@@ -38,10 +42,18 @@ _sync_failures = {"count": 0, "last_warned": None}
 
 
 def worker_count() -> int:
-    """Threads for chunk copies and writes: the scheduler's CPU count (LSF,
-    SGE, SLURM, OpenMP), else the CPUs this process may run on."""
-    for key in ("LSB_DJOB_NUMPROC", "LSB_MAX_NUM_PROCESSORS", "NSLOTS", "SLURM_CPUS_PER_TASK",
-                "OMP_NUM_THREADS"):
+    """How many threads chunk copies and writes may use.
+
+    The CPU count the scheduler gave the job (LSF's ``bsub -n``, SGE, SLURM,
+    OpenMP) first, else the CPUs this process may run on.
+    """
+    for key in (
+        "LSB_DJOB_NUMPROC",
+        "LSB_MAX_NUM_PROCESSORS",
+        "NSLOTS",
+        "SLURM_CPUS_PER_TASK",
+        "OMP_NUM_THREADS",
+    ):
         try:
             value = int(os.environ.get(key, ""))
         except ValueError:
@@ -55,10 +67,14 @@ def worker_count() -> int:
 
 
 def chunk_version(entry) -> str:
-    """One version of a remote chunk: its ETag, from a listing, which changes
-    with the content. LastModified has one-second resolution, so two strokes
-    within a second lost the second; it and the size are only the fallback
-    for a store that lists no ETag."""
+    """What identifies one version of a remote chunk: its ETag, from a listing.
+
+    The ETag changes with the content. LastModified has one-second
+    resolution: two brush strokes to the same chunk within a second, with a
+    sync between them, would leave the second stroke unsynced for good.
+    LastModified and size are only the fallback for a store that lists no
+    ETag.
+    """
     if not isinstance(entry, dict):
         return ""
     etag = entry.get("ETag") or entry.get("etag")
@@ -68,12 +84,15 @@ def chunk_version(entry) -> str:
 
 
 def copy_chunks_parallel(s3, copy_pairs) -> set:
-    """Copy ``(src, dst)`` chunk files from MinIO; returns the sources that failed.
+    """Copy ``(src, dst)`` chunk files from MinIO in parallel.
 
-    Each lands in a temporary file beside its destination and is renamed
-    over it, so the trainer, which reads this same volume, sees the old chunk
-    or the new one and never a half-written file. A failed chunk keeps what
-    was on disk.
+    Each chunk is downloaded to a temporary file beside its destination and
+    moved into place with os.replace, so a reader -- the trainer on its LSF
+    node reads this same volume -- sees the old chunk or the new one, never
+    a half-written file (which blosc rejects).
+
+    Returns the source paths that could not be copied. Their chunks keep
+    what was on disk, and the caller must not record them as synced.
     """
     if not copy_pairs:
         return set()
@@ -102,10 +121,18 @@ def copy_chunks_parallel(s3, copy_pairs) -> set:
 
 
 def sync_zarr_group_metadata(s3, src_path, dst_path) -> set:
-    """Create the arrays of MinIO's group ``src_path`` that ``dst_path`` lacks,
-    and copy the attrs; returns the arrays whose local shape, chunks or dtype
-    differ from MinIO's. Those are left alone: re-creating one would delete
-    its chunks on disk, and chunks must not be copied into it."""
+    """Sync a zarr group's structure and metadata from MinIO to local disk.
+
+    Creates the arrays of ``src_path`` that ``dst_path`` does not have yet,
+    and copies the attrs. An array that exists locally with a different
+    shape, chunking or dtype is left alone and reported: re-creating it
+    would delete every local chunk of that array, which the "never delete
+    on-disk chunks" rule of diff_and_sync_chunks exists to prevent.
+
+    Returns the keys of the arrays whose local layout does not match
+    MinIO's. The caller must not copy chunks into those, since they would
+    not fit.
+    """
     src_group = zarr.open_group(store=s3fs.S3Map(root=src_path, s3=s3), mode="r")
     dst_group = zarr.open_group(store=zarr.DirectoryStore(str(dst_path)), mode="a")
 
@@ -129,7 +156,11 @@ def sync_zarr_group_metadata(s3, src_path, dst_path) -> set:
                 continue
         else:
             dst_group.create_dataset(
-                key, shape=src_array.shape, chunks=src_array.chunks, dtype=src_array.dtype, fill_value=0
+                key,
+                shape=src_array.shape,
+                chunks=src_array.chunks,
+                dtype=src_array.dtype,
+                fill_value=0,
             )
         dst_group[key].attrs.update(src_array.attrs)
 
@@ -138,24 +169,31 @@ def sync_zarr_group_metadata(s3, src_path, dst_path) -> set:
 
 
 def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> tuple:
-    """Copy the chunks of MinIO's ``s0_path`` that changed since ``known_state``.
+    """Copy the chunks of MinIO's ``s0_path`` that changed since ``known_state`` to disk.
 
-    Nothing on disk is ever deleted because MinIO lacks it: a chunk missing
-    from a listing is almost always a transient (a truncated page, a mirror
-    in flight, a restart), and painting background rewrites a chunk rather
-    than removing it. Trusting one bad listing once wiped 3456 chunks of a
-    session.
+    Local disk is the source of truth: YAML imports are written locally
+    first and only later mirrored to MinIO, and painted scribbles flow
+    MinIO -> local through this function. Nothing on disk is ever deleted
+    because MinIO lacks it: a chunk absent from a listing is almost always a
+    transient (a truncated page, an ``mc mirror`` in flight, a server
+    restart, a network blip), not a real erase, since painting background
+    over a chunk in neuroglancer rewrites the chunk file rather than
+    removing it. Trusting one bad listing once wiped 3456 chunks of a
+    session from disk.
 
-    Returns:
-        ``(changed_keys, [], remote_state)``. A chunk that failed to copy is
-        left out of both, keeping its previous state, so the next sync
-        retries it. The empty list is where removed keys used to be.
+    Returns ``(changed_keys, [], remote_state)``: the chunks copied, and the
+    state to record as synced. A chunk that failed to copy is left out of
+    ``changed_keys`` and keeps its previous state (or none) in
+    ``remote_state``, so the next sync tries it again. The empty list is
+    where removed keys used to be; the slot stays so callers' tuple
+    unpacking keeps working.
     """
     try:
         # One listing, with each object's ETag: no per-chunk HEAD request.
         entries = s3.ls(s0_path, detail=True)
     except FileNotFoundError:
-        # Nothing painted yet.
+        # The bucket has no annotation/s0 yet (nothing painted): keep what
+        # is on disk, and look again next cycle.
         return [], [], dict(known_state)
     except Exception as e:
         logger.warning(f"diff_and_sync_chunks: s3.ls({s0_path}) failed: {e}; "
@@ -173,11 +211,16 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
     if not changed:
         return [], [], remote_state
 
+    # Copy, never delete: the recorded state loses a key MinIO stops
+    # listing, but the chunk file on disk stays.
     dst_s0_path = Path(dst_s0_path)
     dst_s0_path.mkdir(parents=True, exist_ok=True)
-    failed = {Path(src).name for src in copy_chunks_parallel(
-        s3, [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed]
-    )}
+    failed = {
+        Path(src).name
+        for src in copy_chunks_parallel(
+            s3, [(f"{s0_path}/{k}", str(dst_s0_path / k)) for k in changed]
+        )
+    }
     for key in failed:
         if key in known_state:
             remote_state[key] = known_state[key]
@@ -187,9 +230,11 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
 
 
 def volume_record(volume_id, zarr_path=None, *, volumes):
-    """The registry record of ``volume_id``, rebuilt from ``zarr_path``'s attrs
-    (and registered) when there is none yet: after a dashboard restart, say.
-    None if neither gives one."""
+    """The registry record of ``volume_id``, or None if there is none.
+
+    When the registry has none yet (after a dashboard restart, say), it is
+    rebuilt from ``zarr_path``'s attrs and registered.
+    """
     if volume_id in volumes:
         return volumes[volume_id]
     if zarr_path is None:
@@ -208,12 +253,19 @@ def volume_record(volume_id, zarr_path=None, *, volumes):
 
 
 def sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bool:
-    """Pull an annotation volume's changed chunks from MinIO; True if any came.
+    """Pull an annotation volume's changed chunks from MinIO to local disk.
 
-    They go to the volume's own zarr: ``zarr_path`` (a resumed copy), else
-    the registered one, else -- for a volume this process has no record of
-    -- ``<output_base>/<volume_id>.zarr``. Sending every volume's strokes to
-    the first session's output_base put them where its trainer never looked.
+    Syncs the annotation group's metadata, then diffs MinIO's chunk listing
+    against what was last synced and copies the chunks that changed. The
+    trainer reads the volume itself, through the session's manifest.
+    Returns True if any chunk was pulled.
+
+    The chunks go to the volume's own zarr: ``zarr_path`` (a resumed copy),
+    else the registered one, else -- only for a volume this dashboard has no
+    record of -- ``<output_base>/<volume_id>.zarr``. output_base is fixed by
+    the first ensure_serving of the dashboard's life, so a volume created
+    under another output path would have its strokes land in the first
+    session's directory, where its trainer never looks.
     """
     with _sync_lock:
         if not state["ip"] or not state["port"]:
@@ -238,12 +290,17 @@ def sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bo
                 return False
             dst_annotation = Path(local_zarr_path) / "annotation"
             dst_annotation.mkdir(parents=True, exist_ok=True)
+            # A local s0 laid out unlike MinIO's is left alone: its chunks
+            # would not fit.
             if "s0" in sync_zarr_group_metadata(s3, src_annotation, dst_annotation):
                 return False
 
             changed, _, remote_state = diff_and_sync_chunks(
-                s3, f"{src_annotation}/s0", dst_annotation / "s0",
-                record.get("chunk_sync_state", {}), force=force,
+                s3,
+                f"{src_annotation}/s0",
+                dst_annotation / "s0",
+                record.get("chunk_sync_state", {}),
+                force=force,
             )
             if not changed:
                 return False
@@ -256,25 +313,37 @@ def sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bo
 
 
 def sync_all(force: bool = True, *, state, volumes) -> int:
-    """Sync every annotation volume in the bucket; how many changed, or -1
-    if MinIO is not initialized."""
+    """Sync every annotation volume in MinIO to local disk.
+
+    Returns the number of volumes that had changed chunks, or -1 if MinIO
+    is not initialized.
+    """
     with _sync_lock:
         if not state.get("ip") or not state.get("port"):
             logger.info("MinIO not initialized, skipping annotation sync")
             return -1
 
+        # DEBUG: the periodic sync runs this every 30 s.
         logger.debug(f"Syncing all annotations from MinIO (force={force})...")
         s3 = minio.make_s3_filesystem(state)
-        zarr_ids = [Path(c).name.replace(".zarr", "") for c in s3.ls(state["bucket"]) if c.endswith(".zarr")]
+        zarr_ids = [
+            Path(c).name.replace(".zarr", "") for c in s3.ls(state["bucket"]) if c.endswith(".zarr")
+        ]
         checked = synced = failed = 0
         for zid in zarr_ids:
-            # Only annotation volumes; anything else in the bucket is a crop
-            # zarr of the removed create-crop route.
+            # Only annotation volumes are synced: they are all the dashboard
+            # serves. Anything else in the bucket is a crop zarr of the
+            # removed create-crop route, whose crops nothing trains on.
             attrs_path = f"{state['bucket']}/{zid}.zarr/.zattrs"
             try:
-                if not s3.exists(attrs_path) or json.loads(s3.cat(attrs_path)).get("type") != "annotation_volume":
+                if (
+                    not s3.exists(attrs_path)
+                    or json.loads(s3.cat(attrs_path)).get("type") != "annotation_volume"
+                ):
                     continue
             except Exception as e:
+                # Counted, so an unreadable volume shows in the summary
+                # instead of passing for a quiet steady state.
                 logger.debug(f"Could not read root attrs for {zid}: {e}")
                 failed += 1
                 continue
@@ -282,8 +351,10 @@ def sync_all(force: bool = True, *, state, volumes) -> int:
             if sync_volume(zid, force=force, state=state, volumes=volumes):
                 synced += 1
 
-        # Say whether nothing changed or something is broken: one line for
-        # both made a real sync failure take a day to spot.
+        # Say whether nothing changed or something is broken. A count of the
+        # volumes that changed alone prints the same line for the healthy
+        # idle case and a broken sync, which made a real sync failure take a
+        # day to spot.
         if synced:
             summary = f"{synced} updated, {checked - synced} unchanged"
         else:
@@ -299,17 +370,21 @@ def periodic_sync_once(*, state, volumes) -> None:
     try:
         if not state["output_base"] or not state["ip"] or not state["port"]:
             return
-        # Pull annotations to disk and nothing else. Any write to the viewer
-        # makes the browser rebuild every layer, taking the draw tool out of
-        # the user's hand and dropping strokes still buffered behind the
-        # brush; the annotated-regions boxes are refreshed from a button.
+        # Pull annotations to disk, and stop there. This thread must never
+        # write to the viewer: python owns the whole state document, so any
+        # write makes the browser run `trackable.reset(); restoreState(...)`
+        # and rebuild every layer -- taking the draw tool out of the user's
+        # hand and dropping whatever strokes were still buffered behind the
+        # brush's commit debounce. The annotated-regions boxes are refreshed
+        # on demand instead, from the "Show Annotated Regions" button.
         sync_all(force=False, state=state, volumes=volumes)
         if _sync_failures["count"]:
             logger.info(f"Periodic annotation sync recovered after {_sync_failures['count']} failure(s)")
         _sync_failures.update(count=0, last_warned=None)
     except Exception as e:
-        # A warning, once per interval: at DEBUG, an outage went unnoticed
-        # until training ran on stale annotations.
+        # A warning, once per interval rather than every 30 s: at DEBUG, a
+        # sync outage went unnoticed until training ran on stale
+        # annotations.
         _sync_failures["count"] += 1
         now = time.monotonic()
         last = _sync_failures["last_warned"]

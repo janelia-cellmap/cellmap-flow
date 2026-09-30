@@ -2,8 +2,10 @@
 
 Neuroglancer reads and writes a volume's chunks straight from MinIO; the
 volume on disk is mirrored up when it is served and pulled back by
-``session.sync``. The server's state (process, address, bucket, data
-directory, sync thread) lives in the dict a ``MinioServer`` is given.
+``session.sync``. The server's state -- process, address, bucket, data
+directory, sync thread -- lives in the dict a ``MinioServer`` is given (the
+dashboard's ``minio_state``), never here, so any number of them over the
+same dict agree.
 """
 
 import logging
@@ -21,19 +23,21 @@ import s3fs
 logger = logging.getLogger(__name__)
 
 # The mc alias for this dashboard's MinIO, defined per call through
-# MC_HOST_<alias> rather than with `mc alias set`, whose ~/.mc/config.json
-# every dashboard of the user shares. finetune_utils.MC_ALIAS repeats it.
+# MC_HOST_<alias> (see MinioServer.mc_env) rather than with `mc alias set`,
+# whose ~/.mc/config.json every dashboard of the user shares: two dashboards
+# would repoint each other's alias. finetune_utils.MC_ALIAS repeats it.
 MC_ALIAS = "myserver"
 MINIO_READY_TIMEOUT = 30.0
 _CREDENTIALS = ("minio", "minio123")
 
-# The URL a reverse proxy in front of the dashboard serves its MinIO at, for
-# browsers that reach the dashboard through it; "{proto}" and "{host}" are
-# the forwarded scheme and host, e.g. "{proto}://{host}/minio". Unset, MinIO
-# URLs are handed out as they are.
+# The URL a reverse proxy in front of the dashboard serves this dashboard's
+# MinIO at, for browsers that reach the dashboard through that proxy. Unset,
+# MinIO URLs are handed out as they are. "{proto}" and "{host}" stand for the
+# forwarded scheme and host, e.g. "{proto}://{host}/minio".
 MINIO_PROXY_URL_ENV = "CELLMAP_FLOW_MINIO_PROXY_URL"
 
-# Two requests arriving together could each see no server and start one.
+# Serializes starting MinIO: two requests arriving together could each see
+# no server and start one.
 _minio_lock = threading.Lock()
 
 
@@ -97,13 +101,26 @@ def wait_for_ready(ip, port, process, timeout=MINIO_READY_TIMEOUT) -> bool:
 
 
 def make_s3_filesystem(state):
-    """An s3fs filesystem on the MinIO ``state`` describes.
+    """An s3fs filesystem pointed at the MinIO ``state`` describes.
 
-    Both cache opt-outs are load-bearing. fsspec would hand back one cached
-    instance with one ``dircache``, which s3fs never expires: the periodic
-    sync's first listing of ``annotation/s0``, made before anything was
-    painted, would be reused for good, and painted chunks would never reach
-    disk ("Synced 0/N", then "No corrections found" at training).
+    Both cache opt-outs are load-bearing, not tuning knobs.
+
+    fsspec caches filesystem *instances* keyed on their constructor
+    arguments, so every call here would otherwise hand back the same object
+    -- and with it the same ``dircache``. s3fs fills ``dircache`` on ``ls()``
+    and never expires it by default. The periodic sync thread starts with
+    MinIO, when the first volume is served, so its first listing of
+    ``annotation/s0`` runs before the user has painted anything and would
+    cache a chunk-less listing. Every later sync would reuse that stale
+    listing, ``diff_and_sync_chunks`` would see no chunk keys, and painted
+    scribbles would never reach disk -- while ``sync_zarr_group_metadata``
+    would keep working, because ``cat()``/``exists()`` address objects
+    directly and bypass the cache. The symptom: every sync logs "no changes"
+    however much is painted, and training finds a volume with no populated
+    chunks.
+
+    Listings here are small and served by a local MinIO, so not caching them
+    costs nothing.
     """
     key, secret = _CREDENTIALS
     return s3fs.S3FileSystem(
@@ -120,13 +137,20 @@ def make_s3_filesystem(state):
 
 
 def proxied_url(minio_url, request=None):
-    """``minio_url`` as a browser behind a reverse proxy can fetch it.
+    """``minio_url`` as a browser behind a reverse proxy can reach it.
 
-    Such a browser cannot reach ``http://<node>:<port>``, and an https page
-    blocks the mixed content. With CELLMAP_FLOW_MINIO_PROXY_URL set and
-    ``request`` (anything with ``headers`` and ``scheme``) carrying
-    X-Forwarded-Host, the URL's path goes under the proxy's URL; the scheme is
-    X-Forwarded-Proto's, else the request's. Otherwise the URL is unchanged.
+    A browser that loaded the dashboard over a proxy's HTTPS cannot fetch
+    ``http://<node>:<port>/...`` chunks from MinIO: the node may not be
+    reachable, and the page blocks the mixed content. When
+    CELLMAP_FLOW_MINIO_PROXY_URL is set and ``request`` (anything with
+    ``headers`` and ``scheme``) came through a proxy, the URL's path is put
+    under that URL instead.
+
+    Only a request carrying X-Forwarded-Host came through a proxy; the Host
+    header is there for every browser, including one that reaches the
+    dashboard directly. The scheme is X-Forwarded-Proto's, else the
+    request's own. Otherwise, and with no request, the URL is returned
+    unchanged.
     """
     template = os.environ.get(MINIO_PROXY_URL_ENV, "").strip()
     if not template or request is None:
@@ -144,11 +168,11 @@ def proxied_url(minio_url, request=None):
 class MinioServer:
     """Starts MinIO once, then serves annotation volumes through it.
 
-    ``state`` is the ``minio_state`` dict (``process``, ``ip``, ``port``,
-    ``bucket``, ``output_base``, ``log_path``, ``sync_thread``), read and
-    written in place; ``volumes`` is the volume registry the sync keeps its
-    chunk state in. ``preflight``, if given, runs first, e.g. a check that
-    the binaries are installed.
+    ``state`` is the dashboard's ``minio_state`` dict (``process``, ``ip``,
+    ``port``, ``bucket``, ``output_base``, ``log_path``, ``sync_thread``):
+    it is read and written in place. ``volumes`` is the volume registry the
+    sync keeps its per-chunk state in. ``preflight``, if given, runs before
+    anything else, e.g. a check that the binaries are installed.
     """
 
     def __init__(self, state: dict, preflight=None, volumes: Optional[dict] = None):
@@ -170,13 +194,13 @@ class MinioServer:
 
     def ensure_serving(self, zarr_path: str, volume_id: str, output_base_dir: Optional[str] = None,
                        mc_target_name: Optional[str] = None) -> str:
-        """Upload the volume at ``zarr_path``, starting MinIO first if needed; returns its URL.
+        """Start MinIO if needed, then upload the volume at ``zarr_path``; returns its MinIO URL.
 
         ``volume_id`` is how the sync finds its chunks: the bucket key without
         ".zarr". ``mc_target_name`` is that key when it is not
-        ``basename(zarr_path)``, as for instance corrections, which keep one
-        key per ROI whichever snapshot is served. A MinIO that has to start
-        keeps its data in ``<output_base_dir>/.minio``.
+        ``basename(zarr_path)``: instance corrections keep one key per ROI
+        whichever snapshot on disk is served. A MinIO that has to start keeps
+        its data in ``<output_base_dir>/.minio``; a running one keeps its own.
         """
         if self.preflight is not None:
             self.preflight()
@@ -184,9 +208,10 @@ class MinioServer:
             if not self.running():
                 self._start(output_base_dir)
 
-        # `mc mirror --overwrite` pushes every local chunk over MinIO's copy,
-        # so anything painted since the last sync -- or everything, for a
-        # resumed session whose .minio was never synced -- would be lost.
+        # `mc mirror --overwrite` pushes every local chunk over MinIO's copy, so
+        # anything painted since the last sync -- up to 30 s of strokes, or all
+        # of them for a resumed session whose .minio holds strokes never synced
+        # -- would be overwritten by a stale local chunk. Pull those first.
         self._pull_painted_chunks(zarr_path, volume_id, mc_target_name)
 
         zarr_name = mc_target_name or Path(zarr_path).name
@@ -203,12 +228,14 @@ class MinioServer:
         return self.url_for(zarr_name)
 
     def _start(self, output_base_dir):
-        """Start MinIO, create the public bucket, and only then record it in the state.
+        """Start MinIO and set it up; record it in the state only once all of that worked.
 
-        Recording the process before the bucket and policy existed left a
-        "running" server without either after a failure. The log goes to a
-        file beside the data directory: a pipe nobody reads blocks MinIO once
-        it has logged about 64 KB.
+        A process recorded right after it started, before the bucket and its
+        policy exist, would be taken for a working server by every later call
+        if either step failed: no bucket and no sync thread until the
+        dashboard restarted. Its log goes to a file beside its data
+        directory: a pipe nobody reads blocks MinIO once it has logged about
+        64 KB.
         """
         from cellmap_flow.finetune.session import sync
 
@@ -219,10 +246,17 @@ class MinioServer:
         ip = get_local_ip()
         port = find_available_port()
         user, password = _CREDENTIALS
-        env = {**os.environ, "MINIO_ROOT_USER": user, "MINIO_ROOT_PASSWORD": password,
-               "MINIO_API_CORS_ALLOW_ORIGIN": "*"}
-        minio_cmd = ["minio", "server", str(root), "--address", f"{ip}:{port}",
-                     "--console-address", f"{ip}:{port+1}"]
+        env = {
+            **os.environ,
+            "MINIO_ROOT_USER": user,
+            "MINIO_ROOT_PASSWORD": password,
+            "MINIO_API_CORS_ALLOW_ORIGIN": "*",
+        }
+        minio_cmd = [
+            "minio", "server", str(root),
+            "--address", f"{ip}:{port}",
+            "--console-address", f"{ip}:{port+1}",
+        ]
 
         logger.info(f"Starting MinIO server at {ip}:{port} (log: {log_path})")
         with open(log_path, "ab") as log:
@@ -239,8 +273,12 @@ class MinioServer:
             result = subprocess.run(["mc", "mb", bucket], capture_output=True, text=True, env=mc_env)
             if result.returncode != 0 and "already" not in result.stderr.lower():
                 raise RuntimeError(f"Could not create the MinIO bucket {bucket}: {result.stderr}")
-            subprocess.run(["mc", "anonymous", "set", "public", bucket],
-                           check=True, capture_output=True, env=mc_env)
+            subprocess.run(
+                ["mc", "anonymous", "set", "public", bucket],
+                check=True,
+                capture_output=True,
+                env=mc_env,
+            )
         except Exception:
             process.terminate()
             try:
@@ -249,14 +287,21 @@ class MinioServer:
                 process.kill()
             raise
 
-        self.state.update(output_base=output_base_dir or None, log_path=str(log_path),
-                          port=port, ip=ip, process=process)
+        self.state.update(
+            output_base=output_base_dir or None,
+            log_path=str(log_path),
+            port=port,
+            ip=ip,
+            process=process,
+        )
         logger.info(f"MinIO started (PID: {process.pid})")
         sync.start_periodic_sync(self.state, self.volumes)
 
     def _pull_painted_chunks(self, zarr_path, volume_id, mc_target_name=None):
-        """Sync the volume's chunks from MinIO into ``zarr_path``, if MinIO has
-        any; a fresh volume costs one request."""
+        """Sync the volume's chunks from MinIO into ``zarr_path``, if MinIO has any.
+
+        A fresh volume has nothing in the bucket yet; that costs one request.
+        """
         from cellmap_flow.finetune.session import sync
 
         zarr_name = mc_target_name or Path(zarr_path).name
