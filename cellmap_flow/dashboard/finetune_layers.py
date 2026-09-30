@@ -21,7 +21,7 @@ import threading
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.listener import FinetuneJobListener
-from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
+from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs, recorded_model_entry
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
@@ -148,7 +148,14 @@ def register_finetuned_model(job, model_name):
                 break
 
     if base_model_dict is None:
-        # Fallback: reconstruct from job params
+        # The model the run's trainer was given, as its record has it: a
+        # Fly, cellmap or finetune model's (job_manager.submit.model_entry).
+        base_model_dict = recorded_model_entry(job.output_dir)
+
+    if base_model_dict is None:
+        # Last, rebuilt from the job's params as a Fly model. Its sizes are
+        # not among them, so it is 178/56, which is what a Fly run's trainer
+        # built before its entry was recorded.
         base_model_dict = {"type": "fly"}
         if params.get("model_checkpoint"):
             base_model_dict["checkpoint_path"] = params["model_checkpoint"]

@@ -9,7 +9,9 @@ the manager keeps its record of the job in ``metadata.json``:
   and when it ends, with its ``finetuned_model_name`` and
   ``model_yaml_path`` (``update_metadata``);
 - completed when it succeeds (``record_completion``).
-The trainer writes a restart's settings into its ``params``.
+The trainer writes a restart's settings into its ``params``. The dashboard
+reads back the ``model_entry`` the trainer was given
+(``recorded_model_entry``).
 
 A dashboard started later, perhaps newer than the one that submitted the
 jobs, finds a session's jobs again from these records (``rehydrate``), so
@@ -132,6 +134,18 @@ def update_metadata(output_dir, **fields) -> None:
         os.replace(tmp, path)
     except Exception as e:
         logger.warning(f"Could not update {path}: {e}")
+
+
+def recorded_model_entry(output_dir) -> Optional[dict]:
+    """The model entry the run's trainer was given (submit.model_entry), as its
+    metadata.json records it. None for a model that went by its own flags, and
+    for a record that is missing or cannot be read."""
+    try:
+        metadata = json.loads((Path(output_dir) / METADATA_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+    entry = metadata.get("model_entry") if isinstance(metadata, dict) else None
+    return entry if isinstance(entry, dict) else None
 
 
 def record_completion(finetune_job: FinetuneJob) -> None:
