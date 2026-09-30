@@ -383,6 +383,137 @@ def test_a_job_lsf_has_forgotten_is_judged_by_its_log(session, monkeypatch, log,
     assert metadata["status"] == status and detail in metadata["status_detail"] and "501" in metadata["status_detail"]
 
 
+CREATED = "2026-01-01T12:00:00"
+PARAMS = {"lora_r": 8, "lora_alpha": 16, "num_epochs": 5, "learning_rate": 0.0001}
+TWO_ITERATIONS = ("FINETUNED_MODEL_YAML: /s/models/m_finetuned_1.yaml\nTRAINING_ITERATION_COMPLETE: m_finetuned_1\n"
+                  f"{IP_PATTERN[0]}{URL}{IP_PATTERN[1]}\nWAITING_FOR_RESTART\nRESTARTING_TRAINING\n"
+                  "TRAINING_ITERATION_COMPLETE: m_finetuned_2\nWAITING_FOR_RESTART\n")
+
+# One session's runs: the status and LSF job id their metadata.json records,
+# what bjobs says of them ("not found": LSF has purged the job; None: bjobs
+# says nothing of it), and their training log.
+RUNS = {
+    "cancelled": ("CANCELLED", "113", None, None),
+    "completed": ("COMPLETED", "111", None, None),
+    "done_meanwhile": ("RUNNING", "105", "DONE", None),
+    "exited_meanwhile": ("RUNNING", "106", "EXIT", None),
+    "failed": ("FAILED", "112", None, None),
+    "known": ("RUNNING", "115", None, None),  # this dashboard already follows it
+    "local": ("RUNNING", "PID:4", None, None),
+    "pending": ("PENDING", "102", "PEND", None),
+    "purged_after_two": ("WAITING_FOR_RESTART", "107", "not found", TWO_ITERATIONS),
+    "purged_mid_epoch": ("RUNNING", "108", "not found", "Starting epoch 1 of 5...\n"),
+    "purged_without_a_log": ("PENDING", "109", "not found", None),
+    "running": ("RUNNING", "101", "RUN", "Starting epoch 2 of 5...\n"),
+    "suspended": ("RUNNING", "104", "USUSP", None),
+    "unanswered": ("RUNNING", "110", None, None),
+    "unrecorded": ("RUNNING", None, None, None),  # from before metadata.json kept the LSF id
+    "waiting": ("WAITING_FOR_RESTART", "103", "RUN", TWO_ITERATIONS),
+}
+# What metadata.json records of each run, as submit and the monitor leave it.
+# "from_an_old_dashboard" has only what the oldest dashboards wrote.
+RECORD = {
+    "model_name": "m", "model_type": "script", "model_script": "/s.py", "model_entry": None,
+    "params": PARAMS, "created_at": CREATED, "queue": "gpu_h100", "charge_group": "cellmap",
+    "command": "python -m cellmap_flow.finetune.finetune_cli ...",
+}
+
+# What the manager makes of them. The jobs it follows again, as it rebuilds
+# them: their status from LSF's answer, the rest from metadata.json, and what
+# only the log says (the server, the model, the epoch) left for the monitor.
+REATTACHED = {
+    "from_an_old_dashboard": dict(lsf_job_id="114", model_name="", params={}, status="RUNNING", created_at="<now>",
+                                  total_epochs=10, corrections_path=None),
+    "pending": dict(lsf_job_id="102", status="PENDING"),
+    "running": dict(lsf_job_id="101", status="RUNNING"),
+    "suspended": dict(lsf_job_id="104", status="RUNNING"),
+    "waiting": dict(lsf_job_id="103", status="RUNNING"),
+}
+# And what it writes into the others' metadata.json, merged into the rest.
+RECORDED = {
+    "done_meanwhile": {"status": "COMPLETED"},
+    "exited_meanwhile": {"status": "FAILED"},
+    "purged_after_two": {"status": "COMPLETED", "status_detail":
+                         "LSF no longer knows job 107; it had finished 2 iteration(s), the last m_finetuned_2"},
+    "purged_mid_epoch": {"status": "FAILED", "status_detail":
+                         "LSF no longer knows job 108; it ended while no dashboard was watching, and how is not known"},
+    "purged_without_a_log": {"status": "FAILED", "status_detail":
+                             "LSF no longer knows job 109; it ended while no dashboard was watching, and how is not known"},
+}
+
+
+def test_rehydrating_a_session_snapshot(fake_lsf, local_jobs, tmp_path):
+    """A dashboard started later finds its jobs from each run's metadata.json and
+    one bjobs call. Jobs outlive dashboard upgrades, so this reading of the file
+    is a format: pinned here for every state a run can be left in."""
+    session = tmp_path / "s"
+    written = {}
+    for name, (status, lsf_job_id, _, log) in RUNS.items():
+        run = session / "runs" / name
+        run.mkdir(parents=True)
+        written[name] = {"job_id": name, **RECORD, "corrections_path": str(session / "corrections"),
+                         "output_dir": str(run), "models_dir": str(session / "models"),
+                         "lsf_job_id": lsf_job_id, "status": status}
+        if name == "waiting":
+            written[name].update(inference_server_url=URL, finetuned_model_name="m_finetuned_2",
+                                 model_yaml_path="/s/models/m_finetuned_1.yaml")
+        if log is not None:
+            (run / "training_log.txt").write_text(log)
+    written["from_an_old_dashboard"] = {"job_id": "from_an_old_dashboard", "lsf_job_id": "114", "status": "RUNNING"}
+    written["no_job_id"] = {"lsf_job_id": "116", "status": "RUNNING"}
+    for name, metadata in written.items():
+        (session / "runs" / name).mkdir(parents=True, exist_ok=True)
+        (session / "runs" / name / "metadata.json").write_text(json.dumps(metadata))
+    (session / "runs" / "unreadable").mkdir()
+    (session / "runs" / "unreadable" / "metadata.json").write_text('{"job_id": "unreadable", "lsf_')
+
+    said = {**{lsf_job_id: stat for lsf_job_id, stat in (RUNS[n][1:3] for n in RUNS) if stat}, "114": "RUN"}
+    fake_lsf.answers["bjobs"] = [
+        (255, "".join(f"{i}  me  {stat}  gpu_h100  login1  h10u05  finetune_m  Jan 1 12:00\n"
+                      for i, stat in said.items() if stat != "not found"),
+         "".join(f"Job <{i}> is not found\n" for i, stat in said.items() if stat == "not found")),
+        "110  me  DONE  gpu_h100  login1  h10u05  finetune_m  Jan 1 12:00\n",
+    ]
+    manager = FinetuneJobManager()
+    manager.jobs["known"] = known = SimpleNamespace(job_id="known")
+
+    assert manager.rehydrate_session(session) == len(REATTACHED)
+
+    # One bjobs call, for the runs whose record is not final, in the order of their directories.
+    assert fake_lsf.calls == [["bjobs", "-noheader", "105", "106", "114", "102", "107", "108", "109", "101",
+                               "104", "110", "103"]]
+    rebuilt = {}
+    for job_id, job in manager.jobs.items():
+        if job is known:
+            continue
+        seen = job.to_dict()
+        assert isinstance(job.lsf_job, LSFJob) and (job.lsf_job.job_id, job.lsf_job.model_name) == (
+            seen["lsf_job_id"], written[job_id].get("model_name"))
+        if "created_at" not in written[job_id]:
+            assert abs(datetime.now() - job.created_at).total_seconds() < 60
+            seen["created_at"] = "<now>"
+        rebuilt[job_id] = seen
+    run = str(session / "runs" / "{}")
+    assert rebuilt == {job_id: {
+        "job_id": job_id, "model_name": "m", "output_dir": run.format(job_id), "params": PARAMS,
+        "created_at": CREATED, "log_file": run.format(job_id) + "/training_log.txt", "finetuned_model_name": None,
+        "model_yaml_path": None, "current_epoch": 0, "total_epochs": 5, "latest_loss": None,
+        "inference_server_url": None, "inference_server_ready": False,
+        "corrections_path": str(session / "corrections"), **fields,
+    } for job_id, fields in REATTACHED.items()}
+    assert [job.job_id for job in local_jobs.monitors] == list(REATTACHED), "each is monitored again"
+    for name, metadata in written.items():
+        on_disk = json.loads((session / "runs" / name / "metadata.json").read_text())
+        assert on_disk == {**metadata, **RECORDED.get(name, {})}, name
+
+    # Asked again, only the run bjobs said nothing of is asked about; it has finished since.
+    assert manager.rehydrate_session(session) == 0
+    assert fake_lsf.calls[1:] == [["bjobs", "-noheader", "110"]]
+    assert json.loads((session / "runs" / "unanswered" / "metadata.json").read_text())["status"] == "COMPLETED"
+    # And with nothing unfinished left, LSF is asked nothing.
+    assert manager.rehydrate_session(session) == 0 and len(fake_lsf.calls) == 2
+
+
 @pytest.mark.parametrize("status, restarted", [
     pytest.param("WAITING_FOR_RESTART", True, id="waiting, with no server: through the signal file"),
     pytest.param("COMPLETED", False, id="completed: the trainer has exited"),
