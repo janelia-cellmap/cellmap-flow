@@ -337,125 +337,16 @@ class CellMapFlowBlockwiseProcessor:
         logger.info(f"type: {self.dtype}")
         logger.info(f"output_path: {self.output_path}")
 
-        # Ensure we have output channels to iterate over
-        channels_to_create = self.output_channels if self.output_channels else []
-        if not isinstance(channels_to_create, list):
-            channels_to_create = [channels_to_create]
+        # _validate_settings checks a task's own output_channels; the model's
+        # channel names, used when it gives none, can repeat too.
+        if len(self.output_channels) != len(set(self.output_channels)):
+            raise Exception(f"output_channels has duplicated channel names. channels: {self.output_channels}")
 
-        # check if there is two channels_to_create with same name
-        if len(channels_to_create) != len(set(channels_to_create)):
-            raise Exception(f"output_channels has duplicated channel names. channels: {channels_to_create}")
-
-        for channel in channels_to_create:
+        for channel in self.output_channels:
             if create:
-                try:
-                    # Determine output shape - for dict format with multiple channels, we need 4D
-                    if self.output_channels_is_dict and self.output_channel_indices:
-                        channel_indices = self.output_channel_indices[channel]
-                        if isinstance(channel_indices, int):
-                            channel_indices = [channel_indices]
-
-                        if len(channel_indices) > 1:
-                            # Multi-channel output - need 4D array (channels, z, y, x)
-                            final_output_shape = (len(channel_indices),) + tuple(
-                                output_shape.astype(int)
-                            )
-                            final_offset = (0,) + tuple(offset)
-                            
-                        else:
-                            # Single channel output - 3D array
-                            final_output_shape = tuple(output_shape.astype(int))
-                            final_offset = tuple(offset)
-                    else:
-                        # List format - 3D array
-                        final_output_shape = tuple(output_shape.astype(int))
-                        final_offset = tuple(offset)
-                    array = prepare_ds(
-                        NestedDirectoryStore(self.output_path / channel / "s0"),
-                        final_output_shape,
-                        dtype=self.dtype,
-                        chunk_shape=(
-                            self.block_shape
-                            if len(final_output_shape) == 3
-                            else (len(channel_indices),) + self.block_shape
-                        ),
-                        voxel_size=Coordinate(
-                            self.output_voxel_size
-                            if len(final_output_shape) == 3
-                            else (1,) + tuple(self.output_voxel_size)
-                        ),
-                        axis_names=(
-                            ["z", "y", "x"]
-                            if len(final_output_shape) == 3
-                            else ["c", "z", "y", "x"]
-                        ),
-                        units=(
-                            ["nanometer"] * 3
-                            if len(final_output_shape) == 3
-                            else [""] + ["nanometer"] * 3
-                        ),
-                        offset=Coordinate(
-                            final_offset
-                        ),
-                    )
-                except Exception as e:
-                    raise Exception(
-                        f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}"
-                    )
-                try:
-                    z_store = NestedDirectoryStore(self.output_path / channel)
-                    zg = open_group(store=z_store, mode="a")
-
-                    # Determine metadata parameters based on dimensionality
-                    if self.output_channels_is_dict and self.output_channel_indices:
-                        channel_indices = self.output_channel_indices[channel]
-                        if isinstance(channel_indices, int):
-                            channel_indices = [channel_indices]
-
-                        if len(channel_indices) > 1:
-                            # 4D metadata
-                            metadata_voxel_size = (1,) + tuple(self.output_voxel_size)
-                            metadata_offset = list(final_offset)
-                            metadata_units = [""] + ["nanometer"] * 3
-                            metadata_axes = ["c", "z", "y", "x"]
-                        else:
-                            # 3D metadata
-                            metadata_voxel_size = self.output_voxel_size
-                            metadata_offset = list(final_offset)
-                            metadata_units = ["nanometer"] * 3
-                            metadata_axes = ["z", "y", "x"]
-                    else:
-                        # List format - 3D metadata
-                        metadata_voxel_size = self.output_voxel_size
-                        metadata_offset = list(final_offset)
-                        metadata_units = ["nanometer"] * 3
-                        metadata_axes = ["z", "y", "x"]
-
-                    zattrs = singlescale_attrs(
-                        arr_name="s0",
-                        voxel_size=metadata_voxel_size,
-                        offset=metadata_offset,
-                        units=metadata_units,
-                        axes=metadata_axes,
-                    )
-                    if "multiscales" in list(zg.attrs):
-                        old_multiscales = zg.attrs["multiscales"]
-                        if old_multiscales != zattrs["multiscales"]:
-                            logger.info(f"Old multiscales: {old_multiscales}")
-                            logger.info(f"New multiscales: {zattrs['multiscales']}")
-                            raise ValueError(
-                                f"multiscales attribute already exists in {z_store.path} and is "
-                                "different from the new one. If it was written by an older "
-                                "cellmap-flow, which placed outputs half a voxel off (OME "
-                                "translation is a voxel centre), its blocks are on a different "
-                                "grid: write to a new output path instead of resuming."
-                            )
-                    zg.attrs["multiscales"] = zattrs["multiscales"]
-                except Exception as e:
-                    raise Exception(
-                        f"Failed to prepare ome-ngff metadata for {self.output_path/channel/'s0'}, {e}"
-                    )
+                array = self._create_output(channel, tuple(output_shape), tuple(offset))
             else:
+                # A worker opens what the master created.
                 try:
                     array = open_ds(
                         NestedDirectoryStore(self.output_path / channel / "s0"),
@@ -464,6 +355,73 @@ class CellMapFlowBlockwiseProcessor:
                 except Exception as e:
                     raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
             self.output_arrays.append(array)
+
+    def _channel_indices(self, name):
+        """The model channels a dict of output_channels gives output ``name``, as a list."""
+        indices = self.output_channel_indices[name]
+        return [indices] if isinstance(indices, int) else indices
+
+    def _create_output(self, channel, shape, offset):
+        """Create output ``channel``: its array s0, and its group's OME attributes.
+
+        ``shape`` (voxels) and ``offset`` (nm, voxel 0's corner) are the
+        spatial ones, z, y, x. An output that a dict of output_channels gives
+        several model channels stacks them on a leading axis "c", with voxel
+        size 1 and offset 0, and each chunk holds all of them; any other
+        output holds one channel and is 3-D. Resuming into an output whose
+        attributes differ is refused.
+        """
+        chunk_shape, voxel_size = tuple(self.block_shape), tuple(self.output_voxel_size)
+        axes, units = ["z", "y", "x"], ["nanometer"] * 3
+        if self.output_channels_is_dict and self.output_channel_indices:
+            stacked = len(self._channel_indices(channel))
+            if stacked > 1:
+                shape, chunk_shape = (stacked, *shape), (stacked, *chunk_shape)
+                voxel_size, offset = (1, *voxel_size), (0, *offset)
+                axes, units = ["c", *axes], ["", *units]
+        try:
+            array = prepare_ds(
+                NestedDirectoryStore(self.output_path / channel / "s0"),
+                shape,
+                dtype=self.dtype,
+                chunk_shape=chunk_shape,
+                voxel_size=Coordinate(voxel_size),
+                axis_names=axes,
+                units=units,
+                offset=Coordinate(offset),
+            )
+        except Exception as e:
+            raise Exception(
+                f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}"
+            )
+        try:
+            z_store = NestedDirectoryStore(self.output_path / channel)
+            zg = open_group(store=z_store, mode="a")
+            zattrs = singlescale_attrs(
+                arr_name="s0",
+                voxel_size=voxel_size,
+                offset=offset,
+                units=units,
+                axes=axes,
+            )
+            if "multiscales" in list(zg.attrs):
+                old_multiscales = zg.attrs["multiscales"]
+                if old_multiscales != zattrs["multiscales"]:
+                    logger.info(f"Old multiscales: {old_multiscales}")
+                    logger.info(f"New multiscales: {zattrs['multiscales']}")
+                    raise ValueError(
+                        f"multiscales attribute already exists in {z_store.path} and is "
+                        "different from the new one. If it was written by an older "
+                        "cellmap-flow, which placed outputs half a voxel off (OME "
+                        "translation is a voxel centre), its blocks are on a different "
+                        "grid: write to a new output path instead of resuming."
+                    )
+            zg.attrs["multiscales"] = zattrs["multiscales"]
+        except Exception as e:
+            raise Exception(
+                f"Failed to prepare ome-ngff metadata for {self.output_path/channel/'s0'}, {e}"
+            )
+        return array
 
     def _snap_to_output_grid(self, roi):
         """``roi`` shrunk onto the output voxel grid anchored at grid_origin."""
@@ -539,10 +497,7 @@ class CellMapFlowBlockwiseProcessor:
             else:
                 if self.output_channels_is_dict and self.output_channel_indices:
                     # Dictionary format: extract multiple channels for this output
-                    channel_indices = self.output_channel_indices[channel_name]
-                    if isinstance(channel_indices, int):
-                        channel_indices = [channel_indices]
-
+                    channel_indices = self._channel_indices(channel_name)
                     if len(channel_indices) == 1:
                         # Single channel output
                         channel_data = chunk_data[channel_indices[0]]
