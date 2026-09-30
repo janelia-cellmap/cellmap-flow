@@ -188,6 +188,10 @@ def test_a_restart_cannot_turn_a_full_finetune_into_lora(run_cli, tmp_path):
 @pytest.mark.parametrize("restart, adapter", [
     pytest.param({"lora_r": 4}, (4, 8), id="alpha follows the rank"),
     pytest.param({"lora_r": 4, "lora_alpha": 4}, (4, 4), id="an alpha given with it is kept"),
+    # Rank 0 asks for a full finetune, which a LoRA job cannot become: it
+    # kept its rank but took the alpha of 2 x 0, a scaling of 0, and trained
+    # nothing.
+    pytest.param({"lora_r": 0}, (2, 4), id="rank 0 keeps the adapter as it was"),
 ])
 def test_a_lora_restarts_alpha_keeps_the_adapters_scaling(run_cli, tmp_path, restart, adapter):
     """peft scales an adapter by lora_alpha / r, and a restart carried only the

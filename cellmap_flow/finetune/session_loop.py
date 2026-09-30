@@ -533,6 +533,9 @@ class TrainingSession:
             logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
                            "submit a new job for that. Keeping the current adapter setup.")
             args.lora_r = max(1, int(kept.r))
+            # Its alpha too: the restart derived 2 x 0 = 0 for it, and an
+            # adapter scaled by alpha / r = 0 trains nothing.
+            args.lora_alpha = kept.alpha
         elif kept.kind == "full" and args.lora_r > 0:
             # The mirror image of the case above. Left alone, args.lora_r > 0
             # made the next iteration's YAML point at a lora_adapter/ this job
