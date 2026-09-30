@@ -6,8 +6,8 @@ is a breaking release rather than a refactor:
 - the console scripts and what each one runs;
 - every command and option of ``cellmap_flow``, ``cellmap_flow_server``,
   ``cellmap_flow_yaml``, ``cellmap_flow_view`` and the two blockwise
-  commands, down to the short flags, which come from walking each
-  constructor signature in reverse, and the type listings;
+  commands, down to the short flags, which go to a model type's
+  constructor arguments in signature order, and the type listings;
 - ``to_dict()`` (exported and finetuned YAMLs are written from it) and
   ``command`` (the server rebuilds the config from it) of every model type;
 - what the dashboard's model form is offered, and how it parses its strings.
@@ -83,14 +83,17 @@ def test_the_console_scripts_are_unchanged():
 # and nargs after them when it is not 1.
 NAME = ('name', ('-n', '--name'), (), 'text', False, None, False, 'Parameter: name (optional)')
 SCALE = ('scale', ('-s', '--scale'), (), 'text', False, None, False, 'Parameter: scale (optional)')
+# Short flags go to the arguments in signature order; a later argument with
+# a taken letter has none (K1).
+LONG_SCALE = ('scale', ('--scale',), (), 'text', False, None, False, 'Parameter: scale (optional)')
 DATA_PATH = ('data_path', ('-d', '--data-path'), (), 'text', True, None, False, 'Path to the dataset')
 LOG_LEVEL = [('log_level', ('--log-level',), (), 'choice', False, 'INFO', False, 'Set the logging level')]
 
 # Each model type's own options, the same in both CLIs.
 MODEL_OPTIONS = {
     'script': [
-        ('script_path', ('--script-path',), (), 'text', True, None, False, 'Parameter: script_path'),
-        NAME, SCALE,
+        ('script_path', ('-s', '--script-path'), (), 'text', True, None, False, 'Parameter: script_path'),
+        NAME, LONG_SCALE,
     ],
     'dacapo': [
         ('run_name', ('-r', '--run-name'), (), 'text', True, None, False, 'Parameter: run_name'),
@@ -98,13 +101,14 @@ MODEL_OPTIONS = {
         NAME, SCALE,
     ],
     'fly': [
-        ('checkpoint_path', ('--checkpoint-path',), (), 'text', True, None, False, 'Parameter: checkpoint_path'),
-        ('channels', ('-c', '--channels'), (), 'text', True, None, False, 'Parameter: channels [comma-separated values]'),
-        ('input_voxel_size', ('--input-voxel-size',), (), 'text', True, None, False, 'Parameter: input_voxel_size'),
-        ('output_voxel_size', ('--output-voxel-size',), (), 'text', True, None, False, 'Parameter: output_voxel_size'),
+        ('checkpoint_path', ('-c', '--checkpoint-path'), (), 'text', True, None, False, 'Parameter: checkpoint_path'),
+        ('channels', ('--channels',), (), 'text', True, None, False, 'Parameter: channels [comma-separated values]'),
+        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', True, None, False, 'Parameter: input_voxel_size'),
+        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', True, None, False,
+         'Parameter: output_voxel_size'),
         NAME,
-        ('input_size', ('-i', '--input-size'), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
-        ('output_size', ('-o', '--output-size'), (), 'text', False, None, False, 'Parameter: output_size (optional)'),
+        ('input_size', ('--input-size',), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
+        ('output_size', ('--output-size',), (), 'text', False, None, False, 'Parameter: output_size (optional)'),
         SCALE,
     ],
     'bioimage': [
@@ -126,8 +130,8 @@ MODEL_OPTIONS = {
         ('weights_path', ('-w', '--weights-path'), (), 'text', False, None, False, 'Parameter: weights_path (optional)'),
     ],
     'huggingface': [
-        ('repo', ('--repo',), (), 'text', True, None, False, 'Parameter: repo'),
-        ('revision', ('-r', '--revision'), (), 'text', False, None, False, 'Parameter: revision (optional)'),
+        ('repo', ('-r', '--repo'), (), 'text', True, None, False, 'Parameter: repo'),
+        ('revision', ('--revision',), (), 'text', False, None, False, 'Parameter: revision (optional)'),
         NAME, SCALE,
     ],
 }

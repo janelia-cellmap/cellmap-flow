@@ -323,7 +323,9 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
 
     # Add model-specific options based on constructor parameters; -d, -q
     # and -P are the command's own.
-    for option_config in registry.click_options(config_class, {"-d", "-q", "-P"}):
+    # Applied last to first, because each decorator puts its option before
+    # the ones already applied.
+    for option_config in reversed(registry.click_options(config_class, {"-d", "-q", "-P"})):
         command_func = click.option(
             *option_config.pop("param_decls"), **option_config
         )(command_func)

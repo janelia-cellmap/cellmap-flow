@@ -450,15 +450,15 @@ def _click_option(param_name: str, param_info: inspect.Parameter, used_short_nam
 def click_options(cls, reserved_short) -> List[dict]:
     """The ``click.option`` arguments for each of ``cls``'s constructor arguments.
 
-    In reverse signature order, the order the options are applied in, and
-    so the order short flags are handed out: the last argument gets its
-    first letter before an earlier one with the same letter. Every existing
-    command's short flags depend on that order. ``reserved_short`` holds the
-    command's own short flags (``-d`` and so on), which no argument gets.
+    In signature order, which is also the order short flags are handed out
+    in: an argument gets its first letter unless an earlier argument has it
+    already (``script -s`` is ``--script-path``, and ``--scale`` has no short
+    flag). ``reserved_short`` holds the command's own short flags (``-d`` and
+    so on), which no argument gets.
     """
     used = set(reserved_short)
     options = []
-    for param_name, param in reversed(list(inspect.signature(cls.__init__).parameters.items())):
+    for param_name, param in inspect.signature(cls.__init__).parameters.items():
         option = _click_option(param_name, param, used)
         if option:
             options.append(option)
