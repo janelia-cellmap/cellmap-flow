@@ -38,7 +38,7 @@ import torch
 from cellmap_flow.models.models_config import FlyModelConfig, DaCapoModelConfig, HuggingFaceModelConfig, ModelConfig
 from cellmap_flow.utils.ds import _is_remote_path
 from cellmap_flow.utils.restart_token import read_or_create_restart_token
-from cellmap_flow.finetune.finetuned_model_templates import FINETUNED_MODEL_YAML_MARKER
+from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy, strategy_for
 from cellmap_flow.finetune.model_loading import (
     decode_model_entry,
@@ -223,7 +223,7 @@ def _wait_for_restart_signal(
     """
     logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
     # The job manager's cue that this job is idle and can take a restart.
-    print("WAITING_FOR_RESTART", flush=True)
+    markers.emit(markers.WAITING_FOR_RESTART)
 
     while True:
         if restart_controller is not None:
@@ -1321,7 +1321,7 @@ def main():
                 return 1
             # The previous iteration's model is still loaded and served;
             # wait for a restart with settings that work.
-            print(f"RESTART_FAILED: {e}", flush=True)
+            markers.emit(markers.RESTART_FAILED, e)
             restart_data = _wait_for_restart_signal(
                 signal_file=Path(args.output_dir) / "restart_signal.json",
                 check_interval=1.0,
@@ -1331,7 +1331,7 @@ def main():
                 logger.error("Malformed restart signal, exiting")
                 return 1
             _apply_restart_params(args, restart_data)
-            print("RESTARTING_TRAINING", flush=True)
+            markers.emit(markers.RESTARTING_TRAINING)
             continue
 
         # Train
@@ -1373,7 +1373,7 @@ def main():
                     _apply_restart_params(args, restart_data)
 
                     pending_reset = True
-                    print("RESTARTING_TRAINING", flush=True)
+                    markers.emit(markers.RESTARTING_TRAINING)
                     continue
                 else:
                     return 1
@@ -1414,10 +1414,10 @@ def main():
                 # The job manager takes the YAML from here rather than
                 # guessing where it went. Printed before the completion
                 # marker so both are in the log when that is seen.
-                print(f"{FINETUNED_MODEL_YAML_MARKER} {yaml_path}", flush=True)
+                markers.emit(markers.FINETUNED_MODEL_YAML, yaml_path)
 
             # Print completion marker with timestamp (for job manager to detect)
-            print(f"TRAINING_ITERATION_COMPLETE: {finetuned_model_name}", flush=True)
+            markers.emit(markers.TRAINING_ITERATION_COMPLETE, finetuned_model_name)
 
             # Auto-serve if requested
             if args.auto_serve:
@@ -1430,7 +1430,7 @@ def main():
                         server_started = True
                     except Exception as e:
                         logger.error(f"Failed to start inference server: {e}", exc_info=True)
-                        print(f"INFERENCE_SERVER_FAILED: {e}", flush=True)
+                        markers.emit(markers.INFERENCE_SERVER_FAILED, e)
                         # The job was asked to train and serve, and cannot
                         # serve. This returned 0, so it showed as COMPLETED
                         # with nothing served and no sign why. The weights
@@ -1462,7 +1462,7 @@ def main():
                 # started from, not from the previous iteration's weights --
                 # once the next iteration is set up (see pending_reset).
                 pending_reset = True
-                print("RESTARTING_TRAINING", flush=True)
+                markers.emit(markers.RESTARTING_TRAINING)
                 continue  # Loop back to retrain
 
             # No auto-serve: just exit after training

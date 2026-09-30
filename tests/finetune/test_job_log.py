@@ -55,14 +55,14 @@ def test_the_markers_and_patterns_are_the_ones_both_sides_always_used(capsys):
         compiled = getattr(markers, name)
         assert (compiled.pattern, compiled.flags & (re.IGNORECASE | re.MULTILINE)) == (pattern, flags), name
 
-    # What the trainer prints today, until it prints through markers.emit.
+    # The trainer prints every one through markers.emit.
     here = Path(markers.__file__).parent
     trainer = (here / "finetune_cli.py").read_text() + (here / "lora_trainer.py").read_text()
-    for marker in (
-        markers.TRAINING_ITERATION_COMPLETE, markers.RESTART_FAILED, markers.INFERENCE_SERVER_FAILED,
-        markers.TRAINING_DIVERGED, markers.RESTARTING_TRAINING, markers.WAITING_FOR_RESTART,
+    for name in (
+        "TRAINING_ITERATION_COMPLETE", "FINETUNED_MODEL_YAML", "RESTART_FAILED",
+        "INFERENCE_SERVER_FAILED", "TRAINING_DIVERGED", "RESTARTING_TRAINING", "WAITING_FOR_RESTART",
     ):
-        assert marker in trainer, marker
+        assert f"markers.emit(markers.{name}" in trainer, name
     assert markers.FINETUNED_MODEL_YAML == finetuned_model_templates.FINETUNED_MODEL_YAML_MARKER
 
     # And what emit prints, the job manager reads.

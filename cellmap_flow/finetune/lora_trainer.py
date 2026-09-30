@@ -16,6 +16,8 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
 
+from cellmap_flow.finetune import markers
+
 # The losses live in losses.py; these names stay importable from here.
 from cellmap_flow.finetune.losses import (  # noqa: F401
     CombinedLoss,
@@ -757,7 +759,7 @@ class LoRAFinetuner:
                         # Every diverged return says so: the job manager
                         # watches for this marker, and without it this path
                         # looked like training that simply went quiet.
-                        print("TRAINING_DIVERGED", flush=True)
+                        markers.emit(markers.TRAINING_DIVERGED)
                         return {
                             'final_loss': float('nan'),
                             'best_loss': self.best_loss,
@@ -787,7 +789,7 @@ class LoRAFinetuner:
                     f"ERROR: Loss is {epoch_loss} at epoch {epoch+1}. "
                     f"Stopping training."
                 )
-                print("TRAINING_DIVERGED", flush=True)
+                markers.emit(markers.TRAINING_DIVERGED)
                 return {
                     'final_loss': epoch_loss,
                     'best_loss': self.best_loss,
