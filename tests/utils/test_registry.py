@@ -9,7 +9,7 @@ import pytest
 from cellmap_flow.globals import g
 from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import FlyModelConfig, ModelConfig, ScriptModelConfig
-from cellmap_flow.utils.config_utils import ConfigError
+from cellmap_flow.config.yaml import ConfigError
 
 
 @pytest.fixture(autouse=True)
@@ -80,6 +80,19 @@ def test_a_yaml_entry_may_use_aliases_and_a_single_voxel_size():
         "type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito"], "input_voxel_size": [8, 8, 8],
         "output_voxel_size": [8, 8, 8], "name": "m", "input_size": [20, 20, 20], "output_size": [10, 10, 10],
     }
+
+
+@pytest.mark.parametrize("models, message", [
+    pytest.param({"m": {"script_path": "/s.py"}}, "missing 'type'", id="entry-without-a-type"),
+    pytest.param({"m": {"type": "no-such-kind"}}, "unrecognized type", id="unknown-type"),
+    pytest.param({"m": {"type": "dacapo", "run_name": "r"}}, "missing required parameter 'iteration'",
+                 id="missing-required-parameter"),
+    pytest.param({"m": "not a mapping"}, "must be a mapping", id="entry-not-a-mapping"),
+    pytest.param([{"type": "script", "script_path": "/s.py"}], "name", id="list-entry-without-a-name"),
+])
+def test_a_bad_model_entry_is_a_config_error(models, message):
+    with pytest.raises(ConfigError, match=message):
+        registry.build_models(models)
 
 
 def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):

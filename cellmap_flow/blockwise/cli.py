@@ -24,7 +24,7 @@ def cli(yaml_config, client, log_level):
     # pay for the whole inference stack (~16s before this).
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
 
-    from cellmap_flow.utils.config_utils import ConfigError
+    from cellmap_flow.config.yaml import ConfigError
 
     configure_logging(getattr(logging, log_level.upper()))
 

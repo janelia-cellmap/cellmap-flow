@@ -19,7 +19,7 @@ from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.utils import neuroglancer_utils
 from cellmap_flow.jobs.spec import JobStartError
-from cellmap_flow.utils.config_utils import ConfigError
+from cellmap_flow.config.yaml import ConfigError
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRIPT = os.path.join(ROOT, "tests", "script_test", "fake_model_script.py")
@@ -96,7 +96,7 @@ def _config(tmp_path, models=None, extra_layers=None):
                  id="extra-layer-of-an-unknown-type"),
 ])
 def test_a_bad_config_is_reported_and_exits_non_zero(tmp_path, models, extra_layers, message):
-    """config_utils called sys.exit(1); now the CLI turns ConfigError into a clean exit."""
+    """The YAML loader called sys.exit(1); now the CLI turns ConfigError into a clean exit."""
     if "cellmap" in str(models):
         pytest.importorskip("cellmap_models.model_export.cellmap_model")
     result = CliRunner().invoke(yaml_cli.main, [_config(tmp_path, models, extra_layers), "--validate-only"])

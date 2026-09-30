@@ -186,7 +186,7 @@ You can list available HuggingFace models programmatically:
 
 .. code-block:: python
 
-    from cellmap_flow.models.model_registry import list_huggingface_models
+    from cellmap_flow.models.hf_catalog import list_huggingface_models
 
     models = list_huggingface_models()
     for model_id, metadata in models.items():
@@ -196,6 +196,6 @@ To force a refresh of the cached model list:
 
 .. code-block:: python
 
-    from cellmap_flow.models.model_registry import refresh_huggingface_models
+    from cellmap_flow.models.hf_catalog import refresh_huggingface_models
 
     models = refresh_huggingface_models()

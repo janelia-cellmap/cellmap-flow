@@ -25,7 +25,7 @@ def test_the_exit_code_says_whether_every_block_ran(raw_zarr, pooling_model, tas
 
 
 def test_a_config_error_is_reported_and_exits_non_zero(tmp_path):
-    """config_utils called sys.exit(1), which the dashboard's precheck could not catch."""
+    """The YAML loader called sys.exit(1), which the dashboard's precheck could not catch."""
     (tmp_path / "c.yaml").write_text("charge_group: g\nmodels: {}\n")
     result = CliRunner().invoke(single.cli, [str(tmp_path / "c.yaml")])
     assert result.exit_code == 1 and "data_path" in result.output

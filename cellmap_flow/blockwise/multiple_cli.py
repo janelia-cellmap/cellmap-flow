@@ -10,7 +10,7 @@ def cli(yaml_configs: tuple) -> None:
     """Process multiple YAML configuration files."""
     configure_logging(logging.INFO)
     from cellmap_flow.blockwise import CellMapFlowBlockwiseProcessor
-    from cellmap_flow.utils.config_utils import ConfigError
+    from cellmap_flow.config.yaml import ConfigError
 
     incomplete = []
     for yaml_config in yaml_configs:

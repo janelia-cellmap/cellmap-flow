@@ -15,10 +15,10 @@ models_bp = Blueprint("models", __name__)
 @models_bp.route("/api/model-config-types")
 def get_model_config_types():
     """Get available ModelConfig subclasses and their parameter metadata"""
-    from cellmap_flow.models.model_registry import get_all_model_configs
+    from cellmap_flow.models.registry import describe_types
 
     try:
-        config_types = get_all_model_configs()
+        config_types = describe_types()
         logger.info(f"Available model config types: {list(config_types.keys())}")
         return jsonify(config_types)
     except Exception as e:
@@ -29,7 +29,7 @@ def get_model_config_types():
 @models_bp.route("/api/create-model-config", methods=["POST"])
 def create_model_config():
     """Create a ModelConfig instance from user-provided parameters"""
-    from cellmap_flow.models.model_registry import instantiate_model_config
+    from cellmap_flow.models.registry import instantiate_model_config
 
     body, error = parse(CreateModelConfig, request.get_json(silent=True))
     if error:
@@ -57,7 +57,7 @@ def create_model_config():
 @models_bp.route("/api/huggingface-models")
 def get_huggingface_models():
     """Get available models from Hugging Face (uses cache if available)"""
-    from cellmap_flow.models.model_registry import list_huggingface_models
+    from cellmap_flow.models.hf_catalog import list_huggingface_models
 
     try:
         hf_models = list_huggingface_models()
@@ -71,7 +71,7 @@ def get_huggingface_models():
 @models_bp.route("/api/huggingface-models/refresh", methods=["POST"])
 def refresh_huggingface_models_route():
     """Force refresh the Hugging Face models cache"""
-    from cellmap_flow.models.model_registry import refresh_huggingface_models
+    from cellmap_flow.models.hf_catalog import refresh_huggingface_models
 
     try:
         hf_models = refresh_huggingface_models()

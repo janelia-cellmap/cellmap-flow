@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving.launch import server_command
-from cellmap_flow.utils.config_utils import ConfigError, load_config, resolve_data_path
+from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 from cellmap_flow.globals import g
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
@@ -300,7 +300,7 @@ def main(config_path: str, log_level: str, list_types: bool, validate_only: bool
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
     if config["models"]:
-        from cellmap_flow.utils.config_utils import build_models
+        from cellmap_flow.models.registry import build_models
 
         try:
             g.models_config = build_models(config["models"])

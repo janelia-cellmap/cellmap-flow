@@ -1,18 +1,21 @@
-"""
-Smart YAML configuration utilities that dynamically discover and instantiate
-ModelConfig subclasses, similar to the CLI v2 approach.
+"""Reading a ``cellmap_flow_yaml`` or blockwise YAML file.
+
+``load_config`` reads and checks the file's top level, filling
+``charge_group`` and ``queue`` from the dashboard's saved settings (then the
+site's default queue) when the file leaves them out; the model entries under
+``models`` are built by ``models.registry.build_models``. Every problem is a ``ConfigError``.
+``resolve_data_path`` is the one rule for a model's ``data_path`` and
+``scale``, used by every launcher.
 """
 
 import json
-import os
-import yaml
 import logging
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any, Dict, Optional
 
-from cellmap_flow.models import registry
-from cellmap_flow.models.models_config import ModelConfig
+import yaml
 
-DEFAULT_SERVER_QUEUE = "gpu_h100"
+from cellmap_flow.jobs.site import current_site
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +85,6 @@ def resolve_data_path(data_path: str, scale: Optional[str]) -> str:
     return os.path.join(data_path, scale)
 
 
-def get_model_type_mapping() -> Dict[str, type]:
-    """Every model type by the name YAML ``type:`` uses: ``registry.model_types()``."""
-    return registry.model_types()
-
-
 def load_config(path: str) -> Dict[str, Any]:
     """
     Load and validate the YAML configuration.
@@ -126,7 +124,7 @@ def load_config(path: str) -> Dict[str, Any]:
             )
 
     if "queue" not in config or not config["queue"]:
-        fallback = cached.get("queue", DEFAULT_SERVER_QUEUE)
+        fallback = cached.get("queue", current_site().default_queue)
         logger.warning(f"Missing 'queue' in YAML, using: {fallback}")
         config["queue"] = fallback
 
@@ -138,51 +136,3 @@ def load_config(path: str) -> Dict[str, Any]:
         raise ConfigError("YAML 'models' must be either a dict or list")
 
     return config
-
-
-def build_model_from_entry(entry: Dict[str, Any], model_name: str) -> ModelConfig:
-    """A model config from a YAML model entry: ``registry.build_model``.
-
-    Raises:
-        ConfigError: the entry does not describe a model that can be built
-    """
-    return registry.build_model(entry, model_name)
-
-
-def build_models(model_entries: Dict[str, Dict[str, Any]]) -> List[ModelConfig]:
-    """
-    Given model entries from YAML, instantiate the correct ModelConfig objects.
-    Uses dynamic discovery like the cellmap_flow CLI instead of hardcoded if/else chains.
-    
-    YAML format:
-    models:
-      my_model_1:
-        type: cellmap
-        checkpoint_path: /path/to/checkpoint
-      my_model_2:
-        type: dacapo
-        run_name: my_run
-        iteration: 50000
-    
-    Args:
-        model_entries: Dictionary mapping model names to their configurations
-        
-    Returns:
-        List of instantiated ModelConfig objects
-    """
-    models = []
-    
-    if isinstance(model_entries, list):
-        entries = {}
-        for entry in model_entries:
-            if not isinstance(entry, dict) or "name" not in entry:
-                raise ConfigError("Each model entry in the list must have a 'name' field.")
-            entries[entry["name"]] = entry
-        model_entries = entries
-
-    
-    for model_name, entry in model_entries.items():
-        model = build_model_from_entry(entry, model_name=model_name)
-        models.append(model)
-    
-    return models

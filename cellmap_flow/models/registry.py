@@ -17,9 +17,13 @@ because each reproduces what its caller has always done:
 - ``coerce_cli_args``: click's strings. ``"8,8,8"`` for a tuple becomes
   ``(8, 8, 8)``, ints.
 - ``coerce_form_params``: the dashboard form's strings. JSON, or
-  ``"8,8,8"`` becomes ``(8.0, 8.0, 8.0)``, floats.
+  ``"8,8,8"`` becomes ``(8.0, 8.0, 8.0)``, floats; ``instantiate_model_config``
+  builds the form's model with them.
 - ``build_model``: YAML values, after ``YAML_ALIASES`` and the voxel-size
-  shorthands, then ``coerce_cli_args``.
+  shorthands, then ``coerce_cli_args``; ``build_models`` for a YAML's whole
+  ``models``.
+
+A bad YAML entry or type name is a ``config.yaml.ConfigError``.
 
 Importing this module imports neither torch, flask, huggingface_hub nor
 ``cellmap_flow.globals``. The model config classes, which bring numpy and
@@ -32,6 +36,8 @@ import inspect
 import json
 import logging
 from typing import Any, Dict, List, Tuple, get_type_hints
+
+from cellmap_flow.config.yaml import ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +83,9 @@ def _subclasses(base) -> List[type]:
 
 def _name_from_class(cls, base_name: str = "ModelConfig") -> str:
     # The class name minus the base's, lower-cased: DaCapoModelConfig is
-    # "dacapo", HuggingFaceModelConfig "huggingface". (cli_utils also ran a
-    # camelCase-to-kebab substitution, but after lower-casing, so it never
-    # changed anything.)
+    # "dacapo", HuggingFaceModelConfig "huggingface". (The CLI's old copy of
+    # this also ran a camelCase-to-kebab substitution, but after
+    # lower-casing, so it never changed anything.)
     return cls.__name__.replace(base_name, "").lower()
 
 
@@ -133,8 +139,6 @@ def model_type(name: str) -> type:
     Raises:
         ConfigError: no type has that name; the message lists the valid ones.
     """
-    from cellmap_flow.utils.config_utils import ConfigError
-
     types = model_types()
     cls = _match_type(str(name), types)
     if cls is None:
@@ -176,8 +180,6 @@ def build_model(entry: Dict[str, Any], name: str):
     Raises:
         ConfigError: the entry does not describe a model that can be built.
     """
-    from cellmap_flow.utils.config_utils import ConfigError
-
     model_name = name
     if not isinstance(entry, dict):
         raise ConfigError(f"Model '{model_name}' must be a mapping, got {entry!r}")
@@ -245,6 +247,35 @@ def build_model(entry: Dict[str, Any], name: str):
         # Some constructors read files straight away (a cellmap model's
         # metadata.json), so a wrong path shows up here.
         raise ConfigError(f"Error creating model '{model_name}' ({mtype}): {e}") from e
+
+
+def build_models(model_entries) -> list:
+    """The model configs for a YAML's ``models``: ``build_model`` for each entry.
+
+    ``model_entries`` maps each model's name to its entry, or is a list of
+    entries that each have a ``name``::
+
+        models:
+          my_model_1:
+            type: cellmap
+            checkpoint_path: /path/to/checkpoint
+          my_model_2:
+            type: dacapo
+            run_name: my_run
+            iteration: 50000
+
+    Raises:
+        ConfigError: an entry does not describe a model that can be built.
+    """
+    if isinstance(model_entries, list):
+        entries = {}
+        for entry in model_entries:
+            if not isinstance(entry, dict) or "name" not in entry:
+                raise ConfigError("Each model entry in the list must have a 'name' field.")
+            entries[entry["name"]] = entry
+        model_entries = entries
+
+    return [build_model(entry, model_name) for model_name, entry in model_entries.items()]
 
 
 # --- click's strings -----------------------------------------------------------
@@ -434,6 +465,24 @@ def click_options(cls, reserved_short) -> List[dict]:
     return options
 
 
+def print_available_models(cli_command_name: str = "cellmap_flow"):
+    """Print every model type and its constructor arguments, for ``list-models``.
+
+    ``cli_command_name`` is the command the closing hint names.
+    """
+    import click
+
+    click.echo("Available model configurations:\n")
+    for cli_name, config_class in sorted(model_types().items()):
+        click.echo(f"  {cli_name:20s} - {config_class.__name__}")
+
+        params = [p for p in inspect.signature(config_class.__init__).parameters if p != "self"]
+        if params:
+            click.echo(f"                       Parameters: {', '.join(params)}")
+
+    click.echo(f"\nUse '{cli_command_name} <model-name> --help' for detailed parameter information.")
+
+
 # --- the dashboard's model form ------------------------------------------------
 
 def coerce_form_params(cls, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -490,6 +539,29 @@ def coerce_form_params(cls, params: Dict[str, Any]) -> Dict[str, Any]:
         parsed_params[param_name] = value
 
     return parsed_params
+
+
+def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
+    """The model config the dashboard's model form describes.
+
+    ``class_name`` is a model type's class name (``"ScriptModelConfig"``),
+    plugins' included, and ``params`` the form's values
+    (``coerce_form_params``).
+
+    Raises:
+        ValueError: the class is unknown, or the values do not build one.
+    """
+    classes = model_classes()
+    if class_name not in classes:
+        raise ValueError(f"Unknown model config class: {class_name}")
+
+    cls = classes[class_name]
+    parsed_params = coerce_form_params(cls, params)
+
+    try:
+        return cls(**parsed_params)
+    except Exception as e:
+        raise ValueError(f"Failed to instantiate {class_name}: {str(e)}")
 
 
 def parameter_info(cls) -> Dict[str, Any]:

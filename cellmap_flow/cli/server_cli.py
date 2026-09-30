@@ -11,7 +11,6 @@ from typing import Type
 
 from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.cli_utils import print_available_models
 from cellmap_flow.utils.plugin_manager import load_plugins
 
 
@@ -44,7 +43,7 @@ def cli(log_level):
 @cli.command(name="list-models")
 def list_models():
     """List all available model configurations."""
-    print_available_models("cellmap_flow_server")
+    registry.print_available_models("cellmap_flow_server")
 
 
 def run_server(

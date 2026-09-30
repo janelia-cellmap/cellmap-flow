@@ -47,7 +47,7 @@ check(["cellmap_flow.models.geometry", "cellmap_flow.serving.virtual_zarr", "cel
     # imports the model config classes, which the CLIs, servers and blockwise
     # workers import too; a type loads its framework only to build a model.
     "registry": """
-check(["cellmap_flow.models.registry", "cellmap_flow.serving.launch"],
+check(["cellmap_flow.models.registry", "cellmap_flow.config.yaml", "cellmap_flow.serving.launch"],
       LIGHT + ["cellmap_flow.models.models_config", "cellmap_flow.models.configs",
                "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types

@@ -23,7 +23,7 @@ from cellmap_flow.blockwise.blockwise_processor import (
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.utils.config_utils import ConfigError
+from cellmap_flow.config.yaml import ConfigError
 
 JSON_DATA = {
     "input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}],

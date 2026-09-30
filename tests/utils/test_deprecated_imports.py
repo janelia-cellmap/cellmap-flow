@@ -13,6 +13,9 @@ import pytest
 # old module, name, new module
 ALIASES = {
     "install_cleanup_handlers": ("cellmap_flow.utils.bsub_utils", "install_cleanup_handlers", "cellmap_flow.jobs.launch"),
+    "list_huggingface_models": ("cellmap_flow.models.model_registry", "list_huggingface_models", "cellmap_flow.models.hf_catalog"),
+    "refresh_huggingface_models": ("cellmap_flow.models.model_registry", "refresh_huggingface_models",
+                                   "cellmap_flow.models.hf_catalog"),
 }
 
 

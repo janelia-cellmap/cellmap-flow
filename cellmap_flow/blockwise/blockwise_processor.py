@@ -19,12 +19,8 @@ from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.utils.config_utils import (
-    ConfigError,
-    build_models,
-    load_config,
-    resolve_data_path,
-)
+from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
+from cellmap_flow.models.registry import build_models
 from cellmap_flow.io.ome import singlescale_attrs
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.jobs.launch import submit_bsub_job

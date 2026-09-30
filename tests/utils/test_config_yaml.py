@@ -1,9 +1,10 @@
 """Reading a YAML config: its errors, and the one data_path + scale rule.
 
-config_utils called sys.exit(1); it also runs inside the dashboard (the
+The loader called sys.exit(1); it also runs inside the dashboard (the
 blockwise precheck, a finetuned model's base config), where SystemExit gets
 past ``except Exception`` and the request thread dies without a response.
-The CLIs turning ConfigError into a clean exit is tested with them.
+The CLIs turning ConfigError into a clean exit is tested with them, and a
+bad model entry with the registry.
 """
 
 import json
@@ -14,7 +15,7 @@ import pytest
 import zarr
 
 import cellmap_flow.globals as G
-from cellmap_flow.utils.config_utils import ConfigError, build_models, load_config, resolve_data_path
+from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 
 
 @pytest.mark.parametrize("yaml_text, message", [
@@ -30,19 +31,6 @@ def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, mes
     with pytest.raises(ConfigError, match=message) as raised:
         load_config(str(tmp_path / "c.yaml"))
     assert not isinstance(raised.value, SystemExit)  # the dashboard's handlers answer it
-
-
-@pytest.mark.parametrize("models, message", [
-    pytest.param({"m": {"script_path": "/s.py"}}, "missing 'type'", id="entry-without-a-type"),
-    pytest.param({"m": {"type": "no-such-kind"}}, "unrecognized type", id="unknown-type"),
-    pytest.param({"m": {"type": "dacapo", "run_name": "r"}}, "missing required parameter 'iteration'",
-                 id="missing-required-parameter"),
-    pytest.param({"m": "not a mapping"}, "must be a mapping", id="entry-not-a-mapping"),
-    pytest.param([{"type": "script", "script_path": "/s.py"}], "name", id="list-entry-without-a-name"),
-])
-def test_a_bad_model_entry_is_a_config_error(models, message):
-    with pytest.raises(ConfigError, match=message):
-        build_models(models)
 
 
 def test_one_rule_for_data_path_and_scale(tmp_path, caplog):

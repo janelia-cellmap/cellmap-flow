@@ -42,7 +42,7 @@ def model_config_from_entry(entry: dict, name=None):
     and voxel sizes up, say), and the constructor would reject them.
     """
     from cellmap_flow.models import registry
-    from cellmap_flow.utils.config_utils import ConfigError
+    from cellmap_flow.config.yaml import ConfigError
 
     entry = dict(entry)
     try:

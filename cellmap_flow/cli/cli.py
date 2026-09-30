@@ -15,8 +15,7 @@ from cellmap_flow.models import registry
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
-from cellmap_flow.utils.config_utils import resolve_data_path
-from cellmap_flow.utils.cli_utils import print_available_models
+from cellmap_flow.config.yaml import resolve_data_path
 from cellmap_flow.utils.plugin_manager import (
     register_plugin,
     unregister_plugin,
@@ -66,7 +65,7 @@ def cli(log_level):
 @cli.command(name="list-models")
 def list_models():
     """List all available model configurations."""
-    print_available_models("cellmap_flow")
+    registry.print_available_models("cellmap_flow")
 
 
 @cli.command(name="register")
