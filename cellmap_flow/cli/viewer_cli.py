@@ -6,7 +6,7 @@ import os
 
 import click
 import logging
-from cellmap_flow.utils.logging_setup import configure_logging
+from cellmap_flow.logging_setup import configure_logging
 from cellmap_flow.globals import g
 
 logging.basicConfig()

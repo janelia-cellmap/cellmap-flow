@@ -5,13 +5,13 @@ and creates server commands based on their __init__ parameters.
 
 import click
 import logging
-from cellmap_flow.utils.logging_setup import configure_logging
+from cellmap_flow.logging_setup import configure_logging
 import sys
 from typing import Type
 
 from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.plugin_manager import load_plugins
+from cellmap_flow.plugins import load_plugins
 
 
 logger = logging.getLogger(__name__)

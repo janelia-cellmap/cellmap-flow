@@ -8,7 +8,7 @@ making it easy to add new model types without modifying this file.
 
 import sys
 import logging
-from cellmap_flow.utils.logging_setup import configure_logging
+from cellmap_flow.logging_setup import configure_logging
 import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed

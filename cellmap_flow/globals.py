@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # This is the basicConfig that actually takes effect in most processes,
 # because globals is imported before any CLI gets to configure logging.
-from cellmap_flow.utils.logging_setup import configure_logging
+from cellmap_flow.logging_setup import configure_logging
 
 configure_logging()
 

@@ -5,7 +5,7 @@ and creates CLI commands based on their __init__ parameters.
 
 import click
 import logging
-from cellmap_flow.utils.logging_setup import configure_logging
+from cellmap_flow.logging_setup import configure_logging
 import inspect
 import sys
 from typing import Type
@@ -16,7 +16,7 @@ from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.globals import g
 from cellmap_flow.config.yaml import resolve_data_path
-from cellmap_flow.utils.plugin_manager import (
+from cellmap_flow.plugins import (
     register_plugin,
     unregister_plugin,
     list_plugins,
