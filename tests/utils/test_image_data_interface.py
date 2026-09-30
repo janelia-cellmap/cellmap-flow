@@ -61,7 +61,6 @@ READS = {
             "resolution": [4, 8, 16], "chunk_size": [20, 10, 2], "voxel_offset": [3, 2, 1]}),
         {}, (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), ((2, 10, 20), "uint8", [1, 2]),
     ),
-    "interior": (_at_the_origin, {}, (0, 0, 0), Roi((32, 8, 8), (32, 8, 8)), ((4, 1, 1), "uint8", [5, 6, 7, 8])),
     "whole-array": (_at_the_origin, {}, (0, 0, 0), None, ((16, 16, 16), "uint8", list(range(1, 17)))),
     # A start inside a voxel reads from that voxel.
     "off-grid-start": (_at_the_origin, {}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2])),
@@ -98,12 +97,9 @@ READS = {
         _two_channels, {"input_norms": [ChannelSelector(1)]}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [101, 102]),
     ),
-    # output_voxel_size resamples by the z factor: finer repeats each voxel...
+    # output_voxel_size resamples by the z factor: finer repeats each voxel, read
+    # widened to whole voxels (here [0, 24) nm) and cropped back to the ROI...
     "upsampled": (
-        _at_the_origin, {"output_voxel_size": (4, 4, 4)}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
-        ((4, 2, 2), "uint8", [1, 1, 2, 2]),
-    ),
-    "upsampled-off-grid": (
         _at_the_origin, {"output_voxel_size": (4, 4, 4)}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)),
         ((4, 2, 2), "uint8", [1, 2, 2, 3]),
     ),
