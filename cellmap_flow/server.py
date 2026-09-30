@@ -152,17 +152,17 @@ class CellMapFlowServer:
             half_precision=_env_flag(HALF_PRECISION_ENV),
         )
 
-        block_shape = [int(x) for x in model_config.config.block_shape]
+        # Also what /__control__/model_info reports, so the dashboard does
+        # not have to build the model itself.
+        self.geometry = model_config.geometry
+        block_shape = list(self.geometry.block_shape())
 
-        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
-        self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
-        self.output_channels = model_config.config.output_channels
-        self.output_dtype = model_config.output_dtype
-        self.model_output_axes = model_config.chunk_output_axes
-
-        # Kept so /__control__/model_info can report geometry without the
-        # dashboard having to build the model itself.
-        self.model_config = model_config
+        # Whole nanometers, as the served grid always was (Coordinate
+        # truncates); model_info reports the sizes as they are.
+        self.input_voxel_size = Coordinate(self.geometry.input_voxel_size)
+        self.output_voxel_size = Coordinate(self.geometry.output_voxel_size)
+        self.output_channels = self.geometry.output_channels
+        self.output_dtype = self.geometry.output_dtype
 
         self.restart_callback = restart_callback
         self.restart_token = restart_token
@@ -191,9 +191,7 @@ class CellMapFlowServer:
                 self.axes.remove(axis_name)
 
         # Determine whether the model output includes a channel axis
-        self.has_channel = any(
-            ax in model_config.chunk_output_axes for ax in ("c", "c^", "channel")
-        )
+        self.has_channel = self.geometry.has_channel_axis
 
         if self.has_channel:
             # The model output spatial axes match the input data axes (not the
@@ -270,37 +268,14 @@ class CellMapFlowServer:
             SigmoidPostprocessor on a model that already ends in a sigmoid.
             """
             inferencer = self.inferencer
-            config = self.model_config.config
 
             # Geometry comes from the validated config rather than the warmup,
             # so it is reported even when the probe itself failed. Script-defined
             # models expose nothing to the dashboard through to_dict(), which
-            # makes this the only place it can learn e.g. that a model has 3+
-            # channels and might be predicting affinities.
-            # Channel names, not just the count: the dashboard decides whether
-            # a model predicts affinities by looking for "_aff" in them, and a
-            # script model exposes nothing through to_dict(), so this is the
-            # only way it can learn them without building the model.
-            channels = (
-                getattr(config, "channels", None)
-                or getattr(config, "channels_names", None)
-                or getattr(config, "classes", None)
-            )
-
-            def numbers(values):
-                # Whole numbers as ints; int() truncated 5.24 nm to 5.
-                return [
-                    int(v) if float(v).is_integer() else float(v) for v in values
-                ]
-
-            info = {
-                "output_channels": self.output_channels,
-                "channels": [str(c) for c in channels] if channels else None,
-                "write_shape": numbers(config.write_shape),
-                "read_shape": numbers(config.read_shape),
-                "output_voxel_size": numbers(config.output_voxel_size),
-                "input_voxel_size": numbers(config.input_voxel_size),
-            }
+            # makes this the only place it can learn their shapes, and their
+            # channel names: the dashboard decides whether a model predicts
+            # affinities by looking for "_aff" in them.
+            info = self.geometry.to_model_info()
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:

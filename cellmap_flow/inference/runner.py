@@ -21,7 +21,6 @@ import threading
 import time
 
 import numpy as np
-from funlib.geometry import Coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -222,13 +221,7 @@ class ModelRunner:
         # when half precision is asked for and agrees with fp32.
         self.autocast_dtype = None
 
-        if hasattr(self.model_config.config, "read_shape") and hasattr(
-            self.model_config.config, "write_shape"
-        ):
-            self.context = (
-                Coordinate(self.model_config.config.read_shape)
-                - Coordinate(self.model_config.config.write_shape)
-            ) / 2
+        self.context = self.model_config.geometry.context
 
         self.optimize_model()
         if not hasattr(self.model_config.config, "predict"):

@@ -47,6 +47,15 @@ def _voxels(extent, voxel_size) -> Tuple[int, ...]:
     return tuple(int(v) for v in np.where(np.isclose(quotient, nearest), nearest, np.floor(quotient)))
 
 
+def _channel_names(config):
+    """The first of channels, channels_names (Hugging Face) or classes a config names."""
+    for attr in ("channels", "channels_names", "classes"):
+        names = getattr(config, attr, None)
+        if names is not None and len(names) > 0:
+            return names
+    return None
+
+
 @dataclass(frozen=True)
 class ModelGeometry:
     """What a model reads and writes. Sizes are in nm unless named ``*_shape`` in voxels."""
@@ -125,11 +134,6 @@ class ModelGeometry:
         config's own (``ModelConfig`` passes its properties, with their
         defaults); otherwise the config's are used, if it has them.
         """
-        channels = (
-            getattr(config, "channels", None)
-            or getattr(config, "channels_names", None)
-            or getattr(config, "classes", None)
-        )
         if chunk_output_axes is None:
             chunk_output_axes = getattr(config, "chunk_output_axes", DEFAULT_OUTPUT_AXES)
         if output_dtype is None:
@@ -140,7 +144,7 @@ class ModelGeometry:
             read_shape=config.read_shape,
             write_shape=config.write_shape,
             output_channels=config.output_channels,
-            channel_names=channels or None,
+            channel_names=_channel_names(config),
             chunk_output_axes=chunk_output_axes,
             output_dtype=output_dtype,
             input_channels=getattr(config, "input_channels", 1),

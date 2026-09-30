@@ -40,7 +40,7 @@ class Inferencer(ModelRunner):
 
         ``input_norms`` / ``postprocess``: the chain to use for this chunk.
         ``None`` falls back to ``g.input_norms`` / ``g.postprocess``, for
-        callers (blockwise, scripts) that set the chain process-wide.
+        callers (scripts) that set the chain process-wide.
 
         ``cancelled``: asked while the chunk waits for a device slot; raises
         ChunkCancelled, without computing it, once that says yes.
@@ -65,10 +65,7 @@ class Inferencer(ModelRunner):
         leave at the input voxel size, so a model whose output is finer than
         its input spaced ids too closely and neighbouring chunks collided.
         """
-        output_voxel_size = getattr(self.model_config.config, "output_voxel_size", None)
-        if output_voxel_size is None:
-            output_voxel_size = idi.output_voxel_size
         shape = np.array(roi.get_shape(), dtype=float) / np.array(
-            output_voxel_size, dtype=float
+            self.model_config.geometry.output_voxel_size, dtype=float
         )
         return int(np.prod(np.ceil(shape)))

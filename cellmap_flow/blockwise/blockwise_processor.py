@@ -18,13 +18,13 @@ from functools import partial
 from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.pipeline_spec import PipelineSpec, chain_output_dtype
 from cellmap_flow.utils.config_utils import (
     ConfigError,
     build_models,
     load_config,
     resolve_data_path,
 )
-from cellmap_flow.utils.serilization_utils import get_process_dataset
 from cellmap_flow.utils.ds import generate_singlescale_metadata
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.utils.bsub_utils import DEFAULT_WALLTIME, submit_bsub_job
@@ -111,7 +111,7 @@ def precheck(yaml_config: str) -> dict:
 
     if config.get("json_data"):
         try:
-            get_process_dataset(config["json_data"])  # built and discarded
+            PipelineSpec.from_json_data(config["json_data"], strict=True).build()  # and discarded
         except Exception as e:
             raise ConfigError(f"Invalid json_data: {e}") from e
 
@@ -243,14 +243,14 @@ class CellMapFlowBlockwiseProcessor:
             )
 
         self.model_config = models[0]
+        geometry = self.model_config.geometry
 
         # this is zyx
-
-        block_shape = [int(x) for x in self.model_config.config.block_shape][:3]
+        block_shape = list(geometry.block_shape())[:3]
         self.block_shape = tuple(self.config.get("block_size", block_shape))
 
-        self.input_voxel_size = Coordinate(self.model_config.config.input_voxel_size)
-        self.output_voxel_size = Coordinate(self.model_config.config.output_voxel_size)
+        self.input_voxel_size = Coordinate(geometry.input_voxel_size)
+        self.output_voxel_size = Coordinate(geometry.output_voxel_size)
         # self.output_channels = self.model_config.config.output_channels
         self.channels = self.model_config.config.channels
 
@@ -270,9 +270,11 @@ class CellMapFlowBlockwiseProcessor:
             self.output_channels = [self.output_channels]
 
         if json_data:
-            g.input_norms, g.postprocess = get_process_dataset(json_data)
-
-        self.dtype = g.get_output_dtype(self.model_config.output_dtype)
+            g.set_pipeline(PipelineSpec.from_json_data(json_data, strict=True))
+        # Every block runs this chain: the task's json_data, or else the
+        # process's own.
+        self.input_norms, self.postprocess = list(g.input_norms), list(g.postprocess)
+        self.dtype = chain_output_dtype(self.postprocess, geometry.output_dtype)
 
         self.inferencers = []
         self.inferencer = None
@@ -491,13 +493,21 @@ class CellMapFlowBlockwiseProcessor:
         if len(self.inferencers) == 1:
             # Single model - original behavior
             chunk_data = self.inferencers[0].process_chunk(
-                self.idi_raw, block.write_roi
+                self.idi_raw,
+                block.write_roi,
+                input_norms=self.input_norms,
+                postprocess=self.postprocess,
             )
         else:
             # Multiple models - merge outputs based on model_mode
             model_outputs = []
             for inferencer in self.inferencers:
-                output = inferencer.process_chunk(self.idi_raw, block.write_roi)
+                output = inferencer.process_chunk(
+                    self.idi_raw,
+                    block.write_roi,
+                    input_norms=self.input_norms,
+                    postprocess=self.postprocess,
+                )
                 if self.process_only and self.cross_channels_merger:
                     # Extract only the specified channels
                     channel_outputs = [output[ch_idx] for ch_idx in self.process_only]
@@ -594,12 +604,9 @@ class CellMapFlowBlockwiseProcessor:
     def run(self) -> bool:
         """Process every ROI; True only if every block of every ROI succeeded."""
 
-        read_shape = self.model_config.config.read_shape
-        write_shape = self.model_config.config.write_shape
-
-        context = (Coordinate(read_shape) - Coordinate(write_shape)) / 2
-
-        read_roi = daisy.Roi((0, 0, 0), read_shape)
+        geometry = self.model_config.geometry
+        context = geometry.context
+        read_roi = daisy.Roi((0, 0, 0), Coordinate(geometry.read_shape))
         write_roi = read_roi.grow(-context, -context)
 
         # Check if bounding boxes are specified
