@@ -38,7 +38,7 @@ def test_every_element_a_tab_looks_up_is_on_the_page(dashboard, tab):
     assert sorted(looked_up - on_the_page) == []
 
 
-@pytest.mark.parametrize("tab", ["finetune"])
+@pytest.mark.parametrize("tab", TABS)
 def test_a_tab_markup_has_no_script_and_no_inline_handler(tab):
     # An inline handler runs in the page's global scope, where none of the
     # modules' functions are.

@@ -10,6 +10,7 @@ import { initConnect } from "./connect.js";
 import { initFinetuneTab } from "./finetune/index.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 import { initModelsTab } from "./models-tab.js";
+import { initReviewTab } from "./review/index.js";
 
 // The header's "Toggle Dashboard" button. The Neuroglancer column's inline
 // flex style makes it fill whatever width the dashboard column leaves, so
@@ -126,6 +127,7 @@ initModelAdvice({ input: inputChain, postprocess: postChain });
 document.addEventListener("keydown", submitOnEnter);
 initSubmitAll(inputChain, postChain);
 initServerConfigModal();
+initReviewTab();
 // The Finetune tab starts on DOMContentLoaded, as its inline script did, so
 // its first requests still go after the other tabs' (the Models tab asks for
 // the GPU queues only once the server config has answered).
