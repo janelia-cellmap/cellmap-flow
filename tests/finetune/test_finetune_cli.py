@@ -7,6 +7,7 @@ weights of each iteration are pinned by test_training_snapshot.
 
 import importlib.util
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -131,6 +132,27 @@ def _metadata(run, **params):
     run.mkdir(parents=True)
     (run / "metadata.json").write_text(json.dumps({"params": params}))
     return run / "metadata.json"
+
+
+MIN_MAX = {"min_value": 0.0, "max_value": 255.0, "invert": False}
+
+
+@pytest.mark.parametrize("input_norm", [
+    pytest.param([{"name": "MinMaxNormalizer", **MIN_MAX}, {"name": "LambdaNormalizer", "expression": "x*2-1"}],
+                 id="the dashboard's step list"),
+    pytest.param({"MinMaxNormalizer": MIN_MAX, "LambdaNormalizer": {"expression": "x*2-1"}},
+                 id="build_corrections' older dict"),
+])
+def test_a_run_records_the_normalization_it_trained_on(run_cli, tmp_path, caplog, input_norm):
+    """metadata.json, next to the weights, says which normalization the
+    training data went through, as the manifest gave it. With the dashboard's
+    step list the job's log said the snapshot had failed, after writing it."""
+    metadata = _metadata(tmp_path / "session" / "runs" / "run", learning_rate=1e-4)
+    cli = run_cli(manifest={"kind": "volume_zarr_v1", "raw_dataset_path": "/data/raw.zarr", "input_norm": input_norm})
+    assert cli.code == 0
+    assert json.loads(metadata.read_text())["params"] == {"learning_rate": 1e-4, "input_norm": input_norm}
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING and r.name.endswith("session_loop")]
+    assert [r.getMessage() for r in warnings] == []
 
 
 def test_a_restart_changes_only_the_training_settings(run_cli, tmp_path):

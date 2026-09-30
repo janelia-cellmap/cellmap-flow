@@ -411,7 +411,9 @@ class TrainingSession:
 
         So any checkpoint saved in this iteration is reproducible: the
         metadata.json next to the .pth says which normalization the training
-        data went through.
+        data went through. It is stored as the manifest has it: the
+        dashboard's ordered ``[{name, **params}]`` steps, or the older
+        ``{Name: params}`` dict (build_corrections' default).
         """
         args = self.args
         try:
@@ -426,10 +428,7 @@ class TrainingSession:
                     md.setdefault("params", {})["input_norm"] = manifest_norm
                     with open(metadata_file, "w") as f:
                         json.dump(md, f, indent=2)
-                    logger.info(
-                        f"Snapshot input_norm into {metadata_file} "
-                        f"(keys: {list(manifest_norm.keys())})"
-                    )
+                    logger.info(f"Snapshot input_norm into {metadata_file}: {manifest_norm}")
         except Exception as _e:
             logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
 

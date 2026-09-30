@@ -13,6 +13,7 @@
 """
 
 import json
+import logging
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -158,7 +159,7 @@ MARKERS = ("TRAINING_ITERATION_COMPLETE:", "FINETUNED_MODEL_YAML:", "RESTART_FAI
 
 
 @pytest.fixture
-def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
+def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
     """``run_cli(*flags, ...)``: finetune_cli.main() on the tiny script, one epoch, rank 0.
 
     ``loaders``: what each create_dataloader call gives, in turn: a DataLoader,
@@ -168,6 +169,10 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
     server would hand them to; None (and running out) is a malformed signal
     file, which ends the job. ``manifest``: the corrections' manifest, None for
     none. ``run_dir``: the output dir, <tmp>/session/runs/run by default.
+
+    The run's log records reach ``caplog``: main() replaces the root logger's
+    handlers, caplog's among them, so for the run caplog's handler is on the
+    package's logger as well.
     """
     from cellmap_flow.finetune import finetune_cli, session_loop
 
@@ -217,7 +222,12 @@ def run_cli(tmp_path, monkeypatch, capsys, tiny_script):
             "--lora-r", "0", "--num-epochs", "1", "--loss-type", "bce", "--no-mixed-precision",
             "--num-workers", "0", *([] if tensorboard else ["--no-tensorboard"]), *flags,
         ])
-        record.code = finetune_cli.main()
+        package_logger = logging.getLogger("cellmap_flow")
+        package_logger.addHandler(caplog.handler)
+        try:
+            record.code = finetune_cli.main()
+        finally:
+            package_logger.removeHandler(caplog.handler)
         record.out = capsys.readouterr().out
         record.markers = [line for line in record.out.splitlines() if line.startswith(MARKERS)]
         return record
