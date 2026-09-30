@@ -24,7 +24,7 @@ export function initJobMonitor({ picker, form }) {
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
   const card = createJobCard(lossPlot);
-  const jobLog = createJobLog({ onLine: card.logLine });
+  const jobLog = createJobLog({ onLine: card.logLine, logFile: card.logFile });
   const appendLog = jobLog.append;
 
   // Start Finetuning button
