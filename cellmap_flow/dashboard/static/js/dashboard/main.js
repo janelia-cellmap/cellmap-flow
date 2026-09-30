@@ -5,8 +5,9 @@
 // page's elements are all there, and the inline scripts still in the tab
 // partials, which wait for DOMContentLoaded, have not started yet.
 import { ApiError, postJSON } from "../lib/api.js";
+import { mountOpChain } from "../shared/op-chain.js";
 import { initConnect } from "./connect.js";
-import { refreshModelAdvice } from "./model-advice.js";
+import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 
 // The header's "Toggle Dashboard" button. The Neuroglancer column's inline
 // flex style makes it fill whatever width the dashboard column leaves, so
@@ -36,11 +37,11 @@ function submitOnEnter(event) {
 
 // Submit All, in each of the Input and Postprocess tabs: send both chains to
 // /api/process, which rebuilds the viewer's layers.
-function initSubmitAll() {
+function initSubmitAll(inputChain, postChain) {
   function handleSubmitAll() {
     const finalPayload = {
-      input_norm: window.gatherInputNormData ? window.gatherInputNormData() : {},
-      postprocess: window.gatherPostProcessData ? window.gatherPostProcessData() : {},
+      input_norm: inputChain.getChain(),
+      postprocess: postChain.getChain(),
     };
     console.log("Combined Payload:", finalPayload);
     postJSON("/api/process", finalPayload)
@@ -116,8 +117,11 @@ function initServerConfigModal() {
 
 initConnect();
 document.getElementById("toggleDashboardBtn").addEventListener("click", toggleDashboard);
+const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind: "input" });
+const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });
+initModelAdvice({ input: inputChain, postprocess: postChain });
 document.addEventListener("keydown", submitOnEnter);
-initSubmitAll();
+initSubmitAll(inputChain, postChain);
 initServerConfigModal();
 
 // The Models tab's inline script calls this by name after a submit.

@@ -19,57 +19,26 @@ const CONFIRM_BANNER_MS = 8000;
 const ADVICE_POLL_INTERVAL_MS = 5000;
 const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
 
-// Tick exactly the suggested steps, fill in their parameters, and move them
-// to the top in the suggested order -- steps are applied top to bottom. The
-// Input/Postprocess lists can hold the same op in two rows (a chain loaded
-// from yaml may use it twice), so work on rows rather than looking fields up
-// by op name: the k-th use of a name takes the k-th row for it, and every
-// row not picked is unticked.
-function applyChainSuggestion(listId, rowSelector, checkboxSelector, names, paramsByName) {
-  const list = document.getElementById(listId);
-  if (!list) return;
-  const rows = Array.from(list.querySelectorAll(rowSelector));
-  const picked = [];
-  names.forEach(function (name) {
-    const row = rows.find(function (r) {
-      const cb = r.querySelector(checkboxSelector);
-      return cb && cb.value === name && picked.indexOf(r) === -1;
-    });
-    if (row) picked.push(row);
-  });
-  rows.forEach(function (row) {
-    const cb = row.querySelector(checkboxSelector);
-    const want = picked.indexOf(row) !== -1;
-    if (cb && cb.checked !== want) {
-      cb.checked = want;
-      cb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
-  picked.forEach(function (row) {
-    const name = row.querySelector(checkboxSelector).value;
-    const values = (paramsByName || {})[name] || {};
-    Object.keys(values).forEach(function (key) {
-      if (key === "name") return;
-      const inp = row.querySelector('input[data-param="' + key + '"]');
-      if (inp) inp.value = values[key];
-    });
-  });
-  picked.slice().reverse().forEach(function (row) {
-    list.insertBefore(row, list.firstChild);
-  });
+// The Input and Postprocess chains (shared/op-chain.js) the Apply buttons
+// change, from initModelAdvice.
+let chains = null;
+
+export function initModelAdvice({ input, postprocess }) {
+  chains = { input, postprocess };
 }
 
+// Tick exactly the suggested steps, fill in their parameters, and move them
+// to the top in the suggested order: steps are applied top to bottom.
 // Defaults assume each step sees the range its usual predecessor produces;
 // where this chain differs, the server says what to use.
 function applyPostprocessSuggestion(names, params) {
-  applyChainSuggestion("postProcessList", ".postprocessor-item", ".postProcessCheckbox", names, params);
+  chains.postprocess.apply(names, params);
 }
 
 // Same idea for the input side. Normalizers carry parameter values, not just
 // a name, so this fills those in as well as ticking the box.
 function applyInputNormSuggestion(norms, order) {
-  applyChainSuggestion("inputNormList", ".normalizer-item", ".inputNormCheckbox",
-                       order || Object.keys(norms || {}), norms);
+  chains.input.apply(order || Object.keys(norms || {}), norms);
 }
 
 // The server repeats the same advice on every poll until the configured
