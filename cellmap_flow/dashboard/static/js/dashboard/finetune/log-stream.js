@@ -1,75 +1,59 @@
 // The Training Logs card's text: what the job has logged, streamed live.
 //
-// The stream is server-sent events. Every block the server sends carries its
-// byte offset in the log as the event id; the browser sends the last one back
-// when it reconnects, so a reconnect continues where it left off instead of
-// replaying the whole log. `offset` starts a new stream part-way, after what
-// the card already shows (a job restored after a reload).
+// The stream is lib/sse's: each event carries its byte offset in the log,
+// so a reconnect continues where it left off instead of replaying the whole
+// log, and a new stream can start part-way, after what the card already
+// shows (a job restored after a reload).
 //
 // onLine(line) gets every line the stream brings, one at a time.
+import { openLogStream } from "../../lib/sse.js";
+
 export function createJobLog({ onLine }) {
   const area = document.getElementById("trainingLogs");
   const autoScroll = document.getElementById("autoScrollLogs");
-  let eventSource = null;
-  let lastLogOffset = 0;  // byte offset in the job's log the page has shown up to
-  let logStreamCloseTimer = null;
-  let streamConnectedOnce = false;
+  let stream = null;  // the open stream, or the last one
+  let closeTimer = null;
+  let connectedOnce = false;
+  let restoredOffset = 0;  // where resume() starts when no stream has run
 
   function append(message) {
     area.value += message + "\n";
   }
 
   function follow(jobId, offset) {
-    // Close existing stream if any
-    if (eventSource) {
-      eventSource.close();
-    }
-    clearTimeout(logStreamCloseTimer);
-    logStreamCloseTimer = null;
-    lastLogOffset = offset || 0;
-
-    const query = lastLogOffset ? `?offset=${lastLogOffset}` : '';
-    eventSource = new EventSource(`/api/finetune/job/${jobId}/logs/stream${query}`);
-    const stream = eventSource;
-
-    eventSource.onopen = function() {
-      if (!streamConnectedOnce) {
-        append("Connected to live log stream.");
-        streamConnectedOnce = true;
-      }
-    };
-
-    // The server's last word: the job is finished and the log complete.
-    eventSource.addEventListener("done", function(event) {
-      stream.close();
-      append(`=== Training ${event.data} ===`);
+    if (stream) stream.close();
+    clearTimeout(closeTimer);
+    closeTimer = null;
+    stream = openLogStream(`/api/finetune/job/${jobId}/logs/stream`, {
+      offset,
+      onOpen() {
+        if (!connectedOnce) {
+          append("Connected to live log stream.");
+          connectedOnce = true;
+        }
+      },
+      // The server's last word: the job is finished and the log complete.
+      onDone(status) {
+        append(`=== Training ${status} ===`);
+      },
+      onLine(data) {
+        append(data);
+        // One event can carry several log lines: the server sends a block of
+        // "data: " lines and the browser joins them into one newline-
+        // separated event. Parsing the block as one line would only ever
+        // match the first "Epoch N/M - Loss:" in it, dropping every other
+        // epoch from the plot whenever epochs finish fast enough to batch.
+        data.split("\n").forEach((line) => onLine(line));
+        if (autoScroll.checked) {
+          area.scrollTop = area.scrollHeight;
+        }
+      },
+      onError(event) {
+        console.error("Log streaming error:", event);
+        // Not closed here: the browser reconnects by itself and resumes from
+        // the last offset. Closing would stop this job's log for good.
+      },
     });
-
-    eventSource.onmessage = function(event) {
-      const id = parseInt(event.lastEventId, 10);
-      if (Number.isFinite(id)) {
-        lastLogOffset = id;
-      }
-      append(event.data);
-      // One SSE event can carry several log lines: the server emits a block of
-      // "data: " lines and the browser concatenates them into a single
-      // newline-separated event.data. Parsing the blob as one line would only
-      // ever match the FIRST "Epoch N/M - Loss:" in it (String.match without
-      // /g returns one match), silently dropping every other epoch from the
-      // plot whenever epochs complete fast enough to batch.
-      event.data.split("\n").forEach((line) => onLine(line));
-
-      if (autoScroll.checked) {
-        area.scrollTop = area.scrollHeight;
-      }
-    };
-
-    eventSource.onerror = function(error) {
-      console.error("Log streaming error:", error);
-      // Do not close here - EventSource auto-reconnects by default, and
-      // resumes from the last event id. Closing would permanently stop log
-      // updates for this job.
-    };
   }
 
   return {
@@ -90,25 +74,25 @@ export function createJobLog({ onLine }) {
     // closing first would lose them. This is the backstop for a "done" that
     // never comes, e.g. a stream stuck reconnecting.
     closeSoon() {
-      if (logStreamCloseTimer || !eventSource || eventSource.readyState === EventSource.CLOSED) {
-        return;  // already closed, or closing (the poller calls this every tick)
+      if (closeTimer || !stream || stream.closed) {
+        return;  // already closed, or closing (the status poll calls this every tick)
       }
-      const stream = eventSource;
-      logStreamCloseTimer = setTimeout(function() {
-        logStreamCloseTimer = null;
-        stream.close();
+      const closing = stream;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        closing.close();
       }, 5000);
     },
     // Reopen the stream where it stopped, if it is not running.
     resume(jobId) {
-      if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
-        follow(jobId, lastLogOffset);
+      if (!stream || stream.closed) {
+        follow(jobId, stream ? stream.offset : restoredOffset);
       }
     },
     // Where resume() starts when no stream has run: the end of the log the
     // card shows.
     resumeFrom(offset) {
-      lastLogOffset = offset;
+      restoredOffset = offset;
     },
   };
 }
