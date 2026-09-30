@@ -100,34 +100,32 @@ def update_equivalences():
     return jsonify({"message": "Equivalences updated successfully"})
 
 
-@pipeline_bp.route("/api/process", methods=["POST"])
-def process():
+def _set_chain_and_redraw(spec, dashboard_url) -> None:
+    """Make ``spec`` the dashboard's chain, and redraw the viewer through it.
+
+    set_pipeline() builds every step before it assigns anything, so a step
+    its class refuses raises here with nothing changed. Then the raw layer
+    and each prediction layer are rebuilt: a prediction layer's URL carries
+    the chain (the args blob, with ``dashboard_url`` and the chain's digest),
+    and its server runs the chain of the layer it is asked for. A job with
+    no host yet gets no layer.
+    """
     session = get_session()
-    data = request.get_json()
-
-    # add dashboard url to data so we can update the state from the server
-    data["dashboard_url"] = request.host_url
-
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
     previous_norm_signature = _chain_signature(session.input_norms)
     previous_post_signature = _chain_signature(session.postprocess)
 
-    logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
-    # The posted steps are kept as the config, so finetune submit/restart,
-    # the manifest and the exported YAML hand the trainer the normalization
+    # The steps are kept as the config, so finetune submit/restart, the
+    # manifest and the exported YAML hand the trainer the normalization
     # inference uses. Without it the trainer reads raw uint8 from /nrs while
     # inference normalizes to the model's expected range.
-    spec = PipelineSpec.from_json_data(data, strict=True)
     session.set_pipeline(spec)
     # Named by content rather than stamped with the time: resubmitting the
     # same settings gives the same layer source, so neuroglancer keeps the
     # chunks it has and each server reuses the chain it already built (with
     # any merger state in it). Changed settings still give a new source.
-    data["digest"] = spec.digest()
-    st_data = spec.to_url_blob(
-        dashboard_url=data["dashboard_url"], digest=data["digest"]
-    )
+    st_data = spec.to_url_blob(dashboard_url=dashboard_url, digest=spec.digest())
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
@@ -189,6 +187,19 @@ def process():
             )
 
     logger.debug(f"Input normalizers: {session.input_norms}")
+
+
+@pipeline_bp.route("/api/process", methods=["POST"])
+def process():
+    data = request.get_json()
+
+    # add dashboard url to data so we can update the state from the server
+    data["dashboard_url"] = request.host_url
+
+    logger.debug(f"Data received: {type(data)} - {data.keys()} -{data}")
+    spec = PipelineSpec.from_json_data(data, strict=True)
+    _set_chain_and_redraw(spec, data["dashboard_url"])
+    data["digest"] = spec.digest()
 
     return jsonify(
         {
