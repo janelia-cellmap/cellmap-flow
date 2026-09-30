@@ -75,6 +75,11 @@ READS = {
         lambda f: _precomputed_pyramid(f) + "/s1", {}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
         ((2, 5, 10), "uint8", [1, 3]),
     ),
+    # The volume is read at the scale for voxel_size, as a multiscale group is.
+    "precomputed-volume-at-a-voxel-size": (
+        _precomputed_pyramid, {"voxel_size": (32, 16, 8)}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
+        ((2, 5, 10), "uint8", [1, 3]),
+    ),
     "whole-array": (_at_the_origin, {}, (0, 0, 0), None, ((16, 16, 16), "uint8", list(range(1, 17)))),
     # A start inside a voxel reads from that voxel.
     "off-grid-start": (_at_the_origin, {}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2])),

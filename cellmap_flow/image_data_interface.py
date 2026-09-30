@@ -1,9 +1,9 @@
 """A dataset to read in world coordinates, through the input chain.
 
 ``ImageDataInterface(path, voxel_size)`` picks the level of a multiscale
-group for ``voxel_size`` (``io.multiscale``), reads its metadata
-(``io.metadata``) and keeps its voxel grid (``io.geometry``) and the array
-(``io.source``). A read of a world ROI is the grid's box of voxels, read
+group or precomputed volume for ``voxel_size`` (``io.multiscale``), reads
+its metadata (``io.metadata``) and keeps its voxel grid (``io.geometry``)
+and the array (``io.source``). A read of a world ROI is the grid's box of voxels, read
 with padding where it runs past the array, then optionally resampled to
 ``output_voxel_size`` (deprecated). What is read goes through the input
 chain on the way: the normalizers and ChannelSelector given as
@@ -99,8 +99,9 @@ class ImageDataInterface:
         of 0) are deprecated: passing either warns, and they go in the next
         release.
 
-        ``voxel_size`` picks the scale of a multiscale group (the finest one
-        not coarser than it). When the array opened is at a different voxel
+        ``voxel_size`` picks the scale of a multiscale group or precomputed
+        volume (the finest one not coarser than it); the path of one scale is
+        read at that scale. When the array opened is at a different voxel
         size, ``on_voxel_size_mismatch`` decides: "relabel" (the default,
         with a warning) reads it as if it were at ``voxel_size``, voxel for
         voxel; "error" raises. ``actual_voxel_size`` and
@@ -116,8 +117,8 @@ class ImageDataInterface:
                     stacklevel=2,
                 )
         dataset_path = dataset_path.replace("\\ ", " ")
-        # A multiscale group is read at its level for voxel_size; a
-        # precomputed path at the scale it names.
+        # A multiscale group or precomputed volume is read at its level for
+        # voxel_size; the path of one level at that level.
         try:
             resolved, scale = multiscale.select_dataset(dataset_path, voxel_size)
             if scale is not None:

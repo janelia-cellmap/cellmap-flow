@@ -252,14 +252,15 @@ def test_select_level(levels, voxel_size, mode, expected):
         assert select_level(levels, voxel_size, mode)[0] == expected
 
 
-@pytest.fixture(params=[pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
-def janelia(ome_pyramid, request):
+def _janelia(ome_pyramid, zarr_format):
     """A Janelia pyramid, 8, 16 and 32 nm, each level's corner at -4 nm."""
-    return ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32), zarr_format=request.param)
+    return ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32), zarr_format=zarr_format)
 
 
-def test_a_janelia_pyramids_levels_share_their_corner(janelia):
-    assert [(path, meta.voxel_size, meta.translation) for path, meta in list_levels(janelia)] == [
+@pytest.mark.parametrize("zarr_format", [pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
+def test_a_janelia_pyramids_levels_share_their_corner(ome_pyramid, zarr_format):
+    levels = list_levels(_janelia(ome_pyramid, zarr_format))
+    assert [(path, meta.voxel_size, meta.translation) for path, meta in levels] == [
         ("s0", (8.0,) * 3, (-4.0,) * 3), ("s1", (16.0,) * 3, (-4.0,) * 3), ("s2", (32.0,) * 3, (-4.0,) * 3),
     ]
 
@@ -274,23 +275,33 @@ def test_a_precomputed_volumes_levels_are_its_scales(write_array):
         list_levels(volume + "/s1")
 
 
-def test_a_group_resolves_to_a_level_and_an_array_is_read_as_it_is(janelia):
-    assert select_dataset(janelia, (16, 16, 16)) == (os.path.join(janelia, "s1"), "s1")
-    assert select_dataset(janelia + "/s0", (16, 16, 16)) == (janelia + "/s0", None)
+@pytest.fixture(params=["zarr2", "zarr3", "precomputed"])
+def pyramid(ome_pyramid, write_array, request):
+    """Levels s0, s1 and s2 of 8, 16 and 32 nm: a Janelia pyramid, or a precomputed
+    volume's scales, which are its levels."""
+    if request.param == "precomputed":
+        return write_array("precomputed", np.zeros((32,) * 3, np.uint8), {"resolution": [8] * 3}, scales=3)
+    return _janelia(ome_pyramid, int(request.param[-1]))
 
 
-def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(janelia, tmp_path):
-    assert closest_raw_scale(janelia, (16, 16, 16)) == closest_raw_scale(janelia + "/s0", (20,) * 3) == (16.0,) * 3
+def test_a_group_resolves_to_a_level_and_an_array_is_read_as_it_is(pyramid):
+    assert select_dataset(pyramid, (16, 16, 16)) == (os.path.join(pyramid, "s1"), "s1")
+    assert select_dataset(pyramid + "/s0", (16, 16, 16)) == (pyramid + "/s0", None)
+
+
+def test_the_closest_raw_scale_from_the_group_or_one_of_its_levels(pyramid, tmp_path):
+    assert closest_raw_scale(pyramid, (16, 16, 16)) == closest_raw_scale(pyramid + "/s0", (20,) * 3) == (16.0,) * 3
     assert closest_raw_scale(str(tmp_path / "missing.zarr"), (8, 8, 8)) is None, "undetermined"
 
 
-@pytest.mark.parametrize("path", [pytest.param("precomputed:///d/pc", id="local"), pytest.param("gs://b/pc", id="gs")])
-def test_a_precomputed_path_is_read_at_the_scale_it_names(path, caplog):
-    """Nothing looks for zarr levels there: a gs:// URL had fsspec ask for gcsfs, in a
-    warning on every ImageDataInterface opened on it."""
+@pytest.mark.parametrize("volume", [pytest.param("precomputed:///d/pc", id="local"), pytest.param("gs://b/pc", id="gs")])
+def test_a_precomputed_path_with_no_scale_to_choose_is_not_opened(volume, caplog):
+    """A named scale is read as it is, and a volume without a voxel size at scale 0,
+    with nothing opened (these volumes don't exist): a gs:// URL once had fsspec
+    ask for gcsfs, in a warning on every ImageDataInterface opened on it."""
     with caplog.at_level(logging.WARNING):
-        assert select_dataset(path, (16, 16, 16)) == (path, None)
-        assert closest_raw_scale(path, (16, 16, 16)) is None
+        assert select_dataset(volume) == (volume, None)
+        assert select_dataset(volume + "/s1", (16, 16, 16)) == (volume + "/s1", None)
     assert caplog.records == []
 
 

@@ -1,8 +1,10 @@
 """Choosing a level of a multiscale pyramid for a voxel size.
 
 The levels come from ``io.metadata.list_levels``, in the order the group's
-``datasets`` list them (finest first, by convention). Voxel sizes are
-compared as nanometer floats on the spatial axes, so 10.48 nm is not 10 nm.
+``datasets`` list them (finest first, by convention); a precomputed
+volume's levels are its scales, in the order its info lists them. Voxel
+sizes are compared as nanometer floats on the spatial axes, so 10.48 nm is
+not 10 nm.
 """
 
 import logging
@@ -120,13 +122,20 @@ def select_dataset(
     ``select_level``); an array is read as it is, with level None. Raises
     when a group has no multiscales it can read.
 
-    A precomputed path is read at the scale it names (``…/s<N>``, else
-    scale 0), whatever ``voxel_size`` is: its scales are not chosen by
-    voxel size, and it is never opened as zarr to look for levels.
+    A precomputed volume is a group whose levels are its scales: it
+    resolves to ``…/s<N>`` for ``voxel_size`` the same way, and the path of
+    one scale is read as it is. Without a voxel size a volume is read at
+    scale 0, the level select_level would give, without opening every scale
+    to list them (a gs:// volume can have a dozen). It is never opened as
+    zarr.
     """
     if paths.is_precomputed(dataset_path):
-        return dataset_path, None
-    group = _level_group(dataset_path)
+        volume, scale = paths.precomputed_scale(dataset_path)
+        if scale is not None or voxel_size is None:
+            return dataset_path, None
+        group = volume
+    else:
+        group = _level_group(dataset_path)
     if group is None:
         return dataset_path, None
     level, _ = select_level(metadata.list_levels(group), voxel_size, mode)
@@ -135,7 +144,9 @@ def select_dataset(
 
 def _pyramid_of(dataset_path: str) -> str:
     """The multiscale group a dataset path belongs to: itself, or the group
-    above it when it is one level's array."""
+    above it when it is one level's array (a precomputed scale's volume)."""
+    if paths.is_precomputed(dataset_path):
+        return paths.precomputed_scale(dataset_path)[0]
     container = paths.find_v3_container(dataset_path)
     if container is not None:
         # A per-scale path (.../s1) finds the array's own zarr.json first;
@@ -159,12 +170,9 @@ def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:
     that ``select_level`` picks for ``target_voxel_size``, or None if it
     can't be determined.
 
-    ``dataset_path`` may be the multiscale group or one of its levels. A
-    precomputed path has no level to choose (see ``select_dataset``), so
-    None, without a warning.
+    ``dataset_path`` may be the multiscale group or one of its levels (a
+    precomputed volume or one of its scales).
     """
-    if paths.is_precomputed(dataset_path):
-        return None
     try:
         levels: List[Level] = metadata.list_levels(_pyramid_of(dataset_path))
         return tuple(_voxel_size(select_level(levels, target_voxel_size)))
