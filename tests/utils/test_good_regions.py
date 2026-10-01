@@ -118,7 +118,7 @@ def test_resuming_a_session_carries_its_good_regions(dashboard, session, tmp_pat
     monkeypatch.setattr(annotation_sessions, "ensure_minio_serving",
                         lambda *a, **k: "http://m:9000/annotations/vol-1.zarr")
     monkeypatch.setattr(annotation_sessions, "refresh_annotated_regions_layer", lambda *a, **k: 0)
-    monkeypatch.setattr(g, "annotation_volumes", {})
+    monkeypatch.setattr(get_session(), "annotation_volumes", {})
     resumed = dashboard.post("/api/finetune/load-existing-volume",
                              json={"source_session_path": str(session), "output_path": str(tmp_path / "next")})
     new_session = resumed.get_json()["new_session_path"]
