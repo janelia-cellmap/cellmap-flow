@@ -92,10 +92,15 @@ def test_labels_do_not_wrap_above_255_and_leave_the_input_alone():
     assert (labels.dtype, labels.max(), data.max()) == (np.uint32, 450, 1)
 
 
-def test_each_chunks_ids_are_offset_by_its_morton_index():
+@pytest.mark.parametrize("chunk_num_voxels", [
+    pytest.param(64, id="a-python-int-as-the-inferencer-passes"),
+    pytest.param(np.int64(64), id="a-numpy-int"),
+])
+def test_each_chunks_ids_are_offset_by_its_morton_index(chunk_num_voxels):
     blob = np.zeros((1, 4, 4, 4), np.uint8)
     blob[0, 1:3, 1:3, 1:3] = 1
-    assert MortonSegmentationRelabeling()(blob, chunk_corner=(1, 0, 0), chunk_num_voxels=np.int64(64)).max() == 1 + 64
+    out = MortonSegmentationRelabeling()(blob, chunk_corner=(1, 0, 0), chunk_num_voxels=chunk_num_voxels)
+    assert (out.dtype, out.max()) == (np.uint64, 1 + 64)
 
 
 @pytest.mark.parametrize("shape", [pytest.param((6, 6, 6), id="zyx"), pytest.param((2, 6, 6, 6), id="with-channels")])

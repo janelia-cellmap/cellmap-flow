@@ -158,14 +158,15 @@ class MortonSegmentationRelabeling(PostProcessor):
 
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
-        morton_order_number = pymorton.interleave(*chunk_corner)
-        unique_increment = chunk_num_voxels * morton_order_number
+        # A Python int, whatever the caller passes (the Inferencer passes a
+        # plain int), so the product cannot overflow before it is cast.
+        unique_increment = int(chunk_num_voxels) * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
             mixed ^= mixed >> 16
             unique_increment = mixed & 0xFFFF
 
-        to_process[to_process > 0] += unique_increment.astype(to_process.dtype)
+        to_process[to_process > 0] += to_process.dtype.type(unique_increment)
         data[self.channel] = to_process
         return data
 
@@ -247,10 +248,10 @@ class AffinityPostprocessor(PostProcessor):
         # numpy has no common integer type for uint64 and int64, so
         # ``np.result_type(np.uint64, np.int64)`` is float64 -- an in-place add of a
         # numpy *signed* scalar into a uint64 array therefore raises
-        # UFuncOutputCastingError. Both increments above are numpy int64
-        # (np.prod / np.random.randint), so cast explicitly to keep the add in
-        # uint64. (A plain Python int would also work under NEP 50's weak
-        # promotion, which is why this never reproduced with literal values.)
+        # UFuncOutputCastingError. np.random.randint gives a numpy int64, and a
+        # caller may pass chunk_num_voxels as one, so cast explicitly to keep
+        # the add in uint64. (A plain Python int would also work under NEP 50's
+        # weak promotion, which is why this never reproduced with literal values.)
         segmentation[segmentation > 0] += np.uint64(unique_increment)
         segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
         # insert empty dimension
