@@ -199,6 +199,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - `cellmap_flow dashboard [-n URL]` serves the dashboard alone, and Ctrl+C kills the models launched from it. `cellmap_flow_app --help` used to start a dashboard. `create_and_run_app` sets up logging at INFO when nothing has.
     - **Plugins load when a command starts, not at `import cellmap_flow`.** Every command and alias loads them, as do the dashboard and the finetune job. A script that uses plugin types calls `cellmap_flow.plugins.load_plugins()` itself. An environment installed before 0.3.0 has old console-script wrappers that don't load plugins until it is reinstalled (`pixi install`, or `pip install -e .`).
     - **Launchers start servers with `<CELLMAP_FLOW_SERVER_COMMAND> --model <JSON> -d <data>`**, where the JSON is `ModelConfig.launch_entry` (its `to_dict()` without None values), rebuilt by the server the way a YAML model entry is. `CELLMAP_FLOW_SERVER_COMMAND` defaults to `cellmap_flow serve`, and pixi's activation sets `pixi run cellmap_flow serve`. The old value `pixi run cellmap_flow_server` still works: that command accepts `--model` too, and keeps its per-type subcommands for one release.
+  - `cellmap_flow yaml` installs a YAML's `json_data` as the dashboard's chain the way Submit does, so the finetune manifest, the exported YAML and the pipeline builder see the steps as the YAML gives them. They used to see the built steps with every constructor default filled in (`MinMaxNormalizer` gained `"invert": false`). The chain that runs, and the layer URLs, are unchanged.
   - **Global state (K16).** `cellmap_flow.globals.g` and `Flow` are deprecated and go in the release after 0.3.0. Every name `g` had still works and warns (`DeprecationWarning`, at the caller's line) with its replacement:
     - the launcher settings (`queue`, `charge_group`, `walltime`, …, `save_server_config()`) are `cellmap_flow.jobs.settings.launcher_settings()`;
     - the chain (`input_norms`, `postprocess`, `pipeline_spec`, `set_pipeline()`, …) is `cellmap_flow.process_chain.process_chain()`;
@@ -221,6 +222,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `b14d443` a YAML's json_data is the dashboard's chain as written
 - `6b3b9f0` build_corrections builds background-only crops instead of refusing them
 - `3cf81d2` build_corrections' sampling flags win over the crops YAML
 - `73dded8` a background-only imported crop gets a patch per annotated chunk, like any other pool
