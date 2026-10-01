@@ -140,6 +140,21 @@ def test_two_requests_start_one_server(fake_minio, tmp_path, monkeypatch):
     assert [cmd[1] for cmd, _ in runs].count("mirror") == 2, "both volumes were served"
 
 
+def test_the_sync_thread_keeps_the_sessions_own_dicts(fake_minio, tmp_path, monkeypatch):
+    """The periodic sync holds the state and volume dicts it was started with
+    for as long as MinIO runs, so they must be the session's own, which the
+    routes change in place. With a copy, a volume registered later would never
+    be synced."""
+    from cellmap_flow.dashboard.state import get_session
+
+    started = []
+    monkeypatch.setattr(session_sync, "start_periodic_sync", lambda *args: started.append(args))
+    fu.ensure_minio_serving(str(tmp_path / "vol.zarr"), "vol", output_base_dir=str(tmp_path))
+    session = get_session()
+    ((state, volumes),) = started
+    assert state is session.minio_state and volumes is session.annotation_volumes
+
+
 def test_readiness_is_asked_of_minio(monkeypatch):
     """The real readiness check polls /minio/health/ready."""
     import urllib.request

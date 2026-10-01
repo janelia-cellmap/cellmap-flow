@@ -166,6 +166,22 @@ def test_the_runs_overrides_reach_the_manifest(submit, request_data, manifest):
     assert {key: job.manifest.get(key, ABSENT) for key in manifest} == manifest
 
 
+def test_submit_gives_the_manifest_the_dashboards_chain(submit):
+    """The trainer normalizes its input as the dashboard's servers do, and the
+    finetuned model's YAML postprocesses as they do, only if the manifest
+    carries the session's chain."""
+    from cellmap_flow.dashboard.state import get_session
+    from cellmap_flow.pipeline_spec import PipelineSpec
+
+    norm = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
+    post = [{"name": "SigmoidPostprocessor"}]
+    get_session().set_pipeline(PipelineSpec(norm, post))
+    job = submit()
+    spec = get_session().pipeline_spec
+    assert (job.manifest["input_norm"], job.manifest["postprocess"]) == (list(spec.input_norm), list(spec.postprocess))
+    assert (job.manifest["input_norm"], job.manifest["postprocess"]) == (norm, post)
+
+
 @pytest.mark.parametrize("request_data", [
     pytest.param({"rehearsal_fraction": 1.5}, id="a fraction out of range"),
     pytest.param({"rehearsal_fraction": "abc"}, id="a fraction that is not a number"),
