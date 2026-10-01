@@ -140,11 +140,7 @@ export function initSessions({ log, addToViewer }) {
         }
         log.add(`  MinIO URL: ${data.minio_url}`);
         if (loadExistingModal) loadExistingModal.hide();
-        addToViewer(
-          data.volume_id,
-          data.neuroglancer_url,
-          `sparse_annotation_${data.volume_id}`,
-        );
+        addToViewer(data.volume_id, data.neuroglancer_url);
       })
       .catch(err => {
         progress.stop();

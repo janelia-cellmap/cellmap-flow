@@ -21,23 +21,19 @@ function describeCropImport(p) {
 
 // log: the panel's log; picker: the model picker; form: the training form
 // (its state is saved once a volume exists).
-// Returns { addToViewer(cropId, neuroglancerUrl, layerName) }, which shows
-// an annotation volume in the viewer.
+// Returns { addToViewer(cropId, neuroglancerUrl) }, which shows an
+// annotation volume in the viewer, as the layer annotation_<cropId>: the
+// server names it, so that Load Crops, which looks for that layer before
+// adding its own, finds this one. The tab used to name it
+// sparse_annotation_<id>, and an import into the volume then added a second
+// writable layer over the same data.
 export function initCrops({ log, picker, form }) {
   const outputPathInput = document.getElementById("outputPath");
 
-  function addToViewer(cropId, neuroglancerUrl, layerName) {
+  function addToViewer(cropId, neuroglancerUrl) {
     log.add(`Adding layer to viewer...`);
 
-    const payload = {
-      crop_id: cropId,
-      minio_url: neuroglancerUrl
-    };
-    if (layerName) {
-      payload.layer_name = layerName;
-    }
-
-    postAnswer("/api/finetune/add-to-viewer", payload)
+    postAnswer("/api/finetune/add-to-viewer", { crop_id: cropId, minio_url: neuroglancerUrl })
       .then(data => {
         if (data.success) {
           log.add(`✓ Layer added: ${data.layer_name}`);
@@ -95,7 +91,7 @@ export function initCrops({ log, picker, form }) {
           `;
           document.getElementById("minioStatus").style.display = "block";
 
-          addToViewer(data.volume_id, data.neuroglancer_url, `sparse_annotation_${data.volume_id}`);
+          addToViewer(data.volume_id, data.neuroglancer_url);
         } else {
           log.add(`✗ Error: ${data.error}`);
         }
