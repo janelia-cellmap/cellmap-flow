@@ -69,15 +69,28 @@ _REQUIREMENTS = {
 }
 
 
+# The modules that still use the deprecated cellmap_flow.globals.g while
+# K16-C (fix-dashboard) moves them off it: dashboard/app.py and its tests.
+# A warning is filed under the module of the line that used g; a
+# monkeypatch.setattr(g, ...) under pytest's monkeypatch module.
+_STILL_USING_G = [
+    r"cellmap_flow\.dashboard\.app",
+    r"tests\.blockwise\.test_blockwise_routes",
+    r"tests\.utils\.test_(dashboard_launch|dashboard_pages|dashboard_routes|launch_command|layer_sources_snapshot"
+    r"|pipeline_route|registry|review_routes)",
+    r"_pytest\.monkeypatch",
+]
+
+
 def pytest_configure(config):
-    # K16 moves the package and its tests off the deprecated
-    # cellmap_flow.globals.g one area at a time. Until the last lands, every
-    # use left warns, hundreds per run, which would bury the summary; so only
-    # the facade's own warnings are hidden, and only here. Its test still sees
+    # Their g uses warn, dozens per run, which would bury the summary; so the
+    # facade's warnings from those modules alone are hidden, and only here. A
+    # g use anywhere else shows in the summary. The facade's test still sees
     # them (pytest.warns records past filters), and adding
     #   -W "default:cellmap_flow.globals.:DeprecationWarning"
-    # to a run lists the uses that remain. Delete this once nothing uses g.
-    config.addinivalue_line("filterwarnings", r"ignore:cellmap_flow\.globals\.:DeprecationWarning")
+    # to a run lists every use that remains. Delete this once nothing uses g.
+    modules = "|".join(_STILL_USING_G)
+    config.addinivalue_line("filterwarnings", rf"ignore:cellmap_flow\.globals\.:DeprecationWarning:({modules})")
 
 
 def pytest_collection_modifyitems(config, items):
