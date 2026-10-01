@@ -173,6 +173,25 @@ def test_a_restart_changes_only_the_training_settings(run_cli, tmp_path):
     }
 
 
+@pytest.mark.parametrize("restart", [
+    pytest.param({"num_epochs": 0}, id="no epochs"),
+    pytest.param({"batch_size": 0}, id="an empty batch"),
+    pytest.param({"gradient_accumulation_steps": 0}, id="no accumulation steps"),
+    pytest.param({"learning_rate": -1}, id="a negative learning rate"),
+    pytest.param({"offsets": [[1, 0]]}, id="an offset of two values"),
+])
+def test_a_restart_setting_that_cannot_train_is_ignored(run_cli, tmp_path, restart):
+    """These type-checked, and failed only once training ran, on a job that
+    was serving: 0 epochs exported the previous iteration's best checkpoint,
+    0 accumulation steps was reported as divergence, a negative learning rate
+    as a failed restart, and two-value offsets ended the job."""
+    launched = dict(num_epochs=1, batch_size=8, gradient_accumulation_steps=1, learning_rate=1e-4, offsets=None)
+    metadata = _metadata(tmp_path / "session" / "runs" / "run", **launched)
+    cli = run_cli("--auto-serve", "--serve-data-path", str(tmp_path), restarts=[{"params": restart}])
+    assert json.loads(metadata.read_text())["params"] == launched
+    assert sum(line.startswith("TRAINING_ITERATION_COMPLETE:") for line in cli.markers) == 2
+
+
 def test_a_restart_that_cannot_be_set_up_waits_for_the_next(run_cli, tmp_path):
     """Its data and target were built outside the CLI's try, so a bad restart
     (an emptied volume, say) ended the job and took the served model with it;

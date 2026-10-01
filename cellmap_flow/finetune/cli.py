@@ -13,6 +13,7 @@
 import argparse
 import json
 import logging
+import math
 from pathlib import Path
 
 from cellmap_flow.finetune.model_loading import decode_model_entry, model_config_from_entry
@@ -577,13 +578,38 @@ def _as_bool(value):
     return bool(value)
 
 
+def _at_least(minimum):
+    def convert(value):
+        number = int(value)
+        if number < minimum:
+            raise ValueError(f"must be at least {minimum}")
+        return number
+    return convert
+
+
+def _positive(value):
+    number = float(value)
+    if not (math.isfinite(number) and number > 0):
+        raise ValueError("must be a number above 0")
+    return number
+
+
+def _is_offset(offset):
+    """A [z, y, x] of whole numbers."""
+    return (
+        isinstance(offset, list)
+        and len(offset) == 3
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in offset)
+    )
+
+
 def _as_offsets(value):
     # --offsets is a JSON string. A restart may carry the list itself, which
     # build_target_transform's json.loads() would then reject.
-    if isinstance(value, str):
-        json.loads(value)
-        return value
-    return json.dumps(value)
+    offsets = json.loads(value) if isinstance(value, str) else value
+    if not (isinstance(offsets, list) and offsets and all(_is_offset(o) for o in offsets)):
+        raise ValueError("expected a list of [z, y, x] integer offsets")
+    return json.dumps(offsets)
 
 
 def _as_shape(value):
@@ -606,12 +632,18 @@ def _one_of(*choices):
 # destination itself. The dashboard's "augment" is the inverse of the CLI's
 # --no-augment, and used to be dropped by a hasattr(args, key) filter, so a
 # restart could never switch augmentation on or off.
+#
+# A value that converts but cannot train is refused here, so that the job
+# keeps the setting it has. Found only once training ran, it failed a job
+# that was serving: 0 epochs exported the previous iteration's best
+# checkpoint, 0 accumulation steps was reported as divergence, two-value
+# offsets failed at the first batch.
 _RESTART_ARG_CONVERTERS = {
     "lora_r": ("lora_r", int),
     "lora_alpha": ("lora_alpha", int),
-    "num_epochs": ("num_epochs", int),
-    "batch_size": ("batch_size", int),
-    "learning_rate": ("learning_rate", float),
+    "num_epochs": ("num_epochs", _at_least(1)),
+    "batch_size": ("batch_size", _at_least(1)),
+    "learning_rate": ("learning_rate", _positive),
     "loss_type": ("loss_type", _one_of("dice", "bce", "combined", "mse", "margin")),
     "label_smoothing": ("label_smoothing", float),
     "distillation_lambda": ("distillation_lambda", float),
@@ -620,8 +652,8 @@ _RESTART_ARG_CONVERTERS = {
     "balance_classes": ("balance_classes", _as_bool),
     "augment": ("no_augment", lambda value: not _as_bool(value)),
     "mask_unannotated": ("mask_unannotated", _as_bool),
-    "gradient_accumulation_steps": ("gradient_accumulation_steps", int),
-    "num_workers": ("num_workers", int),
+    "gradient_accumulation_steps": ("gradient_accumulation_steps", _at_least(1)),
+    "num_workers": ("num_workers", _at_least(0)),
     "no_augment": ("no_augment", _as_bool),
     "no_mixed_precision": ("no_mixed_precision", _as_bool),
     "patch_shape": ("patch_shape", _as_shape),
