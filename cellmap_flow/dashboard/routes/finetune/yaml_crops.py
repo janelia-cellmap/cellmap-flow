@@ -68,15 +68,6 @@ _PROGRESS = Progress()
 # Volume bookkeeping
 # ---------------------------------------------------------------------------
 
-def _find_session_annotation_volume(corrections_dir):
-    """Return ``(volume_id, meta)`` for the annotation_volume in this corrections
-    dir, or ``(None, None)`` if none is registered yet."""
-    for vid, meta in (get_session().annotation_volumes or {}).items():
-        if meta.get("corrections_dir") == corrections_dir:
-            return vid, meta
-    return None, None
-
-
 def _create_session_annotation_volume(
     *,
     raw_dataset_path,
@@ -212,7 +203,7 @@ def load_crops_from_yaml():
         # Reuse the session's annotation_volume if the user already created one
         # (via "New Volume" or "Resume Existing"). Otherwise spin up a fresh one
         # so the YAML import has a destination.
-        volume_id, volume_meta = _find_session_annotation_volume(corrections_dir)
+        volume_id, volume_meta = session_store().session_volume(corrections_dir)
         created_volume = False
         if volume_meta is None:
             step(

@@ -64,13 +64,11 @@ def _backfill_manifest(corrections_dir):
     Returns the manifest if one could be written, else None: the session
     then has nothing the trainer can read, and submit refuses it.
     """
-    from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
+    from cellmap_flow.dashboard.routes.finetune.common import session_store, write_volume_manifest
     from cellmap_flow.finetune.session.manifest import read_manifest
 
-    volumes = get_session().annotation_volumes or {}
-    for volume in reversed(list(volumes.values())):
-        if str(volume.get("corrections_dir") or "") != str(corrections_dir):
-            continue
+    _, volume = session_store().session_volume(corrections_dir)
+    if volume is not None:
         if write_volume_manifest(volume) is None:
             return None
         return read_manifest(str(corrections_dir))

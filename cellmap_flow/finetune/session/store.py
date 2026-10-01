@@ -80,3 +80,19 @@ class SessionStore:
     def volumes(self) -> dict:
         """The registry itself: volume id -> record."""
         return self._volumes
+
+    def session_volume(self, corrections_dir: Optional[str] = None):
+        """``(volume_id, record)`` of the volume a session is painting, or ``(None, None)``.
+
+        That is the last one registered for ``corrections_dir``, or for any
+        corrections dir when it is None: a session can hold several volumes,
+        and the latest is the one the user just made or reattached. Every
+        route asks this, so a crop import, the good regions and training all
+        mean the same volume; load-crops used to take the first instead, and
+        imported into one volume while the user painted another.
+        """
+        for volume_id, record in reversed(list(self._volumes.items())):
+            registered_dir = record.get("corrections_dir")
+            if registered_dir and (corrections_dir is None or str(registered_dir) == str(corrections_dir)):
+                return volume_id, record
+        return None, None

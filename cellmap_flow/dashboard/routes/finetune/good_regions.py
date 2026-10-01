@@ -25,7 +25,7 @@ import numpy as np
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
-from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
+from cellmap_flow.dashboard.routes.finetune.common import session_store, viewer_position_and_scales
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
 
@@ -44,11 +44,7 @@ DEFAULT_REGION_SIZE_NM = 896.0
 
 def _active_volume():
     """The annotation volume currently being worked on, or None."""
-    volumes = get_session().annotation_volumes or {}
-    for volume in reversed(list(volumes.values())):
-        if volume.get("corrections_dir"):
-            return volume
-    return None
+    return session_store().session_volume()[1]
 
 
 def _minio_corrections_dir():

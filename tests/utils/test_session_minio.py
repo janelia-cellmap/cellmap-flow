@@ -219,7 +219,9 @@ def test_painted_chunks_are_pulled_before_the_mirror(order, monkeypatch, tmp_pat
     assert order == pull + [("mc", "mirror")]
 
 
-def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path):
+def test_a_yaml_import_pulls_strokes_before_writing_crops_into_the_sessions_latest_volume(monkeypatch, tmp_path):
+    """The latest volume is the one being painted, and the one the good
+    regions and training mean; the import took the first."""
     from cellmap_flow.dashboard.app import app
     from cellmap_flow.dashboard.routes.finetune import yaml_crops
 
@@ -233,7 +235,9 @@ def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path)
     monkeypatch.setattr(yaml_crops, "parse_crops_yaml", lambda text: crops)
     monkeypatch.setattr(yaml_crops, "_get_selected_model_config", lambda name: (object(), None))
     monkeypatch.setattr(yaml_crops, "ensure_corrections_storage", lambda path: (None, str(tmp_path)))
-    monkeypatch.setattr(yaml_crops, "_find_session_annotation_volume", lambda d: ("vol-1", meta))
+    earlier = {**meta, "zarr_path": str(tmp_path / "vol-0.zarr")}
+    monkeypatch.setattr(g, "annotation_volumes", {"vol-0": {**earlier, "corrections_dir": str(tmp_path)},
+                                                  "vol-1": {**meta, "corrections_dir": str(tmp_path)}})
     monkeypatch.setattr(yaml_crops, "_ensure_editable_layer", lambda *a: None)
     monkeypatch.setattr(yaml_crops, "sync_annotation_volume_from_minio",
                         lambda vid, **k: events.append(("pull", vid)))
