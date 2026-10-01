@@ -511,7 +511,7 @@ def _merge_existing_adapters(model: nn.Module) -> nn.Module:
     """Fold any already-attached LoRA adapter into the base weights.
 
     Returns the plain module to wrap. A model with no adapter passes straight
-    through. See the note in create_lora_model() for why stacking is not an
+    through. See the note in wrap_model_with_lora() for why stacking is not an
     option.
     """
     try:
@@ -591,7 +591,7 @@ def load_lora_adapter(
     logger.info(f"Loading LoRA adapter from: {adapter_path}")
 
     # Fold in any adapter the model already carries, for the same reason
-    # create_lora_model() does -- and additionally because the adapter being
+    # wrap_model_with_lora() does -- and additionally because the adapter being
     # loaded here was saved against the *merged* module tree. Calling
     # from_pretrained() on a PeftModel wraps it a second time, which both
     # drops the existing adapter and double-nests every module name
@@ -609,7 +609,7 @@ def load_lora_adapter(
     # Replace any non-standard leaf modules (e.g. InterpreterModule from
     # torch.export unflatten) with real nn.Conv*/Linear so PEFT's dispatch
     # can find the target modules named in the saved adapter config. Must
-    # mirror create_lora_model()'s call to this before training, since the
+    # mirror wrap_model_with_lora()'s call to this before training, since the
     # adapter's target_modules names were recorded against the post-replacement
     # module tree.
     _replace_interpreter_modules(model)

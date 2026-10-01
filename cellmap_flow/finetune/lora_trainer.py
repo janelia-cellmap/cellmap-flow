@@ -1,5 +1,5 @@
 """
-LoRA finetuning trainer for CellMap-Flow models.
+Finetuning trainer for CellMap-Flow models: a LoRA adapter, or every weight.
 
 This module provides a trainer class for finetuning models using user
 corrections with mixed-precision training and gradient accumulation.
@@ -36,33 +36,54 @@ logger = logging.getLogger(__name__)
 
 class LoRAFinetuner:
     """
-    Trainer for finetuning models with LoRA adapters.
+    Trainer for finetuning a model on user corrections: a LoRA adapter, or
+    every weight (a full finetune).
+
+    Which of the two the model decides: a PEFT model trains its adapter, a
+    plain module trains in full (see adaptation.strategy_for).
 
     Features:
-    - Mixed precision (FP16) training for memory efficiency
+    - Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a
+      GradScaler; it falls back to fp32 when the model NaNs under either
     - Gradient accumulation to simulate larger batch sizes
-    - Checkpointing with best model tracking
-    - Progress logging
     - Partial annotation support (mask unannotated regions)
+    - Distillation toward the starting model, on unlabeled voxels, on all
+      voxels, or on the good regions' rehearsal patches
+    - A best checkpoint, chosen by the supervised loss alone; the export
+      loads it first
+    - Recovery from an OOM (halve the batch, then drop distillation) and
+      from a NaN under mixed precision (restart in fp32)
+    - TensorBoard logging, continuing across a job's iterations
 
     Args:
-        model: PEFT model with LoRA adapters
+        model: The model to train: a PEFT model (LoRA) or a plain module (full finetune)
         dataloader: DataLoader for training data
         output_dir: Directory to save checkpoints and logs
         learning_rate: Learning rate (default: 1e-4)
         num_epochs: Number of training epochs (default: 10)
         gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
-        use_mixed_precision: Enable FP16 training (default: True)
-        loss_type: Loss function ("dice", "bce", or "combined")
+        use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
+        loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse" or "margin"
         device: Training device ("cuda" or "cpu", auto-detected if None)
         select_channel: Optional channel index to select from multi-channel output (default: None)
         mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
                          Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
                          This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
                          Ignored if target_transform is provided.
+        label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for margin)
+        distillation_lambda: Weight of the distillation term. None means 1.0 when the
+                         dataset has good regions and 0 otherwise; an explicit 0 is honoured.
+        distillation_all_voxels: Distil on every voxel, not only the unlabeled ones
+                         (no effect when the dataset has good regions: they decide where)
+        margin: The margin of the "margin" loss (default: 0.3)
+        balance_classes: Weight foreground and background voxels equally
         target_transform: Optional TargetTransform instance that converts raw annotations
                          to (target, mask) pairs. Overrides mask_unannotated when provided.
                          See cellmap_flow.finetune.target_transforms.
+        tensorboard: Write TensorBoard logs to output_dir/tensorboard (default: True)
+        teacher_model: A full finetune's frozen teacher from a previous iteration, to reuse
+        initial_state: A full finetune's starting weights, to reset to; copied from the model if None
+        tb_start_step, tb_start_epoch: Where the previous iteration's TensorBoard curves ended
 
     Examples:
         >>> lora_model = wrap_model_with_lora(model)
@@ -158,7 +179,8 @@ class LoRAFinetuner:
             initial_state if initial_state is not None else self.strategy.initial_state(self.model)
         )
 
-        # Optimizer (only LoRA parameters)
+        # Optimizer, over the parameters that train: the adapter's, or every
+        # weight in a full finetune.
         self.optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=learning_rate,
@@ -1017,8 +1039,8 @@ class LoRAFinetuner:
             if self.label_smoothing > 0:
                 target = target * (1 - self.label_smoothing) + self.label_smoothing / 2
 
-            # Teacher forward pass for distillation (before student pass)
-            # Uses the base model without LoRA adapters as the teacher
+            # Teacher forward pass for distillation (before student pass): the
+            # model as it was before this run (see _teacher_forward).
             teacher_pred = None
             if self.distillation_lambda > 0:
                 teacher_pred = self._teacher_forward(raw)
@@ -1279,7 +1301,8 @@ class LoRAFinetuner:
         Save training checkpoint.
 
         Args:
-            is_best: If True, saves as "best_model.pth"
+            is_best: If True, saves as "best_checkpoint.pth", which save_adapter
+                exports; otherwise as "checkpoint_epoch_<N>.pth"
         """
         checkpoint_name = "best_checkpoint.pth" if is_best else f"checkpoint_epoch_{self.current_epoch+1}.pth"
         checkpoint_path = self.output_dir / checkpoint_name
