@@ -42,11 +42,10 @@ def _voxel_size(level: Level) -> Tuple[float, ...]:
     return level[1].spatial().voxel_size
 
 
-def select_level(
-    levels: Sequence[Level],
-    voxel_size=None,
-    mode: Literal["floor", "exact", "nearest"] = "floor",
-) -> Level:
+Mode = Literal["floor", "exact", "nearest", "resample"]
+
+
+def select_level(levels: Sequence[Level], voxel_size=None, mode: Mode = "floor") -> Level:
     """The ``(path, ArrayMeta)`` of ``levels`` to read at ``voxel_size``.
 
     With no ``voxel_size``, the first (finest) level. Otherwise, by ``mode``:
@@ -58,6 +57,14 @@ def select_level(
     - "exact": the level at ``voxel_size``; ValueError when there is none.
     - "nearest": the level whose voxel size is closest on a log scale
       (summed over the axes), the finer one on a tie.
+    - "resample": the level to resample to ``voxel_size`` from
+      (``io.resample``): the level at ``voxel_size`` if there is one (then
+      nothing is resampled); else the coarsest level that is no coarser
+      than ``voxel_size`` on any axis, so every axis is downsampled from as
+      close as the pyramid allows; else, when every level is coarser on
+      some axis, the finest level, which loses the least. Coarsest and
+      finest are by voxel volume, the earlier level on a tie. Unlike
+      "floor", this does not depend on the order the levels are listed in.
     """
     levels = list(levels)
     if not levels:
@@ -96,7 +103,21 @@ def select_level(
 
         return min(levels, key=distance)
 
-    raise ValueError(f"mode must be 'floor', 'exact' or 'nearest', got {mode!r}")
+    if mode == "resample":
+        for level in levels:
+            if same_voxel_size(_voxel_size(level), voxel_size):
+                return level
+
+        def volume(level):
+            return float(np.prod(_voxel_size(level)))
+
+        fine_enough = [level for level in levels if not coarser_anywhere(_voxel_size(level), voxel_size)]
+        if fine_enough:
+            # max() and min() keep the first of equal keys: the earlier level.
+            return max(fine_enough, key=volume)
+        return min(levels, key=volume)
+
+    raise ValueError(f"mode must be 'floor', 'exact', 'nearest' or 'resample', got {mode!r}")
 
 
 def _level_group(dataset_path: str) -> Optional[str]:
@@ -111,11 +132,7 @@ def _level_group(dataset_path: str) -> Optional[str]:
     return dataset_path if isinstance(node, zarr.hierarchy.Group) else None
 
 
-def select_dataset(
-    dataset_path: str,
-    voxel_size=None,
-    mode: Literal["floor", "exact", "nearest"] = "floor",
-) -> Tuple[str, Optional[str]]:
+def select_dataset(dataset_path: str, voxel_size=None, mode: Mode = "floor") -> Tuple[str, Optional[str]]:
     """``(path of the array to read, level chosen)`` for a dataset path.
 
     A multiscale group resolves to its level for ``voxel_size`` (see

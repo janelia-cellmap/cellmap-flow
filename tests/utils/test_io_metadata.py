@@ -268,6 +268,8 @@ def _level(path, voxel_size):
 
 LEVELS = [_level("s0", (8, 4, 4)), _level("s1", (16, 8, 8)), _level("s2", (32, 16, 16))]
 FLOAT_LEVELS = [_level("s0", (5.24, 4, 4)), _level("s1", (10.48, 8, 8))]
+ANISOTROPIC = [_level("s0", (8, 8, 8)), _level("s1", (8, 16, 16)), _level("s2", (16, 32, 32))]
+EVERY_LEVEL_COARSER = [_level("s0", (40, 8, 8)), _level("s1", (80, 16, 16)), _level("s2", (20, 32, 32))]
 
 
 @pytest.mark.parametrize(
@@ -284,6 +286,13 @@ FLOAT_LEVELS = [_level("s0", (5.24, 4, 4)), _level("s1", (10.48, 8, 8))]
         pytest.param(LEVELS, (16, 8, 8), "exact", "s1", id="exact"),
         pytest.param(FLOAT_LEVELS, (10, 8, 8), "exact", ValueError, id="exact-none-there"),
         pytest.param(LEVELS, (12, 6, 6), "nearest", "s1", id="nearest-on-a-log-scale"),
+        # resample: the coarsest level no coarser than the target on any axis...
+        pytest.param(LEVELS, (16, 8, 8), "resample", "s1", id="resample-exact-match-is-not-resampled"),
+        pytest.param(LEVELS, (20, 10, 10), "resample", "s1", id="resample-coarsest-fine-enough"),
+        pytest.param(LEVELS[::-1], (20, 10, 10), "resample", "s1", id="resample-whatever-the-listing-order"),
+        pytest.param(ANISOTROPIC, (16, 16, 16), "resample", "s1", id="resample-anisotropic-levels"),
+        # ...else the finest: 8x8x40 nm data for a 16 nm model.
+        pytest.param(EVERY_LEVEL_COARSER, (16, 16, 16), "resample", "s0", id="resample-every-level-coarser"),
     ],
 )
 def test_select_level(levels, voxel_size, mode, expected):
