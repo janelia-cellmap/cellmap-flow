@@ -171,6 +171,16 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page. That note names the job's log file from the start, not only after the next line arrives;
     - the Review tab's script is ES modules, with the same behaviour. Its Progress card refreshes on the shared poller: no requests while the page is hidden, one when it is shown again, and no request on top of an unanswered one;
     - the pipeline builder opens on the live chain. Its normalizer and postprocessor nodes come from the chain as it was last set, from anywhere (a dashboard Submit, say). It used to open on its own last canvas, so its first edit sent the old steps back and undid the other change without a word. Inputs, outputs, models, edges and node positions are still the builder's own.
+  - **Dashboard (review fixes):**
+    - Submit on the Models tab no longer bkills a running finetune job: the job finetune adds to the dashboard's jobs is marked, and only the Finetune tab stops it;
+    - a `PUT /api/pipeline` that leaves the chain as the viewer already shows it (a node dragged in the builder, say) no longer redraws the viewer, so a hidden layer or a changed opacity stays as set; a model whose layer is missing still gets one;
+    - the pipeline builder opens a saved canvas with its positions and edges; only nodes with no saved position are laid out, and edges are rebuilt only when the chain gained or lost a step elsewhere. It reads an imported pipeline's models as it reads the page's own;
+    - the pipeline builder shows a refused apply as an error with the server's reason. A refused `PUT /api/pipeline` only reached the console, and a refused blockwise config import was reported as "updated";
+    - the Review tab's Next sends the shown instance's rank only to the queue it came from, so switching queues no longer skips the new queue's first ranks;
+    - the Flow Logs stream no longer dies when a record is logged while it replays the buffer, and shows a multi-line record (a traceback) whole;
+    - behind a reverse proxy, the bounding-box tool's viewer is loaded through the proxy; cancelling the tool while its viewer loads leaves no status poll running;
+    - the Review routes answer an index that has gone with a JSON 404 and an unusable one with a JSON 500, not Flask's HTML page; `/api/review/next?order=` means the first queue; a non-text `PUT /api/pipeline` step name is a 400; `/api/models`, `/update/equivalences` and `/api/bbx-generator` answer a bad body with the usual 400 `{"success": false, "error"}`, and a count of 2.5 is refused rather than cut to 2;
+    - removed, unused: `GET /api/review/current_pick`, and the pages' `op_schemas` page data with `pipeline_spec.op_schemas`.
   - **Finetune jobs:**
     - a job is shown as COMPLETED only once its export has been found. Before, it was COMPLETED first and turned FAILED if the export check then failed, so a poll in between showed a success that wasn't one;
     - a finetune of a Fly model trains and serves at the model's own input and output sizes. The trainer used to get only the checkpoint and build it at 178/56;
@@ -227,6 +237,17 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `255857e` the pipeline builder reads an imported pipeline as it reads the page's own
+- `2eb3c00` /api/models, /update/equivalences and /api/bbx-generator refuse a bad body with a 400, and a count of 2.5 is refused
+- `dc73f28` the review and pipeline routes answer bad input with a JSON error that says why
+- `12b968c` cancelling the box tool while its viewer loads starts no status poll
+- `d56644e` behind a reverse proxy, the box tool's viewer is loaded through it
+- `871e713` the pipeline builder shows a refused apply as an error, with the server's reason
+- `b931f83` the pipeline builder opens a saved canvas where it was left, with its edges
+- `65650b5` the Flow Logs stream no longer dies on a record logged while it replays, and shows a traceback whole
+- `184119f` the Review tab's Next skips the shown rank only in the queue it came from
+- `e220c06` a PUT /api/pipeline that leaves the chain as drawn leaves the viewer alone
+- `bc30003` Submit on the Models tab no longer kills a running finetune job
 - `d67aa94` resume a checkpoint saved without loss scaling
 - `8a2f642` a stop between epochs no longer skips one on resume
 - `c88288c` an epoch that supervised nothing is never the best
