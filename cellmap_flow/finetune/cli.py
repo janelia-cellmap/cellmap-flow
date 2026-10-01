@@ -25,6 +25,7 @@ from cellmap_flow.models.models_config import (
     HuggingFaceModelConfig,
     ModelConfig,
 )
+from cellmap_flow.utils.json_files import write_json_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -719,19 +720,36 @@ def apply_restart_params(args, signal_data: dict):
             changed = True
 
     # Persist updated params to metadata.json
-    if changed and hasattr(args, 'output_dir') and args.output_dir:
-        metadata_file = Path(args.output_dir) / "metadata.json"
-        if metadata_file.exists():
-            try:
-                with open(metadata_file, "r") as f:
-                    metadata = json.load(f)
-                if "params" in metadata:
-                    for key, value in recorded.items():
-                        if key in metadata["params"]:
-                            metadata["params"][key] = value
-                metadata["last_restart_at"] = signal_data.get("timestamp")
-                with open(metadata_file, "w") as f:
-                    json.dump(metadata, f, indent=2)
+    if changed and getattr(args, "output_dir", None):
+        def record(metadata):
+            if "params" in metadata:
+                for key, value in recorded.items():
+                    if key in metadata["params"]:
+                        metadata["params"][key] = value
+            metadata["last_restart_at"] = signal_data.get("timestamp")
+
+        try:
+            if update_run_metadata(args.output_dir, record):
                 logger.info("Updated metadata.json with restart params")
-            except Exception as e:
-                logger.warning(f"Failed to update metadata.json: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to update metadata.json: {e}")
+
+
+def update_run_metadata(output_dir, change) -> bool:
+    """Apply ``change(metadata)`` to the run's metadata.json; False if the run has none.
+
+    The dashboard's job monitor updates the same file from its own host,
+    within seconds of every restart. The file is read just before it is
+    replaced, and replaced whole (write_json_atomically), so neither side
+    can read the other's write half done, and the window in which both
+    update it at once, and one loses the other's change, is kept short.
+    A run that the job manager did not start has no metadata.json, and gets
+    none.
+    """
+    path = Path(output_dir) / "metadata.json"
+    if not path.exists():
+        return False
+    metadata = json.loads(path.read_text())
+    change(metadata)
+    write_json_atomically(path, metadata)
+    return True

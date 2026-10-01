@@ -29,7 +29,7 @@ import torch
 
 from cellmap_flow.finetune import markers, run_outputs
 from cellmap_flow.finetune.adaptation import strategy_for
-from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform
+from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform, update_run_metadata
 from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 from cellmap_flow.io.paths import is_remote
@@ -483,16 +483,13 @@ class TrainingSession:
 
             manifest_norm = (read_manifest(args.corrections) or {}).get("input_norm")
             if manifest_norm is not None and args.output_dir:
-                metadata_file = Path(args.output_dir) / "metadata.json"
-                if metadata_file.exists():
-                    with open(metadata_file) as f:
-                        md = json.load(f)
-                    md.setdefault("params", {})["input_norm"] = manifest_norm
-                    with open(metadata_file, "w") as f:
-                        json.dump(md, f, indent=2)
-                    logger.info(f"Snapshot input_norm into {metadata_file}: {manifest_norm}")
-        except Exception as _e:
-            logger.warning(f"Could not snapshot input_norm into metadata.json: {_e}")
+                def record(metadata):
+                    metadata.setdefault("params", {})["input_norm"] = manifest_norm
+
+                if update_run_metadata(args.output_dir, record):
+                    logger.info(f"Snapshot input_norm into {args.output_dir}/metadata.json: {manifest_norm}")
+        except Exception as e:
+            logger.warning(f"Could not snapshot input_norm into metadata.json: {e}")
 
     def _export(self, trainer, stats, timestamp) -> None:
         """Export this iteration, write the YAML that serves it, and announce both."""
@@ -588,18 +585,19 @@ class TrainingSession:
         a dashboard started later would take for the job's.
         """
         args = self.args
-        metadata_file = Path(args.output_dir) / "metadata.json" if args.output_dir else None
-        try:
-            if metadata_file is None or not metadata_file.exists():
-                return
-            metadata = json.loads(metadata_file.read_text())
+        if not args.output_dir:
+            return
+
+        def record(metadata):
             params = metadata.get("params", {})
             for key in ("lora_r", "lora_alpha"):
                 if key in params:
                     params[key] = getattr(args, key)
-            metadata_file.write_text(json.dumps(metadata, indent=2))
+
+        try:
+            update_run_metadata(args.output_dir, record)
         except Exception as e:
-            logger.warning(f"Could not record the kept rank in {metadata_file}: {e}")
+            logger.warning(f"Could not record the kept rank in {args.output_dir}/metadata.json: {e}")
 
     def _reset_model(self) -> None:
         """Put the model back where training started, for the next iteration.

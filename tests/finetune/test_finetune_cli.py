@@ -222,6 +222,20 @@ def test_a_restart_setting_that_cannot_train_is_ignored(run_cli, tmp_path, resta
     assert sum(line.startswith("TRAINING_ITERATION_COMPLETE:") for line in cli.markers) == 2
 
 
+def test_the_job_replaces_its_metadata_json_whole(run_cli, tmp_path):
+    """The dashboard's monitor reads and rewrites metadata.json from its own
+    host while the job updates it. Rewritten in place, the file could be read
+    half written, and the monitor then skipped its update for good. A reader
+    that has the file open keeps the whole of the file it opened."""
+    metadata = _metadata(tmp_path / "session" / "runs" / "run", learning_rate=1e-4)
+    with open(metadata) as opened_before:
+        run_cli("--auto-serve", "--serve-data-path", str(tmp_path),
+                restarts=[{"params": {"learning_rate": 5e-4}}])
+        assert json.load(opened_before) == {"params": {"learning_rate": 1e-4}}
+    assert json.loads(metadata.read_text())["params"] == {"learning_rate": 5e-4}
+    assert [path.name for path in metadata.parent.glob(".metadata.json.*")] == []
+
+
 def test_a_restart_that_cannot_be_set_up_waits_for_the_next(run_cli, tmp_path):
     """Its data and target were built outside the CLI's try, so a bad restart
     (an emptied volume, say) ended the job and took the served model with it;
