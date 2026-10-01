@@ -15,7 +15,6 @@ from funlib.persistence import Array, open_ds, prepare_ds
 from zarr.storage import NestedDirectoryStore
 from zarr.hierarchy import open_group
 from functools import partial
-from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -24,7 +23,9 @@ from cellmap_flow.models.registry import build_models
 from cellmap_flow.io.ome import singlescale_attrs
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.jobs.launch import submit_bsub_job
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
+from cellmap_flow.process_chain import process_chain
 
 
 def _validate_settings(config):
@@ -166,11 +167,12 @@ class CellMapFlowBlockwiseProcessor:
             self.output_channel_names = output_channels if output_channels else None
             self.output_channel_indices = None
         self.cpu_workers = self.config.get("cpu_workers", 12)
-        # LSF run limit for each worker. Without -W the GPU queues kill a
-        # worker at two hours; see jobs/site.py's default_walltime.
+        # LSF run limit for each worker: the task's, else the saved launcher
+        # setting, else the site's. Without -W the GPU queues kill a worker
+        # at two hours; see jobs/site.py's default_walltime.
         self.walltime = (
             self.config.get("walltime")
-            or getattr(g, "walltime", None)
+            or launcher_settings().walltime
             or current_site().default_walltime
         )
         # Added and create == True to fix client error when create: True in the yaml, so when it is a client it will not be changed
@@ -290,8 +292,8 @@ class CellMapFlowBlockwiseProcessor:
         if json_data:
             spec = PipelineSpec.from_json_data(json_data, strict=True)
             self.input_norms, self.postprocess = spec.build()
-            g.set_pipeline(spec, built=(self.input_norms, self.postprocess))
-        self.dtype = g.get_output_dtype(geometry.output_dtype, self.postprocess)
+            process_chain().set(spec, built=(self.input_norms, self.postprocess))
+        self.dtype = process_chain().output_dtype(geometry.output_dtype, self.postprocess)
 
         self.inferencers = []
         self.inferencer = None
