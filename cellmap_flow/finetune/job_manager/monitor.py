@@ -27,6 +27,7 @@ from cellmap_flow.finetune.job_manager import persistence, state
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
 from cellmap_flow.finetune.job_manager.tailer import Iterations, LogTailer
+from cellmap_flow.jobs.spec import exists_now
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
 
             # === Tail log file for progress updates ===
 
-            if finetune_job.log_file.exists():
+            if exists_now(finetune_job.log_file):
                 try:
                     # Whole lines only, each read once; see LogTailer. It
                     # keeps count of the finished iterations as it reads, so

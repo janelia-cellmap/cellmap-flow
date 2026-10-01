@@ -24,7 +24,7 @@ import socket
 from pathlib import Path
 from typing import Optional
 
-from cellmap_flow.jobs.spec import log_stem
+from cellmap_flow.jobs.spec import exists_now, log_stem
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,8 @@ def read_ready_file(path, job_id: Optional[str] = None) -> Optional[str]:
 
     With ``job_id``, a file written by a different LSF job is not usable.
     """
+    if not exists_now(path):
+        return None
     try:
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError):

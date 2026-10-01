@@ -125,3 +125,42 @@ def test_a_stream_that_breaks_while_the_job_runs_does_not_say_done(tmp_path, cli
     body = http.get("/api/finetune/job/j/logs/stream").get_data(as_text=True)
     assert "event: done" not in body
     assert "data: part" not in body, "a partial line is kept for the reconnect"
+
+
+# What the job had printed when bpeek was asked, and the log file as it is
+# later: the same bytes, since the trainer's output goes through tee into both.
+EARLY = "Loading model...\nFetching 8 files:   0%|  | 0/8\rFetching 8 files: 100%|##| 8/8\n"
+LATER = EARLY + "Epoch 1/2 - Loss: 0.5\nEpoch 2/2 - Loss: 0.4\n"
+
+
+@pytest.fixture
+def bpeek_then_file(tmp_path, client, monkeypatch):
+    """A job whose log file can not be seen yet: bpeek answers with EARLY,
+    and the file appears, holding LATER, once the stream has waited once."""
+    from cellmap_flow.dashboard.routes.finetune import training
+
+    http, manager = client
+    job = _job(tmp_path, "", statuses=[JobStatus.RUNNING] * 3 + [JobStatus.COMPLETED])
+    job.log_file.unlink()
+    job.lsf_job = SimpleNamespace(job_id="123")
+    manager.jobs["j"] = job
+    monkeypatch.setattr(training.subprocess, "run", lambda argv, **kw: SimpleNamespace(
+        stdout=b"<< output from stdout >>\n" + EARLY.encode(), stderr=b""))
+    monkeypatch.setattr(training.time, "sleep", lambda s: job.log_file.write_bytes(LATER.encode()))
+    return http
+
+
+def _shown(body):
+    return [line[len("data: "):] for line in body.splitlines() if line.startswith("data: ")]
+
+
+def test_the_log_read_from_bpeek_then_from_its_file_shows_each_line_once(bpeek_then_file):
+    """It showed the start of the log twice, then every epoch at once."""
+    shown = _shown(bpeek_then_file.get("/api/finetune/job/j/logs/stream").get_data(as_text=True))
+    assert shown[:-1] == LATER.replace("\r", "\n").splitlines() and shown[-1] == "COMPLETED"
+
+
+def test_a_reconnect_after_bpeek_resumes_the_file_after_what_bpeek_showed(bpeek_then_file):
+    """bpeek's blocks had no id, so the browser reconnected from 0."""
+    resumed = bpeek_then_file.get("/api/finetune/job/j/logs/stream", headers={"Last-Event-ID": str(len(EARLY))})
+    assert _shown(resumed.get_data(as_text=True)) == ["Epoch 1/2 - Loss: 0.5", "Epoch 2/2 - Loss: 0.4", "COMPLETED"]

@@ -136,6 +136,30 @@ class JobStartError(RuntimeError):
     """A job was asked for and no usable one came of it."""
 
 
+def exists_now(path) -> bool:
+    """Whether ``path`` exists, when another host may have just created it.
+
+    A job writes its log and ready file on the node it runs on, and the
+    launcher looks for them from another one. Over NFS that host caches "no
+    such file" for a name it looked up, until the directory's attributes
+    time out (acdirmax, 60 s by default; /groups and /nrs are mounted
+    without actimeo). So a log the trainer had been writing for a minute
+    still did not exist for the dashboard, which meanwhile showed bpeek's
+    delayed output. Reading the directory makes the client revalidate it,
+    which drops those cached misses; it is only done when the name is not
+    found, so a file already seen costs one stat.
+    """
+    path = Path(path)
+    if path.exists():
+        return True
+    try:
+        with os.scandir(path.parent) as entries:
+            next(entries, None)
+    except OSError:
+        return False
+    return path.exists()
+
+
 def tail(path: Path, max_chars: int = 4000) -> Optional[str]:
     """Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.
 

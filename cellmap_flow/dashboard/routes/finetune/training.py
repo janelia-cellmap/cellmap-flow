@@ -40,6 +40,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
+from cellmap_flow.jobs.spec import exists_now
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +359,9 @@ def _requested_offset(request):
 # Statuses in which the job can still write to its log.
 _LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
 
+# The line bpeek puts before a job's output, which is not part of the log.
+_BPEEK_HEADER = re.compile(rb"\A<< output from stdout >>\r?\n")
+
 
 @finetune_bp.route("/api/finetune/job/<job_id>/logs/stream", methods=["GET"])
 def stream_job_logs(job_id):
@@ -392,23 +396,18 @@ def stream_job_logs(job_id):
     def sse_done(status):
         return f"event: done\ndata: {status}\n\n"
 
-    def read_bpeek_content(lsf_job_id):
+    def read_bpeek_output(lsf_job_id):
+        """The job's output so far, as bpeek shows it: bytes, without bpeek's
+        "<< output from stdout >>" header. None when bpeek cannot be run."""
         try:
-            result = subprocess.run(
-                ["bpeek", str(lsf_job_id)],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
+            result = subprocess.run(["bpeek", str(lsf_job_id)], capture_output=True, timeout=2)
         except Exception as e:
             logger.debug(f"bpeek call failed for job {lsf_job_id}: {e}")
             return None
-
-        output = result.stdout or ""
-        stderr = (result.stderr or "").strip()
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
         if stderr and "Not yet started" not in stderr:
             logger.debug(f"bpeek stderr for job {lsf_job_id}: {stderr}")
-        return output
+        return _BPEEK_HEADER.sub(b"", result.stdout or b"", count=1)
 
     def generate():
         heartbeat_interval_s = 1.0
@@ -425,21 +424,22 @@ def stream_job_logs(job_id):
         if finetune_job.lsf_job and hasattr(finetune_job.lsf_job, "job_id"):
             lsf_job_id = finetune_job.lsf_job.job_id
 
-        # Prefer the tee'd log file once it exists. LSF bpeek can buffer output
-        # and then release several batch lines at once, which makes the
-        # dashboard look stuck even while training is moving.
+        # How many bytes of the log the client has, whichever source they
+        # came from. The job's output is the log: the trainer's output goes
+        # through `tee` into both, byte for byte. So bpeek, read until the
+        # log file can be seen from here (jobs.spec.exists_now), and the file
+        # count the same bytes, and neither replays what the other sent: on
+        # switching sources, or when the browser reconnects with the id of
+        # a block bpeek sent. A block without an id, as bpeek's were, made a
+        # reconnect start the file from 0, and the log showed twice.
+        position = start_offset
         use_bpeek = lsf_job_id is not None
-        last_bpeek_line_count = 0
         last_bpeek_poll = 0.0
         bpeek_poll_interval_s = 1.0
-        streamed_bpeek = False
-        position = start_offset
 
         def read_file():
             """The new whole lines of the log as an SSE block, or None."""
             nonlocal position
-            if not finetune_job.log_file.exists():
-                return None
             size = finetune_job.log_file.stat().st_size
             if size < position:
                 position = 0  # the log was replaced
@@ -449,54 +449,34 @@ def stream_job_logs(job_id):
             position = new_position
             return sse_data_block(list(iter_visible_lines(text)), position)
 
-        file_seen = finetune_job.log_file.exists()
-        if file_seen:
-            try:
-                block = read_file()
-                if block:
-                    yield block
-            except Exception as e:
-                logger.error(f"Error reading log file: {e}")
-                file_seen = False
-        elif use_bpeek and start_offset == 0:
-            initial = read_bpeek_content(lsf_job_id)
-            if initial is None:
+        def read_bpeek():
+            """The new whole lines of the job's output as an SSE block, or None."""
+            nonlocal position, use_bpeek
+            output = read_bpeek_output(lsf_job_id)
+            if output is None:
                 use_bpeek = False
-            else:
-                last_bpeek_line_count = len(initial.splitlines())
-                streamed_bpeek = bool(initial)
-                block = sse_data_block(list(iter_visible_lines(initial)))
-                if block:
-                    yield block
+                return None
+            whole = output[: output.rfind(b"\n") + 1]
+            if len(whole) <= position:
+                return None
+            text = whole[position:].decode("utf-8", errors="replace")
+            position = len(whole)
+            return sse_data_block(list(iter_visible_lines(text)), position)
 
-        while finetune_job.status.value in _LIVE_STATUSES:
+        while True:
             try:
                 now = time.perf_counter()
-
-                if finetune_job.log_file.exists():
-                    if not file_seen:
-                        file_seen = True
-                        if streamed_bpeek:
-                            # What bpeek showed is already on screen.
-                            position = finetune_job.log_file.stat().st_size
+                block = None
+                if exists_now(finetune_job.log_file):
                     block = read_file()
-                    if block:
-                        yield block
-                elif use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
+                elif use_bpeek and now - last_bpeek_poll >= bpeek_poll_interval_s:
                     last_bpeek_poll = now
-                    content = read_bpeek_content(lsf_job_id)
-                    if content is None:
-                        use_bpeek = False
-                    else:
-                        current_lines = content.splitlines()
-                        delta_lines = current_lines if len(current_lines) < last_bpeek_line_count else current_lines[last_bpeek_line_count:]
-                        last_bpeek_line_count = len(current_lines)
-                        if delta_lines:
-                            streamed_bpeek = True
-                            block = sse_data_block(list(iter_visible_lines("\n".join(delta_lines))))
-                            if block:
-                                yield block
+                    block = read_bpeek()
+                if block:
+                    yield block
 
+                if finetune_job.status.value not in _LIVE_STATUSES:
+                    break
                 if now - last_heartbeat >= heartbeat_interval_s:
                     yield ": ping\n\n"
                     last_heartbeat = now
@@ -512,7 +492,7 @@ def stream_job_logs(job_id):
         # its newline goes out too.
         finished = finetune_job.status.value not in _LIVE_STATUSES
         try:
-            if finetune_job.log_file.exists():
+            if exists_now(finetune_job.log_file):
                 block = read_file()
                 if block:
                     yield block
