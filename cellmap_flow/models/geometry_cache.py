@@ -143,12 +143,9 @@ def store_geometry(model_config, config):
     # Channel names are optional but worth keeping: the finetune tab reads
     # them to tell an affinity model from a binary one, and a cache hit that
     # dropped them would silently downgrade that to "binary".
-    channels = channel_names_of(config)
+    channels = channel_names_of(config)  # a tuple of str, or None
     if channels:
-        try:
-            entry["channels"] = [str(c) for c in channels]
-        except TypeError:
-            pass
+        entry["channels"] = list(channels)
 
     with _lock:
         data = _read_cache()
