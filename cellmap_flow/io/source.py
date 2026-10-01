@@ -2,7 +2,7 @@
 
 ``open_array(path)`` gives an ``ArraySource`` for zarr v2 (local, http(s),
 anonymous s3), zarr v3 (local), N5 and neuroglancer precomputed
-(``precomputed://`` local directories and ``gs://``). Every format is seen
+(``precomputed://`` local directories or URLs, and ``gs://``). Every format is seen
 the same way: C order, as the metadata in ``io.metadata`` describes it
 (channels first, then z, y, x), with voxel 0 at index 0. ``read_padded``
 reads a ``Box`` of voxels from it, or from any view of it, padding what

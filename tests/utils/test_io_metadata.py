@@ -223,6 +223,12 @@ LAYOUTS = {
             "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}, "scans/pc") + "/s0",
         ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
     ),
+    # Neuroglancer writes a cloud source as precomputed://<url> (precomputed://gs://...).
+    "http-precomputed-url": (
+        lambda f: f.write_array("precomputed", np.zeros((2, 10, 20), np.uint8), {
+            "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}) + "/s0",
+        ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
+    ),
 }
 
 
@@ -231,7 +237,7 @@ def test_what_each_layout_reads_as(layout, tmp_path, ome_pyramid, raw_zarr, writ
     write, expected = LAYOUTS[layout]
     path = write(SimpleNamespace(tmp=tmp_path, ome_pyramid=ome_pyramid, raw_zarr=raw_zarr, write_array=write_array))
     if layout.startswith("http"):
-        path = request.getfixturevalue("http_root") + path[len(str(tmp_path)):]
+        path = path.replace(str(tmp_path), request.getfixturevalue("http_root"), 1)
     if expected is RuntimeError:
         with pytest.raises(RuntimeError):
             read_array_meta(path)
@@ -434,6 +440,22 @@ def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expecte
             paths.split_container(path)
     else:
         assert paths.split_container(path) == tuple(p.format(tmp=tmp_path) for p in expected)
+
+
+@pytest.mark.parametrize("path, expected", [
+    pytest.param("precomputed:///d/pc/s1", ({"driver": "file", "path": "/d/pc"}, 1), id="local"),
+    pytest.param("gs://b/pc", ("gs://b/pc", 0), id="gs"),
+    pytest.param("precomputed://gs://b/pc/s2", ("gs://b/pc", 2), id="neuroglancer-gs"),
+    pytest.param("precomputed://https://h/pc", ("https://h/pc", 0), id="neuroglancer-https"),
+    # Not a precomputed volume that isn't there: zarr has no gs:// reader.
+    pytest.param("gs://b/data.zarr/s0", ValueError, id="gs-zarr-is-refused"),
+])
+def test_where_tensorstore_reads_a_precomputed_path(path, expected):
+    if expected is ValueError:
+        with pytest.raises(ValueError, match="https://storage.googleapis.com/b/data.zarr/s0"):
+            paths.precomputed_kvstore(path)
+    else:
+        assert paths.precomputed_kvstore(path) == expected
 
 
 @pytest.mark.parametrize("path, fmt", [

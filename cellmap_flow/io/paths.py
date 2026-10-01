@@ -3,7 +3,9 @@
 A dataset path is a local directory or an http(s)/s3 URL, and may run on
 past its container into the group or array inside it
 (``/data/x.zarr/recon-1/em/s0``). ``gs://`` and ``precomputed://`` paths
-are neuroglancer precomputed volumes.
+are neuroglancer precomputed volumes: ``precomputed://`` is followed by a
+local directory or, as neuroglancer writes it, a URL
+(``precomputed://gs://bucket/volume``).
 
 Only the local filesystem is probed (for ``.zgroup``/``.zarray``/
 ``zarr.json``); nothing here opens a store.
@@ -148,21 +150,34 @@ def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
 
 
 def precomputed_kvstore(path: str) -> Tuple[object, int]:
-    """``(kvstore, scale_index)`` for a ``precomputed://`` or ``gs://`` path.
+    """``(kvstore, scale_index)`` for a precomputed path, as tensorstore opens it.
 
     A trailing ``/s<N>`` names the scale (``precomputed_scale``), else it is
-    scale 0; ``precomputed://`` is a local directory and ``gs://`` is handed
-    to tensorstore as a URL.
+    scale 0. ``precomputed://`` followed by a URL -- neuroglancer's way of
+    writing a cloud source, ``precomputed://gs://bucket/volume`` or
+    ``precomputed://https://host/volume`` -- is that URL, as is a bare
+    ``gs://`` path; tensorstore reads each through its own kvstore. Any other
+    ``precomputed://`` path is a local directory.
+
+    ``gs://`` is only ever precomputed here: zarr and N5 are read through
+    fsspec, which has no gs:// support installed, so a ``gs://`` path with a
+    ``.zarr``/``.n5`` suffix raises ValueError rather than being opened as a
+    precomputed volume that isn't there.
     """
-    if path.startswith("precomputed://"):
-        location = "/" + path[len("precomputed://"):].lstrip("/")
-    else:
-        location = path
+    explicit = path.startswith("precomputed://")
+    location = path[len("precomputed://"):] if explicit else path
+    if not explicit and suffix_format(location) is not None:
+        bucket_path = location[len("gs://"):]
+        raise ValueError(
+            f"{path}: zarr and N5 are not read from gs:// (a gs:// path is a neuroglancer "
+            f"precomputed volume); for a public bucket, give "
+            f"https://storage.googleapis.com/{bucket_path} instead"
+        )
     location, scale_index = precomputed_scale(location)
     scale_index = scale_index or 0
-    if path.startswith("precomputed://"):
-        return {"driver": "file", "path": os.path.normpath(location)}, scale_index
-    return location, scale_index
+    if "://" in location:
+        return location, scale_index
+    return {"driver": "file", "path": os.path.normpath("/" + location.lstrip("/"))}, scale_index
 
 
 def detect_format(path: str) -> Literal["zarr2", "zarr3", "n5", "precomputed"]:
