@@ -32,25 +32,21 @@ from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy
 from cellmap_flow.finetune.cli import model_config_from_args, parse_args
 from cellmap_flow.finetune.model_loading import load_trainable_model
 from cellmap_flow.finetune.session_loop import TrainingSession
+from cellmap_flow.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    # Here, not at import, so that importing this module leaves the importing
-    # process's logging alone. cellmap_flow.globals installs the shared log
-    # format when it is first imported, replacing whatever was set before,
-    # and the job imports it on its first raw read (ImageDataInterface) and
-    # when it serves (the inference server). Imported first, so that the
-    # format set here holds for the whole run.
-    import cellmap_flow.globals  # noqa: F401
     from cellmap_flow.plugins import load_plugins
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        force=True,
-    )
+    # Here, not at import, so that importing this module leaves the importing
+    # process's logging alone. The shared format (logging_setup), because
+    # cellmap_flow.globals installs it again when it is first imported, and
+    # the job still imports it on its first raw read (ImageDataInterface)
+    # and when it serves (the inference server): any other format would
+    # change halfway through the training log.
+    configure_logging()
     args = parse_args()
     # A plugin's model type, normalizers and postprocessors, which the model
     # entry and the chain it serves with may name.

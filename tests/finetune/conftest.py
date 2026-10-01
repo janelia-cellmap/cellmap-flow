@@ -231,7 +231,8 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
             record.code = finetune_cli.main()
         finally:
             package_logger.removeHandler(caplog.handler)
-        record.out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        record.out, record.err = captured.out, captured.err
         record.markers = [line for line in record.out.splitlines() if line.startswith(MARKERS)]
         return record
 

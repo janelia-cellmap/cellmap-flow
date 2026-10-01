@@ -9,6 +9,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -362,6 +363,15 @@ def test_tensorboard_curves_run_on_across_a_restart(run_cli, tmp_path):
     assert {"train/supervised", "train/lr", "time/step_s", "time/data_wait_s", "epoch/supervised",
             "epoch/best_supervised", "time/epoch_data_wait_s", "time/epoch_compute_s"} <= set(tags["scalars"])
     assert "patch/raw|target|prediction|mask" in tags["images"] and "config/text_summary" in tags["tensors"]
+
+
+def test_the_job_logs_in_the_shared_format(run_cli):
+    """It set a format of its own, which held only because it imported
+    cellmap_flow.globals first, for that side effect, so that no later import
+    could install the shared one halfway through the log."""
+    cli = run_cli()
+    line = r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d INFO cellmap_flow\.finetune\.finetune_cli: Loading model\.\.\.$"
+    assert re.search(line, cli.err, re.MULTILINE), cli.err[:500]
 
 
 def test_without_tensorboard_nothing_is_written(run_cli):
