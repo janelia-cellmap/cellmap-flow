@@ -15,12 +15,18 @@ the override), and split into words (quoted as one token, the shell looks
 for a program called "pixi run cellmap_flow serve"). ``cellmap_flow_server``,
 the program before 0.3.0, takes ``--model`` too, so a deployment that
 still sets that works.
+
+The launchers submit it as a shell line, which ``jobs.spec.shell_join``
+quotes: the entry's JSON is full of double quotes and braces, and
+``shlex.join`` would single-quote it, which LSF's own quoting splits apart
+(``jobs.spec.shell_quote`` says how).
 """
 
 import json
 import shlex
 
 from cellmap_flow.jobs import launch as jobs_launch
+from cellmap_flow.jobs.spec import shell_join
 
 
 def _serve_argv(entry: dict, data_path, resample=False) -> list:
@@ -50,5 +56,10 @@ def server_argv_for(model_type: str, params: dict, data_path: str) -> list:
 
 
 def server_command(model_config, data_path: str, resample: bool = False) -> str:
-    """``server_argv`` as one shell-quoted string, which is what start_hosts takes."""
-    return shlex.join(server_argv(model_config, data_path, resample))
+    """``server_argv`` as the shell line start_hosts takes."""
+    return shell_join(server_argv(model_config, data_path, resample))
+
+
+def server_command_for(model_type: str, params: dict, data_path: str) -> str:
+    """``server_argv_for`` as the shell line start_hosts takes."""
+    return shell_join(server_argv_for(model_type, params, data_path))

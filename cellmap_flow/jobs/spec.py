@@ -9,6 +9,7 @@ file's tail, and a filesystem-safe stem for its name.
 import logging
 import os
 import re
+import string
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -29,6 +30,41 @@ IP_PATTERN = ["CELLMAP_FLOW_SERVER_IP(", ")CELLMAP_FLOW_SERVER_IP"]
 #: server reported, ``{host}`` its host and ``{port}`` its port. Unset, the
 #: reported address is used as it is.
 SERVER_URL_TEMPLATE_ENV = "CELLMAP_FLOW_SERVER_URL_TEMPLATE"
+
+
+# A job's shell line survives two rounds of shell quoting: the `bash -c` it is
+# run by, and LSF's own handling, which re-wraps the whole `bash -c` argument
+# in single quotes. A single quote of ours therefore closes LSF's, and the
+# argument word-splits. That is not hypothetical: a finetune run's
+#
+#     --offsets '[[1, 0, 0], [0, 1, 0], [0, 0, 1]]'
+#
+# reached the trainer as the bare word "[[1,", and a server's
+#
+#     --model '{"type":"huggingface","repo":"cellmap/mito","name":"m"}'
+#
+# reached it as "type:huggingface" (bash brace-expanded what was left). Double
+# quotes nest inside LSF's single quotes safely, so quote with those.
+_SHELL_SAFE = frozenset(string.ascii_letters + string.digits + "@%+=:,./-_")
+
+
+def shell_quote(part) -> str:
+    """``part`` as one shell word, quoted without ever emitting a single quote."""
+    part = str(part)
+    if part and all(c in _SHELL_SAFE for c in part):
+        return part
+    escaped = (
+        part.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
+    return f'"{escaped}"'
+
+
+def shell_join(argv) -> str:
+    """``argv`` as a shell line for a job's ``shell`` (``shell_quote``'s words)."""
+    return " ".join(shell_quote(a) for a in argv)
 
 
 @dataclass(frozen=True)
@@ -67,6 +103,12 @@ class JobSpec:
             if not argv:
                 raise ValueError("A JobSpec's argv cannot be empty")
             object.__setattr__(self, "argv", argv)
+        # LSF wraps a shell line in single quotes (see shell_quote), so one of
+        # its own would split the command; refused here rather than mangled.
+        if self.shell is not None and "'" in self.shell:
+            raise ValueError(
+                f"A job's shell line cannot contain a single quote (build it with shell_join): {self.shell}"
+            )
 
 
 def default_log_dir() -> Path:

@@ -5,7 +5,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 import os
-import shlex
 from pathlib import Path
 import zarr
 import daisy
@@ -23,6 +22,7 @@ from cellmap_flow.models.registry import build_models
 from cellmap_flow.io.ome import singlescale_attrs
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.jobs.launch import submit_bsub_job
+from cellmap_flow.jobs.spec import shell_quote
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.process_chain import process_chain
@@ -710,7 +710,7 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None,
 
     def run_worker():
         submit_bsub_job(
-            f"cellmap_flow blockwise {shlex.quote(str(yaml_config))} --client",
+            f"cellmap_flow blockwise {shell_quote(yaml_config)} --client",
             queue=queue,
             charge_group=charge_group,
             job_name=str(name),

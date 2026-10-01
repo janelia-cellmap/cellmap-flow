@@ -20,14 +20,13 @@ import functools
 import json
 import logging
 import os
-import string
 import sys
 from pathlib import Path
 from typing import List, Optional
 
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import JobSpec
+from cellmap_flow.jobs.spec import JobSpec, shell_join, shell_quote
 # Module globals, looked up when a job is submitted, so tests can replace
 # them here.
 from cellmap_flow.jobs.lsf import available as is_bsub_available
@@ -265,33 +264,6 @@ def extract_data_path_from_corrections(corrections_path: Path) -> str:
     return metadata["dataset_path"]
 
 
-# Values in this command survive two rounds of shell quoting: the one bsub
-# starts on the exec host, and LSF's own handling, which re-wraps the whole
-# `bash -c` argument in single quotes. A single quote of ours therefore closes
-# LSF's and the argument word-splits. That is not hypothetical:
-#
-#     --offsets '[[1, 0, 0], [0, 1, 0], [0, 0, 1]]'
-#
-# reached the trainer as the bare word "[[1," with the rest scattered as stray
-# arguments, and json.loads died with "Expecting value: line 1 column 5".
-# Double quotes nest inside LSF's single quotes safely, so quote with those.
-_SHELL_SAFE = frozenset(string.ascii_letters + string.digits + "@%+=:,./-_")
-
-
-def _sh_quote(part: str) -> str:
-    """Shell-quote without ever emitting a single quote."""
-    part = str(part)
-    if part and all(c in _SHELL_SAFE for c in part):
-        return part
-    escaped = (
-        part.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("$", "\\$")
-        .replace("`", "\\`")
-    )
-    return f'"{escaped}"'
-
-
 def build_command(
     *,
     model_config,
@@ -397,7 +369,7 @@ def build_command(
     if charge_group:
         command_parts += ["--charge-group", str(charge_group)]
 
-    command = " ".join(_sh_quote(part) for part in command_parts)
+    command = shell_join(command_parts)
 
     # Put this interpreter's own lib directory first on the loader path.
     #
@@ -412,7 +384,7 @@ def build_command(
     # via cellpose on a GCC 13+ build.
     env_lib = os.path.join(sys.prefix, "lib")
     loader_path = (
-        f"LD_LIBRARY_PATH={_sh_quote(env_lib)}"
+        f"LD_LIBRARY_PATH={shell_quote(env_lib)}"
         '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
     )
     # stdbuf on *both* sides. The trainer already flushes every line it
@@ -426,7 +398,7 @@ def build_command(
     # its job DONE to LSF, and the monitor made it COMPLETED.
     return (
         f"set -o pipefail; {loader_path}stdbuf -oL {command} 2>&1 "
-        f"| stdbuf -oL tee {_sh_quote(log_file)}"
+        f"| stdbuf -oL tee {shell_quote(log_file)}"
     )
 
 

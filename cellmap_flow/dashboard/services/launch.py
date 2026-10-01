@@ -9,7 +9,7 @@
 """
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.serving.launch import server_argv_for
+from cellmap_flow.serving.launch import server_command_for
 from cellmap_flow.jobs.launch import start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
@@ -19,7 +19,6 @@ from cellmap_flow.viewer.layers import prediction_layer
 import threading
 from typing import List
 import re
-import shlex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -68,9 +67,7 @@ def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
         return
-    command = shlex.join(
-        server_argv_for("cellmap", {"folder_path": model_path, "name": name}, get_session().dataset_path)
-    )
+    command = server_command_for("cellmap", {"folder_path": model_path, "name": name}, get_session().dataset_path)
     logger.info(f"To be submitted command : {command}")
     job = _start(command, name)
     if job is not None:
@@ -80,9 +77,7 @@ def run_model(model_path, name, st_data):
 def run_hf_model(repo, name, st_data):
     """Run a Hugging Face model by repo ID."""
     name = _sanitize_job_name(name)
-    command = shlex.join(
-        server_argv_for("huggingface", {"repo": repo, "name": name}, get_session().dataset_path)
-    )
+    command = server_command_for("huggingface", {"repo": repo, "name": name}, get_session().dataset_path)
     logger.info(f"To be submitted HF command : {command}")
     job = _start(command, name)
     if job is not None:

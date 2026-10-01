@@ -11,6 +11,8 @@ with a space in it, goes through the one data_path + scale rule: the YAML's
 
 import json
 import shlex
+import subprocess
+import sys
 
 import pytest
 import zarr
@@ -23,7 +25,7 @@ from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.settings import LauncherSettings
-from cellmap_flow.jobs.spec import JobStartError
+from cellmap_flow.jobs.spec import JobSpec, JobStartError
 from cellmap_flow.serving import launch
 
 def _cli(*argv):
@@ -113,4 +115,25 @@ def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):
     assert argv == launch.server_argv(config, "/d/my raw.zarr") == shlex.split(jobs_launch.SERVER_COMMAND) + [
         "--model", '{"type":"huggingface","repo":"cellmap/mito","name":"m v1"}', "-d", "/d/my raw.zarr",
     ]
-    assert launch.server_command(config, "/d/my raw.zarr") == shlex.join(argv)
+    assert shlex.split(launch.server_command(config, "/d/my raw.zarr")) == argv
+
+
+@pytest.mark.parametrize("launcher", list(LAUNCHERS))
+def test_every_launcher_s_command_reaches_the_server_whole_through_lsf(launched, launcher, monkeypatch, tmp_path):
+    """LSF runs a job's `bash -c` line wrapped in single quotes of its own, so
+    a single-quoted --model JSON came out as "type:huggingface" (2026-10-01)."""
+    commands, data = launched
+    launch_it, entry, *rest = LAUNCHERS[launcher]
+    printer = tmp_path / "print_argv.py"
+    printer.write_text("import json, sys\nprint(json.dumps(sys.argv[1:]))\n")
+    monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", f"{sys.executable} {printer}")
+    launch_it(data)
+    (command,) = commands
+    as_lsf_runs_it = subprocess.run(["sh", "-c", f"bash -c '{command}'"], capture_output=True, text=True, check=True)
+    model, entry_json, d, path, *flags = json.loads(as_lsf_runs_it.stdout)
+    assert (model, json.loads(entry_json), d, path, flags) == ("--model", entry, "-d", data, rest[0] if rest else [])
+
+
+def test_a_job_s_shell_line_with_a_single_quote_is_refused():
+    with pytest.raises(ValueError, match="single quote"):
+        JobSpec(name="j", shell="cellmap_flow serve --model '{}'")

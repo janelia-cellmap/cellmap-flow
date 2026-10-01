@@ -102,7 +102,8 @@ def _split(argv):
 
 
 # What serving.launch.server_command builds for a script model.
-SERVER_COMMAND = """cellmap_flow serve --model '{"type":"script","script_path":"/models/m.py"}' -d /data/raw.zarr"""
+# Double-quoted: LSF wraps the `bash -c` line in single quotes (jobs.spec.shell_quote).
+SERVER_COMMAND = r"""cellmap_flow serve --model "{\"type\":\"script\",\"script_path\":\"/models/m.py\"}" -d /data/raw.zarr"""
 
 
 # --- (a) an inference server, through start_hosts ---------------------------
