@@ -29,6 +29,7 @@ from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_
 from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
+from cellmap_flow.finetune.session.volume import read_volume
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
@@ -126,26 +127,6 @@ def _seed_geometry(model_name, dataset_path):
         "claimed_input_voxel_size": claimed_input_voxel_size.tolist(),
         "claimed_output_voxel_size": claimed_output_voxel_size.tolist(),
     }, None
-
-
-def _register_volume(volume_id, zarr_path, corrections_dir, minio_url):
-    """Record the volume as annotation_volume records are kept, keeping the
-    chunk state the pull before the mirror just recorded."""
-    attrs = dict(zarr.open(zarr_path, mode="r").attrs)
-    session_store().register_volume(
-        volume_id,
-        keep_sync_state=True,
-        zarr_path=zarr_path,
-        model_name=attrs.get("model_name", ""),
-        output_size=attrs.get("chunk_size"),
-        input_size=attrs.get("input_size"),
-        input_voxel_size=attrs.get("input_voxel_size"),
-        output_voxel_size=attrs.get("output_voxel_size"),
-        dataset_path=attrs.get("dataset_path", ""),
-        dataset_offset_nm=attrs.get("dataset_offset_nm"),
-        corrections_dir=corrections_dir,
-        minio_url=minio_url,
-    )
 
 
 @finetune_bp.route("/api/viewer/create-instance-correction", methods=["POST"])
@@ -413,7 +394,13 @@ def create_instance_correction():
             mc_target_name=mc_target_name,
         )
         minio_url = rewrite_minio_url_for_proxy(minio_url)
-        _register_volume(volume_id, effective_zarr_path, output_dir, minio_url)
+        # The volume's own record, but with MinIO's output_dir as its
+        # corrections dir (a reattached snapshot lies a level below it), and
+        # with the chunk state the pull before the mirror just recorded.
+        record = read_volume(effective_zarr_path, require_geometry=False)
+        record.pop("chunk_sync_state")
+        record.update(corrections_dir=output_dir, minio_url=minio_url)
+        session_store().register_volume(volume_id, keep_sync_state=True, **record)
 
         layer_name = data.get("layer_name", f"{roi_name}_annotation")
         add_annotation_layer(session.viewer, layer_name, f"{minio_url}/annotation")
