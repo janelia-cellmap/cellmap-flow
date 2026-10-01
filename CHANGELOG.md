@@ -274,11 +274,13 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - **a distance model trained on scribbles asks only for the side of 0.5** (margin 0.5), with distillation of at least 0.5. The form's margin 0.3 sharpened its edges near strokes;
   - the finetune log is streamed once, and its file is seen from the dashboard as soon as the trainer writes it (it was a minute late over NFS, and the loss plot with it);
   - inference servers log each of their first 20 chunks' time, split into read, GPU wait, GPU, postprocess and encode;
+  - **Resume Existing Volume refuses a session painted on another dataset** (409, naming both), and the session list shows each session's dataset;
   - a new annotation layer's panel opens on its Draw tab, and the Finetune tab's help text is one line per field, with the rest in tooltips.
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `2813a4fe` resume a session only over the dataset it was painted on
 - `fa0e43ba` centre a third of painted patches on painted foreground
 - `de1bab7d` a distance model trained on scribbles asks only for the side of 0.5
 - `d662b1bd` draw a painted patch by chunk, then by voxel, and say what the patches centre on
