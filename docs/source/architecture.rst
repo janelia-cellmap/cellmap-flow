@@ -616,8 +616,8 @@ swaps in fresh ones for every test (``_fresh_process_state``).
   per key of ``SERVER_CONFIG_DEFAULTS`` (``queue``, ``charge_group``,
   ``walltime``, ...), loaded from ``~/.cellmap_flow/server_config.yaml`` the
   first time the process asks, and ``save()``. The CLIs and
-  ``/api/server-config`` write them; ``start_hosts``, the job manager's
-  submit and blockwise read them.
+  ``/api/server-config`` write them; ``start_hosts``, blockwise and the
+  dashboard's finetune submit read them.
 - ``process_chain.process_chain()``: the process's chain. ``input_norms``
   and ``postprocess`` are the live steps, which can hold state;
   ``input_norm_config`` and ``postprocess_config`` the steps as the dashboard
@@ -666,10 +666,9 @@ Each name it had forwards to its owner with a ``DeprecationWarning`` that
 names the replacement; ``pytest`` hides these while the package's own
 modules move off it (K16), and they are silent in the servers and the
 dashboard, whose code is not ``__main__``. Until the move is done, ``g`` is
-still used by the CLIs, the blockwise processor, the job manager's
-``submit.launch`` (walltime), ``dashboard/app.py`` (the viewer's address),
-and ``server.py``, ``inferencer.py`` and ``ImageDataInterface`` (the chain).
-New code uses the owners:
+still used by the CLIs, the blockwise processor, ``dashboard/app.py`` (the
+viewer's address), and ``server.py``, ``inferencer.py`` and
+``ImageDataInterface`` (the chain). New code uses the owners:
 
 - add no attribute to ``g``, and no ``g.x`` read in a module that doesn't
   already have one;
