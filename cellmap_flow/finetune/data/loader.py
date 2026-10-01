@@ -57,6 +57,7 @@ def dataset_from_manifest(
         dense_to_sparse_ratio=manifest.get("dense_to_sparse_ratio"),
         good_regions=load_good_regions_for(corrections_dir),
         rehearsal_fraction=manifest.get("rehearsal_fraction"),
+        anchor_fraction=manifest.get("anchor_fraction"),
         # Explicit argument wins: at training time the CLI flag is the
         # authority. The manifest value is the session's stored preference.
         augment=(

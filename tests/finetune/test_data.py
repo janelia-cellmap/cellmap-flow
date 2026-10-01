@@ -217,7 +217,7 @@ def test_the_trainer_reads_the_regions_marked_beside_its_corrections(annotation_
     (corrections.parent / "good_regions.json").write_text(regions_file)
     manifest = {"kind": "volume_zarr_v1", "volume_zarr_path": volume.path, "raw_dataset_path": volume.raw,
                 "input_size_voxels": [8] * 3, "output_size_voxels": [4] * 3,
-                "input_voxel_size_nm": [16.0] * 3, "output_voxel_size_nm": [16.0] * 3}
+                "input_voxel_size_nm": [16.0] * 3, "output_voxel_size_nm": [16.0] * 3, "anchor_fraction": 0.0}
     assert dataset_from_manifest(manifest, str(corrections) if beside else None).emits_anchor == anchored
 
 
@@ -236,6 +236,7 @@ def _paired_dataset(tmp_path, raw, output_size, voxel_sizes=((8.0,) * 3, (16.0,)
     """A volume planned over ``raw`` for a model of that output size, twice
     that input size, and these (input, output) voxel sizes, and a dataset over both."""
     input_voxel_size, output_voxel_size = voxel_sizes
+    kw.setdefault("anchor_fraction", 0.0)
     model = SimpleNamespace(input_shape=[2 * output_size] * 3, output_shape=[output_size] * 3,
                             input_voxel_size=input_voxel_size, output_voxel_size=output_voxel_size)
     path = create_volume_zarr(str(tmp_path / "vol.zarr"), plan_volume(raw, model), dataset_path=raw, model_name="m")
@@ -276,6 +277,24 @@ def test_a_fractional_voxel_size_reads_the_whole_raw_patch_around_its_labels(tmp
     # Raw voxel z holds z + 1; the volume is on the raw's grid, and the raw
     # patch has one voxel of context either side of the label patch.
     assert raw_patch[0, :, 0, 0].tolist() == list(range(z0, z0 + 4))
+
+
+@pytest.mark.parametrize("labels, crops, share", [
+    # Every patch sat beside a stroke, so nothing held the model anywhere else.
+    pytest.param(FAR_APART, (), 0.25, id="a painted session"),
+    pytest.param(_labels(32, crop=(1, np.s_[0:16, 0:16, 0:16]), fg=(2, np.s_[4:8, 4:8, 4:8])), [CROP16], 0.0,
+                 id="imported crops only"),
+])
+def test_a_painted_session_holds_random_points_of_the_volume_to_the_teacher(annotation_volume, labels, crops, share):
+    dataset = annotation_volume(labels, crops=crops).dataset(anchor_fraction=None, patches_per_epoch=400)
+    draws = [dataset[i] for i in range(400)] if dataset.emits_anchor else []
+    # An anchor patch: held to the teacher wherever it is not painted.
+    anchored = [d for d in draws if bool(((d[2] == 1) == (d[1] == 0)).all()) and float(d[2].sum()) > 0]
+    assert abs(len(anchored) / 400 - share) < 0.06, len(anchored)
+    if share:
+        rng = np.random.default_rng(0)
+        centres = {tuple(c) for c, anchor in (dataset.sampler.draw(rng) for _ in range(400)) if anchor}
+        assert len(centres) > 50, "drawn anywhere, not from a few fixed places"
 
 
 def test_a_good_region_patch_is_whole_voxels_paired_with_its_raw(tmp_path, janelia_raw):

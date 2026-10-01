@@ -69,6 +69,9 @@ class VirtualPatchDataset(Dataset):
             "shape_nm"}`` boxes to hold the model to its teacher in.
         rehearsal_fraction: the share of patches centred on a good region.
             ``None`` (default) means a quarter, when any region is usable.
+        anchor_fraction: the share of the other patches centred at a random
+            point of the volume and held to the teacher there. ``None``
+            (default) means a quarter for a painted session, none otherwise.
         augment: flips, XY rotations, brightness and noise (augment.py).
     """
 
@@ -87,6 +90,7 @@ class VirtualPatchDataset(Dataset):
         dense_to_sparse_ratio: Optional[float] = None,
         good_regions: Optional[list] = None,
         rehearsal_fraction: Optional[float] = None,
+        anchor_fraction: Optional[float] = None,
         augment: bool = False,
     ):
         self.volume_zarr_path = volume_zarr_path
@@ -103,6 +107,7 @@ class VirtualPatchDataset(Dataset):
             dense_to_sparse_ratio=dense_to_sparse_ratio,
             good_regions=good_regions,
             rehearsal_fraction=rehearsal_fraction,
+            anchor_fraction=anchor_fraction,
         )
         self.reader = PatchReader(
             volume_zarr_path,
@@ -155,11 +160,11 @@ class VirtualPatchDataset(Dataset):
     def emits_anchor(self) -> bool:
         """Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
 
-        Only once there is something to anchor on. Without good regions the
-        dataset keeps its original 2-tuple contract, so nothing about an
-        existing run changes.
+        Only once there is something to anchor on: good regions, or random
+        anchors (a painted session's default). Otherwise the dataset keeps
+        its original 2-tuple contract.
         """
-        return self.sampler.effective_rehearsal_fraction > 0.0
+        return self.sampler.effective_rehearsal_fraction > 0.0 or self.sampler.effective_anchor_fraction > 0.0
 
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()
@@ -188,7 +193,8 @@ class VirtualPatchDataset(Dataset):
         #
         #   annotated voxel          -> supervised loss, anchor 0
         #   unannotated in a good    -> anchor 1: hold the student to the
-        #     region                    teacher here
+        #     region or a random        teacher here
+        #     anchor patch
         #   unannotated anywhere     -> anchor 0, no loss at all: you did not
         #     else                      say it was right, only that you had
         #                               not got to it

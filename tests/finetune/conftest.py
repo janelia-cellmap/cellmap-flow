@@ -95,9 +95,11 @@ def annotation_volume(tmp_path, ome_zarr):
         root["annotation"].attrs["multiscales"] = zarr.open_group(raw_path).attrs["multiscales"]
 
         def dataset(**kw):
+            # Random anchors off unless a test asks: they are a share of the
+            # draws, which the tests of everything else do not count on.
             args = dict(volume_zarr_path=path, raw_dataset_path=raw_path, input_size_voxels=(8, 8, 8),
                         output_size_voxels=(4, 4, 4), input_voxel_size_nm=(16, 16, 16),
-                        output_voxel_size_nm=(16, 16, 16), seed=0)
+                        output_voxel_size_nm=(16, 16, 16), seed=0, anchor_fraction=0.0)
             return VirtualPatchDataset(**{**args, **kw})
 
         return SimpleNamespace(path=path, raw=raw_path, dataset=dataset)

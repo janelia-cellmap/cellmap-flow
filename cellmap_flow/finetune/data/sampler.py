@@ -54,6 +54,15 @@ POOL_DTYPE = np.int32
 # patch holds.
 FOREGROUND_SHARE = 1 / 3
 
+# The share of patches a painted session centres at a random point of the
+# volume, by default. Their unpainted voxels are held to the teacher (as a
+# good region's are), so the model is kept where it was everywhere nothing
+# was painted. Without them every patch sat beside a stroke: a run that
+# learned its strokes completely (supervised loss to 0.0002) shifted the
+# whole network, and areas that had sat just below 0.5 turned into false
+# positives across the volume, where no patch ever looked.
+ANCHOR_SHARE = 0.25
+
 
 class PatchSampler:
     """The patch centres of one annotation volume, and the draw among them.
@@ -87,6 +96,9 @@ class PatchSampler:
             or None when no region is usable.
         effective_rehearsal_fraction: the share of patches centred on one;
             0 without a usable region.
+        effective_anchor_fraction: the share of the other patches centred at a
+            random point of the volume, held to the teacher where unpainted;
+            ANCHOR_SHARE by default for a painted session, else 0.
         annotated_chunks: how many chunks hold a voxel of a pool, the
             default epoch length.
         corner_nm, shape_voxels: where annotation voxel 0's lower corner is
@@ -101,6 +113,7 @@ class PatchSampler:
         dense_to_sparse_ratio: Optional[float] = None,
         good_regions: Optional[list] = None,
         rehearsal_fraction: Optional[float] = None,
+        anchor_fraction: Optional[float] = None,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.output_voxel_size = np.array(output_voxel_size_nm, dtype=float)
@@ -114,6 +127,12 @@ class PatchSampler:
         )
         self._index_pools()
         self._index_rehearsal()
+        # Painted sessions only, by default: imported crops are dense, and a
+        # run on them is unchanged unless asked.
+        if anchor_fraction is not None:
+            self.effective_anchor_fraction = max(0.0, min(1.0, float(anchor_fraction)))
+        else:
+            self.effective_anchor_fraction = ANCHOR_SHARE if self.sparse.shape[0] else 0.0
 
     # ------------------------------------------------------------------
     # The draw
@@ -124,7 +143,8 @@ class PatchSampler:
 
         The centre is not whole voxels yet (see PatchReader.snap). What is
         drawn from ``rng``, in order: rehearsal or not (only when there is a
-        usable good region); then which region, or else which pool (only when
+        usable good region); then which region, or else a random anchor or
+        not (only when anchors are on), and where; or else which pool (only when
         both can be chosen); in the painted pool, whether to centre on
         foreground (only when some is painted), then which chunk, or which
         foreground voxel; which voxel, and the jitter.
@@ -137,6 +157,10 @@ class PatchSampler:
             # loss would spill outside the area that was actually judged.
             centres = self.rehearsal_centres
             return centres[rng.integers(0, centres.shape[0])].copy(), True
+
+        if self.effective_anchor_fraction > 0.0 and rng.random() < self.effective_anchor_fraction:
+            # Anywhere in the volume, whole voxels, no jitter needed.
+            return rng.integers(0, self.shape_voxels).astype(np.float64), True
 
         use_dense = self.effective_dense_ratio >= 1.0 or (
             self.effective_dense_ratio > 0.0 and rng.random() < self.effective_dense_ratio
@@ -354,11 +378,17 @@ class PatchSampler:
             self.effective_rehearsal_fraction = max(0.0, min(1.0, self.rehearsal_fraction))
 
     def log_rehearsal_status(self) -> None:
-        """Say what is happening with the good regions, if there are any.
+        """Say what is happening with the good regions, if there are any, and
+        with the random anchors.
 
         Rehearsal switched off -- a deliberate choice -- and good regions that
         all fell outside the volume are different states, and are told apart.
         """
+        if self.effective_anchor_fraction > 0:
+            logger.info(
+                f"VirtualPatchDataset: {self.effective_anchor_fraction:.0%} of the other patches "
+                "are anchors at random points of the volume, held to the teacher where unpainted"
+            )
         if self.effective_rehearsal_fraction > 0:
             logger.info(
                 f"VirtualPatchDataset: {len(self.rehearsal_centres)} good "

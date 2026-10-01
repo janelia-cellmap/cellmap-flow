@@ -236,16 +236,18 @@ class LoRAFinetuner:
             self.distillation_lambda = 1.0 if self._anchors_available else 0.0
             if self._anchors_available:
                 logger.warning(
-                    "Good regions are marked and no distillation weight was "
-                    "given. Using lambda=1.0 so the anchors take effect; pass "
+                    "The patches include anchors (good regions, or random points "
+                    "of the volume) and no distillation weight was given. Using "
+                    "lambda=1.0 so the anchors take effect; pass "
                     "an explicit lambda (0 to switch it off) to override."
                 )
         elif self._anchors_available and self.distillation_lambda <= 0:
             logger.warning(
-                "Good regions are marked but distillation is switched off "
-                "(lambda=0), so their rehearsal patches contribute nothing to "
-                "the loss. Set the rehearsal fraction to 0 to skip them, or "
-                "give distillation a weight to use them."
+                "The patches include anchors (good regions, or random points "
+                "of the volume) but distillation is switched off (lambda=0), "
+                "so they contribute nothing to the loss. Set the rehearsal and "
+                "anchor fractions to 0 to skip them, or give distillation a "
+                "weight to use them."
             )
 
         if self.label_smoothing > 0:
@@ -267,7 +269,7 @@ class LoRAFinetuner:
                     "a fallback in the OOM handler."
                 )
             if self._anchors_available:
-                scope_str = "good regions only"
+                scope_str = "anchor patches only: good regions and random points of the volume"
             elif self.distillation_all_voxels:
                 scope_str = "all voxels"
             else:
