@@ -88,12 +88,9 @@ Painted regions are also shown in the viewer as bounding boxes through the `anno
 
 Once the annotation volume is created or resumed and added to the viewer:
 
-1. **Select the annotation layer** by right-clicking on it in the layer list (it will be named something like `sparse_annotation_vol-XXXX`).
-2. Go to the **Draw** tab for that layer.
-3. **Bind keyboard shortcuts** to the drawing tools:
-   - Click the small box next to each tool name (e.g. `[A] Brush`, `[S] Flood Fill`, `[D] Seg Picker`).
-   - Press the letter you want to assign to that tool.
-   - Once bound, activate a tool by pressing **Shift + the assigned letter**.
+1. The new layer, named `annotation_vol-XXXX`, is **selected with its panel open**, ready to paint. (To come back to it later, right-click it in the layer list.)
+2. Go to its **Draw** tab. **A** is bound to the brush and **F** to flood fill; press **Shift + the letter** to use one.
+3. To bind another tool (e.g. `[D] Seg Picker`), click the small box next to its name and press the letter you want.
 
 
 

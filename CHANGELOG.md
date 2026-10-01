@@ -216,6 +216,8 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the started jobs are `cellmap_flow.jobs.launch.started_jobs()`;
     - everything else is the dashboard's `cellmap_flow.dashboard.state.get_session()`.
 
+    Nothing in the package uses `g` any more. Importing `cellmap_flow.server`, `cellmap_flow.inferencer` or `cellmap_flow.image_data_interface` no longer configures logging, so `--log-level` now holds for `cellmap_flow serve` and `cellmap_flow blockwise` instead of being reset to INFO; a script that imports these modules directly and wants log lines calls `cellmap_flow.logging_setup.configure_logging()`.
+
     A script's `g.input_norms = [...]` still sets the process's chain, and `Flow()` returns `g`. Assigning a name `g` never had raises `AttributeError` instead of storing it. Importing `cellmap_flow.globals` no longer reads `~/.cellmap_flow/server_config.yaml`; a process reads it the first time it needs a setting. Moved without aliases: `globals.SERVER_CONFIG_PATH/DEFAULTS/KEYS` and `load_/save_server_config_cache` → `cellmap_flow.jobs.settings`, `LogHandler` → `cellmap_flow.dashboard.routes.logging_routes`, `get_blockwise_tasks_dir()` → `get_session().tasks_dir()`.
   - **Finetune trainer:**
     - the trainer's two startup probes run in eval mode. On a full finetune of a model with BatchNorm, the built-in-sigmoid probe (×100 noise) inflated the running variance about 7,000×, and the export and the served model carried it. A LoRA adapter with dropout now trains on different dropout masks;
@@ -229,6 +231,14 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a served job waits for a half-written `restart_signal.json` to be complete instead of exiting, and ignores a restart it has already applied (one that arrived over HTTP and as a file);
     - the job replaces `metadata.json` whole, so the dashboard never reads it half-written;
     - the job logs in the shared format (`<time> LEVEL logger: message`).
+  - **Finetune tab, submit and restart:**
+    - the restart route answers 404 for an unknown job and 409 for a job that cannot take a restart, before writing the form's settings into the session manifest or syncing MinIO; it used to rewrite the manifest, sync, then answer 500;
+    - a restart applies submit's loss and target adjustments, with sparsity read again after the sync (a distance model trains bce with no smoothing; mse on sparse annotations becomes margin with distillation 0.5; a distance model on a now-sparse session trains binary + margin; `mask_unannotated` follows the session). A restart from the unchanged form used to send a distance model the margin loss, and every iteration ended in RESTART_FAILED;
+    - submit pulls changed annotation chunks from MinIO (diff-only) before deciding whether the session is sparse. Strokes painted in the last ~30 s before Submit used to train as dense labels;
+    - submit's affinity autodetect reads channel names as `channel_names_of` does: a single channel named by a string (`"x_aff"`), or a geometry's `channel_names`, is detected as affinities instead of training as binary;
+    - a finetuned model's serving YAML no longer says `scale: s0`; the server picks the level of a multiscale `data_path` by the model's input voxel size, as the trainer did. A model trained on s1 used to be served s0;
+    - the tab shows Restart only while the job can take one (waiting for a restart, or RUNNING with its server ready). Once the status is final it stops saying "Serving – Ready", and a reload no longer restores a finished job as the live one;
+    - the tab names a created or resumed volume's layer `annotation_<id>`, the server's name, instead of `sparse_annotation_<id>`, so importing crops into it no longer adds a second writable layer over the same data.
   - **Finetune sessions:**
     - `POST /api/finetune/load-crops` reads a `yaml` value as a file only when it is one line ending in `.yaml`/`.yml`, through read-yaml's checks, and its validation errors no longer echo the input, so it can no longer return the contents of any file the dashboard user can read. A missing file and a refused one get the same 400 from both routes (read-yaml answered a missing `.yaml` with a 404). `build_corrections --crops` goes through the same reader, so it needs a `.yaml`/`.yml` file of at most 1 MB;
     - resuming a session copies its `good_regions.json` and records whether it did in `loaded_from.json`. A resumed session used to show no good regions and train without rehearsal;
@@ -251,6 +261,14 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `1982372` importing the server, the Inferencer or ImageDataInterface no longer configures logging
+- `13499bf` the Finetune tab's volume layer is annotation_<id>, the name the server gives it
+- `0f4aea0` the Finetune tab offers Restart only to a job that can take one
+- `21bf12b` a finetuned model's serving YAML names no scale
+- `bd43155` read a model's channel names as channel_names_of does when detecting affinities
+- `e9f77d7` submit pulls the strokes from MinIO before deciding whether the session is sparse
+- `a522c4c` a restart applies submit's loss and target adjustments
+- `40ce2cd` refuse a restart the job cannot take before writing the manifest or syncing
 - `eaa2cef` reattaching a zarr that is not an annotation volume is refused
 - `2a67670` load-crops and instance layers come with the draw tools bound, selected
 - `3c4225b` a crop import goes into the session's latest volume
