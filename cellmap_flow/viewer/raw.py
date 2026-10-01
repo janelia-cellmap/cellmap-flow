@@ -233,6 +233,22 @@ def _precomputed_pyramid(dataset_path):
     return volume, levels
 
 
+def neuroglancer_source(dataset_path):
+    """The source neuroglancer reads ``dataset_path`` from itself, in the
+    browser (``wrap_raw=False``): its location with the format in front, as
+    neuroglancer names its data sources -- ``zarr://`` (v2 or v3, which
+    neuroglancer tells apart), ``n5://`` or ``precomputed://``, followed by a
+    local path or an ``http(s)://``, ``s3://`` or ``gs://`` URL.
+
+    A precomputed volume is named whole: neuroglancer opens a volume, never
+    one of its scales (``…/s2`` has no info of its own), and a bare ``gs://``
+    path is one.
+    """
+    if paths.is_precomputed(dataset_path):
+        return "precomputed://" + paths.precomputed_volume(dataset_path)[0]
+    return f"{paths.suffix_format(dataset_path) or 'zarr'}://{dataset_path}"
+
+
 def get_raw_layer(
     dataset_path, normalize=True, wrap_raw=True, segmentation=False, disable_meshes=False
 ):
@@ -247,30 +263,16 @@ def get_raw_layer(
     """
     dataset_path = paths.normalize_path(dataset_path)
     original_dataset_path = dataset_path
-    is_precomputed = dataset_path.startswith("precomputed://")
     pyramid = _pyramid(dataset_path)
     if pyramid is not None:
         dataset_path, scales = pyramid
 
-    if is_precomputed:
-        filetype = "precomputed"
-    elif ".zarr" in dataset_path or paths.is_zarr_container(dataset_path):
-        filetype = "zarr"
-    elif ".n5" in dataset_path:
-        filetype = "n5"
-    else:
-        filetype = "precomputed"
-
     if not wrap_raw:
-        if is_precomputed:
-            source = dataset_path
-        else:
-            source = f"{filetype}://{dataset_path}"
         # Unwrapped: neuroglancer fetches the file directly, so the input
         # normalizers never run on what it displays. Sample unnormalized
         # too, or the contrast range lands in the wrong space entirely.
         return _layer(
-            source,
+            neuroglancer_source(dataset_path),
             lambda: _raw_shader([original_dataset_path], normalize=False),
             segmentation,
             disable_meshes,

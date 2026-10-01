@@ -16,7 +16,8 @@ import pytest
 
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.process_chain import process_chain
-from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer
+from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer, neuroglancer_source
+from tests.utils.test_io_metadata import at_url  # noqa: F401  (a fixture: a directory served at URLs)
 
 
 def _source(layer):
@@ -192,3 +193,31 @@ def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     assert _source(layer)["subsources"] == {"meshes": False}
     np.testing.assert_array_equal(np.asarray(layer.source[0].url.data[...]), ids, "ids as stored, never normalized")
     assert "subsources" not in _source(get_raw_layer(path, segmentation=True))
+
+
+@pytest.mark.parametrize("scheme", ["http", "s3", "gs"])
+def test_a_pyramid_at_a_url_is_shown_as_it_is_from_disk(ome_pyramid, at_url, scheme):  # noqa: F811
+    path = ome_pyramid(((8, 0), (16, 4)))
+
+    def shown(path):
+        layer = get_raw_layer(path)
+        levels = layer.source[0].url.volume_layers
+        return _placement(layer), {key: np.asarray(level.data[...]).tolist() for key, level in levels.items()}
+
+    assert shown(at_url(scheme, path)) == shown(path)
+
+
+@pytest.mark.parametrize("path, source", [
+    pytest.param("s3://b/x.zarr/em", "zarr://s3://b/x.zarr/em", id="s3-zarr"),
+    pytest.param("gs://b/x.zarr/em/s0", "zarr://gs://b/x.zarr/em/s0", id="gs-zarr"),
+    pytest.param("https://h/x.n5/em", "n5://https://h/x.n5/em", id="https-n5"),
+    # A zarr at a URL with no .zarr in it was named a precomputed volume.
+    pytest.param("https://h/era5/t2m", "zarr://https://h/era5/t2m", id="https-zarr-without-a-suffix"),
+    pytest.param("gs://b/vol", "precomputed://gs://b/vol", id="bare-gs-is-precomputed"),
+    # The volume, never one of its scales: neuroglancer finds no info under .../s2.
+    pytest.param("precomputed://gs://b/vol/s2", "precomputed://gs://b/vol", id="precomputed-scale"),
+    pytest.param("precomputed://s3://b/vol", "precomputed://s3://b/vol", id="precomputed-s3"),
+])
+def test_the_source_neuroglancer_reads_unwrapped_raw_data_from(path, source):
+    """With wrap_raw=False the browser reads the data itself, at this URL."""
+    assert neuroglancer_source(path) == source
