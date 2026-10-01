@@ -141,7 +141,15 @@ def _open(spec_json: str, gcs_url: Optional[str]):
     return ts.KvStore.open(json.loads(spec_json)).result()
 
 
+# How a metadata read retries a failed request: about 5 s in all. tensorstore's
+# own default, 32 retries of up to 32 s each, kept a misspelt host's dataset
+# loading for a quarter of an hour.
+_METADATA_RETRIES = {"max_retries": 5, "initial_delay": "0.2s", "max_delay": "2s"}
+
+
 def _kvstore(spec: dict):
+    if spec["driver"] != "file":
+        spec = {**spec, "context": {f"{spec['driver']}_request_retries": _METADATA_RETRIES}}
     return _open(json.dumps(spec, sort_keys=True), os.environ.get("TENSORSTORE_GCS_HTTP_URL"))
 
 

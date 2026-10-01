@@ -9,11 +9,9 @@ not 10 nm.
 
 import logging
 import math
-import os
 from typing import List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
-import zarr
 
 from cellmap_flow.io import metadata, paths
 from cellmap_flow.io.metadata import ArrayMeta, snap_integral
@@ -122,14 +120,11 @@ def select_level(levels: Sequence[Level], voxel_size=None, mode: Mode = "floor")
 
 def _level_group(dataset_path: str) -> Optional[str]:
     """The multiscale group ``dataset_path`` picks a level from: the path
-    itself when it is a zarr v2 group, or the nearest zarr.json node when that
-    is a v3 group. None when it is an array."""
-    container = paths.find_v3_container(dataset_path)
-    if container is not None:
-        node_type = metadata.read_zarr_json(container).get("node_type")
-        return container if node_type == "group" else None
-    node = metadata.open_zarr(dataset_path, mode="r")
-    return dataset_path if isinstance(node, zarr.hierarchy.Group) else None
+    itself when it is a zarr v2 or N5 group, or the nearest zarr.json node
+    when that is a v3 group (``metadata.node_type``). None when it is an
+    array."""
+    node, kind = metadata.node_type(dataset_path)
+    return node if kind == "group" else None
 
 
 def select_dataset(dataset_path: str, voxel_size=None, mode: Mode = "floor") -> Tuple[str, Optional[str]]:
@@ -164,22 +159,10 @@ def _pyramid_of(dataset_path: str) -> str:
     above it when it is one level's array (a precomputed scale's volume)."""
     if paths.is_precomputed(dataset_path):
         return paths.precomputed_scale(dataset_path)[0]
-    container = paths.find_v3_container(dataset_path)
-    if container is not None:
-        # A per-scale path (.../s1) finds the array's own zarr.json first;
-        # the pyramid is described by the group above it.
-        if metadata.multiscales_from_group(container) is None:
-            parent = os.path.dirname(os.path.normpath(container))
-            if paths.is_v3_container(parent):
-                container = parent
-        if metadata.multiscales_from_group(container) is not None:
-            return container
-    if isinstance(metadata.open_zarr(dataset_path, mode="r"), zarr.core.Array):
-        # Same for a v2 per-scale path: use the multiscale group above it.
-        if "://" in dataset_path:
-            return dataset_path.rstrip("/").rsplit("/", 1)[0]
-        return os.path.dirname(os.path.normpath(dataset_path))
-    return dataset_path
+    node, kind = metadata.node_type(dataset_path)
+    # A per-scale path (.../s1) is an array; the pyramid is described by the
+    # group above it.
+    return paths.parent(node) if kind == "array" else node
 
 
 def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:

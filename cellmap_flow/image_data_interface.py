@@ -61,13 +61,13 @@ def legacy_meta(meta: ArrayMeta):
     tuple the old readers returned, from an ArrayMeta: spatial axes only,
     voxel size and offset as lists of nanometer floats.
 
-    The local zarr v2/N5 reader always took the *last* n axes (n spatial
-    ones) and called them z, y, x, whatever the metadata said; the others
-    take the spatial axes by name. Both are kept.
+    The zarr v2/N5 reader always took the *last* n axes (n spatial ones)
+    and called them z, y, x, whatever the metadata said, on disk; a URL now
+    reads the same. The others take the spatial axes by name. Both are kept.
     """
     spatial = meta.spatial()
     n = len(spatial.voxel_size)
-    if meta.format in ("zarr2", "n5") and not paths.is_remote(meta.path):
+    if meta.format in ("zarr2", "n5"):
         chunk_shape = tuple(meta.chunk_shape[-n:])
         shape = tuple(meta.shape[-n:])
         axes_names = ["z", "y", "x"][-n:]

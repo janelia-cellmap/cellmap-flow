@@ -26,6 +26,8 @@ from cellmap_flow.io.ome import multiscales_attrs, singlescale_attrs
 
 ZYX = ("z", "y", "x")
 DATA = np.zeros((4, 4, 4), np.uint8)
+# A gs:// path without .zarr or .n5 in it is a precomputed volume.
+V3 = "v3.zarr"
 
 
 def _v3_group(path):
@@ -113,7 +115,8 @@ def at_url(tmp_path, monkeypatch):
     over "http", "s3" or "gs" (see _Buckets), with AWS credentials in the
     environment that the public bucket refuses."""
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_Buckets, directory=str(tmp_path)))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # Polled often, so that shutting it down takes milliseconds, not half a second.
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
     endpoint = f"http://127.0.0.1:{server.server_address[1]}"
     for name, value in {"AWS_ENDPOINT_URL": endpoint, "AWS_REGION": "us-east-1", "AWS_ACCESS_KEY_ID": "AKIDEXAMPLE",
                         "AWS_SECRET_ACCESS_KEY": "secret", "TENSORSTORE_GCS_HTTP_URL": endpoint}.items():
@@ -126,12 +129,6 @@ def at_url(tmp_path, monkeypatch):
     yield url
     server.shutdown()
     server.server_close()
-
-
-@pytest.fixture
-def http_root(at_url, tmp_path):
-    """tmp_path served over http; its URL."""
-    return at_url("http", str(tmp_path))
 
 
 # layout: (how it is written, (format, axes, voxel size, corner, shape, chunk shape))
@@ -171,22 +168,23 @@ LAYOUTS = {
         lambda f: f.ome_pyramid((((0.008, 0.004, 0.004), (0.08, 0.04, 0.04)),), unit="micrometer") + "/s0",
         ("zarr2", ZYX, (8.0, 4.0, 4.0), (76.0, 38.0, 38.0), (16, 16, 16), (8, 8, 8)),
     ),
-    "http-ome-group": (
+    # A group's own path reads its first level, as a v3 group's does.
+    "ome-v2-group": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4))),
         ("zarr2", ZYX, (8.0,) * 3, (-4.0,) * 3, (16, 16, 16), (8, 8, 8)),
     ),
     # The multiscales are on em, the group above the level.
-    "http-ome-nested-level": (
+    "ome-v2-nested-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), name="n.zarr/em") + "/s1",
         ("zarr2", ZYX, (16.0,) * 3, (-4.0,) * 3, (8, 8, 8), (4, 4, 4)),
     ),
-    # A level its group's multiscales don't list is read from its own attributes
-    # on disk and over http alike, not as the group's first level (8 nm).
+    # A level its group's multiscales don't list is read from its own attributes,
+    # not as the group's first level (8 nm).
     "ome-v2-unlisted-level": (_unlisted_level, ("zarr2", ZYX, (16.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2))),
-    "http-ome-unlisted-level": (_unlisted_level, ("zarr2", ZYX, (16.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2))),
-    "http-funlib-attrs": (
-        lambda f: f.raw_zarr(DATA, offset=(4, 4, 4)),
-        ("zarr2", ZYX, (8.0,) * 3, (8.0,) * 3, (4, 4, 4), (4, 4, 4)),
+    # A zarr v2 group without multiscales reads its first array.
+    "funlib-group": (
+        lambda f: f.write_array("zarr2", DATA, {"resolution": [8] * 3, "offset": [0] * 3}, "g.zarr/raw/s0")[:-3],
+        ("zarr2", ZYX, (8.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2)),
     ),
     "funlib-attrs": (
         lambda f: f.raw_zarr(DATA, voxel_size=(8, 4, 4), offset=(80, 40, 40)),
@@ -216,16 +214,16 @@ LAYOUTS = {
         ("zarr2", ("c^",) + ZYX, (1.0, 8.0, 4.0, 4.0), (0.0,) * 4, (3, 4, 4, 4), (1, 2, 2, 2)),
     ),
     "v3-transform-attrs": (
-        lambda f: f.write_array("zarr3", DATA, {"transform": {"scale": [8] * 3, "translate": [100, 200, 300]}}),
+        lambda f: f.write_array("zarr3", DATA, {"transform": {"scale": [8] * 3, "translate": [100, 200, 300]}}, V3),
         ("zarr3", ZYX, (8.0,) * 3, (100.0, 200.0, 300.0), (4, 4, 4), (2, 2, 2)),
     ),
     # A v3 array's own offset is taken as written.
     "v3-funlib-attrs": (
-        lambda f: f.write_array("zarr3", DATA, {"resolution": [8] * 3, "offset": [4] * 3}),
+        lambda f: f.write_array("zarr3", DATA, {"resolution": [8] * 3, "offset": [4] * 3}, V3),
         ("zarr3", ZYX, (8.0,) * 3, (4.0,) * 3, (4, 4, 4), (2, 2, 2)),
     ),
     "v3-no-attrs": (
-        lambda f: f.write_array("zarr3", DATA),
+        lambda f: f.write_array("zarr3", DATA, name=V3),
         ("zarr3", ZYX, (1.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2)),
     ),
     "v3-group-without-multiscales": (
@@ -285,8 +283,7 @@ LAYOUTS = {
             "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}, "scans/pc") + "/s0",
         ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
     ),
-    # Neuroglancer writes a cloud source as precomputed://<url> (precomputed://gs://...).
-    "http-precomputed-url": (
+    "precomputed-scale": (
         lambda f: f.write_array("precomputed", np.zeros((2, 10, 20), np.uint8), {
             "resolution": [4, 8, 16], "chunk_size": [10, 5, 2], "voxel_offset": [3, 2, 1]}) + "/s0",
         ("precomputed", ("channel",) + ZYX, (1.0, 16.0, 8.0, 4.0), (0.0, 16.0, 16.0, 12.0), (1, 2, 10, 20), (1, 2, 5, 10)),
@@ -294,12 +291,15 @@ LAYOUTS = {
 }
 
 
+@pytest.mark.parametrize("scheme", ["disk", "http", "s3", "gs"])
 @pytest.mark.parametrize("layout", LAYOUTS)
-def test_what_each_layout_reads_as(layout, tmp_path, ome_pyramid, raw_zarr, write_array, request):
+def test_what_each_layout_reads_as(layout, scheme, tmp_path, ome_pyramid, raw_zarr, write_array, at_url):
+    """On disk, and at each kind of URL (neuroglancer's precomputed://<url> for
+    precomputed): a URL reads as the same files on disk do."""
     write, expected = LAYOUTS[layout]
     path = write(SimpleNamespace(tmp=tmp_path, ome_pyramid=ome_pyramid, raw_zarr=raw_zarr, write_array=write_array))
-    if layout.startswith("http"):
-        path = path.replace(str(tmp_path), request.getfixturevalue("http_root"), 1)
+    if scheme != "disk":
+        path = at_url(scheme, path)
     if expected is RuntimeError:
         with pytest.raises(RuntimeError):
             read_array_meta(path)
@@ -429,6 +429,24 @@ def test_a_precomputed_path_with_no_scale_to_choose_is_not_opened(volume, caplog
     assert caplog.records == []
 
 
+@pytest.mark.parametrize("scheme", ["http", "s3", "gs"])
+def test_a_pyramid_at_a_url_opens_as_it_does_on_disk(pyramid, at_url, scheme):
+    """Its levels, the level chosen for a voxel size, and what ImageDataInterface
+    reads there."""
+    from cellmap_flow.image_data_interface import ImageDataInterface
+
+    def opened(path):
+        idi = ImageDataInterface(path, voxel_size=(16, 16, 16), input_norms=[])
+        return (
+            [(level, meta.voxel_size, meta.translation, meta.shape) for level, meta in list_levels(path)],
+            select_dataset(path, (16, 16, 16))[1], closest_raw_scale(path + "/s0", (20,) * 3),
+            (idi.voxel_size, idi.offset, idi.roi, idi.shape, idi.chunk_shape, idi.axes_names),
+            idi.to_ndarray_ts(idi.roi).tolist(),
+        )
+
+    assert opened(at_url(scheme, pyramid)) == opened(pyramid)
+
+
 @pytest.mark.parametrize("zarr_format", [pytest.param(2, id="zarr2"), pytest.param(3, id="zarr3")])
 def test_a_missing_level_has_no_closest_scale(ome_pyramid, zarr_format):
     """Not the scale of the group above it, whose zarr.json a v3 lookup found."""
@@ -499,18 +517,21 @@ def test_written_corners_read_back(tmp_path):
     pytest.param("/d/x.zarr/em/s0", ("/d/x.zarr", "em/s0"), id="at-the-suffix"),
     pytest.param("/d/a.n5/b.zarr/raw", ("/d/a.n5/b.zarr", "raw"), id="at-the-innermost-suffix"),
     pytest.param("{tmp}/plain/em/s0", ("{tmp}/plain/em", "s0"), id="without-a-suffix-the-nearest-zgroup"),
-    pytest.param("https://host/no/suffix", RuntimeError, id="remote-without-a-suffix"),
+    # A URL is walked up the same way; it once had to name its .zarr.
+    pytest.param("{url}/plain/em/s0", ("{url}/plain/em", "s0"), id="a-url-without-a-suffix"),
+    pytest.param("{tmp}/nothing/here", RuntimeError, id="no-container"),
 ])
-def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expected):
+def test_splitting_a_path_into_its_container_and_dataset(tmp_path, at_url, path, expected):
     import zarr
 
     zarr.open_group(f"{tmp_path}/plain", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
-    path = path.format(tmp=tmp_path)
+    url = at_url("s3", str(tmp_path))
+    path = path.format(tmp=tmp_path, url=url)
     if expected is RuntimeError:
         with pytest.raises(RuntimeError):
             paths.split_container(path)
     else:
-        assert paths.split_container(path) == tuple(p.format(tmp=tmp_path) for p in expected)
+        assert paths.split_container(path) == tuple(p.format(tmp=tmp_path, url=url) for p in expected)
 
 
 @pytest.mark.parametrize("path, expected", [
@@ -518,15 +539,12 @@ def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expecte
     pytest.param("gs://b/pc", ("gs://b/pc", 0), id="gs"),
     pytest.param("precomputed://gs://b/pc/s2", ("gs://b/pc", 2), id="neuroglancer-gs"),
     pytest.param("precomputed://https://h/pc", ("https://h/pc", 0), id="neuroglancer-https"),
-    # Not a precomputed volume that isn't there: zarr has no gs:// reader.
-    pytest.param("gs://b/data.zarr/s0", ValueError, id="gs-zarr-is-refused"),
+    # A gs:// path naming a zarr or N5 container is that, not a precomputed volume.
+    pytest.param("gs://b/data.zarr/s0", None, id="gs-zarr"),
+    pytest.param("gs://b/data.n5/raw", None, id="gs-n5"),
 ])
 def test_where_a_precomputed_path_is_read(path, expected):
-    if expected is ValueError:
-        with pytest.raises(ValueError, match="https://storage.googleapis.com/b/data.zarr/s0"):
-            paths.precomputed_volume(path)
-    else:
-        assert paths.precomputed_volume(path) == expected
+    assert (paths.precomputed_volume(path) if paths.is_precomputed(path) else None) == expected
 
 
 # --- where the files are -------------------------------------------------------------
@@ -536,8 +554,7 @@ def _url_rows(schemes, formats):
     return [pytest.param(scheme, fmt, None, id=f"{scheme}-{fmt}") for scheme in schemes for fmt in formats]
 
 
-ARRAY_URLS = _url_rows(["http", "s3"], ["zarr2", "zarr3", "n5", "precomputed"]) + [
-    pytest.param("gs", "precomputed", None, id="gs-precomputed"),
+ARRAY_URLS = _url_rows(["http", "s3", "gs"], ["zarr2", "zarr3", "n5", "precomputed"]) + [
     # Credentials are used when a bucket needs them...
     pytest.param("s3", "zarr2", "private", id="s3-private-bucket"),
     # ...and a gs:// bucket is read at its public URL when GCS refuses them.
@@ -549,7 +566,7 @@ ARRAY_URLS = _url_rows(["http", "s3"], ["zarr2", "zarr3", "n5", "precomputed"]) 
 def test_an_array_at_a_url_reads_as_it_does_on_disk(write_array, at_url, scheme, fmt, bucket):
     from cellmap_flow.io.source import open_array
 
-    path = write_array(fmt, np.arange(4 * 6 * 8, dtype=np.uint16).reshape(4, 6, 8))
+    path = write_array(fmt, np.arange(4 * 6 * 8, dtype=np.uint16).reshape(4, 6, 8), name=V3 if fmt == "zarr3" else None)
     on_disk = open_array(path).read()
     assert np.array_equal(open_array(at_url(scheme, path, bucket)).read(), on_disk)
 

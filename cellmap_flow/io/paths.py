@@ -1,14 +1,15 @@
 """Dataset paths: where a container ends, how to join onto a path, what is there.
 
-A dataset path is a local directory or an http(s)/s3 URL, and may run on
-past its container into the group or array inside it
-(``/data/x.zarr/recon-1/em/s0``). ``gs://`` and ``precomputed://`` paths
-are neuroglancer precomputed volumes: ``precomputed://`` is followed by a
-local directory or, as neuroglancer writes it, a URL
-(``precomputed://gs://bucket/volume``).
+A dataset path is a local directory or an http(s), s3 or gs URL, and may run
+on past its container into the group or array inside it
+(``/data/x.zarr/recon-1/em/s0``). A ``precomputed://`` path, and a ``gs://``
+path with no ``.zarr``/``.n5`` in it, is a neuroglancer precomputed volume:
+``precomputed://`` is followed by a local directory or, as neuroglancer
+writes it, a URL (``precomputed://gs://bucket/volume``).
 
-Only the local filesystem is probed (for ``.zgroup``/``.zarray``/
-``zarr.json``); nothing here opens a store.
+What is at a path is probed through ``io.store`` (for ``.zgroup``,
+``.zarray``, ``zarr.json``) only where a path has no ``.zarr``/``.n5``
+suffix to split it at; the local v3 checks look at the filesystem.
 """
 
 import os
@@ -17,17 +18,20 @@ from typing import Optional, Tuple
 
 ZARR_JSON = "zarr.json"
 
-_REMOTE_PREFIXES = ("http://", "https://", "s3://")
-_PRECOMPUTED_PREFIXES = ("precomputed://", "gs://")
+_REMOTE_PREFIXES = ("http://", "https://", "s3://", "gs://")
 
 
 def is_remote(path: str) -> bool:
-    """An http(s) or s3 URL (read as zarr v2 through fsspec)."""
+    """An http(s), s3 or gs URL."""
     return path.startswith(_REMOTE_PREFIXES)
 
 
 def is_precomputed(path: str) -> bool:
-    return path.startswith(_PRECOMPUTED_PREFIXES)
+    """A ``precomputed://`` path, or a ``gs://`` one that names no zarr or
+    N5 container (neuroglancer's cloud volumes are precomputed)."""
+    if path.startswith("precomputed://"):
+        return True
+    return path.startswith("gs://") and suffix_format(path) is None
 
 
 def _location(path: str) -> str:
@@ -52,9 +56,24 @@ def normalize_path(path: str) -> str:
 
 def join(base: str, *parts: str) -> str:
     """Join path components; a URL is joined with "/" whatever the OS."""
-    if is_remote(base):
+    if "://" in base:
         return "/".join([base.rstrip("/"), *parts])
     return os.path.join(base, *parts)
+
+
+def parent(path: str) -> str:
+    """The directory above ``path``, a URL's as a local path's; a URL's root
+    (``s3://bucket``) is its own."""
+    if "://" in path:
+        path = path.rstrip("/")
+        return path if path == _url_root(path) else path.rsplit("/", 1)[0]
+    return os.path.dirname(os.path.normpath(path))
+
+
+def _url_root(path: str) -> str:
+    """``scheme://host`` or ``scheme://bucket`` of a URL: nothing is above it."""
+    scheme, _, rest = path.partition("://")
+    return f"{scheme}://{rest.split('/', 1)[0]}"
 
 
 def is_v3_container(path: str) -> bool:
@@ -99,49 +118,51 @@ def suffix_format(path: str) -> Optional[str]:
     return "zarr" if path.rfind(".zarr") > path.rfind(".n5") else "n5"
 
 
-def _split_container(path: str) -> Tuple[str, str, bool]:
-    """``split_container``, and whether the split was at a .zarr/.n5 suffix."""
+def split_container(path: str) -> Tuple[str, str]:
+    """``(container, path inside it)``.
+
+    The container ends at the last ``.zarr``/``.n5`` in ``path``; without
+    either suffix it is the nearest directory up from ``path`` with a
+    ``.zgroup`` (or, failing that, the first with a ``.zarray``), on disk or
+    at a URL alike.
+    ``/data/x.zarr/em/s0`` is ``("/data/x.zarr", "em/s0")``.
+    """
     extension = suffix_format(path)
     if extension is not None:
         splitter = "." + extension
         container, inner = path.rsplit(splitter, 1)
         if inner.startswith("/"):
             inner = inner[1:]
-        return container + splitter, inner, True
+        return container + splitter, inner
 
     # No .zarr or .n5 suffix: walk up to the directory that is the container.
-    if is_remote(path):
-        raise RuntimeError(f"Remote URL must contain .zarr or .n5 in the path: {path}")
     # Prefer .zgroup (the container root) over .zarray (a leaf array).
-    current = os.path.normpath(path)
+    if is_remote(path):
+        from cellmap_flow.io.store import exists
+
+        current, top = path.rstrip("/"), _url_root(path)
+        has = exists
+    else:
+        current, top = os.path.normpath(path), None
+
+        def has(directory, name):
+            return os.path.isdir(directory) and os.path.exists(os.path.join(directory, name))
+
     parts = []
     fallback = None  # the first .zarray-only directory, if no .zgroup is found
-    while current and current != os.path.dirname(current):
-        if os.path.isdir(current):
-            if os.path.exists(os.path.join(current, ".zgroup")):
-                return current, "/".join(reversed(parts)), False
-            if fallback is None and os.path.exists(os.path.join(current, ".zarray")):
-                fallback = (current, list(parts))
-        current, part = os.path.split(current)
-        parts.append(part)
+    while current and current != top and current != os.path.dirname(current):
+        if has(current, ".zgroup"):
+            return current, "/".join(reversed(parts))
+        if fallback is None and has(current, ".zarray"):
+            fallback = (current, list(parts))
+        parts.append(current.rsplit("/", 1)[1] if top else os.path.basename(current))
+        current = parent(current)
 
     if fallback is not None:
         container, parts = fallback
-        return container, "/".join(reversed(parts)), False
+        return container, "/".join(reversed(parts))
 
     raise RuntimeError(f"Could not find a zarr or n5 container in path: {path}")
-
-
-def split_container(path: str) -> Tuple[str, str]:
-    """``(container, path inside it)``.
-
-    The container ends at the last ``.zarr``/``.n5`` in ``path``; without
-    either suffix it is the nearest directory up from ``path`` with a
-    ``.zgroup`` (or, failing that, the first with a ``.zarray``).
-    ``/data/x.zarr/em/s0`` is ``("/data/x.zarr", "em/s0")``.
-    """
-    container, inner, _ = _split_container(path)
-    return container, inner
 
 
 def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
@@ -161,19 +182,7 @@ def precomputed_volume(path: str) -> Tuple[str, int]:
     cloud source, ``precomputed://gs://bucket/volume`` or
     ``precomputed://https://host/volume`` -- is that URL, as is a bare
     ``gs://`` path. Any other ``precomputed://`` path is a local directory.
-
-    ``gs://`` is only ever precomputed here: zarr and N5 metadata are read
-    through fsspec, which has no gs:// support installed, so a ``gs://`` path
-    with a ``.zarr``/``.n5`` suffix raises ValueError rather than being opened
-    as a precomputed volume that isn't there.
     """
-    if path.startswith("gs://") and suffix_format(path) is not None:
-        bucket_path = path[len("gs://"):]
-        raise ValueError(
-            f"{path}: zarr and N5 are not read from gs:// (a gs:// path is a neuroglancer "
-            f"precomputed volume); for a public bucket, give "
-            f"https://storage.googleapis.com/{bucket_path} instead"
-        )
     location, scale_index = precomputed_scale(_location(path))
     if "://" not in location:
         location = os.path.normpath("/" + location.lstrip("/"))

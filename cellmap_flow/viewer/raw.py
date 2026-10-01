@@ -26,7 +26,6 @@ import numpy as np
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.io import metadata, paths
-from cellmap_flow.io.metadata import open_zarr
 
 logger = logging.getLogger(__name__)
 
@@ -167,14 +166,24 @@ def _is_sn(name):
     return name.startswith("s") and name[1:].isdigit()
 
 
+def _is_array(path):
+    try:
+        return metadata.node_type(path)[1] == "array"
+    except Exception:
+        return False
+
+
 def _sn_arrays(group):
     """The sN children of ``group``, s0 first; none when it has none or is
-    not a directory or group."""
+    not a directory or group. A URL cannot be listed, so there s0, s1, ...
+    are looked for in turn, up to the first that is not an array."""
+    if paths.is_remote(group):
+        names = []
+        while _is_array(paths.join(group, f"s{len(names)}")):
+            names.append(f"s{len(names)}")
+        return names
     try:
-        if paths.is_remote(group):
-            names = list(open_zarr(group, mode="r").keys())
-        else:
-            names = os.listdir(group)
+        names = os.listdir(group)
     except Exception:
         return []
     return sorted((name for name in names if _is_sn(name)), key=lambda name: int(name[1:]))

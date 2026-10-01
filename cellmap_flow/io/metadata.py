@@ -1,7 +1,8 @@
 """Array metadata for every format cellmap-flow reads, as one ``ArrayMeta``.
 
-``read_array_meta(path)`` reads zarr v2 (local, and http(s)/s3 through
-fsspec), zarr v3 (local), N5 and neuroglancer precomputed. Every axis is
+``read_array_meta(path)`` reads zarr v2 and v3, N5 and neuroglancer
+precomputed, on disk or at an http(s), s3 or gs URL: every document is read
+through ``io.store``, so a URL reads as the same files on disk do. Every axis is
 kept, in the array's own (C) order; sizes and translations are nanometer
 floats, and the translation is the lower corner of voxel 0 -- an OME
 translation (voxel 0's centre) is converted exactly, with no rounding onto
@@ -29,7 +30,6 @@ per-format reader it replaced; tests/utils/test_io_metadata.py pins them.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import posixpath
@@ -37,7 +37,6 @@ from dataclasses import dataclass, replace
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
-import zarr
 from funlib.geometry import Coordinate
 
 from cellmap_flow.io import paths, store
@@ -273,12 +272,6 @@ class _Header:
     dtype: Optional[np.dtype]
     chunks: Tuple[int, ...]
     fill_value: object = None
-
-
-def _zarr_header(array) -> _Header:
-    # A zarr Group has none of these, so asking for a group's metadata raises
-    # AttributeError, as it always has.
-    return _Header(tuple(array.shape), array.dtype, tuple(array.chunks), array.fill_value)
 
 
 def _v3_dtype(data_type):
@@ -538,28 +531,102 @@ def _attr_meta(path, fmt, header, voxel_size, offset) -> ArrayMeta:
 # ---------------------------------------------------------------------------
 # Format readers
 # ---------------------------------------------------------------------------
+#
+# Every document is read through io.store, so a container on disk and the
+# same container at an http(s), s3 or gs URL are read by the same code.
+
+# The N5 attributes that describe the array itself, not its user attributes.
+_N5_RESERVED = ("n5", "dimensions", "blockSize", "dataType", "compression")
 
 
-def open_zarr(path, mode="r"):
-    """Open a zarr v2 node, handling HTTP/HTTPS and (anonymous) S3 URLs via fsspec."""
-    path = paths.normalize_path(path)
-    if paths.is_remote(path):
-        import fsspec
-
-        options = {"anon": True} if path.startswith("s3://") else {}
-        return zarr.open(fsspec.get_mapper(path, **options), mode=mode)
-    return zarr.open(path, mode=mode)
+def _v2_dtype(dtype) -> np.dtype:
+    """A ``.zarray`` dtype: a string, or a structured dtype's field lists."""
+    return np.dtype(dtype if isinstance(dtype, str) else [tuple(field) for field in dtype])
 
 
-def _group_attrs(root, rel: str) -> dict:
-    return dict((root[rel] if rel else root).attrs)
+def _v2_fill_value(fill_value, dtype: np.dtype):
+    """A ``.zarray`` fill value; a float's may be "NaN", "Infinity" or "-Infinity"."""
+    if isinstance(fill_value, str) and dtype.kind in "fc":
+        return float(fill_value)
+    return fill_value
 
 
-def _find_multiscales(root, rel: str):
+class _Container:
+    """The nodes of one zarr v2 or N5 container, on disk or at a URL: each
+    node's JSON documents, read through io.store. ``rel`` is a node's path
+    inside the container, "" for its root.
+
+    A node is an array or a group by its own documents, as zarr sees it: an
+    array has a ``.zarray`` (N5: ``attributes.json`` with ``dimensions``), a
+    group a ``.zgroup`` (N5: an ``attributes.json`` without). A directory
+    with neither, an implicit group, is no node.
+    """
+
+    def __init__(self, location: str, fmt: str):
+        self.location, self.fmt = location, fmt
+
+    def _document(self, rel: str, name: str) -> Optional[dict]:
+        return store.read_json(self.location, posixpath.join(rel, name) if rel else name)
+
+    def array(self, rel: str) -> Optional[Tuple[_Header, dict]]:
+        """``(header, attributes)`` of the array at ``rel``; None if there is none."""
+        if self.fmt == "n5":
+            attrs = self._document(rel, "attributes.json")
+            if attrs is None or "dimensions" not in attrs:
+                return None
+            # N5 lists its axes x, y, z: reversed, they are in C order. Its
+            # fill value is always 0.
+            header = _Header(
+                tuple(attrs["dimensions"][::-1]),
+                np.dtype(attrs["dataType"]),
+                tuple(attrs["blockSize"][::-1]),
+                0,
+            )
+            return header, {k: v for k, v in attrs.items() if k not in _N5_RESERVED}
+        meta = self._document(rel, ".zarray")
+        if meta is None:
+            return None
+        dtype = _v2_dtype(meta["dtype"])
+        header = _Header(
+            tuple(meta["shape"]), dtype, tuple(meta["chunks"]), _v2_fill_value(meta.get("fill_value"), dtype)
+        )
+        return header, self._document(rel, ".zattrs") or {}
+
+    def group_attrs(self, rel: str) -> dict:
+        """The attributes of the group at ``rel``; KeyError when it is no group."""
+        if self.fmt == "n5":
+            attrs = self._document(rel, "attributes.json")
+            if attrs is None or "dimensions" in attrs:
+                raise KeyError(rel)
+            return {k: v for k, v in attrs.items() if k not in _N5_RESERVED}
+        if self._document(rel, ".zgroup") is None:
+            raise KeyError(rel)
+        return self._document(rel, ".zattrs") or {}
+
+
+def _open_container(path: str) -> Tuple[_Container, str]:
+    """``(container, path inside it)`` of a zarr v2 or N5 path
+    (``paths.split_container``). An ``.n5`` container is N5 unless it holds
+    zarr's own documents."""
+    location, rel = paths.split_container(path)
+    is_n5 = location.endswith(".n5") and not paths.is_zarr_container(location)
+    return _Container(location, "n5" if is_n5 else "zarr2"), rel.strip("/")
+
+
+def _child_names(directory: str) -> List[str]:
+    """Where to look for a group's first array: its subdirectories, sorted, on
+    disk. A URL cannot be listed, so there only "s0", the first level of
+    every pyramid cellmap-flow writes, is looked for."""
+    if "://" in directory:
+        return ["s0"]
+    return sorted(name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name)))
+
+
+def _find_multiscales(tree: _Container, rel: str):
     """``(multiscales, group path)`` of the nearest group at or above ``rel``
     with multiscales; ``(root's value, "")`` when there is none."""
     while True:
-        multiscales = _group_attrs(root, rel).get("multiscales", None)
+        multiscales = tree.group_attrs(rel).get("multiscales", None)
         if multiscales or rel == "":
             return multiscales, rel
         rel = posixpath.dirname(rel)
@@ -569,30 +636,31 @@ def _relative(rel: str, group_rel: str) -> str:
     return rel if not group_rel else posixpath.relpath(rel, group_rel)
 
 
-def _v2_array_meta(array, root, rel, path, fmt) -> ArrayMeta:
-    """Metadata of a zarr v2 or N5 ``array`` at ``rel`` inside ``root``.
+def _v2_array_meta(tree: _Container, rel: str, path: str, array) -> ArrayMeta:
+    """Metadata of the zarr v2 or N5 array at ``rel`` in ``tree``;
+    ``array`` is its ``(header, attributes)``.
 
     OME multiscales on the nearest group above it that has them, when they
     list the array; otherwise the N5/funlib attributes of the array and its
-    parent. ``root`` is None when the array's container is not known.
+    parent.
     """
-    header = _zarr_header(array)
-    is_n5 = fmt == "n5"
+    header, attrs = array
+    is_n5 = tree.fmt == "n5"
     # N5 attributes are x, y, z; a zarr array's own ``order`` is its chunk
     # memory layout, not an axis order, and is not consulted (only an
     # explicit ``order`` attribute is).
-    order = "F" if is_n5 else array.attrs.get("order", "C")
+    order = "F" if is_n5 else attrs.get("order", "C")
     try:
-        parent_rel = None if (root is None or rel == "") else posixpath.dirname(rel)
-        items = [dict(array.attrs)]
+        parent_rel = None if rel == "" else posixpath.dirname(rel)
+        items = [attrs]
         if parent_rel is not None:
             try:
-                items.append(_group_attrs(root, parent_rel))
-            except (KeyError, ValueError, RuntimeError):
+                items.append(tree.group_attrs(parent_rel))
+            except KeyError:
                 # An implicit parent (no .zgroup) has no attributes to offer.
                 parent_rel = None
         multiscales, ms_rel = (
-            (None, None) if parent_rel is None else _find_multiscales(root, parent_rel)
+            (None, None) if parent_rel is None else _find_multiscales(tree, parent_rel)
         )
         level_path = None if multiscales is None else _relative(rel, ms_rel)
         units = None
@@ -602,7 +670,7 @@ def _v2_array_meta(array, root, rel, path, fmt) -> ArrayMeta:
                 # Exact: an OME corner is usually not a multiple of the voxel
                 # size (-4 nm at 8 nm for Janelia data), and rounding it onto
                 # the grid would undo the centre-to-corner conversion.
-                return _snapped(_ome(multiscales[0], entry, header, path, fmt))
+                return _snapped(_ome(multiscales[0], entry, header, path, tree.fmt))
             # Not listed: its own attributes are read in the multiscales' units.
             units = spatial_axes(multiscales[0].get("axes", []))[2]
         voxel_size, offset, units = _n5(
@@ -616,101 +684,52 @@ def _v2_array_meta(array, root, rel, path, fmt) -> ArrayMeta:
         voxel_size, offset = regularize_offset(to_nm(voxel_size, units), to_nm(offset, units))
     except Exception as e:
         logger.error(
-            "failed to read voxel size and offset for %s (%s), will use default values"
-            % (getattr(array, "path", array), e)
+            "failed to read voxel size and offset for %s (%s), will use default values" % (path, e)
         )
         voxel_size, offset = (1,) * 3, (0,) * 3
-    return _attr_meta(path, fmt, header, voxel_size, offset)
+    return _attr_meta(path, tree.fmt, header, voxel_size, offset)
 
 
-def _ome_group_level(group, leaf, array, path) -> Optional[ArrayMeta]:
-    """``array``'s metadata from the multiscales of ``group``, which list it
-    as ``leaf``; None when ``group`` has no multiscales or they don't list
-    it. Another level's entry never stands in: an unlisted level is read
-    from its own attributes, as it is on disk (``_v2_array_meta``)."""
-    multiscales = group.attrs.get("multiscales", None)
-    if not multiscales:
-        return None
-    entry = match_dataset(multiscales[0], leaf)
-    if entry is None:
-        return None
-    return _ome(multiscales[0], entry, _zarr_header(array), path, "zarr2")
-
-
-def _read_remote(path: str) -> ArrayMeta:
-    """zarr v2 over http(s) or anonymous s3."""
-    node = open_zarr(path, mode="r")
-    rel_extra = None
-    # A URL at a zarr group (e.g. a multiscale container): its first level.
-    if isinstance(node, zarr.hierarchy.Group):
-        multiscales = node.attrs.get("multiscales", None)
-        if multiscales:
-            leaf = multiscales[0]["datasets"][0]["path"]
-            return _ome_group_level(node, leaf.strip("/"), node[leaf], path)
-        for key in sorted(node.keys()):
-            if isinstance(node[key], zarr.core.Array):
-                node, rel_extra = node[key], key
-                break
-
-    root, rel = None, ""
-    if paths.suffix_format(path) is not None:
-        container, sub_path = paths.split_container(path)
-        # A sub-array (e.g. .zarr/raw/s0) has its multiscales on the group
-        # right above it (raw), or on the root naming "raw/s0" directly.
-        if sub_path:
-            sub_path = sub_path.strip("/")
-            parent_path, _, leaf = sub_path.rpartition("/")
-            candidates = [(parent_path, leaf)]
-            if parent_path:
-                candidates.append(("", sub_path))
-            for group_path, entry_path in candidates:
-                try:
-                    group = open_zarr(
-                        paths.join(container, group_path) if group_path else container,
-                        mode="r",
-                    )
-                    meta = _ome_group_level(group, entry_path, node, path)
-                except Exception as e:
-                    logger.warning(
-                        "failed to read parent multiscale metadata for %s: %s" % (path, e)
-                    )
-                    continue
-                if meta is not None:
-                    return meta
-        try:
-            root = open_zarr(container, mode="r")
-            rel = "/".join(p for p in (sub_path.strip("/"), rel_extra) if p)
-        except Exception:
-            root = None
-
-    # No multiscales: the array's own attributes.
-    return _v2_array_meta(node, root, rel, path, "zarr2")
-
-
-def _read_local_v2(path: str) -> ArrayMeta:
-    """Local zarr v2 and N5."""
-    filename, ds_name = paths.split_container(path)
-    if filename.endswith(".zarr") or paths.is_zarr_container(filename):
-        fmt, store = "zarr2", filename
-    elif filename.endswith(".n5"):
-        from zarr.n5 import N5FSStore
-
-        fmt, store = "n5", N5FSStore(filename)
-    else:
-        logger.error("don't know data format of %s in %s", ds_name, filename)
-        raise RuntimeError("Unknown file format for %s" % filename)
+def _group_level(tree: _Container, rel: str, path: str):
+    """``(path in tree, (header, attributes))`` of the array a path at a group
+    reads: its multiscales' first level, else its first array child
+    (``_child_names``)."""
     try:
-        root = zarr.open(store, mode="r")
-        array = root[ds_name] if ds_name else root
-    except Exception as e:
-        logger.error("failed to open %s/%s" % (filename, ds_name))
-        raise e
-    return _v2_array_meta(array, root, getattr(array, "path", ds_name), path, fmt)
+        multiscales = tree.group_attrs(rel).get("multiscales")
+    except KeyError:
+        raise FileNotFoundError(f"There is no zarr array or group at {path}") from None
+    if multiscales:
+        names = [multiscales[0]["datasets"][0]["path"].strip("/")]
+    else:
+        names = _child_names(paths.join(tree.location, rel) if rel else tree.location)
+    for name in names:
+        child = posixpath.join(rel, name) if rel else name
+        array = tree.array(child)
+        if array is not None:
+            return child, array
+    raise RuntimeError(f"No array found under the group {path}")
+
+
+def _read_v2(path: str) -> ArrayMeta:
+    """Zarr v2 and N5: an array, or a group (its first level)."""
+    tree, rel = _open_container(path)
+    array = tree.array(rel)
+    if array is None:
+        rel, array = _group_level(tree, rel, path)
+    return _v2_array_meta(tree, rel, path, array)
+
+
+def _zarr_json(path: str) -> Optional[dict]:
+    return store.read_json(path, paths.ZARR_JSON)
 
 
 def read_zarr_json(path: str) -> dict:
-    with open(os.path.join(path, paths.ZARR_JSON)) as f:
-        return json.load(f)
+    """The ``zarr.json`` of the v3 node at ``path``; FileNotFoundError when
+    there is none."""
+    meta = _zarr_json(path)
+    if meta is None:
+        raise FileNotFoundError(f"No {paths.ZARR_JSON} at {path}")
+    return meta
 
 
 def attrs_from_meta(meta: dict) -> dict:
@@ -724,62 +743,91 @@ def attrs_from_meta(meta: dict) -> dict:
     return merged
 
 
-def multiscales_from_group(group_path: str) -> Optional[dict]:
-    """The first multiscales item of a v3 group, or None (also for an array)."""
-    meta = read_zarr_json(group_path)
-    if meta.get("node_type") != "group":
+def _multiscale_of(meta: Optional[dict]) -> Optional[dict]:
+    """The first multiscales item of a v3 group's ``zarr.json``, or None
+    (also for an array, or no node)."""
+    if meta is None or meta.get("node_type") != "group":
         return None
     multiscales = attrs_from_meta(meta).get("multiscales")
-    if not multiscales:
-        return None
-    return multiscales[0]
+    return multiscales[0] if multiscales else None
+
+
+def multiscales_from_group(group_path: str) -> Optional[dict]:
+    """The first multiscales item of a v3 group, or None (also for an array)."""
+    return _multiscale_of(read_zarr_json(group_path))
+
+
+def _v3_node(path: str) -> Optional[str]:
+    """The v3 node that answers for ``path``, or None.
+
+    On disk it is the nearest directory at or above ``path`` with a
+    ``zarr.json`` (``paths.find_v3_container``). At a URL it is ``path``
+    itself, when it has one: there is no directory there to see is missing,
+    and a missing level must not be answered by the group above it.
+    """
+    if paths.is_remote(path):
+        return path.rstrip("/") if _zarr_json(path) is not None else None
+    return paths.find_v3_container(path)
 
 
 def _v3_level(group_path: str, multiscale: dict, entry: dict) -> ArrayMeta:
-    array_path = os.path.join(group_path, entry["path"])
+    array_path = paths.join(group_path, entry["path"])
     header = _v3_header(read_zarr_json(array_path))
     return _ome(multiscale, entry, header, array_path, "zarr3")
 
 
-def _read_v3(path: str) -> ArrayMeta:
-    """Local zarr v3: an array a multiscale group lists, an array with its own
-    attributes, or a group (its matching, else first, level)."""
-    container = paths.find_v3_container(path)
-    if container is None:
-        raise RuntimeError(f"Could not find a Zarr v3 container in path: {path}")
+def _read_v3(path: str, container: str) -> ArrayMeta:
+    """Zarr v3: an array a multiscale group lists, an array with its own
+    attributes, or a group (its matching, else first, level). ``container``
+    is the node that answers for ``path`` (``_v3_node``)."""
     meta = read_zarr_json(container)
 
     if meta.get("node_type") == "array":
         # ``path`` may point directly at one scale's array inside a multiscale
-        # group (each v3 array has its own zarr.json, so find_v3_container
-        # stops there). The parent's multiscales, when they name this array,
+        # group (each v3 array has its own zarr.json, so the node found is
+        # the array). The parent's multiscales, when they name this array,
         # give its voxel size and offset.
-        parent = os.path.dirname(os.path.normpath(container))
-        if paths.is_v3_container(parent):
-            if read_zarr_json(parent).get("node_type") == "group":
-                multiscale = multiscales_from_group(parent)
-                if multiscale is not None:
-                    rel = os.path.basename(os.path.normpath(container))
-                    entry = match_dataset(multiscale, rel)
-                    if entry is not None:
-                        return _v3_level(parent, multiscale, entry)
+        parent = paths.parent(container)
+        multiscale = _multiscale_of(_zarr_json(parent)) if parent != container else None
+        if multiscale is not None:
+            entry = match_dataset(multiscale, container.rstrip("/").rsplit("/", 1)[-1])
+            if entry is not None:
+                return _v3_level(parent, multiscale, entry)
         header = _v3_header(meta)
         voxel_size, offset = legacy_attrs(attrs_from_meta(meta), len(header.shape))
         return _attr_meta(path, "zarr3", header, voxel_size, offset)
 
-    multiscale = multiscales_from_group(container)
+    multiscale = _multiscale_of(meta)
     if multiscale is not None:
-        rel = os.path.relpath(path, container)
+        rel = os.path.relpath(path, container) if "://" not in path else ""
         entry = match_dataset(multiscale, rel) or multiscale["datasets"][0]
         return _v3_level(container, multiscale, entry)
 
     # A group with no multiscales: its first array child.
-    for name in sorted(os.listdir(container)):
-        child = os.path.join(container, name)
-        if os.path.isdir(child) and paths.is_v3_container(child):
-            if read_zarr_json(child).get("node_type") == "array":
-                return _read_v3(child)
+    for name in _child_names(container):
+        child = paths.join(container, name)
+        if (_zarr_json(child) or {}).get("node_type") == "array":
+            return _read_v3(child, child)
     raise RuntimeError(f"No array found under Zarr v3 group: {container}")
+
+
+def node_type(path: str) -> Tuple[str, str]:
+    """``(node, "group" or "array")``: the zarr v2, v3 or N5 node that
+    answers for ``path`` and what it is. The node is ``path`` itself, except
+    on disk under a v3 node (``_v3_node``). FileNotFoundError when there is
+    none."""
+    path = paths.normalize_path(path)
+    container = _v3_node(path)
+    if container is not None:
+        return container, read_zarr_json(container).get("node_type")
+    tree, rel = _open_container(path)
+    if tree.array(rel) is not None:
+        return path, "array"
+    try:
+        tree.group_attrs(rel)
+    except KeyError:
+        raise FileNotFoundError(f"There is no zarr array or group at {path}") from None
+    return path, "group"
 
 
 def _precomputed_info(path: str) -> dict:
@@ -829,42 +877,21 @@ def _precomputed(path: str, info: Optional[dict] = None) -> ArrayMeta:
 
 
 def read_array_meta(path: str) -> ArrayMeta:
-    """Metadata of the array at ``path`` (see the module docstring).
-
-    A path at an OME multiscale group reads its first level, except for a
-    local zarr v2 group, which is an error.
-    """
+    """Metadata of the array at ``path`` (see the module docstring). A path at
+    a group reads its first level: the first its multiscales list, else its
+    first array (``_child_names``)."""
     path = paths.normalize_path(path)
     if paths.is_precomputed(path):
         return _precomputed(path)
-    if paths.is_remote(path):
-        return _read_remote(path)
-    if paths.find_v3_container(path) is not None:
-        return _read_v3(path)
-    return _read_local_v2(path)
+    container = _v3_node(path)
+    if container is not None:
+        return _read_v3(path, container)
+    return _read_v2(path)
 
 
 # ---------------------------------------------------------------------------
 # Levels of a multiscale group (or of a precomputed volume)
 # ---------------------------------------------------------------------------
-
-
-def levels_from_zarr_group(group, group_path: str = "") -> List[Tuple[str, ArrayMeta]]:
-    """``list_levels`` of an opened zarr v2 group."""
-    multiscale = group.attrs["multiscales"][0]
-    return [
-        (
-            entry["path"],
-            _ome(
-                multiscale,
-                entry,
-                _zarr_header(group[entry["path"]]),
-                paths.join(group_path, entry["path"]) if group_path else entry["path"],
-                "zarr2",
-            ),
-        )
-        for entry in multiscale["datasets"]
-    ]
 
 
 def _precomputed_levels(path: str) -> List[Tuple[str, ArrayMeta]]:
@@ -894,12 +921,21 @@ def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
     group_path = paths.normalize_path(group_path)
     if paths.is_precomputed(group_path):
         return _precomputed_levels(group_path)
-    if not paths.is_remote(group_path) and paths.is_v3_container(group_path):
-        multiscale = multiscales_from_group(group_path)
+    meta = _zarr_json(group_path)
+    if meta is not None:
+        multiscale = _multiscale_of(meta)
         if multiscale is None:
             raise ValueError(f"No multiscales attribute found at {group_path}")
         return [
             (entry["path"], _v3_level(group_path, multiscale, entry))
             for entry in multiscale["datasets"]
         ]
-    return levels_from_zarr_group(open_zarr(group_path, mode="r"), group_path)
+    tree, rel = _open_container(group_path)
+    multiscale = tree.group_attrs(rel)["multiscales"][0]
+    levels = []
+    for entry in multiscale["datasets"]:
+        array = tree.array(posixpath.join(rel, entry["path"]) if rel else entry["path"])
+        if array is None:
+            raise KeyError(f"{group_path} lists {entry['path']!r}, which is not an array")
+        levels.append((entry["path"], _ome(multiscale, entry, array[0], paths.join(group_path, entry["path"]), tree.fmt)))
+    return levels
