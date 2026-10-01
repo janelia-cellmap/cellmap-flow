@@ -40,6 +40,13 @@ def _v3_group_with_s0(f):
     return _v3_group(f.tmp / "g.zarr")
 
 
+def _unlisted_level(f):
+    """raw/s1 next to an OME level raw/s0 that raw's multiscales list alone; s1
+    has its own funlib attributes."""
+    f.ome_pyramid(((8, 0),), name="u.zarr/raw")
+    return f.write_array("zarr2", DATA, {"resolution": [16] * 3, "offset": [0] * 3}, "u.zarr/raw/s1")
+
+
 @pytest.fixture
 def http_root(tmp_path):
     """tmp_path served over http; its URL."""
@@ -97,6 +104,10 @@ LAYOUTS = {
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), name="n.zarr/em") + "/s1",
         ("zarr2", ZYX, (16.0,) * 3, (-4.0,) * 3, (8, 8, 8), (4, 4, 4)),
     ),
+    # A level its group's multiscales don't list is read from its own attributes
+    # on disk and over http alike, not as the group's first level (8 nm).
+    "ome-v2-unlisted-level": (_unlisted_level, ("zarr2", ZYX, (16.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2))),
+    "http-ome-unlisted-level": (_unlisted_level, ("zarr2", ZYX, (16.0,) * 3, (0.0,) * 3, (4, 4, 4), (2, 2, 2))),
     "http-funlib-attrs": (
         lambda f: f.raw_zarr(DATA, offset=(4, 4, 4)),
         ("zarr2", ZYX, (8.0,) * 3, (8.0,) * 3, (4, 4, 4), (4, 4, 4)),

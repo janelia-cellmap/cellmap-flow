@@ -620,14 +620,17 @@ def _v2_array_meta(array, root, rel, path, fmt) -> ArrayMeta:
 
 
 def _ome_group_level(group, leaf, array, path) -> Optional[ArrayMeta]:
-    """``array``'s metadata from the multiscales of ``group``, which lists it
-    as ``leaf`` (or else its first dataset stands in); None without them."""
+    """``array``'s metadata from the multiscales of ``group``, which list it
+    as ``leaf``; None when ``group`` has no multiscales or they don't list
+    it. Another level's entry never stands in: an unlisted level is read
+    from its own attributes, as it is on disk (``_v2_array_meta``)."""
     multiscales = group.attrs.get("multiscales", None)
     if not multiscales:
         return None
-    multiscale = multiscales[0]
-    entry = match_dataset(multiscale, leaf) or multiscale["datasets"][0]
-    return _ome(multiscale, entry, _zarr_header(array), path, "zarr2")
+    entry = match_dataset(multiscales[0], leaf)
+    if entry is None:
+        return None
+    return _ome(multiscales[0], entry, _zarr_header(array), path, "zarr2")
 
 
 def _read_remote(path: str) -> ArrayMeta:
