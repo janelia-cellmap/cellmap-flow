@@ -5,17 +5,22 @@ test_served_metadata_snapshot; these are the rules it follows to get there.
 """
 
 import logging
+import threading
+import time
 
 import numpy as np
 import pytest
 from funlib.geometry import Roi
 
+from cellmap_flow import server as server_module
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.norm.input_normalize import LambdaNormalizer
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import PostProcessor, SimpleBlockwiseMerger, ThresholdPostprocessor
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.serving import virtual_zarr
+from cellmap_flow.serving.protocol import ARGS_KEY
 from tests.utils.serving_helpers import IDENTITY_MODEL, decode_chunk, get_json, layer
 
 
@@ -83,6 +88,29 @@ def test_a_stateful_step_keeps_its_state_across_metadata_requests(server):
     get_json(client, f"/{merged}/.zattrs")
     assert server.refresh_dataset(merged).postprocess[0] is first
     assert first.chunk_slice_position_to_coords_id_dict
+
+
+def test_merged_ids_go_to_the_dashboard_without_holding_up_chunks(server, monkeypatch):
+    """The POST ran inside the chunk request with no timeout, and the refresh
+    time was set only once it returned: a slow dashboard held up the chunk,
+    every request meanwhile posted too, and one that was gone failed it."""
+    posted, release = [], threading.Event()
+
+    def slow_post(url, json, timeout):
+        posted.append((url, timeout))
+        release.wait(5)
+
+    monkeypatch.setattr(server_module.requests, "post", slow_post)
+    blob = PipelineSpec.from_steps([], [SimpleBlockwiseMerger()]).to_url_blob(dashboard_url="http://dashboard/")
+    merged = f"m{ARGS_KEY}{blob}{ARGS_KEY}"
+    client = server.app.test_client()
+    for index in ("0.0.0.0", "1.0.0.0"):
+        assert client.get(f"/{merged}/s0/{index}").status_code == 200
+    release.set()
+    deadline = time.monotonic() + 5
+    while not posted and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert posted == [("http://dashboard/update/equivalences", server_module.EQUIVALENCES_TIMEOUT_SECONDS)]
 
 
 @pytest.mark.parametrize("declared, served", [

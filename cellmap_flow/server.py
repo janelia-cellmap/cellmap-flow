@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 # How many distinct chains (layer URLs) one server keeps built at once.
 CHAIN_CACHE_SIZE = 32
 
+# How long a POST of merged ids to the dashboard may take.
+EQUIVALENCES_TIMEOUT_SECONDS = 10
+
 # How the server reads its raw data; see CellMapFlowServer.__init__.
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
@@ -176,6 +179,14 @@ def _client_gone_check():
     return gone
 
 
+def _post_equivalences(url, payload):
+    """POST a layer's merged ids to the dashboard; a failure is only logged."""
+    try:
+        requests.post(url, json=payload, timeout=EQUIVALENCES_TIMEOUT_SECONDS)
+    except requests.RequestException as e:
+        logger.warning(f"Could not send equivalences to {url}: {e}")
+
+
 class ServedChain(NamedTuple):
     """The normalization/postprocessing a layer URL asks for."""
 
@@ -281,9 +292,10 @@ class CellMapFlowServer:
         else:
             self.model_output_axes = tuple(self.axes)
 
-        # Refresh rate for custom state updates
+        # How often a layer's merged ids go to the dashboard; see _send_equivalences.
         self.refresh_rate_seconds = 5
         self.previous_refresh_time = 0
+        self._refresh_lock = threading.Lock()
 
         # Each layer URL carries its own chain; they are built once per URL
         # and never written to g, so layers (tabs, users) sharing this server
@@ -505,34 +517,7 @@ class CellMapFlowServer:
             )
 
         chunk_data = chunk_data.astype(self._output_dtype(chain))
-
-        current_time = time.time()
-
-        # assume only one has equivalences
-        for postprocess in chain.effective_postprocess():
-            if (
-                # A chain encoded outside /api/process has no dashboard to
-                # tell; concatenating None raised TypeError mid-chunk.
-                chain.dashboard_url
-                and hasattr(postprocess, "equivalences")
-                and postprocess.equivalences is not None
-                and (current_time - self.previous_refresh_time)
-                > self.refresh_rate_seconds
-            ):
-                snapshot = getattr(postprocess, "equivalences_json", None)
-                pairs = snapshot() if snapshot else postprocess.equivalences.to_json()
-                equivalences = {
-                    "dataset": dataset,
-                    "equivalences": [
-                        [int(item) for item in sublist] for sublist in pairs
-                    ],
-                }
-
-                requests.post(
-                    chain.dashboard_url.rstrip("/") + "/update/equivalences",
-                    json=equivalences,
-                )
-                self.previous_refresh_time = current_time
+        self._send_equivalences(dataset, chain)
 
         # Encode using Zarr format
         encoded = self.chunk_encoder.encode(chunk_data)
@@ -542,6 +527,39 @@ class CellMapFlowServer:
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
+
+    def _send_equivalences(self, dataset, chain: ServedChain):
+        """Send the dashboard the ids the chain's merger has merged, at most
+        once every ``refresh_rate_seconds`` across all requests.
+
+        From a thread of its own, with a timeout, so a slow or unreachable
+        dashboard neither holds up the chunk nor fails it. The time is taken
+        before posting, so requests arriving meanwhile do not each post too.
+        Only the first step with equivalences is sent, as the dashboard keeps
+        one set per layer.
+        """
+        # A chain encoded outside /api/process has no dashboard to tell.
+        if not chain.dashboard_url:
+            return
+        merger = next(
+            (p for p in chain.effective_postprocess() if getattr(p, "equivalences", None) is not None),
+            None,
+        )
+        if merger is None:
+            return
+        with self._refresh_lock:
+            now = time.time()
+            if now - self.previous_refresh_time <= self.refresh_rate_seconds:
+                return
+            self.previous_refresh_time = now
+        snapshot = getattr(merger, "equivalences_json", None)
+        pairs = snapshot() if snapshot else merger.equivalences.to_json()
+        payload = {
+            "dataset": dataset,
+            "equivalences": [[int(item) for item in pair] for pair in pairs],
+        }
+        url = chain.dashboard_url.rstrip("/") + "/update/equivalences"
+        threading.Thread(target=_post_equivalences, args=(url, payload), daemon=True).start()
 
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
