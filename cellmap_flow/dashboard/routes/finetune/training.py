@@ -297,7 +297,7 @@ def submit_finetuning():
             label_smoothing=settings.label_smoothing,
             distillation_lambda=settings.distillation_lambda,
             distillation_scope=body.distillation_scope,
-            margin=body.margin,
+            margin=body.margin if settings.margin is None else settings.margin,
             balance_classes=body.balance_classes,
             augment=body.augment,
             queue=body.queue,

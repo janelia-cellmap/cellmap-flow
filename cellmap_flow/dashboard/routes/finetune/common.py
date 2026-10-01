@@ -288,10 +288,15 @@ class TrainingSettings(NamedTuple):
     label_smoothing: float
     distillation_lambda: float
     mask_unannotated: bool
+    # The margin loss's margin when it must not be the form's, else None.
+    margin: float = None
     # The sentence submit's answer carries when the loss was switched for
     # sparse annotations, else None.
     note: str = None
 
+
+# The margin at which margin loss only asks for the right side of 0.5.
+SIGN_ONLY_MARGIN = 0.5
 
 SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
 
@@ -306,11 +311,13 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
       base model at 0.5, which is how sparse annotations train (see the
       distance case below);
     - a distance target with sparse annotations: a binary target with margin
-      loss instead (see below);
+      loss instead, at margin 0.5 and distillation of at least 0.5 (see
+      below);
     - a distance target otherwise: bce, without label smoothing.
     A sparse session also masks its unannotated voxels out of the loss.
     """
     note = None
+    margin = None  # the form's
     if sparse and loss_type == "mse":
         loss_type = "margin"
         distillation_lambda = 0.5
@@ -322,17 +329,23 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
         # strokes with unannotated voxels all around them, so the safe
         # radius of every painted voxel is ~1 and next to nothing would be
         # supervised. Fall back to what sparse annotations already use:
-        # a per-voxel binary target with margin loss (only the side of 0.5
-        # is enforced, so the model's gradual field survives) and
-        # distillation to the base model elsewhere.
+        # a per-voxel binary target with margin loss and distillation to
+        # the base model elsewhere.
+        #
+        # At margin 0.5, so that only the side of 0.5 is enforced and the
+        # model's gradual field survives. The form's 0.3 pushed every
+        # painted voxel to 0.7 or 0.3, which on a distance model (sigma 6)
+        # is 2.5 voxels from the boundary: edges near strokes turned into
+        # steps. And distillation of at least 0.5: the form's default, 0.01,
+        # was passed through as "set", so almost nothing held the rest.
         logger.info(
             "output_type=distance with sparse annotations: using binary "
             "target + margin loss instead (a distance transform needs dense 3D labels)"
         )
         output_type = "binary"
         loss_type = "margin"
-        if distillation_lambda is None or distillation_lambda <= 0:
-            distillation_lambda = 0.5
+        margin = SIGN_ONLY_MARGIN
+        distillation_lambda = max(distillation_lambda or 0.0, 0.5)
     elif output_type == "distance":
         # The soft distance target is only defined against BCE-with-logits;
         # margin/dice assume hard labels and smoothing would blur a target
@@ -351,6 +364,7 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
         label_smoothing=label_smoothing,
         distillation_lambda=distillation_lambda,
         mask_unannotated=bool(sparse),
+        margin=margin,
         note=note,
     )
 

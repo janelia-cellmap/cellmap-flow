@@ -114,9 +114,15 @@ def submit(client, trainable_session, monkeypatch):
 
 @pytest.mark.parametrize("volume, request_data, sent", [
     pytest.param(CROPPED, {}, dict(mask_unannotated=False, loss_type="mse"), id="imported crops are dense"),
-    # A distance target needs 3D boundaries, which scribbles do not have.
-    pytest.param(PAINTED, {"output_type": "distance"}, dict(mask_unannotated=True, loss_type="margin",
-                                                            output_type="binary"), id="a painted session"),
+    # A distance target needs 3D boundaries, which scribbles do not have. Only
+    # the side of 0.5 is asked for: the form's margin 0.3 pushed painted voxels
+    # to 0.7, 2.5 voxels inside a distance model's boundary, and its
+    # distillation of 0.01 held nothing else in place.
+    pytest.param(PAINTED, {"output_type": "distance", "loss_type": "margin", "margin": 0.3, "distillation_lambda": 0.01},
+                 dict(mask_unannotated=True, loss_type="margin", output_type="binary", margin=0.5,
+                      distillation_lambda=0.5), id="a painted session"),
+    pytest.param(PAINTED, {"output_type": "distance", "loss_type": "margin", "distillation_lambda": 10},
+                 dict(margin=0.5, distillation_lambda=10), id="a painted session asking for more distillation"),
     pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin", distillation_lambda=0.5),
                  id="a stroke beside the crops"),
     # The CLI takes a distance target only with bce, and a soft target is not smoothed.
@@ -363,7 +369,8 @@ FORM = {"lora_r": 8, "num_epochs": 10, "batch_size": 2, "learning_rate": 1e-4, "
                  id="mse on scribbles"),
     # Strokes painted since submit, over a distance model's imported crops.
     pytest.param({"output_type": "distance"}, STROKE_BESIDE, FORM,
-                 dict(output_type="binary", loss_type="margin", distillation_lambda=0.01, mask_unannotated=True),
+                 dict(output_type="binary", loss_type="margin", distillation_lambda=0.5, margin=0.5,
+                      mask_unannotated=True),
                  id="a distance model whose session has become sparse"),
 ])
 def test_a_restart_trains_what_submit_would(restart, job_params, volume, request_data, sent):
