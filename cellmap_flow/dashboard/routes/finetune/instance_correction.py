@@ -342,24 +342,23 @@ def create_instance_correction():
             # would cause ensure_minio_serving's initial `mc mirror <seed>
             # <minio>` to overwrite those edits with the stale seed. Refuse
             # and point at the sync route.
-            if session_instance.backing_store_populated(
+            backing = session_instance.populated_backing_store(
                 session.minio_state, output_dir, mc_target_name
-            ):
+            )
+            if backing is not None:
                 return (
                     jsonify({
                         "success": False,
                         "error": (
                             f"MinIO backing store for {mc_target_name} already populated at "
-                            f"{os.path.join(output_dir, '.minio', 'annotations', mc_target_name)} "
-                            "— refusing to re-seed because prior brush edits would be lost"
+                            f"{backing} — refusing to re-seed because prior brush edits would be lost"
                         ),
                         "hint": (
                             "POST /api/viewer/sync-instance-correction with "
                             "{zarr_path: <effective_zarr_path>} first to pull edits "
                             "into the user-visible zarr, then either (a) keep using "
                             "the pulled zarr as your source of truth, or (b) delete "
-                            f"{os.path.join(output_dir, '.minio', 'annotations', mc_target_name)} "
-                            "to genuinely start over."
+                            f"{backing} to genuinely start over."
                         ),
                         "output_zarr_path": effective_zarr_path,
                     }),
@@ -456,8 +455,9 @@ def sync_instance_correction():
 
     POST body:
       zarr_path: str, required. The volume, e.g.
-          `/.../instance_corrections/roi3_annotation.zarr`; its basename is
-          the MinIO bucket key.
+          `/.../instance_corrections/roi3_annotation.zarr`, or the
+          `zarr_path` create answered: the MinIO bucket key is that of the
+          volume registered for it, else its basename.
       dst_path:  str, optional. Where to write the copy: a `.zarr` in the
           same directory as `zarr_path`, new or an existing zarr. Defaults
           to `zarr_path`. Prefer a fresh dated path (e.g.
@@ -474,8 +474,9 @@ def sync_instance_correction():
         if dst_path:
             dst_path = _zarr_target(dst_path, "dst_path", beside=zarr_path)
 
+        session = get_session()
         success, info = session_instance.snapshot_from_minio(
-            get_session().minio_state, zarr_path, dst_path=dst_path
+            session.minio_state, session.annotation_volumes, zarr_path, dst_path=dst_path
         )
         if not success:
             return jsonify({"success": False, "error": info}), 500
@@ -508,7 +509,8 @@ def cc3d_relabel_annotation():
     invalidate segmentation chunks on back-channel writes).
 
     POST body:
-      zarr_path:     str, required. Absolute path to the user-visible zarr.
+      zarr_path:     str, required. Absolute path to the user-visible zarr,
+                     as for sync-instance-correction.
       target_label:  int, required. The instance ID to split (must be >= 2).
       snapshot_dir:  str, optional. Where to drop rollback snapshots: a
                      directory beside `zarr_path`. Defaults to
@@ -534,8 +536,10 @@ def cc3d_relabel_annotation():
         if os.path.exists(snapshot_dir) and not os.path.isdir(snapshot_dir):
             return _error(f"snapshot_dir is not a directory: {snapshot_dir}")
 
+        session = get_session()
         success, info = session_instance.cc3d_relabel(
-            get_session().minio_state,
+            session.minio_state,
+            session.annotation_volumes,
             zarr_path=zarr_path,
             target_label=target_label,
             snapshot_dir=snapshot_dir,

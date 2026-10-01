@@ -157,36 +157,51 @@ def seed_instance_volume(
     return True, output_zarr_path
 
 
-def backing_store_populated(state, output_dir, zarr_name):
-    """Whether MinIO's data directory already holds painted chunks of ``zarr_name``.
+def populated_backing_store(state, output_dir, zarr_name):
+    """Where MinIO's data directory holds painted chunks of ``zarr_name``, or None.
 
     The clobber guard of a fresh seed: re-seeding a zarr whose MinIO copy
     may hold edits not yet pulled would overwrite them with the seed on the
     first mirror. It looks at the files rather than asking MinIO because the
     decision comes before MinIO is started. A running MinIO keeps its data
-    where it was first started, which need not be ``output_dir``.
+    where it was first started, which need not be ``output_dir``, so the
+    path is returned for the refusal to name.
     """
     process = state["process"]
     running = process is not None and process.poll() is None
-    root = minio.minio_root(state.get("output_base") if running else output_dir)
-    s0_backing = root / state["bucket"] / zarr_name / "annotation" / "s0"
-    if not s0_backing.exists():
-        return False
+    backing = minio.minio_root(state.get("output_base") if running else output_dir) / state["bucket"] / zarr_name
+    s0_backing = backing / "annotation" / "s0"
     try:
-        return any(s0_backing.iterdir())
-    except Exception:
-        return False
+        return backing if any(s0_backing.iterdir()) else None
+    except OSError:
+        return None
+
+
+def bucket_key(volumes, zarr_path):
+    """The MinIO key the volume at ``zarr_path`` is served under.
+
+    Create serves every attach of a ROI under ``<roi_name>_annotation.zarr``,
+    whatever the zarr on disk is called, and answers with the zarr's own
+    path: a dated snapshot (``roi3_annotation_<ts>.zarr``) when one was
+    reattached. So the key is that of the registered volume whose zarr this
+    is (its id plus ".zarr"), and the basename only when none is.
+    ``volumes`` is the volume registry, id -> record.
+    """
+    real = os.path.realpath(zarr_path)
+    for volume_id, record in volumes.items():
+        if record.get("zarr_path") and os.path.realpath(record["zarr_path"]) == real:
+            return f"{volume_id}.zarr"
+    return os.path.basename(os.path.normpath(zarr_path))
 
 
 class _NotInMinio(Exception):
     pass
 
 
-def _bucket_root(state, zarr_path):
-    """``(s3, "<bucket>/<zarr name>")``, or _NotInMinio if MinIO has no s0 for it."""
-    zarr_name = os.path.basename(os.path.normpath(zarr_path))
+def _bucket_root(state, volumes, zarr_path):
+    """``(s3, "<bucket>/<key>")``, or _NotInMinio if MinIO has no s0 for it."""
     s3 = minio.make_s3_filesystem(state)
-    src_root = f"{state['bucket']}/{zarr_name}"
+    src_root = f"{state['bucket']}/{bucket_key(volumes, zarr_path)}"
     if not s3.exists(f"{src_root}/annotation/s0"):
         raise _NotInMinio(
             f"no MinIO bucket entry at {src_root}/annotation/s0 "
@@ -195,7 +210,7 @@ def _bucket_root(state, zarr_path):
     return s3, src_root
 
 
-def snapshot_from_minio(state, zarr_path, dst_path=None):
+def snapshot_from_minio(state, volumes, zarr_path, dst_path=None):
     """Copy the MinIO state of a paintable instance-correction zarr to disk.
 
     Unlike ``sync.sync_volume``, which pulls changed chunks into the served
@@ -203,8 +218,9 @@ def snapshot_from_minio(state, zarr_path, dst_path=None):
     make a new zarr: a dated snapshot for rollback or audit, or a copy to
     train from.
 
-    ``zarr_path``'s basename is the MinIO bucket key; the zarr itself is not
-    opened. ``dst_path`` defaults to ``zarr_path``, but a fresh dated path
+    ``zarr_path`` names the MinIO bucket key (see :func:`bucket_key`; the
+    registry ``volumes`` is read for it); the zarr itself is not opened.
+    ``dst_path`` defaults to ``zarr_path``, but a fresh dated path
     (``.../roi3_annotation_<ts>.zarr``) is better: an in-place copy
     overwrites chunk files in their existing inodes, which corrupts any
     hardlinked copy of them (a ``cp -rl`` seed).
@@ -216,7 +232,7 @@ def snapshot_from_minio(state, zarr_path, dst_path=None):
         return False, "MinIO not running"
     dst_path = zarr_path if dst_path is None else dst_path
     try:
-        s3, src_root = _bucket_root(state, zarr_path)
+        s3, src_root = _bucket_root(state, volumes, zarr_path)
         # copy_store copies every key under the bucket root as it is: the
         # root and annotation group metadata, .zarray with its compressor, and
         # every chunk. The sync copies only annotation/, into a volume that
@@ -246,7 +262,7 @@ def snapshot_from_minio(state, zarr_path, dst_path=None):
         return False, str(e)
 
 
-def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
+def cc3d_relabel(state, volumes, zarr_path, target_label, snapshot_dir=None):
     """Split one label of a paintable instance correction into its connected components.
 
     cc3d finds the 26-connected components of ``target_label``'s voxels; the
@@ -255,8 +271,8 @@ def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
     unannotated and 1 is background.
 
     The zarr is read and written in MinIO, which holds the in-progress brush
-    edits; ``zarr_path`` only names the bucket key (its basename) and where
-    the rollback snapshot goes. That snapshot of MinIO's state is taken
+    edits; ``zarr_path`` only names the bucket key (see :func:`bucket_key`)
+    and where the rollback snapshot goes. That snapshot of MinIO's state is taken
     before anything is written, to ``snapshot_dir`` (default
     ``<zarr dir>/snapshots``).
 
@@ -276,7 +292,7 @@ def cc3d_relabel(state, zarr_path, target_label, snapshot_dir=None):
         )
 
     try:
-        s3, src_root = _bucket_root(state, zarr_path)
+        s3, src_root = _bucket_root(state, volumes, zarr_path)
         # check=False skips S3Map's bucket probe: _bucket_root has just found s0.
         store = s3fs.S3Map(root=src_root, s3=s3, check=False)
         ann = zarr.open(store, mode="r+")["annotation/s0"]

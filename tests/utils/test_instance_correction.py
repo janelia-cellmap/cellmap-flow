@@ -144,3 +144,66 @@ def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path
     assert volume_id == "roi_annotation" and kwargs["mc_target_name"] == "roi_annotation.zarr"
     assert get_session().annotation_volumes["roi_annotation"]["zarr_path"] == path
     assert zarr.open_group(path, mode="r").attrs["chunk_size"] == [4, 4, 4]
+
+
+class _Alive:
+    def poll(self):
+        return None
+
+
+class _Bucket:
+    """MinIO's bucket as s3fs sees it: an in-memory zarr per key."""
+
+    def __init__(self):
+        self.stores = {}
+
+    def exists(self, path):
+        root, _, rest = path.partition(".zarr/")
+        return root + ".zarr" in self.stores and rest + "/.zarray" in self.stores[root + ".zarr"]
+
+
+def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatch):
+    """A reattached dated snapshot is served under its ROI's key, and create
+    answers with the snapshot's path. Sync and cc3d took the key from that
+    path's name, found nothing in MinIO and answered 500."""
+    from cellmap_flow.dashboard.routes.finetune import instance_correction
+    from cellmap_flow.finetune.session import instance, minio
+    from cellmap_flow.globals import g
+
+    snapshot = zarr.open_group(str(tmp_path / "vols" / "roi_annotation_20260901.zarr"), mode="w")
+    snapshot.create_group("annotation").create_dataset("s0", shape=(8, 8, 8), chunks=(4, 4, 4), dtype="u2")
+    bucket = _Bucket()
+    served = bucket.stores["annotations/roi_annotation.zarr"] = zarr.MemoryStore()
+    labels = np.zeros((8, 8, 8), np.uint16)
+    labels[0, 0, 0] = labels[7, 7, 7] = 2  # two components of one label
+    zarr.open_group(served).create_group("annotation").create_dataset("s0", data=labels, chunks=(4, 4, 4))
+    monkeypatch.setattr(minio, "make_s3_filesystem", lambda state: bucket)
+    monkeypatch.setattr(instance.s3fs, "S3Map", lambda root, s3, check: s3.stores[root])
+    monkeypatch.setattr(instance_correction, "ensure_minio_serving",
+                        lambda *a, **k: "http://m:9000/annotations/roi_annotation.zarr")
+    monkeypatch.setitem(g.minio_state, "ip", "m")
+    monkeypatch.setitem(g.minio_state, "port", 9000)
+
+    created = client.post(CREATE, json={"roi_name": "roi", "reuse_existing": True,
+                                        "source_zarr_path": snapshot.store.path}).get_json()
+    synced = client.post(SYNC, json={"zarr_path": created["zarr_path"]})
+    assert synced.status_code == 200 and synced.get_json()["keys_copied"] > 0, synced.get_json()
+    split = client.post(CC3D, json={"zarr_path": created["zarr_path"], "target_label": 2})
+    assert split.status_code == 200 and split.get_json()["n_components"] == 2, split.get_json()
+
+
+def test_a_reseed_over_unsynced_edits_names_the_running_minios_store(client, tmp_path, monkeypatch):
+    """A running MinIO keeps its data where it started, which the refusal
+    has to name; it named <output_dir>/.minio, which may not exist."""
+    from cellmap_flow.globals import g
+
+    chunks = tmp_path / "elsewhere" / ".minio" / "annotations" / "roi_annotation.zarr" / "annotation" / "s0"
+    chunks.mkdir(parents=True)
+    (chunks / "0.0.0").write_bytes(b"painted")
+    monkeypatch.setitem(g.minio_state, "process", _Alive())
+    monkeypatch.setitem(g.minio_state, "output_base", str(tmp_path / "elsewhere"))
+
+    response = client.post(CREATE, json={"roi_name": "roi", "model_name": "model",
+                                         "instance_zarr_path": str(tmp_path / "instances.zarr")})
+    assert response.status_code == 409
+    assert str(chunks.parent.parent) in response.get_json()["error"]
