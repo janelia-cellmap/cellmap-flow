@@ -134,10 +134,12 @@ class Resampling:
         steps = [self._axis_step(axis, run, method) for axis, (run, method) in enumerate(zip(runs, methods))]
         source_box = Box(tuple(s[0] for s in steps), tuple(s[1] - s[0] for s in steps))
         data = read_padded(store, source_box)
-        if not all(method in ("same", "nearest") for method in methods):
-            data = data.astype(np.float64)
-        for axis, (_, _, apply) in enumerate(steps):
-            data = apply(data, axis)
+        # float32 for uint8/uint16/float32 data, float64 for float64: exact
+        # enough for both, at a quarter of float64's memory for uint8.
+        work = np.result_type(dtype, np.float32)
+        # Block means first: they shrink what the other steps work on.
+        for axis in sorted(range(len(steps)), key=lambda axis: methods[axis] != "mean"):
+            data = steps[axis][2](data, axis, work)
         for axis, (w, run) in enumerate(zip(wanted, runs)):
             if not np.array_equal(w, run):
                 data = np.take(data, w - run[0], axis=axis)
@@ -151,20 +153,21 @@ class Resampling:
     def _axis_step(self, axis, run, method):
         """``(first, end, apply)``: the source voxels ``[first, end)`` that
         target voxels ``run`` (a contiguous range) need along ``axis``, and
-        ``apply(data, axis)``, which turns those source voxels into them."""
+        ``apply(data, axis, work)``, which turns those source voxels into
+        them, computing means and interpolations in the float dtype ``work``."""
         n = self.source_shape[axis]
         if len(run) == 0:
-            return 0, 0, lambda data, axis: data
+            return 0, 0, lambda data, axis, work: data
         f = self.factor(axis)
         if method == "same":
             first, end = int(run[0]), int(run[-1]) + 1
-            return first, end, lambda data, axis: data
+            return first, end, lambda data, axis, work: data
         if method == "nearest":
             # The source voxel the target voxel's centre, (j + 1/2)·f in
             # source voxels from the corner, lies in.
             index = np.clip(np.floor(snap_integral((run + 0.5) * f)).astype(int), 0, n - 1)
             first = int(index.min())
-            return first, int(index.max()) + 1, lambda data, axis: np.take(data, index - first, axis=axis)
+            return first, int(index.max()) + 1, lambda data, axis, work: np.take(data, index - first, axis=axis)
         if method == "mean":
             whole = _whole_factor(f)
             starts = run * whole
@@ -173,9 +176,18 @@ class Resampling:
             shape = [1] * len(self.source_shape)
             shape[axis] = len(run)
 
-            def mean(data, axis):
-                sums = np.add.reduceat(data, starts - first, axis=axis)
-                return sums / counts.reshape(shape)
+            def mean(data, axis, work):
+                # Block i is data[i*whole : (i+1)*whole] along axis, so the
+                # k-th voxel of every block is data[k::whole]: f strided adds,
+                # about ten times faster than np.add.reduceat. A last block cut
+                # short is missing its last few k.
+                size = list(data.shape)
+                size[axis] = len(run)
+                sums = np.zeros(size, dtype=work)
+                for k in range(whole):
+                    part = data[_along(axis, slice(k, None, whole))]
+                    sums[_along(axis, slice(0, part.shape[axis]))] += part
+                return sums / counts.reshape(shape).astype(work)
 
             return first, end, mean
         # linear
@@ -187,13 +199,18 @@ class Resampling:
         shape = [1] * len(self.source_shape)
         shape[axis] = len(run)
 
-        def linear(data, axis):
-            below = np.take(data, lower - first, axis=axis)
-            above = np.take(data, upper - first, axis=axis)
-            w = weight.reshape(shape)
+        def linear(data, axis, work):
+            below = np.take(data, lower - first, axis=axis).astype(work, copy=False)
+            above = np.take(data, upper - first, axis=axis).astype(work, copy=False)
+            w = weight.reshape(shape).astype(work)
             return below * (1 - w) + above * w
 
         return first, int(upper.max()) + 1, linear
+
+
+def _along(axis, index):
+    """An index that is ``index`` along ``axis`` and everything along the axes before it."""
+    return (slice(None),) * axis + (index,)
 
 
 def _as_dtype(data, dtype):
