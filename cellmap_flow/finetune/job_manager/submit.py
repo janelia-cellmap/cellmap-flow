@@ -297,8 +297,13 @@ def build_command(
     charge_group: Optional[str] = None,
 ) -> str:
     """Build the shell command used to launch finetuning, for ``bash -c``."""
+    # -P: without it `python -m` puts the job's working directory first on
+    # sys.path, so a job started from inside another cellmap-flow checkout
+    # ran that checkout's trainer instead of the installed one (and failed on
+    # the flags it did not know).
     command_parts = [
         sys.executable,
+        "-P",
         "-m",
         "cellmap_flow.finetune.finetune_cli",
         "--model-type", model_type,

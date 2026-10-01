@@ -311,8 +311,10 @@ def submit_blockwise_task():
             name=job_name,
             # This interpreter, not whatever "python" is first on the PATH
             # the job inherits: that is the environment cellmap_flow is in.
-            # Run as it stands: nothing in it needs a shell.
-            argv=(sys.executable, "-m", "cellmap_flow.blockwise.multiple_cli", *yaml_paths),
+            # Run as it stands: nothing in it needs a shell. -P keeps the
+            # job's working directory off sys.path, where another cellmap-flow
+            # checkout would shadow the installed one.
+            argv=(sys.executable, "-P", "-m", "cellmap_flow.blockwise.multiple_cli", *yaml_paths),
             queue=None,
             gpus=0,
             cpus=settings.nb_cores_master,

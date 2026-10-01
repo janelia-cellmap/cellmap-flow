@@ -175,7 +175,7 @@ def _submit_finetune(monkeypatch, tmp_path):
 
 FINETUNE_COMMAND = (
     "set -o pipefail; LD_LIBRARY_PATH=<prefix>/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} "
-    "stdbuf -oL <python> -m cellmap_flow.finetune.finetune_cli --model-type script "
+    "stdbuf -oL <python> -P -m cellmap_flow.finetune.finetune_cli --model-type script "
     "--model-script /models/mito.py --corrections <tmp>/session/corrections "
     "--output-dir <tmp>/session/runs/mito_<ts> --model-name mito --channels mito "
     "--input-voxel-size 8 8 8 --output-voxel-size 16 16 16 --lora-r 8 --lora-alpha 16 "
@@ -271,7 +271,7 @@ def test_the_blockwise_master_submission(monkeypatch, tmp_path):
         "-o": "<tmp>/tasks/my_run_<ts>_%J.log",
     }
     assert command == [
-        "<python>", "-m", "cellmap_flow.blockwise.multiple_cli", "<tmp>/tasks/my_run_<ts>.yaml",
+        "<python>", "-P", "-m", "cellmap_flow.blockwise.multiple_cli", "<tmp>/tasks/my_run_<ts>.yaml",
     ]
     assert call["env"] == {} and call["timeout"] is None
 

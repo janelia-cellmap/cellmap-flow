@@ -87,9 +87,27 @@ def test_a_job_runs_this_interpreters_trainer_and_logs_as_it_goes(submit):
     dashboard, got 5-10 epochs at once. And the command tees its own log, so a
     local run keeps no second copy."""
     job = submit(_Script())
-    assert f"{sys.executable} -m cellmap_flow.finetune.finetune_cli" in job.command
+    assert f"{sys.executable} -P -m cellmap_flow.finetune.finetune_cli" in job.command
     assert f"| stdbuf -oL tee {job.job.log_file}" in job.command and "stdbuf -oL python -m" not in job.command
     assert job.runs[0]["log_file"] == os.devnull
+
+
+def test_a_job_started_inside_another_checkout_runs_the_installed_trainer(submit, tmp_path):
+    """LSF starts the job in the directory the dashboard ran from, and
+    `python -m` put that first on sys.path: from the main checkout, with the
+    package installed from a worktree, the trainer was main's and refused
+    --models-dir (2026-10-01)."""
+    job = submit(_Script())
+    interpreter = shlex.split(job.command.split(" | ")[0])
+    interpreter = interpreter[interpreter.index(sys.executable):interpreter.index("cellmap_flow.finetune.finetune_cli")]
+    decoy = tmp_path / "other_checkout" / "cellmap_flow"
+    decoy.mkdir(parents=True)
+    (decoy / "__init__.py").write_text("raise SystemExit('the other checkout')\n")
+    found = subprocess.run(
+        [*interpreter[:-1], "-c", "import cellmap_flow; print(cellmap_flow.__file__)"],
+        cwd=decoy.parent, capture_output=True, text=True,
+    )
+    assert found.returncode == 0 and str(decoy) not in found.stdout, found.stderr
 
 
 def test_a_trainer_that_fails_fails_its_job(submit, monkeypatch, tmp_path):
