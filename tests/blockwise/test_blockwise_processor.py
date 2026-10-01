@@ -20,11 +20,13 @@ from cellmap_flow.blockwise.blockwise_processor import (
     precheck,
     spawn_worker,
 )
-from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.post.postprocessors import MortonSegmentationRelabeling, ThresholdPostprocessor
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.jobs.site import current_site
+from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.config.yaml import ConfigError
 from tests.utils.serving_helpers import decode_chunk, layer
 
@@ -285,11 +287,31 @@ def test_the_processor_refuses_the_same_settings(raw_zarr, pooling_model, task_y
 @pytest.mark.parametrize("in_yaml, saved, expected", [
     pytest.param("36:00", "10:00", "36:00", id="the-yamls"),
     pytest.param(None, "10:00", "10:00", id="else-the-saved-setting"),
+    pytest.param(None, None, current_site().default_walltime, id="else-the-sites"),
 ])
-def test_the_workers_walltime(raw_zarr, pooling_model, task_yaml, monkeypatch, in_yaml, saved, expected):
-    monkeypatch.setattr(g, "walltime", saved)
+def test_the_workers_walltime(raw_zarr, pooling_model, task_yaml, in_yaml, saved, expected):
+    launcher_settings().walltime = saved
     overrides = {"walltime": in_yaml} if in_yaml else {}
     assert CellMapFlowBlockwiseProcessor(task_yaml(raw_zarr(), pooling_model(), **overrides), create=True).walltime == expected
+
+
+THRESHOLD_ONLY = PipelineSpec(postprocess=[{"name": "ThresholdPostprocessor", "threshold": 0.5}])
+
+
+@pytest.mark.parametrize("json_data, chain", [
+    pytest.param(JSON_DATA, PipelineSpec.from_json_data(JSON_DATA), id="the-tasks-json-data-becomes-the-processs"),
+    pytest.param(None, THRESHOLD_ONLY, id="else-the-processs-own-is-kept-and-used"),
+])
+def test_the_chain_a_task_runs_and_the_dtype_it_writes(raw_zarr, pooling_model, task_yaml, json_data, chain):
+    """A task's json_data is installed as the process's chain; without one the
+    process's own is kept. Either way the output's dtype is the chain's: here
+    ThresholdPostprocessor's uint8 over the model's float32."""
+    process_chain().set(THRESHOLD_ONLY)
+    overrides = {"json_data": json_data} if json_data else {}
+    processor = CellMapFlowBlockwiseProcessor(task_yaml(raw_zarr(), pooling_model(), **overrides), create=True)
+    assert process_chain().spec == chain
+    assert [type(s).__name__ for s in process_chain().postprocess] == ["ThresholdPostprocessor"]
+    assert processor.dtype == np.uint8
 
 
 def test_a_worker_submitted_without_a_walltime_gets_the_default(fake_lsf, tmp_path):

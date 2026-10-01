@@ -18,8 +18,12 @@ from cellmap_flow.cli import yaml_cli
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.dashboard.services import startup
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs import settings
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.config.yaml import ConfigError
+from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.process_chain import process_chain
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRIPT = os.path.join(ROOT, "tests", "script_test", "fake_model_script.py")
@@ -78,8 +82,9 @@ def _array(path, dtype=np.uint8):
     return str(path)
 
 
-def _config(tmp_path, models=None, extra_layers=None):
-    config = {"data_path": _array(tmp_path / "raw.zarr" / "raw"), "charge_group": "grp", "models": models or {}}
+def _config(tmp_path, models=None, extra_layers=None, **settings):
+    config = {"data_path": _array(tmp_path / "raw.zarr" / "raw"), "charge_group": "grp", "models": models or {},
+              **settings}
     if extra_layers is not None:
         config["extra_layers"] = extra_layers
     (tmp_path / "c.yaml").write_text(yaml.safe_dump(config))
@@ -124,6 +129,43 @@ def test_extra_layers_are_shown_beside_the_raw_data(tmp_path, monkeypatch):
     pred, ids = layers["pred"].to_json(), layers["ids"].to_json()
     assert (pred["type"], pred["blend"], pred["shader"]) == ("image", "additive", "void main() { emitGrayscale(1.0); }")
     assert ids["type"] == "segmentation" and ids["source"][0]["subsources"] == {"meshes": False}
+
+
+def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tmp_path, monkeypatch):
+    """What the dashboard and the finetune manifest read after a YAML run:
+    the session's models and extra layers, the process's chain, and the
+    settings saved for the next dashboard."""
+    ran = []
+    monkeypatch.setattr(settings, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
+    monkeypatch.setattr(yaml_cli, "install_cleanup_handlers", lambda: None)
+    monkeypatch.setattr(yaml_cli, "run_multiple", lambda *args, **kwargs: ran.append(args))
+    config = _config(
+        tmp_path,
+        models={"m": {"type": "script", "script_path": SCRIPT}},
+        extra_layers=[{"name": "pred", "path": _array(tmp_path / "pred.zarr" / "mito")}],
+        queue="gpu_h200", walltime="36:00", cycle_gpu_queues=False,
+        json_data={"input_norm": {"MinMaxNormalizer": {"min_value": 0, "max_value": 255}},
+                   "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}},
+    )
+    result = CliRunner().invoke(yaml_cli.main, [config])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+
+    session, chain = get_session(), process_chain()
+    assert [(type(m).__name__, m.name) for m in session.models_config] == [("ScriptModelConfig", "m")]
+    assert ran == [(session.models_config, yaml.safe_load(open(config))["data_path"], "grp", "gpu_h200")]
+    assert list(session.extra_layers) == ["pred"]
+    assert ([type(s).__name__ for s in chain.input_norms], [type(s).__name__ for s in chain.postprocess]) == (
+        ["MinMaxNormalizer"], ["ThresholdPostprocessor"])
+    # The live steps' to_dict(), defaults and all: yaml_cli sets only the
+    # live chain, so pipeline_spec falls back to it.
+    assert session.pipeline_spec == PipelineSpec(
+        [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}],
+        [{"name": "ThresholdPostprocessor", "threshold": 0.5}],
+    )
+    assert yaml.safe_load((tmp_path / "server_config.yaml").read_text()) == {
+        **settings.SERVER_CONFIG_DEFAULTS,
+        "queue": "gpu_h200", "charge_group": "grp", "walltime": "36:00", "cycle_gpu_queues": False,
+    }
 
 
 @pytest.mark.parametrize("failing, viewer_opened", [
