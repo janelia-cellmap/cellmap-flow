@@ -6,7 +6,6 @@ from flask import Blueprint, render_template
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
-from cellmap_flow.dashboard.routes.index_page import page_op_schemas
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.pipeline_spec import builder_steps
 
@@ -152,5 +151,4 @@ def pipeline_builder():
         current_outputs=current_outputs,
         current_edges=current_edges,
         dataset_path=session.dataset_path or "",
-        op_schemas=page_op_schemas(),
     )

@@ -58,8 +58,7 @@ Reading data and running a model
        with a reader for every form it travels in (layer URL blob, YAML
        ``json_data``, finetune manifest, pipeline-builder nodes), its
        ``digest()`` and ``build()``. Also ``chain_output_dtype``,
-       ``chain_num_channels``, ``chain_is_segmentation`` and the
-       ``op_schemas`` the pages build their forms from.
+       ``chain_num_channels`` and ``chain_is_segmentation``.
    * - ``process_chain.py``
      - ``process_chain()``: the process's chain, its live steps and their
        configured ``spec``, changed only by ``set()``. See `Where state lives`_.

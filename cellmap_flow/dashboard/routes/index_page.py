@@ -4,9 +4,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, request, jsonify
 
 from cellmap_flow.norm.input_normalize import get_input_normalizers
-from cellmap_flow.pipeline_spec import op_schemas
 from cellmap_flow.post.postprocessors import get_postprocessors_list
-from cellmap_flow.models.model_merger import get_model_mergers_list
 from cellmap_flow.dashboard.requests import SetData, parse
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
@@ -34,12 +32,6 @@ def viewer_url_for(viewer_url, headers, scheme):
         return viewer_url
     proto = (headers.get("X-Forwarded-Proto") or scheme).split(",")[0].strip()
     return parsed._replace(scheme=proto, netloc=forwarded_host).geturl()
-
-
-def page_op_schemas():
-    """``{"input_norm": [...], "postprocess": [...]}``: each registered op's
-    JSON Schema (pipeline_spec.op_schemas), for the pages' forms."""
-    return {kind: op_schemas(kind) for kind in ("input_norm", "postprocess")}
 
 
 def _form_value(value):
@@ -100,7 +92,6 @@ def index():
     session = get_session()
     input_norm_items = chain_items(get_input_normalizers(), session.input_norms)
     postprocess_items = chain_items(get_postprocessors_list(), session.postprocess)
-    model_mergers = get_model_mergers_list()
     # A copy: the "User" group lists this session's running models for the
     # Models tab only. Written into the session's catalog it outlived the request,
     # and everything else that walks the catalog (update_run_models, the
@@ -124,12 +115,10 @@ def index():
         neuroglancer_url=viewer_url_for(session.neuroglancer_url, request.headers, request.scheme),
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
-        model_mergers=model_mergers,
         model_catalog=model_catalog,
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         server_config_cached=session.server_config_cached,
-        op_schemas=page_op_schemas(),
     )
 
 

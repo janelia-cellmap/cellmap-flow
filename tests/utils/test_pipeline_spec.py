@@ -7,7 +7,6 @@ test_ops.
 """
 
 import base64
-import gc
 import json
 
 import numpy as np
@@ -21,7 +20,6 @@ from cellmap_flow.pipeline_spec import (
     chain_is_segmentation,
     chain_num_channels,
     normalize_steps,
-    op_schemas,
 )
 from cellmap_flow.post.postprocessors import (
     AffinityPostprocessor,
@@ -308,22 +306,3 @@ def test_what_a_chain_outputs(chain, dtype, channels, is_segmentation):
     assert g.get_output_dtype(np.float16) is dtype
     assert chain_num_channels(chain, 9) == channels
     assert chain_is_segmentation(chain) is is_segmentation
-
-
-@pytest.mark.parametrize("kind", [pytest.param("input_norm", id="input-norms"), pytest.param("postprocess", id="postprocessors")])
-def test_op_schemas_describe_every_registered_op(kind):
-    from cellmap_flow.norm.input_normalize import get_input_normalizers
-    from cellmap_flow.post.postprocessors import get_postprocessors_list
-
-    jsonschema = pytest.importorskip("jsonschema")
-    gc.collect()  # so no test-local op class disappears between the two listings
-    listed = get_input_normalizers() if kind == "input_norm" else get_postprocessors_list()
-    schemas = op_schemas(kind)
-    json.dumps(schemas)  # it goes into page data
-    assert [s["name"] for s in schemas] == [op["name"] for op in listed]
-    for entry, op in zip(schemas, listed):
-        schema = entry["schema"]
-        jsonschema.Draft202012Validator.check_schema(schema)
-        assert entry["title"] == schema["title"]
-        assert list(schema["properties"]) == list(op["params"])
-        assert schema["required"] == [p for p, default in op["params"].items() if default == ""]
