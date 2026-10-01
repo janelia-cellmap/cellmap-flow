@@ -34,6 +34,11 @@ async function startBBXGeneration() {
   const existingBoundingBoxes = inputNode.params?.bounding_boxes || [];
 
   openDialog("bbx-viewer-modal");
+  // Closing the dialog replaces the state (onViewerClosed): a dialog closed
+  // while the viewer was being made must not be filled, nor its poll
+  // started, which then ran for the life of the page.
+  const opened = bbxGeneratorState;
+  const closed = () => bbxGeneratorState !== opened;
   try {
     const response = await fetch("/api/bbx-generator", {
       method: "POST",
@@ -45,6 +50,7 @@ async function startBBXGeneration() {
       }),
     });
     const result = await response.json();
+    if (closed()) return;
     if (response.ok) {
       // The viewer; the server has already put the existing boxes in its
       // annotation layer.
@@ -78,6 +84,7 @@ async function startBBXGeneration() {
       closeDialog("bbx-viewer-modal");
     }
   } catch (err) {
+    if (closed()) return;
     showMessage("Failed to connect to BBX generator: " + err.message, "error");
     closeDialog("bbx-viewer-modal");
   }
