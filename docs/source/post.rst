@@ -120,4 +120,5 @@ Applies a user-defined lambda expression to each data point.
 
 - `expression`: A numpy expression in `x` (e.g., `"x * 2"`, `"np.clip(x, 0, 1)"`). Arithmetic, comparisons,
   indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods such as `astype` and `clip`
-  are allowed. Anything else is rejected, because expressions arrive in layer URLs.
+  are allowed, with the keyword arguments `axis`, `keepdims`, `dtype`, `a_min` and `a_max`. Anything else,
+  including repeating a list (`[x] * n`), is rejected, because expressions arrive in layer URLs.

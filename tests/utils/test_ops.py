@@ -193,6 +193,9 @@ X = np.array([[-1.0, 0.25], [0.75, 2.0]], dtype=np.float32)
         pytest.param("abs(x) / np.max(abs(x))", np.abs(X) / np.abs(X).max(), id="abs-and-max"),
         pytest.param("x if x.ndim == 2 else x * 0", X, id="conditional"),
         pytest.param("np.clip(x, a_min=0, a_max=None)", np.clip(X, 0, None), id="keyword-arguments"),
+        pytest.param("np.max(x, axis=0, keepdims=True)", np.max(X, axis=0, keepdims=True), id="reduction-keywords"),
+        pytest.param("np.full_like(x, 3, np.uint8)", np.full_like(X, 3, np.uint8), id="full-like-with-a-dtype"),
+        pytest.param("np.stack([x, x])", np.stack([X, X]), id="a-literal-list"),
     ],
 )
 def test_numpy_math_on_x_is_allowed(expression, expected):
@@ -217,6 +220,11 @@ def test_numpy_math_on_x_is_allowed(expression, expected):
         pytest.param("x ** 10**10", id="huge-power"),
         pytest.param("x ** x", id="power-of-x"),
         pytest.param("x.astype('U1000')", id="huge-string-dtype"),
+        pytest.param("np.concatenate([x] * 10**5)", id="repeated-list"),
+        pytest.param("np.stack((x,) * 10**4)", id="repeated-tuple"),
+        pytest.param("np.full_like(x, 0, shape=(10**5, 10**5))", id="shape-keyword"),
+        pytest.param("np.zeros_like(x, None, None, True, (10**5, 10**5))", id="positional-shape"),
+        pytest.param("np.max(x, out=x)", id="other-keyword"),
         pytest.param("x = 1", id="assignment"),
         pytest.param("x" * 600, id="too-long"),
     ],
