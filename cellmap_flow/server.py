@@ -14,6 +14,7 @@ from flask_cors import CORS
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.inference import timing
 from cellmap_flow.inference.runner import ChunkCancelled, DeviceSlots
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
@@ -264,6 +265,12 @@ class CellMapFlowServer:
         self.restart_callback = restart_callback
         self.restart_token = restart_token
 
+        # For the per-chunk timing line (_log_chunk_timing).
+        self._timing_lock = threading.Lock()
+        self._chunks_started = 0
+        self._chunks_in_flight = 0
+        self._first_chunk_at = None
+
         # Every chunk request reads its input here, and neuroglancer sends
         # them several at a time. The IDI's default single reader thread
         # queued those reads behind one another (a cold 178^3 read from /nrs
@@ -504,7 +511,47 @@ class CellMapFlowServer:
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
+    # The first chunks a server serves log their timing at INFO, so a slow
+    # start can be read from the job's log as it is; the rest log at DEBUG.
+    CHUNKS_TIMED_AT_INFO = 20
+
     def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
+        timing.start()
+        arrived = time.perf_counter()
+        with self._timing_lock:
+            self._chunks_started += 1
+            self._chunks_in_flight += 1
+            number, in_flight = self._chunks_started, self._chunks_in_flight
+            if self._first_chunk_at is None:
+                self._first_chunk_at = arrived
+        try:
+            response = self._serve_chunk(dataset, chunk_z, chunk_y, chunk_x)
+        finally:
+            with self._timing_lock:
+                self._chunks_in_flight -= 1
+        self._log_chunk_timing((chunk_z, chunk_y, chunk_x), number, in_flight, arrived, response[1])
+        return response
+
+    def _log_chunk_timing(self, index, number, in_flight, arrived, status):
+        """One line saying where chunk ``index``'s time went.
+
+        ``number``: the chunk's place among the requests this server has had;
+        ``in_flight``: how many, it included, were being served when it
+        arrived. A chunk that waited long on "gpu wait" was queued behind
+        others; a long "read" is the raw data.
+        """
+        total = time.perf_counter() - arrived
+        stages = ", ".join(f"{name} {seconds:.2f}" for name, seconds in timing.finish().items())
+        outcome = "" if status == HTTPStatus.OK else f" -> {int(status)}"
+        level = logging.INFO if number <= self.CHUNKS_TIMED_AT_INFO else logging.DEBUG
+        logger.log(
+            level,
+            f"Chunk #{number} {'.'.join(map(str, index))}{outcome}: {total:.2f} s ({stages}); "
+            f"arrived {arrived - self._first_chunk_at:.2f} s after the first chunk request, "
+            f"{in_flight} in flight",
+        )
+
+    def _serve_chunk(self, dataset, chunk_z, chunk_y, chunk_x):
         chain = self.chain_for(dataset)
         roi = virtual_zarr.chunk_roi(
             (chunk_z, chunk_y, chunk_x), self._spatial_block, self.output_voxel_size, self.origin
@@ -533,7 +580,8 @@ class CellMapFlowServer:
         self._send_equivalences(dataset, chain)
 
         # Encode using Zarr format
-        encoded = self.chunk_encoder.encode(chunk_data)
+        with timing.stage("encode"):
+            encoded = self.chunk_encoder.encode(chunk_data)
 
         return (
             encoded,

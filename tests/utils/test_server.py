@@ -199,3 +199,14 @@ def _chunk_at(client, server, index):
     response = client.get(f"/plain/s0/{index}")
     assert response.status_code == 200, response.data
     return decode_chunk(server, response.data, np.float32, (4, 4, 4, 1))
+
+
+def test_each_chunk_logs_where_its_time_went(server, caplog):
+    """So a slow first chunk on the cluster can be read off the job's log."""
+    client = server.app.test_client()
+    with caplog.at_level(logging.INFO, logger="cellmap_flow.server"):
+        _chunk(client, server, "plain")
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Chunk #")]
+    assert line.startswith("Chunk #1 0.0.0: ") and line.endswith("0.00 s after the first chunk request, 1 in flight")
+    stages = line.split("(", 1)[1].split(")", 1)[0]
+    assert [s.rsplit(" ", 1)[0] for s in stages.split(", ")] == ["read", "gpu wait", "gpu", "postprocess", "encode"]

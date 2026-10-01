@@ -22,6 +22,8 @@ import time
 
 import numpy as np
 
+from cellmap_flow.inference import timing
+
 logger = logging.getLogger(__name__)
 
 GPU_SLOTS_ENV = "CELLMAP_FLOW_GPU_SLOTS"
@@ -88,6 +90,7 @@ class DeviceSlots:
     @contextlib.contextmanager
     def hold(self, cancelled=None):
         ticket = object()
+        waited_from = time.perf_counter()
         with self._cond:
             self._waiting.append(ticket)
             try:
@@ -103,6 +106,7 @@ class DeviceSlots:
                 raise
             self._waiting.popleft()
             self._running += 1
+            timing.add("gpu wait", time.perf_counter() - waited_from)
             # With more than one slot free, the next in line may go too.
             self._cond.notify_all()
         try:
@@ -146,13 +150,15 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     use_half_prediction = kwargs.get("use_half_prediction", False)
 
-    raw_input = idi.to_ndarray_ts(read_roi)
+    with timing.stage("read"):  # and normalize, which the idi does as it reads
+        raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     # Only the transfer, the forward and the copy back take a device slot;
     # the read and the normalization above overlap another chunk's forward.
     autocast_dtype = kwargs.get("autocast_dtype")
-    with _device_part(kwargs.get("device_slots"), kwargs.get("cancelled")), torch.no_grad():
+    with _device_part(kwargs.get("device_slots"), kwargs.get("cancelled")), torch.no_grad(), \
+            timing.stage("gpu"):
         raw_input_torch = torch.from_numpy(raw_input).to(device, non_blocking=True)
         logger.debug(f"Predicting with model {type(config.model).__name__} on device {device}")
         logger.debug(f"Input shape: {raw_input_torch.shape}, dtype: {raw_input_torch.dtype}")
@@ -391,7 +397,7 @@ class ModelRunner:
         if own and callable(own):
             # A config's own process_chunk (TF, ONNX, cellpose, bioimage) runs
             # its model somewhere inside, so all of it takes the slot.
-            with _device_part(self.device_slots, cancelled):
+            with _device_part(self.device_slots, cancelled), timing.stage("model"):
                 return own(idi, out_roi)
         return self.process_chunk_basic(idi, out_roi, cancelled)
 
@@ -415,7 +421,7 @@ class ModelRunner:
             )
         # A script's own predict may not accept more keywords, and its device
         # part can't be told apart from the rest, so all of it takes the slot.
-        with _device_part(self.device_slots, cancelled):
+        with _device_part(self.device_slots, cancelled), timing.stage("model"):
             return self.model_config.config.predict(
                 input_roi, output_roi, self.model_config.config, **kwargs
             )

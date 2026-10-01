@@ -14,6 +14,7 @@ import logging
 
 import numpy as np
 
+from cellmap_flow.inference import timing
 from cellmap_flow.inference.runner import ModelRunner
 from cellmap_flow.inference.runner import predict  # noqa: F401  (the script contract; WRAPPERS.md)
 from cellmap_flow.process_chain import process_chain
@@ -70,12 +71,13 @@ class Inferencer(ModelRunner):
 
         result = self.predict(idi, roi, cancelled)
 
-        postprocessed = apply_postprocess(
-            result,
-            postprocess=postprocess,
-            chunk_corner=_chunk_index(roi, grid_origin),
-            chunk_num_voxels=self._output_voxels_in(roi, idi),
-        )
+        with timing.stage("postprocess"):
+            postprocessed = apply_postprocess(
+                result,
+                postprocess=postprocess,
+                chunk_corner=_chunk_index(roi, grid_origin),
+                chunk_num_voxels=self._output_voxels_in(roi, idi),
+            )
         return postprocessed
 
     def _output_voxels_in(self, roi, idi):
