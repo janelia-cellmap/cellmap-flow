@@ -1435,7 +1435,10 @@ class LoRAFinetuner:
             self.model.load_state_dict(checkpoint['model_state_dict'])
         if 'optimizer_state_dict' in checkpoint:
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        if 'scaler_state_dict' in checkpoint:
+        # Empty when the checkpoint's run had no loss scaling (bf16, fp32, or
+        # after the fp32 fallback), and an fp16 trainer's scaler refuses an
+        # empty state; it then starts from its defaults.
+        if checkpoint.get('scaler_state_dict'):
             self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         self.current_epoch = checkpoint['epoch']

@@ -307,6 +307,18 @@ def test_a_resumed_run_carries_on_after_its_checkpoint(make_trainer, tmp_path, n
     assert (stats["final_loss"] is None) == (not epochs)
 
 
+@pytest.mark.finetune
+def test_a_checkpoint_saved_without_loss_scaling_resumes_into_a_trainer_with_it(make_trainer, tmp_path):
+    """bf16, fp32 and the fp32 fallback save an empty scaler state, which an fp16 trainer's scaler refused."""
+    data = (torch.rand(1, 1, 4, 4, 4), FOREGROUND)
+    lora = LoraStrategy(2, 4, 0.0)
+    make_trainer(lora.prepare(_net()), data, output_dir=str(tmp_path / "first")).train()
+    resumed = make_trainer(lora.prepare(_net()), data)
+    resumed.scaler = torch.amp.GradScaler("cpu")  # an fp16 trainer's; CUDA's turns itself off without a GPU
+    resumed.load_checkpoint(str(tmp_path / "first" / "best_checkpoint.pth"))
+    assert resumed.scaler.is_enabled()
+
+
 class _StopSignal(nn.Module):
     """Passes its input on; writes the dashboard's stop signal at its second call, in epoch 1
     (the first is the output probe's)."""
