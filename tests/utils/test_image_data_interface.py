@@ -9,6 +9,7 @@ voxels it hit.
 import json
 import logging
 import os
+import pickle
 import warnings
 from types import SimpleNamespace
 
@@ -16,9 +17,9 @@ import numpy as np
 import pytest
 from funlib.geometry import Coordinate, Roi
 
-from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.norm.input_normalize import ChannelSelector, LambdaNormalizer, MinMaxNormalizer
+from cellmap_flow.process_chain import process_chain
 
 Z = np.arange(1, 11, dtype=np.uint8)[:, None, None]  # z index + 1
 
@@ -298,23 +299,28 @@ def test_the_voxel_size_is_in_nanometers_whole_or_fractional(ome_pyramid, levels
 def test_each_read_goes_through_its_own_chain(raw_zarr):
     roi = Roi((0, 0, 0), (32, 32, 32))
     idi = ImageDataInterface(raw_zarr(np.full((4, 4, 4), 7, np.uint8)))
-    g.input_norms = [LambdaNormalizer("x * 2")]
-    # With no chain of its own it follows g, on region and whole-array reads.
+    process_chain().input_norms = [LambdaNormalizer("x * 2")]
+    # With no chain of its own it follows the process's, on region and whole-array reads.
     assert np.all(idi.to_ndarray_ts(roi) == 14) and np.all(idi.to_ndarray_ts() == 14)
     # An explicit chain wins, and leaves the original alone; both share one store.
     tripled = idi.with_input_norms([LambdaNormalizer("x * 3")])
     assert np.all(tripled.to_ndarray_ts(roi) == 21) and np.all(idi.to_ndarray_ts(roi) == 14)
     assert tripled.source.ts is idi.source.ts
     assert np.all(ImageDataInterface(idi.path, normalize=False).to_ndarray_ts(roi) == 7)
+    # Pickled, it still has no chain of its own: it reads the chain of the
+    # process that unpickles it, which in a spawned loader worker is empty.
+    unpickled = pickle.loads(pickle.dumps(idi))
+    process_chain().input_norms = []
+    assert np.all(unpickled.to_ndarray_ts(roi) == 7)
 
 
 def test_the_channel_is_chosen_on_every_read_and_keeps_the_last_declared_dtype(raw_zarr):
     """A server that has read a chunk must follow a new ChannelSelector."""
     roi = Roi((0, 0, 0), (32, 32, 32))
     channels = ImageDataInterface(raw_zarr(np.stack([np.full((4, 4, 4), c, np.uint8) for c in (1, 2)])))
-    g.input_norms = []
+    process_chain().input_norms = []
     assert np.all(channels.to_ndarray_ts(roi) == 1)
-    g.input_norms = [ChannelSelector(1)]
+    process_chain().input_norms = [ChannelSelector(1)]
     assert np.all(channels.to_ndarray_ts(roi) == 2) and np.all(np.asarray(channels.ts[...]) == 2)
     # ChannelSelector declares no dtype: MinMax's float32 still reaches the viewer.
     view = channels.with_input_norms([MinMaxNormalizer(), ChannelSelector(0)])

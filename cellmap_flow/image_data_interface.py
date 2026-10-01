@@ -7,8 +7,8 @@ and the array (``io.source``). A read of a world ROI is the grid's box of voxels
 with padding where it runs past the array, then optionally resampled to
 ``output_voxel_size`` (deprecated). What is read goes through the input
 chain on the way: the normalizers and ChannelSelector given as
-``input_norms``, else the process-wide ``g.input_norms`` as it is at read
-time, which user ``process_chunk`` scripts rely on.
+``input_norms``, else the process's chain (``process_chain().input_norms``)
+as it is at read time, which user ``process_chunk`` scripts rely on.
 """
 
 import copy
@@ -20,12 +20,13 @@ import numpy as np
 import tensorstore as ts
 from funlib.geometry import Coordinate
 
-from cellmap_flow.globals import g
+import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
 from cellmap_flow.io import multiscale, paths
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import ArrayMeta, read_array_meta, snap_integral
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.io.source import open_array, read_padded
+from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ class ImageDataInterface:
         cache_bytes=0,
     ):
         """``input_norms``: the normalizers (and ChannelSelector) to read with.
-        ``None`` follows the process-wide ``g.input_norms`` at read time.
+        ``None`` follows the process's chain (``process_chain().input_norms``)
+        at read time.
 
         ``concurrency_limit`` and ``cache_bytes`` go to the tensorstore the
         reads use (see ``io.source.open_array``). The defaults, one reader
@@ -226,7 +228,7 @@ class ImageDataInterface:
         return view if self.normalize else view.selected()
 
     def with_input_norms(self, input_norms):
-        """This dataset, read through ``input_norms`` instead of ``g.input_norms``.
+        """This dataset, read through ``input_norms`` instead of the process's chain.
 
         Shares the opened tensorstore, so it is cheap to make one per request.
         """
@@ -303,11 +305,11 @@ class ImageDataInterface:
 def apply_norms(data, input_norms=None):
     """Read ``data`` if it is a tensorstore view and run it through the chain.
 
-    ``input_norms=None`` means the process-wide ``g.input_norms``.
+    ``input_norms=None`` means the process's chain, ``process_chain().input_norms``.
     """
     if hasattr(data, "read"):
         data = data.read().result()
-    for norm in g.input_norms if input_norms is None else input_norms:
+    for norm in process_chain().input_norms if input_norms is None else input_norms:
         data = norm(data)
     return data
 
@@ -345,7 +347,9 @@ class LazyNormalization:
     fixed when the store was opened: a server that has already read one chunk
     must still follow a ChannelSelector that changes afterwards.
 
-    ``input_norms=None`` follows the process-wide ``g.input_norms``.
+    ``input_norms=None`` follows the process's chain,
+    ``process_chain().input_norms``, as it is at each access: a worker that
+    unpickles one reads its own chain, not the sender's.
     ``normalize=False`` selects the channel but applies no normalizers.
     """
 
@@ -356,7 +360,9 @@ class LazyNormalization:
         self.spatial_ndim = spatial_ndim
 
     def chain(self):
-        return list(g.input_norms if self.input_norms is None else self.input_norms)
+        if self.input_norms is None:
+            return list(process_chain().input_norms)
+        return list(self.input_norms)
 
     def norms_to_apply(self):
         return self.chain() if self.normalize else []
