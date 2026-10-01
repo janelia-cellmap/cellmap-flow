@@ -259,8 +259,12 @@ class TrainingSession:
         self.initial_state = strategy.initial_state(model)
         # Where the next iteration's TensorBoard curves start: (step, epoch).
         self.tb_position = (0, 0)
-        # Set by a restart; the reset waits until the next iteration is set up.
+        # Set by a restart; the reset waits until the next iteration is set
+        # up, and stays pending until its trainer is built.
         self.pending_reset = False
+        # What the shared model holds, so that a restart that fails can say
+        # what goes on being served.
+        self.model_holds = "the starting weights"
 
     def run(self) -> int:
         """Train (and serve, and retrain on each restart) until the job ends; its exit code."""
@@ -285,9 +289,11 @@ class TrainingSession:
                 logger.error(f"Could not set up training iteration {self.iteration}: {e}", exc_info=True)
                 if not (args.auto_serve and self.server_started):
                     return 1
-                # The previous iteration's model is still loaded and served;
-                # wait for a restart with settings that work.
+                # Usually the previous iteration's model, which is reset only
+                # once the data and target are built; the starting weights if
+                # it was the trainer that failed (see _set_up_iteration).
                 markers.emit(markers.RESTART_FAILED, e)
+                logger.warning(f"Serving {self.model_holds} until a restart with settings that work.")
                 if not self._await_restart():
                     return 1
                 continue
@@ -304,6 +310,7 @@ class TrainingSession:
                 if stats.get('diverged'):
                     # Skip saving, and wait for a restart with other settings.
                     logger.warning("Training diverged — skipping model save.")
+                    self.model_holds = f"the weights of training iteration {self.iteration}, which diverged"
                     if not args.auto_serve:
                         return 1
                     if not self.server_started:
@@ -362,12 +369,13 @@ class TrainingSession:
         target_transform = build_target_transform(args, self.model_config)
         logger.info(f"output_type={args.output_type}, select_channel={args.select_channel}")
 
-        # Only now that the iteration can run: put the model back where
-        # training started (see _reset_model). Until here it is still the
-        # previous iteration's, which the server keeps serving.
+        # Only now that its data and target are built: put the model back
+        # where training started (see _reset_model). Until here it is still
+        # the previous iteration's, which the server keeps serving. The
+        # trainer has to be built on the reset model -- a LoRA reset makes
+        # new adapter parameters for its optimizer -- so it comes after.
         if self.pending_reset:
             self._reset_model()
-            self.pending_reset = False
 
         # Re-created each iteration, for a fresh optimizer and scheduler.
         if self.iteration > 1:
@@ -396,6 +404,10 @@ class TrainingSession:
             tb_start_step=self.tb_position[0],
             tb_start_epoch=self.tb_position[1],
         )
+        # Done only now: had the trainer failed, the model would have been
+        # reset all the same, and the next restart must reset it again, with
+        # its own rank.
+        self.pending_reset = False
 
         # Resume from checkpoint if specified (first iteration only)
         if args.resume and self.iteration == 1:
@@ -445,6 +457,7 @@ class TrainingSession:
         logger.info("\nSaving LoRA adapter..." if is_lora else "\nSaving full finetuned weights...")
         exported = trainer.save_adapter(export_dir=str(export_dir))
         run_outputs.point_latest_export(output_dir, export_dir, strategy.export_name)
+        self.model_holds = f"the weights exported to {export_dir}"
 
         logger.info("\n" + "=" * 60)
         logger.info("Finetuning Complete!")
@@ -570,6 +583,7 @@ class TrainingSession:
             min_channels=args.lora_min_channels,
         )
         self.model = strategy.restart(self.model, self.initial_state)
+        self.model_holds = "the starting weights"
         self.model.train()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

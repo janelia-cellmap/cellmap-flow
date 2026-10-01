@@ -193,6 +193,32 @@ def test_a_restart_that_cannot_be_set_up_waits_for_the_next(run_cli, tmp_path):
     assert len([line for line in cli.markers if line.startswith("TRAINING_ITERATION_COMPLETE:")]) == 2
 
 
+@pytest.mark.finetune
+def test_a_restart_whose_trainer_cannot_be_built_leaves_the_reset_to_the_next(run_cli, tmp_path, monkeypatch, caplog):
+    """The model is reset before its trainer is built, and the reset was marked
+    done before that: the job said the previous model was still served while
+    it served the starting weights, and the next restart, finding nothing to
+    reset, kept the failed one's adapter and ignored its own rank."""
+    from cellmap_flow.finetune import session_loop
+
+    built = []
+
+    def trainer(*args, **kwargs):
+        built.append(kwargs)
+        if len(built) == 2:
+            raise RuntimeError("CUDA out of memory")
+        return real_trainer(*args, **kwargs)
+
+    real_trainer = session_loop.LoRAFinetuner
+    monkeypatch.setattr(session_loop, "LoRAFinetuner", trainer)
+    cli = run_cli("--lora-r", "2", "--auto-serve", "--serve-data-path", str(tmp_path),
+                  restarts=[{"params": {"lora_r": 4}}, {"params": {"lora_r": 8}}])
+    assert "RESTART_FAILED: CUDA out of memory" in cli.markers
+    config = json.loads((Path(_served_entry(cli)["lora_adapter_path"]) / "adapter_config.json").read_text())
+    assert (config["r"], config["lora_alpha"]) == (8, 16)
+    assert "Serving the starting weights until a restart" in caplog.text
+
+
 def test_a_restart_cannot_turn_a_full_finetune_into_lora(run_cli, tmp_path):
     """The model decides what is exported. A restart asking a full finetune for
     LoRA had its next YAML point at a lora_adapter/ that was never written."""
