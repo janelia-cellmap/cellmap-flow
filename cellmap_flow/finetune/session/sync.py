@@ -181,12 +181,10 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
     removing it. Trusting one bad listing once wiped 3456 chunks of a
     session from disk.
 
-    Returns ``(changed_keys, [], remote_state)``: the chunks copied, and the
+    Returns ``(changed_keys, remote_state)``: the chunks copied, and the
     state to record as synced. A chunk that failed to copy is left out of
     ``changed_keys`` and keeps its previous state (or none) in
-    ``remote_state``, so the next sync tries it again. The empty list is
-    where removed keys used to be; the slot stays so callers' tuple
-    unpacking keeps working.
+    ``remote_state``, so the next sync tries it again.
     """
     try:
         # One listing, with each object's ETag: no per-chunk HEAD request.
@@ -194,11 +192,11 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
     except FileNotFoundError:
         # The bucket has no annotation/s0 yet (nothing painted): keep what
         # is on disk, and look again next cycle.
-        return [], [], dict(known_state)
+        return [], dict(known_state)
     except Exception as e:
         logger.warning(f"diff_and_sync_chunks: s3.ls({s0_path}) failed: {e}; "
                        "treating as transient, skipping sync this cycle.")
-        return [], [], dict(known_state)
+        return [], dict(known_state)
 
     remote_state = {}
     for entry in entries:
@@ -209,7 +207,7 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
 
     changed = [k for k, v in remote_state.items() if force or known_state.get(k) != v]
     if not changed:
-        return [], [], remote_state
+        return [], remote_state
 
     # Copy, never delete: the recorded state loses a key MinIO stops
     # listing, but the chunk file on disk stays.
@@ -226,7 +224,7 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
             remote_state[key] = known_state[key]
         else:
             remote_state.pop(key, None)
-    return [k for k in changed if k not in failed], [], remote_state
+    return [k for k in changed if k not in failed], remote_state
 
 
 def volume_record(volume_id, zarr_path=None, *, volumes):
@@ -296,7 +294,7 @@ def sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bo
             if "s0" in sync_zarr_group_metadata(s3, src_annotation, dst_annotation):
                 return False
 
-            changed, _, remote_state = diff_and_sync_chunks(
+            changed, remote_state = diff_and_sync_chunks(
                 s3,
                 f"{src_annotation}/s0",
                 dst_annotation / "s0",

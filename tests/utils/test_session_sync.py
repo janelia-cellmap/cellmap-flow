@@ -73,10 +73,10 @@ class FakeS3:
 def test_a_second_write_within_the_same_second_is_synced(tmp_path):
     s3 = FakeS3()
     s3.put(f"{S0}/0.0.0", b"first", "etag-1")
-    _, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
+    _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
     s3.put(f"{S0}/0.0.0", b"second", "etag-2")  # same LastModified as before
 
-    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
+    changed, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
 
     assert changed == ["0.0.0"]
     assert (tmp_path / "0.0.0").read_bytes() == b"second"
@@ -88,12 +88,12 @@ def test_a_chunk_that_failed_to_download_is_retried(tmp_path):
     s3.put(f"{S0}/0.0.1", b"other", "e2")
     s3.fail.add(f"{S0}/0.0.0")
 
-    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
+    changed, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, {})
     assert changed == ["0.0.1"]
     assert "0.0.0" not in state
 
     s3.fail.clear()
-    changed, _, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
+    changed, state = sync.diff_and_sync_chunks(s3, S0, tmp_path, state)
     assert changed == ["0.0.0"]
     assert (tmp_path / "0.0.0").read_bytes() == b"stroke"
 
