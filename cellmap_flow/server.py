@@ -20,10 +20,10 @@ from cellmap_flow.models.geometry import CHANNEL_AXES
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec, chain_num_channels, chain_output_dtype
 from cellmap_flow.serving import virtual_zarr
+from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.serving.protocol import (
     ARGS_KEY,
     INPUT_NORM_KEY,
-    IP_PATTERN,
     decode_to_json,
     split_dataset_url,
 )
