@@ -3,6 +3,7 @@ import logging
 import neuroglancer
 from flask import Blueprint, request, jsonify
 
+from cellmap_flow.dashboard.routes.index_page import viewer_url_for
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
 
@@ -88,14 +89,15 @@ def start_bbx_generator():
         bbx_generator_state["bounding_boxes"] = list(existing_bounding_boxes)
         bbx_generator_state["viewer"] = viewer
 
-        # Get the viewer URL and fix localhost reference
+        # The address the browser loads the viewer from: the request's host
+        # for a viewer on localhost, and behind a reverse proxy the proxy's,
+        # as for the dashboard's own viewer.
         viewer_url = str(viewer)
-
-        # Replace localhost with the actual request host for external access
         if "localhost" in viewer_url:
             client_host = request.host.split(":")[0]
             viewer_url = viewer_url.replace("localhost", client_host)
             logger.info(f"Replaced localhost with {client_host} in viewer URL")
+        viewer_url = viewer_url_for(viewer_url, request.headers, request.scheme)
 
         bbx_generator_state["viewer_url"] = viewer_url
         bbx_generator_state["viewer_state"] = viewer.state
