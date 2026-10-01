@@ -176,10 +176,40 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
   - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
   - **Deprecated (K18):** `ImageDataInterface`'s `output_voxel_size` and `custom_fill_value` arguments warn; they still work this release. `concurrency_limit` stays, because the inference server uses it.
+  - **One `cellmap_flow` command (K1–K5, K21).** See the Command line page of the docs.
+    - `cellmap_flow` is one command with subcommands: `infer <type>`, `yaml`, `view`, `dashboard`, `serve`, `blockwise`, `finetune {train, export-merged, build-corrections}`, `models`, `plugins {register, unregister, list}` and `doctor`. The old console scripts (`cellmap_flow_yaml`, `_view`, `_blockwise`, `_blockwise_multiple`, `_app`, `_server`) and old subcommands (`list-models`, `register`, `unregister`, `list-plugins`, `cellmap_flow <type>`) keep working for one release, each printing a deprecation notice on stderr.
+    - `cellmap_flow finetune` now means the finetune tools group. A finetuned model is served with `cellmap_flow infer finetune`.
+    - `cellmap_flow blockwise` takes one YAML or several, replacing `cellmap_flow_blockwise_multiple`. `--client` takes exactly one. Workers run `cellmap_flow blockwise <yaml> --client`.
+    - `cellmap_flow run -m TYPE -c k=v` is hidden and deprecated. It prints the `cellmap_flow infer TYPE --k v` command it stands for, then runs it; an unknown key is refused as an unknown option.
+    - A model type's short flags go to its constructor arguments in signature order; an argument whose first letter is taken gets only its long flag (`script`: `-s` is `--script-path`, and `--scale` has none). They used to be reversed.
+    - `cellmap_flow --log-level` applies to every subcommand.
+    - The job cleanup handlers are installed just before a server starts, not on every invocation.
+    - `cellmap_flow dashboard [-n URL]` serves the dashboard alone, and Ctrl+C kills the models launched from it. `cellmap_flow_app --help` used to start a dashboard. `create_and_run_app` sets up logging at INFO when nothing has.
+    - **Plugins load when a command starts, not at `import cellmap_flow`.** Every command and alias loads them, as do the dashboard and the finetune job. A script that uses plugin types calls `cellmap_flow.plugins.load_plugins()` itself. An environment installed before 0.3.0 has old console-script wrappers that don't load plugins until it is reinstalled (`pixi install`, or `pip install -e .`).
+    - **Launchers start servers with `<CELLMAP_FLOW_SERVER_COMMAND> --model <JSON> -d <data>`**, where the JSON is `ModelConfig.launch_entry` (its `to_dict()` without None values), rebuilt by the server the way a YAML model entry is. `CELLMAP_FLOW_SERVER_COMMAND` defaults to `cellmap_flow serve`, and pixi's activation sets `pixi run cellmap_flow serve`. The old value `pixi run cellmap_flow_server` still works: that command accepts `--model` too, and keeps its per-type subcommands for one release.
+  - **Global state (K16).** `cellmap_flow.globals.g` and `Flow` are deprecated and go in the release after 0.3.0. Every name `g` had still works and warns (`DeprecationWarning`, at the caller's line) with its replacement:
+    - the launcher settings (`queue`, `charge_group`, `walltime`, …, `save_server_config()`) are `cellmap_flow.jobs.settings.launcher_settings()`;
+    - the chain (`input_norms`, `postprocess`, `pipeline_spec`, `set_pipeline()`, …) is `cellmap_flow.process_chain.process_chain()`;
+    - the started jobs are `cellmap_flow.jobs.launch.started_jobs()`;
+    - everything else is the dashboard's `cellmap_flow.dashboard.state.get_session()`.
+
+    A script's `g.input_norms = [...]` still sets the process's chain, and `Flow()` returns `g`. Assigning a name `g` never had raises `AttributeError` instead of storing it. Importing `cellmap_flow.globals` no longer reads `~/.cellmap_flow/server_config.yaml`; a process reads it the first time it needs a setting. Moved without aliases: `globals.SERVER_CONFIG_PATH/DEFAULTS/KEYS` and `load_/save_server_config_cache` → `cellmap_flow.jobs.settings`, `LogHandler` → `cellmap_flow.dashboard.routes.logging_routes`, `get_blockwise_tasks_dir()` → `get_session().tasks_dir()`.
+  - **Also changed in this PR, without a "Behaviour change:" commit of their own:**
+    - finetune trainer: `--resume` continues after the checkpoint's epoch; a NaN loss or gradient aborts the epoch before the optimizer step, and a full finetune's fp32 retry reloads its starting weights; TensorBoard steps continue across restarts; after an OOM rebuild the loader keeps its sampler and workers, which changes the patches drawn; an OOM at the first batch reports TRAINING_DIVERGED;
+    - finetune job: an inference server that fails to start ends the job with exit 1; a first iteration that diverges ends the job; a setup failure on restart keeps the job alive and reports RESTART_FAILED;
+    - blockwise: precheck checks every YAML and creates no arrays; submit runs the YAMLs precheck checked; the master runs under `sys.executable`;
+    - added: the dashboard's Review tab and the `review_index` CLI (from PR #102).
 
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `0af021e` g refuses a name it never had
+- `f437b3a` launchers start servers with `cellmap_flow serve --model` (K4)
+- `03a1499` plugins load when a command starts, not at import (K21)
+- `5800117` `cellmap_flow dashboard` serves the dashboard alone (K5)
+- `2de186f` `cellmap_flow run` is a deprecated alias of `infer` (K3)
+- `baf62ef` one cellmap_flow command, with a subcommand per job (K2)
+- `ce0aba5` short flags go to a model's arguments in signature order (K1)
 - `bb1b71a` neuroglancer may zoom out 64x past a pyramid's coarsest level
 - `fbc65b3` a pyramid level that is not a power-of-two downsampling is left out
 - `c61d440` a single array's contrast falls back to its dtype's range
