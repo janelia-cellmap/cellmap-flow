@@ -38,11 +38,13 @@ from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
 
 logger = logging.getLogger(__name__)
 
-# How an inference server is started on a compute node. A deployment whose
-# environment is not on PATH sets this: Fileglancer's pixi checkout uses
-# "pixi run cellmap_flow_server" (see pixi.toml's activation env), so the
-# server runs from the lockfile's environment.
-SERVER_COMMAND = os.environ.get("CELLMAP_FLOW_SERVER_COMMAND", "cellmap_flow_server")
+# How an inference server is started on a compute node; serving/launch.py
+# adds `--model <entry> -d <data>`. A deployment whose environment is not on
+# PATH sets this: Fileglancer's pixi checkout uses "pixi run cellmap_flow
+# serve" (see pixi.toml's activation env), so the server runs from the
+# lockfile's environment. The value before 0.3.0, "... cellmap_flow_server",
+# still works: that command takes --model too.
+SERVER_COMMAND = os.environ.get("CELLMAP_FLOW_SERVER_COMMAND", "cellmap_flow serve")
 SERVER_LOG_DIR = Path(os.path.expanduser("~/.cellmap_flow/server_logs"))
 
 # The site's numbers; jobs/site.py says why each is what it is.

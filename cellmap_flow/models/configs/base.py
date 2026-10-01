@@ -12,7 +12,11 @@ describes it. What the rest of cellmap-flow reads:
 - ``geometry``: the Config's shapes and voxel sizes, as a ``ModelGeometry``.
 - ``chunk_output_axes``, ``output_dtype``: what a processed chunk is.
 - ``to_dict()``: the model entry ``registry.build_model`` rebuilds it from.
-- ``command``: the ``cellmap_flow_server`` arguments that rebuild it.
+- ``launch_entry``: the entry a launched server rebuilds it from
+  (``cellmap_flow serve --model <it, as JSON>``).
+- ``command``: the ``cellmap_flow_server <type>`` arguments that rebuild
+  it, which launchers passed before 0.3.0; that form of the server goes in
+  the release after it.
 """
 
 import inspect
@@ -105,6 +109,20 @@ def _cli_value(value):
     if isinstance(value, (list, tuple, np.ndarray)):
         return ",".join(str(v) for v in value)
     return str(value)
+
+
+def model_entry(cls, params: dict) -> dict:
+    """The model entry ``cellmap_flow serve --model`` builds ``cls(**params)`` from.
+
+    ``{"type": <the name the registry has cls under>, **params}``, leaving
+    out None. The server rebuilds it with ``registry.build_model``, as a
+    YAML's entry is rebuilt, so ``params`` may be to_dict()'s, extra keys
+    and all.
+    """
+    from cellmap_flow.models.registry import cli_name_of
+
+    rest = {k: v for k, v in params.items() if k != "type" and v is not None}
+    return {"type": cli_name_of(cls), **rest}
 
 
 def command_argv(cls, params: dict) -> list:
@@ -423,6 +441,17 @@ class ModelConfig:
     def _launch_params(self) -> dict:
         """The constructor arguments a launched server needs; to_dict() by default."""
         return self.to_dict()
+
+    @property
+    def launch_entry(self) -> dict:
+        """The model entry a launched server rebuilds this exact config from.
+
+        to_dict(), less what only the pipeline builder shows (a Hugging Face
+        repo's downloaded metadata), under the name the registry has this
+        class under (``registry.cli_name_of``), so that the server rebuilds
+        this class and not a parent it inherited cli_name from.
+        """
+        return model_entry(type(self), self._launch_params())
 
     @property
     def command(self) -> str:

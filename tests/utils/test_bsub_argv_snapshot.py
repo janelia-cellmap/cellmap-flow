@@ -100,7 +100,8 @@ def _split(argv):
     return flags, argv[i:]
 
 
-SERVER_COMMAND = "cellmap_flow_server script -s /models/m.py -d /data/raw.zarr"
+# What serving.launch.server_command builds for a script model.
+SERVER_COMMAND = """cellmap_flow serve --model '{"type":"script","script_path":"/models/m.py"}' -d /data/raw.zarr"""
 
 
 # --- (a) an inference server, through start_hosts ---------------------------
@@ -285,7 +286,8 @@ def test_a_local_server_run(monkeypatch, tmp_path, log_dir):
 
     assert rec.runs == []
     assert rec.popens == [{
-        "args": ["cellmap_flow_server", "script", "-s", "/models/m.py", "-d", "/data/raw.zarr"],
+        "args": ["cellmap_flow", "serve", "--model", '{"type":"script","script_path":"/models/m.py"}',
+                 "-d", "/data/raw.zarr"],
         # A python child block-buffers a file otherwise.
         "env": {"PYTHONUNBUFFERED": "1"},
         "stderr_to_stdout": True,

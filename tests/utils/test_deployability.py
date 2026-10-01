@@ -27,14 +27,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _command(words):
     """The click command that ``words``, a console script and its subcommands, runs."""
-    from cellmap_flow.cli import main
-
     scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
     script, *subcommands = words
     module, attr = scripts[script].split(":")
-    command = getattr(importlib.import_module(module), attr)
-    if command is main.main:  # the cellmap_flow script: main() runs the group
-        command = main.cli
+    module = importlib.import_module(module)
+    command = getattr(module, attr)
+    if attr == "main":  # main() loads the plugins, then runs the module's group
+        command = module.cli
     assert isinstance(command, click.Command), words
     for name in subcommands:
         command = command.get_command(click.Context(command), name)
@@ -93,9 +92,18 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
 
 def test_the_server_command_is_read_from_the_environment():
     code = "from cellmap_flow.jobs.launch import SERVER_COMMAND; print(SERVER_COMMAND)"
-    env = {**os.environ, "CELLMAP_FLOW_SERVER_COMMAND": "pixi run cellmap_flow_server"}
+    env = {**os.environ, "CELLMAP_FLOW_SERVER_COMMAND": "pixi run cellmap_flow serve"}
     out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
-    assert out.stdout.strip() == "pixi run cellmap_flow_server"
+    assert out.stdout.strip() == "pixi run cellmap_flow serve"
+
+
+def test_the_server_command_takes_the_model_the_launchers_pass():
+    """pixi's, and the value before 0.3.0, which a deployment may still set."""
+    pixi_value = tomllib.loads((ROOT / "pixi.toml").read_text())["activation"]["env"]["CELLMAP_FLOW_SERVER_COMMAND"]
+    for value in (pixi_value, "pixi run cellmap_flow_server"):
+        pixi, run, *words = value.split()
+        command = _command(words)
+        assert (pixi, run) == ("pixi", "run") and {"--model", "-d"} <= {o for p in command.params for o in p.opts}
 
 
 def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_path):

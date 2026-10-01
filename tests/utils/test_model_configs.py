@@ -10,10 +10,10 @@ import time
 import types
 from types import SimpleNamespace
 
-import click
 import numpy as np
 import pytest
 import torch
+from click.testing import CliRunner
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.models_config import (
@@ -26,6 +26,15 @@ from cellmap_flow.models.models_config import (
     ScriptModelConfig,
 )
 from cellmap_flow.models.configs.script import load_safe_config
+
+
+# Each way a server is started: what launchers run since 0.3.0, the same
+# through the program before it, and that program's per-type commands.
+SERVE_FORMS = {
+    "cellmap_flow serve": lambda config: ["serve", "--model", json.dumps(config.launch_entry)],
+    "cellmap_flow_server --model": lambda config: ["--model", json.dumps(config.launch_entry)],
+    "cellmap_flow_server <type>": lambda config: shlex.split(config.command),
+}
 
 
 @pytest.mark.parametrize(
@@ -43,22 +52,23 @@ from cellmap_flow.models.configs.script import load_safe_config
     ],
     ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface"],
 )
-def test_the_server_rebuilds_the_same_config_from_its_command(config, monkeypatch):
-    """What `cellmap_flow_server <command> -d <data>` does before it serves."""
-    from cellmap_flow.cli.server_cli import cli
-    from cellmap_flow.models import registry
+@pytest.mark.parametrize("form", list(SERVE_FORMS))
+def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
+    """What each form of the server does before it serves."""
+    from cellmap_flow.cli import main, server_cli
 
     def no_download(self):
         raise AssertionError("building a launch command must not fetch metadata")
 
     monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", no_download)
+    served = []
+    monkeypatch.setattr(server_cli, "run_server", lambda *args: served.append(args))
     config = config()
-    argv = shlex.split(config.command)
-    command = cli.get_command(click.Context(cli), argv[0])
-    params = command.make_context(argv[0], argv[1:] + ["-d", "/data/raw.zarr"]).params
-    server_options = {"data_path", "debug", "port", "certfile", "keyfile"}
-    kwargs = {k: v for k, v in params.items() if k not in server_options and v is not None}
-    rebuilt = type(config)(**registry.coerce_cli_args(type(config), kwargs))
+    root = main.cli if form == "cellmap_flow serve" else server_cli.cli
+    result = CliRunner().invoke(root, SERVE_FORMS[form](config) + ["-d", "/data/raw.zarr"])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+    ((rebuilt, data_path, *_),) = served
+    assert type(rebuilt) is type(config) and data_path == "/data/raw.zarr"
     if isinstance(config, HuggingFaceModelConfig):  # its to_dict() adds the downloaded metadata
         assert (rebuilt.repo, rebuilt.revision, rebuilt.name) == (config.repo, config.revision, config.name)
     else:

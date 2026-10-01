@@ -1,41 +1,48 @@
 """The command line that starts an inference server for a model.
 
-Every launcher builds it here: ``cellmap_flow <type>``, ``cellmap_flow run``,
-``cellmap_flow_yaml`` and the dashboard's catalog and Hugging Face models.
+Every launcher builds it here: ``cellmap_flow infer <type>``,
+``cellmap_flow yaml`` and the dashboard's catalog and Hugging Face models.
+It is ``<SERVER_COMMAND> --model <entry> -d <data path>``, where the entry
+is ``ModelConfig.launch_entry`` as JSON, which the server rebuilds as it
+rebuilds a YAML's model entry.
 
 The serve program is ``jobs.launch.SERVER_COMMAND``, and deployments change
-it: the fileglancer deploy sets ``"pixi run cellmap_flow_server"``. So it is
+it: the fileglancer deploy sets ``"pixi run cellmap_flow serve"``. So it is
 read each time a command is built, never copied at import (a copy misses
 the override), and split into words (quoted as one token, the shell looks
-for a program called "pixi run cellmap_flow_server").
+for a program called "pixi run cellmap_flow serve"). ``cellmap_flow_server``,
+the program before 0.3.0, takes ``--model`` too, so a deployment that
+still sets that works.
 """
 
+import json
 import shlex
 
 from cellmap_flow.jobs import launch as jobs_launch
 
 
-def _serve_words():
-    return shlex.split(jobs_launch.SERVER_COMMAND)
+def _serve_argv(entry: dict, data_path) -> list:
+    # Compact, and a value JSON has no type for (a plugin's Path) as its str.
+    entry_json = json.dumps(entry, separators=(",", ":"), default=str)
+    return [*shlex.split(jobs_launch.SERVER_COMMAND), "--model", entry_json, "-d", str(data_path)]
 
 
 def server_argv(model_config, data_path: str) -> list:
     """The server's argv for ``model_config`` reading ``data_path``."""
-    return [*_serve_words(), *shlex.split(model_config.command), "-d", str(data_path)]
+    return _serve_argv(model_config.launch_entry, data_path)
 
 
 def server_argv_for(model_type: str, params: dict, data_path: str) -> list:
     """The server's argv for a model given as its type and constructor arguments.
 
     For launchers that have no model config to hand and should not build
-    one (a Hugging Face config fetches its repo's metadata): the arguments
-    go in signature order, and None ones are left out, as in
-    ``ModelConfig.command``.
+    one (a Hugging Face config fetches its repo's metadata); None arguments
+    are left out, as in ``ModelConfig.launch_entry``.
     """
-    from cellmap_flow.models.configs.base import command_argv
+    from cellmap_flow.models.configs.base import model_entry
     from cellmap_flow.models.registry import model_type as lookup
 
-    return [*_serve_words(), *command_argv(lookup(model_type), params), "-d", str(data_path)]
+    return _serve_argv(model_entry(lookup(model_type), params), data_path)
 
 
 def server_command(model_config, data_path: str) -> str:

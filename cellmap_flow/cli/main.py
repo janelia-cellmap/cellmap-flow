@@ -5,6 +5,7 @@
   yaml           the same for the models a YAML file lists
   view           open a dataset in the viewer; pick models in the dashboard
   dashboard      serve the dashboard alone, for a viewer already running
+  serve          serve one model's predictions (the launchers run this)
   blockwise      run models over a whole volume, writing predictions to disk
   finetune       the finetune tools: train, export-merged, build-corrections
   models         list the model types and their arguments
@@ -23,7 +24,7 @@ import sys
 import click
 
 from cellmap_flow.blockwise.cli import cli as blockwise
-from cellmap_flow.cli import doctor, viewer_cli, yaml_cli
+from cellmap_flow.cli import doctor, server_cli, viewer_cli, yaml_cli
 from cellmap_flow.cli.common import deprecated, log_level_option
 from cellmap_flow.cli.infer import infer, run_generic
 from cellmap_flow.models import registry
@@ -193,6 +194,7 @@ cli.add_command(infer)
 cli.add_command(yaml_cli.main, name="yaml")
 cli.add_command(viewer_cli.main, name="view")
 cli.add_command(dashboard)
+cli.add_command(server_cli.serve)
 cli.add_command(blockwise, name="blockwise")
 cli.add_command(finetune)
 cli.add_command(models)

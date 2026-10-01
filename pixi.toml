@@ -1,7 +1,7 @@
 # The environment cellmap-flow is deployed from. Fileglancer's runnables.yaml
 # launches `pixi run cellmap_flow view` and `pixi run cellmap_flow yaml` from
 # this checkout, and the dashboard then starts inference servers on the
-# cluster with `pixi run cellmap_flow_server` (CELLMAP_FLOW_SERVER_COMMAND
+# cluster with `pixi run cellmap_flow serve` (CELLMAP_FLOW_SERVER_COMMAND
 # below). Python dependencies come from pyproject.toml through the editable
 # install; this file adds what PyPI cannot provide: CUDA, and the MinIO
 # server and client that annotation painting needs.
@@ -21,7 +21,7 @@ platforms = ["linux-64"]
 CXXFLAGS = "-include cstdint"
 # Inference servers are LSF jobs on other nodes, where this environment is
 # not on PATH; jobs/launch.py reads this to start them from the lockfile's env.
-CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow_server"
+CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow serve"
 
 [dependencies]
 python = ">=3.11,<4.0"

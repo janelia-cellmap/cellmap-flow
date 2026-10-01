@@ -1,13 +1,15 @@
 """Every launcher builds its server command through serving.launch.
 
-SERVER_COMMAND is read when a command is built and split into words, so a
-deploy's override (fileglancer's "pixi run cellmap_flow_server") reaches
-every launcher; cellmap_flow and cellmap_flow_yaml used to copy it at import,
-and the dashboard quoted it as one word. The data path, with a space in it,
-goes through the one data_path + scale rule: the YAML's `scale: s3` next to
-a path ending in s3 used to become .../s3/s3.
+It is SERVER_COMMAND, then `--model <the model's launch entry, as JSON>`
+and the data path. SERVER_COMMAND is read when a command is built and split
+into words, so a deploy's override (fileglancer's "pixi run cellmap_flow
+serve") reaches every launcher; cellmap_flow and cellmap_flow_yaml used to
+copy it at import, and the dashboard quoted it as one word. The data path,
+with a space in it, goes through the one data_path + scale rule: the YAML's
+`scale: s3` next to a path ending in s3 used to become .../s3/s3.
 """
 
+import json
 import shlex
 
 import pytest
@@ -31,23 +33,23 @@ def _cli(*argv):
 LAUNCHERS = {
     "cellmap_flow-infer": (
         lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data),
-        ["script", "--script-path", "/s.py", "--name", "m"],
+        {"type": "script", "script_path": "/s.py", "name": "m"},
     ),
     "cellmap_flow-run": (
         lambda data: _cli("run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", data),
-        ["script", "--script-path", "/s.py", "--name", "m"],
+        {"type": "script", "script_path": "/s.py", "name": "m"},
     ),
     "cellmap_flow-yaml": (
         lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m", scale="s3")], data, "grp", "q"),
-        ["script", "--script-path", "/s.py", "--name", "m", "--scale", "s3"],
+        {"type": "script", "script_path": "/s.py", "name": "m", "scale": "s3"},
     ),
     "dashboard-catalog": (
         lambda data: dashboard_launch.run_model("/models/mito v2", "mito", "blob"),
-        ["cellmap", "--folder-path", "/models/mito v2", "--name", "mito"],
+        {"type": "cellmap", "folder_path": "/models/mito v2", "name": "mito"},
     ),
     "dashboard-huggingface": (
         lambda data: dashboard_launch.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
-        ["huggingface", "--repo", "cellmap/mito-v1", "--name", "mito_v1"],
+        {"type": "huggingface", "repo": "cellmap/mito-v1", "name": "mito_v1"},
     ),
 }
 
@@ -69,7 +71,7 @@ def launched(monkeypatch, tmp_path):
         commands.append(command)
         raise JobStartError("recorded")
 
-    monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow_server")
+    monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow serve")
     monkeypatch.setattr(infer, "start_hosts", started)
     monkeypatch.setattr(yaml_cli, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
@@ -82,9 +84,11 @@ def launched(monkeypatch, tmp_path):
 @pytest.mark.parametrize("launcher", list(LAUNCHERS))
 def test_every_launcher_submits_the_split_server_command(launched, launcher):
     commands, data = launched
-    launch_it, model_argv = LAUNCHERS[launcher]
+    launch_it, entry = LAUNCHERS[launcher]
     launch_it(data)
-    assert [shlex.split(c) for c in commands] == [["pixi", "run", "cellmap_flow_server", *model_argv, "-d", data]]
+    (argv,) = [shlex.split(c) for c in commands]
+    assert argv[:4] == ["pixi", "run", "cellmap_flow", "serve"] and argv[4::2] == ["--model", "-d"]
+    assert (json.loads(argv[5]), argv[7]) == (entry, data)
 
 
 def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):
@@ -92,6 +96,6 @@ def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):
     config = HuggingFaceModelConfig(repo="cellmap/mito", name="m v1")
     argv = launch.server_argv_for("huggingface", {"repo": "cellmap/mito", "name": "m v1"}, "/d/my raw.zarr")
     assert argv == launch.server_argv(config, "/d/my raw.zarr") == shlex.split(jobs_launch.SERVER_COMMAND) + [
-        "huggingface", "--repo", "cellmap/mito", "--name", "m v1", "-d", "/d/my raw.zarr",
+        "--model", '{"type":"huggingface","repo":"cellmap/mito","name":"m v1"}', "-d", "/d/my raw.zarr",
     ]
     assert launch.server_command(config, "/d/my raw.zarr") == shlex.join(argv)

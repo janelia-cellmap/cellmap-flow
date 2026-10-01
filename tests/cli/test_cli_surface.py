@@ -8,8 +8,9 @@ is a breaking release rather than a refactor:
   ``cellmap_flow_yaml``, ``cellmap_flow_view`` and the two blockwise
   commands, down to the short flags, which go to a model type's
   constructor arguments in signature order, and the type listings;
-- ``to_dict()`` (exported and finetuned YAMLs are written from it) and
-  ``command`` (the server rebuilds the config from it) of every model type;
+- ``to_dict()`` (exported and finetuned YAMLs are written from it),
+  ``launch_entry`` (``serve --model`` rebuilds the config from it) and
+  ``command`` (so do the per-type server commands) of every model type;
 - what the dashboard's model form is offered, and how it parses its strings.
 """
 
@@ -204,6 +205,15 @@ PLUGIN_FILE = [
 ]
 PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
 INFER = {t: [*options, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
+# The server's own options: `serve` requires the model and data, and
+# cellmap_flow_server takes them instead of a type's command.
+MODEL_JSON_HELP = 'The model: its launch entry (ModelConfig.launch_entry), as JSON.'
+PORT = ('port', ('-p', '--port'), (), 'integer', False, 0, False, 'Port to listen on')
+DEBUG = ('debug', ('--debug',), (), 'boolean', False, False, True, 'Run in debug mode')
+CERTFILE = ('certfile', ('--certfile',), (), 'text', False, None, False, 'Path to SSL certificate file')
+KEYFILE = ('keyfile', ('--keyfile',), (), 'text', False, None, False, 'Path to SSL private key file')
+SERVE = [('model_json', ('--model',), (), 'text', True, None, False, MODEL_JSON_HELP),
+         DATA_PATH, PORT, DEBUG, CERTFILE, KEYFILE]
 
 # Each command by its path; "" is the group's own options. A subcommand's
 # --log-level (yaml, view, blockwise) defaults to the group's.
@@ -237,6 +247,7 @@ CELLMAP_FLOW = {
         ('config', ('-c', '--config'), (), 'text', False, None, False, 'Model configuration as key=value pairs'),
         SERVER_CHECK,
     ],
+    'serve': SERVE,
     'unregister': PLUGIN_NAME,
     'view': [
         ('dataset', ('-d', '--dataset'), (), 'text', True, None, False, 'Path to the dataset (zarr or n5)'),
@@ -256,20 +267,12 @@ CELLMAP_FLOW = {
 HIDDEN = {'list-models', 'list-plugins', 'register', 'run', 'unregister'}
 
 CELLMAP_FLOW_SERVER = {
-    '': LOG_LEVEL,
+    '': [*LOG_LEVEL, ('model_json', ('--model',), (), 'text', False, None, False, MODEL_JSON_HELP),
+         ('data_path', ('-d', '--data-path'), (), 'text', False, None, False, 'Path to the dataset'),
+         PORT, DEBUG, CERTFILE, KEYFILE],
     **dict(sorted({
     'list-models': [],
-    **{
-        t: [
-            *options,
-            ('keyfile', ('--keyfile',), (), 'text', False, None, False, 'Path to SSL private key file'),
-            ('certfile', ('--certfile',), (), 'text', False, None, False, 'Path to SSL certificate file'),
-            ('port', ('-p', '--port'), (), 'integer', False, 0, False, 'Port to listen on'),
-            ('debug', ('--debug',), (), 'boolean', False, False, True, 'Run in debug mode'),
-            DATA_PATH,
-        ]
-        for t, options in MODEL_OPTIONS.items()
-    },
+    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in MODEL_OPTIONS.items()},
     }.items())),
 }
 
@@ -355,18 +358,20 @@ def _listing(prog):
 
 
 @pytest.mark.parametrize(
-    "command, argv, prog",
+    "command, argv, prog, notice",
     [
-        (main.cli, ["models"], "cellmap_flow infer"),
-        (server_cli, ["list-models"], "cellmap_flow_server"),
-        (main.cli, ["yaml", "--list-types"], "cellmap_flow yaml"),
+        (main.cli, ["models"], "cellmap_flow infer", ""),
+        (server_cli, ["list-models"], "cellmap_flow_server",
+         "`cellmap_flow_server list-models` is deprecated and goes in the release after 0.3.0; "
+         "use `cellmap_flow models`.\n"),
+        (main.cli, ["yaml", "--list-types"], "cellmap_flow yaml", ""),
     ],
 )
-def test_the_type_listings_are_unchanged(command, argv, prog):
+def test_the_type_listings_are_unchanged(command, argv, prog, notice):
     gc.collect()  # a model class another test defined must not be listed
     result = CliRunner().invoke(command, argv)
     assert result.exit_code == 0, result.output
-    assert result.output == _listing(prog)
+    assert (result.stdout, result.stderr) == (_listing(prog), notice)
 
 
 # --- to_dict() and command of every model type -----------------------------------
@@ -416,7 +421,8 @@ INNER_FINETUNE = {
     "base_model": {"type": "script", "script_path": "/s.py"}, "name": "inner",
 }
 
-# key: (config, to_dict(), command)
+# key: (config, to_dict(), command[, launch_entry]); the launch entry is
+# to_dict() without its None values where it is not given.
 CONFIGS = {
     "script": (
         lambda: ScriptModelConfig(script_path="/groups/my models/mito.py", name="mito", scale="s1"),
@@ -468,6 +474,8 @@ CONFIGS = {
          'scale': 's0', 'channels_names': ['mito'], 'input_voxel_size': [8, 8, 8],
          'output_voxel_size': [8, 8, 8], 'model_type': 'unet', 'description': 'Mito, v1'},
         "huggingface --repo cellmap/mito-v1 --revision abc123 --name 'm v1' --scale s0",
+        # Without the metadata: launching a server downloads nothing.
+        {'type': 'huggingface', 'repo': 'cellmap/mito-v1', 'revision': 'abc123', 'name': 'm v1', 'scale': 's0'},
     ),
     "hf_bare": (
         lambda: HuggingFaceModelConfig(repo="cellmap/mito-v1"),
@@ -475,6 +483,7 @@ CONFIGS = {
          'input_voxel_size': [8, 8, 8], 'output_voxel_size': [8, 8, 8], 'model_type': 'unet',
          'description': 'Mito, v1'},
         "huggingface --repo cellmap/mito-v1 --name mito-v1",
+        {'type': 'huggingface', 'repo': 'cellmap/mito-v1', 'name': 'mito-v1'},
     ),
     "finetune": (
         lambda: FinetuneModelConfig(lora_adapter_path="/runs/my run/lora_adapter", base_model=FLY_ENTRY,
@@ -502,10 +511,12 @@ CONFIGS = {
 
 
 @pytest.mark.parametrize("key", list(CONFIGS))
-def test_to_dict_and_command_are_unchanged(key, fake_cellmap_models, hf_metadata):
-    build, to_dict, command = CONFIGS[key]
+def test_to_dict_launch_entry_and_command_are_unchanged(key, fake_cellmap_models, hf_metadata):
+    build, to_dict, command, *launch_entry = CONFIGS[key]
     config = build()
     assert config.command == command
+    entry = launch_entry[0] if launch_entry else {k: v for k, v in to_dict.items() if v is not None}
+    assert config.launch_entry == entry and list(config.launch_entry) == list(entry)
     assert hf_metadata == [], "building a launch command must not download metadata.json"
     result = config.to_dict()
     assert result == to_dict
