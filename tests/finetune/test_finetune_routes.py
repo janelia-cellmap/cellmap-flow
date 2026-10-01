@@ -12,7 +12,8 @@ from unittest.mock import ANY
 import numpy as np
 import pytest
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs.settings import launcher_settings
 
 OFFSETS = "offsets = [[1, 0, 0], [0, 1, 0]]\nmodel = None\n"
 CROP = {"annotation_offset_voxels": [0, 0, 0], "annotation_shape_voxels": [16, 16, 16]}
@@ -34,10 +35,11 @@ def client(tmp_path, monkeypatch):
     from cellmap_flow.dashboard.app import app
 
     (tmp_path / "model.py").write_text(OFFSETS)
-    for key, value in dict(models_config=[_Script("m", str(tmp_path / "model.py"))],
-                           charge_group="my_lab", walltime="10:00", annotation_volumes={},
+    for key, value in dict(models_config=[_Script("m", str(tmp_path / "model.py"))], annotation_volumes={},
                            output_sessions={}).items():
-        monkeypatch.setattr(g, key, value, raising=False)
+        monkeypatch.setattr(get_session(), key, value)
+    for key, value in dict(charge_group="my_lab", walltime="10:00").items():
+        monkeypatch.setattr(launcher_settings(), key, value)
     return app.test_client()
 
 
@@ -81,7 +83,7 @@ def submit(client, trainable_session):
     def run(volume=CROPPED, via_base_path=False, **request):
         corrections = trainable_session(*volume)
         asked, listeners = [], []
-        g.finetune_job_manager = SimpleNamespace(
+        get_session().finetune_job_manager = SimpleNamespace(
             jobs={}, add_listener=listeners.append,
             submit_finetuning_job=lambda **kw: asked.append(kw) or SimpleNamespace(
                 job_id="j", output_dir=corrections, lsf_job=None))
@@ -119,8 +121,9 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
                         "tensorboard_command": f"tensorboard --logdir {job.corrections.parent}",
                         "output_type": "affinities", "message": "Finetuning job submitted successfully"}
     assert job.sent == dict(
-        model_config=g.models_config[0], corrections_path=job.corrections, lora_r=8, num_epochs=10, batch_size=2,
-        learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None, auto_serve=True,
+        model_config=get_session().models_config[0], corrections_path=job.corrections, lora_r=8, num_epochs=10,
+        batch_size=2, learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None,
+        auto_serve=True,
         mask_unannotated=False, loss_type="mse", label_smoothing=0.1, distillation_lambda=None,
         distillation_scope="unlabeled", margin=0.3, balance_classes=False, augment=False, queue="gpu_h100",
         charge_group="my_lab", walltime="10:00", output_type="affinities", select_channel=None,
@@ -135,7 +138,7 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
 ])
 def test_submit_bills_the_dashboards_charge_group(submit, dashboards, request_data, billed):
     """Every finetune job billed "cellmap", the job manager's default."""
-    g.charge_group = dashboards
+    launcher_settings().charge_group = dashboards
     assert submit(**request_data).sent["charge_group"] == billed
 
 
@@ -170,7 +173,6 @@ def test_submit_gives_the_manifest_the_dashboards_chain(submit):
     """The trainer normalizes its input as the dashboard's servers do, and the
     finetuned model's YAML postprocesses as they do, only if the manifest
     carries the session's chain."""
-    from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.pipeline_spec import PipelineSpec
 
     norm = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
@@ -218,10 +220,10 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
         volume["corrections_dir"] = str(tmp_path / "elsewhere" / "corrections")
     if registered == "an incomplete":
         volume["output_size"] = volume["dataset_path"] = None
-    g.annotation_volumes = {"vol": volume}
-    g.finetune_job_manager = SimpleNamespace(jobs={}, add_listener=lambda listener: None,
-                                             submit_finetuning_job=lambda **kw: SimpleNamespace(
-                                                 job_id="j", output_dir=corrections, lsf_job=None))
+    get_session().annotation_volumes = {"vol": volume}
+    get_session().finetune_job_manager = SimpleNamespace(jobs={}, add_listener=lambda listener: None,
+                                                         submit_finetuning_job=lambda **kw: SimpleNamespace(
+                                                             job_id="j", output_dir=corrections, lsf_job=None))
     client.post("/api/finetune/submit", json={"model_name": "m", "corrections_path": str(corrections)})
 
     manifest = corrections / "_virtual_sources.json"
@@ -241,10 +243,10 @@ def restart(client, local_jobs, session, monkeypatch):
 
     def run(pulled=0, **request):
         base = session()
-        manager = g.finetune_job_manager  # made when first asked for, as in the dashboard
+        manager = get_session().finetune_job_manager  # made when first asked for, as in the dashboard
         assert isinstance(manager, FinetuneJobManager)
-        job = manager.submit_finetuning_job(model_config=g.models_config[0], corrections_path=base / "corrections",
-                                            output_base=base)
+        job = manager.submit_finetuning_job(model_config=get_session().models_config[0],
+                                            corrections_path=base / "corrections", output_base=base)
         record = SimpleNamespace(syncs=[], sent=[], base=base)
         monkeypatch.setattr(training, "sync_all_annotations_from_minio",
                             lambda force=True: record.syncs.append(force) or pulled)
@@ -304,7 +306,7 @@ def jobs_list(client, session, monkeypatch):
 
     base = session()
     asked = SimpleNamespace(base=base, calls=[])
-    g.finetune_job_manager = SimpleNamespace(
+    get_session().finetune_job_manager = SimpleNamespace(
         jobs={}, list_jobs=lambda: [], rehydrate_session=lambda path: asked.calls.append(("look in", path)),
         add_listener=lambda listener: asked.calls.append(("listener", type(listener))))
     monkeypatch.setattr(common, "load_user_prefs", lambda: {"outputPath": str(base.parent)})
@@ -451,17 +453,17 @@ def _given(situation, world, monkeypatch):
 
     job = world.job
     if situation == "no viewer":
-        g.viewer = None
+        get_session().viewer = None
     elif situation == "the viewer has a position":
-        with g.viewer.txn() as s:
+        with get_session().viewer.txn() as s:
             s.position = [1, 2, 3]
     elif situation == "no models":
-        g.models_config = []
+        get_session().models_config = []
     elif situation == "its geometry is known":
         monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: GEOMETRY)
     elif situation == "a saved pipeline":
-        g.pipeline_model_configs = {"m": {"write_shape": [64] * 3, "output_voxel_size": [16] * 3,
-                                          "output_channels": 2}}
+        get_session().builder_model_configs = {"m": {"write_shape": [64] * 3, "output_voxel_size": [16] * 3,
+                                                     "output_channels": 2}}
     elif situation == "an empty session":
         (world.tmp / "s" / "corrections").mkdir(parents=True)
     elif situation == "no output dir":
@@ -490,8 +492,8 @@ def routes(client, viewer, make_job, tmp_path, monkeypatch):
     world = SimpleNamespace(tmp=tmp_path, job=make_job())
     manager = FinetuneJobManager()
     manager.jobs[world.job.job_id] = world.job
-    monkeypatch.setattr(g, "finetune_job_manager", manager)
-    monkeypatch.setattr(g, "minio_state", dict(g.minio_state, process=None, ip=None, port=None))
+    monkeypatch.setattr(get_session(), "finetune_job_manager", manager)
+    monkeypatch.setattr(get_session(), "minio_state", dict(get_session().minio_state, process=None, ip=None, port=None))
 
     def names(value):
         if isinstance(value, dict):

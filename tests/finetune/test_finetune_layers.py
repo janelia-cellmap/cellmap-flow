@@ -9,7 +9,9 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard.finetune_layers import FinetuneLayerListener, register_finetuned_model
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs.launch import started_jobs
+from cellmap_flow.process_chain import process_chain
 
 URL = "http://node7:8123"
 
@@ -31,8 +33,9 @@ def followed(make_job, viewer, monkeypatch):
     from cellmap_flow.serving import client
 
     monkeypatch.setattr(client.requests, "get", lambda url, timeout=None: _Answer())
-    for key, value in dict(jobs=[], models_config=[], input_norms=[], postprocess=[SigmoidPostprocessor()]).items():
-        monkeypatch.setattr(g, key, value)
+    monkeypatch.setattr(get_session(), "models_config", [])
+    for key, value in dict(input_norms=[], postprocess=[SigmoidPostprocessor()]).items():
+        monkeypatch.setattr(process_chain(), key, value)
     job = make_job(lsf_job=SimpleNamespace(process=SimpleNamespace(pid=99)))
     listener, layers = FinetuneLayerListener(), []
 
@@ -52,7 +55,7 @@ def test_the_viewer_gets_the_layer_once_the_server_is_up_and_each_iteration_repl
     """A layer was added before the server existed, with the source zarr://None/...;
     and a local run's LocalJob has no job_id, so adding its layer raised."""
     assert followed.layers == [[], ["m_finetuned_1"], ["m_finetuned_2"]]
-    assert [job.job_id for job in g.jobs] == ["local"]
+    assert [job.job_id for job in started_jobs()] == ["local"]
 
 
 def test_the_finetuned_layer_shows_the_outputs_own_range(followed):
@@ -62,7 +65,7 @@ def test_the_finetuned_layer_shows_the_outputs_own_range(followed):
 
 
 def test_the_pipeline_builder_gets_each_iterations_model(followed):
-    assert [config.name for config in g.models_config] == ["m_finetuned_2"]
+    assert [config.name for config in get_session().models_config] == ["m_finetuned_2"]
 
 
 def test_without_its_yaml_a_model_is_registered_on_the_base_its_run_recorded(make_job, monkeypatch):
@@ -74,7 +77,7 @@ def test_without_its_yaml_a_model_is_registered_on_the_base_its_run_recorded(mak
     job = make_job()
     job.params.update(model_checkpoint="/c.ts", channels=["mito"], input_voxel_size=[8] * 3, output_voxel_size=[8] * 3)
     (job.output_dir / "metadata.json").write_text(json.dumps({"model_entry": base}))  # as submit records it
-    monkeypatch.setattr(g, "models_config", [])
+    monkeypatch.setattr(get_session(), "models_config", [])
     register_finetuned_model(job, "m_finetuned_1")
-    (config,) = g.models_config
+    (config,) = get_session().models_config
     assert config.base_model_dict == base

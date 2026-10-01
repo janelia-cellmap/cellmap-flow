@@ -14,7 +14,7 @@ import os
 import pytest
 
 from cellmap_flow.dashboard.routes.finetune import overlay
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 
 
 def _volume(corrections, chunks, crops=(), chunk_size=56):
@@ -40,7 +40,7 @@ def txns(viewer, monkeypatch):
     monkeypatch.setattr(viewer, "txn", lambda *a, **k: count.append(1) or real(*a, **k))
     monkeypatch.setattr(overlay, "_last_annotated_regions", None)
     for attr in ("annotation_volumes", "output_sessions"):
-        monkeypatch.setattr(g, attr, {})
+        monkeypatch.setattr(get_session(), attr, {})
     return count
 
 

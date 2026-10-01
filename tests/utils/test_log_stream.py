@@ -45,10 +45,10 @@ def _job(tmp_path, text, statuses=(JobStatus.COMPLETED,)):
 def client(monkeypatch):
     from cellmap_flow.dashboard.app import app
     from cellmap_flow.dashboard.routes.finetune import training
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
     manager = SimpleNamespace(jobs={}, get_job_logs=lambda job_id: None)
-    monkeypatch.setattr(g, "finetune_job_manager", manager, raising=False)
+    monkeypatch.setattr(get_session(), "finetune_job_manager", manager)
     monkeypatch.setattr(training.time, "sleep", lambda s: None)
     return app.test_client(), manager
 

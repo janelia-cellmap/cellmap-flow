@@ -84,14 +84,14 @@ class _Unbuildable:
 
 @pytest.fixture
 def client(monkeypatch, tmp_path, viewer, dashboard):
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
     make_instances(tmp_path / "instances.zarr", s0_attrs={"resolution": [16] * 3, "offset": [0] * 3})
     zarr.open_group(str(tmp_path / "vols" / "roi_annotation.zarr"), mode="w")
     (tmp_path / "vols" / "plain.zarr").mkdir()
     (tmp_path / "elsewhere").mkdir()
-    monkeypatch.setattr(g, "models_config", [_Unbuildable()])
-    monkeypatch.setattr(g, "dataset_path", "/raw.zarr")
+    monkeypatch.setattr(get_session(), "models_config", [_Unbuildable()])
+    monkeypatch.setattr(get_session(), "dataset_path", "/raw.zarr")
     return dashboard
 
 
@@ -127,7 +127,7 @@ def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path
     from types import SimpleNamespace
 
     from cellmap_flow.dashboard.routes.finetune import instance_correction
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.models import geometry_cache
 
     geometry = SimpleNamespace(read_shape=[192] * 3, write_shape=[64] * 3,
@@ -142,5 +142,5 @@ def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path
     assert response.status_code == 200, response.get_json()
     (path, volume_id), kwargs = served[0]
     assert volume_id == "roi_annotation" and kwargs["mc_target_name"] == "roi_annotation.zarr"
-    assert g.annotation_volumes["roi_annotation"]["zarr_path"] == path
+    assert get_session().annotation_volumes["roi_annotation"]["zarr_path"] == path
     assert zarr.open_group(path, mode="r").attrs["chunk_size"] == [4, 4, 4]

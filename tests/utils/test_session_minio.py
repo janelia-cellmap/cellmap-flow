@@ -19,9 +19,9 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard import finetune_utils as fu
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync as session_sync
-from cellmap_flow.globals import g
 
 
 class _Proc:
@@ -69,8 +69,8 @@ def fake_minio(monkeypatch, tmp_path):
         return lambda *a, **k: calls.append(name) or value
 
     _Proc.started = 0
-    monkeypatch.setattr(g, "minio_state", {"process": None, "bucket": "annotations",
-                                            "output_base": None, "sync_thread": None})
+    monkeypatch.setattr(get_session(), "minio_state", {"process": None, "bucket": "annotations",
+                                                        "output_base": None, "sync_thread": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", recorded("preflight"))
     monkeypatch.setattr(session_minio, "get_local_ip", recorded("ip", "127.0.0.1"))
     monkeypatch.setattr(session_minio, "find_available_port", recorded("port", 9123))
@@ -96,7 +96,7 @@ def test_minio_logs_to_a_file_and_mc_uses_its_own_alias(fake_minio, tmp_path):
     assert not any(cmd[:3] == ["mc", "alias", "set"] for cmd, _ in runs), "no shared ~/.mc config"
     for cmd, env in runs:
         assert env.get(f"MC_HOST_{session_minio.MC_ALIAS}") == "http://minio:minio123@127.0.0.1:9123", cmd
-    assert g.minio_state["process"] is procs[0]
+    assert get_session().minio_state["process"] is procs[0]
     assert fake_run.calls == ["preflight", "ip", "port", "ready", "sync thread", "exists"]
 
 
@@ -114,7 +114,7 @@ def test_a_minio_that_does_not_come_up_is_not_left_running(fake_minio, tmp_path,
         raises = pytest.raises(RuntimeError, match="did not become ready")
     with raises:
         fu.ensure_minio_serving(str(tmp_path / "vol.zarr"), "vol", output_base_dir=str(tmp_path))
-    assert g.minio_state["process"] is None and procs[0].terminated
+    assert get_session().minio_state["process"] is None and procs[0].terminated
 
 
 def test_two_requests_start_one_server(fake_minio, tmp_path, monkeypatch):
@@ -145,8 +145,6 @@ def test_the_sync_thread_keeps_the_sessions_own_dicts(fake_minio, tmp_path, monk
     for as long as MinIO runs, so they must be the session's own, which the
     routes change in place. With a copy, a volume registered later would never
     be synced."""
-    from cellmap_flow.dashboard.state import get_session
-
     started = []
     monkeypatch.setattr(session_sync, "start_periodic_sync", lambda *args: started.append(args))
     fu.ensure_minio_serving(str(tmp_path / "vol.zarr"), "vol", output_base_dir=str(tmp_path))
@@ -195,8 +193,8 @@ class _Alive:
 @pytest.fixture
 def order(monkeypatch):
     events = []
-    monkeypatch.setattr(g, "minio_state", {"process": _Alive(), "ip": "127.0.0.1", "port": 9000,
-                                            "bucket": "annotations", "output_base": None})
+    monkeypatch.setattr(get_session(), "minio_state", {"process": _Alive(), "ip": "127.0.0.1", "port": 9000,
+                                                        "bucket": "annotations", "output_base": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", lambda: None)
     monkeypatch.setattr(
         subprocess, "run",
@@ -245,7 +243,7 @@ def test_a_yaml_import_pulls_strokes_before_writing_crops(monkeypatch, tmp_path)
     monkeypatch.setattr(yaml_crops, "ensure_minio_serving", lambda *a, **k: events.append(("mirror",)))
     monkeypatch.setattr(yaml_crops, "write_manifest", lambda *a: None)
     monkeypatch.setattr(yaml_crops, "refresh_annotated_regions_layer", lambda **k: None)
-    monkeypatch.setattr(g, "dataset_path", "/data/raw.zarr", raising=False)
+    monkeypatch.setattr(get_session(), "dataset_path", "/data/raw.zarr")
 
     response = app.test_client().post("/api/finetune/load-crops", json={"model_name": "m", "yaml": "crops: []"})
 

@@ -12,7 +12,7 @@ import neuroglancer
 import pytest
 
 from cellmap_flow.dashboard.routes.finetune import good_regions as gr
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 
 MARK = "/api/finetune/good-regions/mark-view"
 VOLUME = {
@@ -37,8 +37,8 @@ def session(tmp_path, monkeypatch, view):
     """A session with an annotation volume, its corrections under tmp_path."""
     corrections = tmp_path / "20260101_000000" / "corrections"
     corrections.mkdir(parents=True)
-    monkeypatch.setattr(g, "annotation_volumes", {"vol-1": {"corrections_dir": str(corrections), **VOLUME}})
-    monkeypatch.setattr(g, "raw", None, raising=False)
+    monkeypatch.setattr(get_session(), "annotation_volumes", {"vol-1": {"corrections_dir": str(corrections), **VOLUME}})
+    monkeypatch.setattr(get_session(), "raw", None)
     return corrections.parent
 
 
@@ -58,8 +58,8 @@ def test_marks_add_up_in_the_sessions_good_regions_file(dashboard, session, monk
     appended to an empty list, the count said 1, and every earlier mark was
     gone, while the response still said success."""
     if not registered:
-        monkeypatch.setattr(g, "annotation_volumes", {})
-        monkeypatch.setitem(g.minio_state, "output_base", str(session / "corrections"))
+        monkeypatch.setattr(get_session(), "annotation_volumes", {})
+        monkeypatch.setitem(get_session().minio_state, "output_base", str(session / "corrections"))
     for _ in range(3):
         dashboard.post(MARK, json={"size_nm": [512] * 3})
     stored = json.loads((session / "good_regions.json").read_text())
@@ -97,8 +97,8 @@ def test_the_marks_are_drawn_in_their_own_layer(dashboard, session, view):
 
 def test_with_no_session_a_mark_is_refused_and_not_drawn(dashboard, view, monkeypatch):
     """Better a visible error than a box that vanishes on the next click."""
-    monkeypatch.setattr(g, "annotation_volumes", {})
-    monkeypatch.setitem(g.minio_state, "output_base", None)
+    monkeypatch.setattr(get_session(), "annotation_volumes", {})
+    monkeypatch.setitem(get_session().minio_state, "output_base", None)
     response = dashboard.post(MARK, json={})
     assert response.status_code == 409 and response.get_json()["success"] is False
     assert gr.GOOD_REGIONS_LAYER not in view.state.layers

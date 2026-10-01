@@ -56,8 +56,9 @@ class _Alive:
 def world(tmp_path, monkeypatch):
     """A raw pyramid, a crop, a segmentation, a viewer and a MinIO that has nothing yet."""
     from cellmap_flow.dashboard.app import app
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.models import geometry_cache
+    from cellmap_flow.process_chain import process_chain
 
     # Janelia-style: every level's corner is -4 nm. s1 has 21 voxels a side,
     # so the volume (4^3 chunks) is padded to 24.
@@ -101,10 +102,11 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: GEOMETRY)
     for name, value in dict(
         minio_state=state, annotation_volumes=volumes, output_sessions=sessions, viewer=neuroglancer.Viewer(),
-        raw=None, dataset_path=str(tmp_path / "raw.zarr" / "em"),
-        models_config=[SimpleNamespace(name="m")], input_norm_config=NORM, postprocess_config=POST,
+        raw=None, dataset_path=str(tmp_path / "raw.zarr" / "em"), models_config=[SimpleNamespace(name="m")],
     ).items():
-        monkeypatch.setattr(g, name, value, raising=False)
+        monkeypatch.setattr(get_session(), name, value)
+    for name, value in dict(input_norm_config=NORM, postprocess_config=POST).items():
+        monkeypatch.setattr(process_chain(), name, value)
     return SimpleNamespace(tmp=tmp_path, client=app.test_client(), mirrored=mirrored)
 
 

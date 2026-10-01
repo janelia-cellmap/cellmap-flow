@@ -38,7 +38,7 @@ NORMS = {"MinMaxNormalizer": {"min_value": 0, "max_value": 255, "invert": False}
                                    pytest.param([{"name": k, **v} for k, v in NORMS.items()],
                                                 id="a list, as the dashboard sends it")])
 def test_patches_are_normalized_as_inference_sees_them_in_a_spawned_worker_too(annotation_volume, norms):
-    """The trainer is its own process, whose g.input_norms is empty: it trained on
+    """The trainer is its own process, whose process_chain() is empty: it trained on
     raw uint8 while inference fed [-1, 1]. A spawned loader worker gets a pickled
     dataset, which a Lambda normalizer holding a lambda did not survive. The
     dashboard sends the chain as a list, which dict() turned into no normalizers."""
