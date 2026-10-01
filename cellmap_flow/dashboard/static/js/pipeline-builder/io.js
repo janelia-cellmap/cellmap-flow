@@ -13,6 +13,7 @@
 // params, models with a config, normalizers by name). Importing replaces the
 // pipeline; its edges are rebuilt from the node order, and its nodes laid
 // out afresh.
+import { postJSON } from "../lib/api.js";
 import { CORE_SCHEMA, dump, load } from "../vendor/js-yaml.js";
 import { autoLayoutNodes, renderCanvas } from "./canvas.js";
 import { showMessage } from "./messages.js";
@@ -84,15 +85,12 @@ function importFile() {
       if (pipeline.blockwise_config.length > 0) {
         const blockwiseParams = pipeline.blockwise_config[0].params;
         if (blockwiseParams) {
-          fetch("/api/blockwise-config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(blockwiseSettings(blockwiseParams)),
-          }).then((r) => r.json()).then((data) => {
-            console.log("Blockwise config synced from import:", data);
+          // A refusal (a count that is not a whole number) is an error with
+          // the server's reason, not "updated".
+          postJSON("/api/blockwise-config", blockwiseSettings(blockwiseParams)).then(() => {
             showMessage("✓ Blockwise config updated from import", "success");
           }).catch((err) => {
-            console.error("Error syncing blockwise config from import:", err);
+            showMessage("Blockwise config not updated from import: " + err.message, "error");
           });
         }
       }

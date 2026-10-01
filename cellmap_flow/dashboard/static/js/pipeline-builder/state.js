@@ -12,7 +12,9 @@
 // viewer's layers) and the blockwise steps, which ran on the pipeline as it
 // was, start over. Leaving the page with a change the server has not had
 // sends it in a request that outlives the page.
+import { postJSON } from "../lib/api.js";
 import { pageData } from "../lib/page-data.js";
+import { showMessage } from "./messages.js";
 
 const PAGE = pageData();
 const asList = (items) => (Array.isArray(items) ? items : Object.values(items));
@@ -354,12 +356,12 @@ function buildPipelineBody() {
   };
 }
 
-// keepalive lets the request finish after the page is gone, as a beacon
-// would; a beacon can only POST.
-function putPipeline({ keepalive = false } = {}) {
+// The PUT sent as the page is left. keepalive lets it finish after the page
+// is gone, as a beacon would; a beacon can only POST.
+function putPipelineOnUnload() {
   return fetch("/api/pipeline", {
     method: "PUT",
-    keepalive,
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildPipelineBody()),
   });
@@ -373,18 +375,16 @@ export function scheduleApply() {
   applyTimer = setTimeout(() => applyPipeline(), 2000);
 }
 
+// A refusal (a step its op's class will not take) or no answer is shown,
+// with the server's reason: the page stays unapplied, and the unload
+// beacon tries again.
 async function applyPipeline() {
   const sending = changes;
   try {
-    const response = await putPipeline();
-    const result = await response.json();
-    if (!response.ok) {
-      console.error("Pipeline sync error:", result.error || "Unknown error");
-    } else {
-      appliedChanges = Math.max(appliedChanges, sending);
-    }
+    await postJSON("/api/pipeline", buildPipelineBody(), { method: "PUT" });
+    appliedChanges = Math.max(appliedChanges, sending);
   } catch (err) {
-    console.error("Pipeline sync failed:", err.message);
+    showMessage("Pipeline not applied: " + err.message, "error");
   }
 }
 
@@ -400,6 +400,6 @@ export function syncOnUnload() {
     if (applyTimer) clearTimeout(applyTimer);
     if (changes === appliedChanges) return;
     // Nothing is left to report a failure to.
-    putPipeline({ keepalive: true }).catch(() => {});
+    putPipelineOnUnload().catch(() => {});
   });
 }
