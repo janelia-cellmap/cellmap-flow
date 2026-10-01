@@ -346,6 +346,11 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
         loss_type = "margin"
         margin = SIGN_ONLY_MARGIN
         distillation_lambda = max(distillation_lambda or 0.0, 0.5)
+        # The form still shows what was entered, so say what was used.
+        note = (
+            "Distance model on scribbles: trained as a binary target with margin loss at "
+            f"margin {margin} and distillation {distillation_lambda:g}, in place of the form's"
+        )
     elif output_type == "distance":
         # The soft distance target is only defined against BCE-with-logits;
         # margin/dice assume hard labels and smoothing would blur a target

@@ -138,6 +138,12 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
     assert {key: job.sent[key] for key in sent} == sent
 
 
+def test_submit_says_when_a_distance_model_is_trained_as_binary(submit):
+    """The form keeps showing margin 0.3 and distillation 0.01, so the answer says what was used."""
+    job = submit(PAINTED, output_type="distance", loss_type="margin", margin=0.3, distillation_lambda=0.01)
+    assert "margin 0.5 and distillation 0.5" in job.body["note"]
+
+
 def test_submit_reads_the_strokes_still_in_minio(submit):
     """Whether a session is sparse was read from the volume on disk, which lags
     the browser's strokes (they go to MinIO) by up to the periodic sync's 30 s:
