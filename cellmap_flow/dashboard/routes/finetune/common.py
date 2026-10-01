@@ -39,7 +39,6 @@ RESTART_PASSTHROUGH_KEYS = [
     "num_workers",
     "no_augment",
     "no_mixed_precision",
-    "patch_shape",
     "output_type",
     "select_channel",
     "offsets",
