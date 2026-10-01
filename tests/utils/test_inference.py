@@ -18,12 +18,12 @@ import torch
 from funlib.geometry import Roi
 from werkzeug.serving import make_server
 
-from cellmap_flow.globals import g
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inference.runner import DeviceSlots, ModelRunner, predict
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import PostProcessor, ThresholdPostprocessor
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.server import CellMapFlowServer
 from tests.utils.serving_helpers import IDENTITY_MODEL, layer
 
@@ -254,18 +254,18 @@ model = torch.nn.Upsample(scale_factor=2)
             seen.append(chunk_num_voxels)
             return data
 
-    g.postprocess = [Record()]
+    process_chain().postprocess = [Record()]
     raw = raw_zarr(np.zeros((8, 8, 8), np.uint8))
     Inferencer(ScriptModelConfig(script_path=script)).process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI)
     assert seen == [8 * 8 * 8]
 
 
 def test_a_model_runner_returns_the_models_own_output(raw_zarr, model_script):
-    """No chain and nothing from g: the model's output for the region, read with its context."""
+    """No chain, not even the process's: the model's output for the region, read with its context."""
     data = (np.arange(512) % 251).astype(np.uint8).reshape(8, 8, 8)
     script = model_script(IDENTITY_MODEL.replace("read_shape = Coordinate(4, 4, 4)", "read_shape = Coordinate(6, 6, 6)")
                           + "\nmodel.forward = lambda x: x[:, :, 1:-1, 1:-1, 1:-1] * 2\n")
-    g.postprocess = [ThresholdPostprocessor(threshold=0.5)]
+    process_chain().postprocess = [ThresholdPostprocessor(threshold=0.5)]
     runner = ModelRunner(ScriptModelConfig(script_path=script))
     out = runner.predict(ImageDataInterface(raw_zarr(data), voxel_size=(8, 8, 8), input_norms=[]),
                          Roi((8, 8, 8), (32, 32, 32)))

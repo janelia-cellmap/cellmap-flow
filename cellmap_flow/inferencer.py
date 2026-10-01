@@ -3,7 +3,7 @@
 The model itself (the device, the warmup, the forward and the device
 slots) is ``inference.runner.ModelRunner``; an Inferencer is a ModelRunner
 that also applies a normalization and postprocessing chain, the layer's own
-or the process-wide one in ``g``.
+or the process's (``process_chain()``).
 
 ``predict(read_roi, write_roi, config, **kwargs)`` and ``apply_postprocess``
 are what model scripts are written against, so both stay importable from
@@ -14,9 +14,10 @@ import logging
 
 import numpy as np
 
-from cellmap_flow.globals import g
+import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
 from cellmap_flow.inference.runner import ModelRunner
 from cellmap_flow.inference.runner import predict  # noqa: F401  (the script contract; WRAPPERS.md)
+from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,11 @@ logger = logging.getLogger(__name__)
 def apply_postprocess(data, postprocess=None, **kwargs):
     """Run ``data`` through a postprocessing chain.
 
-    ``postprocess=None`` means the process-wide ``g.postprocess``; the server
-    passes the chain of the layer being requested instead.
+    ``postprocess=None`` means the process's chain,
+    ``process_chain().postprocess``; the server passes the chain of the layer
+    being requested instead.
     """
-    for pross in g.postprocess if postprocess is None else postprocess:
+    for pross in process_chain().postprocess if postprocess is None else postprocess:
         data = pross(data, **kwargs)
     return data
 
@@ -52,7 +54,7 @@ class Inferencer(ModelRunner):
         """Predict ``roi`` and postprocess it.
 
         ``input_norms`` / ``postprocess``: the chain to use for this chunk.
-        ``None`` falls back to ``g.input_norms`` / ``g.postprocess``, for
+        ``None`` falls back to the process's chain (``process_chain()``), for
         callers (scripts) that set the chain process-wide.
 
         ``cancelled``: asked while the chunk waits for a device slot; raises
