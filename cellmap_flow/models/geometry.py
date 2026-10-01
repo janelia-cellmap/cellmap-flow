@@ -20,7 +20,8 @@ from typing import Optional, Tuple
 import numpy as np
 from funlib.geometry import Coordinate
 
-# The names a chunk_output_axes entry may give the channel axis.
+# The names a channel axis goes by, in chunk_output_axes and in the raw
+# data's axes (the server drops it from the latter to get the spatial axes).
 CHANNEL_AXES = ("c", "c^", "channel")
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
 
