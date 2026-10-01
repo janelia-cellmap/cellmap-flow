@@ -1,9 +1,9 @@
 """One logging format, actually applied.
 
 ``logging.basicConfig`` does nothing once the root logger has a handler, and
-``cellmap_flow.globals`` configures it at import time -- which nearly
-everything imports early. So every later ``basicConfig`` call in a CLI was a
-silent no-op: ``yaml_cli`` has been asking for a timestamped format for a
+``cellmap_flow.globals`` configures it at import time -- and nearly
+everything used to import that early. So every later ``basicConfig`` call in
+a CLI was a silent no-op: ``yaml_cli`` has been asking for a timestamped format for a
 while, and the output has always come out as the bare default::
 
     INFO:cellmap_flow.cli.yaml_cli:Loading configuration from: ...

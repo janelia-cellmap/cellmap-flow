@@ -171,8 +171,8 @@ The viewer and the dashboard
    * - ``viewer/``
      - The neuroglancer viewer. It never imports or starts the dashboard;
        callers pass what a layer needs. (The raw layer is read through
-       ``ImageDataInterface``, and so through the process's input chain in
-       ``g``.)
+       ``ImageDataInterface``, and so through the process's input chain,
+       ``process_chain()``.)
 
        - ``bootstrap``: ``new_viewer()``;
        - ``layers``: ``prediction_layer``, ``prediction_source``,
@@ -360,7 +360,7 @@ Entry points and process-wide modules
      - Deprecated, and gone after 0.3.0: ``g`` (and its type ``Flow``), which
        forwards each name it had to that name's owner with a
        ``DeprecationWarning``. Importing it configures logging, as it always
-       has. See `Where state lives`_.
+       has, so nothing in the package imports it. See `Where state lives`_.
    * - ``review.py``, ``review_index.py``
      - The Review tab's SQLite index: reading it, and building one
        (``python -m cellmap_flow.review_index``). See :doc:`review`.
@@ -388,9 +388,9 @@ A chunk served to Neuroglancer
 #. ``CellMapFlowServer.chain_for`` finds the blob
    (``serving.protocol.split_dataset_url``), decodes it and builds its steps
    (``PipelineSpec.from_json_data(..., strict=True).build()``), once per URL;
-   the last 32 chains are kept. A URL without a blob gets the process's chain
-   in ``g``, which is empty in a server started from the command line; the
-   log then warns that the model is fed raw voxel values.
+   the last 32 chains are kept. A URL without a blob gets the process's chain,
+   ``process_chain()``, which is empty in a server started from the command
+   line; the log then warns that the model is fed raw voxel values.
 #. ``Inferencer.process_chunk`` points the server's ``ImageDataInterface`` at
    the layer's normalizers (``with_input_norms``) and asks
    ``ModelRunner.predict`` for the chunk. The runner grows the ROI by the
@@ -662,15 +662,19 @@ The deprecated ``g``
 
 ``cellmap_flow.globals.g`` stays for one release, for scripts and plugins.
 Each name it had forwards to its owner with a ``DeprecationWarning`` that
-names the replacement; ``pytest`` hides these while the package's own
-modules move off it (K16), and they are silent in the servers and the
-dashboard, whose code is not ``__main__``. Until the move is done, ``g`` is
-still used by the CLIs, the blockwise processor, ``dashboard/app.py`` (the
-viewer's address), and ``server.py``, ``inferencer.py`` and
-``ImageDataInterface`` (the chain). New code uses the owners:
+names the replacement. The warnings are silent in the servers and the
+dashboard, whose code is not ``__main__``; ``tests/conftest.py`` hides those
+from the modules still being moved off ``g``, and only those.
 
-- add no attribute to ``g``, and no ``g.x`` read in a module that doesn't
-  already have one;
+Nothing in the package imports ``globals``, and ``test_import_targets``
+checks it. Until their moves land, two files are allowed to:
+``dashboard/app.py``, for the viewer's address, and ``finetune_cli.py``, for
+its logging. Importing ``globals`` also configures logging, so a module that
+imported it reset a CLI's ``--log-level`` to INFO whenever the CLI imported
+that module after parsing the flag, as ``cellmap_flow_server`` imports the
+server. New code uses the owners:
+
+- no ``import cellmap_flow.globals``, and no ``g.x``;
 - dashboard code reads state through ``get_session()``;
 - everything else takes what it needs as arguments, as ``finetune.session``
   does: its MinIO and sync functions are given the dashboard's
@@ -768,7 +772,8 @@ Tests
   name says the behaviour it protects.
 - **Shared fixtures** are in the conftest files. ``tests/conftest.py``
   points ``HOME`` at a temporary directory before anything imports
-  cellmap_flow, restores ``g`` and the root logger after every test, and has
+  cellmap_flow, gives every test fresh owners of the process's state
+  (``_fresh_process_state``), restores the root logger after it, and has
   ``raw_zarr``, ``ome_pyramid``, ``write_array``, ``model_script``,
   ``fake_lsf``, ``viewer`` and ``dashboard``. ``tests/finetune/conftest.py``
   and ``tests/blockwise/conftest.py`` have their areas' fixtures.
@@ -802,15 +807,19 @@ Tests
   ``pytest -m "not gpu and not lsf and not minio and not network"`` with and
   without the ``finetune`` extra.
 - **Import hygiene**: what jobs, servers, finetune runs and the dashboard's
-  request threads import must not drag in the dashboard or a model. A new
-  module imports ``globals``, Flask, neuroglancer, huggingface_hub and peft
-  only where it needs them, never at module level, and torch likewise
-  outside ``finetune/`` and ``inference/``. ``test_import_hygiene`` checks it
-  in a fresh interpreter per group: ``jobs/`` and the job manager, ``io/``,
-  ``serving/`` (with ``models.geometry``, ``geometry_cache`` and
-  ``inference.runner``), the registry (with ``config.yaml`` and
-  ``serving.launch``), ``pipeline_spec``, ``review`` and ``viewer/``; and that
-  ``import cellmap_flow`` writes nothing under ``HOME``.
+  request threads import must not drag in the dashboard or a model. No
+  module imports ``globals`` (``test_import_targets``). A new module imports
+  Flask, neuroglancer, huggingface_hub and peft only where it needs them,
+  never at module level, and torch likewise outside ``finetune/`` and
+  ``inference/``. ``test_import_hygiene`` checks it in a fresh interpreter
+  per group: ``jobs/`` and the job manager, ``io/``, ``serving/`` (with
+  ``models.geometry``, ``geometry_cache``, ``inference.runner``, the
+  ``Inferencer`` and ``ImageDataInterface``), the registry (with
+  ``config.yaml`` and ``serving.launch``), ``pipeline_spec`` and
+  ``process_chain``, the state's owners, ``finetune/session/``, ``review``
+  and ``viewer/``; that importing ``server.py`` or ``blockwise/`` leaves
+  logging alone; and that ``import cellmap_flow`` writes nothing under
+  ``HOME``.
 
 The dashboard's JavaScript
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
