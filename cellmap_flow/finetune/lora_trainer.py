@@ -588,60 +588,14 @@ class LoRAFinetuner:
         except Exception as e:  # never let a diagnostic stop training
             logger.debug(f"Single-class check failed: {e}")
 
-    def train(self) -> Dict[str, Any]:
+    def _probe_model(self, log_message):
+        """Two forward passes before training, to set up how it runs.
+
+        Whether the model NaNs under mixed precision (then train in fp32),
+        and whether it ends in a sigmoid (then the losses take
+        probabilities). The second answer is cached on the model, so a
+        restart on the same model does not probe again.
         """
-        Run the training loop.
-
-        Returns:
-            Training statistics dictionary with:
-            - final_loss: Final epoch loss
-            - best_loss: Best loss achieved
-            - total_epochs: Number of epochs trained
-            - total_steps: Total training steps
-        """
-        # Create log file
-        log_file = self.output_dir / "training_log.txt"
-
-        def log_message(msg):
-            """Log to console (tee handles writing to log file).
-
-            Timestamped like the logger's lines so epoch duration can be read
-            off the log: the 2026-09-23 A/B runs had none on the per-epoch
-            summaries, and per-arm speed had to come from LSF's start/end
-            times instead. The progress parsers in finetune/job_manager use
-            unanchored re.findall, so the prefix does not affect them.
-            """
-            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"{stamp} {msg}" if msg else msg, flush=True)
-
-        log_message("="*60)
-        log_message("Starting LoRA Finetuning")
-        log_message("="*60)
-        log_message(f"Epochs: {self.num_epochs}")
-        log_message(f"Batches per epoch: {len(self.dataloader)}")
-        log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
-        log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
-        if self.use_mixed_precision:
-            log_message(
-                f"Mixed precision: {self.use_mixed_precision} "
-                f"(dtype={str(self.amp_dtype).replace('torch.', '')}, "
-                f"grad_scaler={self.scaler.is_enabled()})"
-            )
-        else:
-            log_message("Mixed precision: False (fp32)")
-        log_message(f"Mask unannotated regions: {self.mask_unannotated}")
-        log_message(f"Log file: {log_file}")
-        if self.tb is not None:
-            log_message(f"TensorBoard: tensorboard --logdir {self.output_dir.parent}   (this run: {self.tb_dir})")
-            self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
-        log_message("")
-
-        self._set_train_mode()
-        start_time = time.time()
-
-        # Store log function for use in _train_epoch and helpers
-        self._log_message = log_message
-
         # Probe for FP16 stability: run a single forward pass and check for NaN.
         # Some model+data combinations produce NaN under FP16 autocast.
         if self.use_mixed_precision:
@@ -711,6 +665,62 @@ class LoRAFinetuner:
                     f"WARNING: Sigmoid probe failed ({e}) — assuming raw logits output."
                 )
                 torch.cuda.empty_cache()
+
+    def train(self) -> Dict[str, Any]:
+        """
+        Run the training loop.
+
+        Returns:
+            Training statistics dictionary with:
+            - final_loss: Final epoch loss
+            - best_loss: Best loss achieved
+            - total_epochs: Number of epochs trained
+            - total_steps: Total training steps
+        """
+        # Create log file
+        log_file = self.output_dir / "training_log.txt"
+
+        def log_message(msg):
+            """Log to console (tee handles writing to log file).
+
+            Timestamped like the logger's lines so epoch duration can be read
+            off the log: the 2026-09-23 A/B runs had none on the per-epoch
+            summaries, and per-arm speed had to come from LSF's start/end
+            times instead. The progress parsers in finetune/job_manager use
+            unanchored re.findall, so the prefix does not affect them.
+            """
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{stamp} {msg}" if msg else msg, flush=True)
+
+        log_message("="*60)
+        log_message("Starting LoRA Finetuning")
+        log_message("="*60)
+        log_message(f"Epochs: {self.num_epochs}")
+        log_message(f"Batches per epoch: {len(self.dataloader)}")
+        log_message(f"Gradient accumulation: {self.gradient_accumulation_steps}")
+        log_message(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
+        if self.use_mixed_precision:
+            log_message(
+                f"Mixed precision: {self.use_mixed_precision} "
+                f"(dtype={str(self.amp_dtype).replace('torch.', '')}, "
+                f"grad_scaler={self.scaler.is_enabled()})"
+            )
+        else:
+            log_message("Mixed precision: False (fp32)")
+        log_message(f"Mask unannotated regions: {self.mask_unannotated}")
+        log_message(f"Log file: {log_file}")
+        if self.tb is not None:
+            log_message(f"TensorBoard: tensorboard --logdir {self.output_dir.parent}   (this run: {self.tb_dir})")
+            self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
+        log_message("")
+
+        self._set_train_mode()
+        start_time = time.time()
+
+        # Store log function for use in _train_epoch and helpers
+        self._log_message = log_message
+
+        self._probe_model(log_message)
 
         stop_signal_path = self.output_dir / "stop_signal.json"
         # Make sure no stale signal from a previous run lingers.
