@@ -146,6 +146,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a single raw array whose contrast cannot be sampled is shown over its dtype's range (0–255 for uint8, 0–65535 for uint16) instead of always [-1, 1];
     - a pyramid level whose voxel size is not a power-of-two multiple of the finest level's on every axis (a 12 nm level of an 8 nm pyramid, say) is left out of the raw layer with a warning. It used to be served in place of another level. The finest level is always shown;
     - neuroglancer can zoom the raw layer out 64× past a pyramid's coarsest level, downsampled on the fly as for a single array, so a one-level pyramid is no longer drawn at full resolution when zoomed out.
+    - a zarr level read over http(s) or s3 that its group's multiscales don't list (`…/raw/s1` when `raw` lists only `s0`) is read from its own `resolution`/`offset`, as it is on disk. It used to get the group's first level's voxel size and translation;
+    - an N5 array with a voxel size but no offset (BigDataViewer/Paintera `pixelResolution`, or `resolution` alone) keeps that voxel size, at offset 0. It used to read as 1 nm. A value is taken from the group's multiscales only when the array lacks it;
+    - neuroglancer-style cloud precomputed sources, `precomputed://gs://…` and `precomputed://https://…`, open; they were read as local paths and failed. A `gs://` path ending in `.zarr`/`.n5` fails with a message pointing to its `https://storage.googleapis.com/…` URL, instead of being opened as precomputed;
+    - a dataset URL (http(s), s3, gs, `precomputed://<url>`) is no longer shell-unescaped (`\ ` to a space). Local paths still are.
   - **Model configs:**
     - a Fly model given only one of `input_size`/`output_size` is refused with a message asking for the other. It used to reset both to 178/56;
     - a model config without a `name` falls back to float32 output instead of raising;
@@ -203,6 +207,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `044c331` a dataset URL is not unescaped
+- `6a9aef5` precomputed://gs:// and precomputed://https:// are read as URLs
+- `6f48f02` an N5 voxel size without an offset is kept
+- `1a4f46d` a remote level its group doesn't list reads its own attributes
 - `0af021e` g refuses a name it never had
 - `f437b3a` launchers start servers with `cellmap_flow serve --model` (K4)
 - `03a1499` plugins load when a command starts, not at import (K21)
