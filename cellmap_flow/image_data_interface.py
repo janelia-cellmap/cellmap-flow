@@ -117,7 +117,7 @@ class ImageDataInterface:
                     DeprecationWarning,
                     stacklevel=2,
                 )
-        dataset_path = dataset_path.replace("\\ ", " ")
+        dataset_path = paths.normalize_path(dataset_path)
         # A multiscale group or precomputed volume is read at its level for
         # voxel_size; the path of one level at that level.
         try:

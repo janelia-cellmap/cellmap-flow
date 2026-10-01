@@ -30,14 +30,22 @@ def is_precomputed(path: str) -> bool:
     return path.startswith(_PRECOMPUTED_PREFIXES)
 
 
+def _location(path: str) -> str:
+    """``path`` without a leading ``precomputed://``: a local path or a URL."""
+    return path[len("precomputed://"):] if path.startswith("precomputed://") else path
+
+
 def normalize_path(path: str) -> str:
     """Remove shell-escape backslashes from a filesystem path.
 
     Users often copy-paste paths from a terminal where spaces are escaped
     (e.g. ``/path/to/file\\ name.zarr``).  YAML preserves the literal
     backslashes, but the filesystem expects plain spaces.
+
+    A URL -- http(s), s3, gs, or one after ``precomputed://`` -- is returned
+    as it is: it is not a filesystem path.
     """
-    if is_remote(path):
+    if "://" in _location(path):
         return path
     return path.replace("\\ ", " ")
 
@@ -159,16 +167,14 @@ def precomputed_kvstore(path: str) -> Tuple[object, int]:
     ``.zarr``/``.n5`` suffix raises ValueError rather than being opened as a
     precomputed volume that isn't there.
     """
-    explicit = path.startswith("precomputed://")
-    location = path[len("precomputed://"):] if explicit else path
-    if not explicit and suffix_format(location) is not None:
-        bucket_path = location[len("gs://"):]
+    if path.startswith("gs://") and suffix_format(path) is not None:
+        bucket_path = path[len("gs://"):]
         raise ValueError(
             f"{path}: zarr and N5 are not read from gs:// (a gs:// path is a neuroglancer "
             f"precomputed volume); for a public bucket, give "
             f"https://storage.googleapis.com/{bucket_path} instead"
         )
-    location, scale_index = precomputed_scale(location)
+    location, scale_index = precomputed_scale(_location(path))
     scale_index = scale_index or 0
     if "://" in location:
         return location, scale_index

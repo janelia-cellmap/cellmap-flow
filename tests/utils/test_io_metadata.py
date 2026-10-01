@@ -458,11 +458,19 @@ def test_where_tensorstore_reads_a_precomputed_path(path, expected):
         assert paths.precomputed_kvstore(path) == expected
 
 
-def test_v3_is_read_from_local_disk_only_and_paths_join_and_unescape(tmp_path):
+def test_v3_is_read_from_local_disk_only_and_urls_join_with_slashes(tmp_path):
     _v3_group(tmp_path / "v3.zarr")
     assert paths.is_v3_container(str(tmp_path / "v3.zarr")) and not paths.is_v3_container(str(tmp_path))
     assert paths.find_v3_container("https://host/v3.zarr") is None
     assert paths.join("https://host/x.zarr/", "em", "s0") == "https://host/x.zarr/em/s0"
-    # A shell-escaped space is a space, on disk only.
-    assert paths.normalize_path("/d/my\\ data.zarr") == "/d/my data.zarr"
-    assert paths.normalize_path("https://h/my\\ data.zarr") == "https://h/my\\ data.zarr"
+
+
+@pytest.mark.parametrize("path, normalized", [
+    pytest.param("/d/my\\ data.zarr", "/d/my data.zarr", id="local"),
+    pytest.param("precomputed:///d/my\\ vol", "precomputed:///d/my vol", id="local-precomputed"),
+    pytest.param("https://h/my\\ data.zarr", "https://h/my\\ data.zarr", id="https"),
+    pytest.param("gs://b/my\\ vol", "gs://b/my\\ vol", id="gs"),
+    pytest.param("precomputed://gs://b/my\\ vol", "precomputed://gs://b/my\\ vol", id="precomputed-url"),
+])
+def test_a_shell_escaped_space_is_a_space_on_disk_only(path, normalized):
+    assert paths.normalize_path(path) == normalized

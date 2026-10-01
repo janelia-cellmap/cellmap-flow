@@ -236,7 +236,7 @@ def get_raw_layer(
     normalizers. ``disable_meshes`` then turns off its meshes subsource
     (see _layer).
     """
-    dataset_path = dataset_path.replace("\\ ", " ")
+    dataset_path = paths.normalize_path(dataset_path)
     original_dataset_path = dataset_path
     is_precomputed = dataset_path.startswith("precomputed://")
     pyramid = _pyramid(dataset_path)
