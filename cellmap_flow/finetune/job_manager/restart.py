@@ -7,10 +7,11 @@ takes ``POST <server>/__control__/restart`` with the job's restart token
 "params"}``, ``params`` being the settings to change. When the server cannot
 be reached, or has no URL yet, the same body goes into the run's
 ``restart_signal.json``, which the trainer also watches (finetune.session_loop).
+It is written whole or not at all (persistence.write_json_atomically): the
+trainer reads it as soon as it exists, and ends the job if it is not JSON.
 Jobs outlive dashboard upgrades, so both ways are a protocol.
 """
 
-import json
 import logging
 import time
 from datetime import datetime
@@ -18,7 +19,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from cellmap_flow.finetune.job_manager import state
+from cellmap_flow.finetune.job_manager import persistence, state
 from cellmap_flow.finetune.job_manager.state import FinetuneJob
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, read_restart_token
 
@@ -75,8 +76,7 @@ def request_restart(job: FinetuneJob, updated_params: Optional[Dict[str, Any]] =
     if http_error is not None:
         signal_write_mode = "file_signal_fallback"
         signal_file = job.output_dir / "restart_signal.json"
-        with open(signal_file, 'w') as f:
-            json.dump(signal_data, f, indent=2)
+        persistence.write_json_atomically(signal_file, signal_data)
         logger.info(f"Wrote fallback restart signal to {signal_file}")
     write_elapsed = time.perf_counter() - write_t0
 

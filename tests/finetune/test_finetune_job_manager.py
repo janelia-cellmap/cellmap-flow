@@ -656,6 +656,19 @@ def test_only_a_job_waiting_for_a_restart_is_restarted(make_job, monkeypatch, st
     assert (job.status, job.params["learning_rate"]) == (JobStatus.RUNNING, 5e-5)
 
 
+def test_a_restart_signal_is_written_whole_or_not_at_all(make_job):
+    """The trainer, on its own host, reads restart_signal.json as soon as it
+    exists, and ends the job if that is not JSON. The file was written in
+    place, so the trainer could read it half written, or what a failed write
+    left. Here the write fails partway, on a value JSON cannot hold, as it
+    would on a full disk."""
+    manager, job = FinetuneJobManager(), make_job("WAITING_FOR_RESTART")  # no server: the signal file
+    manager.jobs[job.job_id] = job
+    with pytest.raises(TypeError):
+        manager.restart_finetuning_job(job.job_id, {"learning_rate": 5e-5, "unwritable": object()})
+    assert list(job.output_dir.iterdir()) == [], "neither a signal nor a temporary file"
+
+
 @pytest.mark.parametrize("on_disk, params, served_from", [
     pytest.param(None, {"lora_r": 64}, "lora_adapter", id="nothing yet, a LoRA job"),
     pytest.param(None, {"lora_r": 0}, "full_finetune/model_state_dict.pt", id="nothing yet, a full finetune"),
