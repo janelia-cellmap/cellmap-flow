@@ -176,7 +176,7 @@ def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatc
     path's name, found nothing in MinIO and answered 500."""
     from cellmap_flow.dashboard.routes.finetune import instance_correction
     from cellmap_flow.finetune.session import instance, minio
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
     snapshot = zarr.open_group(str(tmp_path / "vols" / "roi_annotation_20260901.zarr"), mode="w")
     snapshot.create_group("annotation").create_dataset("s0", shape=(8, 8, 8), chunks=(4, 4, 4), dtype="u2")
@@ -190,8 +190,8 @@ def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatc
     monkeypatch.setattr(instance.s3fs, "S3Map", lambda root, s3, check: s3.stores[root])
     monkeypatch.setattr(instance_correction, "ensure_minio_serving",
                         lambda *a, **k: "http://m:9000/annotations/roi_annotation.zarr")
-    monkeypatch.setitem(g.minio_state, "ip", "m")
-    monkeypatch.setitem(g.minio_state, "port", 9000)
+    monkeypatch.setitem(get_session().minio_state, "ip", "m")
+    monkeypatch.setitem(get_session().minio_state, "port", 9000)
 
     created = client.post(CREATE, json={"roi_name": "roi", "reuse_existing": True,
                                         "source_zarr_path": snapshot.store.path}).get_json()
@@ -204,13 +204,13 @@ def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatc
 def test_a_reseed_over_unsynced_edits_names_the_running_minios_store(client, tmp_path, monkeypatch):
     """A running MinIO keeps its data where it started, which the refusal
     has to name; it named <output_dir>/.minio, which may not exist."""
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
     chunks = tmp_path / "elsewhere" / ".minio" / "annotations" / "roi_annotation.zarr" / "annotation" / "s0"
     chunks.mkdir(parents=True)
     (chunks / "0.0.0").write_bytes(b"painted")
-    monkeypatch.setitem(g.minio_state, "process", _Alive())
-    monkeypatch.setitem(g.minio_state, "output_base", str(tmp_path / "elsewhere"))
+    monkeypatch.setitem(get_session().minio_state, "process", _Alive())
+    monkeypatch.setitem(get_session().minio_state, "output_base", str(tmp_path / "elsewhere"))
 
     response = client.post(CREATE, json={"roi_name": "roi", "model_name": "model",
                                          "instance_zarr_path": str(tmp_path / "instances.zarr")})

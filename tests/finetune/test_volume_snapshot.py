@@ -324,11 +324,11 @@ def test_what_each_volume_creator_writes(world):
 def test_the_layer_a_volume_is_painted_in_comes_selected_with_the_draw_tools_bound(world, url, body):
     """As add-to-viewer's does: these routes built their own layer, with no
     keys bound and left unselected."""
-    from cellmap_flow.globals import g
+    from cellmap_flow.dashboard.state import get_session
 
     answer = world.client.post(url, json={k: v.format(tmp=world.tmp) for k, v in body.items()}).get_json()
     layer = answer.get("layer_name") or f"annotation_{answer['volume_id']}"
-    state = g.viewer.state
+    state = get_session().viewer.state
     assert (state.selected_layer.layer, state.selected_layer.visible) == (layer, True)
     bindings = state.layers[layer].to_json()["toolBindings"]
     assert {key: tool if isinstance(tool, str) else tool["type"] for key, tool in bindings.items()} == {
