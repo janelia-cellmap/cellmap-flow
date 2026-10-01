@@ -80,7 +80,7 @@ class Session:
         # {layer name: shaderControls}, likewise.
         self.shader_controls = {}
         # {name: neuroglancer layer} that the viewer shows beside the raw
-        # data: a YAML's extra_layers, built by cellmap_flow_yaml. The
+        # data: a YAML's extra_layers, built by `cellmap_flow yaml`. The
         # viewer-layer routes drop or rename their entries.
         self.extra_layers = {}
 

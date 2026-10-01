@@ -141,7 +141,7 @@ def generate_current_config_yaml(
     """
     Build YAML text snapshotting the dashboard's current live server config
     (whatever models/normalization/postprocessing/queue are active right
-    now), so it can be handed back to `cellmap_flow_yaml` later.
+    now), so it can be handed back to `cellmap_flow yaml` later.
 
     Unlike generate_finetuned_model_yaml (which describes one specific
     finetune job), this is a general "export what's currently running"
@@ -185,7 +185,7 @@ def generate_current_config_yaml(
 
     header = (
         "# CellMap-Flow exported configuration\n"
-        "# Reload with: cellmap_flow_yaml <this file>\n"
+        "# Reload with: cellmap_flow yaml <this file>\n"
         "#\n"
     )
     if not has_json_data:

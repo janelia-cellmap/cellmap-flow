@@ -78,7 +78,7 @@ class LauncherSettings:
     of being stored beside the real one, and a key added to the defaults is
     loaded and saved without being named anywhere else. (Assigning each key
     by hand is how adding "walltime" once gave save() a key no instance had,
-    and every cellmap_flow_yaml run died at startup.)
+    and every `cellmap_flow yaml` run died at startup.)
     """
 
     __slots__ = (*SERVER_CONFIG_KEYS, "cached")

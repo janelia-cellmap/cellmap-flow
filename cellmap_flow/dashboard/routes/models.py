@@ -154,7 +154,7 @@ def export_config():
     """
     Export the dashboard's current live config (models, normalization,
     postprocessing, queue/charge_group) as a downloadable YAML file that can
-    be reloaded later with `cellmap_flow_yaml`.
+    be reloaded later with `cellmap_flow yaml`.
     """
     from cellmap_flow.finetune.finetuned_model_templates import (
         generate_current_config_yaml,

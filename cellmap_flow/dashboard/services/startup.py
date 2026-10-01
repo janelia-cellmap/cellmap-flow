@@ -1,7 +1,7 @@
 """The CLIs' last step: open the viewer on the dataset, then serve the dashboard.
 
 ``generate_neuroglancer_url`` is what ``cellmap_flow <type>`` and
-``cellmap_flow_yaml`` end with. The viewer and its layers are built by
+``cellmap_flow yaml`` end with. The viewer and its layers are built by
 ``cellmap_flow.viewer``; this module adds the session's models to it and
 starts the dashboard, which is why it imports ``dashboard.app`` and
 ``viewer`` does not. The routes never import it: ``dashboard.app`` imports
@@ -63,7 +63,7 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
             shader=session.shaders[model], shader_controls=session.shader_controls.get(model), info=info,
             fallback_output_voxel_size=_configured_output_voxel_size(model, info),
         )
-    # The YAML's extra_layers (cellmap_flow_yaml builds them).
+    # The YAML's extra_layers (`cellmap_flow yaml` builds them).
     layers.update(session.extra_layers)
 
     session.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)

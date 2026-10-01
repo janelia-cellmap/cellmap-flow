@@ -3,7 +3,7 @@
 Every ModelConfig subclass is a model type: the built-in ones in
 ``models/configs`` (imported from models_config) and any that a plugin
 defines. The model CLIs
-(``cellmap_flow``, ``cellmap_flow_server``, ``cellmap_flow_yaml``), YAML
+(``cellmap_flow infer``, ``cellmap_flow serve``, ``cellmap_flow yaml``), YAML
 configs, the dashboard's model form and the finetune CLI's model entries
 all look types up here, so a plugin type is a type everywhere.
 
