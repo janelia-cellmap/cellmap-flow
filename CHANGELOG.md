@@ -197,6 +197,12 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - **`cellmap_flow.utils` is dissolved** into the packages that own each piece: `io/`, `jobs/`, `serving/`, `config/yaml.py`, `models/registry`, `models/hf_catalog`, `models/geometry_cache`, `norm/safe_expression`, `dashboard/services/`, and `cellmap_flow.plugins` and `cellmap_flow.logging_setup` at the package root. The three names the docs used keep deprecated aliases for one release: `utils.bsub_utils.install_cleanup_handlers` (now `jobs.launch`), `utils.serialize_config.Config` (now `models.models_config.Config`), and `models.model_registry.list_huggingface_models`/`refresh_huggingface_models` (now `models.hf_catalog`). `python -m cellmap_flow.utils.doctor` is `python -m cellmap_flow.cli.doctor`.
   - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
   - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
+  - **Remote data (s3, gs, http):** see the new Data paths docs page.
+    - zarr v2, zarr v3 and N5 datasets are read at `gs://`, `s3://` and `http(s)://` URLs with the same metadata and voxels as the same files on disk, through tensorstore's own kvstores, with no new dependency. gs zarr/N5 raised an error before, and N5 and zarr v3 at a URL failed;
+    - arrays at `s3://` URLs can be read again: every s3 open failed, because the anonymous-credentials spec was one tensorstore no longer accepts. s3 is read anonymously first and with the AWS default credentials when a bucket refuses, so configured credentials never stop a public read; `AWS_ENDPOINT_URL`/`AWS_REGION` select an S3-compatible store. A `gs://` bucket that refuses your Google credentials is read at its public URL;
+    - a zarr v2 or N5 group path reads its first level on disk, as it did at a URL, instead of failing; a URL with no `.zarr`/`.n5` in it finds its container like a local path; an unreachable host fails after about 5 s instead of retrying for many minutes;
+    - only a path component that ends in `.zarr`/`.n5` ends a container, so names like `…chunk-1.zarr-v2` are no longer cut in two;
+    - with `wrap_raw: false`, a precomputed path naming one scale gives neuroglancer the volume, and a zarr URL without `.zarr` in it is given as `zarr://`, not `precomputed://`.
   - **Added: optional resampling to a model's voxel size.** `resample: true` in a YAML, `cellmap_flow infer <type> --resample` and `cellmap_flow serve --resample` resample the data to the model's input voxel size when the dataset has no level at that size, each axis by its own factor: a block mean for whole factors, linear interpolation otherwise, the nearest voxel for label data. It reads the coarsest level no coarser than the target on any axis, and the resampled grid starts at the data's own corner. The default is unchanged: the nearest level is read as if it were at the model's voxel size, with a warning that now names the option. In Python it is `ImageDataInterface(..., on_voxel_size_mismatch="resample")`; blockwise reads with it too, and the server's `model_info` reports `input_resampled_from`.
   - **Deprecated (K18):** `ImageDataInterface`'s `output_voxel_size` and `custom_fill_value` arguments warn; they still work this release. Use `on_voxel_size_mismatch="resample"` instead of `output_voxel_size`, which applied the z factor to every axis on a 0 nm grid. `concurrency_limit` stays, because the inference server uses it.
   - **One `cellmap_flow` command (K1–K5, K21).** See the Command line page of the docs.
@@ -262,6 +268,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `42409d7` the unwrapped raw layer names a precomputed volume whole and an unsuffixed zarr URL as zarr
+- `41aacc6` a container ends at a path component ending in .zarr or .n5
+- `38292fc` zarr and N5 metadata are read from their JSON through io.store, so a URL reads as the same files on disk
+- `58a5372` arrays at s3:// and gs:// URLs are opened through one kvstore module
 - `1982372` importing the server, the Inferencer or ImageDataInterface no longer configures logging
 - `13499bf` the Finetune tab's volume layer is annotation_<id>, the name the server gives it
 - `0f4aea0` the Finetune tab offers Restart only to a job that can take one
