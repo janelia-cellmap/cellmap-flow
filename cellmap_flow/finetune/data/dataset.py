@@ -135,11 +135,12 @@ class VirtualPatchDataset(Dataset):
 
         sampler = self.sampler
         n_dense, n_sparse = int(sampler.dense.shape[0]), int(sampler.sparse.shape[0])
+        n_sparse_fg = sampler.sparse_foreground
         logger.info(
-            f"VirtualPatchDataset: built FG index with {n_dense + n_sparse} voxels "
-            f"(dense={n_dense}, sparse={n_sparse}) from {sampler.annotated_chunks} FG-bearing "
-            f"chunk(s) ({sampler.chunk_files} chunk files on disk) of "
-            f"{self.volume_zarr_path}; "
+            f"VirtualPatchDataset: patch centres from {sampler.annotated_chunks} annotated "
+            f"chunk(s) ({sampler.chunk_files} chunk files on disk) of {self.volume_zarr_path}: "
+            f"{n_sparse} painted voxels ({n_sparse_fg} foreground, {n_sparse - n_sparse_fg} "
+            f"background), {n_dense} foreground voxels in imported crops; "
             f"patches_per_epoch={self.patches_per_epoch}, "
             f"dense_ratio={sampler.effective_dense_ratio:.3f} "
             f"({'auto' if sampler.dense_to_sparse_ratio is None else 'explicit'}), "

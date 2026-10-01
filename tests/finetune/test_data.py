@@ -112,6 +112,16 @@ def test_a_background_fix_far_from_any_foreground_is_drawn(annotation_volume):
     assert any(1 in ann and 2 not in ann for ann in _drawn(dataset))
 
 
+def test_each_painted_chunk_gets_a_like_share_however_much_was_painted_in_it(annotation_volume):
+    """Drawn by voxel, a wide background stroke (here 512 voxels against the
+    foreground's 8) took nearly every patch, and the foreground fix was hardly
+    seen: 2 of 64 draws on average, where it now gets about half."""
+    labels = _labels(64, fg=(2, np.s_[2:4, 2:4, 2:4]), wide=(1, np.s_[40:48, 40:48, 40:48]))
+    drawn = _drawn(annotation_volume(labels).dataset(patches_per_epoch=64), 64)
+    with_foreground = sum(2 in ann for ann in drawn)
+    assert 20 <= with_foreground <= 44, with_foreground
+
+
 @pytest.mark.parametrize("labels, label", [
     pytest.param(_labels(32, crop=(1, np.s_[0:16, 0:16, 0:16]), fg=(2, np.s_[4:8, 4:8, 4:8])), 2,
                  id="around its foreground, not its background"),
