@@ -329,9 +329,6 @@ class CellMapFlowServer:
             self.origin,
             self.output_voxel_size,
         )
-        self.vol_shape, self.zarr_block_shape = self._zarr_geometry(
-            ServedChain(None, None, None)
-        )
 
         # Chunk encoding for Zarr
         self.chunk_encoder = virtual_zarr.chunk_encoder()
@@ -415,7 +412,7 @@ class CellMapFlowServer:
 
         @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
-            self.refresh_dataset(dataset)
+            self.chain_for(dataset)  # builds and checks the chain, so a bad URL fails here
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/.zarray", methods=["GET"])
@@ -438,7 +435,7 @@ class CellMapFlowServer:
         def chunk_3d(dataset, scale, chunk_z, chunk_y, chunk_x):
             return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
 
-    def _chain_for(self, dataset) -> ServedChain:
+    def chain_for(self, dataset) -> ServedChain:
         """The chain the requested layer URL carries, built once per URL.
 
         A URL without an args block gets the process default (g's chain,
@@ -465,10 +462,6 @@ class CellMapFlowServer:
                 self._chains.popitem(last=False)
             return chain
 
-    def refresh_dataset(self, dataset) -> ServedChain:
-        """Resolve (and cache) the chain for ``dataset``. Changes no globals."""
-        return self._chain_for(dataset)
-
     def _zarr_geometry(self, chain: ServedChain):
         """(shape, chunks) of the served array under ``chain``."""
         shape = list(self._spatial_shape)
@@ -492,14 +485,14 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        chain = self._chain_for(dataset)
+        chain = self.chain_for(dataset)
         shape, chunks = self._zarr_geometry(chain)
         attr = virtual_zarr.zarray(shape, chunks, self._output_dtype(chain))
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
     def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
-        chain = self._chain_for(dataset)
+        chain = self.chain_for(dataset)
         roi = virtual_zarr.chunk_roi(
             (chunk_z, chunk_y, chunk_x), self._spatial_block, self.output_voxel_size, self.origin
         )

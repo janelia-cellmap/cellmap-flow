@@ -386,7 +386,7 @@ A chunk served to Neuroglancer
    ``<dataset>/s0/<z>.<y>.<x>[.<c>]``. ``serving.virtual_zarr`` works out
    each answer: the OME attributes, the array's shape and dtype under the
    chain, and the world ROI of a chunk key.
-#. ``CellMapFlowServer._chain_for`` finds the blob
+#. ``CellMapFlowServer.chain_for`` finds the blob
    (``serving.protocol.split_dataset_url``), decodes it and builds its steps
    (``PipelineSpec.from_json_data(..., strict=True).build()``), once per URL;
    the last 32 chains are kept. A URL without a blob gets the process's chain

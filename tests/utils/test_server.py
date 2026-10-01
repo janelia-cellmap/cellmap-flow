@@ -83,10 +83,10 @@ def test_a_stateful_step_keeps_its_state_across_metadata_requests(server):
     merged = layer(posts=[SimpleBlockwiseMerger()])
     client = server.app.test_client()
     get_json(client, f"/{merged}/.zattrs")
-    first = server.refresh_dataset(merged).postprocess[0]
+    first = server.chain_for(merged).postprocess[0]
     client.get(f"/{merged}/s0/0.0.0.0")
     get_json(client, f"/{merged}/.zattrs")
-    assert server.refresh_dataset(merged).postprocess[0] is first
+    assert server.chain_for(merged).postprocess[0] is first
     assert first.chunk_slice_position_to_coords_id_dict
 
 
