@@ -120,6 +120,51 @@ def test_the_best_epoch_is_the_best_supervised_one(make_trainer):
     assert best["epoch"] + 1 == 2
 
 
+class _RehearsalFirst(torch.utils.data.Dataset):
+    """One patch: a rehearsal patch, nothing annotated, for its first ``draws`` draws; then both classes."""
+
+    def __init__(self, draws):
+        self.rehearsals, self.raw = draws, torch.rand(1, 4, 4, 4, generator=torch.Generator().manual_seed(0))
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, i):
+        self.rehearsals -= 1
+        return self.raw, (NOTHING_ANNOTATED if self.rehearsals >= 0 else BOTH_CLASSES)[0]
+
+
+def test_an_epoch_that_supervised_nothing_is_never_the_best(make_trainer):
+    """Ranked by its total loss, lambda * distillation alone (~0, and exactly 0
+    at lambda 0), an epoch of rehearsal patches only was "best" for the rest of
+    the run, and the export shipped it."""
+    # Two rehearsal draws: the trainer's output probe's, and epoch 1's.
+    trainer = make_trainer(_net(), torch.utils.data.DataLoader(_RehearsalFirst(2)), num_epochs=3,
+                           learning_rate=0.1, distillation_lambda=0.0, target_transform=BinaryTargetTransform())
+    trainer.train()
+    best = torch.load(trainer.output_dir / "best_checkpoint.pth", weights_only=False)
+    later = trainer.training_stats[1:]
+    assert best["epoch"] + 1 == min(later, key=lambda s: s["loss"])["epoch"]
+    assert trainer.best_loss == min(s["loss"] for s in later)
+
+
+@pytest.mark.parametrize("ann, num_epochs", [
+    pytest.param(NOTHING_ANNOTATED, 2, id="no epoch supervised anything"),
+    pytest.param(FOREGROUND, 0, id="no epoch ran"),  # a restart asking for 0 epochs
+])
+def test_without_a_best_epoch_the_export_is_this_runs_last_weights(make_trainer, tmp_path, ann, num_epochs):
+    """A job's iterations share the output directory, and the export loaded the
+    best checkpoint an earlier one left there: it shipped that iteration's
+    weights as this one's, or failed to load them after a change of rank."""
+    make_trainer(_net(), (torch.rand(1, 1, 4, 4, 4), FOREGROUND), learning_rate=0.1).train()
+    trainer = make_trainer(_net(), (torch.rand(1, 1, 4, 4, 4), ann), num_epochs=num_epochs,
+                           distillation_lambda=0.0, target_transform=BinaryTargetTransform())
+    trainer.train()
+    last = cpu_state_copy(trainer.model)
+    exported = torch.load(trainer.save_adapter(export_dir=str(tmp_path / "export")), weights_only=True)
+    assert all(torch.equal(v, last[k]) for k, v in exported.items())
+
+
 @pytest.mark.parametrize("accumulate", [pytest.param(1, id="a step per batch"),
                                         pytest.param(2, id="gradient accumulation")])
 def test_a_non_finite_batch_never_reaches_the_weights(make_trainer, accumulate):

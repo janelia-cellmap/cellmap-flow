@@ -317,6 +317,11 @@ class LoRAFinetuner:
         self._start_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Whether best_checkpoint.pth is this run's: written by this trainer,
+        # or the one it resumed from. The output directory is shared by a
+        # job's iterations, so the file can be an earlier iteration's, and
+        # save_adapter must not export that.
+        self._has_best_checkpoint = False
         # Average supervised loss of the epoch just finished. Checkpoint
         # selection uses this rather than the combined loss -- see the epoch
         # loop for why the combined loss cannot rank epochs.
@@ -439,6 +444,11 @@ class LoRAFinetuner:
         self._start_epoch = 0
         self.global_step = 0
         self.best_loss = float('inf')
+        # Whether best_checkpoint.pth is this run's: written by this trainer,
+        # or the one it resumed from. The output directory is shared by a
+        # job's iterations, so the file can be an earlier iteration's, and
+        # save_adapter must not export that.
+        self._has_best_checkpoint = False
         # Average supervised loss of the epoch just finished. Checkpoint
         # selection uses this rather than the combined loss -- see the epoch
         # loop for why the combined loss cannot rank epochs.
@@ -848,9 +858,14 @@ class LoRAFinetuner:
             # Distillation belongs in the objective, where it restrains the
             # update; it cannot also be the yardstick for which epoch is best.
             # With lambda=0 the two terms are equal, so this changes nothing.
+            #
+            # An epoch that supervised nothing -- every patch a rehearsal
+            # patch, or no annotated voxel in any -- has a NaN supervised loss
+            # and is not ranked at all. Ranking it by its total loss instead,
+            # lambda * distillation alone (about 0, or exactly 0 at lambda 0),
+            # made it "best" for the rest of the run, for the same reason.
             selection_loss = self.last_supervised_loss
-            if not math.isfinite(selection_loss):
-                selection_loss = epoch_loss
+            supervised = math.isfinite(selection_loss)
 
             # Log epoch results. On soft targets the BCE cannot go below the
             # target's entropy, so also say how far above that floor it sits.
@@ -869,10 +884,11 @@ class LoRAFinetuner:
                 f"Supervised: {selection_loss:.6f} - "
                 f"Best supervised: {self.best_loss:.6f}"
                 f"{bce_extra}"
+                + ("" if supervised else " (nothing supervised: not ranked)")
             )
 
             # Save checkpoint if best
-            if selection_loss < self.best_loss:
+            if supervised and selection_loss < self.best_loss:
                 self.best_loss = selection_loss
                 self._log_message("  Saving best checkpoint...")
                 self.save_checkpoint(is_best=True)
@@ -893,7 +909,8 @@ class LoRAFinetuner:
                 data_wait, compute = getattr(self, "_last_epoch_timing", (0.0, 0.0))
                 e = self._tb_epoch
                 self.tb.add_scalar("epoch/loss", epoch_loss, e)
-                self.tb.add_scalar("epoch/supervised", selection_loss, e)
+                if supervised:
+                    self.tb.add_scalar("epoch/supervised", selection_loss, e)
                 self.tb.add_scalar("epoch/best_supervised", self.best_loss, e)
                 if epoch_floor is not None:
                     self.tb.add_scalar("epoch/bce_floor", epoch_floor, e)
@@ -904,6 +921,13 @@ class LoRAFinetuner:
                 if self.device.type == "cuda":
                     self.tb.add_scalar("memory/peak_gb", torch.cuda.max_memory_allocated() / 1e9, e)
                 self.tb.flush()
+
+        if epoch_loss is not None and not self._has_best_checkpoint:
+            self._log_message(
+                "WARNING: no epoch had a supervised voxel (every patch was a "
+                "rehearsal patch, or nothing annotated was sampled), so there is "
+                "no best epoch. The export will be the last epoch's weights."
+            )
 
         # Final checkpoint
         self.save_checkpoint(is_best=False)
@@ -1313,8 +1337,8 @@ class LoRAFinetuner:
                 f"First 5 dead: {dead_names[:5]}"
             )
 
-        # NaN when nothing in the epoch was supervised: train() then ranks
-        # the epoch by its total loss instead.
+        # NaN when nothing in the epoch was supervised: train() then does not
+        # rank the epoch for the best checkpoint.
         self.last_supervised_loss = (
             epoch_supervised_loss / supervised_batches if supervised_batches else float('nan')
         )
@@ -1344,6 +1368,8 @@ class LoRAFinetuner:
         }
 
         torch.save(checkpoint, checkpoint_path)
+        if is_best:
+            self._has_best_checkpoint = True
         logger.debug(f"Checkpoint saved: {checkpoint_path}")
 
     def save_adapter(self, adapter_path: Optional[str] = None, export_dir: Optional[str] = None):
@@ -1351,7 +1377,9 @@ class LoRAFinetuner:
         Export the finetune: only the LoRA adapter, or a full finetune's weights.
 
         Automatically loads the best checkpoint weights before saving
-        so the exported adapter reflects the best training epoch.
+        so the exported adapter reflects the best training epoch. Without one
+        from this run -- no epoch supervised anything, or none ran -- it
+        exports the weights as they are, those of the last epoch.
 
         Args:
             adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter.
@@ -1368,9 +1396,11 @@ class LoRAFinetuner:
         if export_dir is not None:
             adapter_path = None
 
-        # Load best checkpoint weights before saving
+        # Load best checkpoint weights before saving, if they are this run's.
+        # An earlier iteration's (the output directory is shared) was exported
+        # as this one, or failed to load after a change of rank.
         best_ckpt = self.output_dir / "best_checkpoint.pth"
-        if best_ckpt.exists():
+        if self._has_best_checkpoint and best_ckpt.exists():
             checkpoint = torch.load(best_ckpt, map_location=self.device)
             if checkpoint.get('lora_only', False):
                 self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
@@ -1378,7 +1408,7 @@ class LoRAFinetuner:
                 self.model.load_state_dict(checkpoint['model_state_dict'])
             logger.info(f"Loaded best checkpoint (epoch {checkpoint['epoch'] + 1}, loss {checkpoint['best_loss']:.6f}) before saving adapter")
         else:
-            logger.warning("No best checkpoint found, saving adapter from final epoch weights")
+            logger.warning("No best checkpoint from this run; exporting the final weights")
 
         # The adapter, or for a full finetune the whole state dict, where
         # FinetuneModelConfig(weights_path=...) expects it.
@@ -1407,6 +1437,8 @@ class LoRAFinetuner:
         self._start_epoch = checkpoint['epoch'] + 1
         self.global_step = checkpoint['global_step']
         self.best_loss = checkpoint['best_loss']
+        # It had a best epoch, whose best_checkpoint.pth this run carries on.
+        self._has_best_checkpoint = math.isfinite(self.best_loss)
         self.training_stats = checkpoint.get('training_stats', [])
 
         logger.info(f"Checkpoint loaded from: {checkpoint_path}")
