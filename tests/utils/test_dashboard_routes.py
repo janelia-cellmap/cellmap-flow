@@ -89,6 +89,21 @@ def test_a_package_log_record_reaches_the_log_panel(dashboard):
     assert stream.get_nowait() == get_session().log_buffer[-1]
 
 
+def test_the_log_stream_survives_a_record_logged_as_it_replays_and_sends_every_line(dashboard):
+    """It iterated the buffer while records were appended to it, and died
+    ("deque mutated during iteration"); and a traceback's lines after the
+    first, sent without "data: ", were dropped by the browser."""
+    get_session().log_buffer.extend(["one", 'Traceback (most recent call last):\n  File "x.py"\nValueError: bad'])
+    response = dashboard.get("/api/logs/stream", buffered=False)
+    events = iter(response.response)
+    assert next(events) == b"data: one\n\n"
+    logging.getLogger("cellmap_flow.jobs.launch").info("logged while replaying")
+    assert next(events) == b'data: Traceback (most recent call last):\ndata:   File "x.py"\ndata: ValueError: bad\n\n'
+    assert next(events).decode().endswith("logged while replaying\n\n")
+    response.close()
+    assert get_session().log_clients == [], "a closed stream stops getting records"
+
+
 def test_a_count_sent_as_a_string_is_a_number(dashboard):
     response = dashboard.post("/api/blockwise-config", json={"nb_cores_master": "4", "nb_cores_worker": "12",
                                                              "nb_workers": "3"})

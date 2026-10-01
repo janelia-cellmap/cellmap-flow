@@ -23,32 +23,41 @@ class LogHandler(logging.Handler):
         log_entry = self.format(record)
         session = get_session()
         session.log_buffer.append(log_entry)
-        for client_queue in session.log_clients:
+        # A copy: a stream opening or closing on another thread changes the list.
+        for client_queue in list(session.log_clients):
             try:
                 client_queue.put_nowait(log_entry)
             except queue.Full:
                 pass
 
 
+def _event(log_entry):
+    """One SSE message holding ``log_entry``: a "data:" line per line of it.
+    A traceback's later lines, sent bare, are not data, and the browser
+    dropped them."""
+    return "".join(f"data: {line}\n" for line in log_entry.splitlines() or [""]) + "\n"
+
+
 @logging_bp.route("/api/logs/stream")
 def stream_logs():
-    """Stream logs via Server-Sent Events (SSE)"""
+    """The log panel's records as Server-Sent Events: the buffer's, then
+    each new one as it is logged, with a keepalive comment every 30 s."""
     session = get_session()
 
     def generate():
-        # Send existing log buffer first
-        for log_line in session.log_buffer:
-            yield f"data: {log_line}\n\n"
-
-        # Create a queue for this client
+        # The queue first, so that nothing logged while the buffer is sent is
+        # lost (a record logged just then may come twice), and a copy of the
+        # buffer: iterating the buffer itself across the yields died with
+        # "deque mutated during iteration" when another thread logged.
         client_queue = queue.Queue(maxsize=100)
         session.log_clients.append(client_queue)
-
         try:
+            for log_line in list(session.log_buffer):
+                yield _event(log_line)
             while True:
                 try:
                     log_line = client_queue.get(timeout=30)
-                    yield f"data: {log_line}\n\n"
+                    yield _event(log_line)
                 except queue.Empty:
                     # Send keepalive
                     yield ": keepalive\n\n"
