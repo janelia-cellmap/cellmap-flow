@@ -32,7 +32,6 @@ export function createJobLog({ onLine }) {
   let stream = null;  // the open stream, or the last one
   let closeTimer = null;
   let connectedOnce = false;
-  let restoredOffset = 0;  // where resume() starts when no stream has run
   // What the card shows, less the note about dropped lines: its placeholder
   // at first. lineCount is its line breaks; dropped, the lines taken off its
   // front since it was last cleared or replaced.
@@ -154,13 +153,8 @@ export function createJobLog({ onLine }) {
     // Reopen the stream where it stopped, if it is not running.
     resume(jobId) {
       if (!stream || stream.closed) {
-        follow(jobId, stream ? stream.offset : restoredOffset);
+        follow(jobId, stream ? stream.offset : 0);
       }
-    },
-    // Where resume() starts when no stream has run: the end of the log the
-    // card shows.
-    resumeFrom(offset) {
-      restoredOffset = offset;
     },
     // The path of the job's log file, for the note to name; a note already
     // shown names it at once.

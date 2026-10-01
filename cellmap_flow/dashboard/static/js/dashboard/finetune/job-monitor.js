@@ -222,6 +222,11 @@ export function initJobMonitor({ picker, form }) {
   // Restart, confirms.
   const restartJobBtn = document.getElementById('restartJobBtn');
   restartJobBtn.addEventListener('click', async () => {
+    const jobId = card.jobId();
+    if (!jobId || jobId === "-") {
+      alert("No job to restart.");
+      return;
+    }
     let requestBody;
     try {
       requestBody = form.trainingParams();
@@ -250,7 +255,6 @@ export function initJobMonitor({ picker, form }) {
     setBusy(restartJobBtn, true);
     restartJobBtn.textContent = 'Restarting...';
 
-    const jobId = card.jobId();
     try {
       const data = await postAnswer(`/api/finetune/job/${jobId}/restart`, requestBody);
 
@@ -282,19 +286,15 @@ export function initJobMonitor({ picker, form }) {
       const data = await getAnswer('/api/finetune/jobs');
       if (!data.success || !data.jobs || data.jobs.length === 0) return;
 
-      // Find the most recent live job: queued, running, waiting for a
-      // restart, or finished and still serving (it can be restarted). A
-      // queued job needs its card too, or it cannot be cancelled after a
-      // reload. The list comes back oldest first.
+      // Find the most recent live job: queued, running, or waiting for a
+      // restart. A queued job needs its card too, or it cannot be cancelled
+      // after a reload. A finished job is not one, even if its last status
+      // said its server was ready: it has exited, and cannot be restarted.
+      // The list comes back oldest first.
       const activeJob = data.jobs
         .slice()
         .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
-        .find(j =>
-          j.status === 'PENDING' ||
-          j.status === 'RUNNING' ||
-          j.status === 'WAITING_FOR_RESTART' ||
-          (j.status === 'COMPLETED' && j.inference_server_ready)
-        );
+        .find(j => !TERMINAL.includes(j.status));
       if (!activeJob) return;
 
       const jobId = activeJob.job_id;
@@ -316,20 +316,10 @@ export function initJobMonitor({ picker, form }) {
         console.warn('Could not restore logs:', e);
       }
 
-      // Resume polling and streaming if job is still queued, running, or
-      // waiting for a restart
-      if (activeJob.status === 'RUNNING' || activeJob.status === 'PENDING' ||
-          activeJob.status === 'WAITING_FOR_RESTART') {
-        jobLog.follow(jobId, restoredLogOffset);
-        startStatusPolling(jobId);
-      } else {
-        // Nothing more will be written, but a restart reopens the stream from
-        // here (jobLog.resume).
-        jobLog.resumeFrom(restoredLogOffset);
-        // Finished, and its model was served: one poll brings the card up to
-        // date, and the poll stops there, as the status is final.
-        startStatusPolling(jobId);
-      }
+      // Follow it again: its log from where the restored one ends, and its
+      // status.
+      jobLog.follow(jobId, restoredLogOffset);
+      startStatusPolling(jobId);
 
     } catch (e) {
       console.warn('Could not restore active finetuning job:', e);

@@ -21,6 +21,16 @@ const STATUS_COLORS = {
 // one, nothing changes it again.
 export const TERMINAL = ["FAILED", "CANCELLED", "COMPLETED"];
 
+// Whether the job can take a restart: the job manager's state.can_restart,
+// which refuses any other. A trainer waits for one once an iteration has
+// finished or diverged; a RUNNING job whose server is up is a trainer from
+// before the WAITING_FOR_RESTART marker. A finished job has exited, even if
+// its last status said its server was ready.
+function restartable(job) {
+  return job.status === "WAITING_FOR_RESTART" ||
+    (job.status === "RUNNING" && Boolean(job.inference_server_ready));
+}
+
 // lossPlot: the Training Logs card's plot, which a new run empties and each
 // epoch's loss goes into.
 export function createJobCard(lossPlot) {
@@ -77,6 +87,20 @@ export function createJobCard(lossPlot) {
     progressBar.textContent = "Serving - Ready for inference";
     isServingReady = true;
     restartEpochResetPending = false;
+  }
+
+  // The job has ended while its model was served, by the card or by the
+  // job's last status: it is not any more, as its server went with the job.
+  function servingEnded(job) {
+    if (!(isServingReady || job.inference_server_ready)) return;
+    isServingReady = false;
+    serverStatus.style.display = "none";
+    progressBar.className = "progress-bar bg-secondary";
+    progressBar.textContent = `Not serving: the job is ${job.status}`;
+  }
+
+  function showRestart(job) {
+    restartBtn.style.display = restartable(job) ? "inline-block" : "none";
   }
 
   function resetProgressBarToWaiting() {
@@ -166,12 +190,9 @@ export function createJobCard(lossPlot) {
       showOutputType((job.params && job.params.output_type) || "binary");
       showStatus(job.status);
       showReportedEpoch(job);
-      if (job.status === "WAITING_FOR_RESTART") {
-        restartBtn.style.display = "inline-block";
-      }
-      if (job.inference_server_ready) {
+      showRestart(job);
+      if (job.inference_server_ready && !TERMINAL.includes(job.status)) {
         renderServingReadyProgress();
-        restartBtn.style.display = "inline-block";
         if (job.finetuned_model_name) showServer(job.finetuned_model_name);
       }
     },
@@ -196,11 +217,8 @@ export function createJobCard(lossPlot) {
         lossPlot.add(data.current_epoch, data.loss);
       }
 
-      // Restart: while the model is serving, or the trainer is waiting for
-      // a restart (an iteration finished, or diverged).
-      if (data.inference_server_ready || data.status === "WAITING_FOR_RESTART") {
-        restartBtn.style.display = "inline-block";
-      }
+      // Restart: only while the job can take one (restartable).
+      showRestart(data);
 
       // Stop Early only means something while a training loop is running,
       // so it is enabled then, and only then; unless a stop has been
@@ -210,14 +228,15 @@ export function createJobCard(lossPlot) {
       }
 
       // The model is served (the training iteration is complete): the loop
-      // has exited, naturally or by Stop Early.
-      if (data.inference_server_ready && data.finetuned_model_name) {
+      // has exited, naturally or by Stop Early. Not once the job is over:
+      // the last status of a job that ended while serving still says its
+      // server is ready.
+      if (TERMINAL.includes(data.status)) {
+        servingEnded(data);
+        resetStopEarly();
+      } else if (data.inference_server_ready && data.finetuned_model_name) {
         showServer(data.finetuned_model_name);
         renderServingReadyProgress();
-        resetStopEarly();
-      }
-
-      if (TERMINAL.includes(data.status)) {
         resetStopEarly();
       }
     },
