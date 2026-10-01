@@ -1,4 +1,4 @@
-"""`cellmap_flow_yaml`: the bundled examples, how a bad config is reported,
+"""`cellmap_flow yaml`: the bundled examples, how a bad config is reported,
 what it shows in the viewer, and what it does when servers fail to start."""
 
 import glob

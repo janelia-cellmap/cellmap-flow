@@ -38,7 +38,7 @@ JSON_DATA = {
 
 def test_a_models_scale_picks_its_level_of_a_multiscale_group(ome_pyramid, pooling_model, task_yaml):
     """Blockwise ignored ``scale`` and read the level nearest the model's input
-    voxel size: the same YAML read other data than under cellmap_flow_yaml."""
+    voxel size: the same YAML read other data than under cellmap_flow yaml."""
     path = task_yaml(ome_pyramid(((8, 0), (16, 4))), pooling_model(), model_extra={"scale": "s1"})
     processor = CellMapFlowBlockwiseProcessor(path, create=True)
     assert processor.input_path.rstrip("/").endswith("pyramid.zarr/s1")

@@ -210,7 +210,7 @@ class CellMapFlowBlockwiseProcessor:
         if len(models) == 0:
             raise ConfigError("No models found in the configuration.")
 
-        # The same data_path + scale rule as cellmap_flow and cellmap_flow_yaml.
+        # The same data_path + scale rule as cellmap_flow infer and yaml.
         # All models read through one ImageDataInterface, so the first
         # model's scale is the one that applies.
         scale = getattr(models[0], "scale", None)

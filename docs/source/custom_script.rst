@@ -17,12 +17,12 @@ The CLI command looks like:
 
 .. code-block:: bash
 
-    cellmap_flow script -s /path/to/your_script.py -d /path/to/input_data.zarr -q gpu_h100 -P cellmap
+    cellmap_flow infer script -s /path/to/your_script.py -d /path/to/input_data.zarr -q gpu_h100 -P cellmap
 
 Minimum Requirements for Custom Scripts
 ---------------------------------------
 
-When using `cellmap_flow script`, your Python script **must define** a configuration object (typically the global scope) that satisfies the following:
+When using `cellmap_flow infer script`, your Python script **must define** a configuration object (typically the global scope) that satisfies the following:
 
 Required Attributes
 ^^^^^^^^^^^^^^^^^^^
@@ -45,7 +45,7 @@ You can test your script locally using:
 
 .. code-block:: bash
 
-    cellmap_flow script --script-path /path/to/your_script.py -d /path/to/input.zarr --server-check
+    cellmap_flow infer script --script-path /path/to/your_script.py -d /path/to/input.zarr --server-check
 
 This loads the script and runs the model on a single output chunk (chunk index
 2, 2, 2) in the current process, without submitting a job, and prints

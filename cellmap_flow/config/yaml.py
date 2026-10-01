@@ -1,4 +1,4 @@
-"""Reading a ``cellmap_flow_yaml`` or blockwise YAML file.
+"""Reading a ``cellmap_flow yaml`` or blockwise YAML file.
 
 ``load_config`` reads and checks the file's top level, filling
 ``charge_group`` and ``queue`` from the dashboard's saved settings (then the
@@ -63,8 +63,8 @@ def _node_kind(path) -> Optional[str]:
 def resolve_data_path(data_path: str, scale: Optional[str]) -> str:
     """The dataset a model reads: ``data_path``, with ``scale`` applied.
 
-    The one rule every launcher uses (cellmap_flow, cellmap_flow_yaml and
-    blockwise), so the same YAML reads the same data in each:
+    The one rule every launcher uses (``cellmap_flow infer``, ``yaml`` and
+    ``blockwise``), so the same YAML reads the same data in each:
 
     - ``data_path`` is an array: it is used as it is. A ``scale`` naming a
       different level is ignored, with a warning.

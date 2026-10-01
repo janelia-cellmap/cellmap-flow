@@ -1,8 +1,8 @@
 YAML Configuration
 ===================
 
-``cellmap_flow_yaml`` lets you define and run multiple models from a single YAML file.
-It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (``cellmap_flow_blockwise``).
+``cellmap_flow yaml`` lets you define and run multiple models from a single YAML file.
+It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (``cellmap_flow blockwise``).
 
 Usage
 -----
@@ -10,16 +10,16 @@ Usage
 .. code-block:: bash
 
     # Run inference
-    cellmap_flow_yaml config.yaml
+    cellmap_flow yaml config.yaml
 
     # Validate without running
-    cellmap_flow_yaml config.yaml --validate-only
+    cellmap_flow yaml config.yaml --validate-only
 
     # List available model types
-    cellmap_flow_yaml --list-types
+    cellmap_flow yaml --list-types
 
     # Set log level
-    cellmap_flow_yaml config.yaml --log-level DEBUG
+    cellmap_flow yaml config.yaml --log-level DEBUG
 
 YAML Structure
 --------------
@@ -83,7 +83,7 @@ Model Entries
 -------------
 
 Each model entry requires a ``type`` field and the parameters for that model type.
-Use ``cellmap_flow_yaml --list-types`` to see all available types and their required parameters.
+Use ``cellmap_flow yaml --list-types`` to see all available types and their required parameters.
 
 Models can be specified as a **dict** (keys become model names) or a **list** (each entry must include a ``name`` field).
 
@@ -192,7 +192,7 @@ Normalizers are applied in order before inference. Postprocessors are applied in
 Extra Layers
 ------------
 
-``cellmap_flow_yaml`` can show more volumes in the viewer beside the raw data and the predictions, for instance an earlier prediction or an instance segmentation. Each is read as stored, without the input normalizers:
+``cellmap_flow yaml`` can show more volumes in the viewer beside the raw data and the predictions, for instance an earlier prediction or an instance segmentation. Each is read as stored, without the input normalizers:
 
 .. code-block:: yaml
 
@@ -354,5 +354,5 @@ Run blockwise processing with:
 
 .. code-block:: bash
 
-    cellmap_flow_blockwise config.yaml
-    cellmap_flow_blockwise config.yaml --log-level DEBUG
+    cellmap_flow blockwise config.yaml
+    cellmap_flow blockwise config.yaml --log-level DEBUG
