@@ -271,17 +271,24 @@ def test_the_final_status_is_recorded_for_a_dashboard_started_later(monitored):
     assert run.job.status.value == run.metadata["status"] == "FAILED"
 
 
-@pytest.mark.parametrize("exported", [pytest.param(FULL, id="a full finetune"),
-                                      pytest.param(LORA, id="a LoRA adapter")])
-def test_a_completed_job_takes_the_trainers_name_and_yaml(monitored, tmp_path, exported):
+@pytest.mark.parametrize("exported, yaml_2", [
+    pytest.param(FULL, "/s/models/m_2.yaml", id="a full finetune"),
+    pytest.param(LORA, "/s/models/m_2.yaml", id="a LoRA adapter"),
+    # The trainer could not write m_2's, and its log says why. The job kept
+    # m_1's, which serves m_1's weights: the pipeline builder offered those as
+    # m_2. With none, it offers the run's latest export, m_2's.
+    pytest.param(FULL, None, id="the last iteration without a YAML"),
+])
+def test_a_completed_job_takes_the_trainers_name_and_yaml(monitored, tmp_path, exported, yaml_2):
     """The manager made up its own name (the job's creation time, not the
-    iteration's), never found that YAML, and wrote a second one."""
-    run = monitored(["FINETUNED_MODEL_YAML: /s/models/m_1.yaml\nTRAINING_ITERATION_COMPLETE: m_1\n"
-                     "RESTARTING_TRAINING\nFINETUNED_MODEL_YAML: /s/models/m_2.yaml\n"
-                     "TRAINING_ITERATION_COMPLETE: m_2\n"], final="COMPLETED", exported=exported)
+    iteration's), never found that YAML, and wrote a second one. The monitor
+    reads each iteration at a poll of its own here."""
+    run = monitored(["FINETUNED_MODEL_YAML: /s/models/m_1.yaml\nTRAINING_ITERATION_COMPLETE: m_1\n",
+                     "RESTARTING_TRAINING\n" + (f"FINETUNED_MODEL_YAML: {yaml_2}\n" if yaml_2 else "")
+                     + "TRAINING_ITERATION_COMPLETE: m_2\n"], final="COMPLETED", exported=exported)
     assert run.job.status.value == run.metadata["status"] == "COMPLETED"
     assert run.job.finetuned_model_name == run.metadata["finetuned_model_name"] == "m_2"
-    assert run.job.model_yaml_path == Path(run.metadata["model_yaml_path"]) == Path("/s/models/m_2.yaml")
+    assert (run.job.model_yaml_path, run.metadata["model_yaml_path"]) == (Path(yaml_2) if yaml_2 else None, yaml_2)
     assert not (tmp_path / "models").exists(), "no YAML of its own"
 
 

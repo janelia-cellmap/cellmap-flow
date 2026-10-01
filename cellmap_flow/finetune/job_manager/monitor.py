@@ -20,6 +20,7 @@ once that is found, and FAILED if it is not.
 import logging
 import time
 from pathlib import Path
+from typing import Optional
 
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_manager import persistence, state
@@ -159,6 +160,18 @@ def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
             pass
 
 
+def _serving_yaml(iterations: Iterations) -> Optional[Path]:
+    """The serving YAML of the latest iteration ``iterations`` holds, or None
+    if it reported none: the trainer could not write it, and its log says why.
+
+    Never an earlier iteration's. That one serves the earlier iteration's
+    weights, from its own export, under the latest one's name. With none, a
+    listener falls back to the run's latest export
+    (persistence.finetune_export_kwargs).
+    """
+    return Path(iterations.yaml_path) if iterations.yaml_path else None
+
+
 def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, iterations: Iterations,
                                   listeners: Listeners):
     """
@@ -187,8 +200,7 @@ def _parse_inference_server_ready(finetune_job: FinetuneJob, log_content: str, i
     # The model it serves is the last iteration's: the trainer announces it
     # before it starts the server, usually in an earlier read than this one.
     model_name = iterations.name or f"{finetune_job.model_name}_finetuned"
-    if iterations.yaml_path:
-        finetune_job.model_yaml_path = Path(iterations.yaml_path)
+    finetune_job.model_yaml_path = _serving_yaml(iterations)
 
     listeners.notify("on_server_ready", finetune_job, server_url, model_name)
     # Whatever the listeners managed (see FinetuneJobListener), and so
@@ -234,8 +246,7 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, iterati
             finetune_job.inference_server_ready = True
 
         new_model_name = iterations.name
-        if iterations.yaml_path:
-            finetune_job.model_yaml_path = Path(iterations.yaml_path)
+        finetune_job.model_yaml_path = _serving_yaml(iterations)
         if new_model_name != finetune_job.finetuned_model_name:
             logger.info(f"New training iteration complete: {new_model_name}")
             listeners.notify("on_iteration_complete", finetune_job, new_model_name)
@@ -266,10 +277,9 @@ def _read_last_lines(finetune_job: FinetuneJob, log: LogTailer, finished: bool):
             _parse_training_progress(finetune_job, log.read(finished=finished))
     except OSError as e:
         logger.warning(f"Could not read the end of {finetune_job.log_file}: {e}")
-    if log.iterations.name:
+    if log.iterations.count:
         finetune_job.finetuned_model_name = log.iterations.name
-    if log.iterations.yaml_path:
-        finetune_job.model_yaml_path = Path(log.iterations.yaml_path)
+        finetune_job.model_yaml_path = _serving_yaml(log.iterations)
 
 
 def complete_job(finetune_job: FinetuneJob):
