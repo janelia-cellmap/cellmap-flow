@@ -59,6 +59,8 @@ def test_g_answers_to_the_names_it_had_and_no_others():
     assert names == {*ATTRIBUTES, "pipeline_spec", "save_server_config", "set_pipeline", "get_output_dtype"}
     with pytest.raises(AttributeError):
         g.no_such_name
+    with pytest.raises(AttributeError):
+        g.no_such_name = "stored where nothing reads it"
 
 
 @pytest.mark.parametrize("name", ATTRIBUTES)

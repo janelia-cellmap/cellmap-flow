@@ -128,8 +128,12 @@ class Flow:
     """Deprecated: the type of ``g``; see the module docstring.
 
     Every attribute is forwarded to its owner on each use, never copied, so
-    ``g`` and the owners cannot disagree.
+    ``g`` and the owners cannot disagree. It stores nothing itself: a name g
+    never had raises, as a misspelt one does on the dashboard's Session,
+    rather than being kept where nothing reads it.
     """
+
+    __slots__ = ()
 
     def __new__(cls):
         _warn("Flow()", "the owners that cellmap_flow.globals' docstring lists (Flow() returns g)")
@@ -145,9 +149,7 @@ class Flow:
     def __setattr__(self, name, value):
         forward = _FORWARDS.get(name)
         if forward is None:
-            # Stored on g itself, as any unknown name always was.
-            object.__setattr__(self, name, value)
-            return
+            raise AttributeError(f"cellmap_flow.globals.g has no attribute {name!r}")
         if forward.set is None:
             raise AttributeError(f"cellmap_flow.globals.g.{name} cannot be set; it is derived from the chain")
         _warn(f"g.{name}", forward.replacement)
