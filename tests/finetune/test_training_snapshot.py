@@ -347,7 +347,7 @@ def test_the_cli_writes_and_announces_what_it_always_did(lora_r, tmp_path, monke
         loaded.append(k)
         return DataLoader(_data(4), batch_size=2)
 
-    signals = iter([json.dumps({"params": {"learning_rate": 2e-4}}), "not json"])
+    signals = iter([json.dumps({"params": {"learning_rate": 2e-4}}), "[]"])
     real_wait = session_loop._wait_for_restart_signal
 
     def wait(**kwargs):
@@ -367,7 +367,7 @@ def test_the_cli_writes_and_announces_what_it_always_did(lora_r, tmp_path, monke
         "--auto-serve", "--serve-data-path", str(tmp_path),
     ])
 
-    assert finetune_cli.main() == 1  # the second, malformed, restart signal ends it
+    assert finetune_cli.main() == 1  # the second signal, not a restart request, ends it
     assert (len(loaded), len(served), len(waited)) == (2, 1, 2)
 
     out = capsys.readouterr().out

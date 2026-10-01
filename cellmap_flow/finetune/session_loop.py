@@ -23,7 +23,7 @@ import time
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Collection, Optional
 
 import torch
 
@@ -185,50 +185,68 @@ def _start_inference_server_background(
     return server_thread, port
 
 
+def _restart_timestamp(signal_data: dict) -> Optional[str]:
+    """The job manager's timestamp of a restart, which names it; None without one."""
+    timestamp = signal_data.get("timestamp")
+    return timestamp if isinstance(timestamp, str) and timestamp else None
+
+
 def _wait_for_restart_signal(
     signal_file: Optional[Path],
     check_interval: float = 1.0,
     restart_controller: Optional[RestartController] = None,
+    applied: Collection[str] = (),
 ):
-    """
-    Watch for a restart signal file. Blocks until signal appears.
+    """Block until a restart is asked for, and return its signal.
 
-    Prefers in-memory restart events from the control endpoint, and
-    falls back to a signal file for backward compatibility.
+    A restart comes from the inference server's control endpoint, through
+    ``restart_controller``, or, when the job manager cannot reach that, as
+    the ``signal_file`` it writes instead. Both carry the job manager's
+    timestamp; a signal whose timestamp is in ``applied`` has been acted on
+    already and is dropped. That happens when the HTTP request got through
+    but its reply timed out: the job manager then writes the file as well.
 
-    Args:
-        signal_file: Optional path to watch for legacy signal file
-        check_interval: Seconds between checks
+    The job manager writes the file from another host, so it can be seen
+    empty or cut short. Until it parses, it is left alone and the wait goes
+    on.
 
     Returns:
-        Dict with restart parameters, or None if signal file is malformed
+        The signal, a dict with the restart's ``params``; or None for a file
+        that parses but is not a restart signal.
     """
     logger.info(f"Watching for restart signal (controller + file fallback: {signal_file})")
     # The job manager's cue that this job is idle and can take a restart.
     markers.emit(markers.WAITING_FOR_RESTART)
 
+    unreadable = None  # what the file last failed with, so it is logged once
     while True:
         if restart_controller is not None:
             in_memory_signal = restart_controller.get_if_triggered()
             if in_memory_signal is not None:
+                if _restart_timestamp(in_memory_signal) in applied:
+                    logger.info(f"Ignoring a restart that was applied already: {in_memory_signal}")
+                    continue
                 logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
                 return in_memory_signal
 
         if signal_file and signal_file.exists():
             try:
-                with open(signal_file) as f:
-                    signal_data = json.load(f)
-                signal_file.unlink()  # Remove signal file
+                signal_data = json.loads(signal_file.read_text())
+            except (OSError, ValueError) as e:
+                if str(e) != unreadable:
+                    logger.warning(f"Cannot read {signal_file} yet ({e}); waiting for it to be written.")
+                    unreadable = str(e)
+            else:
+                unreadable = None
+                signal_file.unlink(missing_ok=True)
+                if not isinstance(signal_data, dict):
+                    logger.error(f"Restart signal is not a restart request: {signal_data!r}")
+                    return None
+                if _restart_timestamp(signal_data) in applied:
+                    logger.info(f"Ignoring a restart signal file for a restart applied already: {signal_data}")
+                    continue
                 logger.info(f"Restart signal received: {signal_data}")
                 return signal_data
-            except Exception as e:
-                logger.error(f"Error reading restart signal: {e}")
-                # Remove malformed signal file
-                try:
-                    signal_file.unlink()
-                except OSError:
-                    pass
-                return None
         time.sleep(check_interval)
 
 
@@ -259,6 +277,9 @@ class TrainingSession:
         self.initial_state = strategy.initial_state(model)
         # Where the next iteration's TensorBoard curves start: (step, epoch).
         self.tb_position = (0, 0)
+        # The timestamps of the restarts applied, so that the same restart
+        # arriving twice (over HTTP and as a file) is applied once.
+        self.applied_restarts = set()
         # Set by a restart; the reset waits until the next iteration is set
         # up, and stays pending until its trainer is built.
         self.pending_reset = False
@@ -549,10 +570,13 @@ class TrainingSession:
             signal_file=Path(self.args.output_dir) / "restart_signal.json",
             check_interval=1.0,
             restart_controller=self.restart_controller,
+            applied=self.applied_restarts,
         )
         if restart_data is None:
             logger.error("Malformed restart signal, exiting")
             return False
+        if _restart_timestamp(restart_data):
+            self.applied_restarts.add(_restart_timestamp(restart_data))
         apply_restart_params(self.args, restart_data)
         markers.emit(markers.RESTARTING_TRAINING)
         return True

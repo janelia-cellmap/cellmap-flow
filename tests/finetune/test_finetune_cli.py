@@ -173,6 +173,36 @@ def test_a_restart_changes_only_the_training_settings(run_cli, tmp_path):
     }
 
 
+FIRST_RESTART = {"timestamp": "2026-09-30T10:00:00", "params": {"batch_size": 3}}
+
+
+@pytest.mark.parametrize("left_by_the_writer", [
+    pytest.param("", id="the next restart's file, still being written"),
+    pytest.param(json.dumps(FIRST_RESTART), id="the file of a restart that came over HTTP as well"),
+])
+def test_a_served_job_takes_each_restart_once_and_once_written(run_cli, tmp_path, monkeypatch, left_by_the_writer):
+    """The job manager writes restart_signal.json from another host, and also
+    when an HTTP restart got through but its reply timed out. Read while it
+    was still empty, the file ended the served job; the second copy of a
+    restart restarted the job again, unasked."""
+    from cellmap_flow.finetune import session_loop
+
+    signal = tmp_path / "session" / "runs" / "run" / "restart_signal.json"
+    writes = [json.dumps({"timestamp": "2026-09-30T11:00:00", "params": {"batch_size": 4}})]
+
+    def leave_the_file(record):  # while the first restart sets up
+        signal.write_text(left_by_the_writer)
+        return run_cli.patches()
+
+    def the_writer_finishes(seconds):  # between the job's looks at the file
+        signal.write_text(writes.pop())
+
+    monkeypatch.setattr(session_loop.time, "sleep", the_writer_finishes)
+    cli = run_cli("--auto-serve", "--serve-data-path", str(tmp_path), loaders=[None, leave_the_file],
+                  restarts=[FIRST_RESTART, lambda signal_file, controller: None])
+    assert [load["batch_size"] for load in cli.loaded] == [8, 3, 4]
+
+
 @pytest.mark.parametrize("restart", [
     pytest.param({"num_epochs": 0}, id="no epochs"),
     pytest.param({"batch_size": 0}, id="an empty batch"),

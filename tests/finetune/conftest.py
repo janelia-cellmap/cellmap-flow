@@ -166,8 +166,9 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
     an exception (raised), or a callable of the run's record returning either.
     ``server``: replaces starting the inference server. ``restarts``: the
     requests the job receives in turn, through the restart controller the
-    server would hand them to; None (and running out) is a malformed signal
-    file, which ends the job. ``manifest``: the corrections' manifest, None for
+    server would hand them to, or a callable of (signal file, controller)
+    that delivers one itself; None (and running out) is a signal file that
+    is not a restart request, which ends the job. ``manifest``: the corrections' manifest, None for
     none. ``run_dir``: the output dir, <tmp>/session/runs/run by default.
 
     The run's log records reach ``caplog``: main() replaces the root logger's
@@ -204,7 +205,9 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
             record.waited += 1
             request = next(requests, None)
             if request is None:
-                kwargs["signal_file"].write_text("not json")
+                kwargs["signal_file"].write_text("[]")
+            elif callable(request):
+                request(kwargs["signal_file"], kwargs["restart_controller"])
             else:
                 kwargs["restart_controller"].request_restart(request)
             return real_wait(**kwargs)
