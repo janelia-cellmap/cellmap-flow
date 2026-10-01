@@ -19,6 +19,7 @@ shaders, their contrast windows sampled from the data where it can be read.
 import logging
 import math
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import neuroglancer
 import numpy as np
@@ -268,13 +269,18 @@ def get_raw_layer(
 
     if pyramid is not None:
         try:
-            images = [
-                ImageDataInterface(
+
+            def level(scale):
+                image = ImageDataInterface(
                     paths.join(dataset_path, scale), normalize=normalize and not segmentation
                 )
-                for scale in scales
-            ]
-            layers = [_local_volume(image) for image in images]
+                return image, _local_volume(image)
+
+            # Each level's metadata read and tensorstore open is a round trip
+            # to wherever the data is, about 40 ms each on gs://, where a
+            # volume can have a dozen levels: they are made side by side.
+            with ThreadPoolExecutor(max_workers=len(scales)) as pool:
+                images, layers = (list(built) for built in zip(*pool.map(level, scales)))
             # ScalePyramid serves every level as a downsampling of the finest
             # one, so the finest level's corner places them all. That holds
             # for pyramids whose levels share a corner (Janelia's all sit at
