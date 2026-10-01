@@ -73,11 +73,12 @@ def _chain_signature(steps) -> str:
 
 def _unknown_op(kind, names):
     """"Unknown <kind>: <name>" for the first of ``names`` that no registered
-    op of ``kind`` ("normalizer" or "postprocessor") is called; else None."""
+    op of ``kind`` ("normalizer" or "postprocessor") is called, a name that
+    is not text included; else None."""
     ops = get_input_normalizers() if kind == "normalizer" else get_postprocessors_list()
     known = {op["name"] for op in ops}
     for name in names:
-        if name not in known:
+        if not isinstance(name, str) or name not in known:
             return f"Unknown {kind}: {name}"
     return None
 

@@ -128,6 +128,8 @@ def test_a_put_that_leaves_the_chain_as_drawn_leaves_the_viewer_alone(call):
         pytest.param(UNKNOWN, "Unknown normalizer: NoSuchNormalizer", id="unknown-normalizer"),
         pytest.param({"input_norm": [], "postprocess": [{"name": "NoSuchPostprocessor"}]},
                      "Unknown postprocessor: NoSuchPostprocessor", id="unknown-postprocessor"),
+        pytest.param({"input_norm": [{"name": ["MinMaxNormalizer"]}], "postprocess": []},
+                     "Unknown normalizer: ['MinMaxNormalizer']", id="a-name-that-is-not-text"),
         pytest.param({"input_norm": [], "postprocess": [BAD_THRESHOLD]}, "could not convert string to float: 'high'",
                      id="a-parameter-its-class-refuses"),
         pytest.param({**SUBMITTED, "builder": {"inputs": "i1"}}, "builder.inputs: Input should be a valid list",

@@ -3,8 +3,10 @@ the index it opens, and the t-key pick reaching every open stream."""
 
 import itertools
 import json
+import os
 import queue
 import sqlite3
+import stat
 import threading
 
 import neuroglancer
@@ -70,6 +72,8 @@ def viewer():
 SESSION = [
     ("get", "/api/review/next?order=smallest&min_vox=5", None, 200, {"id": 2, "navigated": True}),
     ("get", "/api/review/next?order=smallest&skip_rank=0", None, 200, {"id": 3}),
+    # The queue list is still empty when the page first sends this: the first queue.
+    ("get", "/api/review/next?order=&min_vox=5", None, 200, {"id": 2}),
     ("post", "/api/review/verdict", {"id": 2, "verdict": "blessed", "entry_method": "next"}, 200, {"success": True}),
     ("get", "/api/review/next?order=smallest", None, 200, {"id": 3}),
     ("get", "/api/review/progress", None, 200, {"by_state": {"blessed": 1, "unreviewed": 2}}),
@@ -107,6 +111,23 @@ def test_a_review_session(client, index, viewer):
     assert "entry_method" in _ledger_columns(index)
     ledger = client.post("/api/review/verdict", json={"id": 1, "verdict": "erased"}).get_json()["ledger"]
     assert (ledger["review_state"], ledger["reviewer"]) == ("erased", reviewer)
+
+
+def test_an_index_that_cannot_be_written_or_has_gone_is_an_error_the_tab_can_read(client, index, tmp_path):
+    """Not Flask's HTML 500, which the tab's JSON parse turned into a SyntaxError."""
+    client.post(OPEN, json={"db_path": index})
+    os.chmod(index, stat.S_IRUSR)
+    os.chmod(tmp_path, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        refused = client.post("/api/review/verdict", json={"id": 2, "verdict": "blessed"})
+    finally:
+        os.chmod(tmp_path, stat.S_IRWXU)
+        os.chmod(index, stat.S_IRUSR | stat.S_IWUSR)
+    assert refused.status_code == 500 and "readonly" in refused.get_json()["error"]
+    os.remove(index)
+    for url in ("/api/review/progress", "/api/review/next?order=smallest", "/api/review/show/2"):
+        gone = client.get(url)
+        assert (gone.status_code, gone.get_json()) == (404, {"error": f"review index not found: {index}"}), url
 
 
 def test_only_a_review_index_by_name_is_opened(client, tmp_path):

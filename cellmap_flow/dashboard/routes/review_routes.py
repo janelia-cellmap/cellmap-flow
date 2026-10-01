@@ -109,6 +109,21 @@ def _no_session():
     return jsonify({"error": "no review index open; POST /api/review/open first"}), 409
 
 
+@review_bp.errorhandler(FileNotFoundError)
+def _index_gone(error):
+    """The open index was moved or deleted since /api/review/open."""
+    return jsonify({"error": str(error)}), 404
+
+
+@review_bp.errorhandler(sqlite3.Error)
+def _index_failed(error):
+    """SQLite could not do it, e.g. a verdict on an index it may not write.
+    JSON like every other answer here: Flask's HTML page made the tab's
+    parse fail with a SyntaxError instead of showing the reason."""
+    logger.warning(f"review: the index refused: {error}")
+    return jsonify({"error": f"review index: {error}"}), 500
+
+
 def _json_body() -> dict:
     data = request.get_json(silent=True)
     return data if isinstance(data, dict) else {}
@@ -308,7 +323,8 @@ def review_next():
     """Return the next unreviewed instance in the chosen queue.
 
     Query: ?order=<queue>&min_vox=100&skip_rank=12, where the queues are
-    the index's rank_<queue> columns; the first one when order is absent.
+    the index's rank_<queue> columns; the first one when order is absent or
+    empty (the tab sends it empty until its queue list is filled).
 
     Side effect: navigates the viewer to the instance's centroid (if
     viewer exists).
@@ -326,7 +342,7 @@ def review_next():
 
     conn = open_db(session.db_path)
     try:
-        if order is None:
+        if not order:
             order = next(iter(queues(conn)), "")
         inst = get_next(conn, order, min_vox, skip_rank)
     except ValueError as e:
