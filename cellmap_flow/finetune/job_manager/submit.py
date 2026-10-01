@@ -324,7 +324,7 @@ def build_command(
     queue: Optional[str] = None,
     charge_group: Optional[str] = None,
 ) -> str:
-    """Build the shell command used to launch finetuning."""
+    """Build the shell command used to launch finetuning, for ``bash -c``."""
     command_parts = [
         sys.executable,
         "-m",
@@ -420,8 +420,12 @@ def build_command(
     # block-buffered when the destination is not a terminal -- so roughly
     # 8KB of output, five to ten epochs' worth, landed in the file at
     # once and the dashboard showed nothing in between.
+    #
+    # pipefail, so that the job's exit status is the trainer's. A pipeline's
+    # is otherwise its last command's, tee's: a trainer that failed ended
+    # its job DONE to LSF, and the monitor made it COMPLETED.
     return (
-        f"{loader_path}stdbuf -oL {command} 2>&1 "
+        f"set -o pipefail; {loader_path}stdbuf -oL {command} 2>&1 "
         f"| stdbuf -oL tee {_sh_quote(log_file)}"
     )
 

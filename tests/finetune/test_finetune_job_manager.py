@@ -6,6 +6,7 @@ dashboard's listener does test_finetune_layers'."""
 import json
 import os
 import shlex
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -89,6 +90,19 @@ def test_a_job_runs_this_interpreters_trainer_and_logs_as_it_goes(submit):
     assert f"{sys.executable} -m cellmap_flow.finetune.finetune_cli" in job.command
     assert f"| stdbuf -oL tee {job.job.log_file}" in job.command and "stdbuf -oL python -m" not in job.command
     assert job.runs[0]["log_file"] == os.devnull
+
+
+def test_a_trainer_that_fails_fails_its_job(submit, monkeypatch, tmp_path):
+    """The trainer's output is piped through tee, and a pipeline's status was
+    tee's: a trainer that exited 1 was DONE to LSF, and its job COMPLETED. Here
+    the command runs, as a local job would, with a trainer that fails."""
+    trainer = tmp_path / "trainer"
+    trainer.write_text("#!/bin/sh\necho trained\nexit 1\n")
+    trainer.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(trainer))  # the interpreter the command runs
+    job = submit(_Script())
+    assert subprocess.run(job.runs[0]["command"]).returncode == 1
+    assert job.job.log_file.read_text() == "trained\n"
 
 
 def test_the_job_writes_its_yamls_into_the_session_with_its_queue_and_charge_group(submit):

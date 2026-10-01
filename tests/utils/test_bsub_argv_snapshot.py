@@ -173,7 +173,7 @@ def _submit_finetune(monkeypatch, tmp_path):
 
 
 FINETUNE_COMMAND = (
-    "LD_LIBRARY_PATH=<prefix>/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} "
+    "set -o pipefail; LD_LIBRARY_PATH=<prefix>/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} "
     "stdbuf -oL <python> -m cellmap_flow.finetune.finetune_cli --model-type script "
     "--model-script /models/mito.py --corrections <tmp>/session/corrections "
     "--output-dir <tmp>/session/runs/mito_<ts> --model-name mito --channels mito "
