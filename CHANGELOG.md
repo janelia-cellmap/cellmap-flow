@@ -55,7 +55,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - background-only corrections are now sampled;
   - `--balance-classes` combined with label smoothing;
   - `mse` on logit models;
-  - best-epoch choice when rehearsal-only batches occur;
+  - best-epoch choice when rehearsal-only batches occur, and an epoch of rehearsal patches only is never ranked best (its distillation-only loss of ~0 used to win the whole run, and that epoch was exported);
   - painted (sparse) sessions are now detected, which switches distance models to binary + margin and mse to margin + distillation 0.5;
   - base norm layers and the teacher run in eval mode;
   - augmentation for signed, float or windowed data;
@@ -207,6 +207,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - everything else is the dashboard's `cellmap_flow.dashboard.state.get_session()`.
 
     A script's `g.input_norms = [...]` still sets the process's chain, and `Flow()` returns `g`. Assigning a name `g` never had raises `AttributeError` instead of storing it. Importing `cellmap_flow.globals` no longer reads `~/.cellmap_flow/server_config.yaml`; a process reads it the first time it needs a setting. Moved without aliases: `globals.SERVER_CONFIG_PATH/DEFAULTS/KEYS` and `load_/save_server_config_cache` → `cellmap_flow.jobs.settings`, `LogHandler` → `cellmap_flow.dashboard.routes.logging_routes`, `get_blockwise_tasks_dir()` → `get_session().tasks_dir()`.
+  - **Finetune trainer:**
+    - the trainer's two startup probes run in eval mode. On a full finetune of a model with BatchNorm, the built-in-sigmoid probe (×100 noise) inflated the running variance about 7,000×, and the export and the served model carried it. A LoRA adapter with dropout now trains on different dropout masks;
+    - `save_adapter` exports the best checkpoint only if this run wrote it or resumed from it. With none (nothing supervised, or `num_epochs: 0`), it exports the last epoch's weights with a warning. It used to load whatever `best_checkpoint.pth` an earlier iteration left in the shared output directory, and failed after a rank change;
+    - a stop between epochs no longer records the skipped epoch as done, so `--resume` trains it;
+    - `--resume` from a checkpoint saved without loss scaling (bf16, fp32, or after the fp32 fallback) works in an fp16 trainer.
   - **Finetune data:**
     - annotation patches are read in the volume's own dtype, so instance-correction ids above 255 no longer wrap modulo 256 (instance 256 read as background, 257 merged with 1);
     - raw patches are cut as a box of raw voxels, so fractional voxel sizes (5.24 nm, 10.48 nm) get the full patch at the right place. They were one voxel short, started one voxel early, and failed the first batch. Whole-nm grids read exactly as before;
@@ -222,6 +227,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `d67aa94` resume a checkpoint saved without loss scaling
+- `8a2f642` a stop between epochs no longer skips one on resume
+- `c88288c` an epoch that supervised nothing is never the best
+- `b94078e` run the startup probes in eval mode
 - `b14d443` a YAML's json_data is the dashboard's chain as written
 - `6b3b9f0` build_corrections builds background-only crops instead of refusing them
 - `3cf81d2` build_corrections' sampling flags win over the crops YAML
