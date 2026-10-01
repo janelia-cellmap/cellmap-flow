@@ -15,8 +15,8 @@
 Before 0.3.0 these were separate console scripts (``cellmap_flow_yaml`` and
 the rest). Those names still work for one release: ``cli/aliases.py`` says
 where each went and runs it. So do this command's own earlier subcommands,
-hidden from ``--help``: ``cellmap_flow <type>``, ``list-models``,
-``register``, ``unregister`` and ``list-plugins``.
+hidden from ``--help``: ``cellmap_flow <type>``, ``run`` (cli/infer.py),
+``list-models``, ``register``, ``unregister`` and ``list-plugins``.
 """
 
 import sys
