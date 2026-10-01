@@ -13,7 +13,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - added `requests`, `scipy` and `click`;
   - the `[finetune]` extra is `peft` + `tensorboard`, and `[postprocess]` is `edt`.
 
-- **Lambda normalizer/postprocessor expressions** must be numpy math on `x`: arithmetic, comparisons, indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods. Anything else raises `ValueError` when the op is built. Every expression in the repo and docs is `x*2-1`, which is unaffected.
+- **Lambda normalizer/postprocessor expressions** must be numpy math on `x`: arithmetic, comparisons, indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods. Anything else raises `ValueError` when the op is built. Every expression in the repo and docs is `x*2-1`, which is unaffected. They may not repeat a list or tuple (`[x] * n`), pass keywords other than `axis`, `keepdims`, `dtype`, `a_min` and `a_max`, or give `np.full_like`/`ones_like`/`zeros_like` a positional shape: each of these let a layer URL make a server allocate without bound.
 - **Custom-code postprocessing is removed**, along with the `CUSTOM_CODE_FOLDER` env var. It never ran from the UI.
 - **Seven dashboard routes are removed.** Nothing called them: `/api/available-models`, `/api/pipeline/validate`, `/api/dataset-path`, `/api/shaders`, `/api/finetune/view-center`, `/api/finetune/job/<id>/inference-server`, `/api/viewer/add-finetuned-layer`.
 - **Restarting a finetune job over HTTP needs the job's token.** The job manager writes it to `<output_dir>/restart_token`. A restart can only change training settings. Jobs started before this change fall back to the `restart_signal.json` file.
@@ -41,8 +41,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - A new `FillHolesPostprocessor` (from PR #102) thresholds the output and fills each blob's enclosed holes, per channel, returning uint8 labels. It runs per chunk with no halo, so a hole touching a chunk's edge stays open.
   - Steps without a declared dtype keep their input dtype instead of float64.
   - Bio models serve uint8, and can be launched at all.
-  - Unique label ids change for models whose output voxel size differs from the input's.
+  - Unique label ids (`MortonSegmentationRelabeling`, `AffinityPostprocessor`) are offset by each chunk's index counted from the output grid's first chunk, which starts at the raw data's corner, and spaced by the chunk's output voxels, so a served layer and a blockwise run give a block the same ids. On data whose corner lies within one chunk of 0 (Janelia's −4 nm, say), with equal input and output voxel sizes, the ids are main's. They change for models whose output voxel size differs from the input's, and for data whose corner is a chunk or more from 0.
 - **Served array:** larger for datasets with an offset, and one voxel longer when the extent doesn't divide evenly (ceil, not floor).
+- **Inference servers** send a layer's merged ids to the dashboard from a background thread, with a 10 s timeout, at most once per refresh interval across all requests. A slow or unreachable dashboard no longer holds up chunk requests or fails them with a 500.
+- **Processed chunks are channel-first.** The server warns at start-up when a config's `chunk_output_axes` puts the channel axis elsewhere, and serves the chunk as if it were first, as before.
+- The postprocessing advice recognises an affinity model whose metadata gives its channel names as one string (`"affinities"`).
 - **Launch commands:** quoted, and they now include name, scale, Fly sizes and Bio voxel size.
 - **DaCapo:** channel names change where the old guess had the wrong count.
 - **Dependencies:** `h5py` is no longer a core dependency.
@@ -212,6 +215,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `0d500b1` read a string of channel names as one name in the affinity check
+- `a716f64` post merged ids to the dashboard off the chunk request
+- `a471068` refuse Lambda expressions that ask for unbounded memory
+- `8fce6d6` count chunk indices from the output grid's origin
 - `643ee8a` a restart signal is written whole or not at all
 - `4c06023` a finetune whose trainer fails ends FAILED
 - `a6db61f` a job's serving YAML is its latest iteration's, or none
