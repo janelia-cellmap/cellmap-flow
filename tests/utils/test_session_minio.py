@@ -238,7 +238,6 @@ def test_a_yaml_import_pulls_strokes_before_writing_crops_into_the_sessions_late
     earlier = {**meta, "zarr_path": str(tmp_path / "vol-0.zarr")}
     monkeypatch.setattr(g, "annotation_volumes", {"vol-0": {**earlier, "corrections_dir": str(tmp_path)},
                                                   "vol-1": {**meta, "corrections_dir": str(tmp_path)}})
-    monkeypatch.setattr(yaml_crops, "_ensure_editable_layer", lambda *a: None)
     monkeypatch.setattr(yaml_crops, "sync_annotation_volume_from_minio",
                         lambda vid, **k: events.append(("pull", vid)))
     monkeypatch.setattr(yaml_crops, "write_crop_into_volume",

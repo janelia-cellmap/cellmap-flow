@@ -18,7 +18,6 @@ import logging
 import os
 import re
 
-import neuroglancer
 import numpy as np
 import zarr
 from flask import jsonify, request
@@ -27,6 +26,7 @@ from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.routes.finetune.annotation_core import _get_selected_model_config
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_proxy, session_store
+from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
 from cellmap_flow.io.multiscale import closest_raw_scale
@@ -409,19 +409,7 @@ def create_instance_correction():
         _register_volume(volume_id, effective_zarr_path, output_dir, minio_url)
 
         layer_name = data.get("layer_name", f"{roi_name}_annotation")
-        with session.viewer.txn() as s:
-            if layer_name in s.layers:
-                del s.layers[layer_name]
-            source_config = {
-                "url": f"s3+{minio_url}/annotation",
-                "subsources": {
-                    "default": {"writingEnabled": True},
-                    "bounds": {},
-                },
-            }
-            s.layers[layer_name] = neuroglancer.SegmentationLayer(
-                source=source_config,
-            )
+        add_annotation_layer(session.viewer, layer_name, f"{minio_url}/annotation")
         logger.info(
             f"Added paintable layer {layer_name} -> {minio_url}/annotation"
         )

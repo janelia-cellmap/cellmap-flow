@@ -42,7 +42,10 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
     session_store,
 )
-from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.routes.finetune.overlay import (
+    add_annotation_layer,
+    refresh_annotated_regions_layer,
+)
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.crop_loader import (
     YamlFileRefused,
@@ -95,27 +98,6 @@ def _create_session_annotation_volume(
         ),
     )
     return volume_id, record
-
-
-def _ensure_editable_layer(volume_id, minio_url):
-    """Add the volume's MinIO-backed annotation layer to the viewer if absent."""
-    import neuroglancer
-
-    viewer = get_session().viewer
-    if not viewer or not minio_url:
-        return
-    layer_name = f"annotation_{volume_id}"
-    try:
-        with viewer.txn() as s:
-            if layer_name in s.layers:
-                return
-            source_config = {
-                "url": f"s3+{minio_url}/annotation",
-                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
-            }
-            s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
-    except Exception as e:
-        logger.warning(f"Could not add editable layer for {volume_id}: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +208,14 @@ def load_crops_from_yaml():
             "Serving the volume through MinIO and adding the editable layer...",
             n_crops=n_crops,
         )
-        _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))
+        viewer, minio_url = get_session().viewer, volume_meta.get("minio_url")
+        if viewer is not None and minio_url:
+            try:
+                # Kept if there: it may be the layer the user is painting.
+                add_annotation_layer(viewer, f"annotation_{volume_id}", f"{minio_url}/annotation",
+                                     keep_existing=True)
+            except Exception as e:
+                logger.warning(f"Could not add editable layer for {volume_id}: {e}")
 
         if not created_volume:
             # The crops are written into the local chunks and then mirrored

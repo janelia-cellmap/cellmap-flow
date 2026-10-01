@@ -90,6 +90,39 @@ def _register_voxel_annotation_tools():
 _register_voxel_annotation_tools()
 
 
+def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=False):
+    """Add the writable layer that paints into a volume, and select it.
+
+    ``annotation_url`` is the volume's ``annotation`` group as MinIO serves
+    it. This is the one builder of that layer: add-to-viewer (after
+    create-volume and resume), load-crops and instance corrections all add
+    it here. So each gets the draw tools pre-bound (ANNOTATION_TOOL_BINDINGS)
+    and is selected with its panel open, ready to paint without hunting for
+    it in the layer list; load-crops and instance corrections used to build
+    their own, with neither.
+
+    A layer of that name is replaced, unless ``keep_existing``: then it is
+    left as it is, selection included, and False is returned.
+    """
+    with viewer.txn() as s:
+        if keep_existing and layer_name in s.layers:
+            return False
+        layer = neuroglancer.SegmentationLayer(source={
+            "url": f"s3+{annotation_url}",
+            "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
+        })
+        try:
+            layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
+        except Exception as e:
+            # An older neuroglancer without tool_bindings should still get
+            # its layer; the keys just will not be pre-bound.
+            logger.warning(f"Could not pre-bind annotation tools: {e}")
+        s.layers[layer_name] = layer
+        s.selected_layer.layer = layer_name
+        s.selected_layer.visible = True
+    return True
+
+
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,
@@ -365,25 +398,8 @@ def add_crop_to_viewer():
         if viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
 
-        with viewer.txn() as s:
-            layer_name = data.get("layer_name", f"annotation_{crop_id}")
-            source_config = {
-                "url": f"s3+{minio_url}",
-                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
-            }
-            layer = neuroglancer.SegmentationLayer(source=source_config)
-            try:
-                layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
-            except Exception as e:
-                # An older neuroglancer without tool_bindings should still get
-                # its layer; the keys just will not be pre-bound.
-                logger.warning(f"Could not pre-bind annotation tools: {e}")
-            s.layers[layer_name] = layer
-            # Select the new layer and open its panel, so the user can start
-            # painting into the volume they just created or loaded without
-            # hunting for it in the layer list.
-            s.selected_layer.layer = layer_name
-            s.selected_layer.visible = True
+        layer_name = data.get("layer_name", f"annotation_{crop_id}")
+        add_annotation_layer(viewer, layer_name, minio_url)
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:

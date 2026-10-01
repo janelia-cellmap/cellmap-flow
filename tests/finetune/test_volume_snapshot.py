@@ -312,3 +312,24 @@ def test_what_each_volume_creator_writes(world):
     # As JSON, so an int written as a float (16 -> 16.0) counts as a change.
     canonical = lambda d: {k: json.dumps(v, sort_keys=True, indent=1) for k, v in d.items()}  # noqa: E731
     assert canonical(_record(world)) == canonical(EXPECTED)
+
+
+@pytest.mark.parametrize("url, body", [
+    pytest.param("/api/finetune/load-crops", {"model_name": "m", "output_path": "{tmp}/c", "yaml": "{tmp}/crops.yaml"},
+                 id="load-crops"),
+    pytest.param("/api/viewer/create-instance-correction",
+                 {"roi_name": "roi", "model_name": "m", "instance_zarr_path": "{tmp}/seg.zarr"},
+                 id="instance-correction"),
+])
+def test_the_layer_a_volume_is_painted_in_comes_selected_with_the_draw_tools_bound(world, url, body):
+    """As add-to-viewer's does: these routes built their own layer, with no
+    keys bound and left unselected."""
+    from cellmap_flow.globals import g
+
+    answer = world.client.post(url, json={k: v.format(tmp=world.tmp) for k, v in body.items()}).get_json()
+    layer = answer.get("layer_name") or f"annotation_{answer['volume_id']}"
+    state = g.viewer.state
+    assert (state.selected_layer.layer, state.selected_layer.visible) == (layer, True)
+    bindings = state.layers[layer].to_json()["toolBindings"]
+    assert {key: tool if isinstance(tool, str) else tool["type"] for key, tool in bindings.items()} == {
+        "A": "vox-brush", "F": "vox-flood-fill"}
