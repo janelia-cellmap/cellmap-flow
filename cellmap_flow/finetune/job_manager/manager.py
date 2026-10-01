@@ -390,7 +390,8 @@ class FinetuneJobManager:
             job_id: Job ID
 
         Returns:
-            Log file content as string, or None if not found
+            Log file content as string, or None if not found. A byte that
+            is not UTF-8 is read as U+FFFD (see tailer.LogTailer).
         """
         if job_id not in self.jobs:
             return None
@@ -401,7 +402,7 @@ class FinetuneJobManager:
             return "Log file not yet created..."
 
         try:
-            with open(finetune_job.log_file, "r") as f:
+            with open(finetune_job.log_file, encoding="utf-8", errors="replace") as f:
                 return f.read()
         except Exception as e:
             logger.error(f"Error reading log file: {e}")

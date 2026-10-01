@@ -205,16 +205,18 @@ def _lsf(*replies, **fields):
 
 
 def _monitor(manager, job, chunks, monkeypatch, observe=None):
-    """monitor_job over a log that grows by one chunk per poll; what ``observe()``
-    returns at each poll (default: the job's status, epoch and loss)."""
-    job.log_file.write_text(chunks[0])
+    """monitor_job over a log that grows by one chunk per poll (text, or bytes as
+    they are written); what ``observe()`` returns at each poll (default: the
+    job's status, epoch and loss)."""
+    chunks = [chunk if isinstance(chunk, bytes) else chunk.encode() for chunk in chunks]
+    job.log_file.write_bytes(chunks[0])
     rest, seen = iter(chunks[1:]), []
     observe = observe or (lambda: (job.status.value, job.current_epoch, job.latest_loss))
 
     def sleep(seconds):
         seen.append(observe())
-        with open(job.log_file, "a") as f:
-            f.write(next(rest, ""))
+        with open(job.log_file, "ab") as f:
+            f.write(next(rest, b""))
 
     monkeypatch.setattr(monitor.time, "sleep", sleep)
     manager.monitor_job(job)
@@ -364,6 +366,11 @@ HEARD = [("iteration", "m_finetuned_1", None), ("server", URL, "m_finetuned_1", 
     pytest.param(["TRAINING_ITERATION_COMPLETE: m_finetuned_1\n" + SERVER, ITERATIONS[2]],
                  [("server", URL, "m_finetuned_1", None), ("iteration", "m_finetuned_2", "m_finetuned_1")],
                  id="the server and its model in one read"),
+    # One byte that is not UTF-8, from a user's print or a library: every read
+    # after it failed, so the monitor followed the job no further, and the
+    # monitor raised as the job ended.
+    pytest.param([b"a print \xff\n" + ITERATIONS[0].encode(), *ITERATIONS[1:]], HEARD,
+                 id="after a byte that is not UTF-8"),
 ])
 def test_listeners_hear_of_the_server_and_of_each_iteration(make_job, monkeypatch, chunks, events):
     """What the dashboard does about a job is a listener. While listeners run

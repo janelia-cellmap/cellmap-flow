@@ -57,8 +57,14 @@ class LogTailer:
 
     A read can end mid-line ("Epoch 7/10 - Lo", "TRAINING_ITERATION_COM");
     parsed as it stood, the epoch's loss or the marker would be lost or cut
-    short. The incomplete end is held back until the rest of the line is
-    written.
+    short. The incomplete end is left in the file, and read again once the
+    rest of the line is written. ``position`` is the byte offset after the
+    lines handed out.
+
+    The log is everything the run printed, the user's code and its libraries
+    included, so it need not be UTF-8: a byte that is not is decoded as
+    U+FFFD. A whole line never ends inside a character, since no byte of a
+    multi-byte UTF-8 character is a newline.
 
     ``iterations`` (Iterations) holds what every line handed out so far says
     of the finished iterations, so what depends on the whole log never needs
@@ -75,7 +81,6 @@ class LogTailer:
 
     def _start_over(self):
         self.position = 0
-        self._partial = ""
         self.iterations = Iterations()
 
     def read(self) -> str:
@@ -89,14 +94,13 @@ class LogTailer:
             logger.info(f"Log file truncated (size {size} < position {self.position}), resetting")
             self._start_over()
 
-        with open(self.path, "r") as f:
+        with open(self.path, "rb") as f:
             f.seek(self.position)
-            new_content = f.read()
-            self.position = f.tell()
+            new_bytes = f.read()
 
-        text = self._partial + new_content
-        cut = text.rfind("\n") + 1
-        text, self._partial = text[:cut], text[cut:]
+        cut = new_bytes.rfind(b"\n") + 1
+        self.position += cut
+        text = new_bytes[:cut].decode("utf-8", errors="replace")
         self.iterations.feed(text.splitlines())
         return text
 
@@ -119,7 +123,7 @@ def finished_iterations(log_file):
     """
     iterations = Iterations()
     try:
-        with open(log_file, errors="replace") as f:
+        with open(log_file, encoding="utf-8", errors="replace") as f:
             iterations.feed(f)
     except OSError:
         return 0, None

@@ -249,10 +249,11 @@ def _read_trainer_outputs(finetune_job: FinetuneJob):
     The trainer prints "FINETUNED_MODEL_YAML: <path>" and then
     "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it
     finishes. It reads the whole log: the monitor calls it once the job has
-    ended, when it may not have read the last lines yet.
+    ended, when it may not have read the last lines yet. A byte that is not
+    UTF-8 is read as U+FFFD, as LogTailer reads it.
     """
     try:
-        log_text = finetune_job.log_file.read_text()
+        log_text = finetune_job.log_file.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return
     name, yaml_path = trainer_outputs_from_log(log_text)
