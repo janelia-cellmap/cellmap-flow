@@ -36,7 +36,8 @@ __all__ = [
 
 # Followed by a value: "<marker> <value>".
 TRAINING_ITERATION_COMPLETE = "TRAINING_ITERATION_COMPLETE:"  # the iteration's model name
-RESTART_FAILED = "RESTART_FAILED:"  # why
+# Why a restart could not be set up or trained; the job serves on and waits.
+RESTART_FAILED = "RESTART_FAILED:"
 INFERENCE_SERVER_FAILED = "INFERENCE_SERVER_FAILED:"  # why
 # What a restart is doing before its first epoch. Only the finetune tab reads
 # it (job-card.js shows it as the job's progress); the job manager needs

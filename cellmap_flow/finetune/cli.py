@@ -162,7 +162,8 @@ def build_arg_parser():
         type=int,
         nargs=3,
         default=None,
-        help="Patch shape for training (Z Y X). Default: None (use full corrections)"
+        help="Unused, and accepted so that older commands still parse: the "
+             "patch shape comes from the corrections' manifest."
     )
     parser.add_argument(
         "--no-augment",
@@ -555,14 +556,16 @@ def model_config_from_args(args) -> ModelConfig:
 # What a restart may change: training settings only. The model, the data and
 # every path stay as launched, so a restart request cannot point the job at
 # other files. Matches the dashboard's RESTART_PASSTHROUGH_KEYS, plus the
-# distillation_all_voxels flag it derives from distillation_scope.
+# distillation_all_voxels flag it derives from distillation_scope, less
+# patch_shape: the patch geometry comes from the corrections' manifest, and
+# nothing reads --patch-shape.
 RESTARTABLE_ARGS = frozenset(
     {
         "lora_r", "lora_alpha", "num_epochs", "batch_size", "learning_rate",
         "loss_type", "label_smoothing", "distillation_lambda",
         "distillation_all_voxels", "margin", "balance_classes", "augment",
         "mask_unannotated", "gradient_accumulation_steps", "num_workers",
-        "no_augment", "no_mixed_precision", "patch_shape", "output_type",
+        "no_augment", "no_mixed_precision", "output_type",
         "select_channel", "offsets",
     }
 )
@@ -613,13 +616,6 @@ def _as_offsets(value):
     return json.dumps(offsets)
 
 
-def _as_shape(value):
-    shape = [int(v) for v in value]
-    if len(shape) != 3:
-        raise ValueError(f"expected three values, got {value!r}")
-    return shape
-
-
 def _one_of(*choices):
     def convert(value):
         if value not in choices:
@@ -657,7 +653,6 @@ _RESTART_ARG_CONVERTERS = {
     "num_workers": ("num_workers", _at_least(0)),
     "no_augment": ("no_augment", _as_bool),
     "no_mixed_precision": ("no_mixed_precision", _as_bool),
-    "patch_shape": ("patch_shape", _as_shape),
     "output_type": (
         "output_type", _one_of("binary", "binary_broadcast", "affinities", "distance")
     ),

@@ -40,7 +40,14 @@ logger = logging.getLogger(__name__)
 
 
 class RestartController:
-    """In-memory restart control shared between training loop and server endpoint."""
+    """Hands a restart from the inference server's thread to the training loop.
+
+    The server's ``/__control__/restart`` endpoint, once it has checked the
+    job's token, calls ``request_restart`` with the request's body; the
+    loop's wait (_wait_for_restart_signal) polls ``get_if_triggered``. A
+    request that comes while the job is still training is kept until the
+    wait; a second one replaces the first.
+    """
 
     def __init__(self):
         self._event = threading.Event()
@@ -98,7 +105,11 @@ def _start_inference_server_background(
     Args:
         args: Command-line arguments
         model_config: Base model configuration
-        trained_model: The trained LoRA model
+        trained_model: The model just trained: LoRA-wrapped, or fully
+            finetuned
+        restart_controller: Where the server's restart endpoint hands
+            restart requests, with the job's restart token required; None
+            for a server that takes none
 
     Returns:
         (thread, port) tuple
@@ -125,7 +136,7 @@ def _start_inference_server_background(
         raise ValueError(f"Data path not found: {args.serve_data_path}")
 
     # Use the already-trained model
-    logger.info("Using trained LoRA model for inference...")
+    logger.info("Using the trained model for inference...")
 
     from cellmap_flow.models.configs.base import _get_device
     device = _get_device()
@@ -264,6 +275,8 @@ class TrainingSession:
         self.args = args
         self.model_config = model_config
         self.model = model
+        # Given to the inference server when it starts, which hands it the
+        # restarts it is sent.
         self.restart_controller = RestartController()
         self.server_started = False
         self.iteration = 0
@@ -337,11 +350,12 @@ class TrainingSession:
                     if not args.auto_serve:
                         return 1
                     if not self.server_started:
-                        # Nothing can restart this job: the dashboard sends a
-                        # restart to the job's inference server, which only
-                        # starts after an iteration completes. Waiting here
-                        # would hold the GPU until walltime. Exit so the job
-                        # shows as failed and the GPU is freed.
+                        # No iteration has completed, so there is no model to
+                        # serve while the job waits. A restart could still
+                        # reach it through the signal file, but waiting holds
+                        # the GPU, perhaps until walltime, for what a resubmit
+                        # does as well. Exit so the job shows as failed and the
+                        # GPU is freed.
                         logger.error(
                             "The first training iteration diverged, so no inference "
                             "server is running to receive a restart. Exiting; "
@@ -562,7 +576,7 @@ class TrainingSession:
         return True
 
     def _await_restart(self) -> bool:
-        """Wait for the next restart and apply its settings; False if its signal was malformed."""
+        """Wait for the next restart and apply its settings; False for a signal file that is not a restart request."""
         restart_data = _wait_for_restart_signal(
             signal_file=Path(self.args.output_dir) / "restart_signal.json",
             check_interval=1.0,
