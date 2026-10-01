@@ -1,12 +1,16 @@
 """The dashboard's routes outside finetuning: what it serves, the settings forms,
 the bounding boxes read back from the viewer, and the viewer layer API."""
 
+import logging
+import queue
+
 import neuroglancer
 import numpy as np
 import pytest
 import zarr
 from neuroglancer import AxisAlignedBoundingBoxAnnotation as Box
 
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.globals import g
 from cellmap_flow.jobs.settings import LauncherSettings
 
@@ -65,6 +69,24 @@ def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, mon
     response = dashboard.post(url, **kwargs)
     assert (response.status_code, response.get_json()) == (400, {"success": False, "error": error})
     assert (g.queue, g.nb_workers, g.dataset_path, g.models_config) == ("gpu_h100", 14, "/data/raw.zarr", [])
+
+
+def test_the_blockwise_settings_are_kept_and_read_back(dashboard, tmp_path):
+    sent = {"queue": "gpu_l4", "charge_group": "grp", "nb_cores_master": 2, "nb_cores_worker": 8, "nb_workers": 5,
+            "tmp_dir": str(tmp_path / "progress"), "blockwise_tasks_dir": str(tmp_path / "tasks")}
+    assert dashboard.post("/api/blockwise-config", json=sent).get_json() == {"success": True, "config": sent}
+    assert dashboard.get("/api/blockwise-config").get_json() == sent
+    session = get_session()
+    assert (session.queue, session.tmp_dir, session.tasks_dir()) == ("gpu_l4", sent["tmp_dir"], sent["blockwise_tasks_dir"])
+
+
+def test_a_package_log_record_reaches_the_log_panel(dashboard):
+    """Into the buffer a late panel replays, and to each open stream."""
+    stream = queue.Queue()
+    get_session().log_clients.append(stream)
+    logging.getLogger("cellmap_flow.jobs.launch").info("model mito started")
+    assert get_session().log_buffer[-1].endswith("INFO cellmap_flow.jobs.launch: model mito started")
+    assert stream.get_nowait() == get_session().log_buffer[-1]
 
 
 def test_a_count_sent_as_a_string_is_a_number(dashboard):

@@ -63,6 +63,7 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
     import werkzeug.serving
 
     from cellmap_flow.dashboard import app as dashboard
+    from cellmap_flow.dashboard.state import get_session
 
     class FakeServer:
         def __init__(self, host, port, wsgi_app, threaded=False, **kwargs):
@@ -83,6 +84,7 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
 
     dashboard.create_and_run_app(neuroglancer_url="http://ng")
     assert root.handlers and root.level == logging.INFO
+    assert get_session().neuroglancer_url == "http://ng", "the index page embeds it"
 
     url = url_file.read_text()
     host, port = url.removeprefix("http://").rsplit(":", 1)
