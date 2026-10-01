@@ -291,7 +291,7 @@ EXPECTED = {
         ),
     },
     "list_existing_sessions": {"success": True, "sessions": [{
-        "chunk_count": 1, "session_id": "<session>", "session_path": "<tmp>/a/<session>",
+        "chunk_count": 1, "dataset_path": RAW, "session_id": "<session>", "session_path": "<tmp>/a/<session>",
         "volumes": [{"path": "<tmp>/a/<session>/corrections/vol-1.zarr", "volume_id": "vol-1"}],
     }]},
     "load_existing_volume": {
@@ -333,3 +333,18 @@ def test_the_layer_a_volume_is_painted_in_comes_selected_with_the_draw_tools_bou
     bindings = state.layers[layer].to_json()["toolBindings"]
     assert {key: tool if isinstance(tool, str) else tool["type"] for key, tool in bindings.items()} == {
         "A": "vox-brush", "F": "vox-flood-fill"}
+
+
+def test_a_session_resumes_only_over_the_dataset_it_was_painted_on(world):
+    """A jrc_axolotl-heart-1 session resumed in a jrc_amphiuma-means-heart-1
+    dashboard drew its strokes over the wrong EM, trained on axolotl, and
+    served axolotl over amphiuma's view (2026-10-01)."""
+    from cellmap_flow.dashboard.state import get_session
+
+    post = lambda url, **body: world.client.post(url, json=body)  # noqa: E731
+    created = post("/api/finetune/create-volume", model_name="m", output_path=str(world.tmp / "a")).get_json()
+    get_session().dataset_path = str(world.tmp / "other.zarr" / "em")
+    refused = post("/api/finetune/load-existing-volume", output_path=str(world.tmp / "b"),
+                   source_session_path=str(Path(created["zarr_path"]).parents[1]))
+    assert refused.status_code == 409 and "raw.zarr/em" in refused.get_json()["error"]
+    assert not (world.tmp / "b").exists()

@@ -8,6 +8,7 @@ Routes: POST ``/api/finetune/list-existing-sessions``, POST
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 
@@ -134,6 +135,24 @@ def _annotation_volume_dirs(corrections_dir):
     return volumes
 
 
+def _volume_dataset(volume_path):
+    """The raw dataset an annotation volume was painted on (its attrs'
+    ``dataset_path``), or None when it does not say."""
+    try:
+        with open(os.path.join(volume_path, ".zattrs")) as f:
+            return json.load(f).get("dataset_path")
+    except (OSError, ValueError):
+        return None
+
+
+def _same_dataset(a, b):
+    """Whether two dataset paths name one dataset: a trailing slash and a
+    trailing scale level (``/s2``) aside."""
+    def bare(path):
+        return re.sub(r"/s\d+$", "", str(path).rstrip("/"))
+    return bare(a) == bare(b)
+
+
 def _populated_chunk_count(volume_path):
     """How many chunks of a volume's annotation/s0 are on disk, painted or imported."""
     s0_dir = os.path.join(volume_path, "annotation", "s0")
@@ -176,6 +195,7 @@ def list_existing_sessions():
                         # legacy per-chunk extracts, which no session gets
                         # any more, so it said 0 for most sessions.
                         "chunk_count": sum(_populated_chunk_count(v["path"]) for v in volumes),
+                        "dataset_path": _volume_dataset(volumes[0]["path"]),
                     }
                 )
 
@@ -221,6 +241,18 @@ def load_existing_volume():
 
         volume_dir = volume_entries[0]
         volume_id = volume_dir.replace(".zarr", "")
+
+        # A volume's voxels are positions in the dataset it was painted on.
+        # Resumed in a dashboard showing another dataset, the strokes were
+        # drawn over the wrong EM, training read the old dataset, and the
+        # finetuned layer served the old dataset over the new one's view.
+        painted_on = _volume_dataset(os.path.join(source_corrections, volume_dir))
+        if painted_on and session.dataset_path and not _same_dataset(painted_on, session.dataset_path):
+            return jsonify({"success": False, "error": (
+                f"That session was painted on {painted_on}, and this dashboard has "
+                f"{session.dataset_path} open. Start the dashboard on {painted_on} to resume it."
+            )}), 409
+
         new_session_path, new_corrections = ensure_corrections_storage(output_path)
 
         all_zarr_entries = [item for item in os.listdir(source_corrections) if item.endswith(".zarr")]

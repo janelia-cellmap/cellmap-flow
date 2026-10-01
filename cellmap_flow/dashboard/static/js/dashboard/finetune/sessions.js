@@ -61,7 +61,9 @@ export function initSessions({ log, addToViewer }) {
           const volNames = s.volumes.map(v => v.volume_id).join(", ") || "(no volume)";
           const opt = document.createElement("option");
           opt.value = s.session_path;
-          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks — ${volNames}`;
+          // The dataset it was painted on: a session resumes only over that one.
+          const dataset = s.dataset_path ? ` — ${s.dataset_path.replace(/\/+$/, "").split("/").find(p => p.endsWith(".zarr") || p.endsWith(".n5")) || s.dataset_path}` : "";
+          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks${dataset} — ${volNames}`;
           opt.disabled = s.volumes.length === 0;
           existingSessionsList.appendChild(opt);
         });
