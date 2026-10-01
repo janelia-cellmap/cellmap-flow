@@ -9,7 +9,8 @@ goes through funlib's ``Coordinate``, which truncates both. A ``Box`` is a
 range of voxel indices, which may start before the array or run past it.
 
 - ``Grid.world_to_box(roi)``: the voxels a read of a world ``Roi`` returns.
-- ``Grid.box_to_world(box)``: the whole-nm ``Roi`` around a box.
+- ``Grid.box_to_world(box)``: the whole-nm ``Roi`` around a box, which
+  ``world_to_box`` maps back to the same box.
 - ``coordinate_or_floats``: a voxel size or offset as a ``Coordinate`` when
   it is whole, else as floats.
 - ``list_populated_chunks``: the chunks of a local zarr v2 array that have a
@@ -60,21 +61,42 @@ class Grid:
         That is the voxel below an off-grid start on either side of voxel 0:
         half a voxel before the array starts at voxel -1. Float noise from
         the division (9.9999999 voxels) counts as the whole number it is.
+
+        A start less than 1 nm below a voxel boundary (and nearer it than
+        half a voxel) is read from that boundary. A Roi holds whole
+        nanometers, so it cannot start on a boundary that is not one:
+        OpenOrganelle's voxel 0 starts at -2.62 nm (10.48 nm voxels), and
+        both ``box_to_world`` (which floors) and the served and blockwise
+        output grids (which round) start it at -3 nm. Read from the voxel
+        -3 nm is in, the array's own roi came back as a voxel of padding
+        and then voxels 0 to n-2, and a model reading such a grid (resampled
+        to 8 nm, say) got its input a voxel early. On a whole-nm grid (8 and
+        16 nm, a -4 nm corner) every whole-nm start is on a boundary or at
+        least 1 nm past one, so nothing changes there.
         """
         voxel_size = np.asarray(self.voxel_size, dtype=float)
-        begin = np.floor(
-            snap_integral(
-                (np.asarray(roi.begin, dtype=float) - np.asarray(self.translation, dtype=float))
-                / voxel_size
-            )
+        position = snap_integral(
+            (np.asarray(roi.begin, dtype=float) - np.asarray(self.translation, dtype=float))
+            / voxel_size
         )
+        begin = np.floor(position)
+        # How far below the next voxel boundary the start is, in nm.
+        below_next = snap_integral((begin + 1 - position) * voxel_size)
+        stands_for_next = (position != begin) & (below_next < np.minimum(1.0, voxel_size / 2))
+        begin = np.where(stands_for_next, begin + 1, begin)
         shape = np.trunc(snap_integral(np.asarray(roi.shape, dtype=float) / voxel_size))
         return Box(tuple(int(b) for b in begin), tuple(int(s) for s in shape))
 
     def box_to_world(self, box: Box) -> Roi:
         """The integer-nm ``Roi`` covering ``box``: exactly its extent when
         that is whole nanometers, else rounded out to them (a Roi holds
-        integers)."""
+        integers).
+
+        ``world_to_box`` maps it back to ``box`` when the voxels are 2 nm or
+        more. On a finer grid whose boundaries are not whole nanometers
+        (1 nm voxels centred on whole nm), each nanometer the rounding adds
+        can be half a voxel, and the box reads back with a voxel of padding.
+        """
         voxel_size = snap_integral(self.voxel_size)
         begin = snap_integral(
             np.asarray(self.translation, dtype=float) + np.asarray(box.begin) * voxel_size

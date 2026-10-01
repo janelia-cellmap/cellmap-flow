@@ -633,6 +633,10 @@ def test_public_data_reads_as_tensorstore_reads_it(path, voxel_size, placed, lev
     begin = (0,) * (direct.rank - 3) + voxel
     want = direct[tuple(slice(b, b + n) for b, n in zip(begin, size))].read().result()
     assert np.array_equal(idi.source.read(Box(begin, size)), want)
+    # Read in the world too: the whole-nm Roi around those voxels (z from
+    # 16681 nm, not voxel 1592's 16681.54, on OpenOrganelle) reads them.
+    world = idi._grid.box_to_world(Box(voxel, size[-3:]))
+    assert np.array_equal(idi.to_ndarray_ts(world), want[(0,) * (direct.rank - 3)])
 
 
 def test_v3_is_read_from_local_disk_only_and_urls_join_with_slashes(tmp_path):

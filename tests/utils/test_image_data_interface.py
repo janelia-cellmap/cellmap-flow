@@ -57,6 +57,16 @@ def _extra_compressor_field(f):
     return path
 
 
+def _openorganelle_level(f):
+    """OpenOrganelle's s1: 8^3 voxels of 10.48, 8, 8 nm. s0 (5.24, 4, 4 nm) is
+    centred on 0, so every level's corner is at (-2.62, -2, -2) nm, which is
+    not a whole nanometer in z."""
+    return f.ome_pyramid((((5.24, 4, 4), 0), ((10.48, 8, 8), (2.62, 2, 2)))) + "/s1"
+
+
+# Read the dataset's own roi.
+OWN_ROI = "idi.roi"
+
 # layout: (how it is written, ImageDataInterface arguments, where it starts, read ROI,
 #          (shape read, its dtype, its z column))
 READS = {
@@ -160,6 +170,23 @@ READS = {
         lambda f: f.ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32)) + "/s2",
         {}, (-4, -4, -4), Roi((60, -4, -4), (64, 32, 32)), ((2, 1, 1), "uint8", [3, 4]),
     ),
+    # A Roi holds whole nm, so roi starts voxel 0 at -3 nm, not -2.62: reading
+    # it gives the array's own voxels, not a voxel of padding and voxels 0..6.
+    "openorganelle-own-roi": (
+        _openorganelle_level, {}, (-3, -2, -2), OWN_ROI, ((8, 8, 8), "uint8", list(range(1, 9))),
+    ),
+    "5.24nm-own-roi": (
+        lambda f: f.ome_pyramid((((5.24, 4, 4), 0),), shape=(16, 4, 4)) + "/s0",
+        {}, (-3, -2, -2), OWN_ROI, ((16, 4, 4), "uint8", list(range(1, 17))),
+    ),
+    # Voxel 2 starts at 18.34 nm; the whole-nm box around voxels 2..4 starts at 18.
+    "openorganelle-whole-nm-start": (
+        _openorganelle_level, {}, (-3, -2, -2), Roi((18, -2, -2), (32, 8, 8)), ((3, 1, 1), "uint8", [3, 4, 5]),
+    ),
+    # More than 1 nm below voxel 0 (-4 nm) is still in voxel -1.
+    "openorganelle-start-before-voxel-0": (
+        _openorganelle_level, {}, (-3, -2, -2), Roi((-4, -2, -2), (21, 8, 8)), ((2, 1, 1), "uint8", [0, 1]),
+    ),
     "ome-v3-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), zarr_format=3),
         {"voxel_size": (16, 16, 16)}, (-4, -4, -4), Roi((-4, -4, -4), (32, 16, 16)), ((2, 1, 1), "uint8", [1, 2]),
@@ -189,7 +216,7 @@ def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
     write, kwargs, corner, roi, (shape, dtype, column) = READS[layout]
     idi = _open(write, kwargs, ome_pyramid, write_array)
     assert tuple(idi.roi.offset) == corner
-    got = idi.to_ndarray_ts(roi)
+    got = idi.to_ndarray_ts(idi.roi if roi == OWN_ROI else roi)
     assert (got.shape, str(got.dtype), got[:, 0, 0].tolist()) == (shape, dtype, column)
 
 
