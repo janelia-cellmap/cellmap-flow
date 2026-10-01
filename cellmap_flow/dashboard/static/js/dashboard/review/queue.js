@@ -28,13 +28,19 @@ export function initQueue({ current, progress }) {
     if (e.key === "Enter") { e.preventDefault(); gotoInstanceId(); }
   });
 
+  // The queue the instance on screen came from, when Next brought it up.
+  // Its rank is its place in that queue only: sent with another queue, it
+  // skipped that many of the other queue's instances unseen.
+  let shownFrom = null;
+
   $("reviewNextBtn").addEventListener("click", async () => {
     const order = $("reviewOrder").value;
     const minVox = $("reviewMinVox").value;
     // skip_rank = rank of currently-shown instance; ensures Next advances
     // past what's already on screen even when not verdicted.
     const shown = current.instance();
-    const skipRank = (shown && shown.rank !== undefined) ? shown.rank : null;
+    const fromThisQueue = shown && current.method() === "next" && shownFrom === order;
+    const skipRank = (fromThisQueue && shown.rank !== undefined) ? shown.rank : null;
     const url = `/api/review/next?order=${encodeURIComponent(order)}`
               + (minVox ? `&min_vox=${encodeURIComponent(minVox)}` : "")
               + (skipRank != null ? `&skip_rank=${encodeURIComponent(skipRank)}` : "");
@@ -44,6 +50,7 @@ export function initQueue({ current, progress }) {
       if (!r.ok) { alert("next failed: " + (j.error || r.status)); return; }
       if (j.done) { current.none(); return; }
       current.show(j, "next");
+      shownFrom = order;
     } catch (e) { alert("next error: " + e); }
   });
 
