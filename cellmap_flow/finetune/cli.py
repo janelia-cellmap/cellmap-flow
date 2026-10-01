@@ -25,7 +25,7 @@ from cellmap_flow.models.models_config import (
     HuggingFaceModelConfig,
     ModelConfig,
 )
-from cellmap_flow.utils.json_files import write_json_atomically
+from cellmap_flow.finetune.json_files import write_json_atomically
 
 logger = logging.getLogger(__name__)
 

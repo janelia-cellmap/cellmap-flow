@@ -28,12 +28,12 @@ run left: a LoRA run's ``lora_adapter/``, a full finetune's
 
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from cellmap_flow.finetune.json_files import write_json_atomically
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
 from cellmap_flow.finetune.job_manager.submit import model_entry
 from cellmap_flow.finetune.job_manager.tailer import finished_iterations
@@ -113,26 +113,6 @@ def submission_metadata(
         "created_at": datetime.now().isoformat(),
         "command": command,
     }
-
-
-def write_json_atomically(path, data) -> None:
-    """Write ``data`` to ``path`` as indented JSON, replacing the file whole.
-
-    The JSON goes into a temporary file beside ``path``, named for this one
-    write, which then replaces ``path``. So a reader finds the old file or
-    the new one, never part of one: the trainer on its own host, another
-    dashboard, or another thread of this one. And two writers never share a
-    temporary file. Raises what serializing or writing raises (TypeError,
-    OSError), with ``path`` left as it was and no temporary file behind.
-    """
-    path = Path(path)
-    text = json.dumps(data, indent=2)
-    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        tmp.write_text(text)
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)  # still there only if the write or the replace failed
 
 
 def write_metadata(output_dir, metadata: dict) -> None:
