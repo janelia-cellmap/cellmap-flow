@@ -121,6 +121,16 @@ export function createJobCard(lossPlot) {
     badge.className = "badge " + (outputType === "affinities" ? "bg-warning" : "bg-info");
   }
 
+  // What the job trains with, from its own parameters: submit may have
+  // replaced the form's (a distance model on scribbles trains at margin 0.5).
+  function showTraining(params) {
+    if (!params || !params.loss_type) return;
+    const parts = [`${params.loss_type} loss`];
+    if (params.loss_type === "margin" && params.margin != null) parts.push(`margin ${params.margin}`);
+    if (params.distillation_lambda != null) parts.push(`distillation ${params.distillation_lambda}`);
+    $("jobTraining").textContent = parts.join(", ");
+  }
+
   function showStatus(status) {
     const badge = $("jobStatus");
     badge.textContent = status;
@@ -172,6 +182,7 @@ export function createJobCard(lossPlot) {
     submitted(jobId, modelName, outputType) {
       showJob(jobId, modelName);
       showOutputType(outputType);
+      $("jobTraining").textContent = "-";
       showStatus("SUBMITTED");
       liveEpochState = null;
       restartEpochResetPending = false;
@@ -188,6 +199,7 @@ export function createJobCard(lossPlot) {
     restored(job) {
       showJob(job.job_id, job.model_name);
       showOutputType((job.params && job.params.output_type) || "binary");
+      showTraining(job.params);
       showStatus(job.status);
       showReportedEpoch(job);
       showRestart(job);
@@ -202,6 +214,7 @@ export function createJobCard(lossPlot) {
       if (data.params && data.params.output_type) {
         showOutputType(data.params.output_type);
       }
+      showTraining(data.params);
       showStatus(data.status);
 
       // Surface status transitions even if log stream is temporarily delayed

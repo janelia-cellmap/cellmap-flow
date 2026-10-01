@@ -3,6 +3,7 @@
 import { esc } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer } from "./requests.js";
+import { applyModelDefaults } from "./training-form.js";
 
 // Models only appear in g.models_config once a pipeline has been submitted
 // on the main tab. The finetune tab is usually opened first, so a single
@@ -93,6 +94,8 @@ export function initModelPicker({ log, savedModelName }) {
         modelSelectionDiv.style.display = models.length === 1 ? "none" : "";
         selectedModel = models.find(m => m.name === modelSelect.value) || models[0];
         displayModelInfo(selectedModel);
+        // A new pick, as choosing it would: the defaults of its kind.
+        if (modelSelect.value !== previousName) applyModelDefaults(modelSelect.value);
 
         loggedNoModels = false;
         if (!quiet || models.length !== lastLoadedCount) {

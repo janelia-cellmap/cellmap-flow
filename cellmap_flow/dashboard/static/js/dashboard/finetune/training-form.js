@@ -120,6 +120,27 @@ function trainingParams() {
 // Whether augmentation is worth enabling depends on how many times the run
 // revisits the same patches, which is epochs x batches-per-epoch. Static
 // advice cannot say that, so compute it from the form as it is edited.
+// The cellmap distance models say what they are only by name, which is how
+// submit tells them too (autodetect_output_type).
+export function isDistanceModel(name) {
+  return /distance/i.test(name || "");
+}
+
+// What a distance model trains with on scribbles, set in the form when one is
+// picked so the form shows what the job will get: submit applies the same
+// (training_settings), and a form left at margin 0.3 and distillation 0.01
+// read as if those would be used. Only on picking a model, so values edited
+// afterwards stand.
+export function applyModelDefaults(name) {
+  const distance = isDistanceModel(name);
+  document.getElementById("distanceModelHint").hidden = !distance;
+  if (!distance) return;
+  document.getElementById("marginValue").value = "0.5";
+  const distillation = document.getElementById("distillationLambda");
+  if (!(parseFloat(distillation.value) >= 0.5)) distillation.value = "0.5";
+  saveFinetuneState();
+}
+
 function updateAugmentAdvice() {
   const advice = document.getElementById("augmentAdvice");
   const epochs = parseInt(document.getElementById("numEpochs").value, 10);
@@ -216,6 +237,10 @@ export function initTrainingForm() {
   }
 
   subscribeGpuQueues(showGpuQueues);
+
+  const modelSelect = document.getElementById("modelSelect");
+  modelSelect.addEventListener("change", () => applyModelDefaults(modelSelect.value));
+  document.getElementById("distanceModelHint").hidden = !isDistanceModel(modelSelect.value);
 
   ["numEpochs", "batchSize", "patchesPerEpoch"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", updateAugmentAdvice);
