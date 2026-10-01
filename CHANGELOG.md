@@ -176,6 +176,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - the monitor reads each line of the training log once, and only once it is whole. It no longer re-reads the whole log every 3 s, and no longer announces an iteration under a name cut short mid-write (`m_fi`), so no layer, registered model or `metadata.json` entry gets such a name;
     - the dashboard is told when a finetune's inference server comes up even if the log cannot be re-read at that moment. A failed read used to leave the server marked ready but never announced, so no layer was added;
     - a finetune job's walltime is passed to the job manager (`submit_finetuning_job(walltime=)`), not read from `g`.
+    - a training log with a byte that is not UTF-8 (a user's print, a library) is followed to the end; the monitor used to stop at that byte, and the job ended FAILED;
+    - a job's record includes the log lines written just before it ended, even a last line without its newline. A job LSF said had finished but whose export was missing could be recorded without its last iteration's model and YAML;
+    - an iteration that could not write its serving YAML no longer inherits the previous iteration's. The pipeline builder registers the new model from the run's latest export. It used to register the new name on the previous iteration's weights;
+    - a finetune whose trainer exits with an error ends FAILED (training raised, a first iteration diverged, the inference server would not start). LSF used to see `tee`'s exit status, so such a job was DONE, and COMPLETED whenever an export was on disk;
+    - `restart_signal.json` and every dashboard-side write of `metadata.json` are written whole or not at all.
   - **`cellmap_flow.utils` is dissolved** into the packages that own each piece: `io/`, `jobs/`, `serving/`, `config/yaml.py`, `models/registry`, `models/hf_catalog`, `models/geometry_cache`, `norm/safe_expression`, `dashboard/services/`, and `cellmap_flow.plugins` and `cellmap_flow.logging_setup` at the package root. The three names the docs used keep deprecated aliases for one release: `utils.bsub_utils.install_cleanup_handlers` (now `jobs.launch`), `utils.serialize_config.Config` (now `models.models_config.Config`), and `models.model_registry.list_huggingface_models`/`refresh_huggingface_models` (now `models.hf_catalog`). `python -m cellmap_flow.utils.doctor` is `python -m cellmap_flow.cli.doctor`.
   - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
   - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
@@ -207,6 +212,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `643ee8a` a restart signal is written whole or not at all
+- `4c06023` a finetune whose trainer fails ends FAILED
+- `a6db61f` a job's serving YAML is its latest iteration's, or none
+- `43e1af5` a job that has ended is recorded with the log lines the monitor had not read
+- `c2fc627` a byte in the training log that is not UTF-8 no longer stops the monitor
 - `044c331` a dataset URL is not unescaped
 - `6a9aef5` precomputed://gs:// and precomputed://https:// are read as URLs
 - `6f48f02` an N5 voxel size without an offset is kept
