@@ -28,7 +28,7 @@ from flask import Flask
 
 from cellmap_flow.cli import aliases, main
 from cellmap_flow.cli.server_cli import cli as server_cli
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.models.models_config import (
     BioModelConfig,
     DaCapoModelConfig,
@@ -597,7 +597,6 @@ def dashboard():
 
     app = Flask(__name__)
     app.register_blueprint(models_bp)
-    g.models_config = []
     return app.test_client()
 
 
@@ -631,6 +630,6 @@ def test_the_model_form_parses_and_rejects_the_same_way(dashboard, class_name, p
     assert response.status_code == status, response.get_json()
     if status == 200:
         assert response.get_json()["config_dict"] == expected
-        assert [type(m).__name__ for m in g.models_config] == [class_name]
+        assert [type(m).__name__ for m in get_session().models_config] == [class_name]
     else:
         assert response.get_json()["error"].startswith(expected)

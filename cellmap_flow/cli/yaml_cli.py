@@ -16,7 +16,9 @@ from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs.settings import launcher_settings
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.cli.common import log_level_option
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
@@ -102,8 +104,9 @@ def run_multiple(
         charge_group: Billing/chargeback group
         queue: Job queue name
     """
-    g.queue = queue
-    g.charge_group = charge_group
+    settings = launcher_settings()
+    settings.queue = queue
+    settings.charge_group = charge_group
 
     def _submit_model(model):
         current_data_path = resolve_data_path(dataset_path, getattr(model, "scale", None))
@@ -259,7 +262,8 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
         logger.info(f"Loading normalization/postprocessing from: {json_data}")
         from cellmap_flow.pipeline_spec import PipelineSpec
 
-        g.input_norms, g.postprocess = PipelineSpec.from_json_data(json_data, strict=True).build()
+        chain = process_chain()
+        chain.input_norms, chain.postprocess = PipelineSpec.from_json_data(json_data, strict=True).build()
     else:
         logger.info("Using default normalization and postprocessing")
 
@@ -274,56 +278,58 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     # explicit false pins submissions to `queue`.
     cycle_gpu_queues = config.get("cycle_gpu_queues")
 
-    # Update globals; they are saved to the cache below, once this is a real
-    # run rather than a --validate-only check.
-    g.queue = queue
-    g.charge_group = charge_group
+    # The launcher settings; they are saved below, once this is a real run
+    # rather than a --validate-only check.
+    settings = launcher_settings()
+    settings.queue = queue
+    settings.charge_group = charge_group
     if walltime:
-        g.walltime = walltime
+        settings.walltime = walltime
     if cycle_gpu_queues is not None:
-        g.cycle_gpu_queues = bool(cycle_gpu_queues)
+        settings.cycle_gpu_queues = bool(cycle_gpu_queues)
 
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
     logger.info(f"Queue: {queue}")
-    if not getattr(g, "cycle_gpu_queues", True):
+    if not settings.cycle_gpu_queues:
         logger.info("GPU queue cycling: off (jobs wait for the queue above)")
 
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
+    session = get_session()
     if config["models"]:
         from cellmap_flow.models.registry import build_models
 
         try:
-            g.models_config = build_models(config["models"])
+            session.models_config = build_models(config["models"])
         except ConfigError as e:
             raise click.ClickException(str(e))
     else:
-        g.models_config = []
+        session.models_config = []
         logger.info("No models configured — starting dashboard for interactive use")
 
-    logger.info(f"Configured {len(g.models_config)} model(s):")
-    for i, model in enumerate(g.models_config, 1):
+    logger.info(f"Configured {len(session.models_config)} model(s):")
+    for i, model in enumerate(session.models_config, 1):
         model_name = getattr(model, "name", None) or type(model).__name__
         logger.info(f"  {i}. {model_name} ({type(model).__name__})")
 
     # Validation mode - exit without running
     if validate_only:
         click.echo("\n✓ Configuration is valid!")
-        click.echo(f"  - Models: {len(g.models_config)}")
+        click.echo(f"  - Models: {len(session.models_config)}")
         click.echo(f"  - Data path: {data_path}")
         click.echo(f"  - Queue: {queue}")
         if extra_layers:
             click.echo(f"  - Extra layers: {len(extra_layers)}")
         return
 
-    g.save_server_config()
-    g.extra_layers = build_extra_layers(extra_layers)
+    settings.save()
+    session.extra_layers = build_extra_layers(extra_layers)
 
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()
     try:
-        run_multiple(g.models_config, data_path, charge_group, queue,wrap_raw=wrap_raw)
+        run_multiple(session.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw)
     except JobStartError as e:
         raise click.ClickException(str(e))
 

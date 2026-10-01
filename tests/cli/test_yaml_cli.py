@@ -15,7 +15,6 @@ import zarr
 from click.testing import CliRunner
 
 from cellmap_flow.cli import yaml_cli
-from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.dashboard.services import startup
 from cellmap_flow.dashboard.state import get_session
@@ -107,7 +106,7 @@ def test_a_bad_config_is_reported_and_exits_non_zero(tmp_path, models, extra_lay
     result = CliRunner().invoke(yaml_cli.main, [_config(tmp_path, models, extra_layers), "--validate-only"])
     assert result.exit_code == 1 and message in result.output, result.output
     assert not isinstance(result.exception, ConfigError), "caught, not a traceback"
-    assert g.extra_layers == {}
+    assert get_session().extra_layers == {}
 
 
 def test_extra_layers_are_shown_beside_the_raw_data(tmp_path, monkeypatch):
@@ -124,7 +123,7 @@ def test_extra_layers_are_shown_beside_the_raw_data(tmp_path, monkeypatch):
     ])
     result = CliRunner().invoke(yaml_cli.main, [config])
     assert result.exit_code == 0, result.output
-    layers = g.viewer.state.layers
+    layers = get_session().viewer.state.layers
     assert [layer.name for layer in layers] == ["data", "pred", "ids"]
     pred, ids = layers["pred"].to_json(), layers["ids"].to_json()
     assert (pred["type"], pred["blend"], pred["shader"]) == ("image", "additive", "void main() { emitGrayscale(1.0); }")

@@ -20,7 +20,6 @@ import click
 import yaml
 
 import cellmap_flow
-from cellmap_flow.globals import g
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -112,7 +111,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
 
     from cellmap_flow.cli.main import cli
     from cellmap_flow.dashboard import app as dashboard
-    from cellmap_flow.jobs import launch
+    from cellmap_flow.jobs import launch, settings
     from cellmap_flow.viewer import raw
 
     class FakeViewer:
@@ -127,10 +126,14 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
     started = []
     monkeypatch.setattr(dashboard, "create_and_run_app", lambda **k: started.append(k))
     monkeypatch.setenv("LSB_PROJECT_NAME", "cellmap-fileglancer")
+    monkeypatch.setattr(settings, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
 
     result = CliRunner().invoke(cli, ["view", "-d", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert g.charge_group == "cellmap-fileglancer" and started and raw_layers == [str(tmp_path)]
+    assert settings.launcher_settings().charge_group == "cellmap-fileglancer"
+    assert started and raw_layers == [str(tmp_path)]
 
     result = CliRunner().invoke(cli, ["view", "-d", str(tmp_path), "-P", "explicit"])
-    assert result.exit_code == 0 and g.charge_group == "explicit"
+    assert result.exit_code == 0 and settings.launcher_settings().charge_group == "explicit"
+    # The job's billing, not the user's default for the next dashboard.
+    assert not (tmp_path / "server_config.yaml").exists()

@@ -21,7 +21,7 @@ from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models import registry
 from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.globals import g
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.config.yaml import resolve_data_path
 from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice
 
@@ -93,11 +93,12 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
 
-        # Fall back to cached values if not provided
+        # Fall back to the saved settings if not provided
+        settings = launcher_settings()
         if project is None:
-            project = g.charge_group
+            project = settings.charge_group
         if queue is None:
-            queue = g.queue
+            queue = settings.queue
 
         # Process kwargs for the model config
         for key, value in kwargs.items():
@@ -120,11 +121,11 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             data_path, getattr(model_config, "scale", None)
         )
 
-        # Save server config to cache
-        g.queue = queue
+        # Save them for the next run and the dashboard
+        settings.queue = queue
         if project:
-            g.charge_group = project
-        g.save_server_config()
+            settings.charge_group = project
+        settings.save()
 
         # Run server check or full inference
         if server_check:

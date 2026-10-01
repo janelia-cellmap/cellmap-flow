@@ -7,7 +7,6 @@ import os
 import click
 import logging
 from cellmap_flow.cli.common import log_level_option
-from cellmap_flow.globals import g
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,9 @@ def main(dataset, project):
     import neuroglancer
 
     from cellmap_flow.dashboard.app import create_and_run_app
+    from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
+    from cellmap_flow.jobs.settings import launcher_settings
     from cellmap_flow.viewer.raw import get_raw_layer
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
@@ -62,14 +63,16 @@ def main(dataset, project):
     # Fileglancer runs the viewer as an LSF job, and the models picked in the
     # dashboard should be billed where that job is: LSB_PROJECT_NAME is the
     # job's project. An explicit -P wins over it.
+    # For this process only, not saved: it is this job's billing, not a
+    # default for the next dashboard.
     if os.environ.get("LSB_PROJECT_NAME"):
-        g.charge_group = os.environ["LSB_PROJECT_NAME"]
+        launcher_settings().charge_group = os.environ["LSB_PROJECT_NAME"]
     if project:
-        g.charge_group = project
+        launcher_settings().charge_group = project
 
-    # Set dataset path in globals
-    g.dataset_path = dataset
-    g.viewer = viewer
+    session = get_session()
+    session.dataset_path = dataset
+    session.viewer = viewer
 
     # Add dataset layer to viewer
     with viewer.txn() as s:
