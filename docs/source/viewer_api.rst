@@ -23,7 +23,7 @@ Add an image layer
 ------------------
 
 ``path`` is a zarr or n5 array or multiscale group, or a ``precomputed://``
-URL, opened the same way as the raw dataset. ``shader`` and ``blend`` are
+URL, opened the same way as the raw dataset (see :doc:`data_paths`). ``shader`` and ``blend`` are
 optional and passed to Neuroglancer as they are. A layer with the same name is
 replaced.
 

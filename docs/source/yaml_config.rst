@@ -35,7 +35,8 @@ A configuration file has the following top-level fields:
      - Description
    * - ``data_path``
      - Yes
-     - Path to the input dataset (zarr/n5).
+     - Path to the input dataset: zarr, N5 or precomputed, on disk or at an
+       ``http(s)://``, ``s3://`` or ``gs://`` URL (see :doc:`data_paths`).
    * - ``charge_group``
      - Yes
      - Project billing group.

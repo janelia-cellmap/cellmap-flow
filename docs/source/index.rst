@@ -7,6 +7,7 @@
    cli
    scripts
    yaml_config
+   data_paths
    huggingface
    custom_script
    post
