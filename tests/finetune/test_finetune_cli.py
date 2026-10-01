@@ -55,6 +55,9 @@ def test_the_yaml_serves_the_data_the_run_trained_on(run_cli, tmp_path, manifest
         (tmp_path / "session" / "corrections" / "vol.zarr" / ".zattrs").write_text(json.dumps(attrs))
     cli = run_cli(manifest=manifest)
     assert yaml.safe_load(open(_yamls(cli)[-1]))["data_path"] == "/data/raw.zarr"
+    # At the level it trained on: the server picks it by the model's voxel
+    # size, as the trainer did. The YAML said "scale: s0", whatever that was.
+    assert "scale" not in _served_entry(cli)
 
 
 def test_a_run_whose_data_nothing_names_still_succeeds_without_a_yaml(run_cli):

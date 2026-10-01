@@ -33,7 +33,7 @@ def generate_finetuned_model_yaml(
     queue: str = None,
     charge_group: str = None,
     json_data: dict = None,
-    scale: str = "s0",
+    scale: str = None,
     weights_path: str = None,
 ) -> Path:
     """
@@ -54,7 +54,11 @@ def generate_finetuned_model_yaml(
         queue: LSF queue name; None is the site's default queue
         charge_group: LSF charge group; None is the site's default one
         json_data: Optional dict with input_norm and postprocess from base model
-        scale: Scale level (e.g., "s0", "s1") from base model
+        scale: The level of a multiscale ``data_path`` to serve ("s1"), or
+            None for none. With none, the server picks the level by the
+            model's input voxel size, which is how the trainer read the same
+            ``data_path``. This was always "s0", so a model trained on s1 of
+            a multiscale group was served s0.
 
     Returns:
         Path to the generated YAML file
@@ -78,8 +82,9 @@ def generate_finetuned_model_yaml(
         "type": "finetune",
         "name": model_name,
         "base_model": base_model_dict,
-        "scale": scale,
     }
+    if scale:
+        model_entry["scale"] = scale
     if weights_path:
         model_entry["weights_path"] = weights_path
     else:

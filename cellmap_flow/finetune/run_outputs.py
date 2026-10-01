@@ -176,6 +176,10 @@ def write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_d
         )
 
     export_root = Path(export_dir)
+    # No scale: the trainer read data_path at the model's input voxel size,
+    # which picks the level of a multiscale group, and the server picks the
+    # same one the same way. Naming a level could only disagree with it.
+    #
     # The job's own queue and charge group, when the job manager passed them;
     # the template's defaults otherwise.
     scheduler = {
