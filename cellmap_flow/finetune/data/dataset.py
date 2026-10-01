@@ -135,7 +135,7 @@ class VirtualPatchDataset(Dataset):
 
         sampler = self.sampler
         n_dense, n_sparse = int(sampler.dense.shape[0]), int(sampler.sparse.shape[0])
-        n_sparse_fg = sampler.sparse_foreground
+        n_sparse_fg = int(sampler.sparse_foreground_rows.size)
         logger.info(
             f"VirtualPatchDataset: patch centres from {sampler.annotated_chunks} annotated "
             f"chunk(s) ({sampler.chunk_files} chunk files on disk) of {self.volume_zarr_path}: "

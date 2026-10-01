@@ -46,6 +46,14 @@ logger = logging.getLogger(__name__)
 # of int64. A volume is far below 2**31 voxels along any axis.
 POOL_DTYPE = np.int32
 
+# The share of painted patches centred on a painted foreground voxel; the
+# rest are drawn by chunk, background fixes included. nnU-Net's
+# oversample_foreground_percent (Isensee et al., 2021): the usual floor for
+# sparse labels, so that a session of mostly background fixes still trains
+# on the objects it painted, while the class-balanced loss weighs what each
+# patch holds.
+FOREGROUND_SHARE = 1 / 3
+
 
 class PatchSampler:
     """The patch centres of one annotation volume, and the draw among them.
@@ -70,8 +78,8 @@ class PatchSampler:
         sparse_chunk_starts: where each chunk's voxels begin in ``sparse``,
             plus its length at the end: chunk i holds rows
             ``sparse_chunk_starts[i]:sparse_chunk_starts[i + 1]``.
-        sparse_foreground: how many of ``sparse`` are foreground; the rest
-            are painted background.
+        sparse_foreground_rows: the rows of ``sparse`` that are foreground;
+            the rest are painted background.
         effective_dense_ratio: the share of non-rehearsal patches taken from
             ``dense``; ``dense_to_sparse_ratio`` as asked (None: auto),
             clamped away from an empty pool.
@@ -117,7 +125,9 @@ class PatchSampler:
         The centre is not whole voxels yet (see PatchReader.snap). What is
         drawn from ``rng``, in order: rehearsal or not (only when there is a
         usable good region); then which region, or else which pool (only when
-        both can be chosen), which voxel of it, and the jitter.
+        both can be chosen); in the painted pool, whether to centre on
+        foreground (only when some is painted), then which chunk, or which
+        foreground voxel; which voxel, and the jitter.
         """
         if (
             self.effective_rehearsal_fraction > 0.0
@@ -131,8 +141,11 @@ class PatchSampler:
         use_dense = self.effective_dense_ratio >= 1.0 or (
             self.effective_dense_ratio > 0.0 and rng.random() < self.effective_dense_ratio
         )
+        foreground = self.sparse_foreground_rows
         if use_dense:
             anchor = self.dense[rng.integers(0, self.dense.shape[0])]
+        elif foreground.size and rng.random() < FOREGROUND_SHARE:
+            anchor = self.sparse[foreground[rng.integers(0, foreground.size)]]
         else:
             # A chunk first, then a voxel in it: each place that was painted
             # gets about the same share of patches, however many voxels its
@@ -212,7 +225,7 @@ class PatchSampler:
         dense_rows: List[np.ndarray] = []
         sparse_rows: List[np.ndarray] = []
         n_fg_chunks = 0  # chunks that contributed voxels to a pool
-        sparse_foreground = 0
+        sparse_is_fg: List[np.ndarray] = []  # per sparse_rows entry, which rows are foreground
         for index in chunks:
             chunk_origin = np.array(index, dtype=np.int64) * chunk_shape
             chunk_data = arr.blocks[index]
@@ -225,7 +238,7 @@ class PatchSampler:
                     continue
                 n_fg_chunks += 1
                 sparse_rows.append((painted_local + chunk_origin).astype(POOL_DTYPE))
-                sparse_foreground += int((chunk_data[tuple(painted_local.T)] >= 2).sum())
+                sparse_is_fg.append(chunk_data[tuple(painted_local.T)] >= 2)
                 continue
             annotated_local = np.argwhere(chunk_data >= 1).astype(np.int64)
             if not annotated_local.size:
@@ -239,7 +252,7 @@ class PatchSampler:
                 contributed = True
             if (~in_dense).any():
                 sparse_rows.append(annotated_global[~in_dense].astype(POOL_DTYPE))
-                sparse_foreground += int((is_fg & ~in_dense).sum())
+                sparse_is_fg.append(is_fg[~in_dense])
                 contributed = True
             n_fg_chunks += int(contributed)
 
@@ -253,7 +266,9 @@ class PatchSampler:
         self.sparse_chunk_starts = np.concatenate(
             [[0], np.cumsum([rows.shape[0] for rows in sparse_rows], dtype=np.int64)]
         ).astype(np.int64)
-        self.sparse_foreground = sparse_foreground
+        self.sparse_foreground_rows = (
+            np.flatnonzero(np.concatenate(sparse_is_fg)) if sparse_is_fg else np.zeros(0, dtype=np.int64)
+        )
         if self.dense.shape[0] == 0 and self.sparse.shape[0] == 0 and bbox_offsets.shape[0]:
             # Imported crops that are all background, and nothing painted:
             # centre on the crops' annotated voxels rather than refuse. Their
