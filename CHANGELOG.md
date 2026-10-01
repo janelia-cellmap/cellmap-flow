@@ -109,14 +109,14 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - fp16 is opt-in (`CELLMAP_FLOW_HALF_PRECISION=1`, or `half_precision = True` in a model script), checked against fp32 at warmup; a model that differs by more than 1% of its output range is served in fp32.
   - Round 1's 5 s bpeek backoff is reverted (`94e8de5`). NFS can hide the new ready file for up to 30 s, and the backoff then delayed server detection.
   - A blockwise worker checks its first model's shapes once, on the warmup forward. It used to run the check a second time, on whatever device the loader left the model on.
-  - The pipeline builder builds its nodes from elements, not HTML strings (`00e9034`, X2). Ids, names and parameters in an imported YAML or JSON file can no longer run as script in the dashboard, and a node whose id holds a quote now works.
+  - The pipeline builder builds its nodes from elements, not HTML strings (`629bfa1`, X2). Ids, names and parameters in an imported YAML or JSON file can no longer run as script in the dashboard, and a node whose id holds a quote now works.
   - Finetune:
     - a YAML crop imported with several CPUs no longer loses rows where two parallel slabs met: the slabs are cut on the volume's chunk rows, so each chunk has one writer;
     - a new volume's voxel count is its data's extent in output voxels, rounded up, one rule for create-volume, crop import and `build_corrections`; on every level tried it equals the old count;
     - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
     - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed;
-    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`e293b1d`);
-    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`0fd7892`);
+    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`3cccd79`);
+    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`42a3797`);
     - a LoRA job restarted with `lora_r=0` keeps its adapter's alpha. It used to get alpha 0, so every later iteration trained nothing and served the base model.
   - Viewer and dashboard (wave 3):
     - the startup viewer draws a labelling model's output as segmentations, as Submit already did;
@@ -281,136 +281,136 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
-- `ae35844c` anchor a painted session at random points of the volume
-- `2813a4fe` resume a session only over the dataset it was painted on
-- `fa0e43ba` centre a third of painted patches on painted foreground
-- `de1bab7d` a distance model trained on scribbles asks only for the side of 0.5
-- `d662b1bd` draw a painted patch by chunk, then by voxel, and say what the patches centre on
-- `c494d165` kill a server still starting, and on SIGHUP, when the launcher stops
-- `0f612d1` a whole-nm start just below a voxel boundary reads from that boundary
-- `42409d7` the unwrapped raw layer names a precomputed volume whole and an unsuffixed zarr URL as zarr
-- `41aacc6` a container ends at a path component ending in .zarr or .n5
-- `38292fc` zarr and N5 metadata are read from their JSON through io.store, so a URL reads as the same files on disk
-- `58a5372` arrays at s3:// and gs:// URLs are opened through one kvstore module
-- `1982372` importing the server, the Inferencer or ImageDataInterface no longer configures logging
-- `13499bf` the Finetune tab's volume layer is annotation_<id>, the name the server gives it
-- `0f4aea0` the Finetune tab offers Restart only to a job that can take one
-- `21bf12b` a finetuned model's serving YAML names no scale
-- `bd43155` read a model's channel names as channel_names_of does when detecting affinities
-- `e9f77d7` submit pulls the strokes from MinIO before deciding whether the session is sparse
-- `a522c4c` a restart applies submit's loss and target adjustments
-- `40ce2cd` refuse a restart the job cannot take before writing the manifest or syncing
-- `eaa2cef` reattaching a zarr that is not an annotation volume is refused
-- `2a67670` load-crops and instance layers come with the draw tools bound, selected
-- `3c4225b` a crop import goes into the session's latest volume
-- `c88db2b` instance sync and cc3d accept the zarr_path create answers
-- `90187bb` resuming a session carries its good regions
-- `7c4618a` load-crops reads only YAML files, and neither YAML route says which files exist
-- `8e00048` the finetune job logs in the shared format, and imports globals no more
-- `f32e318` the finetune job replaces metadata.json whole
-- `d5eadc4` a served job waits out a half-written restart signal, and takes each restart once
-- `4b7f4d9` a served job whose training fails keeps serving and waits for a restart
-- `ba1e5cf` a restart refuses settings that convert but cannot train
-- `cfb3f8a` a restart whose trainer cannot be built leaves its reset to the next restart
-- `255857e` the pipeline builder reads an imported pipeline as it reads the page's own
-- `2eb3c00` /api/models, /update/equivalences and /api/bbx-generator refuse a bad body with a 400, and a count of 2.5 is refused
-- `dc73f28` the review and pipeline routes answer bad input with a JSON error that says why
-- `12b968c` cancelling the box tool while its viewer loads starts no status poll
-- `d56644e` behind a reverse proxy, the box tool's viewer is loaded through it
-- `871e713` the pipeline builder shows a refused apply as an error, with the server's reason
-- `b931f83` the pipeline builder opens a saved canvas where it was left, with its edges
-- `65650b5` the Flow Logs stream no longer dies on a record logged while it replays, and shows a traceback whole
-- `184119f` the Review tab's Next skips the shown rank only in the queue it came from
-- `e220c06` a PUT /api/pipeline that leaves the chain as drawn leaves the viewer alone
-- `bc30003` Submit on the Models tab no longer kills a running finetune job
-- `d67aa94` resume a checkpoint saved without loss scaling
-- `8a2f642` a stop between epochs no longer skips one on resume
-- `c88288c` an epoch that supervised nothing is never the best
-- `b94078e` run the startup probes in eval mode
-- `b14d443` a YAML's json_data is the dashboard's chain as written
-- `6b3b9f0` build_corrections builds background-only crops instead of refusing them
-- `3cf81d2` build_corrections' sampling flags win over the crops YAML
-- `73dded8` a background-only imported crop gets a patch per annotated chunk, like any other pool
-- `afb8559` read the raw patch as a box of raw voxels, so fractional voxel sizes get all of it
-- `d61b4a1` read annotation patches in the volume's dtype, so instance ids past 255 survive
-- `0d500b1` read a string of channel names as one name in the affinity check
-- `a716f64` post merged ids to the dashboard off the chunk request
-- `a471068` refuse Lambda expressions that ask for unbounded memory
-- `8fce6d6` count chunk indices from the output grid's origin
-- `643ee8a` a restart signal is written whole or not at all
-- `4c06023` a finetune whose trainer fails ends FAILED
-- `a6db61f` a job's serving YAML is its latest iteration's, or none
-- `43e1af5` a job that has ended is recorded with the log lines the monitor had not read
-- `c2fc627` a byte in the training log that is not UTF-8 no longer stops the monitor
-- `044c331` a dataset URL is not unescaped
-- `6a9aef5` precomputed://gs:// and precomputed://https:// are read as URLs
-- `6f48f02` an N5 voxel size without an offset is kept
-- `1a4f46d` a remote level its group doesn't list reads its own attributes
-- `0af021e` g refuses a name it never had
-- `f437b3a` launchers start servers with `cellmap_flow serve --model` (K4)
-- `03a1499` plugins load when a command starts, not at import (K21)
-- `5800117` `cellmap_flow dashboard` serves the dashboard alone (K5)
-- `2de186f` `cellmap_flow run` is a deprecated alias of `infer` (K3)
-- `baf62ef` one cellmap_flow command, with a subcommand per job (K2)
-- `ce0aba5` short flags go to a model's arguments in signature order (K1)
-- `bb1b71a` neuroglancer may zoom out 64x past a pyramid's coarsest level
-- `fbc65b3` a pyramid level that is not a power-of-two downsampling is left out
-- `c61d440` a single array's contrast falls back to its dtype's range
-- `c4321de` a precomputed volume is read at the scale for the voxel size asked
-- `e286362` load_config refuses a YAML that is not a path
-- `d1c632c` a model's channels given as one string name one channel
-- `1bf82c7` the server is announced from what the monitor has read
-- `6ebc046` the monitor reads each log line once, and only once it is whole
-- `79e11ee` a finished job whose record cannot be read stays COMPLETED
-- `987a0f3` without its YAML, a finetune is registered on the base its run recorded
-- `d08eb4c` a Fly model reaches the trainer as its entry, sizes and all
-- `886bc0f` blockwise refuses a task YAML that is not a path
-- `ccf6501` blockwise takes a model's channel names from its geometry
-- `bb1980d` the pipeline builder opens on the live chain
-- `a3bf4ee` the Training Logs note names the log file from the start
-- `0653621` the Review tab's progress refresh pauses while the page is hidden
-- `f2d7340` a job is COMPLETED only once its export has been found
-- `447df64` the training logs keep the last 1,000 lines
-- `df561ef` the finetune status poll stops at a final status or a 404
-- `390520e` a read wholly outside the array is padding
-- `b2fde02` a precomputed volume of several scales is shown as their pyramid
-- `21681ac` a precomputed path's scale is its last /s<N>
-- `aa8d5c7` blockwise submit refuses a yaml_paths that is not a list of paths
-- `47f0417` a malformed blockwise request is answered with what is wrong
-- `ee0ab90` one PUT /api/pipeline sets the chain and redraws the layers (K11)
-- `d9277c4` a Hugging Face model's metadata is fetched again after a failure
-- `7fa6907` a shape mismatch names the model's type
-- `b1671e0` a config with no name falls back to float32 output
-- `6549224` a Fly model given one of its sizes asks for the other
-- `78743c7` a malformed finetune request is refused before anything is done
-- `bebd1a2` a restart that cannot change the rank records the rank kept
-- `1267947` a finetuned model's layer is the layer every model gets
-- `ceb4102` the dashboard's GPU queue poll pauses while the page is hidden
-- `05ea8ee` the pipeline builder's unload beacon only sends a change
-- `aec6f7a` the pipeline builder reads and writes its YAML with js-yaml
-- `2b58b67` build the sampling pools in chunk order, not listing order
-- `dbfd27e` a missing path under a zarr v3 group is missing
-- `0a49912` an N5 units string is every axis's unit
-- `f421525` the raw layer takes a pyramid's levels from its multiscales
-- `0a9060d` a read starting off the grid before voxel 0 floors
-- `4b814e2` pause the Finetune tab's model and progress polls while the page is hidden
-- `03352f1` a LoRA job restarted at rank 0 keeps its adapter's alpha
-- `38883d9` a bad model-form or set-data body is the settings forms' 400
-- `ad09407` a model without a channel axis gets a 3-D overlay transform
-- `2bfa838` draw a model's output where its server says it lies
-- `c6ecdeb` a model started from the Models tab gets the layer Submit gives it
-- `a34b1fe` the startup viewer draws a labelling chain as segmentations
-- `000e4ba` delete the Conv3d-only merge that `56701dc` replaced
-- `56701dc` fold every adapted layer in export_merged, through LoraStrategy.merge
-- `45c5b1a` cut a crop's parallel slabs on the volume's chunk rows
-- `26144fb` don't invent the geometry of a volume that lacks it
-- `f9d276f` count a new volume's voxels from the data, rounding up
-- `7c51f0b` check a blockwise worker's first model on its warmup only
-- `6329e40` check a served model's shapes on its warmup forward
-- `5c32fba` skip a chunk whose client hung up before its turn on the GPU
-- `ca73a34` let chunk requests use the GPU one at a time, in arrival order
-- `8623842` behind a reverse proxy, load the viewer through the proxy
-- `0125536` pin the viewer's dimensions to the raw data's finest level
+- `d378bc0e` anchor a painted session at random points of the volume
+- `5c12677a` resume a session only over the dataset it was painted on
+- `d2b7ddbc` centre a third of painted patches on painted foreground
+- `b814d19d` a distance model trained on scribbles asks only for the side of 0.5
+- `3dfd0705` draw a painted patch by chunk, then by voxel, and say what the patches centre on
+- `e6f4b862` kill a server still starting, and on SIGHUP, when the launcher stops
+- `b14499e` a whole-nm start just below a voxel boundary reads from that boundary
+- `9eeea9f` the unwrapped raw layer names a precomputed volume whole and an unsuffixed zarr URL as zarr
+- `a3963f3` a container ends at a path component ending in .zarr or .n5
+- `2499b1d` zarr and N5 metadata are read from their JSON through io.store, so a URL reads as the same files on disk
+- `7b9f67e` arrays at s3:// and gs:// URLs are opened through one kvstore module
+- `84ca6d1` importing the server, the Inferencer or ImageDataInterface no longer configures logging
+- `3215381` the Finetune tab's volume layer is annotation_<id>, the name the server gives it
+- `415d54a` the Finetune tab offers Restart only to a job that can take one
+- `b54bb23` a finetuned model's serving YAML names no scale
+- `992fded` read a model's channel names as channel_names_of does when detecting affinities
+- `9d2ba11` submit pulls the strokes from MinIO before deciding whether the session is sparse
+- `63f4fbf` a restart applies submit's loss and target adjustments
+- `7b7fff0` refuse a restart the job cannot take before writing the manifest or syncing
+- `34f4fdb` reattaching a zarr that is not an annotation volume is refused
+- `8086a91` load-crops and instance layers come with the draw tools bound, selected
+- `340bfc8` a crop import goes into the session's latest volume
+- `14c8d09` instance sync and cc3d accept the zarr_path create answers
+- `eb8cb06` resuming a session carries its good regions
+- `f73422a` load-crops reads only YAML files, and neither YAML route says which files exist
+- `17a5ca4` the finetune job logs in the shared format, and imports globals no more
+- `0b83a45` the finetune job replaces metadata.json whole
+- `f3d5606` a served job waits out a half-written restart signal, and takes each restart once
+- `eac9e46` a served job whose training fails keeps serving and waits for a restart
+- `ae4264e` a restart refuses settings that convert but cannot train
+- `57b9f24` a restart whose trainer cannot be built leaves its reset to the next restart
+- `0252c8f` the pipeline builder reads an imported pipeline as it reads the page's own
+- `863dc5a` /api/models, /update/equivalences and /api/bbx-generator refuse a bad body with a 400, and a count of 2.5 is refused
+- `1c1de37` the review and pipeline routes answer bad input with a JSON error that says why
+- `2e6f1c9` cancelling the box tool while its viewer loads starts no status poll
+- `4268e10` behind a reverse proxy, the box tool's viewer is loaded through it
+- `8cfe757` the pipeline builder shows a refused apply as an error, with the server's reason
+- `e71ba2a` the pipeline builder opens a saved canvas where it was left, with its edges
+- `8052b75` the Flow Logs stream no longer dies on a record logged while it replays, and shows a traceback whole
+- `06d96f1` the Review tab's Next skips the shown rank only in the queue it came from
+- `2264302` a PUT /api/pipeline that leaves the chain as drawn leaves the viewer alone
+- `0b94aa6` Submit on the Models tab no longer kills a running finetune job
+- `ea3abb1` resume a checkpoint saved without loss scaling
+- `4904db3` a stop between epochs no longer skips one on resume
+- `736352c` an epoch that supervised nothing is never the best
+- `ec7c925` run the startup probes in eval mode
+- `4a5caaf` a YAML's json_data is the dashboard's chain as written
+- `f3b3e79` build_corrections builds background-only crops instead of refusing them
+- `60acf1a` build_corrections' sampling flags win over the crops YAML
+- `ff468aa` a background-only imported crop gets a patch per annotated chunk, like any other pool
+- `5769548` read the raw patch as a box of raw voxels, so fractional voxel sizes get all of it
+- `c677cfa` read annotation patches in the volume's dtype, so instance ids past 255 survive
+- `73f74d8` read a string of channel names as one name in the affinity check
+- `c4720d2` post merged ids to the dashboard off the chunk request
+- `0016191` refuse Lambda expressions that ask for unbounded memory
+- `b7dc120` count chunk indices from the output grid's origin
+- `d4fbc4b` a restart signal is written whole or not at all
+- `cefdb5e` a finetune whose trainer fails ends FAILED
+- `d5f2226` a job's serving YAML is its latest iteration's, or none
+- `514cc6d` a job that has ended is recorded with the log lines the monitor had not read
+- `2f5375b` a byte in the training log that is not UTF-8 no longer stops the monitor
+- `389d542` a dataset URL is not unescaped
+- `c491ecf` precomputed://gs:// and precomputed://https:// are read as URLs
+- `2561f97` an N5 voxel size without an offset is kept
+- `a832eca` a remote level its group doesn't list reads its own attributes
+- `c5467ca` g refuses a name it never had
+- `c63c298` launchers start servers with `cellmap_flow serve --model` (K4)
+- `b2787a0` plugins load when a command starts, not at import (K21)
+- `3c8efc0` `cellmap_flow dashboard` serves the dashboard alone (K5)
+- `73a752c` `cellmap_flow run` is a deprecated alias of `infer` (K3)
+- `59e6f6a` one cellmap_flow command, with a subcommand per job (K2)
+- `420d9c8` short flags go to a model's arguments in signature order (K1)
+- `7e3b7b4` neuroglancer may zoom out 64x past a pyramid's coarsest level
+- `cc9d313` a pyramid level that is not a power-of-two downsampling is left out
+- `f8fd9e2` a single array's contrast falls back to its dtype's range
+- `6aa8c1c` a precomputed volume is read at the scale for the voxel size asked
+- `2d58c2d` load_config refuses a YAML that is not a path
+- `a1789b5` a model's channels given as one string name one channel
+- `fa870ff` the server is announced from what the monitor has read
+- `c798df0` the monitor reads each log line once, and only once it is whole
+- `a102b9a` a finished job whose record cannot be read stays COMPLETED
+- `4fbe8d9` without its YAML, a finetune is registered on the base its run recorded
+- `1dda6c9` a Fly model reaches the trainer as its entry, sizes and all
+- `e2d911c` blockwise refuses a task YAML that is not a path
+- `80fffa6` blockwise takes a model's channel names from its geometry
+- `32e6ecb` the pipeline builder opens on the live chain
+- `dc9b5ad` the Training Logs note names the log file from the start
+- `b0a0d31` the Review tab's progress refresh pauses while the page is hidden
+- `c06f2c1` a job is COMPLETED only once its export has been found
+- `7803360` the training logs keep the last 1,000 lines
+- `e6356e2` the finetune status poll stops at a final status or a 404
+- `04c339c` a read wholly outside the array is padding
+- `1fc77db` a precomputed volume of several scales is shown as their pyramid
+- `d5efd66` a precomputed path's scale is its last /s<N>
+- `e1af0bf` blockwise submit refuses a yaml_paths that is not a list of paths
+- `201c627` a malformed blockwise request is answered with what is wrong
+- `7061cac` one PUT /api/pipeline sets the chain and redraws the layers (K11)
+- `4828f57` a Hugging Face model's metadata is fetched again after a failure
+- `810d1c1` a shape mismatch names the model's type
+- `87997ef` a config with no name falls back to float32 output
+- `e512c7c` a Fly model given one of its sizes asks for the other
+- `fc98506` a malformed finetune request is refused before anything is done
+- `3851e5c` a restart that cannot change the rank records the rank kept
+- `4521218` a finetuned model's layer is the layer every model gets
+- `2105ef6` the dashboard's GPU queue poll pauses while the page is hidden
+- `73bd596` the pipeline builder's unload beacon only sends a change
+- `f9bff8a` the pipeline builder reads and writes its YAML with js-yaml
+- `f731cde` build the sampling pools in chunk order, not listing order
+- `340f62d` a missing path under a zarr v3 group is missing
+- `e07caeb` an N5 units string is every axis's unit
+- `b952b5c` the raw layer takes a pyramid's levels from its multiscales
+- `17ad6d7` a read starting off the grid before voxel 0 floors
+- `1cdf71e` pause the Finetune tab's model and progress polls while the page is hidden
+- `1f2525c` a LoRA job restarted at rank 0 keeps its adapter's alpha
+- `45d8e05` a bad model-form or set-data body is the settings forms' 400
+- `fc24da1` a model without a channel axis gets a 3-D overlay transform
+- `03bdfe4` draw a model's output where its server says it lies
+- `e44e503` a model started from the Models tab gets the layer Submit gives it
+- `b25aeb5` the startup viewer draws a labelling chain as segmentations
+- `db929cc` delete the Conv3d-only merge that `a7446d4` replaced
+- `a7446d4` fold every adapted layer in export_merged, through LoraStrategy.merge
+- `22abdc9` cut a crop's parallel slabs on the volume's chunk rows
+- `d5d7259` don't invent the geometry of a volume that lacks it
+- `b7fe6c9` count a new volume's voxels from the data, rounding up
+- `6a391c7` check a blockwise worker's first model on its warmup only
+- `ca6a6fc` check a served model's shapes on its warmup forward
+- `912abaf` skip a chunk whose client hung up before its turn on the GPU
+- `0796abe` let chunk requests use the GPU one at a time, in arrival order
+- `f488b69` behind a reverse proxy, load the viewer through the proxy
+- `8e3b134` pin the viewer's dimensions to the raw data's finest level
 - `6650a2c` name a blockwise run after the job name typed for it
 - `99d3948` separate the model and task names in a blockwise task id
 - `8e8c306` the blockwise master builds no Inferencers

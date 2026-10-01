@@ -140,7 +140,7 @@ FULL_CHECKPOINT = [
     "training_stats",
 ]
 
-# platform: case: numbers, recorded at 3af8578 (the finetune and py311 envs);
+# platform: case: numbers, recorded at 6cbce24 (the finetune and py311 envs);
 # the LoRA and BatchNorm cases re-recorded when the startup probes moved to eval mode.
 NUMBERS = {
     "2.11.0/AVX512": {
