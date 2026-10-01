@@ -262,8 +262,8 @@ def test_apply_keeps_the_builders_steps_in_order_with_the_name_last(dashboard):
     assert get_session().builder_model_configs["mito"] == {"type": "script", "script_path": "/m.py"}
 
 
-def test_after_a_yaml_boot_the_config_is_the_live_chain():
-    # yaml_cli builds the live chain from json_data and leaves the configs empty.
+def test_a_chain_set_only_live_is_read_from_its_steps():
+    # A script that assigns the live chain leaves the configs empty.
     chain = process_chain()
     chain.input_norm_config, chain.postprocess_config = {}, {}
     chain.input_norms = [MinMaxNormalizer(min_value="0"), LambdaNormalizer("x*2")]

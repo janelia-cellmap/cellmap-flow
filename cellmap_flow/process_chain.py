@@ -30,9 +30,9 @@ class ProcessChain:
         # The chain's steps as the dashboard received them, which the
         # finetune submit/restart flow hands the trainer so it normalizes
         # as inference does. Written only by set(); read them through spec,
-        # which falls back to the live instances when these are empty
-        # (yaml_cli and blockwise set input_norms and postprocess from a YAML
-        # without touching them).
+        # which falls back to the live instances when these are empty (a
+        # script that assigns input_norms or postprocess itself, as the
+        # deprecated g.input_norms = [...] does, leaves them untouched).
         self.input_norm_config = {}
         self.postprocess_config = {}
 
@@ -96,10 +96,11 @@ def _chain_config(steps) -> list:
 def _configured_steps(config, live):
     """The configured steps, or the live chain's when none are configured.
 
-    The fallback matters because some startup paths (yaml_cli) populate the
-    live chain from the YAML at server boot but never touch the config -- if
-    the user submits training without first pressing Submit, the manifest
-    would otherwise be written empty.
+    The fallback matters because a script can assign the live chain itself
+    (``process_chain().input_norms = [...]``, or the deprecated
+    ``g.input_norms = [...]``) without touching the config; ``spec`` would
+    otherwise read as empty, and a finetune manifest written from it would
+    train on unnormalized input.
     """
     if config:
         return normalize_steps(config)

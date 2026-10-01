@@ -1,9 +1,9 @@
 """The deprecated ``cellmap_flow.globals.g``: for one release, every name it
 had still works, on its owner's state, and warns with what replaces it.
 
-Scripts and plugins outside the package are what still use g; the documented
-use is ``g.input_norms = [...]`` in a user's process_chunk script
-(docs/source/scripts.rst).
+Scripts and plugins outside the package are what still use g, typically a
+user's process_chunk script that sets ``g.input_norms = [...]``; the docs now
+show ``process_chain().set(...)`` instead (docs/source/scripts.rst).
 """
 
 import re
