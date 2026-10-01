@@ -44,6 +44,16 @@ check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "ce
       + [f"cellmap_flow.serving.{m}" for m in ("virtual_zarr", "protocol", "client", "probe", "restart_token")],
       LIGHT + ["torch"])
 """,
+    # cellmap_flow_server applies --log-level before it imports the server,
+    # which reset it to INFO while the server imported globals.
+    "server-logging": """
+import logging
+root = logging.getLogger()
+root.setLevel(logging.WARNING)
+handlers = list(root.handlers)
+check(["cellmap_flow.server"], ["cellmap_flow.globals", "cellmap_flow.dashboard", "neuroglancer", "torch"])
+assert (root.level, root.handlers) == (logging.WARNING, handlers)
+""",
     # describe_types() runs when the dashboard opens its model form. It
     # imports the model config classes, which the CLIs, servers and blockwise
     # workers import too; a type loads its framework only to build a model.

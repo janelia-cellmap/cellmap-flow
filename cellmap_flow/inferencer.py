@@ -14,7 +14,6 @@ import logging
 
 import numpy as np
 
-import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
 from cellmap_flow.inference.runner import ModelRunner
 from cellmap_flow.inference.runner import predict  # noqa: F401  (the script contract; WRAPPERS.md)
 from cellmap_flow.process_chain import process_chain

@@ -20,7 +20,6 @@ import numpy as np
 import tensorstore as ts
 from funlib.geometry import Coordinate
 
-import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
 from cellmap_flow.io import multiscale, paths
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import ArrayMeta, read_array_meta, snap_integral

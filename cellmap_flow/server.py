@@ -30,8 +30,6 @@ from cellmap_flow.serving.protocol import (
 )
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 
-import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
-
 import requests
 import time
 
