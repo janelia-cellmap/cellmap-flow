@@ -152,20 +152,20 @@ def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
     return (match[1], int(match[2])) if match else (path, None)
 
 
-def precomputed_kvstore(path: str) -> Tuple[object, int]:
-    """``(kvstore, scale_index)`` for a precomputed path, as tensorstore opens it.
+def precomputed_volume(path: str) -> Tuple[str, int]:
+    """``(volume location, scale index)`` for a precomputed path: the volume's
+    local directory or URL, which ``io.store`` reads, and the scale a trailing
+    ``/s<N>`` names (``precomputed_scale``), else 0.
 
-    A trailing ``/s<N>`` names the scale (``precomputed_scale``), else it is
-    scale 0. ``precomputed://`` followed by a URL -- neuroglancer's way of
-    writing a cloud source, ``precomputed://gs://bucket/volume`` or
+    ``precomputed://`` followed by a URL -- neuroglancer's way of writing a
+    cloud source, ``precomputed://gs://bucket/volume`` or
     ``precomputed://https://host/volume`` -- is that URL, as is a bare
-    ``gs://`` path; tensorstore reads each through its own kvstore. Any other
-    ``precomputed://`` path is a local directory.
+    ``gs://`` path. Any other ``precomputed://`` path is a local directory.
 
-    ``gs://`` is only ever precomputed here: zarr and N5 are read through
-    fsspec, which has no gs:// support installed, so a ``gs://`` path with a
-    ``.zarr``/``.n5`` suffix raises ValueError rather than being opened as a
-    precomputed volume that isn't there.
+    ``gs://`` is only ever precomputed here: zarr and N5 metadata are read
+    through fsspec, which has no gs:// support installed, so a ``gs://`` path
+    with a ``.zarr``/``.n5`` suffix raises ValueError rather than being opened
+    as a precomputed volume that isn't there.
     """
     if path.startswith("gs://") and suffix_format(path) is not None:
         bucket_path = path[len("gs://"):]
@@ -175,8 +175,6 @@ def precomputed_kvstore(path: str) -> Tuple[object, int]:
             f"https://storage.googleapis.com/{bucket_path} instead"
         )
     location, scale_index = precomputed_scale(_location(path))
-    scale_index = scale_index or 0
-    if "://" in location:
-        return location, scale_index
-    return {"driver": "file", "path": os.path.normpath("/" + location.lstrip("/"))}, scale_index
-
+    if "://" not in location:
+        location = os.path.normpath("/" + location.lstrip("/"))
+    return location, scale_index or 0

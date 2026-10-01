@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import threading
+import urllib.parse
 from types import SimpleNamespace
 
 import numpy as np
@@ -61,15 +62,76 @@ def _unlisted_level(f):
     return f.write_array("zarr2", DATA, {"resolution": [16] * 3, "offset": [0] * 3}, "u.zarr/raw/s1")
 
 
+class _Buckets(http.server.SimpleHTTPRequestHandler):
+    """A directory served as a web server, an S3 endpoint and GCS, by the
+    first part of the request path, which names the "bucket":
+
+    - ``/web/<key>``: plain http;
+    - ``/bkt/<key>``: a public S3 bucket (path-style), which refuses a signed
+      request as S3 refuses a public read signed with a key it doesn't know;
+    - ``/private/<key>``: an S3 bucket that needs a signed request;
+    - ``/storage/v1/b/<bucket>/o/<key>``: GCS's JSON API, which refuses the
+      bucket "denied" (as when broken credentials are sent); ``/denied/<key>``
+      is that bucket's public URL.
+
+    Every bucket holds the same files. S3 needs an ETag on every object.
+    """
+
+    def log_message(self, *args):
+        pass
+
+    def end_headers(self):
+        self.send_header("ETag", '"0"')
+        super().end_headers()
+
+    def _refuse(self):
+        path = urllib.parse.urlparse(self.path).path
+        signed = "Authorization" in self.headers
+        return (
+            (path.startswith("/bkt/") and signed)
+            or (path.startswith("/private/") and not signed)
+            or path.startswith("/storage/v1/b/denied/")
+        )
+
+    def send_head(self):
+        if self._refuse():
+            self.send_error(403)
+            return None
+        return super().send_head()
+
+    def translate_path(self, path):
+        path = urllib.parse.urlparse(path).path
+        if path.startswith("/storage/v1/b/"):
+            bucket, _, key = path[len("/storage/v1/b/"):].partition("/o/")
+            path = f"/{bucket}/{urllib.parse.unquote(key)}"
+        return super().translate_path("/" + path.lstrip("/").partition("/")[2])
+
+
 @pytest.fixture
-def http_root(tmp_path):
-    """tmp_path served over http; its URL."""
-    quiet = type("Quiet", (http.server.SimpleHTTPRequestHandler,), {"log_message": lambda *a: None})
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(quiet, directory=str(tmp_path)))
+def at_url(tmp_path, monkeypatch):
+    """``at_url(scheme, path, bucket=...)``: the URL serving a path under tmp_path,
+    over "http", "s3" or "gs" (see _Buckets), with AWS credentials in the
+    environment that the public bucket refuses."""
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_Buckets, directory=str(tmp_path)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
+    endpoint = f"http://127.0.0.1:{server.server_address[1]}"
+    for name, value in {"AWS_ENDPOINT_URL": endpoint, "AWS_REGION": "us-east-1", "AWS_ACCESS_KEY_ID": "AKIDEXAMPLE",
+                        "AWS_SECRET_ACCESS_KEY": "secret", "TENSORSTORE_GCS_HTTP_URL": endpoint}.items():
+        monkeypatch.setenv(name, value)
+
+    def url(scheme, path, bucket=None):
+        root = {"http": f"{endpoint}/web", "s3": "s3://" + (bucket or "bkt"), "gs": "gs://" + (bucket or "bkt")}[scheme]
+        return path.replace(str(tmp_path), root, 1)
+
+    yield url
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def http_root(at_url, tmp_path):
+    """tmp_path served over http; its URL."""
+    return at_url("http", str(tmp_path))
 
 
 # layout: (how it is written, (format, axes, voxel size, corner, shape, chunk shape))
@@ -452,19 +514,44 @@ def test_splitting_a_path_into_its_container_and_dataset(tmp_path, path, expecte
 
 
 @pytest.mark.parametrize("path, expected", [
-    pytest.param("precomputed:///d/pc/s1", ({"driver": "file", "path": "/d/pc"}, 1), id="local"),
+    pytest.param("precomputed:///d/pc/s1", ("/d/pc", 1), id="local"),
     pytest.param("gs://b/pc", ("gs://b/pc", 0), id="gs"),
     pytest.param("precomputed://gs://b/pc/s2", ("gs://b/pc", 2), id="neuroglancer-gs"),
     pytest.param("precomputed://https://h/pc", ("https://h/pc", 0), id="neuroglancer-https"),
     # Not a precomputed volume that isn't there: zarr has no gs:// reader.
     pytest.param("gs://b/data.zarr/s0", ValueError, id="gs-zarr-is-refused"),
 ])
-def test_where_tensorstore_reads_a_precomputed_path(path, expected):
+def test_where_a_precomputed_path_is_read(path, expected):
     if expected is ValueError:
         with pytest.raises(ValueError, match="https://storage.googleapis.com/b/data.zarr/s0"):
-            paths.precomputed_kvstore(path)
+            paths.precomputed_volume(path)
     else:
-        assert paths.precomputed_kvstore(path) == expected
+        assert paths.precomputed_volume(path) == expected
+
+
+# --- where the files are -------------------------------------------------------------
+
+
+def _url_rows(schemes, formats):
+    return [pytest.param(scheme, fmt, None, id=f"{scheme}-{fmt}") for scheme in schemes for fmt in formats]
+
+
+ARRAY_URLS = _url_rows(["http", "s3"], ["zarr2", "zarr3", "n5", "precomputed"]) + [
+    pytest.param("gs", "precomputed", None, id="gs-precomputed"),
+    # Credentials are used when a bucket needs them...
+    pytest.param("s3", "zarr2", "private", id="s3-private-bucket"),
+    # ...and a gs:// bucket is read at its public URL when GCS refuses them.
+    pytest.param("gs", "precomputed", "denied", id="gs-refused-credentials"),
+]
+
+
+@pytest.mark.parametrize("scheme, fmt, bucket", ARRAY_URLS)
+def test_an_array_at_a_url_reads_as_it_does_on_disk(write_array, at_url, scheme, fmt, bucket):
+    from cellmap_flow.io.source import open_array
+
+    path = write_array(fmt, np.arange(4 * 6 * 8, dtype=np.uint16).reshape(4, 6, 8))
+    on_disk = open_array(path).read()
+    assert np.array_equal(open_array(at_url(scheme, path, bucket)).read(), on_disk)
 
 
 def test_v3_is_read_from_local_disk_only_and_urls_join_with_slashes(tmp_path):

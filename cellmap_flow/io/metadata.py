@@ -40,7 +40,7 @@ import numpy as np
 import zarr
 from funlib.geometry import Coordinate
 
-from cellmap_flow.io import paths
+from cellmap_flow.io import paths, store
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES, ome_corner
 
 logger = logging.getLogger(__name__)
@@ -785,21 +785,16 @@ def _read_v3(path: str) -> ArrayMeta:
 def _precomputed_info(path: str) -> dict:
     """The ``info`` JSON of the precomputed volume ``path`` is, or is a scale
     of: one read."""
-    import tensorstore as ts
-
-    # Not GCE's metadata server: probing it for credentials stalls a gs://
-    # open off Google Cloud (io.source sets the same before opening one).
-    os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
-    kvstore, _ = paths.precomputed_kvstore(path)
-    result = (ts.KvStore.open(kvstore).result() / "info").read("").result()
-    if result.state != "value":
+    location, _ = paths.precomputed_volume(path)
+    info = store.read_json(location, "info")
+    if info is None:
         raise FileNotFoundError(f"{path} is not a precomputed volume: it has no info file")
-    return json.loads(result.value)
+    return info
 
 
 def _precomputed(path: str, info: Optional[dict] = None) -> ArrayMeta:
     """The scale of a neuroglancer precomputed volume ``path`` names (the
-    volume is scale 0, ``…/s<N>`` scale N; ``paths.precomputed_kvstore``),
+    volume is scale 0, ``…/s<N>`` scale N; ``paths.precomputed_volume``),
     in C order (channel, z, y, x), from the volume's ``info`` (read here
     unless given) as tensorstore's neuroglancer_precomputed driver reads it,
     so that choosing a scale opens none of them:
@@ -816,7 +811,7 @@ def _precomputed(path: str, info: Optional[dict] = None) -> ArrayMeta:
     ``info`` lists each per-axis value x, y, z.
     """
     info = _precomputed_info(path) if info is None else info
-    _, index = paths.precomputed_kvstore(path)
+    _, index = paths.precomputed_volume(path)
     if index >= len(info["scales"]):
         raise ValueError(f"{path}: the volume has {len(info['scales'])} scales")
     scale = info["scales"][index]

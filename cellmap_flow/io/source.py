@@ -1,8 +1,8 @@
 """Reading array data with tensorstore, whatever the format.
 
-``open_array(path)`` gives an ``ArraySource`` for zarr v2 (local, http(s),
-anonymous s3), zarr v3 (local), N5 and neuroglancer precomputed
-(``precomputed://`` local directories or URLs, and ``gs://``). Every format is seen
+``open_array(path)`` gives an ``ArraySource`` for zarr v2 and v3, N5 and
+neuroglancer precomputed, on local disk or at an ``http(s)://``, ``s3://`` or
+``gs://`` URL (``io.store``). Every format is seen
 the same way: C order, as the metadata in ``io.metadata`` describes it
 (channels first, then z, y, x), with voxel 0 at index 0. ``read_padded``
 reads a ``Box`` of voxels from it, or from any view of it, padding what
@@ -12,35 +12,28 @@ Where the voxels are in the world is ``io.geometry``'s business, and what
 the input chain does to them is ``ImageDataInterface``'s.
 """
 
-import json
 import logging
-import os
 from typing import Optional
 
 import numpy as np
 import tensorstore as ts
 
 from cellmap_flow.io import paths
+from cellmap_flow.io.store import exists, read_json, with_access
 from cellmap_flow.io.geometry import Box
 
 logger = logging.getLogger(__name__)
 
 
-def _clean_zarr_compressor(dataset_path: str):
-    """Return .zarray metadata with unsupported compressor fields removed.
+def _clean_zarr_compressor(meta: Optional[dict]):
+    """``meta``, a ``.zarray``, with unsupported compressor fields removed;
+    None when it has none (or is None).
 
     Tensorstore is strict about compressor metadata and rejects extra fields
     added by newer numcodecs versions, such as ``checksum``.
     """
-    zarray_path = os.path.join(os.path.normpath(dataset_path), ".zarray")
-    if not os.path.isfile(zarray_path):
+    if meta is None:
         return None
-    try:
-        with open(zarray_path) as f:
-            meta = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
     compressor = meta.get("compressor")
     if not isinstance(compressor, dict):
         return None
@@ -64,66 +57,52 @@ def _clean_zarr_compressor(dataset_path: str):
         "Stripping unsupported compressor fields %s for tensorstore compatibility",
         extra_keys,
     )
-    meta["compressor"] = {k: v for k, v in compressor.items() if k in allowed}
-    return meta
-
-
-def _kvstore(path: str):
-    """Where tensorstore finds ``path``'s files: a local directory, http(s)
-    or anonymous s3."""
-    if path.startswith("http://") or path.startswith("https://"):
-        return {"driver": "http", "base_url": path.rstrip("/"), "path": ""}
-    if path.startswith("s3://"):
-        return {
-            "driver": "s3",
-            "bucket": path.split("/")[2],
-            "path": "/".join(path.split("/")[3:]),
-            "aws_credentials": {"anonymous": True},
-        }
-    return {"driver": "file", "path": os.path.normpath(path)}
+    return {**meta, "compressor": {k: v for k, v in compressor.items() if k in allowed}}
 
 
 def _open(path: str, concurrency_limit: Optional[int], cache_bytes: int):
-    """The tensorstore for ``path``, in C order with voxel 0 at index 0."""
+    """The tensorstore for ``path``, in C order with voxel 0 at index 0.
+
+    The array is read where ``path`` is, a local directory or a URL, through
+    the kvstores io.store gives it (anonymous first on s3, see there).
+    """
     driver = "n5" if paths.suffix_format(path) == "n5" else "zarr"
     extra_args = {}
+    location = path
     if paths.is_precomputed(path):
-        # Not GCE's metadata server: probing it for credentials stalls a gs://
-        # open off Google Cloud.
-        os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
         # A trailing /s<N> picks the scale.
-        kvstore, scale_index = paths.precomputed_kvstore(path)
+        location, scale_index = paths.precomputed_volume(path)
         driver = "neuroglancer_precomputed"
         extra_args = {"scale_index": scale_index}
-    else:
-        kvstore = _kvstore(path)
-
-    local = isinstance(kvstore, dict) and kvstore.get("driver") == "file"
-    if driver == "zarr" and local and paths.is_v3_container(kvstore["path"]):
+    elif driver == "zarr" and exists(location, "zarr.json"):
         driver = "zarr3"
 
     # tensorstore rejects compressor fields it doesn't know ("extra
     # members", e.g. numcodecs' zstd checksum), so such arrays are opened
     # with their metadata minus those fields.
     assume_metadata = False
-    if driver == "zarr" and local:
-        cleaned_metadata = _clean_zarr_compressor(kvstore["path"])
+    if driver == "zarr":
+        cleaned_metadata = _clean_zarr_compressor(read_json(location, ".zarray"))
         if cleaned_metadata is not None:
             extra_args["metadata"] = cleaned_metadata
             assume_metadata = True
 
-    spec = {"driver": driver, "kvstore": kvstore, **extra_args}
     context = {}
     if concurrency_limit:
         context["data_copy_concurrency"] = {"limit": concurrency_limit}
         context["file_io_concurrency"] = {"limit": concurrency_limit}
     if cache_bytes:
         context["cache_pool"] = {"total_bytes_limit": int(cache_bytes)}
-    if context:
-        spec["context"] = context
 
     open_kwargs = {"open": True, "assume_metadata": True} if assume_metadata else {}
-    store = ts.open(spec, read=True, write=False, **open_kwargs).result()
+
+    def attempt(kvstore):
+        spec = {"driver": driver, "kvstore": kvstore, **extra_args}
+        if context:
+            spec["context"] = context
+        return ts.open(spec, read=True, write=False, **open_kwargs).result()
+
+    array = with_access(location, attempt)
 
     if driver in ("n5", "neuroglancer_precomputed"):
         # Both drivers expose Fortran order (x, y, z[, channel]); everything
@@ -131,13 +110,13 @@ def _open(path: str, concurrency_limit: Optional[int], cache_bytes: int):
         # names -- is C order (z, y, x). Reading an N5 dataset without this
         # returned x/z-transposed data, and precomputed lost its x axis to the
         # channel selection.
-        store = store[ts.d[:].transpose[::-1]]
+        array = array[ts.d[:].transpose[::-1]]
     if driver == "neuroglancer_precomputed":
         # tensorstore starts a precomputed volume's domain at its
         # voxel_offset. Index 0 is voxel 0 everywhere else here, and the
         # metadata's translation already carries the offset.
-        store = store[ts.d[:].translate_to[0]]
-    return store
+        array = array[ts.d[:].translate_to[0]]
+    return array
 
 
 class ArraySource:
