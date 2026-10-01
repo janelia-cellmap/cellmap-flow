@@ -8,9 +8,10 @@ import neuroglancer
 import pytest
 
 from cellmap_flow.dashboard.services import launch
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.lsf import BsubTimeoutError
 from cellmap_flow.jobs.spec import JobStartError
+from cellmap_flow.process_chain import process_chain
 
 
 @pytest.mark.parametrize("error", [pytest.param(JobStartError("no GPU queue took it"), id="no-queue-took-it"),
@@ -23,10 +24,11 @@ def test_a_failed_launch_is_logged_not_raised_and_adds_no_layer(viewer, monkeypa
         raise error
 
     monkeypatch.setattr(launch, "start_hosts", fail)
-    g.jobs, g.dataset_path = [], "/data/raw.zarr"
+    session = get_session()
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
     with caplog.at_level(logging.ERROR, logger="cellmap_flow.dashboard.services.launch"):
         start()
-    assert g.jobs == [] and len(viewer.state.layers) == 0
+    assert get_session().jobs == [] and len(viewer.state.layers) == 0
     assert any(str(error) in r.getMessage() for r in caplog.records)
 
 
@@ -51,14 +53,15 @@ def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, 
     monkeypatch.setattr(launch, "run_model", lambda path, name, st: launched.append(name))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     kept, dropped = _Job("mito"), _Job("nuc")
-    g.jobs, g.input_norms, g.postprocess = [kept, dropped], [], []
-    g.model_catalog = {"catalog": {"mito": "/models/mito", "nuc": "/models/nuc"}}
+    get_session().jobs = [kept, dropped]
+    process_chain().input_norms, process_chain().postprocess = [], []
+    get_session().model_catalog = {"catalog": {"mito": "/models/mito", "nuc": "/models/nuc"}}
     with viewer.txn() as s:
         for name in ("mito", "nuc"):
             s.layers[name] = neuroglancer.ImageLayer(source=f"zarr://http://{name}/x")
 
     launch.update_run_models(["mito"])
-    assert dropped.killed and not kept.killed and g.jobs == [kept]
+    assert dropped.killed and not kept.killed and get_session().jobs == [kept]
     assert [layer.name for layer in viewer.state.layers] == ["mito"]
     # Selecting it again must start it again, not be a silent no-op.
     launch.update_run_models(["mito", "nuc"])

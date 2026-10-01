@@ -6,7 +6,7 @@ import shlex
 
 import pytest
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import FlyModelConfig, ModelConfig, ScriptModelConfig
 from cellmap_flow.config.yaml import ConfigError
@@ -103,7 +103,7 @@ def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
             super().__init__()
             self.onnx_path, self.output_channels, self.name = onnx_path, output_channels, name
 
-    g.models_config = []
+    get_session().models_config = []
     types = dashboard.get("/api/model-config-types").get_json()
     assert types["OnnxModelConfig"]["display_name"] == "Onnx Model" and "ScriptModelConfig" in types
     assert types["OnnxModelConfig"]["parameters"]["onnx_path"]["input_type"] == "file"
@@ -113,4 +113,4 @@ def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
     assert response.status_code == 200, response.get_json()
     # No to_dict() of its own: ModelConfig's default serves.
     assert response.get_json()["config_dict"] == {"type": "onnx", "onnx_path": "/m.onnx", "output_channels": 3, "name": "o"}
-    assert isinstance(g.models_config[-1], OnnxModelConfig)
+    assert isinstance(get_session().models_config[-1], OnnxModelConfig)

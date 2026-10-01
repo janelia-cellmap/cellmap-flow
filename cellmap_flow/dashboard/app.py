@@ -4,9 +4,9 @@ import logging
 
 from flask import Flask
 
-from cellmap_flow.globals import g
 from cellmap_flow.logging_setup import LOG_DATEFMT, LOG_FORMAT, configure_logging
 from cellmap_flow.dashboard.routes.logging_routes import LogHandler, logging_bp
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.dashboard.routes.index_page import index_bp
 from cellmap_flow.dashboard.routes.pipeline_builder_page import pipeline_builder_bp
 from cellmap_flow.dashboard.routes.models import models_bp
@@ -93,7 +93,7 @@ def create_and_run_app(neuroglancer_url=None):
     if not logging.getLogger().handlers:
         configure_logging()
     load_plugins()
-    g.NEUROGLANCER_URL = neuroglancer_url
+    get_session().neuroglancer_url = neuroglancer_url
     hostname = socket.gethostname()
     # threaded=True is not optional. make_server defaults to one request at a
     # time, and the dashboard has long POSTs (a YAML crop load ran for three

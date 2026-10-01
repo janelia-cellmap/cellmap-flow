@@ -31,7 +31,7 @@ import neuroglancer
 import pytest
 from neuroglancer.viewer_base import ViewerBase
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import ThresholdPostprocessor
@@ -80,16 +80,17 @@ class _Answer:
 
 @pytest.fixture
 def servers(monkeypatch, ome_pyramid):
-    """The four model servers, the raw data as g.dataset_path, and viewers without a web server."""
+    """The four model servers, the raw data as the session's dataset_path, and viewers without a web server."""
     monkeypatch.setattr(client.requests, "get",
                         lambda url, timeout=None: _Answer(MODEL_INFO[url.split("/__control__")[0]]))
     monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
-    g.dataset_path = ome_pyramid(((RAW_VOXEL_SIZE, None),))
-    g.jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000") for name in MODELS]
-    g.models_config = [SimpleNamespace(name="silent", config=SimpleNamespace(output_voxel_size=(16, 16, 16)))]
-    g.shaders, g.shader_controls, g.extra_layers = {}, {}, {}
-    g.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, []))
-    return g.dataset_path
+    session = get_session()
+    session.dataset_path = ome_pyramid(((RAW_VOXEL_SIZE, None),))
+    session.jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000") for name in MODELS]
+    session.models_config = [SimpleNamespace(name="silent", config=SimpleNamespace(output_voxel_size=(16, 16, 16)))]
+    session.shaders, session.shader_controls, session.extra_layers = {}, {}, {}
+    session.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, []))
+    return session.dataset_path
 
 
 def _scales(dimensions):
@@ -137,13 +138,13 @@ def test_the_startup_viewer(servers, monkeypatch):
     served = []
     monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: served.append(neuroglancer_url))
     # Not up yet: a zarr://None/... layer would never load, and nothing replaces it later.
-    g.jobs = g.jobs + [SimpleNamespace(model_name="queued", host=None)]
-    g.extra_layers = {"extra": neuroglancer.ImageLayer(source="zarr://http://files/extra.zarr")}
+    get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="queued", host=None)]
+    get_session().extra_layers = {"extra": neuroglancer.ImageLayer(source="zarr://http://files/extra.zarr")}
 
     startup.generate_neuroglancer_url(servers)
 
-    assert served == [str(g.viewer)]
-    assert _viewer(g.viewer, MODELS) == {
+    assert served == [str(get_session().viewer)]
+    assert _viewer(get_session().viewer, MODELS) == {
         "layers": [("data", "image"), ("old", "image"), ("new", "image"), ("flat", "image"), ("silent", "image"),
                    ("extra", "image")],
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
@@ -159,11 +160,11 @@ def test_the_startup_viewer_shows_a_labelling_chain_as_segmentations(servers, mo
     from cellmap_flow.dashboard.services import startup
 
     monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: None)
-    g.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, [ThresholdPostprocessor(0.5)]))
+    get_session().set_pipeline(PipelineSpec.from_steps(INPUT_NORM, [ThresholdPostprocessor(0.5)]))
 
     startup.generate_neuroglancer_url(servers)
 
-    assert _viewer(g.viewer, ["old"]) == {
+    assert _viewer(get_session().viewer, ["old"]) == {
         "layers": [("data", "image"), ("old", "segmentation"), ("new", "segmentation"), ("flat", "segmentation"),
                    ("silent", "segmentation")],
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
@@ -180,7 +181,7 @@ def submit(servers, dashboard, viewer):
     """Submit ``postprocess`` with a job still queued, over a viewer where the
     user had given "old" a shader and a control of their own."""
     def post(postprocess):
-        g.jobs = g.jobs + [SimpleNamespace(model_name="queued", host=None)]
+        get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="queued", host=None)]
         with viewer.txn() as s:
             s.layers["old"] = neuroglancer.ImageLayer(source="zarr://http://old:8000/old", shader="void main() {}",
                                                       shader_controls={"brightness": 0.5})
@@ -225,11 +226,11 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
     def start_hosts(command, job_name, queue=None, charge_group=None):
         started.append(job_name)
         job = SimpleNamespace(model_name=job_name, host=f"http://{job_name}:8000")
-        g.jobs = g.jobs + [job]
+        get_session().jobs = get_session().jobs + [job]
         return job
 
     monkeypatch.setattr(launch, "start_hosts", start_hosts)
-    g.jobs = []
+    get_session().jobs = []
     blob = PipelineSpec.from_steps(INPUT_NORM, []).to_url_blob()
     for name in MODELS:
         if launch == "catalog":
@@ -258,7 +259,7 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
 def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
     from cellmap_flow.dashboard.finetune_layers import add_finetuned_layer
 
-    g.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, postprocess))
+    get_session().set_pipeline(PipelineSpec.from_steps(INPUT_NORM, postprocess))
     job = SimpleNamespace(model_name=server, lsf_job=SimpleNamespace(job_id="7"), finetuned_model_name=None,
                           inference_server_url=f"http://{server}:8000", params={"output_voxel_size": [16, 16, 16]})
     add_finetuned_layer(job, f"{server}_finetuned_1")
@@ -275,11 +276,11 @@ def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
 
 def test_the_viewers_set_data_and_the_box_tool_open(servers, dashboard):
     assert dashboard.post("/api/set-data", json={"dataset_path": servers}).status_code == 200
-    assert _viewer(g.viewer) == {"layers": [("data", "image")], "dimensions": EIGHT_NM}
+    assert _viewer(get_session().viewer) == {"layers": [("data", "image")], "dimensions": EIGHT_NM}
     drawn = [{"offset": [8, 16, 24], "shape": [80, 40, 40]}]
     assert dashboard.post("/api/bbx-generator", json={"dataset_path": servers, "existing_bounding_boxes": drawn}
                           ).status_code == 200
-    viewer = g.bbx_generator_state["viewer"]
+    viewer = get_session().bbx_generator_state["viewer"]
     assert _viewer(viewer) == {"layers": [("fibsem", "image"), ("bboxes", "annotation")], "dimensions": EIGHT_NM}
     boxes = viewer.state.layers["bboxes"].to_json()
     assert (boxes["source"], boxes["annotations"]) == (

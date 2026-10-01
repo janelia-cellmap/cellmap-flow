@@ -17,7 +17,6 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.globals import g
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.protocol import split_dataset_url
 
@@ -58,8 +57,8 @@ def call(dashboard, viewer, ome_pyramid, monkeypatch):
     import cellmap_flow.dashboard.routes.pipeline as pipeline
 
     monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_voxel_size": [16] * 3, "output_class": "unit"})
-    g.dataset_path = ome_pyramid((((24, 12, 12), None),))
-    g.jobs = [SimpleNamespace(model_name="mito", host="http://gpu:8000"), SimpleNamespace(model_name="queued", host=None)]
+    get_session().dataset_path = ome_pyramid((((24, 12, 12), None),))
+    get_session().jobs = [SimpleNamespace(model_name="mito", host="http://gpu:8000"), SimpleNamespace(model_name="queued", host=None)]
 
     def call(method, url, body):
         response = dashboard.open(url, method=method, data=json.dumps(body), content_type="application/json")
@@ -71,7 +70,7 @@ def call(dashboard, viewer, ome_pyramid, monkeypatch):
 
 def _drawn(name="mito"):
     """The chain the layer's URL carries."""
-    source = g.viewer.state.layers[name].to_json()["source"]
+    source = get_session().viewer.state.layers[name].to_json()["source"]
     source = source[0] if isinstance(source, list) else source
     url = source["url"] if isinstance(source, dict) else source
     return PipelineSpec.from_url_blob(split_dataset_url(url))[0]
@@ -92,7 +91,7 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
     assert call("PUT", "/api/pipeline", body) == (200, {
         "success": True, "pipeline": SUBMITTED, "digest": PipelineSpec.from_json_data(SUBMITTED).digest(),
         "layers": ["mito"]})
-    assert g.pipeline_spec == PipelineSpec.from_json_data(SUBMITTED)
+    assert get_session().pipeline_spec == PipelineSpec.from_json_data(SUBMITTED)
     assert _drawn() == PipelineSpec.from_json_data(SUBMITTED)
     if builder is None:
         assert get_session().builder_state == canvas_before, "Submit leaves the builder's canvas as it was"
@@ -120,7 +119,7 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
 def test_a_refused_put_is_a_400_that_says_why_and_changes_nothing(call, body, error):
     canvas_before = get_session().builder_state
     assert call("PUT", "/api/pipeline", body) == (400, {"success": False, "error": error})
-    assert g.pipeline_spec == PipelineSpec.from_json_data(SHOWN)
+    assert get_session().pipeline_spec == PipelineSpec.from_json_data(SHOWN)
     assert _drawn() == PipelineSpec.from_json_data(SHOWN)
     assert get_session().builder_state == canvas_before
 
@@ -144,7 +143,7 @@ def test_each_old_route_answers_as_it_did_and_redraws_as_put_does(call, url, bod
     """``chain`` is the chain configured and drawn after the request."""
     canvas_before = get_session().builder_state
     assert call("POST", url, body) == (status, answer)
-    assert g.pipeline_spec == PipelineSpec.from_json_data(chain)
+    assert get_session().pipeline_spec == PipelineSpec.from_json_data(chain)
     assert _drawn() == PipelineSpec.from_json_data(chain)
     if url == "/api/process":
         assert get_session().builder_state == canvas_before, "Submit leaves the builder's canvas as it was"

@@ -255,7 +255,7 @@ def precheck_blockwise_task():
     try:
         # precheck() rather than constructing the processor: that created the
         # output arrays, loaded every model into this process, and replaced
-        # the dashboard's live g.input_norms and g.postprocess.
+        # the dashboard's live chain.
         from cellmap_flow.blockwise.blockwise_processor import precheck
 
         for yaml_path in body.yaml_paths:

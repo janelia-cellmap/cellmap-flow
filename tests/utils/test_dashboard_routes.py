@@ -11,7 +11,6 @@ import zarr
 from neuroglancer import AxisAlignedBoundingBoxAnnotation as Box
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.globals import g
 from cellmap_flow.jobs.settings import LauncherSettings
 
 READ_YAML = "/api/finetune/read-yaml"
@@ -64,11 +63,12 @@ def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
 def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, monkeypatch, url, payload, error):
     """The shape every form reads: {"success": false, "error": ...}."""
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
-    g.queue, g.nb_workers, g.dataset_path, g.models_config = "gpu_h100", 14, "/data/raw.zarr", []
+    session = get_session()
+    session.queue, session.nb_workers, session.dataset_path, session.models_config = "gpu_h100", 14, "/data/raw.zarr", []
     kwargs = {"data": payload} if isinstance(payload, str) else {"json": payload}
     response = dashboard.post(url, **kwargs)
     assert (response.status_code, response.get_json()) == (400, {"success": False, "error": error})
-    assert (g.queue, g.nb_workers, g.dataset_path, g.models_config) == ("gpu_h100", 14, "/data/raw.zarr", [])
+    assert (session.queue, session.nb_workers, session.dataset_path, session.models_config) == ("gpu_h100", 14, "/data/raw.zarr", [])
 
 
 def test_the_blockwise_settings_are_kept_and_read_back(dashboard, tmp_path):
@@ -92,7 +92,7 @@ def test_a_package_log_record_reaches_the_log_panel(dashboard):
 def test_a_count_sent_as_a_string_is_a_number(dashboard):
     response = dashboard.post("/api/blockwise-config", json={"nb_cores_master": "4", "nb_cores_worker": "12",
                                                              "nb_workers": "3"})
-    assert response.status_code == 200 and g.nb_workers == 3
+    assert response.status_code == 200 and get_session().nb_workers == 3
 
 
 def _annotations():
@@ -119,7 +119,7 @@ def test_the_boxes_drawn_are_read_from_the_box_layer(dashboard, viewer, monkeypa
         for name in layers or []:
             s.layers[name] = _annotations()
             s.layers[name].annotations.append(Box(id=name, point_a=[10, 20, 30], point_b=[40, 60, 80]))
-    monkeypatch.setitem(g.bbx_generator_state, "viewer", viewer if layers else None)
+    monkeypatch.setitem(get_session().bbx_generator_state, "viewer", viewer if layers else None)
     assert dashboard.get("/api/bbx-generator/status").get_json()["bounding_boxes"] == boxes
 
 
@@ -127,7 +127,7 @@ def test_a_layer_is_added_renamed_and_removed(dashboard, viewer, tmp_path, monke
     s0 = zarr.open_group(str(tmp_path / "labels.zarr"), mode="w").create_dataset(
         "s0", data=np.arange(64, dtype=np.uint32).reshape(4, 4, 4))
     s0.attrs.update(resolution=[8] * 3, offset=[16, 0, 0])
-    monkeypatch.setattr(g, "shaders", {"seg": "void main() {}"})
+    get_session().shaders = {"seg": "void main() {}"}
 
     def post(route, **body):
         response = dashboard.post(f"/api/viewer/{route}", json=body)
@@ -145,7 +145,7 @@ def test_a_layer_is_added_renamed_and_removed(dashboard, viewer, tmp_path, monke
     assert post("rename-layer", old_name="missing", new_name="x")[0] == 404
     assert post("rename-layer", old_name="seg", new_name="labels")[1]["renamed"]
     assert [layer.name for layer in viewer.state.layers] == ["labels", "img"]
-    assert "labels" in g.shaders and "seg" not in g.shaders
+    assert "labels" in get_session().shaders and "seg" not in get_session().shaders
     assert post("remove-layer", name="labels")[1]["removed"] is True
     assert post("remove-layer", name="labels")[1]["removed"] is False
-    assert [layer.name for layer in viewer.state.layers] == ["img"] and "labels" not in g.shaders
+    assert [layer.name for layer in viewer.state.layers] == ["img"] and "labels" not in get_session().shaders

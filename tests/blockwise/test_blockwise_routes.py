@@ -19,8 +19,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.process_chain import process_chain
 
 SETTINGS = {"charge_group": "grp", "queue": "gpu_h100", "nb_workers": 2, "nb_cores_worker": 12,
             "nb_cores_master": 4, "tmp_dir": "/scratch/progress"}
@@ -52,7 +53,8 @@ def unstamped(text):
 
 @pytest.fixture
 def tasks(tmp_path):
-    g.blockwise_tasks_dir, g.walltime = str(tmp_path / "tasks"), "12:00"
+    session = get_session()
+    session.blockwise_tasks_dir, session.walltime = str(tmp_path / "tasks"), "12:00"
     return tmp_path / "tasks"
 
 
@@ -297,11 +299,11 @@ def test_the_precheck_passes_a_task_without_side_effects(dashboard, raw_zarr, po
         raise AssertionError("the precheck loaded a model")
 
     monkeypatch.setattr(ScriptModelConfig, "_get_config", refuse)
-    g.input_norms, g.postprocess = ["the dashboard's own"], ["chain"]
+    process_chain().input_norms, process_chain().postprocess = ["the dashboard's own"], ["chain"]
     body = dashboard.post("/api/blockwise/precheck", json={"yaml_paths": [task_yaml(raw_zarr(), pooling_model())]})
     assert body.get_json() == {"success": True, "message": "success"}
     assert not os.path.exists(tmp_path / "out.zarr")
-    assert (g.input_norms, g.postprocess) == (["the dashboard's own"], ["chain"])
+    assert (get_session().input_norms, get_session().postprocess) == (["the dashboard's own"], ["chain"])
 
 
 def test_the_precheck_answers_a_config_error(dashboard, tmp_path):

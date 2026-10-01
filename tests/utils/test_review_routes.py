@@ -12,7 +12,7 @@ import pytest
 from neuroglancer.viewer_base import ViewerBase
 
 from cellmap_flow.dashboard.app import app
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 
 OPEN = "/api/review/open"
 
@@ -62,7 +62,7 @@ def viewer():
     v = ViewerBase()  # neuroglancer's state, actions and config, no server
     with v.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[8, 8, 8])
-    g.viewer = v
+    get_session().viewer = v
     return v
 
 
@@ -125,7 +125,7 @@ def test_only_a_review_index_by_name_is_opened(client, tmp_path):
     assert client.post(OPEN, json={"db_path": str(tmp_path / "missing.sqlite")}).status_code == 404
     # Not a review index, so not migrated either.
     assert _ledger_columns(tmp_path / "other.sqlite") == ["instance_id"]
-    assert g.review is None
+    assert get_session().review is None
 
 
 def test_every_pick_stream_sees_every_pick(client, index, viewer):

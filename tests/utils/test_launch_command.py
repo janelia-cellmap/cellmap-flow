@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 from cellmap_flow.cli import infer, yaml_cli
 from cellmap_flow.cli.main import cli
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.dashboard.services import launch as dashboard_launch
 from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.jobs import launch as jobs_launch
@@ -78,7 +78,7 @@ def launched(monkeypatch, tmp_path):
     monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
-    g.dataset_path = data
+    get_session().dataset_path = data
     return commands, data
 
 

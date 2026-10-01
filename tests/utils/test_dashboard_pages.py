@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.process_chain import process_chain
 
 
 def _job(name):
@@ -14,11 +15,11 @@ def _job(name):
 
 
 def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
-    catalog_before = {k: dict(v) for k, v in g.model_catalog.items()}
-    g.jobs = [_job("mito_server")]
+    catalog_before = {k: dict(v) for k, v in get_session().model_catalog.items()}
+    get_session().jobs = [_job("mito_server")]
     html = dashboard.get("/").get_data(as_text=True)
     assert 'value="mito_server"' in html, "the running model is listed on the Models tab"
-    assert g.model_catalog == catalog_before, "but not added to the catalog everything else reads"
+    assert get_session().model_catalog == catalog_before, "but not added to the catalog everything else reads"
 
 
 @pytest.mark.parametrize("headers, expected", [
@@ -28,7 +29,7 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
                  "https://proxy.example.org/v/abc/", id="https-proxy"),
 ])
 def test_behind_a_reverse_proxy_the_viewer_is_loaded_through_it(dashboard, headers, expected):
-    g.NEUROGLANCER_URL = "http://node7:8765/v/abc/"
+    get_session().neuroglancer_url = "http://node7:8765/v/abc/"
     assert f'<iframe src="{expected}"' in dashboard.get("/", headers=headers).get_data(as_text=True)
 
 
@@ -74,9 +75,9 @@ def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, 
     from cellmap_flow.post.postprocessors import get_postprocessors
 
     if kind == "input":
-        g.input_norms = get_normalizations(chain)
+        process_chain().input_norms = get_normalizations(chain)
     else:
-        g.postprocess = get_postprocessors(chain)
+        process_chain().postprocess = get_postprocessors(chain)
     html = dashboard.get("/").get_data(as_text=True)
     rows = _rows(html, *(("normalizer-item", "inputNormCheckbox") if kind == "input"
                          else ("postprocessor-item", "postProcessCheckbox")))
@@ -96,7 +97,7 @@ def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, 
 def test_with_nothing_configured_every_op_is_listed_once_unticked(dashboard):
     from cellmap_flow.norm.input_normalize import get_input_normalizers
 
-    g.input_norms = []
+    process_chain().input_norms = []
     rows = _rows(dashboard.get("/").get_data(as_text=True), "normalizer-item", "inputNormCheckbox")
     assert [name for name, _, _ in rows] == [op["name"] for op in get_input_normalizers()]
     assert not any(checked for _, checked, _ in rows)
@@ -194,24 +195,22 @@ def test_the_builder_opens_on_the_live_chain_and_its_last_canvas(dashboard, sent
     the PUT /api/pipeline bodies that set the chain, in order."""
     from cellmap_flow.pipeline_spec import PipelineSpec, builder_steps
 
-    g.jobs = [_job("other_model")]
+    get_session().jobs = [_job("other_model")]
     for body in sent:
         assert dashboard.put("/api/pipeline", json=body).status_code == 200
     state = _builder_state(dashboard)
 
     assert _new_ids(state) == expected
     # So the page's first edit, which sends its nodes' steps, sends the live chain back.
-    assert PipelineSpec(builder_steps(state["normalizers"]), builder_steps(state["postprocessors"])) == g.pipeline_spec
+    assert PipelineSpec(builder_steps(state["normalizers"]), builder_steps(state["postprocessors"])) == (
+        get_session().pipeline_spec)
 
 
 def test_before_anything_is_applied_the_builder_starts_from_the_live_chain(dashboard):
     from cellmap_flow.norm.input_normalize import get_normalizations
 
-    for attr in ("pipeline_inputs", "pipeline_outputs", "pipeline_edges", "pipeline_normalizers",
-                 "pipeline_models", "pipeline_postprocessors"):
-        setattr(g, attr, [])
-    g.input_norms = get_normalizations([{"name": "ZScoreNormalizer", "mean": 1, "std": 2}])
-    g.jobs = [_job("mito")]
+    process_chain().input_norms = get_normalizations([{"name": "ZScoreNormalizer", "mean": 1, "std": 2}])
+    get_session().jobs = [_job("mito")]
 
     state = _builder_state(dashboard)
     assert [(n["name"], n["params"]) for n in state["normalizers"]] == [("ZScoreNormalizer", {"mean": 1.0, "std": 2.0})]
@@ -227,15 +226,18 @@ class _Configured(SimpleNamespace):
 def test_each_model_node_carries_its_config(dashboard, applied):
     """From the configured model of its name, else (nothing applied yet) from
     the YAML the builder imported; the palette lists both kinds of model."""
-    g.models_config = [_Configured(name="mito")]
-    g.pipeline_model_configs = {"nuc": {"type": "script", "script_path": "/imported.py"}}
-    g.model_catalog = {"catalog": {"er": "/models/er"}}
+    get_session().models_config = [_Configured(name="mito")]
+    get_session().builder_model_configs = {"nuc": {"type": "script", "script_path": "/imported.py"}}
+    get_session().model_catalog = {"catalog": {"er": "/models/er"}}
     if applied:
-        g.pipeline_inputs = [{"id": "input-1", "params": {}}]
-        g.pipeline_models = [{"id": "model-1", "name": "mito", "params": {}},
-                             {"id": "model-2", "name": "nuc", "params": {}, "config": {"type": "given"}}]
+        get_session().builder_state = {
+            **get_session().builder_state,
+            "inputs": [{"id": "input-1", "params": {}}],
+            "models": [{"id": "model-1", "name": "mito", "params": {}},
+                       {"id": "model-2", "name": "nuc", "params": {}, "config": {"type": "given"}}],
+        }
     else:
-        g.jobs = [_job("mito"), _job("nuc"), _job("unknown")]
+        get_session().jobs = [_job("mito"), _job("nuc"), _job("unknown")]
     html = dashboard.get("/pipeline-builder").get_data(as_text=True)
 
     models = _builder_state(dashboard)["models"]
