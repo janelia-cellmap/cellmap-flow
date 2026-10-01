@@ -78,7 +78,7 @@ def ome_zarr():
 @pytest.fixture
 def annotation_volume(tmp_path, ome_zarr):
     """``annotation_volume(labels, raw=None, crops=())``: a 16 nm volume holding
-    ``labels`` over a raw of the same grid (constant 128 unless given), and
+    ``labels``, in their dtype, over a raw of the same grid (constant 128 unless given), and
     ``.dataset(**kw)``, the VirtualPatchDataset over them (8^3 in, 4^3 out)."""
     from cellmap_flow.finetune.data import VirtualPatchDataset
 
@@ -88,7 +88,7 @@ def annotation_volume(tmp_path, ome_zarr):
         path = str(tmp_path / f"{name}.zarr")
         root = zarr.open_group(path, mode="w")
         root.create_group("annotation").create_dataset(
-            "s0", shape=labels.shape, chunks=(16, 16, 16), dtype="uint8", fill_value=0
+            "s0", shape=labels.shape, chunks=(16, 16, 16), dtype=labels.dtype, fill_value=0
         )
         root["annotation"]["s0"][:] = labels
         root.attrs.update(dataset_offset_nm=[0.0] * 3, imported_crops=list(crops))

@@ -119,6 +119,14 @@ def test_an_imported_crop_is_drawn_around_its_annotation(annotation_volume, labe
     assert all(label in ann for ann in _drawn(dataset))
 
 
+def test_instance_ids_past_255_reach_the_trainer_unwrapped(annotation_volume):
+    """An instance-correction volume is uint16 (id + 1); a uint8 patch turned
+    instance 257 (stored 258) into 2, instance 1."""
+    labels = np.zeros((32,) * 3, np.uint16)
+    labels[8:12, 8:12, 8:12] = 258
+    assert all(258 in ann for ann in _drawn(annotation_volume(labels).dataset(), 4))
+
+
 def test_a_volume_with_nothing_annotated_is_refused(annotation_volume):
     with pytest.raises(ValueError):
         annotation_volume(_labels(32)).dataset()

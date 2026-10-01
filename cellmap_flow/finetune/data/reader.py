@@ -114,10 +114,16 @@ class PatchReader:
         return np.floor(centre_voxels - half + 0.5) + half
 
     def annotation(self, centre_voxels: np.ndarray) -> np.ndarray:
-        """The annotation patch around a snapped centre, as uint8.
+        """The annotation patch around a snapped centre, in the volume's own dtype.
 
         Out-of-bounds voxels are 0, unannotated, which the trainer's loss
         masks out when ``mask_unannotated`` is on.
+
+        The dtype is the volume's because an instance-correction volume is
+        uint16 or uint32 (instance id + 1): a uint8 patch wrapped its ids
+        modulo 256, so instance 255 became unannotated, 256 background, and
+        257 merged with instance 1. The dataset casts the patch to float32,
+        which holds every id below 2**24 exactly.
         """
         out_size = self.output_size
         lo = (centre_voxels - out_size / 2).astype(int)
@@ -127,12 +133,12 @@ class PatchReader:
         clip_hi = np.minimum(hi, self.shape_voxels)
         valid = np.all(clip_hi > clip_lo)
 
-        patch = np.zeros(out_size, dtype=np.uint8)
+        if self._volume_arr is None:
+            self._volume_arr = zarr.open(
+                os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
+            )
+        patch = np.zeros(out_size, dtype=self._volume_arr.dtype)
         if valid:
-            if self._volume_arr is None:
-                self._volume_arr = zarr.open(
-                    os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
-                )
             src_slices = tuple(slice(int(c), int(d)) for c, d in zip(clip_lo, clip_hi))
             dst_slices = tuple(
                 slice(int(c - l), int(d - l))
