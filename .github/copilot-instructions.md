@@ -6,7 +6,7 @@ cellmap-flow serves PyTorch, TensorFlow, DaCapo and bioimage.io models to Neurog
 - World coordinates are in nm. A `Roi` is (lower corner, shape) in nm, and voxel `i` covers `[corner + i*vs, corner + (i+1)*vs)` along each axis.
 - An OME-NGFF `translation` is the centre of voxel 0, not its corner: read it with `io.ome.ome_corner` and write it with `io.ome.ome_translation`. Legacy `resolution`/`offset` attributes and N5 `transform` are already corners.
 - Voxel sizes can be fractional (5.24 nm), and a corner need not lie on the voxel grid (Janelia raw has a -4 nm corner at 8 nm). `Coordinate` truncates to integers, so use `io.geometry` (`Grid`, `coordinate_or_floats`) or keep floats.
-- A model's forward takes `(batch, 1, z, y, x)` and returns `(batch, C, z, y, x)`. A processed chunk is `(c, z, y, x)` unless the config sets `chunk_output_axes`; the served zarr array puts the channel axis last.
+- A model's forward takes `(batch, 1, z, y, x)` and returns `(batch, C, z, y, x)`. A processed chunk is channel-first, `(c, z, y, x)`, or `(z, y, x)` when the config's `chunk_output_axes` names no channel axis: the server and blockwise read `chunk_output_axes` only for whether there is one, not where. The served zarr array puts the channel axis last.
 
 **Code**
 - `peft` and `tensorboard` come from the optional `finetune` extra, so import them inside the functions that use them, never at module level. CI runs the tests without that extra too.

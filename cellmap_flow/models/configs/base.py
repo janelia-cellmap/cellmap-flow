@@ -387,9 +387,12 @@ class ModelConfig:
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
-        """Returns the axes order of processed chunk output. Defaults to ('c', 'z', 'y', 'x').
+        """The axes of a processed chunk. Defaults to ('c', 'z', 'y', 'x').
 
-        Models can override by setting config.chunk_output_axes.
+        Models can override by setting config.chunk_output_axes. The server
+        and blockwise read it only for whether a chunk has a channel axis:
+        one that has must have it first, and its spatial axes are the raw
+        data's, in the raw data's order.
         Note: this is distinct from config.output_axes used by BioModelConfig
         for raw bioimageio model axes.
         """

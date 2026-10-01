@@ -287,7 +287,14 @@ class CellMapFlowServer:
         if self.has_channel:
             # The model output spatial axes match the input data axes (not the
             # hardcoded default which assumes z,y,x).  Override so that
-            # reorder_to_zarr_axes applies the correct permutation.
+            # reorder_to_zarr_axes applies the correct permutation. The
+            # channel axis is taken to come first, as blockwise takes it too,
+            # whatever chunk_output_axes says.
+            if self.geometry.chunk_output_axes[0] not in CHANNEL_AXES:
+                logger.warning(
+                    f"chunk_output_axes {self.geometry.chunk_output_axes} does not put "
+                    "the channel axis first; it is served as if it did"
+                )
             self.model_output_axes = ("c",) + tuple(self.axes)
         else:
             self.model_output_axes = tuple(self.axes)
