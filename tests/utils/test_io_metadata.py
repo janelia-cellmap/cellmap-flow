@@ -458,19 +458,6 @@ def test_where_tensorstore_reads_a_precomputed_path(path, expected):
         assert paths.precomputed_kvstore(path) == expected
 
 
-@pytest.mark.parametrize("path, fmt", [
-    pytest.param("{tmp}/v3.zarr/s0", "zarr3", id="under-a-zarr-json"),
-    pytest.param("{tmp}/v2.zarr/s0", "zarr2", id="zarr-suffix"),
-    pytest.param("/d/a.n5/raw", "n5", id="n5-suffix"),
-    pytest.param("https://h/a.n5", "n5", id="remote-n5"),
-    pytest.param("gs://b/pc", "precomputed", id="gs"),
-])
-def test_a_paths_format(tmp_path, path, fmt):
-    _v3_group(tmp_path / "v3.zarr")
-    os.makedirs(tmp_path / "v3.zarr" / "s0")
-    assert paths.detect_format(path.format(tmp=tmp_path)) == fmt
-
-
 def test_v3_is_read_from_local_disk_only_and_paths_join_and_unescape(tmp_path):
     _v3_group(tmp_path / "v3.zarr")
     assert paths.is_v3_container(str(tmp_path / "v3.zarr")) and not paths.is_v3_container(str(tmp_path))

@@ -13,7 +13,7 @@ Only the local filesystem is probed (for ``.zgroup``/``.zarray``/
 
 import os
 import re
-from typing import Literal, Optional, Tuple
+from typing import Optional, Tuple
 
 ZARR_JSON = "zarr.json"
 
@@ -136,11 +136,6 @@ def split_container(path: str) -> Tuple[str, str]:
     return container, inner
 
 
-def ends_with_scale(path: str) -> bool:
-    """``path`` ends in a level name such as ``s0``."""
-    return bool(re.search(r"s\d+$", path))
-
-
 def precomputed_scale(path: str) -> Tuple[str, Optional[int]]:
     """``(volume, scale index)`` for a precomputed path: a last component
     ``s<N>`` names scale N of the volume above it; a path without one is
@@ -179,18 +174,3 @@ def precomputed_kvstore(path: str) -> Tuple[object, int]:
         return location, scale_index
     return {"driver": "file", "path": os.path.normpath("/" + location.lstrip("/"))}, scale_index
 
-
-def detect_format(path: str) -> Literal["zarr2", "zarr3", "n5", "precomputed"]:
-    """The storage format at ``path``, from its prefix, suffix and local files.
-
-    Checked in the order the metadata reader dispatches: precomputed URLs,
-    then (for local paths) a ``zarr.json`` at or above ``path``, then the
-    last ``.zarr``/``.n5`` suffix. Anything else is zarr v2.
-    """
-    if is_precomputed(path):
-        return "precomputed"
-    if not is_remote(path) and find_v3_container(path) is not None:
-        return "zarr3"
-    if suffix_format(path) == "n5":
-        return "n5"
-    return "zarr2"
