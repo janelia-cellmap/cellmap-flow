@@ -88,6 +88,8 @@ def client(monkeypatch, tmp_path, viewer, dashboard):
 
     make_instances(tmp_path / "instances.zarr", s0_attrs={"resolution": [16] * 3, "offset": [0] * 3})
     zarr.open_group(str(tmp_path / "vols" / "roi_annotation.zarr"), mode="w")
+    untyped = zarr.open_group(str(tmp_path / "vols" / "untyped.zarr"), mode="w")
+    untyped.create_group("annotation").create_dataset("s0", shape=(4, 4, 4), dtype="u2")
     (tmp_path / "vols" / "plain.zarr").mkdir()
     (tmp_path / "elsewhere").mkdir()
     monkeypatch.setattr(get_session(), "models_config", [_Unbuildable()])
@@ -104,6 +106,7 @@ def client(monkeypatch, tmp_path, viewer, dashboard):
                   "model_name": "model"}),
         (CREATE, {"roi_name": "roi", "instance_zarr_path": "{tmp}/instances.zarr"}),
         (CREATE, {"roi_name": "roi", "reuse_existing": True, "source_zarr_path": "{tmp}/vols"}),
+        (CREATE, {"roi_name": "roi", "reuse_existing": True, "source_zarr_path": "{tmp}/vols/untyped.zarr"}),
         (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/elsewhere/copy.zarr"}),
         (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/plain.zarr"}),
         (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/copy"}),
@@ -111,7 +114,7 @@ def client(monkeypatch, tmp_path, viewer, dashboard):
                 "snapshot_dir": "{tmp}/elsewhere/snapshots"}),
         (CC3D, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "target_label": "five"}),
     ],
-    ids=["output-dir-missing", "roi-name-path", "no-model", "source-not-zarr",
+    ids=["output-dir-missing", "roi-name-path", "no-model", "source-not-zarr", "source-not-a-volume",
          "dst-elsewhere", "dst-not-a-zarr", "dst-not-dot-zarr", "snapshots-elsewhere", "bad-label"],
 )
 def test_bad_paths_are_refused_before_anything_is_written(client, tmp_path, url, body):
@@ -172,6 +175,7 @@ def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatc
 
     snapshot = zarr.open_group(str(tmp_path / "vols" / "roi_annotation_20260901.zarr"), mode="w")
     snapshot.create_group("annotation").create_dataset("s0", shape=(8, 8, 8), chunks=(4, 4, 4), dtype="u2")
+    snapshot.attrs["type"] = "annotation_volume"
     bucket = _Bucket()
     served = bucket.stores["annotations/roi_annotation.zarr"] = zarr.MemoryStore()
     labels = np.zeros((8, 8, 8), np.uint16)

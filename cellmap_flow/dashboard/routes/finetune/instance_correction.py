@@ -316,6 +316,13 @@ def create_instance_correction():
             root = zarr.open(effective_zarr_path, mode="r+")
             if root.attrs.get("type") == _LEGACY_TYPE:
                 root.attrs["type"] = "annotation_volume"
+            elif root.attrs.get("type") != "annotation_volume":
+                # Refused before it is served: the listing, the overlay and
+                # training skip it, and it cannot be registered as a volume.
+                return _error(
+                    f"{effective_zarr_path} is not an annotation volume "
+                    f"(its attrs say type {root.attrs.get('type')!r})"
+                )
             logger.info(
                 f"Reattaching paintable layer for {roi_name}: "
                 f"{effective_zarr_path} (reuse_existing)"
