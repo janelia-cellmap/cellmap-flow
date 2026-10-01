@@ -102,9 +102,11 @@ def test_annotation_layers_come_with_the_draw_tools_bound(dashboard, viewer):
     assert all(k.isupper() and len(k) == 1 for k in bindings)
 
 
-def test_a_new_annotation_layer_is_selected_with_its_panel_open(dashboard, viewer):
-    """Creating or loading a volume switches the viewer to its layer, ready to paint."""
+def test_a_new_annotation_layer_is_selected_with_its_panel_open_on_draw(dashboard, viewer):
+    """Creating or loading a volume switches the viewer to its layer, ready
+    to paint: the panel opened on the Source tab, and the brush is on Draw."""
     body = dashboard.post("/api/finetune/add-to-viewer", json={"crop_id": "c1", "minio_url": "http://minio/x.zarr"}).get_json()
     assert body["success"]
     selected = viewer.state.selected_layer
     assert (selected.layer, selected.visible) == ("annotation_c1", True)
+    assert viewer.state.layers["annotation_c1"].tab == "Draw"

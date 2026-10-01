@@ -99,7 +99,8 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
     it here. So each gets the draw tools pre-bound (ANNOTATION_TOOL_BINDINGS)
     and is selected with its panel open, ready to paint without hunting for
     it in the layer list; load-crops and instance corrections used to build
-    their own, with neither.
+    their own, with neither. The panel opens on its Draw tab, where the
+    brush and flood fill are.
 
     A layer of that name is replaced, unless ``keep_existing``: then it is
     left as it is, selection included, and False is returned.
@@ -117,6 +118,8 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
             # An older neuroglancer without tool_bindings should still get
             # its layer; the keys just will not be pre-bound.
             logger.warning(f"Could not pre-bind annotation tools: {e}")
+        # The tab's id in the neuroglancer build that has the voxel tools.
+        layer.tab = "Draw"
         s.layers[layer_name] = layer
         s.selected_layer.layer = layer_name
         s.selected_layer.visible = True
