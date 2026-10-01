@@ -140,22 +140,23 @@ FULL_CHECKPOINT = [
     "training_stats",
 ]
 
-# platform: case: numbers, recorded at 3af8578 (the finetune and py311 envs).
+# platform: case: numbers, recorded at 3af8578 (the finetune and py311 envs);
+# the LoRA and BatchNorm cases re-recorded when the startup probes moved to eval mode.
 NUMBERS = {
     "2.11.0/AVX512": {
-        "head-lora": dict(losses=[0.6987214684486389, 0.698712557554245, 0.6987031698226929], best_epoch=3,
-            final="aadceb91307bd1f2", served="1d4eeec443f6701b", merged="1ae9508586c91e8c"),
+        "head-lora": dict(losses=[0.6987209916114807, 0.698713093996048, 0.6987030804157257], best_epoch=3,
+            final="b4b73e9c69c69ba5", served="763d74da39819ca9", merged="7463fa1fd5b1bd37"),
         "head-full": dict(losses=[0.5870955586433411, 0.5870503385861715, 0.5870087544123331], best_epoch=3,
             final="3b179152167fc898", served="a7e8a07a96a7d192", merged="c10ba1aafb918bde"),
         "head-mse": dict(losses=[0.255184605717659, 0.25077535957098007, 0.24827992916107178], best_epoch=3,
             final="6dea9ec7b5241659", served="f049423276a5ffee", merged="3470018947a22780"),
-        "bn-lora": dict(losses=[0.04049688205122948, 0.04049413092434406, 0.04049061983823776], best_epoch=3,
-            final="c5bfcd066c8f2664", served="57fde1d0176a8a8f", merged="a3946bc35a61afe0"),
+        "bn-lora": dict(losses=[0.04049694538116455, 0.040494199842214584, 0.04049184173345566], best_epoch=3,
+            final="d2fbab97a3adffd7", served="3bca8c6c1ebbbf08", merged="09610b81b13e9af7"),
         "bn-full": dict(losses=[0.6908666491508484, 0.6729371845722198, 0.6613186895847321], best_epoch=3,
-            final="9e93f023a0e51145", served="d04c0be4916f5b57", merged="b8b89ebeb77b870d"),
+            final="7e24ea0fc66ed2f1", served="adfee9d4c0dfe3aa", merged="af112bc0f53a2732"),
         "bn-combined": dict(losses=[0.5986000299453735, 0.5984358191490173, 0.5982885360717773], best_epoch=3,
-            final="b8cb03479f51ee1b", served="75a3c2aea70442cc", merged="6c4ee0a6f96a21e0"),
-        "cli-lora": dict(weights=["56d2b390ba176af7", "fd999680f2cad95c"]),
+            final="9a8a5256df4e1228", served="bbd0738a34b201d1", merged="3f1e2ba12b3e35d5"),
+        "cli-lora": dict(weights=["5f01c87384bc375a", "9f353fadafb00a4d"]),
         "cli-full": dict(weights=["7be962342aa2a858", "7972cf973bddacaa"]),
     },
     "2.5.1/AVX512": {
@@ -164,9 +165,9 @@ NUMBERS = {
         "head-mse": dict(losses=[0.255184605717659, 0.25077535957098007, 0.24827992916107178], best_epoch=3,
             final="6dea9ec7b5241659", served="f049423276a5ffee", merged="3470018947a22780"),
         "bn-full": dict(losses=[0.6908666491508484, 0.6729371845722198, 0.6613186895847321], best_epoch=3,
-            final="948b8c532ac63579", served="3cf955be11ea45ee", merged="05fc8a30c0712535"),
+            final="cfb16c39814850ef", served="1306fa048cffbf5a", merged="7f75e17107964203"),
         "bn-combined": dict(losses=[0.5986000299453735, 0.5984358191490173, 0.598288506269455], best_epoch=3,
-            final="bbbb5275691e9be0", served="dd612148798b6fe3", merged="8453e8647c292040"),
+            final="254682e13f29af18", served="b0528b3794cc2ee6", merged="10acd5b5b2e9179e"),
         "cli-full": dict(weights=["7be962342aa2a858", "7972cf973bddacaa"]),
     },
 }
