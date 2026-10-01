@@ -714,13 +714,23 @@ class LoRAFinetuner:
             self.tb.add_text("config", self._tb_config_markdown(), self._tb_epoch)
         log_message("")
 
-        self._set_train_mode()
         start_time = time.time()
 
         # Store log function for use in _train_epoch and helpers
         self._log_message = log_message
 
-        self._probe_model(log_message)
+        # The probes only look at what the model computes, so they run in
+        # eval mode. In train mode a full finetune's BatchNorm added their
+        # batches -- one of them noise at 100x -- to its running statistics:
+        # about 7,000x on every channel, which takes ~85 batches to decay,
+        # longer than most interactive runs, and the export and the served
+        # model normalize by them. LoRA's frozen norms are in eval mode
+        # either way.
+        self.model.eval()
+        try:
+            self._probe_model(log_message)
+        finally:
+            self._set_train_mode()
 
         stop_signal_path = self.output_dir / "stop_signal.json"
         # Make sure no stale signal from a previous run lingers.

@@ -168,18 +168,22 @@ def _bn_net():
                          nn.Dropout(0.5), nn.Conv3d(4, 1, 1))
 
 
-@pytest.mark.parametrize("lora", [pytest.param(True, marks=pytest.mark.finetune, id="lora"),
-                                  pytest.param(False, id="full")])
-def test_only_a_full_finetune_moves_the_batchnorm_statistics(make_trainer, lora):
+@pytest.mark.parametrize("lora, num_epochs, moves", [
+    pytest.param(True, 2, False, marks=pytest.mark.finetune, id="lora"),
+    pytest.param(False, 2, True, id="full"),
+    # The output probe's 100x noise, in train mode, multiplied the variance ~7000x.
+    pytest.param(False, 0, False, id="full, the startup probes alone"),
+])
+def test_only_training_a_full_finetune_moves_the_batchnorm_statistics(make_trainer, lora, num_epochs, moves):
     """model.train() put the frozen base's BatchNorm in train mode: its running
     statistics, which the adapter does not save, drifted from the served base."""
     model = LoraStrategy(2, 4, 0.0).prepare(_bn_net()) if lora else _bn_net()
     bn = next(m for m in model.modules() if isinstance(m, nn.BatchNorm3d))
-    before = bn.running_mean.clone()
+    before = torch.cat([bn.running_mean, bn.running_var])
     ann = _annotation(1, n=2, size=6, fg=(2, np.s_[:, :, :3]))
-    make_trainer(model, (torch.rand(ann.shape) * 5, ann), batch_size=2, num_epochs=2,
+    make_trainer(model, (torch.rand(ann.shape) * 5, ann), batch_size=2, num_epochs=num_epochs,
                  target_transform=BinaryTargetTransform()).train()
-    assert torch.equal(bn.running_mean, before) == lora
+    assert torch.equal(torch.cat([bn.running_mean, bn.running_var]), before) != moves
 
 
 def _half_background(n=4):
