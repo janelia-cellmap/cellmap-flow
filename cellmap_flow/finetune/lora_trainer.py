@@ -941,9 +941,13 @@ class LoRAFinetuner:
 
         LoRA: the model itself with its adapters switched off, in eval mode.
         Full finetune: the frozen copy taken before training.
+
+        Only called while distillation is on, and __init__ makes the teacher
+        whenever it is (only the OOM handler drops it, along with the term).
+        Making one here instead would be wrong for a full finetune: it would
+        copy the student as it is now, not as it started.
         """
-        teacher = self._teacher if self._teacher is not None else self.strategy.teacher(self.model)
-        with teacher as model:
+        with self._teacher as model:
             with autocast('cuda', enabled=self.use_mixed_precision, dtype=self.amp_dtype):
                 teacher_pred = model(raw)
         if self.select_channel is not None:
