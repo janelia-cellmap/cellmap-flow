@@ -574,6 +574,67 @@ def test_an_array_at_a_url_reads_as_it_does_on_disk(write_array, at_url, scheme,
     assert np.array_equal(open_array(at_url(scheme, path, bucket)).read(), on_disk)
 
 
+_COSEM = "janelia-cosem-datasets/jrc_hela-2/jrc_hela-2"
+_ERA5 = "gcp-public-data-arco-era5/ar/1959-2022-6h-64x32_equiangular_conservative.zarr/2m_temperature"
+_S3 = {"driver": "s3", "bucket": "janelia-cosem-datasets", "aws_credentials": {"type": "anonymous"}}
+
+
+def _cosem(suffix):
+    return {**_S3, "path": f"jrc_hela-2/jrc_hela-2.{suffix}/"}
+
+
+# path, the voxel size to open it at, (its voxel size, corner), the level as
+# tensorstore opens it, and a voxel in tissue (z, y, x)
+PUBLIC = [
+    pytest.param("gs://flyem-male-cns/em/em-clahe-jpeg", (32,) * 3, ((32.0,) * 3, (0.0,) * 3),
+                 {"driver": "neuroglancer_precomputed", "kvstore": "gs://flyem-male-cns/em/em-clahe-jpeg/",
+                  "scale_index": 2}, (8960, 9984, 20736), id="gs-precomputed"),
+    pytest.param("precomputed://https://storage.googleapis.com/flyem-male-cns/em/em-clahe-jpeg", (32,) * 3,
+                 ((32.0,) * 3, (0.0,) * 3), {"driver": "neuroglancer_precomputed", "scale_index": 2,
+                 "kvstore": "https://storage.googleapis.com/flyem-male-cns/em/em-clahe-jpeg/"},
+                 (8960, 9984, 20736), id="https-precomputed"),
+    pytest.param(f"s3://{_COSEM}.zarr/recon-1/em/fibsem-uint8", (10.48, 8, 8), ((10.48, 8.0, 8.0), (-2.62, -2.0, -2.0)),
+                 {"driver": "zarr", "kvstore": {**_cosem("zarr/recon-1/em/fibsem-uint8/s1")}}, (1592, 400, 3000),
+                 id="s3-ome-zarr"),
+    pytest.param(f"https://{_COSEM.replace('/', '.s3.amazonaws.com/', 1)}.zarr/recon-1/em/fibsem-uint8", (10.48, 8, 8),
+                 ((10.48, 8.0, 8.0), (-2.62, -2.0, -2.0)),
+                 {"driver": "zarr", "kvstore": {**_cosem("zarr/recon-1/em/fibsem-uint8/s1")}}, (1592, 400, 3000),
+                 id="https-ome-zarr"),
+    # funlib's rule rounds the N5 offset, a voxel centre (2.62, 2, 2), onto the grid.
+    pytest.param(f"s3://{_COSEM}.n5/em/fibsem-uint16/s1", None, ((10.48, 8.0, 8.0), (0.0,) * 3),
+                 {"driver": "n5", "kvstore": {**_cosem("n5/em/fibsem-uint16/s1")}}, (1592, 400, 3000), id="s3-n5"),
+    pytest.param(f"gs://{_ERA5}", None, ((1.0,) * 3, (0.0,) * 3),
+                 {"driver": "zarr", "kvstore": f"gs://{_ERA5}/"}, (1000, 0, 0), id="gs-zarr"),
+]
+
+
+@pytest.mark.network
+@pytest.mark.parametrize("path, voxel_size, placed, level, voxel", PUBLIC)
+def test_public_data_reads_as_tensorstore_reads_it(path, voxel_size, placed, level, voxel, tmp_path, monkeypatch):
+    """With broken AWS and Google credentials configured, which must not stop a
+    public read."""
+    import tensorstore
+
+    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.geometry import Box
+
+    direct = tensorstore.open(level).result()
+    if level["driver"] != "zarr":  # x, y, z(, channel), as io.source opens them
+        direct = direct[tensorstore.d[:].transpose[::-1]][tensorstore.d[:].translate_to[0]]
+    (tmp_path / "adc.json").write_text(json.dumps(
+        {"type": "authorized_user", "client_id": "x", "client_secret": "y", "refresh_token": "z"}))
+    for name, value in {"AWS_ACCESS_KEY_ID": "AKIAFAKEFAKEFAKEFAKE", "AWS_SECRET_ACCESS_KEY": "fake",
+                        "GOOGLE_APPLICATION_CREDENTIALS": str(tmp_path / "adc.json")}.items():
+        monkeypatch.setenv(name, value)
+    idi = ImageDataInterface(path, voxel_size=voxel_size, input_norms=[])
+    assert (tuple(idi._grid.voxel_size), tuple(idi._grid.translation)) == placed
+    assert tuple(idi.shape) == tuple(direct.shape[-3:])
+    size = (1,) * (direct.rank - 3) + tuple(min(64, s) for s in direct.shape[-3:])
+    begin = (0,) * (direct.rank - 3) + voxel
+    want = direct[tuple(slice(b, b + n) for b, n in zip(begin, size))].read().result()
+    assert np.array_equal(idi.source.read(Box(begin, size)), want)
+
+
 def test_v3_is_read_from_local_disk_only_and_urls_join_with_slashes(tmp_path):
     _v3_group(tmp_path / "v3.zarr")
     assert paths.is_v3_container(str(tmp_path / "v3.zarr")) and not paths.is_v3_container(str(tmp_path))
