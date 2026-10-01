@@ -12,6 +12,7 @@ other users of the cluster.
 import hmac
 import os
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -22,11 +23,18 @@ TOKEN_HEADER = "X-Restart-Token"
 def write_restart_token(output_dir) -> str:
     """Create a new token in ``output_dir`` (mode 0600) and return it."""
     token = secrets.token_urlsafe(32)
-    path = Path(output_dir) / TOKEN_FILE
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(token)
-    os.chmod(path, 0o600)  # O_CREAT's mode does not apply to an existing file
+    # Written to a new 0600 file (mkstemp's mode) and renamed over the old
+    # one. Rewriting an existing token file in place would keep its mode
+    # until a chmod afterwards, and anyone who had it open could read the
+    # new token through their handle.
+    fd, temp = tempfile.mkstemp(dir=output_dir, prefix=f".{TOKEN_FILE}.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(token)
+        os.replace(temp, Path(output_dir) / TOKEN_FILE)
+    except BaseException:
+        os.unlink(temp)
+        raise
     return token
 
 

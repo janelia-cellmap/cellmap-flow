@@ -14,7 +14,12 @@ import pytest
 from cellmap_flow.finetune.session_loop import RestartController
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.serving.restart_token import TOKEN_HEADER, read_or_create_restart_token, read_restart_token
+from cellmap_flow.serving.restart_token import (
+    TOKEN_HEADER,
+    read_or_create_restart_token,
+    read_restart_token,
+    write_restart_token,
+)
 
 SCRIPT_TEST = os.path.join(os.path.dirname(__file__), os.pardir, "script_test")
 RAW = os.path.join(SCRIPT_TEST, "dummy.zarr", "raw")
@@ -25,6 +30,15 @@ def test_the_token_is_private_and_made_once(tmp_path):
     token = read_or_create_restart_token(tmp_path)  # a run from before tokens gets one on demand
     assert read_or_create_restart_token(tmp_path) == read_restart_token(tmp_path) == token and len(token) >= 32
     assert stat.S_IMODE(os.stat(tmp_path / "restart_token").st_mode) == 0o600
+
+    # A new token over a file others could read: rewritten in place, it was
+    # readable until the chmod, and for good through a handle opened before.
+    os.chmod(tmp_path / "restart_token", 0o644)
+    with open(tmp_path / "restart_token") as earlier_reader:
+        new = write_restart_token(tmp_path)
+        assert earlier_reader.read() == token != new == read_restart_token(tmp_path)
+    assert stat.S_IMODE(os.stat(tmp_path / "restart_token").st_mode) == 0o600
+    assert os.listdir(tmp_path) == ["restart_token"]
 
 
 def test_a_restart_needs_the_jobs_token():
