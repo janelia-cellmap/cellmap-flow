@@ -267,8 +267,10 @@ function deleteConnection(edgeId) {
 // Arrange the nodes left to right by their place in the graph (longest-path
 // layering over the edges), each column as wide as its widest node and
 // centred on the tallest, with the blockwise nodes in a row below. It
-// measures the nodes' elements, so the canvas must be drawn first.
-export function autoLayoutNodes() {
+// measures the nodes' elements, so the canvas must be drawn first. With
+// `only` (node ids), only those nodes move, to where the arrangement of them
+// all puts them: the others keep the places they were saved with.
+export function autoLayoutNodes({ only } = {}) {
   const COL_GAP = 80;
   const ROW_SPACING = 40;
   const LEFT_MARGIN = 40;
@@ -352,7 +354,9 @@ export function autoLayoutNodes() {
     currentX += Math.max(...layers[k].map((n) => nodeSize[n.id].w)) + COL_GAP;
   });
 
+  const moves = only ? new Set(only) : null;
   const moveTo = (node, position) => {
+    if (moves && !moves.has(node.id)) return;
     node.position = position;
     const el = document.getElementById(`node-${node.id}`);
     if (el) {

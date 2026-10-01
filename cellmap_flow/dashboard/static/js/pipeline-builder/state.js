@@ -100,58 +100,50 @@ export function defaultPosition(type, i) {
 // The page's starting pipeline (pageData().pipeline): the live chain's
 // steps as normalizer and postprocessor nodes, and the rest of what the
 // builder last applied (routes/pipeline_builder_page.py). Every node gets an
-// id and a position, and there is always an INPUT node, with the dashboard's
-// dataset if it has no path of its own. The edges are then rebuilt from the
-// node order.
+// id, and there is always an INPUT node, with the dashboard's dataset if it
+// has no path of its own.
+//
+// A node keeps the position it was saved with. Returns the ids of the nodes
+// that had none, for the page to lay out once they are drawn
+// (canvas.autoLayoutNodes): every node, before anything was applied; a step
+// added since by something other than the builder (Submit on the dashboard
+// page). The saved edges stay if they still join the chain as it is (the
+// user's own extra edges with them); otherwise the chain changed since, a
+// step added or gone, and they are rebuilt from the node order.
 export function loadPipeline() {
   const start = PAGE.pipeline;
-  const inputs = (start.inputs || []).map((n, i) => ({
-    id: n.id || `input-${i}-${Date.now()}`,
-    name: "INPUT",
-    params: n.params || { dataset_path: datasetPath },
-    position: n.position || defaultPosition("input", i),
-  }));
+  const unplaced = [];
+  const node = (n, prefix, type, i, name, params) => {
+    const id = n.id || `${prefix}-${i}-${Date.now()}`;
+    if (!n.position) unplaced.push(id);
+    return { id, name, params, position: n.position || defaultPosition(type, i) };
+  };
+  const inputs = (start.inputs || []).map((n, i) => node(n, "input", "input", i, "INPUT",
+    n.params || { dataset_path: datasetPath }));
   if (inputs.length === 0) {
-    inputs.push({
-      id: `input-0-${Date.now()}`,
-      name: "INPUT",
-      params: { dataset_path: datasetPath },
-      position: defaultPosition("input", 0),
-    });
+    inputs.push(node({}, "input", "input", 0, "INPUT", { dataset_path: datasetPath }));
   } else if (!inputs[0].params?.dataset_path) {
     inputs[0].params = inputs[0].params || {};
     inputs[0].params.dataset_path = datasetPath;
   }
-  const simple = (prefix, type) => (n, i) => ({
-    id: n.id || `${prefix}-${i}-${Date.now()}`,
-    name: n.name,
-    params: n.params || {},
-    position: n.position || defaultPosition(type, i),
-  });
+  const step = (prefix, type) => (n, i) => node(n, prefix, type, i, n.name, n.params || {});
   replacePipeline({
     inputs,
-    outputs: (start.outputs || []).map((n, i) => ({
-      id: n.id || `output-${i}-${Date.now()}`,
-      name: "OUTPUT",
-      params: n.params || {},
-      position: n.position || defaultPosition("output", i),
-    })),
-    normalizers: (start.normalizers || []).map(simple("norm", "normalizer")),
-    models: (start.models || []).map(loadModel),
-    postprocessors: (start.postprocessors || []).map(simple("post", "postprocessor")),
+    outputs: (start.outputs || []).map((n, i) => node(n, "output", "output", i, "OUTPUT", n.params || {})),
+    normalizers: (start.normalizers || []).map(step("norm", "normalizer")),
+    models: (start.models || []).map((m, i) => loadModel(m, node(m, "model", "model", i, m.name, m.params || {}))),
+    postprocessors: (start.postprocessors || []).map(step("post", "postprocessor")),
     blockwise_config: [],
     edges: start.edges || [],
   });
-  autoConnectNodes();
+  const linked = new Set(pipeline.edges.map((e) => `${e.from}>${e.to}`));
+  if (!chainEdges().every(([from, to]) => linked.has(`${from}>${to}`))) autoConnectNodes();
+  return unplaced;
 }
 
-function loadModel(m, i) {
-  const model = {
-    id: m.id || `model-${i}-${Date.now()}`,
-    name: m.name,
-    params: m.params || {},
-    position: m.position || defaultPosition("model", i),
-  };
+// The saved model node m, as `model` ({id, name, params, position}), with
+// the config it was saved with.
+function loadModel(m, model) {
   // Keep the config (the server's ModelConfig.to_dict()), with its channel
   // names as an array: 'channels' (FlyModel etc.) or 'channels_names'
   // (HuggingFace), which may come as a JSON string. 'channels' is what the
@@ -196,36 +188,44 @@ export function addEdge(fromId, toId, id) {
   return true;
 }
 
-// The edges a pipeline in the usual order has, replacing any it had: INPUT ->
-// the normalizers in a chain -> every model -> the postprocessors in a chain
-// -> OUTPUT, skipping any stage that has no nodes.
-export function autoConnectNodes() {
-  pipeline.edges = [];
+// The edges a pipeline in the usual order has, as [from id, to id]: INPUT
+// -> the normalizers in a chain -> every model -> the postprocessors in a
+// chain -> OUTPUT, skipping any stage that has no nodes.
+function chainEdges() {
+  const edges = [];
+  const link = (from, to) => edges.push([from, to]);
   const { inputs, normalizers, models, postprocessors, outputs } = pipeline;
 
   if (inputs.length > 0 && normalizers.length > 0) {
-    addEdge(inputs[0].id, normalizers[0].id);
+    link(inputs[0].id, normalizers[0].id);
   }
   for (let i = 0; i < normalizers.length - 1; i++) {
-    addEdge(normalizers[i].id, normalizers[i + 1].id);
+    link(normalizers[i].id, normalizers[i + 1].id);
   }
   const sourceForModels = normalizers.length > 0
     ? normalizers[normalizers.length - 1].id
     : (inputs.length > 0 ? inputs[0].id : null);
   if (sourceForModels) {
-    models.forEach((model) => addEdge(sourceForModels, model.id));
+    models.forEach((model) => link(sourceForModels, model.id));
   }
   if (postprocessors.length > 0) {
-    models.forEach((model) => addEdge(model.id, postprocessors[0].id));
+    models.forEach((model) => link(model.id, postprocessors[0].id));
   } else if (outputs.length > 0) {
-    models.forEach((model) => addEdge(model.id, outputs[0].id));
+    models.forEach((model) => link(model.id, outputs[0].id));
   }
   for (let i = 0; i < postprocessors.length - 1; i++) {
-    addEdge(postprocessors[i].id, postprocessors[i + 1].id);
+    link(postprocessors[i].id, postprocessors[i + 1].id);
   }
   if (postprocessors.length > 0 && outputs.length > 0) {
-    addEdge(postprocessors[postprocessors.length - 1].id, outputs[0].id);
+    link(postprocessors[postprocessors.length - 1].id, outputs[0].id);
   }
+  return edges;
+}
+
+// Replace the edges with the usual order's (chainEdges).
+export function autoConnectNodes() {
+  pipeline.edges = [];
+  chainEdges().forEach(([from, to]) => addEdge(from, to));
 }
 
 // Connect a node just added, without touching the other edges: an INPUT to

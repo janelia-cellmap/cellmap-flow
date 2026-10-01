@@ -30,13 +30,14 @@ import { initOutputChannels } from "./output-channels.js";
 import { initPalette } from "./palette.js";
 import { changed, loadPipeline, syncOnUnload } from "./state.js";
 
-loadPipeline();
+const unplaced = loadPipeline();
 syncOnUnload();
 initLogPanel();
 initCanvas();
 initPalette();
 renderCanvas();
-autoLayoutNodes();  // measures the nodes, so after they are drawn
+// The nodes with no saved place; it measures the nodes, so after they are drawn.
+if (unplaced.length > 0) autoLayoutNodes({ only: unplaced });
 initBlockwise();
 initDialogs();
 initOutputChannels();
