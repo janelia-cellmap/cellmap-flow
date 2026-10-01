@@ -43,6 +43,10 @@ def looks_like_affinities(out_channels=None, model_name="", channels_names=None)
     """
     if not out_channels or int(out_channels) < 3:
         return False
+    # A string is one name, as models.geometry.channel_names_of reads it:
+    # iterated, "affinities" became the letters "a f f i ...", with no "aff".
+    if isinstance(channels_names, str):
+        channels_names = [channels_names]
     haystack = " ".join(
         [str(model_name or "")] + [str(c) for c in (channels_names or [])]
     ).lower()

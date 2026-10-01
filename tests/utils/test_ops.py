@@ -125,16 +125,19 @@ def test_affinities_are_agglomerated_from_probabilities_or_uint8():
     assert len(post.neighborhood) == 9, "three channels of input did not shrink it"
 
 
-@pytest.mark.parametrize("output_class, chain, level", [
-    pytest.param("unbounded", ["SigmoidPostprocessor", "AffinityPostprocessor"], "ok", id="probabilities"),
-    pytest.param("unit", ["AffinityPostprocessor"], "ok", id="a-model-giving-probabilities"),
-    pytest.param("unbounded", ["AffinityPostprocessor"], "warn", id="logits"),
+@pytest.mark.parametrize("output_class, chain, names, level", [
+    pytest.param("unbounded", ["SigmoidPostprocessor", "AffinityPostprocessor"], {"model_name": "aff"}, "ok",
+                 id="probabilities"),
+    pytest.param("unit", ["AffinityPostprocessor"], {"model_name": "aff"}, "ok", id="a-model-giving-probabilities"),
+    pytest.param("unbounded", ["AffinityPostprocessor"], {"model_name": "aff"}, "warn", id="logits"),
+    pytest.param("unbounded", ["AffinityPostprocessor"], {"channels_names": "affinities"}, "warn",
+                 id="logits-from-a-model-whose-one-channel-name-is-a-string"),
 ])
-def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain, level):
+def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain, names, level):
     from cellmap_flow.serving import probe
 
     output_class = {"unbounded": probe.UNBOUNDED, "unit": probe.UNIT}[output_class]
-    assert probe.review_postprocess(output_class, chain, out_channels=3, model_name="aff")["level"] == level
+    assert probe.review_postprocess(output_class, chain, out_channels=3, **names)["level"] == level
 
 
 def test_the_merger_survives_concurrent_chunks():
