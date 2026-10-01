@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, fields
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 import numpy as np
 import zarr
@@ -110,35 +110,26 @@ def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
     return np.asarray(ome_corner(offset, output_voxel_size), dtype=float)
 
 
-def _grid(raw_dataset_path, output_voxel_size, chunk_size, rounding):
+def _grid(raw_dataset_path, output_voxel_size, chunk_size):
+    """``(offset_nm, shape_voxels)`` of a volume over the data, padded to whole chunks."""
     from cellmap_flow.image_data_interface import ImageDataInterface
 
     output_voxel_size = np.asarray(output_voxel_size, dtype=float)
     chunk_size = np.asarray(chunk_size, dtype=int)
     idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
     offset = np.asarray(ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size))
-    if rounding == "ceil":
-        # The data's own extent in output voxels, rounded up so a partial
-        # voxel at the far end is covered. Not idi.roi's: that is the
-        # whole-nm box around the data, up to 2 nm larger, which would add
-        # a voxel to every level whose extent is not whole nm (10.48 nm...).
-        extent = np.asarray(idi.shape, dtype=float)[-output_voxel_size.size:] * np.asarray(
-            idi.voxel_size, dtype=float
-        )
-        shape = np.ceil(np.round(extent / output_voxel_size, 6)).astype(int)
-    elif rounding == "legacy_floor":
-        shape = (np.asarray(idi.roi.shape, dtype=float) / output_voxel_size).astype(int)
-    else:
-        raise ValueError(f"rounding must be 'ceil' or 'legacy_floor', got {rounding!r}")
+    # The data's own extent in output voxels, rounded up so a partial voxel
+    # at the far end is covered. Not idi.roi's: that is the whole-nm box
+    # around the data, up to 2 nm larger, which would add a voxel to every
+    # level whose extent is not whole nm (10.48 nm...).
+    extent = np.asarray(idi.shape, dtype=float)[-output_voxel_size.size:] * np.asarray(
+        idi.voxel_size, dtype=float
+    )
+    shape = np.ceil(np.round(extent / output_voxel_size, 6)).astype(int)
     return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
 
 
-def plan_volume(
-    raw_dataset_path: str,
-    model_geometry,
-    *,
-    rounding: Literal["ceil", "legacy_floor"] = "ceil",
-) -> VolumeGeometry:
+def plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry:
     """Where a new volume over ``raw_dataset_path`` lies, for a model.
 
     ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
@@ -147,9 +138,7 @@ def plan_volume(
     Each voxel size is snapped to the raw level closest to it (the model's
     own is kept as the claimed one); the volume lies on the output level's
     grid from its corner, one chunk per model output, and covers the data
-    padded to whole chunks. ``rounding="legacy_floor"`` counts the voxels
-    as volumes made before this did: rounded down, from the whole-nm box
-    around the data.
+    padded to whole chunks.
     """
     claimed_in = np.array(model_geometry.input_voxel_size)
     claimed_out = np.array(model_geometry.output_voxel_size)
@@ -161,7 +150,7 @@ def plan_volume(
         output_size = (np.array(model_geometry.write_shape) / claimed_out).astype(int)
     output_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_out)) or claimed_out)
     input_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_in)) or claimed_in)
-    offset, shape = _grid(raw_dataset_path, output_voxel_size, output_size, rounding)
+    offset, shape = _grid(raw_dataset_path, output_voxel_size, output_size)
     return VolumeGeometry(
         output_voxel_size=output_voxel_size,
         input_voxel_size=input_voxel_size,
