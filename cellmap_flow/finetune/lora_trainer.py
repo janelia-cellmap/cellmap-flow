@@ -754,8 +754,12 @@ class LoRAFinetuner:
         # from 0 regardless, so --resume re-ran every epoch it had already
         # done, and the checkpoint's epoch number was only ever logged.
         epoch_loss = None
+        # The last epoch done, which is what a checkpoint records: none yet,
+        # or the one a resume carries on after. The loop moves it only once
+        # an epoch starts. Moved before the stop check, a stop between two
+        # epochs recorded the next one as done, and --resume skipped it.
+        self.current_epoch = self._start_epoch - 1
         for epoch in range(self._start_epoch, self.num_epochs):
-            self.current_epoch = epoch
             # User-requested graceful stop: drop out of the training loop so
             # the outer flow (inference server + wait for restart) kicks in.
             if stop_signal_path.exists():
@@ -768,6 +772,7 @@ class LoRAFinetuner:
                 except Exception:
                     pass
                 break
+            self.current_epoch = epoch
             log_message(f"Starting epoch {epoch+1} of {self.num_epochs}...")
             # Mitigation loop: keep applying mitigations (halve batch, then
             # disable distillation) and retrying until the epoch succeeds or

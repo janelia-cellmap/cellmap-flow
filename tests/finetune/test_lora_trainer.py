@@ -307,23 +307,42 @@ def test_a_resumed_run_carries_on_after_its_checkpoint(make_trainer, tmp_path, n
     assert (stats["final_loss"] is None) == (not epochs)
 
 
-class _StopsDuringEpoch1(nn.Conv3d):
-    """Writes the dashboard's stop signal from inside epoch 1 (its first call is the output probe)."""
+class _StopSignal(nn.Module):
+    """Passes its input on; writes the dashboard's stop signal at its second call, in epoch 1
+    (the first is the output probe's)."""
 
     def __init__(self, signal):
-        super().__init__(1, 1, 1)
+        super().__init__()
         self.signal, self.calls = signal, 0
 
     def forward(self, x):
         self.calls += 1
-        if self.calls == 2:
+        if self.calls == 2 and self.signal is not None:
             self.signal.write_text("{}")
-        return super().forward(x)
+        return x
+
+
+def _stops_during_epoch_1(signal):
+    return nn.Sequential(_StopSignal(signal), nn.Conv3d(1, 1, 1))
 
 
 def test_the_dashboards_stop_signal_ends_the_run_after_the_current_epoch(make_trainer, tmp_path):
-    trainer = make_trainer(_StopsDuringEpoch1(tmp_path / "run" / "stop_signal.json"),
+    trainer = make_trainer(_stops_during_epoch_1(tmp_path / "run" / "stop_signal.json"),
                            (torch.rand(1, 1, 4, 4, 4), FOREGROUND), num_epochs=3)
     trainer.train()
     assert [s["epoch"] for s in trainer.training_stats] == [1]
     assert not (tmp_path / "run" / "stop_signal.json").exists(), "the signal is used up"
+
+
+@pytest.mark.finetune
+def test_a_run_stopped_between_epochs_resumes_at_the_epoch_it_skipped(make_trainer, tmp_path):
+    """The final checkpoint recorded the epoch the stop skipped as done, so --resume never ran it."""
+    data = (torch.rand(1, 1, 4, 4, 4), FOREGROUND)
+    lora = LoraStrategy(2, 4, 0.0)
+    make_trainer(lora.prepare(_stops_during_epoch_1(tmp_path / "run" / "stop_signal.json")), data,
+                 num_epochs=3).train()
+    [checkpoint] = (tmp_path / "run").glob("checkpoint_epoch_*.pth")
+    resumed = make_trainer(lora.prepare(_stops_during_epoch_1(None)), data, num_epochs=3)
+    resumed.load_checkpoint(str(checkpoint))
+    resumed.train()
+    assert [s["epoch"] for s in resumed.training_stats] == [1, 2, 3]
