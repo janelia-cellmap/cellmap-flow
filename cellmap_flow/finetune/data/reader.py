@@ -50,9 +50,9 @@ class PatchReader:
     """Reads the annotation and raw patches of one volume, and normalizes the raw.
 
     The raw is normalized here, with the session's own chain: the dashboard
-    normalizes raw through ``g.input_norms`` before inference, but the
-    trainer is a separate process whose ``g.input_norms`` is empty, so without
-    this it would train on raw uint8 while inference sees normalized [-1, 1].
+    normalizes raw through its ``process_chain()`` before inference, but the
+    trainer is a separate process whose chain is empty, so without this it
+    would train on raw uint8 while inference sees normalized [-1, 1].
 
     The arrays are opened on first read. In training that is in a loader
     worker, after the dataset was pickled to it: no open zarr or

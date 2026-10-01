@@ -352,11 +352,8 @@ class TrainingSession:
         dataloader = create_dataloader(
             args.corrections,
             batch_size=args.batch_size,
-            patch_shape=tuple(args.patch_shape) if args.patch_shape is not None else None,
             augment=not args.no_augment,
             num_workers=args.num_workers,
-            shuffle=True,
-            model_name=args.model_name,
         )
         logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
         self._record_input_norm()

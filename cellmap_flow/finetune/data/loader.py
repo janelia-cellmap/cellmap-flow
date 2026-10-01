@@ -9,7 +9,7 @@ fallback's included, keeps its workers from one epoch to the next.
 from __future__ import annotations
 
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
@@ -68,11 +68,8 @@ def dataset_from_manifest(
 def create_dataloader(
     corrections_zarr_path: str,
     batch_size: int = 2,
-    patch_shape: Optional[Tuple[int, int, int]] = None,
     augment: bool = True,
     num_workers: int = 4,
-    shuffle: bool = True,
-    model_name: Optional[str] = None,
 ) -> torch.utils.data.DataLoader:
     """Build the training DataLoader for a corrections directory.
 
@@ -80,20 +77,17 @@ def create_dataloader(
     session writes one (volume creation, YAML import, training submit) and
     restarts backfill one, so a missing manifest means something upstream
     failed -- which is worth an exception rather than training on anything
-    else.
+    else. The patch geometry comes from the manifest, and the dataset
+    samples randomly, so there is no patch shape or shuffle to pass.
 
     Args:
         corrections_zarr_path: Session corrections directory.
         batch_size: Clamped down to the dataset size when smaller.
-        patch_shape: Accepted for call-site compatibility; patch geometry comes
-            from the manifest, so this is unused.
         augment: Flips, XY rotations, brightness and noise, on top of the
             patch-centre jitter that is always applied. It overrides the
             manifest's stored preference.
         num_workers: DataLoader workers. Spawned, not forked -- tensorstore
             handles do not survive fork.
-        shuffle: Ignored; the dataset already samples randomly.
-        model_name: Accepted for call-site compatibility; unused.
     """
     manifest = read_manifest(corrections_zarr_path)
     if manifest is None:
