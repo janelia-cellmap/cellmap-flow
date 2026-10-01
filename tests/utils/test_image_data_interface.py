@@ -266,17 +266,153 @@ def test_without_a_voxel_size_the_finest_level_is_opened(ome_pyramid):
     assert ImageDataInterface(ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))).path.endswith("s0")
 
 
-def test_a_level_at_another_voxel_size_is_relabelled_with_a_warning_or_refused(ome_pyramid, caplog):
+def test_a_level_at_another_voxel_size_is_relabelled_with_a_warning_resampled_or_refused(ome_pyramid, caplog):
     pyramid = ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))
     with caplog.at_level(logging.WARNING):
         idi = ImageDataInterface(pyramid, voxel_size=(16, 16, 16))
-    assert [r.name for r in caplog.records if r.levelno >= logging.WARNING] == ["cellmap_flow.image_data_interface"]
-    assert (idi.path[-2:], idi.voxel_size, idi.actual_voxel_size, idi.requested_voxel_size) == (
-        "s1", Coordinate(16, 16, 16), Coordinate(12, 12, 12), Coordinate(16, 16, 16),
+    warned = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.name for r in warned] == ["cellmap_flow.image_data_interface"]
+    assert 'on_voxel_size_mismatch="resample"' in warned[0].getMessage(), "it says how to resample instead"
+    assert (idi.path[-2:], idi.voxel_size, idi.actual_voxel_size, idi.requested_voxel_size, idi.resampled) == (
+        "s1", Coordinate(16, 16, 16), Coordinate(12, 12, 12), Coordinate(16, 16, 16), False,
     )
     assert tuple(idi.roi.shape) == (64, 32, 32)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        resampled = ImageDataInterface(pyramid, voxel_size=(16, 16, 16), on_voxel_size_mismatch="resample")
+    assert not caplog.records and (resampled.path[-2:], resampled.resampled) == ("s1", True)
     with pytest.raises(ValueError, match="requested"):
         ImageDataInterface(pyramid, voxel_size=(16, 16, 16), on_voxel_size_mismatch="error")
+
+
+# --- resampling (on_voxel_size_mismatch="resample") ---------------------------------
+
+# layout: (OME levels as ome_pyramid takes them, its shape, voxel_size asked for;
+#          what the resampled dataset opens as: the level read, its voxel size,
+#          voxel_size, offset, roi, shape). Every level's corner is -4 nm.
+RESAMPLED_OPENS = {
+    # Every level is coarser than 4 nm: the finest is upsampled.
+    "4nm-model-on-janelia-levels": (
+        ((8, 0), (16, 4)), (16, 16, 16), (4, 4, 4),
+        ("s0", (8, 8, 8), (4, 4, 4), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (32, 32, 32)),
+    ),
+    # 16 nm is too coarse for 12: s0 at 8 nm, by 1.5, covered by ceil(16 / 1.5) voxels.
+    "12nm-model-on-janelia-levels": (
+        ((8, 0), (16, 4)), (16, 16, 16), (12, 12, 12),
+        ("s0", (8, 8, 8), (12, 12, 12), (-4, -4, -4), Roi((-4, -4, -4), (132, 132, 132)), (11, 11, 11)),
+    ),
+    "16nm-model-on-8x8x40-data": (
+        (((40, 8, 8), (16, 0, 0)),), (10, 24, 24), (16, 16, 16),
+        ("s0", (40, 8, 8), (16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (400, 192, 192)), (25, 12, 12)),
+    ),
+    # A level at the voxel size asked for is read as it is.
+    "exact-level-is-not-resampled": (
+        ((8, 0), (16, 4)), (16, 16, 16), (16, 16, 16),
+        ("s1", (16, 16, 16), (16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (8, 8, 8)),
+    ),
+}
+
+
+@pytest.mark.parametrize("layout", RESAMPLED_OPENS)
+def test_a_resampled_dataset_starts_at_the_levels_corner(ome_pyramid, layout):
+    """The resampled grid's voxel 0 starts where the level's does (the OME
+    translation less half a level voxel), not at 0 nm, so what the model sees
+    lies over the data."""
+    levels, shape, requested, expected = RESAMPLED_OPENS[layout]
+    idi = ImageDataInterface(ome_pyramid(levels, shape=shape), voxel_size=requested,
+                             on_voxel_size_mismatch="resample", input_norms=[])
+    assert (idi.path[-2:], tuple(idi.actual_voxel_size), tuple(idi.voxel_size), tuple(idi.offset), idi.roi,
+            tuple(idi.shape)) == expected
+    assert idi.resampled is (expected[1] != expected[2]) and idi.output_voxel_size == idi.voxel_size
+    if idi.resampled:  # its voxels exist only as reads compute them
+        with pytest.raises(AttributeError, match="resampled"):
+            idi.ts
+
+
+def _scipy_resampled(data, source_vs, target_vs):
+    """What a resampled read should give, computed directly: a block mean on the
+    axes whose factor is a whole number of 2 or more (the last block, cut short
+    by the end of the data, over the voxels it has), then ``map_coordinates``
+    (linear) at each target voxel's centre, clamped to the data's first and
+    last voxel centres, on the others. Label data takes the voxel each target
+    voxel's centre is in."""
+    from scipy.ndimage import map_coordinates
+
+    factors = [t / s for s, t in zip(source_vs, target_vs)]
+    targets = [int(np.ceil(n / f - 1e-9)) for n, f in zip(data.shape, factors)]
+    if data.dtype.kind == "u" and data.dtype.itemsize >= 4:
+        index = [np.minimum(np.floor((np.arange(m) + 0.5) * f).astype(int), n - 1)
+                 for n, m, f in zip(data.shape, targets, factors)]
+        return data[np.ix_(*index)]
+    values, coordinates = data.astype(np.float64), []
+    for axis, (f, m) in enumerate(zip(factors, targets)):
+        if f >= 2 and float(f).is_integer():
+            blocks = np.array_split(values, range(int(f), values.shape[axis], int(f)), axis=axis)
+            values = np.concatenate([block.mean(axis=axis, keepdims=True) for block in blocks], axis=axis)
+            coordinates.append(np.arange(m, dtype=float))
+        else:
+            coordinates.append(np.clip((np.arange(m) + 0.5) * f - 0.5, 0, data.shape[axis] - 1))
+    resampled = map_coordinates(values, np.meshgrid(*coordinates, indexing="ij"), order=1)
+    return np.rint(resampled).astype(data.dtype) if data.dtype.kind in "iu" else resampled.astype(data.dtype)
+
+
+# layout: (source voxel size, shape, dtype, voxel size asked for)
+RESAMPLED_VALUES = {
+    "block-mean": ((8, 8, 8), (8, 8, 8), np.float32, (16, 16, 16)),
+    "block-mean-rounded-in-uint8": ((8, 8, 8), (8, 8, 8), np.uint8, (16, 16, 16)),
+    "block-mean-of-a-last-block-cut-short": ((8, 8, 8), (5, 8, 7), np.float32, (24, 16, 24)),
+    "upsampled-linear": ((8, 8, 8), (4, 4, 4), np.float32, (4, 4, 4)),
+    "non-integer-factor-linear": ((12, 12, 12), (8, 8, 8), np.float32, (16, 16, 16)),
+    "16nm-model-on-12x12x30-data": ((30, 12, 12), (6, 8, 8), np.float32, (16, 16, 16)),
+    "4nm-model-on-8x8x40-data": ((40, 8, 8), (3, 4, 4), np.float32, (4, 4, 4)),
+    # z linear (40 -> 16), y and x block means (8 -> 16).
+    "16nm-model-on-8x8x40-data": ((40, 8, 8), (4, 8, 8), np.float32, (16, 16, 16)),
+    # Labels take the nearest voxel, whatever the factor.
+    "labels-nearest": ((12, 8, 8), (8, 8, 8), np.uint64, (16, 16, 16)),
+}
+
+
+def _random_volume(write_array, layout):
+    source_vs, shape, dtype, requested = RESAMPLED_VALUES[layout]
+    data = (np.random.default_rng(0).random(shape) * 250).astype(dtype)
+    path = write_array("zarr2", data, {"resolution": list(source_vs), "offset": [0, 0, 0]})
+    idi = ImageDataInterface(path, voxel_size=requested, on_voxel_size_mismatch="resample", input_norms=[])
+    return idi, data
+
+
+@pytest.mark.parametrize("layout", RESAMPLED_VALUES)
+def test_a_resampled_read_is_the_direct_computation(write_array, layout):
+    idi, data = _random_volume(write_array, layout)
+    source_vs, _, dtype, requested = RESAMPLED_VALUES[layout]
+    got, expected = idi.to_ndarray_ts(idi.roi), _scipy_resampled(data, source_vs, requested)
+    assert got.dtype == dtype and got.shape == expected.shape == tuple(idi.shape)
+    if np.dtype(dtype).kind == "f":
+        np.testing.assert_allclose(got, expected, rtol=1e-6)
+    else:
+        np.testing.assert_array_equal(got, expected)
+    # Through the chain after resampling, as a stored level would be.
+    doubled = idi.with_input_norms([LambdaNormalizer("x * 2")]).to_ndarray_ts(idi.roi)
+    np.testing.assert_allclose(doubled, expected.astype(np.float32) * 2, rtol=1e-6)
+
+
+@pytest.mark.parametrize("layout", RESAMPLED_VALUES)
+def test_neighbouring_resampled_chunks_meet_exactly(write_array, layout):
+    """The server reads every chunk on its own: two that meet must give, at
+    their shared border, the voxels one read across both gives, including
+    where they run past the data into padding."""
+    idi, _ = _random_volume(write_array, layout)
+    voxel = np.array(idi.voxel_size)
+    whole = Roi(idi.roi.offset - Coordinate(voxel * 2), idi.roi.shape + Coordinate(voxel * 4))
+    expected = idi.to_ndarray_ts(whole)
+    for axis in range(3):
+        for split in range(1, expected.shape[axis]):
+            cut = np.array(whole.shape)
+            cut[axis] = split * voxel[axis]
+            first = Roi(whole.offset, Coordinate(cut))
+            rest = Roi(whole.offset + Coordinate(np.eye(3, dtype=int)[axis] * cut[axis]),
+                       whole.shape - Coordinate(np.eye(3, dtype=int)[axis] * cut[axis]))
+            pieces = np.concatenate([idi.to_ndarray_ts(first), idi.to_ndarray_ts(rest)], axis=axis)
+            assert np.array_equal(pieces, expected), (axis, split)
 
 
 @pytest.mark.parametrize("levels, unit, requested, level, voxel_size, roi_shape", [

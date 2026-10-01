@@ -4,8 +4,10 @@
 group or precomputed volume for ``voxel_size`` (``io.multiscale``), reads
 its metadata (``io.metadata``) and keeps its voxel grid (``io.geometry``)
 and the array (``io.source``). A read of a world ROI is the grid's box of voxels, read
-with padding where it runs past the array, then optionally resampled to
-``output_voxel_size`` (deprecated). What is read goes through the input
+with padding where it runs past the array. With
+``on_voxel_size_mismatch="resample"``, a dataset with no level at
+``voxel_size`` is resampled to it (``io.resample``); the deprecated
+``output_voxel_size`` resamples what is read, crudely. What is read goes through the input
 chain on the way: the normalizers and ChannelSelector given as
 ``input_norms``, else the process's chain (``process_chain().input_norms``)
 as it is at read time, which user ``process_chunk`` scripts rely on.
@@ -24,19 +26,32 @@ from cellmap_flow.io import multiscale, paths
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import ArrayMeta, read_array_meta, snap_integral
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
+from cellmap_flow.io.resample import Resampling, is_label_dtype
 from cellmap_flow.io.source import open_array, read_padded
 from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)
 
-# (path, requested voxel size) pairs already warned about; one of these is
-# built per extracted chunk in some paths.
+# (path, requested voxel size, on_voxel_size_mismatch) already warned about,
+# or told about being resampled; one of these is built per extracted chunk in
+# some paths.
 _warned_relabel = set()
+
+ON_VOXEL_SIZE_MISMATCH = ("relabel", "resample", "error")
+
+# What the relabel warning suggests instead.
+RESAMPLE_HINT = (
+    'on_voxel_size_mismatch="resample" (`resample: true` in a YAML, `--resample` '
+    "on the command line) resamples it to that voxel size instead"
+)
 
 # The arguments that warn when passed, and go in the next release (K18),
 # with what to do instead. Nothing in cellmap-flow passes them.
 _DEPRECATED = {
-    "output_voxel_size": "read at the dataset's voxel size and resample what is read",
+    "output_voxel_size": (
+        'use voxel_size with on_voxel_size_mismatch="resample" (`resample: true` in a YAML, '
+        "`--resample` on the command line), which resamples every axis by its own factor"
+    ),
     "custom_fill_value": "read within the dataset's roi and pad what is read",
 }
 
@@ -104,11 +119,25 @@ class ImageDataInterface:
         ``voxel_size`` picks the scale of a multiscale group or precomputed
         volume (the finest one not coarser than it); the path of one scale is
         read at that scale. When the array opened is at a different voxel
-        size, ``on_voxel_size_mismatch`` decides: "relabel" (the default,
-        with a warning) reads it as if it were at ``voxel_size``, voxel for
-        voxel; "error" raises. ``actual_voxel_size`` and
-        ``requested_voxel_size`` record both.
+        size, ``on_voxel_size_mismatch`` decides:
+
+        - "relabel" (the default, with a warning) reads it as if it were at
+          ``voxel_size``, voxel for voxel. The data then really lies at
+          ``actual_voxel_size``, and ``offset`` is its corner rescaled.
+        - "resample" reads it resampled to ``voxel_size`` (``io.resample``),
+          from the level ``select_level``'s "resample" mode picks: the
+          coarsest not coarser than ``voxel_size`` on any axis, else the
+          finest. The data then really is at ``voxel_size``, ``offset`` is
+          the level's own corner and ``shape`` the resampled one.
+          ``resampled`` says which of the two a mismatch got.
+        - "error" raises.
+
+        ``actual_voxel_size`` (the level read) and ``requested_voxel_size``
+        record both sizes either way.
         """
+        resample = on_voxel_size_mismatch == "resample"
+        if resample and output_voxel_size is not None:
+            raise ValueError('output_voxel_size cannot be combined with on_voxel_size_mismatch="resample"')
         passed = {"output_voxel_size": output_voxel_size, "custom_fill_value": custom_fill_value}
         for name, value in passed.items():
             if value is not None:
@@ -122,7 +151,9 @@ class ImageDataInterface:
         # A multiscale group or precomputed volume is read at its level for
         # voxel_size; the path of one level at that level.
         try:
-            resolved, scale = multiscale.select_dataset(dataset_path, voxel_size)
+            resolved, scale = multiscale.select_dataset(
+                dataset_path, voxel_size, mode="resample" if resample else "floor"
+            )
             if scale is not None:
                 logger.info(f"found scale {scale} for voxel size {voxel_size}")
                 dataset_path = resolved
@@ -131,6 +162,7 @@ class ImageDataInterface:
             logger.warning(f"could not open dataset {dataset_path} to find scale: {e}")
         self.path = dataset_path
         self.input_norms = None if input_norms is None else list(input_norms)
+        meta = read_array_meta(dataset_path)
         (
             actual_voxel_size,
             actual_offset,
@@ -138,8 +170,7 @@ class ImageDataInterface:
             shape,
             self.axes_names,
             self.filetype,
-        ) = legacy_meta(read_array_meta(dataset_path))
-        self.shape = Coordinate(shape)
+        ) = legacy_meta(meta)
         actual_voxel_size = snap_integral(actual_voxel_size)
         actual_offset = snap_integral(actual_offset)
         # What the data really is, and what the caller asked for; voxel_size
@@ -153,6 +184,8 @@ class ImageDataInterface:
             else coordinate_or_floats(voxel_size, "voxel size", dataset_path)
         )
         voxel_size_f, offset_f = actual_voxel_size, actual_offset
+        # How a read is resampled to voxel_size, when it is (see to_ndarray_ts).
+        self._resampling = None
         if voxel_size is not None:
             requested = snap_integral(voxel_size)
             if not multiscale.same_voxel_size(requested, actual_voxel_size):
@@ -162,25 +195,43 @@ class ImageDataInterface:
                 )
                 if on_voxel_size_mismatch == "error":
                     raise ValueError(message)
-                if on_voxel_size_mismatch != "relabel":
+                if on_voxel_size_mismatch not in ON_VOXEL_SIZE_MISMATCH:
                     raise ValueError(
-                        f"on_voxel_size_mismatch must be 'relabel' or 'error', "
-                        f"got {on_voxel_size_mismatch!r}"
+                        "on_voxel_size_mismatch must be one of "
+                        f"{', '.join(map(repr, ON_VOXEL_SIZE_MISMATCH))}, got {on_voxel_size_mismatch!r}"
                     )
-                key = (dataset_path, tuple(requested.tolist()))
-                if key not in _warned_relabel:
-                    _warned_relabel.add(key)
-                    logger.warning(
-                        f"{message}; reading it as if it were "
-                        f"{tuple(requested.tolist())} nm (the data is not resampled)"
+                key = (dataset_path, tuple(requested.tolist()), on_voxel_size_mismatch)
+                if resample:
+                    # The resampled grid starts at the level's own corner, so
+                    # offset_f stays the level's; only the voxels change.
+                    self._resampling = Resampling(
+                        tuple(float(v) for v in actual_voxel_size),
+                        tuple(float(v) for v in requested),
+                        tuple(int(n) for n in shape),
                     )
-                # Relabel on the real grid: voxel i stays voxel i and only its
-                # size changes, so the offset scales with it. Keeping the real
-                # offset against the requested voxel size mixed two unit
-                # systems in (roi - offset) / voxel_size and shifted every read
-                # of an offset dataset.
-                offset_f = actual_offset / actual_voxel_size * requested
+                    methods = self._resampling.methods(is_label_dtype(meta.dtype))
+                    shape = self._resampling.shape
+                    if key not in _warned_relabel:
+                        _warned_relabel.add(key)
+                        logger.info(
+                            f"{message}; resampling it ({', '.join(f'{a} {m}' for a, m in zip(self.axes_names, methods))})"
+                        )
+                else:
+                    if key not in _warned_relabel:
+                        _warned_relabel.add(key)
+                        logger.warning(
+                            f"{message}; reading it as if it were "
+                            f"{tuple(requested.tolist())} nm (the data is not resampled; "
+                            f"{RESAMPLE_HINT})"
+                        )
+                    # Relabel on the real grid: voxel i stays voxel i and only its
+                    # size changes, so the offset scales with it. Keeping the real
+                    # offset against the requested voxel size mixed two unit
+                    # systems in (roi - offset) / voxel_size and shifted every read
+                    # of an offset dataset.
+                    offset_f = actual_offset / actual_voxel_size * requested
             voxel_size_f = requested
+        self.shape = Coordinate(shape)
         # The grid reads are done on, in exact floats: voxel_size and offset
         # below are Coordinates when whole, and roi is the whole-nm box
         # around the data.
@@ -208,6 +259,14 @@ class ImageDataInterface:
         # debugging question.
         logger.debug(str(self.info))
 
+    @property
+    def resampled(self) -> bool:
+        """Whether reads are resampled from ``actual_voxel_size`` to
+        ``voxel_size``: the data then really is at ``voxel_size``. When the
+        two differ and this is False, the level was relabelled, and the data
+        really lies at ``actual_voxel_size``."""
+        return self._resampling is not None
+
     def _view(self):
         return LazyNormalization(
             self.source.ts,
@@ -222,7 +281,16 @@ class ImageDataInterface:
 
         With ``normalize=False`` this is the plain tensorstore of the selected
         channel, as it always was.
+
+        A resampled dataset has none: its voxels exist only as
+        ``to_ndarray_ts`` computes them. ``source.ts`` is the level as stored.
         """
+        if self.resampled:
+            raise AttributeError(
+                f"{self.path} is resampled from {tuple(self.actual_voxel_size)} nm to "
+                f"{tuple(self.voxel_size)} nm, so it is read with to_ndarray_ts(); "
+                "source.ts is the stored level"
+            )
         view = self._view()
         return view if self.normalize else view.selected()
 
@@ -254,14 +322,21 @@ class ImageDataInterface:
 
         Where the ROI runs past the array it is padded with
         ``custom_fill_value`` (0 when unset; "edge" repeats the border
-        voxels), after the chain: padding is never normalized. A ROI is read
-        at ``output_voxel_size`` when that differs from the voxel size (see
-        ``_read_resampled``); the whole array never is.
+        voxels), after the chain: padding is never normalized.
+
+        A resampled dataset (``resampled``) is read at ``voxel_size`` by
+        ``io.resample``: the stored voxels are resampled, then go through the
+        chain, as a stored level at ``voxel_size`` would. A ROI is read at
+        the deprecated ``output_voxel_size`` when that differs from the voxel
+        size (see ``_read_resampled``); the whole array never is.
         """
         view = self._view()
         store = view.selected()
         through_chain = functools.partial(apply_norms, input_norms=view.norms_to_apply())
         fill = self.custom_fill_value if self.custom_fill_value else 0
+        if self.resampled:
+            box = Box((0,) * len(self.shape), tuple(self.shape)) if roi is None else self._grid.world_to_box(roi)
+            return self._resampling.read(store, box, fill, through_chain)
         if roi is None:
             return read_padded(store, None, fill, through_chain)
         if multiscale.same_voxel_size(self._grid.voxel_size, self.output_voxel_size):
