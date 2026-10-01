@@ -21,7 +21,6 @@ Routes: POST ``/api/finetune/load-crops`` (the import), GET
 """
 
 import logging
-import os
 import time
 
 from flask import jsonify, request
@@ -45,7 +44,11 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune.crop_loader import parse_crops_yaml
+from cellmap_flow.finetune.crop_loader import (
+    YamlFileRefused,
+    parse_crops_yaml,
+    read_yaml_file,
+)
 from cellmap_flow.finetune.session.volume import (
     build_manifest,
     plan_volume,
@@ -172,9 +175,14 @@ def load_crops_from_yaml():
         step("setup", "Reading the crop manifest...")
         try:
             crops_config = parse_crops_yaml(yaml_input)
+        except YamlFileRefused as e:
+            return jsonify({"success": False, "error": str(e)}), 400
         except ValidationError as e:
+            # Only where and what: each error's "input" is the offending
+            # value, which for a top-level error is the whole document.
+            details = [{"loc": list(err["loc"]), "msg": err["msg"]} for err in e.errors()]
             return (
-                jsonify({"success": False, "error": "YAML validation failed", "details": e.errors()}),
+                jsonify({"success": False, "error": "YAML validation failed", "details": details}),
                 400,
             )
         except Exception as e:
@@ -354,29 +362,17 @@ def get_load_crops_progress():
 
 
 @finetune_bp.route("/api/finetune/read-yaml", methods=["GET"])
-def read_yaml_file():
+def read_yaml():
     """Return the contents of a YAML file so the dashboard can preview/edit it.
 
-    The dashboard listens on every interface, and this used to return any
-    file the user could read, so it now serves only files that are YAML by
-    name after resolving symlinks. The name is checked before existence so
-    the route cannot be used to probe for other files either.
+    :func:`~cellmap_flow.finetune.crop_loader.read_yaml_file` decides which
+    files may be read: the dashboard listens on every interface, and this
+    used to return any file the user could read.
     """
     path = request.args.get("path")
     if not path:
         return jsonify({"success": False, "error": "Missing 'path' query param"}), 400
-    real = os.path.realpath(os.path.expanduser(path))
-    if not real.lower().endswith((".yaml", ".yml")):
-        return jsonify({"success": False, "error": "Only .yaml or .yml files can be read"}), 400
-    if not os.path.exists(real):
-        return jsonify({"success": False, "error": f"File not found: {path}"}), 404
-    if not os.path.isfile(real):
-        return jsonify({"success": False, "error": f"Not a file: {path}"}), 400
-    if os.path.getsize(real) > 1_000_000:
-        return jsonify({"success": False, "error": "File exceeds 1 MB; paste it directly instead"}), 400
     try:
-        with open(real) as f:
-            text = f.read()
-        return jsonify({"success": True, "text": text})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": True, "text": read_yaml_file(path)})
+    except YamlFileRefused as e:
+        return jsonify({"success": False, "error": str(e)}), 400

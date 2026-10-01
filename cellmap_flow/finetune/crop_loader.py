@@ -120,12 +120,51 @@ class CropsConfig(BaseModel):
         return out
 
 
+YAML_SUFFIXES = (".yaml", ".yml")
+YAML_SIZE_LIMIT = 1_000_000
+
+
+class YamlFileRefused(ValueError):
+    """A path :func:`read_yaml_file` will not read; the message says why."""
+
+
+def read_yaml_file(path: str) -> str:
+    """Return the text of the YAML file at ``path``, or raise :class:`YamlFileRefused`.
+
+    The dashboard listens on every interface without authentication, and two
+    of its routes read a file the request names: read-yaml, for the editor,
+    and load-crops. Both used to read any file the dashboard's user could, so
+    this reads only a regular file that is YAML by name once symlinks are
+    resolved, and at most 1 MB of it.
+
+    A file that is missing, is not YAML, is not a regular file or cannot be
+    opened is refused with the same message, so the answer does not tell a
+    caller which paths exist either.
+    """
+    real = os.path.realpath(os.path.expanduser(path))
+    refused = YamlFileRefused("Only an existing .yaml or .yml file can be read")
+    if not real.lower().endswith(YAML_SUFFIXES) or not os.path.isfile(real):
+        raise refused
+    if os.path.getsize(real) > YAML_SIZE_LIMIT:
+        raise YamlFileRefused("File exceeds 1 MB; paste it directly instead")
+    try:
+        with open(real) as f:
+            return f.read()
+    except OSError:
+        raise refused from None
+
+
 def parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig:
-    """Parse a YAML string OR the path to a YAML file into a validated config."""
+    """Parse YAML text, or the path to a YAML file, into a validated config.
+
+    A single line that ends in ``.yaml`` or ``.yml`` is a path, read through
+    :func:`read_yaml_file`; anything else is YAML text. Deciding by the name
+    rather than by whether the file exists is what keeps load-crops from
+    opening arbitrary files, or answering differently for one that exists.
+    """
     text = yaml_text_or_path
-    if "\n" not in yaml_text_or_path and os.path.exists(yaml_text_or_path):
-        with open(yaml_text_or_path) as f:
-            text = f.read()
+    if "\n" not in text and text.strip().lower().endswith(YAML_SUFFIXES):
+        text = read_yaml_file(text.strip())
     data = yaml.safe_load(text) or {}
     return CropsConfig.model_validate(data)
 

@@ -16,16 +16,39 @@ from cellmap_flow.jobs.settings import LauncherSettings
 READ_YAML = "/api/finetune/read-yaml"
 
 
-def test_only_yaml_files_are_served(dashboard, tmp_path):
-    """It listens on every interface, so it must not hand out arbitrary files."""
+def _read_yaml(dashboard, path):
+    return dashboard.get(READ_YAML, query_string={"path": path})
+
+
+def _load_crops(dashboard, path):
+    return dashboard.post("/api/finetune/load-crops", json={"yaml": path, "model_name": "m"})
+
+
+# Each file the routes must not read, beside a missing one that must answer the same.
+REFUSED_AND_MISSING = [
+    ("id_rsa", "missing_id_rsa"),
+    ("notes.txt", "missing.txt"),
+    ("settings.yaml.bak", "missing.yaml.bak"),
+    ("link.yaml", "missing.yaml"),  # a YAML name for a secret
+    ("dir.yaml", "missing.yaml"),
+]
+
+
+@pytest.mark.parametrize("read", [_read_yaml, _load_crops], ids=["read-yaml", "load-crops"])
+def test_only_yaml_files_are_served(dashboard, tmp_path, read):
+    """It listens on every interface, so it must not hand out arbitrary files,
+    nor say which of them exist."""
     (tmp_path / "crops.yaml").write_text("crops: []\n")
-    assert dashboard.get(READ_YAML, query_string={"path": str(tmp_path / "crops.yaml")}).get_json()["text"] == "crops: []\n"
+    assert _read_yaml(dashboard, str(tmp_path / "crops.yaml")).get_json()["text"] == "crops: []\n"
     for name in ("id_rsa", "notes.txt", "settings.yaml.bak"):
         (tmp_path / name).write_text("secret")
     (tmp_path / "link.yaml").symlink_to(tmp_path / "id_rsa")
-    for name in ("id_rsa", "notes.txt", "settings.yaml.bak", "missing_id_rsa", "link.yaml"):
-        response = dashboard.get(READ_YAML, query_string={"path": str(tmp_path / name)})
-        assert response.status_code == 400 and "secret" not in response.get_data(as_text=True), name
+    (tmp_path / "dir.yaml").mkdir()
+    for name, missing in REFUSED_AND_MISSING:
+        refused, absent = read(dashboard, str(tmp_path / name)), read(dashboard, str(tmp_path / missing))
+        assert refused.status_code == 400 and "secret" not in refused.get_data(as_text=True), name
+        answer = refused.get_data(as_text=True).replace(name, "<name>")
+        assert answer == absent.get_data(as_text=True).replace(missing, "<name>"), name
 
 
 def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
