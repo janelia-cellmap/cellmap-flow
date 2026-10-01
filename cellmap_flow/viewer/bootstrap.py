@@ -1,8 +1,9 @@
 """A new viewer on a dataset: ``new_viewer()``.
 
-The one place a viewer is made: the CLIs' startup viewer
+The viewers the dashboard serves are made here: the CLIs' startup viewer
 (dashboard.services.startup.generate_neuroglancer_url), /api/set-data, and the
-bounding-box tool. It never starts the dashboard.
+bounding-box tool. ``cellmap_flow view`` (cli/viewer_cli.py) still builds its
+own. It never starts the dashboard.
 """
 
 import logging

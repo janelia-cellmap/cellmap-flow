@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def _sanitize_job_name(name: str) -> str:
-    """Replace spaces and hyphens with underscores for bsub job names."""
+    """A Hugging Face model's name: its repo's last part, spaces and hyphens
+    made underscores. It names the bsub job, the viewer layer and the
+    model's config. (routes/blockwise has a _sanitize_job_name of its own,
+    which keeps hyphens in a task's name: making the two one would rename
+    either the Hugging Face models or the blockwise tasks.)"""
     return re.sub(r"[\s\-]+", "_", name)
 
 
@@ -114,8 +118,8 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
     with session.viewer.txn() as s:
         kill_n_remove_from_neuroglancer(to_be_killed, s)
         # Forget them too: a killed job left in the jobs still counts as
-        # running, so selecting that model again did nothing, and
-        # /api/process kept rebuilding layers pointing at its dead host.
+        # running, so selecting that model again did nothing, and each
+        # PUT /api/pipeline rebuilt a layer pointing at its dead host.
         session.jobs = [j for j in session.jobs if j not in to_be_killed]
         # Launch local catalog models
         for _, group in session.model_catalog.items():

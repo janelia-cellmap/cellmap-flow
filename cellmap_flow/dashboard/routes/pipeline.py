@@ -332,13 +332,15 @@ def _deprecated_alias(view):
 @pipeline_bp.route("/api/process", methods=["POST"])
 @_deprecated_alias
 def process():
-    """Submit's route before PUT /api/pipeline, answering as it did.
+    """Submit's route before PUT /api/pipeline.
 
     The body is ``{"input_norm", "postprocess"}``, either chain in the list
     or the older dict form. The answer is ``{"message", "received_data"}``,
-    the body with the dashboard's address and the chain's digest added. An
-    op it does not know is kept in the chain and skipped where it is built;
-    a body without both chains, or a step its class refuses, is a 500.
+    the body with the dashboard's address and the chain's digest added; the
+    older answer's ``found_custom_normalizer`` and ``received_data.time``,
+    which nothing read, are gone. An op it does not know is kept in the
+    chain and skipped where it is built; a body without both chains, or a
+    step its class refuses, is a 500.
     """
     data = request.get_json()
 
