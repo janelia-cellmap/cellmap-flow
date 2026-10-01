@@ -13,6 +13,7 @@ import pytest
 from funlib.geometry import Roi
 
 from cellmap_flow import server as server_module
+from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.norm.input_normalize import LambdaNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -147,3 +148,54 @@ def test_chunks_go_out_in_zarr_order(shape, axes, expected):
     if len(shape) == 4:  # each voxel keeps its own channel values
         voxel = tuple(slice(None) if a == "c" else {"z": 1, "y": 2, "x": 3}[a] for a in axes)
         assert np.array_equal(out[1, 2, 3], data[voxel])
+
+
+# flags: (served .zattrs translation, served shape, model_info's
+#         effective_output_voxel_size and input_resampled_from)
+RESAMPLE_OR_RELABEL = {
+    # 16x4x4 nm data resampled to the model's 8 nm from its corner, (-8, -2, -2).
+    "--resample": ([-4.0, 2.0, 2.0], [32, 8, 8, 1], [8, 8, 8], [16, 4, 4]),
+    # Without it, read voxel for voxel as if at 8 nm: the output really is at 16x4x4.
+    "": ([0.0, 0.0, 0.0], [16, 16, 16, 1], [16, 4, 4], None),
+}
+
+
+@pytest.mark.parametrize("flag", RESAMPLE_OR_RELABEL)
+def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyramid, model_script, monkeypatch, flag):
+    """From the command line a launcher runs to the chunks: a resampled input
+    is at the model's voxel size and placed from the data's corner, and
+    model_info tells it apart from a relabelled one, which the viewer then
+    draws at the level's real voxel size."""
+    import json
+
+    from click.testing import CliRunner
+
+    from cellmap_flow.cli.main import cli
+
+    path = ome_pyramid((((16, 4, 4), 0),))  # 16^3 voxels from (-8, -2, -2) nm, each its z index + 1
+    served = []
+    monkeypatch.setattr(CellMapFlowServer, "run", lambda self, **kwargs: served.append(self))
+    entry = json.dumps({"type": "script", "script_path": model_script()})
+    result = CliRunner().invoke(cli, ["serve", "--model", entry, "-d", path, *flag.split()])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+
+    (server,) = served
+    client = server.app.test_client()
+    translation, shape, effective, resampled_from = RESAMPLE_OR_RELABEL[flag]
+    zattrs = get_json(client, "/plain/.zattrs")["multiscales"][0]["datasets"][0]["coordinateTransformations"]
+    assert (zattrs[1]["translation"][:3], get_json(client, "/plain/s0/.zarray")["shape"]) == (translation, shape)
+    info = get_json(client, "/__control__/model_info")
+    assert (info["effective_output_voxel_size"], info["input_resampled_from"]) == (effective, resampled_from)
+    # Each chunk is the model (the identity) on the input read the same way.
+    reader = ImageDataInterface(path, voxel_size=(8, 8, 8), on_voxel_size_mismatch="resample" if flag else "relabel",
+                                input_norms=[])
+    for index in ("0.0.0.0", "0.1.1.0"):
+        corner = server.origin + 32 * np.array([int(i) for i in index.split(".")[:3]])
+        expected = reader.to_ndarray_ts(Roi(tuple(corner), (32, 32, 32)))
+        assert np.array_equal(_chunk_at(client, server, index), expected[..., None]), index
+
+
+def _chunk_at(client, server, index):
+    response = client.get(f"/plain/s0/{index}")
+    assert response.status_code == 200, response.data
+    return decode_chunk(server, response.data, np.float32, (4, 4, 4, 1))

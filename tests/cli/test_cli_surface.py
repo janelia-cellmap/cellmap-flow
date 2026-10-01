@@ -204,7 +204,10 @@ PLUGIN_FILE = [
     ('force', ('--force',), (), 'boolean', False, False, True, 'Overwrite existing plugin with the same name.'),
 ]
 PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
-INFER = {t: [*options, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
+RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
+            "When the dataset has no level at the model's input voxel size, resample a level to it, "
+            "axis by axis, instead of reading the level as if it were at that size.")
+INFER = {t: [*options, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
 # The server's own options: `serve` requires the model and data, and
 # cellmap_flow_server takes them instead of a type's command.
 MODEL_JSON_HELP = 'The model: its launch entry (ModelConfig.launch_entry), as JSON.'
@@ -213,7 +216,7 @@ DEBUG = ('debug', ('--debug',), (), 'boolean', False, False, True, 'Run in debug
 CERTFILE = ('certfile', ('--certfile',), (), 'text', False, None, False, 'Path to SSL certificate file')
 KEYFILE = ('keyfile', ('--keyfile',), (), 'text', False, None, False, 'Path to SSL private key file')
 SERVE = [('model_json', ('--model',), (), 'text', True, None, False, MODEL_JSON_HELP),
-         DATA_PATH, PORT, DEBUG, CERTFILE, KEYFILE]
+         DATA_PATH, PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE]
 
 # Each command by its path; "" is the group's own options. A subcommand's
 # --log-level (yaml, view, blockwise) defaults to the group's.
@@ -269,7 +272,7 @@ HIDDEN = {'list-models', 'list-plugins', 'register', 'run', 'unregister'}
 CELLMAP_FLOW_SERVER = {
     '': [*LOG_LEVEL, ('model_json', ('--model',), (), 'text', False, None, False, MODEL_JSON_HELP),
          ('data_path', ('-d', '--data-path'), (), 'text', False, None, False, 'Path to the dataset'),
-         PORT, DEBUG, CERTFILE, KEYFILE],
+         PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE],
     **dict(sorted({
     'list-models': [],
     **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in MODEL_OPTIONS.items()},

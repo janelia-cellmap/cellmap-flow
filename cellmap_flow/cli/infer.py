@@ -4,7 +4,7 @@ the viewer on its predictions and serve the dashboard.
 There is a subcommand for each model type (``models.registry``), built when
 click asks for it. It takes the type's constructor arguments as options
 (``registry.click_options``), and the dataset (``-d``), queue (``-q``),
-billing project (``-P``) and ``--server-check`` as its own.
+billing project (``-P``), ``--resample`` and ``--server-check`` as its own.
 
 ``run``, the generic form before 0.3.0 (``cellmap_flow run -m TYPE -c
 key=value``), is a deprecated alias: it says which ``infer`` command it
@@ -23,7 +23,7 @@ from cellmap_flow.serving.launch import server_command
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.config.yaml import resolve_data_path
-from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice
+from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice, resample_option
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +92,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
+        resample = kwargs.pop("resample", False)
 
         # Fall back to the saved settings if not provided
         settings = launcher_settings()
@@ -131,11 +132,11 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         if server_check:
             from cellmap_flow.server import CellMapFlowServer
 
-            server = CellMapFlowServer(final_data_path, model_config)
+            server = CellMapFlowServer(final_data_path, model_config, resample=resample)
             server._chunk_impl(None, None, 2, 2, 2)
             click.echo("Server check passed")
         else:
-            command = server_command(model_config, final_data_path)
+            command = server_command(model_config, final_data_path, resample=resample)
             logger.info(f"Executing command: {command}")
             base_name = getattr(model_config, "name", None) or cli_name
             # Ctrl+C or SIGTERM from here on kills the job this starts.
@@ -182,6 +183,8 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         is_flag=True,
         help="Run server check instead of full inference",
     )(command_func)
+
+    command_func = resample_option()(command_func)
 
     # Add model-specific options based on constructor parameters; -d, -q
     # and -P are the command's own.

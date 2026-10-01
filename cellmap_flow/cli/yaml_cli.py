@@ -92,7 +92,12 @@ def build_extra_layers(entries) -> dict:
 
 
 def run_multiple(
-    models: List["ModelConfig"], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True
+    models: List["ModelConfig"],
+    dataset_path: str,
+    charge_group: str,
+    queue: str,
+    wrap_raw: bool = True,
+    resample: bool = False,
 ) -> None:
     """
     Submit multiple model inference jobs.
@@ -102,6 +107,7 @@ def run_multiple(
         dataset_path: Base path to the dataset
         charge_group: Billing/chargeback group
         queue: Job queue name
+        resample: start each server with --resample (the YAML's ``resample``)
     """
     settings = launcher_settings()
     settings.queue = queue
@@ -115,7 +121,7 @@ def run_multiple(
                 f"scale {model.scale}; reading {current_data_path}"
             )
 
-        command = server_command(model, current_data_path)
+        command = server_command(model, current_data_path, resample=resample)
         model_name = getattr(model, "name", None) or type(model).__name__
 
         logger.info(f"Submitting job for model: {model_name}")
@@ -178,6 +184,8 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     cycle_gpu_queues: true # optional; false pins the job to `queue` above
                            # instead of falling back to a queue with capacity.
     wrap_raw: true         # optional; false serves raw straight from the file
+    resample: false        # optional; true resamples the data to each model's
+                           # input voxel size when it has no level at it.
     extra_layers:          # optional; more volumes to show beside the raw data
       - name: mito_pred
         path: /path/to/pred.zarr/mito
@@ -330,7 +338,10 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()
     try:
-        run_multiple(session.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw)
+        run_multiple(
+            session.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw,
+            resample=config.get("resample", False),
+        )
     except JobStartError as e:
         raise click.ClickException(str(e))
 

@@ -31,10 +31,16 @@ def _cli(*argv):
     assert result.exit_code == 0, result.output + repr(result.exception)
 
 
+# launcher: (launch it on the data path, the model entry it passes, the flags after the data path)
 LAUNCHERS = {
     "cellmap_flow-infer": (
         lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data),
         {"type": "script", "script_path": "/s.py", "name": "m"},
+    ),
+    "cellmap_flow-infer-resample": (
+        lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data, "--resample"),
+        {"type": "script", "script_path": "/s.py", "name": "m"},
+        ["--resample"],
     ),
     "cellmap_flow-run": (
         lambda data: _cli("run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", data),
@@ -43,6 +49,13 @@ LAUNCHERS = {
     "cellmap_flow-yaml": (
         lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m", scale="s3")], data, "grp", "q"),
         {"type": "script", "script_path": "/s.py", "name": "m", "scale": "s3"},
+    ),
+    # The YAML's resample: true.
+    "cellmap_flow-yaml-resample": (
+        lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], data, "grp", "q",
+                                           resample=True),
+        {"type": "script", "script_path": "/s.py", "name": "m"},
+        ["--resample"],
     ),
     "dashboard-catalog": (
         lambda data: dashboard_launch.run_model("/models/mito v2", "mito", "blob"),
@@ -85,11 +98,12 @@ def launched(monkeypatch, tmp_path):
 @pytest.mark.parametrize("launcher", list(LAUNCHERS))
 def test_every_launcher_submits_the_split_server_command(launched, launcher):
     commands, data = launched
-    launch_it, entry = LAUNCHERS[launcher]
+    launch_it, entry, *rest = LAUNCHERS[launcher]
+    flags = rest[0] if rest else []
     launch_it(data)
     (argv,) = [shlex.split(c) for c in commands]
-    assert argv[:4] == ["pixi", "run", "cellmap_flow", "serve"] and argv[4::2] == ["--model", "-d"]
-    assert (json.loads(argv[5]), argv[7]) == (entry, data)
+    assert argv[:4] == ["pixi", "run", "cellmap_flow", "serve"] and argv[4:8:2] == ["--model", "-d"]
+    assert (json.loads(argv[5]), argv[7], argv[8:]) == (entry, data, flags)
 
 
 def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):

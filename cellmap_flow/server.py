@@ -210,9 +210,15 @@ class CellMapFlowServer:
         model_config: ModelConfig,
         restart_callback=None,
         restart_token=None,
+        resample=False,
     ):
         """
         Initialize the server and set up routes via decorators.
+
+        ``resample``: when the dataset has no level at the model's input
+        voxel size, resample one to it (``on_voxel_size_mismatch="resample"``,
+        see ImageDataInterface) instead of reading the nearest level as if it
+        were at that size. ``cellmap_flow serve --resample``.
 
         ``restart_callback`` enables POST /__control__/restart, which then
         only accepts requests carrying ``restart_token`` in the
@@ -269,6 +275,7 @@ class CellMapFlowServer:
             voxel_size=self.input_voxel_size,
             concurrency_limit=_env_count(RAW_READ_CONCURRENCY_ENV, None),
             cache_bytes=_env_count(RAW_CACHE_BYTES_ENV, RAW_CACHE_BYTES_DEFAULT),
+            on_voxel_size_mismatch="resample" if resample else "relabel",
         )
         # The output grid starts at the corner of the raw level the model
         # reads, so every output voxel sits exactly on the input voxels it is
@@ -370,7 +377,13 @@ class CellMapFlowServer:
             # makes this the only place it can learn their shapes, and their
             # channel names: the dashboard decides whether a model predicts
             # affinities by looking for "_aff" in them.
-            info = self.geometry.to_model_info(self.axes, self.idi_raw.actual_voxel_size)
+            # A resampled input really is at input_voxel_size; a relabelled
+            # one is at the level's, which moves the output (see to_model_info).
+            idi = self.idi_raw
+            info = self.geometry.to_model_info(
+                self.axes, idi.voxel_size if idi.resampled else idi.actual_voxel_size
+            )
+            info["input_resampled_from"] = list(idi.actual_voxel_size) if idi.resampled else None
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:

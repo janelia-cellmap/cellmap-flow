@@ -5,7 +5,10 @@
 site's default queue) when the file leaves them out; the model entries under
 ``models`` are built by ``models.registry.build_models``. Every problem is a ``ConfigError``.
 ``resolve_data_path`` is the one rule for a model's ``data_path`` and
-``scale``, used by every launcher.
+``scale``, used by every launcher. A top-level ``resample: true`` has every
+model's input resampled to its voxel size when the data has no level at it
+(``cellmap_flow yaml`` passes ``--resample`` to each server; blockwise reads
+with ``on_voxel_size_mismatch="resample"``).
 """
 
 import json
@@ -140,5 +143,9 @@ def load_config(path: str) -> Dict[str, Any]:
 
     if not isinstance(config["models"], (dict, list)):
         raise ConfigError("YAML 'models' must be either a dict or list")
+
+    # A string such as "false" would be truthy and turn it on.
+    if not isinstance(config.get("resample", False), bool):
+        raise ConfigError(f"YAML 'resample' must be true or false, got {config['resample']!r}")
 
     return config

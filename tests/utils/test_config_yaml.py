@@ -23,6 +23,8 @@ from cellmap_flow.jobs import settings
     pytest.param("data_path: /d.zarr\ncharge_group: g\nmodels: 3\n", "dict or list", id="models-neither-dict-nor-list"),
     pytest.param("- just\n- a list\n", "mapping", id="not-a-mapping"),
     pytest.param("data_path: /d.zarr\n", "charge_group", id="no-charge-group-and-none-saved"),
+    # "false" is a string, and would turn it on.
+    pytest.param('data_path: /d.zarr\ncharge_group: g\nresample: "false"\n', "true or false", id="resample-not-a-bool"),
 ])
 def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, message):
     monkeypatch.setattr(settings, "load_server_config_cache", lambda: None)

@@ -6,6 +6,7 @@
   from the registry when asked for.
 - ``deprecated``: a command under the name it had before 0.3.0, which says
   what replaces it and then runs it.
+- ``resample_option``: ``--resample``, of ``infer <type>`` and ``serve``.
 """
 
 import logging
@@ -46,6 +47,20 @@ def log_level_option(default=None, help="Set the logging level"):
         expose_value=False,
         callback=_set_log_level,
         help=help,
+    )
+
+
+def resample_option():
+    """``--resample``: read the dataset resampled to the model's input voxel
+    size when it has no level at that size (ImageDataInterface's
+    ``on_voxel_size_mismatch="resample"``). Without it, the level chosen is
+    read as if it were at the model's voxel size, with a warning."""
+    return click.option(
+        "--resample",
+        is_flag=True,
+        help="When the dataset has no level at the model's input voxel size, "
+        "resample a level to it, axis by axis, instead of reading the level as if "
+        "it were at that size.",
     )
 
 
