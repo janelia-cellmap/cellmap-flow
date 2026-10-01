@@ -83,8 +83,12 @@ class LogTailer:
         self.position = 0
         self.iterations = Iterations()
 
-    def read(self) -> str:
+    def read(self, finished=False) -> str:
         """The complete lines written since the last call, or "" if none.
+
+        ``finished``: nothing writes to the log any more (its job has
+        ended), so a last line without its newline is complete, and is
+        handed out too.
 
         Raises OSError when the log cannot be read; nothing is consumed then,
         so the next call picks up from the same place.
@@ -98,7 +102,7 @@ class LogTailer:
             f.seek(self.position)
             new_bytes = f.read()
 
-        cut = new_bytes.rfind(b"\n") + 1
+        cut = len(new_bytes) if finished else new_bytes.rfind(b"\n") + 1
         self.position += cut
         text = new_bytes[:cut].decode("utf-8", errors="replace")
         self.iterations.feed(text.splitlines())

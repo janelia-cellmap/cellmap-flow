@@ -11,7 +11,8 @@ trainer has added to its log (tailer.LogTailer):
 - the status markers (state.on_status_marker).
 
 It records each change of status in the run's metadata.json, and, when the
-job ends, its final status, model and serving YAML. A job the scheduler says
+job ends, its final status, model and serving YAML, once it has read the
+lines its last poll had not (``_read_last_lines``). A job the scheduler says
 completed must have left its export (``complete_job``): it is COMPLETED only
 once that is found, and FAILED if it is not.
 """
@@ -24,7 +25,7 @@ from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.job_manager import persistence, state
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
-from cellmap_flow.finetune.job_manager.tailer import Iterations, LogTailer, trainer_outputs_from_log
+from cellmap_flow.finetune.job_manager.tailer import Iterations, LogTailer
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,10 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
     finally:
         # === Post-completion actions ===
 
+        # The loop stops on the scheduler's word, which can come before it
+        # has read the trainer's last lines: the last iteration's, perhaps.
+        _read_last_lines(finetune_job, log, finished=ended is not None)
+
         if ended == JobStatus.COMPLETED:
             try:
                 complete_job(finetune_job)
@@ -110,10 +115,6 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
             # state.on_scheduler_status). A cancel that came in meanwhile stands.
             if finetune_job.status not in TERMINAL_STATUSES:
                 finetune_job.status = outcome
-        else:
-            # A job that failed after training -- its server would not
-            # start, say -- still produced a model; record what it was.
-            _read_trainer_outputs(finetune_job)
 
         persistence.update_metadata(
             finetune_job.output_dir,
@@ -243,24 +244,32 @@ def _parse_training_restart(finetune_job: FinetuneJob, log_content: str, iterati
             finetune_job.finetuned_model_name = new_model_name
 
 
-def _read_trainer_outputs(finetune_job: FinetuneJob):
-    """Take the latest iteration's model name and serving YAML from the log.
+def _read_last_lines(finetune_job: FinetuneJob, log: LogTailer, finished: bool):
+    """Read the lines of the log the monitor has not read yet, once it has
+    stopped following the job, and take what the whole log says of it: the
+    last epoch and loss, and the latest iteration's model name and serving
+    YAML. Every job's record gets them, whatever its end: one that failed
+    after training (its server would not start, say) still produced a model.
 
     The trainer prints "FINETUNED_MODEL_YAML: <path>" and then
-    "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it
-    finishes. It reads the whole log: the monitor calls it once the job has
-    ended, when it may not have read the last lines yet. A byte that is not
-    UTF-8 is read as U+FFFD, as LogTailer reads it.
+    "TRAINING_ITERATION_COMPLETE: <name>" for every iteration it finishes.
+
+    ``finished``: the scheduler says the job has ended. Nothing writes to the
+    log any more, so a last line without its newline is whole, and is read
+    too. Otherwise (a cancel, whose kill may not have landed yet, or the
+    monitor's own error) the trainer may still be writing it, and it is
+    left. No listener is told of these lines: the job is over, and its
+    inference server with it.
     """
     try:
-        log_text = finetune_job.log_file.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return
-    name, yaml_path = trainer_outputs_from_log(log_text)
-    if name:
-        finetune_job.finetuned_model_name = name
-    if yaml_path:
-        finetune_job.model_yaml_path = Path(yaml_path)
+        if finetune_job.log_file.exists():
+            _parse_training_progress(finetune_job, log.read(finished=finished))
+    except OSError as e:
+        logger.warning(f"Could not read the end of {finetune_job.log_file}: {e}")
+    if log.iterations.name:
+        finetune_job.finetuned_model_name = log.iterations.name
+    if log.iterations.yaml_path:
+        finetune_job.model_yaml_path = Path(log.iterations.yaml_path)
 
 
 def complete_job(finetune_job: FinetuneJob):
@@ -268,9 +277,10 @@ def complete_job(finetune_job: FinetuneJob):
     Post-training actions after job completes successfully.
 
     1. Verify adapter files exist
-    2. Take the model name and serving YAML the trainer reported
-    3. Record the completion in metadata.json; the monitor makes the job
-       COMPLETED once this has returned
+    2. Record the completion in metadata.json, with the model name and
+       serving YAML the trainer reported, which the monitor has read from
+       its log (_read_last_lines); the monitor makes the job COMPLETED once
+       this has returned
 
     Args:
         finetune_job: The completed job
@@ -294,8 +304,8 @@ def complete_job(finetune_job: FinetuneJob):
     # generated a second one (with the dashboard's current norms rather
     # than the training ones), and metadata.json named a model that
     # neither the viewer layer nor the registered config did. The trainer
-    # prints both, and is the only thing that knows them.
-    _read_trainer_outputs(finetune_job)
+    # prints both, and is the only thing that knows them; the monitor has
+    # read them from its log.
     finetuned_model_name = finetune_job.finetuned_model_name
     yaml_path = finetune_job.model_yaml_path
     if yaml_path is None:

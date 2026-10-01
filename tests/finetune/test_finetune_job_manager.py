@@ -290,7 +290,12 @@ def test_a_completed_job_takes_the_trainers_name_and_yaml(monitored, tmp_path, e
 def test_a_job_lsf_says_is_done_is_completed_only_once_its_export_is_found(make_job, monkeypatch, exported, final):
     """The finetune tab stops polling, and the log stream says done, at the first
     final status they see. A job was COMPLETED while its export was checked,
-    and FAILED after when it was missing, so they never saw it fail."""
+    and FAILED after when it was missing, so they never saw it fail.
+
+    LSF says so here before the monitor has read the log. Either way the job
+    is recorded with what the log says: one whose export was missing kept only
+    what the monitor had read. The trainer has exited, so the log's last line
+    counts without its newline."""
     job = make_job("RUNNING", lsf_job=_lsf(LSF.COMPLETED))
     for export in exported:
         (job.output_dir / export).parent.mkdir(exist_ok=True)
@@ -302,9 +307,13 @@ def test_a_job_lsf_says_is_done_is_completed_only_once_its_export_is_found(make_
         return check_export(*args)
 
     monkeypatch.setattr(persistence, "check_export", check)
-    _monitor(FinetuneJobManager(), job, ["Epoch 1/1 - Loss: 0.1\n"], monkeypatch)
+    _monitor(FinetuneJobManager(), job, ["Epoch 1/1 - Loss: 0.1\nFINETUNED_MODEL_YAML: /s/models/m_1.yaml\n"
+                                         "TRAINING_ITERATION_COMPLETE: m_1"], monkeypatch)
+    metadata = json.loads((job.output_dir / "metadata.json").read_text())
     assert shown == ["RUNNING"], "not final while its export is checked"
-    assert job.status.value == json.loads((job.output_dir / "metadata.json").read_text())["status"] == final
+    assert job.status.value == metadata["status"] == final
+    assert (job.current_epoch, job.latest_loss, metadata["finetuned_model_name"], metadata["model_yaml_path"]) == (
+        1, 0.1, "m_1", "/s/models/m_1.yaml"), "recorded with the lines the monitor had not read"
 
 
 def test_a_job_that_finished_stays_completed_when_its_record_cannot_be_read(make_job, monkeypatch):
