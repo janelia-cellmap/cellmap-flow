@@ -45,14 +45,6 @@ def test_every_imported_name_exists():
     assert not unresolved, "imports of names that no longer exist:\n" + "\n".join(unresolved)
 
 
-# Still being moved off g by the agents that own them; emptied by the lead
-# once K16-C (fix-dashboard) and fix-loop land.
-STILL_IMPORTING_GLOBALS = {
-    "cellmap_flow/dashboard/app.py",
-    "cellmap_flow/finetune/finetune_cli.py",
-}
-
-
 def _imports_globals(node):
     if isinstance(node, ast.Import):
         return any(alias.name == "cellmap_flow.globals" for alias in node.names)
@@ -72,5 +64,4 @@ def test_no_module_imports_the_deprecated_globals():
             continue
         if any(_imports_globals(node) for node in ast.walk(ast.parse(path.read_text()))):
             importers.add(str(path.relative_to(PACKAGE.parent)))
-    unexpected = sorted(importers - STILL_IMPORTING_GLOBALS)
-    assert not unexpected, f"these import cellmap_flow.globals: {unexpected}"
+    assert not importers, f"these import cellmap_flow.globals: {sorted(importers)}"

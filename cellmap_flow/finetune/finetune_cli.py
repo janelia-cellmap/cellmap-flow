@@ -41,11 +41,9 @@ def main():
     from cellmap_flow.plugins import load_plugins
 
     # Here, not at import, so that importing this module leaves the importing
-    # process's logging alone. The shared format (logging_setup), because
-    # cellmap_flow.globals installs it again when it is first imported, and
-    # the job still imports it on its first raw read (ImageDataInterface)
-    # and when it serves (the inference server): any other format would
-    # change halfway through the training log.
+    # process's logging alone. The shared format (logging_setup), the one
+    # every cellmap_flow command logs in, so the job's own lines and those of
+    # the inference server it starts read the same.
     configure_logging()
     args = parse_args()
     # A plugin's model type, normalizers and postprocessors, which the model

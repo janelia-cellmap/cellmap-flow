@@ -663,13 +663,10 @@ The deprecated ``g``
 ``cellmap_flow.globals.g`` stays for one release, for scripts and plugins.
 Each name it had forwards to its owner with a ``DeprecationWarning`` that
 names the replacement. The warnings are silent in the servers and the
-dashboard, whose code is not ``__main__``; ``tests/conftest.py`` hides those
-from the modules still being moved off ``g``, and only those.
+dashboard, whose code is not ``__main__``, and show under pytest.
 
 Nothing in the package imports ``globals``, and ``test_import_targets``
-checks it. Until their moves land, two files are allowed to:
-``dashboard/app.py``, for the viewer's address, and ``finetune_cli.py``, for
-its logging. Importing ``globals`` also configures logging, so a module that
+checks it. Importing ``globals`` also configures logging, so a module that
 imported it reset a CLI's ``--log-level`` to INFO whenever the CLI imported
 that module after parsing the flag, as ``cellmap_flow_server`` imports the
 server. New code uses the owners:

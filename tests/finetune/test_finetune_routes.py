@@ -171,7 +171,7 @@ def test_an_affinity_model_is_told_by_its_channel_names(submit, tmp_path, monkey
     from cellmap_flow.models import geometry_cache
 
     (tmp_path / "plain.py").write_text("model = None\n")
-    g.models_config = [_Script("m", str(tmp_path / "plain.py"))]
+    monkeypatch.setattr(get_session(), "models_config", [_Script("m", str(tmp_path / "plain.py"))])
     monkeypatch.setattr(geometry_cache, "resolve_model_geometry", lambda name, config: geometry)
     job = submit()
     assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", offsets)

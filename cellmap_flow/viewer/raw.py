@@ -107,7 +107,7 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
             # does, so LazyNormalization.__getitem__ runs and the sample is in
             # the same space as what gets displayed. to_ndarray_ts() would
             # silently give unnormalized data here: its roi=None branch returns
-            # the underlying store's read() without applying g.input_norms
+            # the underlying store's read() without applying the chain
             # (only the roi branch does), so the percentiles would land in raw
             # uint8 space while the layer shows [-1, 1] -- a 0-168 range over
             # data that never exceeds 1, i.e. an all-black image.
