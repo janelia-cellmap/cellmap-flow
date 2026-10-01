@@ -97,7 +97,7 @@ def build_corrections(
     model_name=None,
     patches_per_epoch=None,
     jitter_voxels=None,
-    seed=0,
+    seed=None,
     dense_to_sparse_ratio=None,
     input_norm=None,
     postprocess=None,
@@ -108,6 +108,10 @@ def build_corrections(
 
     ``output_dir`` must not already contain a volume: this builds from
     scratch so the record describes everything in it.
+
+    ``patches_per_epoch``, ``jitter_voxels``, ``seed`` and
+    ``dense_to_sparse_ratio`` are the CLI's flags: each one given (not None)
+    wins over the crops YAML's own setting, which applies otherwise.
     """
     from cellmap_flow.finetune.crop_loader import parse_crops_yaml
     from cellmap_flow.finetune.session.manifest import write_manifest
@@ -187,16 +191,18 @@ def build_corrections(
     if total_fg == 0:
         raise RuntimeError("No foreground voxel was imported from any crop; check fg_ids")
 
-    # The manifest's own fields win over the CLI's so a manifest that says
-    # patches_per_epoch travels with its crops.
-    def first(value, default):
-        return value if value is not None else default
+    # A flag given on the command line wins; otherwise the crops YAML's
+    # setting, so a YAML that says patches_per_epoch travels with its crops.
+    # The YAML used to win, and CropsConfig.seed defaults to 0, so --seed
+    # never took effect.
+    def flag_or_yaml(flag, from_yaml):
+        return flag if flag is not None else from_yaml
 
     manifest = build_manifest(volume_meta, input_norm=input_norm, postprocess=postprocess, overrides={
-        "patches_per_epoch": first(cfg.patches_per_epoch, patches_per_epoch),
-        "jitter_voxels": first(cfg.jitter_voxels, jitter_voxels),
-        "seed": first(cfg.seed, seed),
-        "dense_to_sparse_ratio": first(cfg.dense_to_sparse_ratio, dense_to_sparse_ratio),
+        "patches_per_epoch": flag_or_yaml(patches_per_epoch, cfg.patches_per_epoch),
+        "jitter_voxels": flag_or_yaml(jitter_voxels, cfg.jitter_voxels),
+        "seed": flag_or_yaml(seed, cfg.seed),
+        "dense_to_sparse_ratio": flag_or_yaml(dense_to_sparse_ratio, cfg.dense_to_sparse_ratio),
     })
     if postprocess is None:
         del manifest["postprocess"]
@@ -259,7 +265,7 @@ def main(argv=None):
     p.add_argument("--output-voxel-size", type=_triple(float))
     p.add_argument("--patches-per-epoch", type=int, help="fixed patches per epoch (default: one per fg-bearing chunk)")
     p.add_argument("--jitter-voxels", type=_triple(int))
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--seed", type=int, help="patch-sampling seed (default: the crops YAML's, else 0)")
     p.add_argument("--dense-to-sparse-ratio", type=float)
     p.add_argument("--input-norm", help="JSON input_norm block (default: MinMax 0-255 then x*2-1)")
     p.add_argument("--postprocess", help="JSON postprocess block recorded for the served yaml")
