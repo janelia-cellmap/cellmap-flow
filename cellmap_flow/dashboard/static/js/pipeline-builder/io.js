@@ -10,14 +10,15 @@
 //     channels, ...), or its params when it has no config;
 //   edges: id, from, to.
 // An import may also be the builder's own structure as JSON (inputs with
-// params, models with a config, normalizers by name). Importing replaces the
+// params, models with a config, normalizers by name), read as the page's
+// starting pipeline is (state.readPipeline). Importing replaces the
 // pipeline; its edges are rebuilt from the node order, and its nodes laid
 // out afresh.
 import { postJSON } from "../lib/api.js";
 import { CORE_SCHEMA, dump, load } from "../vendor/js-yaml.js";
 import { autoLayoutNodes, renderCanvas } from "./canvas.js";
 import { showMessage } from "./messages.js";
-import { autoConnectNodes, blockwiseSettings, datasetPath, defaultPosition, edited, pipeline, replacePipeline } from "./state.js";
+import { autoConnectNodes, blockwiseSettings, datasetPath, edited, pipeline, readPipeline, replacePipeline } from "./state.js";
 
 // Blocks down to a node's own fields, and anything nested deeper (a box's
 // offset and shape, a parameter's list) inline; no line folding, no
@@ -76,7 +77,7 @@ function importFile() {
       const content = e.target.result;
       // YAML's core schema is plain data: a date-like string stays a string.
       const data = /\.ya?ml$/.test(file.name) ? fromFileLayout(load(content, { schema: CORE_SCHEMA })) : JSON.parse(content);
-      replacePipeline(pipelineFromFile(data));
+      replacePipeline(readPipeline(data).lists);
       autoConnectNodes();
       renderCanvas();
       autoLayoutNodes();
@@ -103,59 +104,6 @@ function importFile() {
     }
   };
   reader.readAsText(file);
-}
-
-// The pipeline's lists from an imported file's, every node with an id and a
-// position. An op may be given by its name alone; a model given with its
-// config's fields as its own (type, ...) gets them as its config and params.
-function pipelineFromFile(data) {
-  const op = (prefix, type) => (n, i) => ({
-    id: n.id || `${prefix}-${Date.now()}-${i}`,
-    name: typeof n === "string" ? n : (n.name || n),
-    params: n.params || {},
-    position: n.position || defaultPosition(type, i),
-  });
-  return {
-    inputs: (data.inputs || []).map((n, i) => ({
-      id: n.id || `input-${Date.now()}-${i}`,
-      name: "INPUT",
-      params: n.params || { dataset_path: datasetPath },
-      position: n.position || defaultPosition("input", i),
-    })),
-    outputs: (data.outputs || []).map((n, i) => ({
-      id: n.id || `output-${Date.now()}-${i}`,
-      name: "OUTPUT",
-      params: n.params || {},
-      position: n.position || defaultPosition("output", i),
-    })),
-    normalizers: (data.input_normalizers || data.normalizers || []).map(op("norm", "normalizer")),
-    models: (data.models || []).map((m, i) => {
-      const model = {
-        id: m.id || `model-${Date.now()}-${i}`,
-        name: typeof m === "string" ? m : (m.name || m),
-        params: m.params || m.config || {},
-        position: m.position || defaultPosition("model", i),
-      };
-      if (m.config && typeof m.config === "object") {
-        model.config = m.config;
-      } else if (m.type) {
-        model.config = { ...m };
-        delete model.config.id;
-        delete model.config.params;
-        delete model.config.position;
-        model.params = { ...model.config };
-      }
-      return model;
-    }),
-    postprocessors: (data.postprocessors || []).map(op("post", "postprocessor")),
-    blockwise_config: (data.blockwise_config || []).map((c, i) => ({
-      id: c.id || `blockwise-${Date.now()}-${i}`,
-      name: "Blockwise Configuration",
-      params: c.params,
-      position: c.position || defaultPosition("blockwise-config", i),
-    })),
-    edges: data.edges || [],
-  };
 }
 
 // A YAML file's nodes in the builder's structure: an INPUT's or OUTPUT's own

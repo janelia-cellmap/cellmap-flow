@@ -99,11 +99,43 @@ export function defaultPosition(type, i) {
   }
 }
 
+// A pipeline's lists from a saved one: the page's starting pipeline or an
+// imported file (io.js). Every node gets an id, and keeps the position it
+// was saved with or gets its type's default; an op may be given by its name
+// alone; a model keeps its config (see readModel). Returns {lists,
+// unplaced}, unplaced being the ids of the nodes that came without a
+// position.
+export function readPipeline(data) {
+  const unplaced = [];
+  const node = (n, prefix, type, i, name, params) => {
+    const id = n.id || `${prefix}-${i}-${Date.now()}`;
+    if (!n.position) unplaced.push(id);
+    return { id, name, params, position: n.position || defaultPosition(type, i) };
+  };
+  const io = (prefix, name, params) => (n, i) => node(n, prefix, prefix, i, name, n.params || params);
+  const op = (prefix, type) => (n, i) => (typeof n === "string"
+    ? node({}, prefix, type, i, n, {})
+    : node(n, prefix, type, i, n.name, n.params || {}));
+  const lists = {
+    inputs: (data.inputs || []).map(io("input", "INPUT", { dataset_path: datasetPath })),
+    outputs: (data.outputs || []).map(io("output", "OUTPUT", {})),
+    normalizers: (data.input_normalizers || data.normalizers || []).map(op("norm", "normalizer")),
+    models: (data.models || []).map((m, i) => (typeof m === "string"
+      ? node({}, "model", "model", i, m, {})
+      : readModel(m, node(m, "model", "model", i, m.name, m.params || {})))),
+    postprocessors: (data.postprocessors || []).map(op("post", "postprocessor")),
+    blockwise_config: (data.blockwise_config || []).map((c, i) => node(
+      c, "blockwise", "blockwise-config", i, "Blockwise Configuration", c.params)),
+    edges: data.edges || [],
+  };
+  return { lists, unplaced };
+}
+
 // The page's starting pipeline (pageData().pipeline): the live chain's
 // steps as normalizer and postprocessor nodes, and the rest of what the
-// builder last applied (routes/pipeline_builder_page.py). Every node gets an
-// id, and there is always an INPUT node, with the dashboard's dataset if it
-// has no path of its own.
+// builder last applied (routes/pipeline_builder_page.py), read as
+// readPipeline reads it. There is always an INPUT node, with the
+// dashboard's dataset if it has no path of its own.
 //
 // A node keeps the position it was saved with. Returns the ids of the nodes
 // that had none, for the page to lay out once they are drawn
@@ -113,45 +145,38 @@ export function defaultPosition(type, i) {
 // user's own extra edges with them); otherwise the chain changed since, a
 // step added or gone, and they are rebuilt from the node order.
 export function loadPipeline() {
-  const start = PAGE.pipeline;
-  const unplaced = [];
-  const node = (n, prefix, type, i, name, params) => {
-    const id = n.id || `${prefix}-${i}-${Date.now()}`;
-    if (!n.position) unplaced.push(id);
-    return { id, name, params, position: n.position || defaultPosition(type, i) };
-  };
-  const inputs = (start.inputs || []).map((n, i) => node(n, "input", "input", i, "INPUT",
-    n.params || { dataset_path: datasetPath }));
-  if (inputs.length === 0) {
-    inputs.push(node({}, "input", "input", 0, "INPUT", { dataset_path: datasetPath }));
-  } else if (!inputs[0].params?.dataset_path) {
-    inputs[0].params = inputs[0].params || {};
-    inputs[0].params.dataset_path = datasetPath;
+  const { lists, unplaced } = readPipeline(PAGE.pipeline);
+  if (lists.inputs.length === 0) {
+    const input = { id: `input-0-${Date.now()}`, name: "INPUT", params: { dataset_path: datasetPath },
+                    position: defaultPosition("input", 0) };
+    lists.inputs.push(input);
+    unplaced.push(input.id);
+  } else if (!lists.inputs[0].params?.dataset_path) {
+    lists.inputs[0].params = lists.inputs[0].params || {};
+    lists.inputs[0].params.dataset_path = datasetPath;
   }
-  const step = (prefix, type) => (n, i) => node(n, prefix, type, i, n.name, n.params || {});
-  replacePipeline({
-    inputs,
-    outputs: (start.outputs || []).map((n, i) => node(n, "output", "output", i, "OUTPUT", n.params || {})),
-    normalizers: (start.normalizers || []).map(step("norm", "normalizer")),
-    models: (start.models || []).map((m, i) => loadModel(m, node(m, "model", "model", i, m.name, m.params || {}))),
-    postprocessors: (start.postprocessors || []).map(step("post", "postprocessor")),
-    blockwise_config: [],
-    edges: start.edges || [],
-  });
+  replacePipeline(lists);
   const linked = new Set(pipeline.edges.map((e) => `${e.from}>${e.to}`));
   if (!chainEdges().every(([from, to]) => linked.has(`${from}>${to}`))) autoConnectNodes();
   return unplaced;
 }
 
-// The saved model node m, as `model` ({id, name, params, position}), with
-// the config it was saved with.
-function loadModel(m, model) {
-  // Keep the config (the server's ModelConfig.to_dict()), with its channel
-  // names as an array: 'channels' (FlyModel etc.) or 'channels_names'
-  // (HuggingFace), which may come as a JSON string. 'channels' is what the
-  // rest of the builder reads.
-  if (m.config && typeof m.config === "object") {
-    model.config = m.config;
+// A saved model node m, as `model` ({id, name, params, position}), with its
+// config: m.config (the server's ModelConfig.to_dict()), or else, for a
+// model written with its config's fields as its own (type, ...), those.
+// The config's channel names become an array: 'channels' (FlyModel etc.)
+// or 'channels_names' (HuggingFace), either of which may come as a JSON
+// string. 'channels' is what the rest of the builder reads.
+function readModel(m, model) {
+  let config = m.config && typeof m.config === "object" ? m.config : null;
+  if (!config && m.type) {
+    config = { ...m };
+    delete config.id;
+    delete config.params;
+    delete config.position;
+  }
+  if (config) {
+    model.config = config;
     const chKey = model.config.channels ? "channels" : (model.config.channels_names ? "channels_names" : null);
     if (chKey) {
       if (typeof model.config[chKey] === "string") {
@@ -171,7 +196,7 @@ function loadModel(m, model) {
     // A node without params of its own shows its config's (all but 'name').
     if (!m.params || Object.keys(m.params).length === 0) {
       model.params = {};
-      Object.entries(m.config).forEach(([key, value]) => {
+      Object.entries(config).forEach(([key, value]) => {
         if (key !== "name") {
           model.params[key] = value;
         }
