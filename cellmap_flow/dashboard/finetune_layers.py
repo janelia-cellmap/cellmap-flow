@@ -63,6 +63,8 @@ def add_finetuned_layer(job, model_name):
     # dashboard's own requests and the restart control keep server_url.
     inference_job.host = public_server_url(server_url)
     inference_job.status = JobStatus.RUNNING
+    # The Finetune tab owns it: the Models tab's Submit must not kill it.
+    inference_job.owned_by_finetune = True
 
     # Replace any old finetuned jobs for this base model. One assignment of
     # a new list, rather than filter-then-append on the shared one: this

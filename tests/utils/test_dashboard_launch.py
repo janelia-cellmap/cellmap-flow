@@ -3,13 +3,14 @@ launch leaves, and a model taken off and put back on. Its commands are in
 test_launch_command, its layers in test_layer_sources_snapshot."""
 
 import logging
+from types import SimpleNamespace
 
 import neuroglancer
 import pytest
 
 from cellmap_flow.dashboard.services import launch
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.jobs.lsf import BsubTimeoutError
+from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.process_chain import process_chain
 
@@ -66,3 +67,25 @@ def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, 
     # Selecting it again must start it again, not be a silent no-op.
     launch.update_run_models(["mito", "nuc"])
     assert launched == ["nuc"]
+
+
+def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, monkeypatch):
+    """The Finetune tab owns that job. The Models tab, rendered before its
+    server came up, has no box for it, and bkilling it ended the training."""
+    from cellmap_flow.dashboard import finetune_layers
+
+    monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda url: {})
+    monkeypatch.setattr(finetune_layers, "prediction_layer",
+                        lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
+    killed = []
+    monkeypatch.setattr(LSFJob, "kill", lambda self: killed.append(self.job_id))
+    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
+                               model_name="mito", finetuned_model_name=None, params={})
+    finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
+    monkeypatch.setattr(launch, "run_model", lambda path, name, st: None)
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    get_session().model_catalog = {"catalog": {"nuc": "/models/nuc"}}
+
+    launch.update_run_models(["nuc"])
+    assert killed == [] and [j.model_name for j in get_session().jobs] == ["mito_finetuned_1"]
+    assert "mito_finetuned_1" in viewer.state.layers

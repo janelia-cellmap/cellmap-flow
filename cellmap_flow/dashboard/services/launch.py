@@ -1,7 +1,8 @@
 """Start the models picked on the Models tab, and show each in the viewer.
 
 - ``update_run_models()``: stop and forget the models no longer picked,
-  start the ones newly picked, each in its own thread.
+  start the ones newly picked, each in its own thread. A finetune job's
+  server is the Finetune tab's to stop, never this one's.
 - ``run_model()`` / ``run_hf_model()``: start one catalog or Hugging Face
   model's inference server (``start_hosts``, which records the job) and add
   its layer, the one Submit would give it.
@@ -98,7 +99,12 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
         hf_repos = []
 
     all_names = names + [_sanitize_job_name(repo.split("/")[-1]) for repo in hf_repos]
-    to_be_killed = [j for j in session.jobs if j.model_name not in all_names]
+    # Not a finetune job's server (finetune_layers marks it): it is the
+    # training job itself, and its name, new with each iteration, has no
+    # box on a Models tab rendered before it, so every Submit bkilled it.
+    to_be_killed = [
+        j for j in session.jobs if j.model_name not in all_names and not getattr(j, "owned_by_finetune", False)
+    ]
     names_running = [j.model_name for j in session.jobs]
 
     threads = []
