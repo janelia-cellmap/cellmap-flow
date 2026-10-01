@@ -562,6 +562,36 @@ def stop_training_early(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _restart_training_settings(job, updated_params, corrections_dir):
+    """The target and loss settings a restart sends, adjusted as submit adjusts them.
+
+    The form holds what the user picked, not what submit replaced it with
+    (training_settings), and the trainer only checks what it is sent. So a
+    restart from the unchanged form undid submit's choice: a distance model
+    was sent the form's margin loss, and its next iteration failed at setup,
+    every time, and mse went back to training on scribbles. The same rules
+    are applied here, to the form's settings over the job's own, with the
+    session's sparsity read again after the sync: strokes painted since
+    submit can make it sparse.
+
+    All five settings are sent, so the trainer's settings are the adjusted
+    ones whichever of them the form left out. A job that does not know its
+    session (one from before jobs recorded it) keeps its mask_unannotated.
+    """
+    current = {**job.params, **updated_params}
+    settings = training_settings(
+        output_type=current.get("output_type"),
+        loss_type=current.get("loss_type"),
+        label_smoothing=current.get("label_smoothing"),
+        distillation_lambda=current.get("distillation_lambda"),
+        sparse=bool(corrections_dir) and detect_sparse_annotations(corrections_dir),
+    )
+    sent = {key: value for key, value in settings._asdict().items() if key != "note" and value is not None}
+    if not corrections_dir:
+        sent.pop("mask_unannotated")
+    return sent
+
+
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
 def restart_finetuning_job(job_id):
     data = request.get_json() or {}
@@ -642,10 +672,9 @@ def restart_finetuning_job(job_id):
         except Exception as e:
             logger.warning(f"Error syncing annotations before restart: {e}")
 
-        job = manager.restart_finetuning_job(
-            job_id=job_id,
-            updated_params=build_restart_params(data),
-        )
+        updated_params = build_restart_params(data)
+        updated_params.update(_restart_training_settings(job_record, updated_params, corrections_dir))
+        job = manager.restart_finetuning_job(job_id=job_id, updated_params=updated_params)
         total_elapsed = time.perf_counter() - restart_t0
         logger.info(f"Restart request processed for job {job_id}: total={total_elapsed:.2f}s")
         if pulled:

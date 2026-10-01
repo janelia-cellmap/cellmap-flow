@@ -237,23 +237,32 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
 
 
 @pytest.fixture
-def restart(client, local_jobs, session, monkeypatch):
-    """``restart(pulled=0, job_status="WAITING_FOR_RESTART", **request)``: POST
-    /api/finetune/job/<id>/restart for a job submitted through the dashboard's
-    own job manager, now in ``job_status``, with MinIO sync pulling ``pulled``
-    volumes. Returns the response's status and body, the syncs asked for, what
-    the trainer is sent, and the session."""
+def restart(client, local_jobs, session, annotation_volume, monkeypatch):
+    """``restart(pulled=0, job_status="WAITING_FOR_RESTART", job_params={},
+    volume=None, **request)``: POST /api/finetune/job/<id>/restart for a job
+    submitted through the dashboard's own job manager, now in ``job_status``
+    and with ``job_params`` over its params, on a session whose manifest names
+    a volume holding ``volume`` (labels, crops) if given, with MinIO sync
+    pulling ``pulled`` volumes. Returns the response's status and body, the
+    syncs asked for, what the trainer is sent, and the session."""
     from cellmap_flow.dashboard.routes.finetune import training
     from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
     from cellmap_flow.finetune.job_manager.state import JobStatus
 
-    def run(pulled=0, job_status="WAITING_FOR_RESTART", **request):
-        base = session()
+    def run(pulled=0, job_status="WAITING_FOR_RESTART", job_params={}, volume=None, **request):
+        if volume is not None:
+            labels, crops = volume
+            volume = annotation_volume(labels, crops=crops)
+            base = session(manifest={"kind": "volume_zarr_v1", "volume_zarr_path": volume.path,
+                                     "raw_dataset_path": volume.raw})
+        else:
+            base = session()
         manager = get_session().finetune_job_manager  # made when first asked for, as in the dashboard
         assert isinstance(manager, FinetuneJobManager)
         job = manager.submit_finetuning_job(model_config=get_session().models_config[0],
                                             corrections_path=base / "corrections", output_base=base)
         job.status = JobStatus(job_status)
+        job.params.update(job_params)
         record = SimpleNamespace(syncs=[], sent=[], base=base)
         monkeypatch.setattr(training, "sync_all_annotations_from_minio",
                             lambda force=True: record.syncs.append(force) or pulled)
@@ -292,7 +301,37 @@ def test_a_restart_sends_the_trainer_its_own_flags(restart):
     JSON (a list killed the restart), and the scope is --distillation-all-voxels."""
     run = restart(augment=True, offsets=[[1, 0, 0]], distillation_scope="all", loss_type="margin")
     assert run.sent == [{"augment": True, "no_augment": False, "offsets": "[[1, 0, 0]]",
-                         "distillation_all_voxels": True, "loss_type": "margin"}]
+                         "distillation_all_voxels": True, "loss_type": "margin",
+                         # The job's target, and the session's sparsity (see the test below).
+                         "output_type": "binary", "label_smoothing": 0.0, "mask_unannotated": False}]
+
+
+# What the Finetune tab sends on Restart with its form at the defaults.
+FORM = {"lora_r": 8, "num_epochs": 10, "batch_size": 2, "learning_rate": 1e-4, "loss_type": "margin",
+        "distillation_lambda": 0.01, "distillation_scope": "unlabeled", "balance_classes": False,
+        "augment": False, "label_smoothing": 0.1, "margin": 0.3}
+
+
+@pytest.mark.parametrize("job_params, volume, request_data, sent", [
+    pytest.param({"output_type": "distance"}, None, FORM,
+                 dict(output_type="distance", loss_type="bce", label_smoothing=0.0, mask_unannotated=False),
+                 id="a distance model, from the unchanged form"),
+    pytest.param({"output_type": "binary"}, PAINTED, {**FORM, "loss_type": "mse"},
+                 dict(loss_type="margin", distillation_lambda=0.5, mask_unannotated=True),
+                 id="mse on scribbles"),
+    # Strokes painted since submit, over a distance model's imported crops.
+    pytest.param({"output_type": "distance"}, STROKE_BESIDE, FORM,
+                 dict(output_type="binary", loss_type="margin", distillation_lambda=0.01, mask_unannotated=True),
+                 id="a distance model whose session has become sparse"),
+])
+def test_a_restart_trains_what_submit_would(restart, job_params, volume, request_data, sent):
+    """Restart sent the form as it was, undoing what submit had chosen: a
+    distance model's next iteration got the form's margin loss, which the
+    trainer refuses for a distance target, so every restart failed until the
+    user picked BCE by hand."""
+    run = restart(job_params=job_params, volume=volume, **request_data)
+    assert run.status == 200
+    assert {key: run.sent[0].get(key) for key in sent} == sent
 
 
 @pytest.mark.parametrize("job_status, request_data, status, error", [
