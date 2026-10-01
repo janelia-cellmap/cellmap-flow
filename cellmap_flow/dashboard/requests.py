@@ -12,6 +12,9 @@ message is pydantic's, after the field's name.
 - ``BlockwiseSettings``: POST /api/blockwise-config
 - ``CreateModelConfig``: POST /api/create-model-config
 - ``SetData``: POST /api/set-data
+- ``SubmitModels``: POST /api/models
+- ``Equivalences``: POST /update/equivalences
+- ``BbxGenerator``: POST /api/bbx-generator
 - ``FinetuneSubmit``: POST /api/finetune/submit
 - ``FinetuneRestart``: POST /api/finetune/job/<job_id>/restart
 - ``CreateVolume``: POST /api/finetune/create-volume
@@ -39,12 +42,21 @@ from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 
 
-def _whole_number(value, info: ValidationInfo):
-    # int() as the routes always parsed the counts: "12" and 12.0 are 12.
+def _number(value, kind, name):
+    """``value`` as a number of type ``kind`` (int or float), or a
+    ValueError saying ``name`` must be one and what was sent. A whole number
+    may come as "25" or 25.0, but not 2.5: int() made that 2."""
     try:
-        return int(value)
+        number = float(value)
     except (TypeError, ValueError):
-        raise ValueError(f"{info.field_name} must be a whole number, got {value!r}")
+        number = None
+    if number is None or (kind is int and not number.is_integer()):
+        raise ValueError(f"{name} must be {'a whole number' if kind is int else 'a number'}, got {value!r}")
+    return int(number) if kind is int else number
+
+
+def _whole_number(value, info: ValidationInfo):
+    return _number(value, int, info.field_name)
 
 
 WholeNumber = Annotated[int, BeforeValidator(_whole_number)]
@@ -127,6 +139,44 @@ class SetData(BaseModel):
     dataset_path: Annotated[str, _required("dataset_path", strip=True)] = Field(None, validate_default=True)
 
 
+class SubmitModels(BaseModel):
+    """The Models tab's Submit: the catalog models and Hugging Face repos to
+    run. Every other running model is stopped (services.launch)."""
+
+    selected_models: list[str] = []
+    selected_hf_models: list[str] = []
+
+
+class Equivalences(BaseModel):
+    """A merging postprocessor's merged ids, from its inference server, for
+    the segmentation layer whose source ends in ``dataset``: each list is a
+    set of ids shown as one."""
+
+    dataset: str
+    equivalences: list[list[int]]
+
+
+# A point or a size, z, y, x.
+_Triple = Annotated[list[float], Field(min_length=3, max_length=3)]
+
+
+class BoundingBox(BaseModel):
+    """A box drawn or loaded on an INPUT node: its corner and its size."""
+
+    offset: _Triple = [0, 0, 0]
+    shape: _Triple = [1, 1, 1]
+
+
+class BbxGenerator(BaseModel):
+    """The box tool's viewer on ``dataset_path``, showing the boxes the
+    INPUT node has; ``num_boxes`` is how many the dialog counts up to."""
+
+    dataset_path: Annotated[str, _required("dataset_path", message="Dataset path is required")] = Field(
+        None, validate_default=True)
+    num_boxes: WholeNumber = 1
+    existing_bounding_boxes: Optional[list[BoundingBox]] = []
+
+
 # --- The finetune tab's ------------------------------------------------------------
 
 
@@ -139,18 +189,10 @@ def _form_number(kind, default):
     "25" or 25.0, but not 2.5. Anything else is refused with the field's
     name and what was sent.
     """
-    what = "a whole number" if kind is int else "a number"
-
     def read(value, info: ValidationInfo):
         if value is None or value == "":
             return default
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            number = None
-        if number is None or (kind is int and not number.is_integer()):
-            raise ValueError(f"{info.field_name} must be {what}, got {value!r}")
-        return int(number) if kind is int else number
+        return _number(value, kind, info.field_name)
 
     return Annotated[kind if default is not None else Optional[kind], Field(default=default), BeforeValidator(read)]
 

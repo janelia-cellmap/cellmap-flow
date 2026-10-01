@@ -3,7 +3,7 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, parse
+from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import update_run_models
 from cellmap_flow.dashboard.state import get_session
 
@@ -84,12 +84,14 @@ def refresh_huggingface_models_route():
 
 @models_bp.route("/api/models", methods=["POST"])
 def submit_models():
-    data = request.get_json()
-    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
-    selected_models = data.get("selected_models", [])
-    selected_hf_models = data.get("selected_hf_models", [])
+    """Run the models the Models tab has ticked (a SubmitModels), and stop
+    the others: services.launch.update_run_models."""
+    body, error = parse(SubmitModels, request.get_json(silent=True))
+    if error:
+        return error
+    selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
     update_run_models(selected_models, selected_hf_models)
-    logger.warning(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
+    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
     return jsonify(
         {
             "message": "Data received successfully",

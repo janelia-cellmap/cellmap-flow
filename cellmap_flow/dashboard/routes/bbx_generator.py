@@ -3,6 +3,7 @@ import logging
 import neuroglancer
 from flask import Blueprint, request, jsonify
 
+from cellmap_flow.dashboard.requests import BbxGenerator, parse
 from cellmap_flow.dashboard.routes.index_page import viewer_url_for
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.bootstrap import new_viewer
@@ -52,22 +53,21 @@ def _extract_bounding_boxes(viewer):
 
 @bbx_bp.route("/api/bbx-generator", methods=["POST"])
 def start_bbx_generator():
-    """Start the Neuroglancer viewer for creating bounding boxes"""
+    """Start the box tool's Neuroglancer viewer (a BbxGenerator)."""
+    body, error = parse(BbxGenerator, request.get_json(silent=True))
+    if error:
+        return error
     try:
-        data = request.json
-        dataset_path = data.get("dataset_path", "")
-        num_boxes = data.get("num_boxes", 1)
-        existing_bounding_boxes = data.get("existing_bounding_boxes", [])
-
-        if not dataset_path:
-            return jsonify({"error": "Dataset path is required"}), 400
+        dataset_path = body.dataset_path
+        num_boxes = body.num_boxes
+        existing_bounding_boxes = [box.model_dump() for box in body.existing_bounding_boxes or []]
 
         # The boxes drawn so far, each with an id and a description. Their
         # corners must be floats.
         boxes = []
-        for idx, bbox in enumerate(existing_bounding_boxes or []):
-            offset = bbox.get("offset", [0, 0, 0])
-            shape = bbox.get("shape", [1, 1, 1])
+        for idx, bbox in enumerate(existing_bounding_boxes):
+            offset = bbox["offset"]
+            shape = bbox["shape"]
             boxes.append(neuroglancer.AxisAlignedBoundingBoxAnnotation(
                 point_a=[float(offset[j]) for j in range(3)],
                 point_b=[float(offset[j] + shape[j]) for j in range(3)],

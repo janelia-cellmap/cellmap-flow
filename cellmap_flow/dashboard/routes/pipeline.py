@@ -17,7 +17,7 @@ import numpy as np
 from flask import Blueprint, jsonify, make_response, request
 from pydantic import BaseModel, ValidationInfo, field_validator
 
-from cellmap_flow.dashboard.requests import BlockwiseSettings, parse
+from cellmap_flow.dashboard.requests import BlockwiseSettings, Equivalences, parse
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -135,12 +135,13 @@ class PipelineUpdate(BaseModel):
 
 @pipeline_bp.route("/update/equivalences", methods=["POST"])
 def update_equivalences():
-    equivalences_info = request.get_json()
-    dataset = equivalences_info["dataset"]
-    equivalences_str = equivalences_info["equivalences"]
-    equivalences = [
-        [np.uint64(item) for item in sublist] for sublist in equivalences_str
-    ]
+    """Show a merging postprocessor's merged ids (an Equivalences) in its
+    segmentation layer. Its inference server posts them as it merges."""
+    body, error = parse(Equivalences, request.get_json(silent=True))
+    if error:
+        return error
+    dataset = body.dataset
+    equivalences = [[np.uint64(item) for item in sublist] for sublist in body.equivalences]
 
     with get_session().viewer.txn() as s:
         for layer in s.layers:
