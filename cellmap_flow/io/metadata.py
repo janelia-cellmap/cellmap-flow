@@ -471,28 +471,33 @@ def _n5_multiscale_level(multiscales, level_path):
 def _n5(items, order, ndim, is_n5, units=None, multiscales=None, level_path=None):
     """``(voxel_size, offset, units)`` in C order from the N5/funlib attributes.
 
-    ``units`` is used instead of looking them up when given. For N5, a
-    lookup that finds no voxel size or no offset falls back to the group's
-    ``multiscales`` entry, which replaces both. What is still missing
-    defaults to voxel size 1 and offset 0.
+    ``units`` is used instead of looking them up when given. For N5, what
+    the attributes don't give -- the voxel size, the offset, or both -- is
+    taken from the level's entry in the group's ``multiscales`` (a voxel
+    size with that entry's units); what they do give is kept. BigDataViewer
+    and Paintera N5s have a ``pixelResolution`` and no offset. What is still
+    missing defaults to voxel size 1 and offset 0.
     """
     voxel_size = n5_voxel_size(items, order)
     offset = n5_offset(items, order)
     if units is None:
         units = n5_units(items, order, ndim)
+    if is_n5 and (voxel_size is None or offset is None):
+        level_scale, level_offset, level_units = _n5_multiscale_level(multiscales, level_path)
+        if voxel_size is None and level_scale is not None:
+            voxel_size, units = level_scale, level_units
+        if offset is None:
+            offset = level_offset
     if voxel_size is not None and offset is not None:
         if order == "F" or is_n5:
             return _reverse(voxel_size), _reverse(offset), _reverse(units)
         return voxel_size, offset, units
 
-    if is_n5:
-        voxel_size, offset, units = _n5_multiscale_level(multiscales, level_path)
-
     dims = min(ndim, 3)
     if voxel_size is None:
         voxel_size = (1,) * dims
     if offset is None:
-        offset = (0,) * dims
+        offset = (0,) * len(voxel_size)
     units = _per_axis("pixels" if units is None else units, dims)
     if order == "F":
         return _reverse(voxel_size), _reverse(offset), _reverse(units)

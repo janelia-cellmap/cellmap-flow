@@ -40,6 +40,20 @@ def _v3_group_with_s0(f):
     return _v3_group(f.tmp / "g.zarr")
 
 
+def _n5_level_in_multiscales(f):
+    """An N5 level with a resolution and no offset, whose group's multiscales list it
+    with a voxel size of their own (8 nm, not used) and an offset (x, y, z)."""
+    import zarr
+    from zarr.n5 import N5FSStore
+
+    path = f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"resolution": [3, 2, 1]}, "m.n5/raw/s0")
+    transform = {"scale": [8, 8, 8], "translate": [30, 20, 10], "units": ["nm"] * 3}
+    zarr.open_group(N5FSStore(str(f.tmp / "m.n5")), mode="a")["raw"].attrs["multiscales"] = [
+        {"datasets": [{"path": "s0", "transform": transform}]}
+    ]
+    return path
+
+
 def _unlisted_level(f):
     """raw/s1 next to an OME level raw/s0 that raw's multiscales list alone; s1
     has its own funlib attributes."""
@@ -174,10 +188,15 @@ LAYOUTS = {
             "resolution": [3, 2, 1], "offset": [0] * 3, "units": "um"}),
         ("n5", ZYX, (1000.0, 2000.0, 3000.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
     ),
-    # Without an offset the whole lookup falls through, voxel size and all.
+    # A voxel size without an offset is kept, at offset 0; it was once dropped for 1 nm.
     "n5-resolution-without-offset": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"resolution": [3, 2, 1]}),
-        ("n5", ZYX, (1.0,) * 3, (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (1.0, 2.0, 3.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
+    ),
+    # ... and the group's multiscales give only the offset the array lacks.
+    "n5-offset-from-multiscales": (
+        _n5_level_in_multiscales,
+        ("n5", ZYX, (1.0, 2.0, 3.0), (10.0, 20.0, 30.0), (10, 20, 30), (5, 10, 15)),
     ),
     # BigDataViewer's and Paintera's N5.
     "n5-pixel-resolution": (
@@ -185,6 +204,12 @@ LAYOUTS = {
             "pixelResolution": {"dimensions": [2, 4, 8], "unit": "nm"},
             "downsamplingFactors": [2, 2, 1], "offset": [30, 20, 10]}),
         ("n5", ZYX, (8.0, 8.0, 4.0), (8.0, 24.0, 32.0), (10, 20, 30), (5, 10, 15)),
+    ),
+    # ... which usually have no offset.
+    "n5-pixel-resolution-without-offset": (
+        lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {
+            "pixelResolution": {"dimensions": [2, 4, 8], "unit": "nm"}, "downsamplingFactors": [2, 2, 1]}),
+        ("n5", ZYX, (8.0, 8.0, 4.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
     ),
     # x, y, z voxels (3, 2, 1) at (4, 8, 16) nm: the corner is (16, 16, 12) nm.
     "precomputed": (
