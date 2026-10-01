@@ -233,11 +233,12 @@ class PatchSampler:
         )
         if self.dense.shape[0] == 0 and self.sparse.shape[0] == 0 and bbox_offsets.shape[0]:
             # Imported crops that are all background, and nothing painted:
-            # centre on the crops' annotated voxels rather than refuse.
-            self.dense = _annotated_voxels_in_crops(
+            # centre on the crops' annotated voxels rather than refuse. Their
+            # chunks count as any other pool's do: a crop over 8 chunks gets
+            # 8 patches an epoch, not 1.
+            self.dense, n_fg_chunks = _annotated_voxels_in_crops(
                 arr, chunks, chunk_shape, bbox_offsets, bbox_ends
             )
-            n_fg_chunks = max(n_fg_chunks, 1 if self.dense.shape[0] else 0)
         self.annotated_chunks = n_fg_chunks
 
         n_dense, n_sparse = int(self.dense.shape[0]), int(self.sparse.shape[0])
@@ -343,7 +344,8 @@ class PatchSampler:
 
 
 def _annotated_voxels_in_crops(arr, chunks, chunk_shape, bbox_offsets, bbox_ends):
-    """Every annotated voxel inside the imported crops, as (N, 3) global indices."""
+    """Every annotated voxel inside the imported crops, as (N, 3) global
+    indices, and how many chunks hold one."""
     rows = []
     for index in chunks:
         chunk_origin = np.array(index, dtype=np.int64) * chunk_shape
@@ -352,4 +354,5 @@ def _annotated_voxels_in_crops(arr, chunks, chunk_shape, bbox_offsets, bbox_ends
             inside = voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends)
             if inside.any():
                 rows.append(annotated[inside].astype(POOL_DTYPE))
-    return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=POOL_DTYPE)
+    voxels = np.concatenate(rows, axis=0) if rows else np.zeros((0, 3), dtype=POOL_DTYPE)
+    return voxels, len(rows)

@@ -90,16 +90,19 @@ def _drawn(dataset, n=16):
     return [dataset[i][1] for i in range(n)]
 
 
-@pytest.mark.parametrize("labels, patches", [
-    pytest.param(_labels(48, a=(2, np.s_[1, 1, 1]), b=(2, np.s_[17, 17, 17]), c=(2, np.s_[33, 33, 33])), 3,
+@pytest.mark.parametrize("labels, crops, patches", [
+    pytest.param(_labels(48, a=(2, np.s_[1, 1, 1]), b=(2, np.s_[17, 17, 17]), c=(2, np.s_[33, 33, 33])), (), 3,
                  id="three chunks of foreground"),
-    pytest.param(FAR_APART, 2, id="a background fix counts too"),
+    pytest.param(FAR_APART, (), 2, id="a background fix counts too"),
     # A session that painted only background raised "no foreground voxels".
-    pytest.param(_labels(32, fix=(1, np.s_[20:24, 20:24, 20:24])), 1, id="background only"),
+    pytest.param(_labels(32, fix=(1, np.s_[20:24, 20:24, 20:24])), (), 1, id="background only"),
+    # It got 1 patch an epoch, whatever its size.
+    pytest.param(_labels(32, crop=(1, np.s_[0:32, 0:32, 0:32])), [{"annotation_offset_voxels": [0, 0, 0],
+                 "annotation_shape_voxels": [32, 32, 32]}], 8, id="a background-only crop over 8 chunks"),
 ])
-def test_an_epoch_is_a_patch_per_annotated_chunk(annotation_volume, labels, patches):
-    """patches_per_epoch None, the default: what was painted, about once an epoch."""
-    assert len(annotation_volume(labels).dataset()) == patches
+def test_an_epoch_is_a_patch_per_annotated_chunk(annotation_volume, labels, crops, patches):
+    """patches_per_epoch None, the default: what was annotated, about once an epoch."""
+    assert len(annotation_volume(labels, crops=crops).dataset()) == patches
 
 
 def test_a_background_fix_far_from_any_foreground_is_drawn(annotation_volume):
