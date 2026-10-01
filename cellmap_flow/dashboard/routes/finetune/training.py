@@ -37,6 +37,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     training_settings,
 )
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.job_manager.state import can_restart
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
 
@@ -570,29 +571,23 @@ def restart_finetuning_job(job_id):
     try:
         restart_t0 = time.perf_counter()
 
-        # Every restart asks MinIO whether anything changed. That question is
-        # cheap and is the only way to answer it -- the browser writes its
-        # strokes straight to MinIO, so the dashboard has no way of knowing
-        # locally whether you drew anything since the last run. Asking *is*
-        # the check: force=False diffs chunk keys and downloads only what
-        # differs, so a parameters-only restart pulls nothing and the log says
-        # so. What it must not do is skip the question, because the trainer
-        # rebuilds its dataloader from the volume zarr on disk each iteration
-        # and the background sync only runs every 30s.
-        #
-        # This used to be skipped whenever a manifest was present, because the
-        # sync also materialized per-chunk raw extracts the virtual dataset
-        # never reads, which on a big session took minutes. The sync is just
-        # the chunk diff now.
         from cellmap_flow.finetune.session.manifest import read_manifest
 
+        # Refused before anything is written or pulled: a restart the job
+        # cannot take used to rewrite the session's manifest with the form's
+        # settings, which later submits then inherited, and sync, and only
+        # then fail (with a 500).
         manager = get_session().finetune_job_manager
         job_record = (getattr(manager, "jobs", {}) or {}).get(job_id)
-        corrections_dir = (
-            str(getattr(job_record, "corrections_path", "") or "")
-            if job_record is not None
-            else ""
-        )
+        if job_record is None:
+            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
+        if not can_restart(job_record):
+            return jsonify({"success": False, "error": (
+                f"Job {job_id} is in state {job_record.status.value} - can only restart a "
+                f"job that is waiting for a restart (its training iteration has "
+                f"finished or diverged)"
+            )}), 409
+        corrections_dir = str(job_record.corrections_path or "")
 
         existing_manifest = (
             read_manifest(corrections_dir) if corrections_dir else None
@@ -607,6 +602,20 @@ def restart_finetuning_job(job_id):
                 corrections_dir, existing_manifest, body.overrides(), "restart"
             )
 
+        # Every restart asks MinIO whether anything changed. That question is
+        # cheap and is the only way to answer it -- the browser writes its
+        # strokes straight to MinIO, so the dashboard has no way of knowing
+        # locally whether you drew anything since the last run. Asking *is*
+        # the check: force=False diffs chunk keys and downloads only what
+        # differs, so a parameters-only restart pulls nothing and the log says
+        # so. What it must not do is skip the question, because the trainer
+        # rebuilds its dataloader from the volume zarr on disk each iteration
+        # and the background sync only runs every 30s.
+        #
+        # This used to be skipped whenever a manifest was present, because the
+        # sync also materialized per-chunk raw extracts the virtual dataset
+        # never reads, which on a big session took minutes. The sync is just
+        # the chunk diff now.
         pulled = 0
         try:
             sync_t0 = time.perf_counter()

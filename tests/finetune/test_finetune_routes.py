@@ -238,19 +238,22 @@ def test_submit_backfills_the_manifest_of_a_session_from_before_it(client, tmp_p
 
 @pytest.fixture
 def restart(client, local_jobs, session, monkeypatch):
-    """``restart(pulled=0, **request)``: POST /api/finetune/job/<id>/restart for
-    a job submitted through the dashboard's own job manager, with MinIO sync
-    pulling ``pulled`` volumes. Returns the response's status and body, the
-    syncs asked for, what the trainer is sent, and the session."""
+    """``restart(pulled=0, job_status="WAITING_FOR_RESTART", **request)``: POST
+    /api/finetune/job/<id>/restart for a job submitted through the dashboard's
+    own job manager, now in ``job_status``, with MinIO sync pulling ``pulled``
+    volumes. Returns the response's status and body, the syncs asked for, what
+    the trainer is sent, and the session."""
     from cellmap_flow.dashboard.routes.finetune import training
     from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
+    from cellmap_flow.finetune.job_manager.state import JobStatus
 
-    def run(pulled=0, **request):
+    def run(pulled=0, job_status="WAITING_FOR_RESTART", **request):
         base = session()
         manager = get_session().finetune_job_manager  # made when first asked for, as in the dashboard
         assert isinstance(manager, FinetuneJobManager)
         job = manager.submit_finetuning_job(model_config=get_session().models_config[0],
                                             corrections_path=base / "corrections", output_base=base)
+        job.status = JobStatus(job_status)
         record = SimpleNamespace(syncs=[], sent=[], base=base)
         monkeypatch.setattr(training, "sync_all_annotations_from_minio",
                             lambda force=True: record.syncs.append(force) or pulled)
@@ -292,12 +295,23 @@ def test_a_restart_sends_the_trainer_its_own_flags(restart):
                          "distillation_all_voxels": True, "loss_type": "margin"}]
 
 
-def test_a_restart_with_an_override_that_is_not_one_is_refused(restart):
-    """It failed with a 500, as if the dashboard were broken."""
-    run = restart(rehearsal_fraction="abc")
-    assert (run.status, run.body) == (400, {"success": False,
-                                            "error": "rehearsal_fraction must be a number between 0 and 1"})
+@pytest.mark.parametrize("job_status, request_data, status, error", [
+    # It failed with a 500, as if the dashboard were broken.
+    pytest.param("WAITING_FOR_RESTART", {"rehearsal_fraction": "abc"}, 400,
+                 "rehearsal_fraction must be a number between 0 and 1", id="an override that is not one"),
+    # The Finetune tab offered Restart for a finished job that had been serving.
+    pytest.param("COMPLETED", {"patches_per_epoch": 7}, 409,
+                 "is in state COMPLETED - can only restart a job that is waiting", id="a job that has finished"),
+])
+def test_a_refused_restart_changes_nothing(restart, job_status, request_data, status, error):
+    """A restart the job could not take still wrote the form's settings into the
+    session's manifest, which later submits inherited, and pulled from MinIO,
+    and then answered 500."""
+    run = restart(job_status=job_status, **request_data)
+    assert (run.status, run.body["success"]) == (status, False) and error in run.body["error"]
     assert run.sent == [] and run.syncs == []
+    manifest = json.loads((run.base / "corrections" / "_virtual_sources.json").read_text())
+    assert not {"patches_per_epoch", "rehearsal_fraction"} & set(manifest)
 
 
 @pytest.fixture
@@ -550,9 +564,9 @@ ANSWERS = [
                  {"success": True, "job_id": "j", "annotations_synced": 0,
                   "message": "Restart request sent. No new annotations to pull; training will restart on the "
                              "same GPU."}, id="restart"),
-    pytest.param("post", "/api/finetune/job/j/restart", {}, None, 500, _refused(NOT_RESTARTABLE),
+    pytest.param("post", "/api/finetune/job/j/restart", {}, None, 409, _refused(NOT_RESTARTABLE),
                  id="restart a job that is not waiting"),
-    pytest.param("post", "/api/finetune/job/nope/restart", {}, None, 500, _refused("Job nope not found"),
+    pytest.param("post", "/api/finetune/job/nope/restart", {}, None, 404, _refused("Job nope not found"),
                  id="restart an unknown job"),
     pytest.param("post", "/api/finetune/submit", {}, None, 400, _refused("model_name is required"),
                  id="submit without a model"),
