@@ -40,7 +40,8 @@ check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome"
 """,
     # torch only once a runner is built.
     "serving": """
-check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "cellmap_flow.inference.runner"]
+check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "cellmap_flow.inference.runner",
+       "cellmap_flow.inferencer", "cellmap_flow.image_data_interface"]
       + [f"cellmap_flow.serving.{m}" for m in ("virtual_zarr", "protocol", "client", "probe", "restart_token")],
       LIGHT + ["torch"])
 """,
@@ -74,19 +75,23 @@ get_postprocessors_list()
 get_postprocessors([{"name": "SigmoidPostprocessor"}, {"name": "AffinityPostprocessor"}])
 check([], ["neuroglancer", "pymorton", "mwatershed", "fastremap", "fastmorph", "scipy.ndimage"])
 """,
+    # The trainer, the finetune CLI and the dashboard's routes all read a
+    # session's volumes and manifest.
+    "finetune-session": """
+check([f"cellmap_flow.finetune.session.{m}" for m in ("manifest", "volume", "store", "minio", "sync", "instance")],
+      LIGHT + ["torch"])
+""",
     "review": """
 check(["cellmap_flow.review", "cellmap_flow.review_index"], LIGHT + ["torch"])
 """,
-    # A viewer never starts the dashboard. (globals still comes in with the
-    # raw layer, through ImageDataInterface.)
+    # A viewer never starts the dashboard.
     "viewer": """
 check(["cellmap_flow.viewer.layers", "cellmap_flow.viewer.bootstrap"],
-      ["flask", "cellmap_flow.dashboard", "torch", "huggingface_hub", "peft"])
+      ["cellmap_flow.globals", "flask", "cellmap_flow.dashboard", "torch", "huggingface_hub", "peft"])
 """,
     # The dashboard imports blockwise lazily, for the precheck.
     "blockwise-logging": """
 import logging
-import cellmap_flow.globals
 root = logging.getLogger()
 root.setLevel(logging.WARNING)
 handlers = list(root.handlers)

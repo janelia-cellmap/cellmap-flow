@@ -43,3 +43,34 @@ def test_every_imported_name_exists():
         except ModuleNotFoundError:
             unresolved.append(f"{path}:{line}: from {module} import {name}")
     assert not unresolved, "imports of names that no longer exist:\n" + "\n".join(unresolved)
+
+
+# Still being moved off g by the agents that own them; emptied by the lead
+# once K16-C (fix-dashboard) and fix-loop land.
+STILL_IMPORTING_GLOBALS = {
+    "cellmap_flow/dashboard/app.py",
+    "cellmap_flow/finetune/finetune_cli.py",
+}
+
+
+def _imports_globals(node):
+    if isinstance(node, ast.Import):
+        return any(alias.name == "cellmap_flow.globals" for alias in node.names)
+    if isinstance(node, ast.ImportFrom) and not node.level:
+        return node.module == "cellmap_flow.globals" or (
+            node.module == "cellmap_flow" and any(alias.name == "globals" for alias in node.names))
+    return False
+
+
+def test_no_module_imports_the_deprecated_globals():
+    """Every name g had has an owner to read it from (see globals' docstring).
+    Importing globals also configures logging, which reset a CLI's
+    --log-level to INFO when a later import pulled it in."""
+    importers = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        if path.name == "globals.py" and path.parent == PACKAGE:
+            continue
+        if any(_imports_globals(node) for node in ast.walk(ast.parse(path.read_text()))):
+            importers.add(str(path.relative_to(PACKAGE.parent)))
+    unexpected = sorted(importers - STILL_IMPORTING_GLOBALS)
+    assert not unexpected, f"these import cellmap_flow.globals: {unexpected}"
