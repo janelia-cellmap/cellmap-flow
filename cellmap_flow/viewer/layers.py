@@ -5,9 +5,9 @@ they all place and shade it the same way:
 
 - ``prediction_voxel_override()``: the voxel size to draw a model's output
   at, when it is not the one its server declares.
-- ``prediction_source()``: the layer source, a zarr served by the model's
-  inference server with the chain in its URL, and the override as its
-  transform.
+- ``prediction_url()`` and ``prediction_source()``: the layer's URL, a zarr
+  served by the model's inference server with the chain in it, and its
+  source, that URL with the override as its transform.
 - ``prediction_shader_for()``: a shader over the range the chain produces.
 - ``prediction_layer()``: the layer itself, a segmentation when the chain
   ends in labels and an image otherwise.
@@ -76,6 +76,12 @@ def prediction_voxel_override(host, dataset_path, info=None, fallback_output_vox
     return override
 
 
+def prediction_url(host, model, url_blob):
+    """The URL of ``model``'s zarr on ``host``, with ``url_blob``
+    (PipelineSpec.to_url_blob) in it: what the layer's source points at."""
+    return f"zarr://{host}/{model}{ARGS_KEY}{url_blob}{ARGS_KEY}"
+
+
 def prediction_source(host, model, url_blob, override_scales=None, has_channel=True):
     """The source of ``model``'s layer: its zarr on ``host``, with ``url_blob``
     (PipelineSpec.to_url_blob) in the URL.
@@ -86,7 +92,7 @@ def prediction_source(host, model, url_blob, override_scales=None, has_channel=T
     served array with a channel axis (the last, ``has_channel``) keeps it as a
     unit-less ``c^``.
     """
-    url = f"zarr://{host}/{model}{ARGS_KEY}{url_blob}{ARGS_KEY}"
+    url = prediction_url(host, model, url_blob)
     if override_scales is None:
         return url
     dimensions = {axis: [size * 1e-9, "m"] for axis, size in zip("zyx", override_scales)}

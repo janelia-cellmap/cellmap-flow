@@ -24,7 +24,7 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.viewer.layers import prediction_layer, raw_layer
+from cellmap_flow.viewer.layers import prediction_layer, prediction_url, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,22 @@ def update_equivalences():
     return jsonify({"message": "Equivalences updated successfully"})
 
 
+def _shows(viewer, jobs, url_blob) -> bool:
+    """Whether ``viewer`` already shows the raw, and each job that has a host
+    its layer over ``url_blob``: then a redraw would show nothing new."""
+    layers = viewer.state.layers
+    if "data" not in layers:
+        return False
+    for job in jobs:
+        if not job.host:
+            continue
+        if job.model_name not in layers:
+            return False
+        if layers[job.model_name].source[0].url != prediction_url(job.host, job.model_name, url_blob):
+            return False
+    return True
+
+
 def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> list:
     """Make ``spec`` the dashboard's chain, and redraw the viewer through it.
 
@@ -161,11 +177,19 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     with ``dashboard_url`` and the chain's digest), and its server runs the
     chain of the layer it is asked for.
 
-    Returns the names of the prediction layers drawn. A job with no host
-    yet gets no layer, and with no viewer yet (no dataset opened) nothing
-    is drawn.
+    The viewer is left alone when the chain is the one it already shows: the
+    chain was this already, the raw layer is there, and every job's layer
+    carries this chain. The builder sends its canvas after every edit, a
+    node dragged too, and each redraw sampled the raw again, asked every
+    server for its model_info and reset what the user had set in the viewer
+    (a layer hidden, an opacity).
+
+    Returns the names of the prediction layers shown through the chain. A
+    job with no host yet gets no layer, and with no viewer yet (no dataset
+    opened) nothing is drawn.
     """
     session = get_session()
+    previous_digest = session.pipeline_spec.digest()
     # Capture which normalization the *currently displayed* raw layer was built
     # under, before it is replaced below.
     previous_norm_signature = _chain_signature(session.input_norms)
@@ -188,6 +212,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # chunks it has and each server reuses the chain it already built (with
     # any merger state in it). Changed settings still give a new source.
     st_data = spec.to_url_blob(dashboard_url=dashboard_url, digest=spec.digest())
+    if spec.digest() == previous_digest and _shows(session.viewer, session.jobs, st_data):
+        logger.debug("The viewer already shows this chain; it is left as it is")
+        return [job.model_name for job in session.jobs if job.host]
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()

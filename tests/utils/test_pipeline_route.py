@@ -100,6 +100,24 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
         assert get_session().builder_model_configs["mito"] == {"type": "script", "script_path": "/m.py"}
 
 
+def test_a_put_that_leaves_the_chain_as_drawn_leaves_the_viewer_alone(call):
+    """The builder PUTs after every edit, a node dragged too. Each redrew the
+    viewer, rebuilding every layer and undoing what the user set there."""
+    with get_session().viewer.txn() as s:
+        s.layers["mito"].visible = False
+        s.layers["data"].opacity = 0.3
+    moved = {**CANVAS, "inputs": [{**CANVAS["inputs"][0], "position": {"x": 50, "y": 80}}]}
+    assert call("PUT", "/api/pipeline", {**SHOWN, "builder": moved})[1]["layers"] == ["mito"]
+    layers = get_session().viewer.state.layers
+    assert (layers["mito"].visible, layers["data"].opacity) == (False, 0.3)
+    assert get_session().builder_state["inputs"] == moved["inputs"], "the canvas is kept all the same"
+
+    # A model whose server came up since gets its layer.
+    get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="nuc", host="http://gpu:8001")]
+    assert call("PUT", "/api/pipeline", SHOWN)[1]["layers"] == ["mito", "nuc"]
+    assert _drawn("nuc") == PipelineSpec.from_json_data(SHOWN)
+
+
 @pytest.mark.parametrize(
     "body, error",
     [
