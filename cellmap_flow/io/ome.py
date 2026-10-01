@@ -26,13 +26,17 @@ def ome_translation(corner: Sequence[float], scale: Sequence[float]) -> List[flo
     return [float(c) + float(s) / 2 for c, s in zip(corner, scale)]
 
 
-# Axes written with type "channel" (no unit, no half-voxel shift).
-CHANNEL_AXES = ("c", "c^")
+# The axis names that are channels, never space, wherever cellmap-flow
+# names axes: OME axes lists, tensorstore dimension labels, a model's
+# chunk_output_axes. They are written with type "channel" (no unit, no
+# half-voxel shift). It is defined here rather than in io.metadata, which
+# imports this module; import it from here.
+CHANNEL_AXIS_NAMES = ("c", "c^", "channel")
 
 
 def _translation(corner, voxel_size, axes) -> List[float]:
     return [
-        float(c) if axis in CHANNEL_AXES else float(c) + float(v) / 2
+        float(c) if axis in CHANNEL_AXIS_NAMES else float(c) + float(v) / 2
         for axis, c, v in zip(axes, corner, voxel_size)
     ]
 
@@ -49,12 +53,12 @@ def multiscales_attrs(
     ``levels`` are ``(path, voxel_size, corner)``, one entry per axis in
     ``axes`` order, with ``corner`` the lower corner of voxel 0. Spatial
     axes get ``translation = corner + voxel_size / 2`` and the unit from
-    ``units``; the channel axes (named "c" or "c^") are written as they
-    are, with type "channel" and no unit. ``voxel_size`` is written as given.
+    ``units``; the channel axes (named "c", "c^" or "channel") are written
+    as they are, with type "channel" and no unit. ``voxel_size`` is written as given.
     """
     axes_list = []
     for axis, unit in zip(axes, units):
-        if axis in CHANNEL_AXES:
+        if axis in CHANNEL_AXIS_NAMES:
             axes_list.append({"name": axis, "type": "channel"})
         else:
             axes_list.append({"name": axis, "type": "space", "unit": unit})

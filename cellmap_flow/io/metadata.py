@@ -41,7 +41,7 @@ import zarr
 from funlib.geometry import Coordinate
 
 from cellmap_flow.io import paths
-from cellmap_flow.io.ome import ome_corner
+from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES, ome_corner
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,6 @@ _NM_PER_UNIT = {
     "picometer": 1e-3,
     "pm": 1e-3,
 }
-CHANNEL_AXIS_NAMES = ("c", "c^", "channel")
 _NON_SPATIAL_AXIS_NAMES = CHANNEL_AXIS_NAMES + ("t", "time")
 
 _warned_units = set()

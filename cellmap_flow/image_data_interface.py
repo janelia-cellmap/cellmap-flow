@@ -24,6 +24,7 @@ from cellmap_flow.globals import g
 from cellmap_flow.io import multiscale, paths
 from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import ArrayMeta, read_array_meta, snap_integral
+from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.io.source import open_array, read_padded
 
 logger = logging.getLogger(__name__)
@@ -311,9 +312,6 @@ def apply_norms(data, input_norms=None):
     return data
 
 
-_CHANNEL_LABELS = ("c", "c^", "channel")
-
-
 def selected_channel(input_norms) -> int:
     """The input channel a chain asks for: its first ChannelSelector, else 0."""
     from cellmap_flow.norm.input_normalize import ChannelSelector
@@ -334,7 +332,7 @@ def select_channel(ts_dataset, channel=0, spatial_ndim=3):
     if ts_dataset.ndim <= spatial_ndim:
         return ts_dataset
     labels = list(getattr(ts_dataset.domain, "labels", None) or [])
-    axis = next((i for i, lab in enumerate(labels) if lab in _CHANNEL_LABELS), 0)
+    axis = next((i for i, lab in enumerate(labels) if lab in CHANNEL_AXIS_NAMES), 0)
     if axis == 0:
         return ts_dataset[channel]
     return ts_dataset[ts.d[axis][channel]]
