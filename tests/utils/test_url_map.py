@@ -53,7 +53,6 @@ URLS = {
     "/api/pipeline": "PUT",
     "/api/pipeline/apply": "POST",
     "/api/process": "POST",
-    "/api/review/current_pick": "GET",
     "/api/review/next": "GET",
     "/api/review/open": "POST",
     "/api/review/pick_stream": "GET",

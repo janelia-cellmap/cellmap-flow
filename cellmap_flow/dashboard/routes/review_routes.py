@@ -65,21 +65,19 @@ class PickBoard:
         self._changed = threading.Condition()
         self.seq = 0
         self.label_id: Optional[int] = None
-        self.at: Optional[float] = None  # time.monotonic() of the pick
         self.closed = False
 
     def post(self, label_id: int) -> int:
         with self._changed:
             self.seq += 1
             self.label_id = label_id
-            self.at = time.monotonic()
             self._changed.notify_all()
             return self.seq
 
     def latest(self):
-        """``(seq, label_id, at)`` of the last pick."""
+        """``(seq, label_id)`` of the last pick."""
         with self._changed:
-            return self.seq, self.label_id, self.at
+            return self.seq, self.label_id
 
     def wait_past(self, seq: int, timeout: float):
         """``(seq, label_id)`` once there is a pick after ``seq``, or as they
@@ -186,8 +184,7 @@ def _on_review_pick(action_state) -> None:
     if label_id == 0:
         return
     seq = session.picks.post(label_id)
-    # Timestamps measure end-to-end latency: keypress → action arrival
-    # (this line) → the stream or poll that serves it (PICK_POLL_ARRIVAL).
+    # The time measures the latency from the keypress to this action.
     logger.debug(
         f"PICK_HANDLER_ENTRY seq={seq} label={label_id} t_mono={time.monotonic():.3f}"
     )
@@ -463,42 +460,6 @@ def review_show(instance_id: int):
     return jsonify(inst)
 
 
-@review_bp.route("/api/review/current_pick", methods=["GET"])
-def review_current_pick():
-    """Return the most-recent instance picked via the 'review-pick' NG action.
-
-    Two-stage to keep NG's Tornado event loop unblocked:
-      - the action handler posts `label_id` only (no DB I/O on the loop)
-      - this endpoint, served by Flask on its own thread pool, does the
-        catalog lookup at poll time
-
-    Response:
-      200 with {"pick": instance_record, "seq": int}
-          when a pick has been recorded since /api/review/open
-      204 No Content when no pick yet
-    """
-    session = get_session().review
-    if session is None:
-        return _no_session()
-    seq, label_id, picked_at = session.picks.latest()
-    if label_id is None:
-        return ("", 204)
-    t_poll = time.monotonic()
-    inst = _read_instance(session.db_path, label_id)
-    logger.debug(
-        f"PICK_POLL_ARRIVAL seq={seq} label={label_id} "
-        f"age_since_handler_ms={(t_poll - picked_at) * 1000.0:.1f} "
-        f"flask_db_ms={(time.monotonic() - t_poll) * 1000.0:.1f}"
-    )
-    if inst is None:
-        return jsonify({
-            "error": f"label_id {label_id} not in catalog",
-            "seq": seq,
-        }), 404
-    inst["label_id"] = int(inst["id"])
-    return jsonify({"pick": inst, "seq": seq})
-
-
 @review_bp.route("/api/review/pick_stream", methods=["GET"])
 def review_pick_stream():
     """Server-Sent Events stream of pick updates.
@@ -537,7 +498,7 @@ def review_pick_stream():
         # so EventSource clients see something the moment they open. Comment
         # lines (": ...") are dropped by some buffering proxies and don't
         # trigger onmessage on the client.
-        sent, label_id, _ = picks.latest()
+        sent, label_id = picks.latest()
         yield event({
             "seq": sent,
             "pick": lookup(label_id) if label_id is not None else None,
