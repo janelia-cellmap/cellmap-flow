@@ -9,6 +9,7 @@ the manager keeps its record of the job in ``metadata.json``:
   and when it ends, with its ``finetuned_model_name`` and
   ``model_yaml_path`` (``update_metadata``);
 - completed when it succeeds (``record_completion``).
+Each write replaces the file whole (``write_json_atomically``).
 The trainer writes a restart's settings into its ``params``. The dashboard
 reads back the ``model_entry`` the trainer was given
 (``recorded_model_entry``).
@@ -114,17 +115,37 @@ def submission_metadata(
     }
 
 
+def write_json_atomically(path, data) -> None:
+    """Write ``data`` to ``path`` as indented JSON, replacing the file whole.
+
+    The JSON goes into a temporary file beside ``path``, named for this one
+    write, which then replaces ``path``. So a reader finds the old file or
+    the new one, never part of one: the trainer on its own host, another
+    dashboard, or another thread of this one. And two writers never share a
+    temporary file. Raises what serializing or writing raises (TypeError,
+    OSError), with ``path`` left as it was and no temporary file behind.
+    """
+    path = Path(path)
+    text = json.dumps(data, indent=2)
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp.write_text(text)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)  # still there only if the write or the replace failed
+
+
 def write_metadata(output_dir, metadata: dict) -> None:
-    """Write a new run's metadata.json."""
+    """Write a new run's metadata.json (write_json_atomically)."""
     metadata_file = Path(output_dir) / METADATA_FILE
-    with open(metadata_file, "w") as f:
-        json.dump(metadata, f, indent=2)
+    write_json_atomically(metadata_file, metadata)
 
     logger.info(f"Saved metadata to {metadata_file}")
 
 
 def update_metadata(output_dir, **fields) -> None:
-    """Merge ``fields`` into the run's metadata.json, replacing it atomically.
+    """Merge ``fields`` into the run's metadata.json, replacing it atomically
+    (write_json_atomically).
 
     A missing record is started with ``fields``; one that cannot be read is
     left as it is, with a warning.
@@ -133,9 +154,7 @@ def update_metadata(output_dir, **fields) -> None:
     try:
         metadata = json.loads(path.read_text()) if path.exists() else {}
         metadata.update(fields)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(metadata, indent=2))
-        os.replace(tmp, path)
+        write_json_atomically(path, metadata)
     except Exception as e:
         logger.warning(f"Could not update {path}: {e}")
 
