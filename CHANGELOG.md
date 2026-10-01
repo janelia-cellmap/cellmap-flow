@@ -270,7 +270,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - every server launched on LSF failed with "Invalid value for '--model': not JSON". LSF wraps a job's `bash -c` line in single quotes, and the `--model` JSON was single-quoted too. Every shell line given to LSF is now quoted with double quotes (`jobs.spec.shell_join`), and a line containing a single quote is refused;
   - a finetune job started from inside another cellmap-flow checkout ran that checkout's trainer. The trainer and the blockwise master now run with `python -P`;
   - **a server still starting when the launcher stops is killed too**, and so are all of them on SIGHUP (the terminal closed, or the interactive LSF session ended). Both left GPUs billing;
-  - **a painted patch is drawn by chunk, then by voxel**, so each place painted gets a like share of patches whatever the size of its strokes;
+  - **a painted patch is drawn by chunk, then by voxel**, so each place painted gets a like share of patches whatever the size of its strokes, and **a third are centred on painted foreground** (nnU-Net's foreground oversampling), so mostly-background sessions still train on their objects;
   - **a distance model trained on scribbles asks only for the side of 0.5** (margin 0.5), with distillation of at least 0.5. The form's margin 0.3 sharpened its edges near strokes;
   - the finetune log is streamed once, and its file is seen from the dashboard as soon as the trainer writes it (it was a minute late over NFS, and the loss plot with it);
   - inference servers log each of their first 20 chunks' time, split into read, GPU wait, GPU, postprocess and encode;
@@ -279,6 +279,7 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `fa0e43ba` centre a third of painted patches on painted foreground
 - `de1bab7d` a distance model trained on scribbles asks only for the side of 0.5
 - `d662b1bd` draw a painted patch by chunk, then by voxel, and say what the patches centre on
 - `c494d165` kill a server still starting, and on SIGHUP, when the launcher stops
