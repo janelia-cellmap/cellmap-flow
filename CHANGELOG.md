@@ -206,6 +206,12 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - everything else is the dashboard's `cellmap_flow.dashboard.state.get_session()`.
 
     A script's `g.input_norms = [...]` still sets the process's chain, and `Flow()` returns `g`. Assigning a name `g` never had raises `AttributeError` instead of storing it. Importing `cellmap_flow.globals` no longer reads `~/.cellmap_flow/server_config.yaml`; a process reads it the first time it needs a setting. Moved without aliases: `globals.SERVER_CONFIG_PATH/DEFAULTS/KEYS` and `load_/save_server_config_cache` → `cellmap_flow.jobs.settings`, `LogHandler` → `cellmap_flow.dashboard.routes.logging_routes`, `get_blockwise_tasks_dir()` → `get_session().tasks_dir()`.
+  - **Finetune data:**
+    - annotation patches are read in the volume's own dtype, so instance-correction ids above 255 no longer wrap modulo 256 (instance 256 read as background, 257 merged with 1);
+    - raw patches are cut as a box of raw voxels, so fractional voxel sizes (5.24 nm, 10.48 nm) get the full patch at the right place. They were one voxel short, started one voxel early, and failed the first batch. Whole-nm grids read exactly as before;
+    - when the only annotation is background-only imported crops, an epoch is one patch per chunk those crops cover, as for every other pool, instead of one patch whatever their size;
+    - `build_corrections`' `--patches-per-epoch`, `--jitter-voxels`, `--seed` and `--dense-to-sparse-ratio` win over the crops YAML when given; the YAML's apply otherwise. The YAML always won before, so `--seed` was always ignored;
+    - `build_corrections` builds crops with no foreground, which the trainer trains on, and warns instead of raising "No foreground voxel was imported".
   - **Also changed in this PR, without a "Behaviour change:" commit of their own:**
     - finetune trainer: `--resume` continues after the checkpoint's epoch; a NaN loss or gradient aborts the epoch before the optimizer step, and a full finetune's fp32 retry reloads its starting weights; TensorBoard steps continue across restarts; after an OOM rebuild the loader keeps its sampler and workers, which changes the patches drawn; an OOM at the first batch reports TRAINING_DIVERGED;
     - finetune job: an inference server that fails to start ends the job with exit 1; a first iteration that diverges ends the job; a setup failure on restart keeps the job alive and reports RESTART_FAILED;
@@ -215,6 +221,11 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `6b3b9f0` build_corrections builds background-only crops instead of refusing them
+- `3cf81d2` build_corrections' sampling flags win over the crops YAML
+- `73dded8` a background-only imported crop gets a patch per annotated chunk, like any other pool
+- `afb8559` read the raw patch as a box of raw voxels, so fractional voxel sizes get all of it
+- `d61b4a1` read annotation patches in the volume's dtype, so instance ids past 255 survive
 - `0d500b1` read a string of channel names as one name in the affinity check
 - `a716f64` post merged ids to the dashboard off the chunk request
 - `a471068` refuse Lambda expressions that ask for unbounded memory
