@@ -189,7 +189,14 @@ def build_corrections(
                          "n_fg_voxels": int(n_fg)})
     total_fg = sum(c["n_fg_voxels"] for c in imported)
     if total_fg == 0:
-        raise RuntimeError("No foreground voxel was imported from any crop; check fg_ids")
+        # Not refused: background-only crops train (the dataset centres
+        # patches on their background, teaching the model where there is
+        # nothing). But the same thing happens when fg_ids name no label in
+        # the crops, so say so.
+        logger.warning(
+            "No foreground voxel was imported from any crop: training will see "
+            "only background. If that is not intended, check fg_ids."
+        )
 
     # A flag given on the command line wins; otherwise the crops YAML's
     # setting, so a YAML that says patches_per_epoch travels with its crops.
@@ -263,7 +270,7 @@ def main(argv=None):
     p.add_argument("--output-shape", type=_triple(int))
     p.add_argument("--input-voxel-size", type=_triple(float))
     p.add_argument("--output-voxel-size", type=_triple(float))
-    p.add_argument("--patches-per-epoch", type=int, help="fixed patches per epoch (default: one per fg-bearing chunk)")
+    p.add_argument("--patches-per-epoch", type=int, help="fixed patches per epoch (default: one per annotated chunk)")
     p.add_argument("--jitter-voxels", type=_triple(int))
     p.add_argument("--seed", type=int, help="patch-sampling seed (default: the crops YAML's, else 0)")
     p.add_argument("--dense-to-sparse-ratio", type=float)

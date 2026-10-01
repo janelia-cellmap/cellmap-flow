@@ -11,7 +11,7 @@ import zarr
 from cellmap_flow.finetune.build_corrections import DEFAULT_INPUT_NORM, build_corrections
 
 
-def _build(tmp_path, ome_zarr, settings="", **flags):
+def _build(tmp_path, ome_zarr, settings="", fg_ids="[50]", **flags):
     """build_corrections of one 8^3 crop, foreground id 50 in a background
     shell, over a 64^3 raw at 8 nm with s1 at 16 nm, for a toy 16 nm model.
     ``settings``: more top-level lines for the crops YAML."""
@@ -21,7 +21,7 @@ def _build(tmp_path, ome_zarr, settings="", **flags):
     labels[2:6, 2:6, 2:6] = 50  # dense: the zeros around it are background
     crop = ome_zarr(tmp_path / "crop.zarr", ("s0", labels, 16.0, 128.0))  # voxel 0's corner is 120 nm
     (tmp_path / "crops.yaml").write_text(
-        f"crops:\n  - path: {crop}\n    name: c1\n    fg_ids: [50]\n    mode: dense\n{settings}")
+        f"crops:\n  - path: {crop}\n    name: c1\n    fg_ids: {fg_ids}\n    mode: dense\n{settings}")
     out = tmp_path / "corrections"
     record = build_corrections(
         raw_dataset_path=raw, crops_yaml=str(tmp_path / "crops.yaml"), output_dir=str(out),
@@ -45,6 +45,15 @@ def test_a_build_writes_the_crop_at_its_place_and_records_where_it_came_from(tmp
     assert record["total_fg_voxels"] == record["crops"][0]["n_fg_voxels"] == 4 ** 3
     assert (record["dataset"], record["class"]) == ("toy_ds", "mito_group") and "fg_ids: [50]" in record["crops_yaml"]
     assert json.loads((out / "build_record.json").read_text())["geometry"]["effective_output_voxel_size_nm"] == [16.0] * 3
+
+
+def test_a_background_only_crop_builds_and_trains(tmp_path, ome_zarr):
+    """The build refused a crop with no foreground, which the dataset trains on."""
+    from cellmap_flow.finetune.data import dataset_from_manifest
+
+    _, out, record, manifest = _build(tmp_path, ome_zarr, fg_ids="[51]")
+    assert record["total_fg_voxels"] == 0
+    assert len(dataset_from_manifest(manifest, str(out))) == 1  # the crop, in one chunk
 
 
 @pytest.mark.parametrize("settings, flags, expected", [
