@@ -18,7 +18,6 @@ from cellmap_flow.serving.launch import server_command
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.settings import launcher_settings
-from cellmap_flow.process_chain import process_chain
 from cellmap_flow.cli.common import log_level_option
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
@@ -262,8 +261,10 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
         logger.info(f"Loading normalization/postprocessing from: {json_data}")
         from cellmap_flow.pipeline_spec import PipelineSpec
 
-        chain = process_chain()
-        chain.input_norms, chain.postprocess = PipelineSpec.from_json_data(json_data, strict=True).build()
+        # The dashboard's chain, as if submitted there: the live steps and
+        # the steps as written, which pipeline_spec (the finetune manifest,
+        # the exported YAML, the builder) then reads.
+        get_session().set_pipeline(PipelineSpec.from_json_data(json_data, strict=True))
     else:
         logger.info("Using default normalization and postprocessing")
 

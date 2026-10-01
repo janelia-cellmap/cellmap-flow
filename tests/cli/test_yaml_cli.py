@@ -155,10 +155,11 @@ def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tm
     assert list(session.extra_layers) == ["pred"]
     assert ([type(s).__name__ for s in chain.input_norms], [type(s).__name__ for s in chain.postprocess]) == (
         ["MinMaxNormalizer"], ["ThresholdPostprocessor"])
-    # The live steps' to_dict(), defaults and all: yaml_cli sets only the
-    # live chain, so pipeline_spec falls back to it.
+    # The steps as the YAML gives them, as a chain submitted in the
+    # dashboard is: the finetune manifest's text. (It was the live steps'
+    # to_dict(), with every default: "invert": False here.)
     assert session.pipeline_spec == PipelineSpec(
-        [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}],
+        [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}],
         [{"name": "ThresholdPostprocessor", "threshold": 0.5}],
     )
     assert yaml.safe_load((tmp_path / "server_config.yaml").read_text()) == {
