@@ -19,6 +19,7 @@ from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec, chain_num_channels, chain_output_dtype
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving import virtual_zarr
 from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.serving.protocol import (
@@ -29,7 +30,7 @@ from cellmap_flow.serving.protocol import (
 )
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 
-from cellmap_flow.globals import g
+import cellmap_flow.globals  # noqa: F401  (configures logging, for now)
 
 import requests
 import time
@@ -192,11 +193,11 @@ class ServedChain(NamedTuple):
     """The normalization/postprocessing a layer URL asks for."""
 
     dashboard_url: Optional[str]
-    input_norms: Optional[list]  # None: the process default (g.input_norms)
-    postprocess: Optional[list]  # None: the process default (g.postprocess)
+    input_norms: Optional[list]  # None: the process's (process_chain().input_norms)
+    postprocess: Optional[list]  # None: the process's (process_chain().postprocess)
 
     def effective_postprocess(self):
-        return g.postprocess if self.postprocess is None else self.postprocess
+        return process_chain().postprocess if self.postprocess is None else self.postprocess
 
 
 class CellMapFlowServer:
@@ -305,7 +306,7 @@ class CellMapFlowServer:
         self._refresh_lock = threading.Lock()
 
         # Each layer URL carries its own chain; they are built once per URL
-        # and never written to g, so layers (tabs, users) sharing this server
+        # and never written to the process's chain, so layers (tabs, users) sharing this server
         # don't get each other's normalization.
         self._chains = OrderedDict()
         self._chain_lock = threading.Lock()
@@ -438,13 +439,14 @@ class CellMapFlowServer:
     def chain_for(self, dataset) -> ServedChain:
         """The chain the requested layer URL carries, built once per URL.
 
-        A URL without an args block gets the process default (g's chain,
-        empty in a server started from the CLI).
+        A URL without an args block gets the process's chain
+        (``process_chain()``, empty in a server started from the CLI).
         """
         if not dataset or ARGS_KEY not in dataset:
             if not self._warned_no_chain:
                 self._warned_no_chain = True
-                if not (g.input_norms or g.postprocess):
+                fallback = process_chain()
+                if not (fallback.input_norms or fallback.postprocess):
                     _chain_from_url(dataset or "")  # logs the warning
             return ServedChain(None, None, None)
 

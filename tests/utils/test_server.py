@@ -13,11 +13,11 @@ import pytest
 from funlib.geometry import Roi
 
 from cellmap_flow import server as server_module
-from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.norm.input_normalize import LambdaNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import PostProcessor, SimpleBlockwiseMerger, ThresholdPostprocessor
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.serving import virtual_zarr
 from cellmap_flow.serving.protocol import ARGS_KEY
@@ -45,7 +45,8 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(server):
     """The server wrote every metadata request's chain into g, and chunks read
     whatever was there: two layers on one server (two tabs, or the old URL still
     loading after a Submit) got each other's normalization and dtype."""
-    g.input_norms, g.postprocess = [], [Plus()]  # the process's own chain
+    chain = process_chain()
+    chain.input_norms, chain.postprocess = [], [Plus()]  # the process's own chain
     doubled, tripled = layer([LambdaNormalizer("x * 2")]), layer([LambdaNormalizer("x * 3")])
     thresholded = layer(posts=[ThresholdPostprocessor(threshold=0.5)])
     client = server.app.test_client()
@@ -58,7 +59,7 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(server):
     assert np.all(_chunk(client, server, thresholded, np.uint8) == 1)
     # A URL without a chain (in-process callers, --server-check) gets the process's.
     assert np.all(_chunk(client, server, "plain") == 11)
-    assert g.input_norms == [] and [type(p) for p in g.postprocess] == [Plus], "nothing leaks into g"
+    assert chain.input_norms == [] and [type(p) for p in chain.postprocess] == [Plus], "nothing leaks into it"
 
 
 def test_the_servers_address_leads_to_what_it_serves(server):
