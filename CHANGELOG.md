@@ -222,6 +222,20 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - `save_adapter` exports the best checkpoint only if this run wrote it or resumed from it. With none (nothing supervised, or `num_epochs: 0`), it exports the last epoch's weights with a warning. It used to load whatever `best_checkpoint.pth` an earlier iteration left in the shared output directory, and failed after a rank change;
     - a stop between epochs no longer records the skipped epoch as done, so `--resume` trains it;
     - `--resume` from a checkpoint saved without loss scaling (bf16, fp32, or after the fp32 fallback) works in an fp16 trainer.
+  - **Finetune job (session loop):**
+    - a restart whose trainer cannot be built no longer swallows its reset: the next restart resets the model with its own LoRA rank, and the job logs what it is serving meanwhile;
+    - a restart refuses settings that cannot train (0 epochs, batch size or accumulation steps, a non-positive learning rate, offsets that aren't `[z, y, x]` lists): they are ignored with a warning, and the job keeps its setting;
+    - a served job whose training or export fails reports RESTART_FAILED, keeps serving and waits for the next restart, instead of exiting;
+    - a served job waits for a half-written `restart_signal.json` to be complete instead of exiting, and ignores a restart it has already applied (one that arrived over HTTP and as a file);
+    - the job replaces `metadata.json` whole, so the dashboard never reads it half-written;
+    - the job logs in the shared format (`<time> LEVEL logger: message`).
+  - **Finetune sessions:**
+    - `POST /api/finetune/load-crops` reads a `yaml` value as a file only when it is one line ending in `.yaml`/`.yml`, through read-yaml's checks, and its validation errors no longer echo the input, so it can no longer return the contents of any file the dashboard user can read. A missing file and a refused one get the same 400 from both routes (read-yaml answered a missing `.yaml` with a 404). `build_corrections --crops` goes through the same reader, so it needs a `.yaml`/`.yml` file of at most 1 MB;
+    - resuming a session copies its `good_regions.json` and records whether it did in `loaded_from.json`. A resumed session used to show no good regions and train without rehearsal;
+    - instance-correction sync and cc3d accept the `zarr_path` create answered, including a reattached dated snapshot, and the re-seed refusal names the running MinIO's data directory;
+    - with several volumes in a session, a crop import goes into the last one registered, the volume good regions and training use. It went into the first;
+    - the annotation layers load-crops and instance corrections add have A/F bound to the brush and flood fill, and come selected with their panel open, as add-to-viewer's do;
+    - `create-instance-correction` with `reuse_existing` refuses, with a 400, a zarr whose attrs don't say `type: annotation_volume` (the legacy instance type is still converted).
   - **Finetune data:**
     - annotation patches are read in the volume's own dtype, so instance-correction ids above 255 no longer wrap modulo 256 (instance 256 read as background, 257 merged with 1);
     - raw patches are cut as a box of raw voxels, so fractional voxel sizes (5.24 nm, 10.48 nm) get the full patch at the right place. They were one voxel short, started one voxel early, and failed the first batch. Whole-nm grids read exactly as before;
@@ -237,6 +251,18 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `eaa2cef` reattaching a zarr that is not an annotation volume is refused
+- `2a67670` load-crops and instance layers come with the draw tools bound, selected
+- `3c4225b` a crop import goes into the session's latest volume
+- `c88db2b` instance sync and cc3d accept the zarr_path create answers
+- `90187bb` resuming a session carries its good regions
+- `7c4618a` load-crops reads only YAML files, and neither YAML route says which files exist
+- `8e00048` the finetune job logs in the shared format, and imports globals no more
+- `f32e318` the finetune job replaces metadata.json whole
+- `d5eadc4` a served job waits out a half-written restart signal, and takes each restart once
+- `4b7f4d9` a served job whose training fails keeps serving and waits for a restart
+- `ba1e5cf` a restart refuses settings that convert but cannot train
+- `cfb3f8a` a restart whose trainer cannot be built leaves its reset to the next restart
 - `255857e` the pipeline builder reads an imported pipeline as it reads the page's own
 - `2eb3c00` /api/models, /update/equivalences and /api/bbx-generator refuse a bad body with a 400, and a count of 2.5 is refused
 - `dc73f28` the review and pipeline routes answer bad input with a JSON error that says why
