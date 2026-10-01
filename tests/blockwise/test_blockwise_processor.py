@@ -22,8 +22,11 @@ from cellmap_flow.blockwise.blockwise_processor import (
 )
 from cellmap_flow.globals import g
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
+from cellmap_flow.post.postprocessors import MortonSegmentationRelabeling, ThresholdPostprocessor
+from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.config.yaml import ConfigError
+from tests.utils.serving_helpers import decode_chunk, layer
 
 JSON_DATA = {
     "input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}],
@@ -153,6 +156,28 @@ def test_the_whole_volume_task_covers_the_output_on_its_chunk_grid(raw_zarr, poo
     with pytest.raises(Stop):
         processor.run()
     assert scheduled == [processor.output_arrays[0].roi]
+
+
+@pytest.mark.parametrize("corner", [pytest.param(0, id="corner-at-0"), pytest.param(-4, id="a-janelia-corner")])
+def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, pooling_model, task_yaml, corner):
+    """Each chunk's ids are offset by the Morton code of its index on the
+    output grid, which starts at the raw data's corner. The index was taken
+    from 0, so on data whose corner is -4 nm the first chunk was
+    (-1, -1, -1), which Morton reads as 1023 on every axis."""
+    raw = ome_pyramid(((8, corner + 4),)) + "/s0"  # every voxel is at least 1
+    model = pooling_model()  # 4^3 output voxels a chunk
+    posts = [ThresholdPostprocessor(threshold=0.5), MortonSegmentationRelabeling()]
+    path = task_yaml(raw, model, json_data={"input_norm": [], "postprocess": [p.to_dict() for p in posts]})
+    CellMapFlowBlockwiseProcessor(path, create=True)
+    worker = CellMapFlowBlockwiseProcessor(path, create=False)
+    server = CellMapFlowServer(raw, ScriptModelConfig(script_path=model))
+    for index in range(2):  # along z
+        roi = daisy.Roi((corner + 32 * index, corner, corner), (32, 32, 32))
+        worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
+        written = worker.output_arrays[0].to_ndarray(roi)
+        response = server.app.test_client().get(f"/{layer(posts=posts)}/s0/{index}.0.0.0")
+        served = decode_chunk(server, response.data, np.uint64, (4, 4, 4, 2))[..., 0]
+        assert np.all(written == served) and np.all(served == 1 + 64 * index), index
 
 
 @pytest.mark.parametrize("failing", [pytest.param(True, id="blocks-failed"), pytest.param(False, id="clean-run")])

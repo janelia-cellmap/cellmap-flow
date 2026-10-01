@@ -464,6 +464,7 @@ class CellMapFlowBlockwiseProcessor:
                 block.write_roi,
                 input_norms=self.input_norms,
                 postprocess=self.postprocess,
+                grid_origin=self.grid_origin,
             )
         else:
             # Multiple models - merge outputs based on model_mode
@@ -474,6 +475,7 @@ class CellMapFlowBlockwiseProcessor:
                     block.write_roi,
                     input_norms=self.input_norms,
                     postprocess=self.postprocess,
+                    grid_origin=self.grid_origin,
                 )
                 if self.process_only and self.cross_channels_merger:
                     # Extract only the specified channels

@@ -32,10 +32,23 @@ def apply_postprocess(data, postprocess=None, **kwargs):
     return data
 
 
+def _chunk_index(roi, grid_origin=None):
+    """``roi``'s index on the grid of ``roi``-sized chunks starting at ``grid_origin`` (nm).
+
+    The ops that give each chunk its own label ids (Morton, Affinity) key them
+    on this index, and Morton keeps 10 bits of each axis, so it must count
+    from the grid's first chunk: on data whose corner is -4 nm an index taken
+    from 0 made the first chunk (-1, -1, -1), which Morton reads as 1023 on
+    every axis.
+    """
+    begin = np.array(roi.get_begin()) - (0 if grid_origin is None else np.array(grid_origin))
+    return tuple(int(v) for v in begin // np.array(roi.get_shape()))
+
+
 class Inferencer(ModelRunner):
     """A ModelRunner that normalizes its input and postprocesses its output."""
 
-    def process_chunk(self, idi, roi, input_norms=None, postprocess=None, cancelled=None):
+    def process_chunk(self, idi, roi, input_norms=None, postprocess=None, cancelled=None, grid_origin=None):
         """Predict ``roi`` and postprocess it.
 
         ``input_norms`` / ``postprocess``: the chain to use for this chunk.
@@ -44,6 +57,12 @@ class Inferencer(ModelRunner):
 
         ``cancelled``: asked while the chunk waits for a device slot; raises
         ChunkCancelled, without computing it, once that says yes.
+
+        ``grid_origin``: where (nm) the chunk grid ``roi`` lies on starts, so
+        the steps get ``roi``'s index on that grid as ``chunk_corner``; None
+        means a grid starting at 0. The server and blockwise both start
+        theirs at the raw data's corner (see ``_chunk_index``), so a region
+        gets the same unique label ids from either.
         """
         if input_norms is not None and hasattr(idi, "with_input_norms"):
             idi = idi.with_input_norms(input_norms)
@@ -53,7 +72,7 @@ class Inferencer(ModelRunner):
         postprocessed = apply_postprocess(
             result,
             postprocess=postprocess,
-            chunk_corner=tuple(roi.get_begin() // roi.get_shape()),
+            chunk_corner=_chunk_index(roi, grid_origin),
             chunk_num_voxels=self._output_voxels_in(roi, idi),
         )
         return postprocessed

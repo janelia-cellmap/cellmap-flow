@@ -491,6 +491,7 @@ class CellMapFlowServer:
                 input_norms=chain.input_norms,
                 postprocess=chain.postprocess,
                 cancelled=_client_gone_check(),
+                grid_origin=self.origin,
             )
         except ChunkCancelled:
             # Nobody is left to read it. 499 is nginx's "client closed request".
