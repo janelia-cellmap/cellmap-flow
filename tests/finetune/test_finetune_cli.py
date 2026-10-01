@@ -238,6 +238,24 @@ def test_a_restart_whose_trainer_cannot_be_built_leaves_the_reset_to_the_next(ru
     assert "Serving the starting weights until a restart" in caplog.text
 
 
+class _UnreadableChunks(torch.utils.data.Dataset):
+    def __len__(self):
+        return 2
+
+    def __getitem__(self, index):
+        raise OSError("a chunk could not be read")
+
+
+def test_a_restart_whose_training_fails_waits_for_the_next(run_cli, tmp_path):
+    """Only a restart's set-up was guarded: an error once training ran, such as
+    a chunk that could not be read, ended a job that was serving."""
+    cli = run_cli("--auto-serve", "--serve-data-path", str(tmp_path),
+                  loaders=[None, DataLoader(_UnreadableChunks(), batch_size=2)],
+                  restarts=[{"params": {}}, {"params": {}}])
+    assert "RESTART_FAILED: a chunk could not be read" in cli.markers
+    assert sum(line.startswith("TRAINING_ITERATION_COMPLETE:") for line in cli.markers) == 2
+
+
 def test_a_restart_cannot_turn_a_full_finetune_into_lora(run_cli, tmp_path):
     """The model decides what is exported. A restart asking a full finetune for
     LoRA had its next YAML point at a lora_adapter/ that was never written."""

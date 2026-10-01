@@ -287,25 +287,27 @@ class TrainingSession:
                 trainer = self._set_up_iteration()
             except Exception as e:
                 logger.error(f"Could not set up training iteration {self.iteration}: {e}", exc_info=True)
-                if not (args.auto_serve and self.server_started):
-                    return 1
-                # Usually the previous iteration's model, which is reset only
-                # once the data and target are built; the starting weights if
-                # it was the trainer that failed (see _set_up_iteration).
-                markers.emit(markers.RESTART_FAILED, e)
-                logger.warning(f"Serving {self.model_holds} until a restart with settings that work.")
-                if not self._await_restart():
+                if not self._keep_serving_after(e):
                     return 1
                 continue
 
             try:
-                if self.iteration > 1:
-                    markers.emit(markers.RESTART_STATUS, "Starting training...")
-                stats = trainer.train()
-                # None again if an OOM made the trainer drop distillation.
-                self.teacher_model = trainer.teacher_model
-                self.tb_position = (trainer._tb_step, trainer._tb_epoch)
-                trainer.close()
+                # Training, too, can fail on what a restart changed: data that
+                # cannot be read, a target the model's output does not fit.
+                try:
+                    if self.iteration > 1:
+                        markers.emit(markers.RESTART_STATUS, "Starting training...")
+                    stats = self._train(trainer)
+                    if not stats.get('diverged'):
+                        self._export(trainer, stats, timestamp)
+                except Exception as e:
+                    logger.error(f"Training failed: {e}", exc_info=True)
+                    self.model_holds = f"the partly trained weights of training iteration {self.iteration}"
+                    # The next iteration starts from the starting weights again.
+                    self.pending_reset = True
+                    if not self._keep_serving_after(e):
+                        return 1
+                    continue
 
                 if stats.get('diverged'):
                     # Skip saving, and wait for a restart with other settings.
@@ -326,7 +328,6 @@ class TrainingSession:
                         )
                         return 1
                 else:
-                    self._export(trainer, stats, timestamp)
                     if not args.auto_serve:
                         return 0
                     if not self._serve():
@@ -346,8 +347,39 @@ class TrainingSession:
                 return 1
 
             except Exception as e:
-                logger.error(f"Training failed: {e}", exc_info=True)
+                logger.error(f"The finetune job failed: {e}", exc_info=True)
                 return 1
+
+    def _train(self, trainer) -> dict:
+        """Train this iteration; what the next one carries on with is kept even if training fails."""
+        try:
+            return trainer.train()
+        finally:
+            # None again if an OOM made the trainer drop distillation.
+            self.teacher_model = trainer.teacher_model
+            self.tb_position = (trainer._tb_step, trainer._tb_epoch)
+            trainer.close()
+
+    def _keep_serving_after(self, error) -> bool:
+        """Report an iteration that failed and wait for the next restart; False if the job ends instead.
+
+        Only a job that is serving outlives the failure: its model is still
+        of use, and the dashboard can restart it with other settings.
+        Before that -- the first iteration, or a run that does not serve --
+        nothing could restart it (see the divergence case in run), so it
+        fails.
+        """
+        if not (self.args.auto_serve and self.server_started):
+            return False
+        markers.emit(markers.RESTART_FAILED, error)
+        # What the model holds depends on where the iteration failed: the
+        # previous iteration's model if its data or target did, as the reset
+        # waits for those (see _set_up_iteration); the starting weights if
+        # its trainer did; partly trained weights if training did. The server
+        # shares the model, and serves it in eval mode, whatever it holds.
+        self.model.eval()
+        logger.warning(f"Serving {self.model_holds} until a restart with settings that work.")
+        return self._await_restart()
 
     def _set_up_iteration(self) -> LoRAFinetuner:
         """This iteration's data, target and trainer, with the model reset if a restart asked."""
