@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 import zarr
 
@@ -277,6 +278,81 @@ def autodetect_output_type(model_config, output_type, offsets):
         resolved_offsets = json.dumps(resolved_offsets)
 
     return resolved_output_type, resolved_offsets
+
+
+class TrainingSettings(NamedTuple):
+    """The target and loss a job trains with (see ``training_settings``)."""
+
+    output_type: str
+    loss_type: str
+    label_smoothing: float
+    distillation_lambda: float
+    mask_unannotated: bool
+    # The sentence submit's answer carries when the loss was switched for
+    # sparse annotations, else None.
+    note: str = None
+
+
+SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
+
+
+def training_settings(*, output_type, loss_type, label_smoothing, distillation_lambda, sparse):
+    """What a job trains with, from what was asked for and whether its session is sparse.
+
+    Some combinations cannot train, or would train the wrong thing, so they
+    are replaced here, where the user sees it in the answer, rather than
+    failing on the cluster:
+    - sparse annotations with mse: margin loss, with distillation to the
+      base model at 0.5, which is how sparse annotations train (see the
+      distance case below);
+    - a distance target with sparse annotations: a binary target with margin
+      loss instead (see below);
+    - a distance target otherwise: bce, without label smoothing.
+    A sparse session also masks its unannotated voxels out of the loss.
+    """
+    note = None
+    if sparse and loss_type == "mse":
+        loss_type = "margin"
+        distillation_lambda = 0.5
+        note = SPARSE_MSE_NOTE
+        logger.info(SPARSE_MSE_NOTE)
+
+    if output_type == "distance" and sparse:
+        # A distance target needs the 3D object boundary. Scribbles are
+        # strokes with unannotated voxels all around them, so the safe
+        # radius of every painted voxel is ~1 and next to nothing would be
+        # supervised. Fall back to what sparse annotations already use:
+        # a per-voxel binary target with margin loss (only the side of 0.5
+        # is enforced, so the model's gradual field survives) and
+        # distillation to the base model elsewhere.
+        logger.info(
+            "output_type=distance with sparse annotations: using binary "
+            "target + margin loss instead (a distance transform needs dense 3D labels)"
+        )
+        output_type = "binary"
+        loss_type = "margin"
+        if distillation_lambda is None or distillation_lambda <= 0:
+            distillation_lambda = 0.5
+    elif output_type == "distance":
+        # The soft distance target is only defined against BCE-with-logits;
+        # margin/dice assume hard labels and smoothing would blur a target
+        # that is already soft. The CLI rejects anything else.
+        if loss_type != "bce" or label_smoothing:
+            logger.info(
+                f"output_type=distance: using bce loss without label smoothing "
+                f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
+            )
+        loss_type = "bce"
+        label_smoothing = 0.0
+
+    return TrainingSettings(
+        output_type=output_type,
+        loss_type=loss_type,
+        label_smoothing=label_smoothing,
+        distillation_lambda=distillation_lambda,
+        mask_unannotated=bool(sparse),
+        note=note,
+    )
 
 
 def build_restart_params(data):

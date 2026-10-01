@@ -34,6 +34,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     find_model_config,
     get_lsf_job_id,
     resolve_finetune_session,
+    training_settings,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
@@ -231,50 +232,15 @@ def submit_finetuning():
                 actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
 
-        loss_type = body.loss_type
-        distillation_lambda = body.distillation_lambda
         has_sparse = detect_sparse_annotations(actual_corrections_path)
-        sparse_auto_switched = False
-        if has_sparse and loss_type == "mse":
-            loss_type = "margin"
-            distillation_lambda = 0.5
-            sparse_auto_switched = True
-            logger.info(
-                "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
-            )
-
         output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
-
-        label_smoothing = body.label_smoothing
-        if output_type == "distance" and has_sparse:
-            # A distance target needs the 3D object boundary. Scribbles are
-            # strokes with unannotated voxels all around them, so the safe
-            # radius of every painted voxel is ~1 and next to nothing would be
-            # supervised. Fall back to what sparse annotations already use:
-            # a per-voxel binary target with margin loss (only the side of 0.5
-            # is enforced, so the model's gradual field survives) and
-            # distillation to the base model elsewhere.
-            logger.info(
-                "output_type=distance with sparse annotations: using binary "
-                "target + margin loss instead (a distance transform needs dense 3D labels)"
-            )
-            output_type = "binary"
-            if loss_type not in ("margin",):
-                loss_type = "margin"
-            if distillation_lambda is None or distillation_lambda <= 0:
-                distillation_lambda = 0.5
-        elif output_type == "distance":
-            # The soft distance target is only defined against BCE-with-logits;
-            # margin/dice assume hard labels and smoothing would blur a target
-            # that is already soft. The CLI rejects anything else, so decide
-            # here where the user can see it in the response.
-            if loss_type != "bce" or label_smoothing:
-                logger.info(
-                    f"output_type=distance: using bce loss without label smoothing "
-                    f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
-                )
-            loss_type = "bce"
-            label_smoothing = 0.0
+        settings = training_settings(
+            output_type=output_type,
+            loss_type=body.loss_type,
+            label_smoothing=body.label_smoothing,
+            distillation_lambda=body.distillation_lambda,
+            sparse=has_sparse,
+        )
 
         session = get_session()
         # Before the job exists: submitting starts its monitor, which tells
@@ -290,10 +256,10 @@ def submit_finetuning():
             output_base=Path(session_path),
             checkpoint_path_override=Path(body.checkpoint_path) if body.checkpoint_path else None,
             auto_serve=body.auto_serve,
-            mask_unannotated=has_sparse,
-            loss_type=loss_type,
-            label_smoothing=label_smoothing,
-            distillation_lambda=distillation_lambda,
+            mask_unannotated=settings.mask_unannotated,
+            loss_type=settings.loss_type,
+            label_smoothing=settings.label_smoothing,
+            distillation_lambda=settings.distillation_lambda,
             distillation_scope=body.distillation_scope,
             margin=body.margin,
             balance_classes=body.balance_classes,
@@ -302,7 +268,7 @@ def submit_finetuning():
             # The request's, else the dashboard's own, else the site's.
             charge_group=body.charge_group or session.charge_group or current_site().default_charge_group,
             walltime=session.walltime,
-            output_type=output_type,
+            output_type=settings.output_type,
             select_channel=body.select_channel,
             offsets=offsets,
         )
@@ -314,13 +280,11 @@ def submit_finetuning():
             "output_dir": str(finetune_job.output_dir),
             # Over the parent so every run in the session tree overlays.
             "tensorboard_command": f"tensorboard --logdir {os.path.dirname(str(finetune_job.output_dir))}",
-            "output_type": output_type,
+            "output_type": settings.output_type,
             "message": "Finetuning job submitted successfully",
         }
-        if sparse_auto_switched:
-            response["note"] = (
-                "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
-            )
+        if settings.note:
+            response["note"] = settings.note
         return jsonify(response)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
