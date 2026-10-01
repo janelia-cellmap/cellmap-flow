@@ -36,9 +36,9 @@ From a checkout:
 .. code-block:: bash
 
    pixi install          # the default environment: dashboard, catalog and cellpose models, finetuning
-   pixi run cellmap_flow_view -d /path/to/dataset.zarr
+   pixi run cellmap_flow view -d /path/to/dataset.zarr
 
 ``runnables.yaml`` registers the same commands as Fileglancer apps. Inside a
 pixi environment, inference servers submitted to the cluster start with
-``pixi run cellmap_flow_server`` (``CELLMAP_FLOW_SERVER_COMMAND``), so they run
-from the same lockfile.
+``pixi run cellmap_flow serve`` (``CELLMAP_FLOW_SERVER_COMMAND``), so they run
+from the same lockfile. :doc:`cli` lists the commands.

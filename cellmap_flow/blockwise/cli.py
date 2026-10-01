@@ -6,7 +6,7 @@ from cellmap_flow.cli.common import log_level_option
 logger = logging.getLogger(__name__)
 
 
-@click.command()
+@click.command(name="blockwise")
 @click.argument("yaml_configs", nargs=-1, required=True, type=click.Path(exists=True))
 @click.option(
     "-c",

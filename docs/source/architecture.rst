@@ -257,9 +257,10 @@ Blockwise and finetuning
      - Running models over a whole volume, to disk, with daisy.
        ``blockwise_processor``: ``CellMapFlowBlockwiseProcessor`` (the master
        plans the blocks and creates the outputs; each worker runs blocks),
-       ``precheck`` and ``spawn_worker``. ``cli``: one task YAML, as master
-       or, with ``--client``, as worker. ``multiple_cli``: several task
-       YAMLs in turn.
+       ``precheck`` and ``spawn_worker``. ``cli``: ``cellmap_flow
+       blockwise``, task YAMLs in turn as master or, with ``--client``, one
+       as worker. ``multiple_cli``: the ``python -m`` path the dashboard's
+       blockwise tab runs, the same command.
    * - ``finetune/finetune_cli.py``
      - The training job's entry point, ``python -m
        cellmap_flow.finetune.finetune_cli``. The job manager runs this path,
@@ -327,21 +328,25 @@ Entry points and process-wide modules
    * - Module
      - What it is for
    * - ``cli/``
-     - ``cli`` (``cellmap_flow``: a command per model type, ``run``, and the
-       plugin commands), ``server_cli`` (``cellmap_flow_server <type>``, the
-       inference server on its node), ``yaml_cli`` (``cellmap_flow_yaml``,
-       and ``run_multiple``), ``viewer_cli`` (``cellmap_flow_view``, a viewer
-       and dashboard with no models), ``doctor`` (``python -m
-       cellmap_flow.cli.doctor``). ``cellmap_flow_app`` is
-       ``dashboard.app.create_and_run_app``, and the two blockwise scripts
-       are in ``blockwise/``.
+     - The ``cellmap_flow`` command (:doc:`cli`). ``main``: the group, its
+       ``main()`` (loads the plugins, then runs it), ``dashboard``,
+       ``models``, ``plugins`` and the ``finetune`` tools. ``infer``:
+       ``infer <type>``, a command per model type built on request, and
+       ``run``. ``yaml_cli`` (``yaml``, and ``run_multiple``),
+       ``viewer_cli`` (``view``, a viewer and dashboard with no models),
+       ``server_cli`` (``serve``, the inference server on its node, and
+       ``cellmap_flow_server``), ``doctor``. ``common``: ``--log-level``,
+       ``ModelTypeGroup`` and the deprecation notice; ``aliases``: the
+       console scripts before 0.3.0. ``blockwise`` is in ``blockwise/``.
    * - ``config/yaml.py``
-     - ``load_config`` and ``ConfigError`` for a ``cellmap_flow_yaml`` or
+     - ``load_config`` and ``ConfigError`` for a ``cellmap_flow yaml`` or
        blockwise YAML, and ``resolve_data_path``, the one rule for a model's
        ``data_path`` and ``scale``.
    * - ``plugins.py``
      - Plugins in ``~/.cellmap_flow/plugins/``: registering them, and
-       ``load_plugins``, which ``import cellmap_flow`` runs. Also
+       ``load_plugins``, which the commands, the dashboard
+       (``create_and_run_app``) and the finetune job call when they start;
+       ``import cellmap_flow`` does not. Also
        ``analyze_script``, the safety check a plugin or a model script
        passes.
    * - ``logging_setup.py``
@@ -433,17 +438,18 @@ Submit, or ``PUT /api/pipeline``, and the layers
 Launching a model server
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. A model config comes from ``cellmap_flow <type>`` (``cli/cli.py``: a
-   command per type in ``models.registry.model_types()``, its options from
+#. A model config comes from ``cellmap_flow infer <type>`` (``cli/infer.py``:
+   a command per type in ``models.registry.model_types()``, its options from
    ``registry.click_options``, its strings through ``coerce_cli_args``), or
    from a YAML (``cli/yaml_cli.py``: ``config.yaml.load_config``,
    ``registry.build_models``). The Models tab's catalog and Hugging Face
    picks (``POST /api/models``, ``dashboard/services/launch.py``) need no
    config for the command, only a type and its arguments.
 #. ``serving.launch`` builds the command line: the words of
-   ``jobs.launch.SERVER_COMMAND``, then ``ModelConfig.command`` (made from
-   ``to_dict()``, in ``server_argv``) or the type and arguments
-   (``server_argv_for``), then ``-d <data path>``.
+   ``jobs.launch.SERVER_COMMAND`` (``cellmap_flow serve`` by default), then
+   ``--model`` and the model's entry as JSON (``ModelConfig.launch_entry``,
+   ``to_dict()`` without None, in ``server_argv``; or the type and
+   arguments, in ``server_argv_for``), then ``-d <data path>``.
 #. ``jobs.launch.start_hosts`` submits it to LSF with one GPU
    (``submit_bsub_job``, then ``jobs.lsf.submit`` and ``bsub_argv``). When a
    queue does not start the job it tries the next of
@@ -456,9 +462,9 @@ Launching a model server
    job's environment (``jobs.ready``), else from the
    ``CELLMAP_FLOW_SERVER_IP(...)`` marker in the job's output, through
    bpeek. Then it adds the job to ``g.jobs``.
-#. On the GPU node, ``cellmap_flow_server <type> ... -d <data path>``
-   (``cli/server_cli.py``) rebuilds the config through the registry and
-   starts ``CellMapFlowServer``. Its ``Inferencer`` loads the model, and the
+#. On the GPU node, ``cellmap_flow serve --model <entry> -d <data path>``
+   (``cli/server_cli.py``) rebuilds the config with ``registry.build_model``,
+   as a YAML's model entry is rebuilt, and starts ``CellMapFlowServer``. Its ``Inferencer`` loads the model, and the
    warmup forward checks the declared shapes, probes the output range (for
    ``model_info``) and keeps fp16 only if it agrees with fp32
    (``CELLMAP_FLOW_HALF_PRECISION``). ``run()`` prints the address marker,
@@ -478,7 +484,7 @@ A blockwise run
    ``blockwise_processor.precheck``, which loads no model and writes
    nothing. Submit sends the master to LSF as a CPU job:
    ``python -m cellmap_flow.blockwise.multiple_cli <task YAMLs>``. From a
-   shell, ``cellmap_flow_blockwise <task.yaml>`` runs one master.
+   shell, ``cellmap_flow blockwise <task.yaml>`` runs one master.
 #. The master, ``CellMapFlowBlockwiseProcessor(yaml, create=True)``, reads
    the YAML (``config.yaml.load_config``, ``registry.build_models``,
    ``resolve_data_path``), builds no ``Inferencer`` (it needs the geometry
@@ -489,7 +495,7 @@ A blockwise run
    bounding box), with the id ``predict_<model>_<task>``. Daisy spawns the
    workers through ``spawn_worker``: each is an LSF job, submitted with
    ``jobs.launch.submit_bsub_job``, that runs
-   ``cellmap_flow_blockwise <task.yaml> --client``, with a walltime and its
+   ``cellmap_flow blockwise <task.yaml> --client``, with a walltime and its
    own log.
 #. A worker builds an ``Inferencer`` per model, takes blocks from daisy and
    runs ``Inferencer.process_chunk`` on each, merging several models with
@@ -813,17 +819,19 @@ The deployability contract
 Fileglancer runs cellmap-flow from this repository with pixi, and
 ``tests/utils/test_deployability.py`` pins what that needs:
 
-- ``runnables.yaml`` runs ``pixi run <console script>`` for scripts in
-  ``[project.scripts]``, with flags they accept (``-d`` for
-  ``cellmap_flow_view``, a positional config for ``cellmap_flow_yaml``). A
-  change to a script's name or flags changes the manifest in the same
+- ``runnables.yaml`` runs ``pixi run <console script> [<subcommand>]`` for
+  scripts in ``[project.scripts]``, with flags they accept (``-d`` for
+  ``cellmap_flow view``, a positional config for ``cellmap_flow yaml``). A
+  change to a command's name or flags changes the manifest in the same
   commit.
 - The dashboard binds a free port with a threaded server, prints its URL, and
   writes it to the file named by ``SERVICE_URL_PATH`` when that is set.
 - ``jobs.launch.SERVER_COMMAND`` comes from ``CELLMAP_FLOW_SERVER_COMMAND``,
-  which pixi's activation sets to ``pixi run cellmap_flow_server``. It is
+  which pixi's activation sets to ``pixi run cellmap_flow serve``. It is
   read at import and used at call time; no other module keeps a copy of it.
-- ``cellmap_flow_view`` bills the models it launches to ``LSB_PROJECT_NAME``,
+  The value before 0.3.0, ``pixi run cellmap_flow_server``, still takes the
+  ``--model`` the launchers pass.
+- ``cellmap_flow view`` bills the models it launches to ``LSB_PROJECT_NAME``,
   the Fileglancer job's project, unless ``-P`` is given.
 - CI runs ``pixi lock --check``, so a change to the environment is re-locked
   in the same commit.
@@ -845,10 +853,12 @@ Each of these still works in 0.3.0, warns, and goes in the next release.
      - Use instead
    * - The separate console scripts (``cellmap_flow_yaml``,
        ``cellmap_flow_view``, ``cellmap_flow_server``, the blockwise scripts,
-       ``cellmap_flow_app``)
-     - The subcommands of the one ``cellmap_flow`` command (K2). The old
-       names stay for one release as aliases that say so. :doc:`install`,
-       :doc:`yaml_config` and :doc:`scripts` show the command lines.
+       ``cellmap_flow_app``), and ``cellmap_flow <type>``, ``run`` and the
+       plugin commands
+     - The subcommands of the one ``cellmap_flow`` command (K2, K3); servers
+       start with ``cellmap_flow serve --model`` (K4). The old names stay
+       for one release as aliases that say so. :doc:`cli` lists each one
+       and its replacement.
    * - ``POST /api/process`` and ``POST /api/pipeline/apply``
      - ``PUT /api/pipeline`` (K11), which also redraws the layers. The old
        routes answer as they did, log a warning, and send a

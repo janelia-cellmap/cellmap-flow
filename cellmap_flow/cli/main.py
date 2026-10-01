@@ -191,18 +191,18 @@ for _name, _module, _summary in (
 
 
 cli.add_command(infer)
-cli.add_command(yaml_cli.main, name="yaml")
-cli.add_command(viewer_cli.main, name="view")
+cli.add_command(yaml_cli.main)
+cli.add_command(viewer_cli.main)
 cli.add_command(dashboard)
 cli.add_command(server_cli.serve)
-cli.add_command(blockwise, name="blockwise")
+cli.add_command(blockwise)
 cli.add_command(finetune)
 cli.add_command(models)
 cli.add_command(plugins_group)
-cli.add_command(doctor.main, name="doctor")
+cli.add_command(doctor.main)
 
 # The subcommands before 0.3.0, hidden, until the release after it.
-cli.add_command(run_generic, name="run")
+cli.add_command(run_generic)
 cli.add_command(deprecated(models, "list-models", "cellmap_flow list-models", "cellmap_flow models"))
 cli.add_command(deprecated(register_cmd, "register", "cellmap_flow register", "cellmap_flow plugins register"))
 cli.add_command(deprecated(unregister_cmd, "unregister", "cellmap_flow unregister", "cellmap_flow plugins unregister"))

@@ -4,6 +4,7 @@
    :caption: CellMap-Flow API:
 
    install
+   cli
    scripts
    yaml_config
    huggingface

@@ -162,7 +162,7 @@ def run_checks(include_finetune=True):
     return results
 
 
-@click.command()
+@click.command(name="doctor")
 @click.option("--core-only", is_flag=True, help="Skip the finetune checks.")
 def main(core_only):
     """Check the environment: what is installed, what is missing, and how to fix it."""

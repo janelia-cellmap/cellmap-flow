@@ -87,26 +87,30 @@ See [docs/finetuning.md](docs/finetuning.md) for the full setup.
 
 ## Usage
 
+`cellmap_flow` has a subcommand for each job; `cellmap_flow <command> --help`
+shows its options, and the [CLI page](docs/source/cli.rst) lists them all,
+with the names they had before 0.3.0.
+
 ```bash
-$ cellmap_flow
-
-Usage: cellmap_flow [OPTIONS] COMMAND [ARGS]...
-
-  Examples:     
-    To use Dacapo run the following commands:  
-    cellmap_flow dacapo -r my_run -i iteration -d data_path
-
-    To use custom script
-    cellmap_flow script -s script_path -d data_path
-
-    To use bioimage-io model 
-    cellmap_flow bioimage -m model_path -d data_path
-
+$ cellmap_flow --help
 
 Commands:
-  bioimage  Run the CellMapFlow server with a bioimage-io model.
-  dacapo    Run the CellMapFlow server with a DaCapo model.
-  script    Run the CellMapFlow server with a custom script.
+  blockwise  Run the model a blockwise YAML describes over the whole...
+  dashboard  Serve the dashboard alone, for a viewer already running.
+  doctor     Check the environment: what is installed, what is missing,...
+  finetune   The finetune tools.
+  infer      Start a model's inference server, then open the viewer on...
+  models     List the model types and the arguments each takes.
+  plugins    Register, unregister and list plugins.
+  serve      Serve one model's predictions, as an inference job does on...
+  view       Start CellMap Flow viewer with a dataset.
+  yaml       Run multiple model inference jobs from a YAML configuration...
+
+$ cellmap_flow view -d data_path                       # pick models in the dashboard
+$ cellmap_flow yaml config.yaml                        # the models a YAML lists
+$ cellmap_flow infer dacapo -r my_run -i iteration -d data_path
+$ cellmap_flow infer script -s script_path -d data_path
+$ cellmap_flow infer bioimage -m model_path -v 8,8,8 -d data_path
 ```
 
 Currently available:
@@ -114,11 +118,11 @@ Currently available:
 This enables using any model by providing a script e.g. [example/model_spec.py](example/model_spec.py)
 e.g.
 ```bash
-cellmap_flow script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -d /nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0 
+cellmap_flow infer script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -d /nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0 
 ```
 
 ### Script keywords:
-Define these variables in your script (`cellmap_flow script -s path/to/your_script.py`):
+Define these variables in your script (`cellmap_flow infer script -s path/to/your_script.py`):
 - **model**: 
   The PyTorch model to be used for inference. 
 - **input_size**: 
@@ -138,7 +142,7 @@ Define these variables in your script (`cellmap_flow script -s path/to/your_scri
 which enable inference using a Dacapo model by providing the run name and iteration number
 e.g.
 ```bash
-cellmap_flow dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
+cellmap_flow infer dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
 ```
 
 ## Using bioimage-io model:
@@ -147,8 +151,9 @@ still in development
 ## Using TensorFlow model:
 To run TensorFlow models, we suggest installing TensorFlow via conda: `conda install tensorflow-gpu==2.16.1`
 
-##  Run multiple model at once: 
+## Run multiple models at once:
+List them in a YAML file ([docs/source/yaml_config.rst](docs/source/yaml_config.rst)) and run
 ```bash
-cellmap_flow_multiple --script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -n script_base --dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -n using_dacapo -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
+cellmap_flow yaml config.yaml
 ```
 

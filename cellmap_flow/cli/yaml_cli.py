@@ -150,7 +150,7 @@ def run_multiple(
     generate_neuroglancer_url(dataset_path,wrap_raw=wrap_raw)
 
 
-@click.command()
+@click.command(name="yaml")
 @click.argument("config_path", type=click.Path(exists=True), required=False)
 @log_level_option()
 @click.option("--list-types", is_flag=True, help="List available model types and exit")

@@ -1,6 +1,6 @@
 Python Scripts
 ================================
-CellMap Flow can be run from the command line or from a Python script. A script does what ``cellmap_flow_yaml`` does with a YAML file (see :doc:`yaml_config`): it builds the model configs, submits one inference server per model, and then serves the dashboard.
+CellMap Flow can be run from the command line or from a Python script. A script does what ``cellmap_flow yaml`` does with a YAML file (see :doc:`yaml_config`): it builds the model configs, submits one inference server per model, and then serves the dashboard.
 
 First define your model configs: ``ScriptModelConfig``, ``DaCapoModelConfig``, ``BioModelConfig`` or ``FlyModelConfig``. Then pass them to ``run_multiple``.
 
@@ -54,6 +54,6 @@ Explanation
 - **g.input_norms**: the input normalization chain. Left empty, the model sees the raw values.
 - **queue**: the LSF queue the inference servers are submitted to.
 - **charge_group**: the accounting group the GPU time is billed to.
-- **run_multiple**: starts one inference server per model and waits for each to report its address. Then it serves the dashboard with a prediction layer per model. It does not return. Stop it with Ctrl+C: ``install_cleanup_handlers()`` makes that kill the jobs it started, which ``cellmap_flow_yaml`` does for you.
+- **run_multiple**: starts one inference server per model and waits for each to report its address. Then it serves the dashboard with a prediction layer per model. It does not return. Stop it with Ctrl+C: ``install_cleanup_handlers()`` makes that kill the jobs it started, which ``cellmap_flow yaml`` does for you.
 
 If no model server starts, ``run_multiple`` raises ``JobStartError`` naming each failure.

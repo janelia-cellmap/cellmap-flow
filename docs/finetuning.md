@@ -46,7 +46,7 @@ git reference there would make the published PyPI package unuploadable.
 Start by loading your data and model with a YAML configuration file:
 
 ```bash
-cellmap_flow_yaml my_yamls/jrc_c-elegans-bw-1_affinities.yaml
+cellmap_flow yaml my_yamls/jrc_c-elegans-bw-1_affinities.yaml
 ```
 
 This starts the dashboard with your dataset and model loaded into the Neuroglancer viewer.

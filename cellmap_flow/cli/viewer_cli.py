@@ -12,7 +12,7 @@ from cellmap_flow.globals import g
 logger = logging.getLogger(__name__)
 
 
-@click.command()
+@click.command(name="view")
 @click.option(
     "-d",
     "--dataset",

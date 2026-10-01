@@ -93,7 +93,7 @@ Then run:
 
 .. code-block:: bash
 
-    cellmap_flow_yaml config.yaml
+    cellmap_flow yaml config.yaml
 
 You can also specify an optional ``revision`` to pin a specific version:
 
@@ -112,12 +112,12 @@ Run a HuggingFace model directly from the command line:
 
 .. code-block:: bash
 
-    cellmap_flow_server huggingface --repo cellmap/fly_organelles_run08_438000 -d /path/to/your/data.zarr/recon-1/em/fibsem-uint8
+    cellmap_flow infer huggingface --repo cellmap/fly_organelles_run08_438000 -d /path/to/your/data.zarr/recon-1/em/fibsem-uint8
 
 Using the Dashboard
 ~~~~~~~~~~~~~~~~~~~
 
-1. Launch the dashboard with ``cellmap_flow_dashboard``.
+1. Launch the dashboard with ``cellmap_flow view -d /path/to/your/data.zarr``.
 2. Go to the **Models** tab.
 3. In the **HuggingFace Models** section, browse or search for a model.
 4. Select the model(s) you want to run and click **Submit**.
