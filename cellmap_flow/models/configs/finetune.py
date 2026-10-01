@@ -139,7 +139,7 @@ class FinetuneModelConfig(ModelConfig):
         return config
 
     def to_dict(self):
-        """Export configuration for use with build_model_from_entry.
+        """This config as a model entry, which ``registry.build_model`` rebuilds.
 
         Surfaces key base model fields at the top level so the pipeline
         builder UI can display them alongside the finetune-specific fields.

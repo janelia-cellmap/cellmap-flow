@@ -86,7 +86,7 @@ class DaCapoModelConfig(ModelConfig):
         return names
 
     def to_dict(self):
-        """Export configuration for use with build_model_from_entry."""
+        """This config as a model entry, which ``registry.build_model`` rebuilds."""
         return self._with_name_scale(
             {"type": "dacapo", "run_name": self.run_name, "iteration": self.iteration}
         )

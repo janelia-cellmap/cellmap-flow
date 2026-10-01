@@ -136,7 +136,7 @@ class FlyModelConfig(ModelConfig):
         return config
 
     def to_dict(self):
-        """Export configuration for use with build_model_from_entry."""
+        """This config as a model entry, which ``registry.build_model`` rebuilds."""
         result = {
             "type": "fly",
             "checkpoint_path": self.checkpoint_path,

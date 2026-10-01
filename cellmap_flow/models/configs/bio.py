@@ -179,7 +179,7 @@ class BioModelConfig(ModelConfig):
         )
 
     def to_dict(self):
-        """Export configuration for use with build_model_from_entry."""
+        """This config as a model entry, which ``registry.build_model`` rebuilds."""
         result = self._with_name_scale({
             "type": "bioimage",
             "model_name": self.model_name,

@@ -55,7 +55,7 @@ class CellMapModelConfig(ModelConfig):
         return config
 
     def to_dict(self):
-        """Export configuration for use with build_model_from_entry."""
+        """This config as a model entry, which ``registry.build_model`` rebuilds."""
         return self._with_name_scale(
             {"type": "cellmap", "folder_path": self.cellmap_model.folder_path}
         )
