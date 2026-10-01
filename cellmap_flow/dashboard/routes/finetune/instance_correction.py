@@ -443,8 +443,8 @@ def sync_instance_correction():
       dst_path:  str, optional. Where to write the copy: a `.zarr` in the
           same directory as `zarr_path`, new or an existing zarr. Defaults
           to `zarr_path`. Prefer a fresh dated path (e.g.
-          `.../roi3_annotation_<ts>.zarr`); see the helper docstring for
-          why an in-place copy can corrupt hardlinked snapshots.
+          `.../roi3_annotation_<ts>.zarr`), which leaves the volume as it
+          was to roll back to.
 
     Returns:
       {success, zarr_path, dst_path, keys_copied, keys_skipped, bytes_copied}

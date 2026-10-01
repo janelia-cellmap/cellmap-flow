@@ -18,9 +18,9 @@ class SessionStore:
     """Sessions and the volume registry, kept in the dicts it is given.
 
     ``sessions`` maps a base output path to the session this process made
-    under it (the dashboard's ``g.output_sessions``); ``volumes`` maps a
-    volume id -- its MinIO bucket key without ".zarr" -- to its record
-    (``g.annotation_volumes``). The store holds nothing else, so any number
+    under it (the dashboard's ``get_session().output_sessions``); ``volumes``
+    maps a volume id -- its MinIO bucket key without ".zarr" -- to its
+    record (``get_session().annotation_volumes``). The store holds nothing else, so any number
     of them over the same dicts agree. Both dicts live in memory only;
     ``latest_on_disk`` is what finds a session again after a restart.
     """

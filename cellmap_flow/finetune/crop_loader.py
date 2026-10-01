@@ -87,15 +87,17 @@ class CropsConfig(BaseModel):
     govern epoch length, patch-center jitter (in voxels), and the per-worker
     RNG base seed for reproducible patch sampling across runs.
 
-    ``patches_per_epoch=None`` (the default) means "cover every populated
-    chunk roughly once per epoch" — the dataset substitutes the total
-    populated-chunk count at index build time. Override with an explicit
-    int to cap the epoch length.
+    ``patches_per_epoch=None`` (the default) means "cover every annotated
+    chunk roughly once per epoch" — the dataset substitutes the number of
+    chunks holding a voxel of either pool at index build time. Override
+    with an explicit int to cap the epoch length.
 
     ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
-    50/50 split between dense imported crops and sparse painted scribbles
-    when both pools exist; degrades to 1.0 (all from the surviving pool)
-    when only one pool has FG voxels.
+    half the patches are centred in the dense pool (foreground inside the
+    imported crops) and half in the sparse one (every annotated voxel
+    outside them, background included: the painted scribbles) when both
+    have voxels, and all in the one that has when only one does (see
+    ``finetune.data.sampler``).
     """
 
     model_config = ConfigDict(extra="forbid")

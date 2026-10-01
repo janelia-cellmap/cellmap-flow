@@ -155,10 +155,11 @@ def _chunk_outside_all_bboxes(
 def refresh_annotated_regions_layer(corrections_path=None):
     """Draw a box around every region that has annotations in it.
 
-    Only ever called for something the user just did -- creating a volume,
-    importing crops, or clicking "Show Annotated Regions". Nothing calls this
-    on a timer: see the note on _last_annotated_regions for why a push the
-    user did not ask for is destructive.
+    Only ever called for something the user just did: creating a volume,
+    importing crops, resuming a session, clicking "Save Annotations to
+    Disk" or "Show Annotated Regions". Nothing calls this on a timer: see
+    the note on _last_annotated_regions for why a push the user did not ask
+    for is destructive.
     """
     session = get_session()
     viewer = session.viewer

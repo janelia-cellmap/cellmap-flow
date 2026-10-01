@@ -48,11 +48,12 @@ def _active_volume():
 
 
 def _minio_corrections_dir():
-    """The session's corrections dir as MinIO knows it, or None.
+    """The corrections dir MinIO was first started for, or None.
 
-    A second, independent witness to which session is live. The sync thread
-    runs off this, so it stays true for as long as annotations are flowing --
-    including after a dashboard restart clears the session's annotation_volumes.
+    The fallback when no volume is registered. It is this process's state,
+    like the volume registry, so it does not survive a dashboard restart
+    either: after one, marks are refused until a volume is created or
+    resumed.
     """
     return get_session().minio_state.get("output_base") or None
 
@@ -60,13 +61,12 @@ def _minio_corrections_dir():
 def _store_path():
     """Where this session's good regions live, or None if there is no session.
 
-    Falls back to MinIO's record when no volume is registered in-process.
-    The two can disagree: annotation_volumes is in-process state that a
-    dashboard restart wipes, while the MinIO sync keeps going from its own
-    copy. When they did disagree, every mark was lost in a way that looked
-    like success -- the save failed, so the next load returned [], so each
-    click appended to an empty list and replaced the previous region instead
-    of adding to it. You could click ten times and still have one box.
+    The session's volume's corrections dir, else MinIO's. With no volume
+    registered and no fallback, every mark used to be lost in a way that
+    looked like success -- the save failed, so the next load returned [],
+    so each click appended to an empty list and replaced the previous
+    region instead of adding to it. You could click ten times and still
+    have one box. Now the mark is refused instead.
     """
     volume = _active_volume() or {}
     return session_manifest.good_regions_path(

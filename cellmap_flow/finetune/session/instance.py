@@ -221,9 +221,10 @@ def snapshot_from_minio(state, volumes, zarr_path, dst_path=None):
     ``zarr_path`` names the MinIO bucket key (see :func:`bucket_key`; the
     registry ``volumes`` is read for it); the zarr itself is not opened.
     ``dst_path`` defaults to ``zarr_path``, but a fresh dated path
-    (``.../roi3_annotation_<ts>.zarr``) is better: an in-place copy
-    overwrites chunk files in their existing inodes, which corrupts any
-    hardlinked copy of them (a ``cp -rl`` seed).
+    (``.../roi3_annotation_<ts>.zarr``) is better: the volume stays as it
+    was, a point to roll back to. Either way each chunk is written to a
+    temp file and renamed into place (zarr's DirectoryStore), so a
+    hardlinked copy of the files (a ``cp -rl`` seed) keeps its contents.
 
     Returns ``(True, {zarr_path, dst_path, keys_copied, keys_skipped,
     bytes_copied})`` or ``(False, error)``.

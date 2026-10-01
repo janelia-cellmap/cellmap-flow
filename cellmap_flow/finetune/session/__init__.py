@@ -14,6 +14,6 @@ reads; ``good_regions.json`` sits beside ``corrections/``.
 The submodules import neither flask, neuroglancer, torch nor
 ``cellmap_flow.globals``, so the CLI, the trainer and scripts can use them
 without a dashboard. State such as the volume registry and MinIO's is passed
-in, never held here. Import the submodule you need; this package imports
+in (the dashboard passes its ``get_session()``'s), never held here. Import the submodule you need; this package imports
 none of them itself.
 """
