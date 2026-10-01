@@ -102,3 +102,27 @@ def test_with_no_session_a_mark_is_refused_and_not_drawn(dashboard, view, monkey
     response = dashboard.post(MARK, json={})
     assert response.status_code == 409 and response.get_json()["success"] is False
     assert gr.GOOD_REGIONS_LAYER not in view.state.layers
+
+
+def test_resuming_a_session_carries_its_good_regions(dashboard, session, tmp_path, monkeypatch):
+    """They sit beside corrections/, so copying the zarrs left them behind:
+    the resumed session showed none and trained with no rehearsal."""
+    import zarr
+
+    from cellmap_flow.dashboard.routes.finetune import annotation_sessions
+
+    volume = zarr.open_group(str(session / "corrections" / "vol-1.zarr"), mode="w")
+    volume.create_group("annotation").create_dataset("s0", shape=(8, 8, 8), chunks=(4, 4, 4), dtype="u1")
+    volume.attrs["type"] = "annotation_volume"
+    dashboard.post(MARK, json={})
+    monkeypatch.setattr(annotation_sessions, "ensure_minio_serving",
+                        lambda *a, **k: "http://m:9000/annotations/vol-1.zarr")
+    monkeypatch.setattr(annotation_sessions, "refresh_annotated_regions_layer", lambda *a, **k: 0)
+    monkeypatch.setattr(g, "annotation_volumes", {})
+    resumed = dashboard.post("/api/finetune/load-existing-volume",
+                             json={"source_session_path": str(session), "output_path": str(tmp_path / "next")})
+    new_session = resumed.get_json()["new_session_path"]
+    assert dashboard.get("/api/finetune/good-regions").get_json()["count"] == 1
+    with open(f"{new_session}/loaded_from.json") as f:
+        lineage = json.load(f)
+    assert lineage["copied_good_regions"] is True

@@ -8,6 +8,7 @@ Routes: POST ``/api/finetune/list-existing-sessions``, POST
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
 
 from flask import jsonify, request
@@ -23,6 +24,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session import manifest as session_manifest
 from cellmap_flow.finetune.session import sync as session_sync
 from cellmap_flow.finetune.session.manifest import read_manifest
 from cellmap_flow.finetune.session.volume import read_volume
@@ -46,7 +48,6 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     per-file progress. NFS round-trip latency dominates per-file cost, so
     threading gives a big speedup on small-file workloads (sparse zarr chunks).
     """
-    import shutil
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     file_pairs: list[tuple[str, str]] = []
@@ -283,6 +284,16 @@ def load_existing_volume():
                 )
                 copied_minio = True
 
+        # The good regions sit beside corrections/, not in it, and the
+        # trainer and the good-regions routes read them from the new
+        # session. Left behind, a resumed session showed no regions and
+        # trained with no rehearsal or anchored distillation.
+        source_regions = session_manifest.good_regions_path(source_corrections)
+        new_regions = session_manifest.good_regions_path(new_corrections)
+        copied_good_regions = os.path.isfile(source_regions) and not os.path.exists(new_regions)
+        if copied_good_regions:
+            shutil.copy2(source_regions, new_regions)
+
         _RESUME_PROGRESS.update(
             load_id,
             phase="mirroring_minio",
@@ -297,6 +308,7 @@ def load_existing_volume():
                     "source_session_path": source_session_path,
                     "loaded_at": datetime.now().isoformat(),
                     "copied_files": copied,
+                    "copied_good_regions": copied_good_regions,
                 },
                 f,
                 indent=2,
