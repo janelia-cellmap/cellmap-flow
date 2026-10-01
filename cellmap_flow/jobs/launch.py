@@ -3,8 +3,8 @@
 The policy over ``jobs.lsf`` and ``jobs.local``: ``start_hosts`` runs a
 server on LSF or on this machine, tries the other GPU queues when one does
 not start it, waits for its address and records the job in
-``started_jobs()``; ``install_cleanup_handlers`` kills the recorded jobs on
-Ctrl+C.
+``started_jobs()``; ``install_cleanup_handlers`` kills the recorded jobs,
+and any still starting, on Ctrl+C, SIGTERM or SIGHUP.
 
 Two deployment settings are read here, once, at import:
 
@@ -19,6 +19,7 @@ other queues) are ``jobs.settings.launcher_settings()``, read when a job is
 started.
 """
 
+import contextlib
 import logging
 import os
 import signal
@@ -71,6 +72,27 @@ def _logged(error: Exception) -> Exception:
 # each test its own list here.
 _started: list = []
 
+# Jobs submitted but not in started_jobs() yet: queued, or loading their
+# model, while start_hosts waits for an address. They are not in that list
+# because everything that reads it (the dashboard's layers, the server
+# check) takes a job there to have a server. cleanup_handler kills these
+# too: a Ctrl+C in the minutes a job takes to start used to leave it
+# running, billing its GPU, with nothing left that knew about it.
+_starting: set = set()
+_starting_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _while_starting(job):
+    """Count ``job`` among the starting jobs until the block is left."""
+    with _starting_lock:
+        _starting.add(job)
+    try:
+        yield
+    finally:
+        with _starting_lock:
+            _starting.discard(job)
+
 
 def started_jobs() -> list:
     """The jobs this process started: the live list, which start_hosts
@@ -86,7 +108,9 @@ def cleanup_handler(signum: int, frame) -> None:
     status, so a stopped run does not report success.
     """
     logger.warning(f"Received signal {signum}. Cleaning up jobs...")
-    for job in list(started_jobs()):
+    with _starting_lock:
+        starting = [job for job in _starting if job not in started_jobs()]
+    for job in list(started_jobs()) + starting:
         logger.info(f"Killing job: {job.model_name}")
         try:
             job.kill()
@@ -96,7 +120,12 @@ def cleanup_handler(signum: int, frame) -> None:
 
 
 def install_cleanup_handlers() -> bool:
-    """Kill the tracked jobs on Ctrl+C or SIGTERM. Returns whether installed.
+    """Kill the tracked jobs on Ctrl+C, SIGTERM or SIGHUP. Returns whether installed.
+
+    SIGHUP is what a dashboard gets when its terminal goes: the window is
+    closed, the connection to it drops, or the interactive LSF session it
+    runs in ends. Unhandled, it ended the process and left every server it
+    had started running.
 
     For entry points that launch jobs, called from their main thread. This
     used to happen when the module was imported, which set the handlers for
@@ -108,6 +137,7 @@ def install_cleanup_handlers() -> bool:
         return False
     signal.signal(signal.SIGINT, cleanup_handler)  # Handle Ctrl+C
     signal.signal(signal.SIGTERM, cleanup_handler)  # Handle termination
+    signal.signal(signal.SIGHUP, cleanup_handler)  # The terminal went away
     return True
 
 
@@ -262,72 +292,10 @@ def start_hosts(
                 started_jobs().append(job)
                 return job
 
-            # Give an unstarted job less patience while there is somewhere
-            # else to try, and the full wait once this is the last option.
-            more_to_try = index < len(candidates) - 1
-            host = job.wait_for_host(
-                timeout=PENDING_FALLBACK_SECONDS if more_to_try else 300
-            )
-            # observed_status(), not get_status(): the latter falls back to
-            # self.status, which starts out RUNNING, so an unreadable bjobs
-            # would look like "it started" and stop the fallback exactly when
-            # LSF is flaky. Unknown is treated as still queued -- the job has
-            # produced no host in PENDING_FALLBACK_SECONDS, so there is
-            # nothing to lose by trying elsewhere.
-            observed = None if host else job.observed_status()
-
-            # Started but still loading its model: that is not a queue
-            # problem, so wait on this job rather than trying elsewhere.
-            if observed == JobStatus.RUNNING:
-                host = job.wait_for_host(timeout=STARTUP_TIMEOUT_SECONDS)
-                observed = None if host else job.observed_status()
-
-            if host:
-                if candidate != queue:
-                    logger.warning(
-                        f"Running on {candidate}, not the requested {queue}: "
-                        f"{index} earlier queue(s) did not start the job"
-                    )
-                else:
-                    logger.info(f"Running on {candidate}")
-                started_jobs().append(job)
-                return job
-
-            # Only a job that never started is a queue problem. One that ran
-            # and crashed will crash the same way everywhere else, so fail
-            # now instead of burning through every queue reproducing it.
-            #
-            # A job with no host is not returned as if it were ready: there
-            # is no server for the viewer to point at (it would build a
-            # zarr://None/... layer), and nothing updates it later. One that
-            # may still be alive is killed rather than left to bill.
-            if observed == JobStatus.RUNNING:
-                job.kill()
-                raise _logged(JobStartError(
-                    f"Job {job.job_id} for {job_name} on {candidate} ran for "
-                    f"{STARTUP_TIMEOUT_SECONDS}s without reporting a server "
-                    f"address and has been killed; see {job.log_file}"
-                ))
-            if observed is not None and observed != JobStatus.PENDING:
-                raise _logged(JobStartError(
-                    f"Job {job.job_id} for {job_name} on {candidate} ended "
-                    f"({observed.value}) without reporting a server address; "
-                    f"see {job.log_file}"
-                ))
-
-            if more_to_try:
-                logger.warning(
-                    f"Job {job.job_id} has not started on {candidate} after "
-                    f"{PENDING_FALLBACK_SECONDS}s; killing it and trying "
-                    f"{candidates[index + 1]}"
-                )
-                job.kill()
-            else:
-                job.kill()
-                raise _logged(JobStartError(
-                    f"Job {job.job_id} for {job_name} did not start on "
-                    f"{' or '.join(candidates)}; it has been killed"
-                ))
+            with _while_starting(job):
+                started = _wait_on_queue(job, job_name, queue, candidate, index, candidates)
+            if started is not None:
+                return started
 
         raise _logged(JobStartError(
             f"No GPU queue accepted {job_name}: "
@@ -338,12 +306,88 @@ def start_hosts(
 
     job = run_locally(command, job_name)
 
-    if wait_for_host and not job.wait_for_host():
+    with _while_starting(job):
+        if wait_for_host and not job.wait_for_host():
+            job.kill()
+            raise _logged(JobStartError(
+                f"The local server for {job_name} did not report its address; "
+                f"see {getattr(job, 'log_file', None)}"
+            ))
+        started_jobs().append(job)
+    return job
+
+
+def _wait_on_queue(job, job_name, queue, candidate, index, candidates):
+    """Wait for ``job``, submitted to ``candidate``, the ``index``-th of
+    ``candidates``, to report its address.
+
+    Returns it, recorded in started_jobs(), once it has. Returns None after
+    killing it when it never started and there is another queue to try.
+    Raises JobStartError, after killing it if it may be alive, otherwise.
+    """
+    # Give an unstarted job less patience while there is somewhere
+    # else to try, and the full wait once this is the last option.
+    more_to_try = index < len(candidates) - 1
+    host = job.wait_for_host(
+        timeout=PENDING_FALLBACK_SECONDS if more_to_try else 300
+    )
+    # observed_status(), not get_status(): the latter falls back to
+    # self.status, which starts out RUNNING, so an unreadable bjobs
+    # would look like "it started" and stop the fallback exactly when
+    # LSF is flaky. Unknown is treated as still queued -- the job has
+    # produced no host in PENDING_FALLBACK_SECONDS, so there is
+    # nothing to lose by trying elsewhere.
+    observed = None if host else job.observed_status()
+
+    # Started but still loading its model: that is not a queue
+    # problem, so wait on this job rather than trying elsewhere.
+    if observed == JobStatus.RUNNING:
+        host = job.wait_for_host(timeout=STARTUP_TIMEOUT_SECONDS)
+        observed = None if host else job.observed_status()
+
+    if host:
+        if candidate != queue:
+            logger.warning(
+                f"Running on {candidate}, not the requested {queue}: "
+                f"{index} earlier queue(s) did not start the job"
+            )
+        else:
+            logger.info(f"Running on {candidate}")
+        started_jobs().append(job)
+        return job
+
+    # Only a job that never started is a queue problem. One that ran
+    # and crashed will crash the same way everywhere else, so fail
+    # now instead of burning through every queue reproducing it.
+    #
+    # A job with no host is not returned as if it were ready: there
+    # is no server for the viewer to point at (it would build a
+    # zarr://None/... layer), and nothing updates it later. One that
+    # may still be alive is killed rather than left to bill.
+    if observed == JobStatus.RUNNING:
         job.kill()
         raise _logged(JobStartError(
-            f"The local server for {job_name} did not report its address; "
-            f"see {getattr(job, 'log_file', None)}"
+            f"Job {job.job_id} for {job_name} on {candidate} ran for "
+            f"{STARTUP_TIMEOUT_SECONDS}s without reporting a server "
+            f"address and has been killed; see {job.log_file}"
+        ))
+    if observed is not None and observed != JobStatus.PENDING:
+        raise _logged(JobStartError(
+            f"Job {job.job_id} for {job_name} on {candidate} ended "
+            f"({observed.value}) without reporting a server address; "
+            f"see {job.log_file}"
         ))
 
-    started_jobs().append(job)
-    return job
+    if more_to_try:
+        logger.warning(
+            f"Job {job.job_id} has not started on {candidate} after "
+            f"{PENDING_FALLBACK_SECONDS}s; killing it and trying "
+            f"{candidates[index + 1]}"
+        )
+        job.kill()
+        return None
+    job.kill()
+    raise _logged(JobStartError(
+        f"Job {job.job_id} for {job_name} did not start on "
+        f"{' or '.join(candidates)}; it has been killed"
+    ))

@@ -154,6 +154,42 @@ def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
     assert job.killed and exited.value.code == 128 + signal.SIGTERM, "not 0, as if the run had succeeded"
 
 
+def test_the_cleanup_handler_kills_a_job_still_waiting_to_start(monkeypatch):
+    """A job joined started_jobs() only once it reported an address, so a
+    Ctrl+C while it was queued or loading its model left it running."""
+    waiting, release = threading.Event(), threading.Event()
+
+    class Queued(FakeJob):
+        def wait_for_host(self, timeout=300):
+            waiting.set()
+            release.wait(5)
+            return "http://node:1" if not self.killed else None
+
+    job = Queued("1")
+    monkeypatch.setattr(launch, "is_bsub_available", lambda: True)
+    monkeypatch.setattr(launch, "submit_bsub_job", lambda *a, **kw: job)
+    monkeypatch.setattr(launch, "gpu_queue_candidates", lambda preferred, cycle=True: [preferred])
+    starting = threading.Thread(target=lambda: start_hosts("serve", queue="gpu_h100", job_name="m"))
+    starting.start()
+    assert waiting.wait(5)
+    try:
+        with pytest.raises(SystemExit):
+            launch.cleanup_handler(signal.SIGINT, None)
+    finally:
+        release.set()
+        starting.join(5)
+    assert job.killed
+
+
+def test_the_cleanup_handlers_cover_the_terminal_going_away(monkeypatch):
+    """SIGHUP: the terminal closed, its connection dropped, or the
+    interactive LSF session the dashboard ran in ended."""
+    installed = {}
+    monkeypatch.setattr(launch.signal, "signal", lambda signum, handler: installed.setdefault(signum, handler))
+    assert launch.install_cleanup_handlers()
+    assert {signal.SIGINT, signal.SIGTERM, signal.SIGHUP} <= set(installed)
+
+
 def _cellmap_flow_infer(monkeypatch, tmp_path, order):
     from cellmap_flow.cli import infer, main
     from cellmap_flow.dashboard.services import startup
