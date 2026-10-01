@@ -73,15 +73,30 @@ ABSENT = object()
 
 
 @pytest.fixture
-def submit(client, trainable_session):
-    """``submit(volume=CROPPED, via_base_path=False, **request)``: POST
-    /api/finetune/submit for model "m", on a session over ``volume``. Returns
-    the status and answer, what the job manager was asked for (None if
-    nothing), the listeners it was given, and the session's manifest
-    afterwards."""
+def submit(client, trainable_session, monkeypatch):
+    """``submit(volume=CROPPED, via_base_path=False, pulled=None, **request)``:
+    POST /api/finetune/submit for model "m", on a session over ``volume``,
+    with MinIO sync pulling the labels ``pulled`` into the volume, if given.
+    Returns the status and answer, what the job manager was asked for (None if
+    nothing), the syncs asked for, the listeners it was given, and the
+    session's manifest afterwards."""
+    import zarr
 
-    def run(volume=CROPPED, via_base_path=False, **request):
+    from cellmap_flow.dashboard.routes.finetune import training
+
+    def run(volume=CROPPED, via_base_path=False, pulled=None, **request):
         corrections = trainable_session(*volume)
+        syncs = []
+
+        def sync(force=True):
+            syncs.append(force)
+            if pulled is None:
+                return 0
+            manifest = json.loads((corrections / "_virtual_sources.json").read_text())
+            zarr.open_group(manifest["volume_zarr_path"])["annotation"]["s0"][:] = pulled
+            return 1
+
+        monkeypatch.setattr(training, "sync_all_annotations_from_minio", sync)
         asked, listeners = [], []
         get_session().finetune_job_manager = SimpleNamespace(
             jobs={}, add_listener=listeners.append,
@@ -91,7 +106,7 @@ def submit(client, trainable_session):
         response = client.post("/api/finetune/submit",
                                json={"model_name": "m", "corrections_path": str(path), **request})
         return SimpleNamespace(status=response.status_code, body=response.get_json(), sent=asked[0] if asked else None,
-                               corrections=corrections, listeners=listeners,
+                               syncs=syncs, corrections=corrections, listeners=listeners,
                                manifest=json.loads((corrections / "_virtual_sources.json").read_text()))
 
     return run
@@ -115,6 +130,15 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
     unannotated voxels taken for background. It is read from the volume now."""
     job = submit(volume, **request_data)
     assert {key: job.sent[key] for key in sent} == sent
+
+
+def test_submit_reads_the_strokes_still_in_minio(submit):
+    """Whether a session is sparse was read from the volume on disk, which lags
+    the browser's strokes (they go to MinIO) by up to the periodic sync's 30 s:
+    a stroke painted just before Submit trained as dense labels."""
+    job = submit(CROPPED, pulled=STROKE_BESIDE[0])
+    assert job.syncs == [False], "a diff of the chunks"
+    assert job.sent["mask_unannotated"] is True
 
 
 def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):

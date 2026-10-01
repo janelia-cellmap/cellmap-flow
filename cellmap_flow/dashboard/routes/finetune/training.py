@@ -116,6 +116,37 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, overrides,
     write_manifest(str(corrections_dir), manifest)
 
 
+def _pull_annotations(context):
+    """Pull from MinIO what changed since the last sync; the number of volumes pulled.
+
+    force=False diffs the chunk keys and downloads only what differs, so it
+    is cheap when nothing changed. 0 when MinIO is not running, or the sync
+    failed (logged, under ``context``): the volume on disk is then what
+    there is.
+    """
+    try:
+        t0 = time.perf_counter()
+        pulled = sync_all_annotations_from_minio(force=False) or 0
+        elapsed = time.perf_counter() - t0
+    except Exception as e:
+        logger.warning(f"{context}: error syncing annotations from MinIO: {e}")
+        return 0
+    if pulled < 0:
+        logger.info(f"{context}: MinIO is not running, so there is nothing to pull.")
+        return 0
+    if pulled:
+        logger.info(
+            f"{context}: pulled new annotations for {pulled} volume(s) in "
+            f"{elapsed:.2f}s; training uses them."
+        )
+    else:
+        logger.info(
+            f"{context}: nothing new to pull ({elapsed:.2f}s) -- annotations "
+            f"on disk are already current."
+        )
+    return pulled
+
+
 def _rehydrate_jobs():
     """Reattach to jobs a previous dashboard process left running.
 
@@ -212,12 +243,6 @@ def submit_finetuning():
                 }
             ), 400
 
-        # No pre-training sync: VirtualPatchDataset reads annotation_volume.zarr
-        # directly, which the periodic sync keeps up to date, and a sync can
-        # hang submit for many minutes when the volume holds imported YAML
-        # data. Only a session without a manifest was synced here, to
-        # materialize the per-chunk extracts of the removed legacy dataset;
-        # without a manifest the job manager refuses the submit anyway.
         from cellmap_flow.finetune.session.manifest import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
@@ -233,8 +258,17 @@ def submit_finetuning():
                 actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
 
-        has_sparse = detect_sparse_annotations(actual_corrections_path)
         output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
+
+        # Whether the session is sparse is read from the volume on disk, which
+        # lags the browser's strokes (they go straight to MinIO) by up to the
+        # periodic sync's 30 s, or for good while that sync fails. So pull
+        # first, as restart does: strokes painted just before Submit made a
+        # distance model train distance/bce on scribbles, without the mask.
+        # The sync used to also write per-chunk extracts and could take
+        # minutes; it is only the chunk diff now.
+        _pull_annotations("Submit pre-sync")
+        has_sparse = detect_sparse_annotations(actual_corrections_path)
         settings = training_settings(
             output_type=output_type,
             loss_type=body.loss_type,
@@ -646,31 +680,7 @@ def restart_finetuning_job(job_id):
         # sync also materialized per-chunk raw extracts the virtual dataset
         # never reads, which on a big session took minutes. The sync is just
         # the chunk diff now.
-        pulled = 0
-        try:
-            sync_t0 = time.perf_counter()
-            pulled = sync_all_annotations_from_minio(force=False) or 0
-            sync_elapsed = time.perf_counter() - sync_t0
-            if pulled < 0:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: MinIO is not running, "
-                    f"so there is nothing to pull."
-                )
-                pulled = 0
-            elif pulled:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: pulled new annotations "
-                    f"for {pulled} volume(s) in {sync_elapsed:.2f}s. The next "
-                    f"iteration trains on them."
-                )
-            else:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: nothing new to pull "
-                    f"({sync_elapsed:.2f}s) -- annotations on disk are already "
-                    f"current, so this is a parameters-only restart."
-                )
-        except Exception as e:
-            logger.warning(f"Error syncing annotations before restart: {e}")
+        pulled = _pull_annotations(f"Restart pre-sync for job {job_id}")
 
         updated_params = build_restart_params(data)
         updated_params.update(_restart_training_settings(job_record, updated_params, corrections_dir))
