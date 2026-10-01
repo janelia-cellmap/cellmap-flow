@@ -36,20 +36,20 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     resolve_finetune_session,
 )
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
 
 logger = logging.getLogger(__name__)
 
 
 def _step_names(config):
-    """Step names from an input_norm/postprocess config, whichever shape it is.
+    """Step names from an input_norm/postprocess chain, whichever shape it is.
 
-    The dashboard POSTs these as a list of dicts carrying a "name" key, on
-    purpose: jsonify sorts dict keys, and the order of these steps changes
-    what they compute. pipeline.py stores that list verbatim, so
-    current_*_config() hands back a list whenever the pipeline has been
-    applied, and a name-keyed dict otherwise. Only used for logging, so an
-    unrecognised shape is worth naming rather than raising.
+    current_chain() gives a list of dicts carrying a "name" key, in the order
+    the steps run (a dict's keys would lose it: jsonify sorts them). A
+    manifest written before the chains were lists may still hold the legacy
+    name-keyed dict. Only used for logging, so an unrecognised shape gives no
+    names rather than raising.
     """
     if isinstance(config, dict):
         return list(config.keys())
@@ -138,7 +138,7 @@ def _rehydrate_jobs():
         try:
             sessions = [
                 os.path.join(base, entry) for entry in os.listdir(base)
-                if re.match(r"^\d{8}_\d{6}$", entry)
+                if SESSION_DIR_RE.match(entry)
             ]
         except OSError:
             continue
