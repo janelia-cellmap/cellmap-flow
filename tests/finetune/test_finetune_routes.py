@@ -102,8 +102,12 @@ def submit(client, trainable_session):
     # A distance target needs 3D boundaries, which scribbles do not have.
     pytest.param(PAINTED, {"output_type": "distance"}, dict(mask_unannotated=True, loss_type="margin",
                                                             output_type="binary"), id="a painted session"),
-    pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin"),
+    pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin", distillation_lambda=0.5),
                  id="a stroke beside the crops"),
+    # The CLI takes a distance target only with bce, and a soft target is not smoothed.
+    pytest.param(CROPPED, {"output_type": "distance", "loss_type": "margin"},
+                 dict(mask_unannotated=False, loss_type="bce", label_smoothing=0.0, output_type="distance"),
+                 id="a distance model on imported crops"),
 ])
 def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent):
     """Scribbles were detected from per-chunk extracts that no session has any
