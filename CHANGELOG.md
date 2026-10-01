@@ -37,6 +37,8 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
   - Datasets that were misread: N5, precomputed, multichannel OME, micrometer units, fractional voxel sizes, relabelled scales with an offset.
   - `EuclideanDistance` now applies its parameters (default output `tanh(distance)`).
   - `LabelPostprocessor` serves uint32.
+  - `AffinityPostprocessor` takes float input as the [0, 1] affinities it is; only integer input is still divided by 255. After a `SigmoidPostprocessor`, or on a [0, 1] model output, the affinities used to be about 250× too small and the watershed merged everything, so those chains now give a different (real) segmentation. `DefaultPostprocessor` → `AffinityPostprocessor` is bit-identical.
+  - A new `FillHolesPostprocessor` (from PR #102) thresholds the output and fills each blob's enclosed holes, per channel, returning uint8 labels. It runs per chunk with no halo, so a hole touching a chunk's edge stays open.
   - Steps without a declared dtype keep their input dtype instead of float64.
   - Bio models serve uint8, and can be launched at all.
   - Unique label ids change for models whose output voxel size differs from the input's.
