@@ -27,7 +27,7 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import ModelGeometry
+from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +387,8 @@ class ModelConfig:
 
     @property
     def chunk_output_axes(self) -> tuple[str, ...]:
-        """The axes of a processed chunk. Defaults to ('c', 'z', 'y', 'x').
+        """The axes of a processed chunk; by default ``geometry.DEFAULT_OUTPUT_AXES``,
+        ("c", "z", "y", "x").
 
         Models can override by setting config.chunk_output_axes. The server
         and blockwise read it only for whether a chunk has a channel axis:
@@ -398,7 +399,7 @@ class ModelConfig:
         """
         if hasattr(self.config, "chunk_output_axes"):
             return tuple(self.config.chunk_output_axes)
-        return ("c", "z", "y", "x")
+        return DEFAULT_OUTPUT_AXES
 
     @property
     def output_dtype(self):
