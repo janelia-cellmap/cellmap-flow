@@ -11,7 +11,7 @@ derived from them.
 the stand-ins ``serving.client`` and ``models.geometry_cache`` build from a
 server's ``model_info`` or the cache, which carry no block shape.
 
-Importing this module is cheap: numpy and funlib.geometry only.
+Importing this module is cheap: numpy, funlib.geometry and io.ome only.
 """
 
 from dataclasses import dataclass, field
@@ -20,9 +20,8 @@ from typing import Optional, Tuple
 import numpy as np
 from funlib.geometry import Coordinate
 
-# The names a channel axis goes by, in chunk_output_axes and in the raw
-# data's axes (the server drops it from the latter to get the spatial axes).
-CHANNEL_AXES = ("c", "c^", "channel")
+from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
+
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
 
 
@@ -133,7 +132,7 @@ class ModelGeometry:
     @property
     def has_channel_axis(self) -> bool:
         """Whether a chunk the model outputs has a channel axis."""
-        return any(axis in self.chunk_output_axes for axis in CHANNEL_AXES)
+        return any(axis in self.chunk_output_axes for axis in CHANNEL_AXIS_NAMES)
 
     def block_shape(self) -> Tuple[int, ...]:
         """(*spatial, channels) of one output block: the declared one, if any."""
@@ -181,7 +180,7 @@ class ModelGeometry:
         served .zattrs still say output_voxel_size.
         """
         if spatial_axes is None:
-            spatial_axes = [a for a in self.chunk_output_axes if a not in CHANNEL_AXES]
+            spatial_axes = [a for a in self.chunk_output_axes if a not in CHANNEL_AXIS_NAMES]
         effective = self.output_voxel_size
         if actual_input_voxel_size is not None:
             actual = np.asarray(actual_input_voxel_size, dtype=float)

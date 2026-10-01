@@ -16,7 +16,7 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inference.runner import ChunkCancelled, DeviceSlots
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.models.geometry import CHANNEL_AXES
+from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec, chain_num_channels, chain_output_dtype
 from cellmap_flow.serving import virtual_zarr
@@ -277,7 +277,7 @@ class CellMapFlowServer:
         # data, whose corner is -4 nm. Whole nanometers: Roi is integral.
         self.origin = np.round(np.array(self.idi_raw.offset, dtype=float)).astype(int)
         self.axes = self.idi_raw.axes_names.copy()
-        for axis_name in CHANNEL_AXES:
+        for axis_name in CHANNEL_AXIS_NAMES:
             if axis_name in self.axes:
                 self.axes.remove(axis_name)
 
@@ -290,7 +290,7 @@ class CellMapFlowServer:
             # reorder_to_zarr_axes applies the correct permutation. The
             # channel axis is taken to come first, as blockwise takes it too,
             # whatever chunk_output_axes says.
-            if self.geometry.chunk_output_axes[0] not in CHANNEL_AXES:
+            if self.geometry.chunk_output_axes[0] not in CHANNEL_AXIS_NAMES:
                 logger.warning(
                     f"chunk_output_axes {self.geometry.chunk_output_axes} does not put "
                     "the channel axis first; it is served as if it did"
