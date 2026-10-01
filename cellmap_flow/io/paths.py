@@ -111,29 +111,37 @@ def is_zarr_container(path: str) -> bool:
     )
 
 
+# A path component that ends in .zarr or .n5 (not ERA5's "chunk-1.zarr-v2").
+_CONTAINER_SUFFIX = re.compile(r"\.(zarr|n5)(?=/|$)")
+
+
+def _last_suffix(path: str) -> Optional["re.Match"]:
+    matches = list(_CONTAINER_SUFFIX.finditer(path))
+    return matches[-1] if matches else None
+
+
 def suffix_format(path: str) -> Optional[str]:
-    """"zarr" or "n5", whichever of .zarr/.n5 comes last in ``path``; else None."""
-    if ".zarr" not in path and ".n5" not in path:
-        return None
-    return "zarr" if path.rfind(".zarr") > path.rfind(".n5") else "n5"
+    """"zarr" or "n5": the suffix of the last component of ``path`` that ends
+    in .zarr or .n5; else None."""
+    match = _last_suffix(path)
+    return match[1] if match else None
 
 
 def split_container(path: str) -> Tuple[str, str]:
     """``(container, path inside it)``.
 
-    The container ends at the last ``.zarr``/``.n5`` in ``path``; without
-    either suffix it is the nearest directory up from ``path`` with a
+    The container ends at the last component of ``path`` ending in
+    ``.zarr``/``.n5``; without one it is the nearest directory up from ``path`` with a
     ``.zgroup`` (or, failing that, the first with a ``.zarray``), on disk or
     at a URL alike.
     ``/data/x.zarr/em/s0`` is ``("/data/x.zarr", "em/s0")``.
     """
-    extension = suffix_format(path)
-    if extension is not None:
-        splitter = "." + extension
-        container, inner = path.rsplit(splitter, 1)
+    match = _last_suffix(path)
+    if match is not None:
+        inner = path[match.end():]
         if inner.startswith("/"):
             inner = inner[1:]
-        return container + splitter, inner
+        return path[:match.end()], inner
 
     # No .zarr or .n5 suffix: walk up to the directory that is the container.
     # Prefer .zgroup (the container root) over .zarray (a leaf array).

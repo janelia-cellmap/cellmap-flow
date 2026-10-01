@@ -517,6 +517,8 @@ def test_written_corners_read_back(tmp_path):
     pytest.param("/d/x.zarr/em/s0", ("/d/x.zarr", "em/s0"), id="at-the-suffix"),
     pytest.param("/d/a.n5/b.zarr/raw", ("/d/a.n5/b.zarr", "raw"), id="at-the-innermost-suffix"),
     pytest.param("{tmp}/plain/em/s0", ("{tmp}/plain/em", "s0"), id="without-a-suffix-the-nearest-zgroup"),
+    # A name with .zarr inside it is no suffix: it was split there, into "x.zarr" and "-v2/em/s0".
+    pytest.param("{tmp}/x.zarr-v2/em/s0", ("{tmp}/x.zarr-v2/em", "s0"), id="zarr-inside-a-name"),
     # A URL is walked up the same way; it once had to name its .zarr.
     pytest.param("{url}/plain/em/s0", ("{url}/plain/em", "s0"), id="a-url-without-a-suffix"),
     pytest.param("{tmp}/nothing/here", RuntimeError, id="no-container"),
@@ -524,7 +526,8 @@ def test_written_corners_read_back(tmp_path):
 def test_splitting_a_path_into_its_container_and_dataset(tmp_path, at_url, path, expected):
     import zarr
 
-    zarr.open_group(f"{tmp_path}/plain", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
+    for name in ("plain", "x.zarr-v2"):
+        zarr.open_group(f"{tmp_path}/{name}", mode="w").create_group("em").create_dataset("s0", shape=(2,), dtype="u1")
     url = at_url("s3", str(tmp_path))
     path = path.format(tmp=tmp_path, url=url)
     if expected is RuntimeError:
