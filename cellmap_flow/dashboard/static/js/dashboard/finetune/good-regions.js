@@ -25,13 +25,9 @@ export function initGoodRegions({ log }) {
   function updateRehearsalHint() {
     const hint = document.getElementById("rehearsalFractionHint");
 
-    const base =
-      "Share of training patches drawn from regions you marked good, " +
-      "where the model is held to what it already predicts.";
-
+    // The label's tooltip says what the setting is; this says what it does now.
     if (lastGoodRegionCount === 0) {
-      hint.textContent =
-        base + " No good regions marked yet, so this has no effect.";
+      hint.textContent = "No good regions marked: no effect.";
       return;
     }
     const raw = rehearsalFraction.value.trim();
@@ -39,16 +35,13 @@ export function initGoodRegions({ log }) {
     const fraction = raw === "" ? 0.25 : Number(raw);
     if (!Number.isFinite(fraction) || fraction <= 0) {
       hint.textContent =
-        base +
-        ` Set to 0, so the ${lastGoodRegionCount} marked region` +
-        `${lastGoodRegionCount === 1 ? "" : "s"} will be ignored this run.`;
+        `0: the ${lastGoodRegionCount} good region` +
+        `${lastGoodRegionCount === 1 ? " is" : "s are"} ignored.`;
       return;
     }
     hint.textContent =
-      base +
-      ` About ${Math.round(fraction * 100)}% of patches will come from the ` +
-      `${lastGoodRegionCount} region${lastGoodRegionCount === 1 ? "" : "s"} ` +
-      "you marked.";
+      `~${Math.round(fraction * 100)}% of patches from ` +
+      `${lastGoodRegionCount} good region${lastGoodRegionCount === 1 ? "" : "s"}.`;
   }
 
   markGoodRegionBtn.addEventListener("click", function () {

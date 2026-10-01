@@ -1,6 +1,6 @@
 <div class="alert alert-info" role="alert">
-  <strong>Finetune:</strong> Create annotation crops and submit training jobs to the GPU cluster.
-  <br><small><strong>Note:</strong> Models must be configured with full metadata (write_shape, output_voxel_size, etc.) to create crops. If models were submitted from the GUI after startup, you may need to restart with a proper model configuration.</small>
+  <strong>Finetune:</strong> paint corrections, then train on the GPU cluster.
+  <small class="d-block" title="Crops need the model's write_shape, output_voxel_size and so on. A model submitted from the GUI after startup may lack them; restart with a full model configuration.">Needs a model with full metadata.</small>
 </div>
 
 <!-- Tabs for Annotation Crops and Training -->
@@ -33,9 +33,7 @@
         &#x21bb;
       </button>
     </div>
-    <small class="form-text text-muted">
-      Crop will be sized to model's output inference size
-    </small>
+    <small class="form-text text-muted">Crops are sized to the model's output.</small>
   </div>
 
   <!-- Model Info Display -->
@@ -48,7 +46,7 @@
   <div class="mb-3">
     <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
     <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
-    <small class="form-text text-muted">Directory where annotation crops will be saved (must be accessible to MinIO).</small>
+    <small class="form-text text-muted">Where crops are saved; MinIO must be able to read it.</small>
   </div>
 
   <!-- Primary actions: start or resume an annotation volume -->
@@ -65,31 +63,23 @@
         Load Crops from YAML
       </button>
     </div>
-    <small class="form-text text-muted d-block mt-1">
-      Sparse volume across full dataset extent (paint <code>1</code>=background, <code>2</code>=foreground).
-      Resuming copies the chosen session into a new one, leaving the original intact.
-    </small>
+    <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> = foreground.</small>
   </div>
 
   <!-- Annotated-region boxes, on demand only -->
   <div class="mb-2">
     <button type="button" class="btn btn-outline-primary" id="showAnnotatedRegionsBtn"
-            title="Redraw the boxes showing where this session has annotations">
+            title="Redraws the annotated_regions boxes. Not automatic on purpose: updating any layer makes neuroglancer rebuild all of them, which drops the draw tool you have selected and can lose a stroke you just painted. Click it when you want to see where you have been, not while painting.">
       Show Annotated Regions
     </button>
     <span id="annotatedRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
-    <small class="form-text text-muted d-block mt-1">
-      Redraws the "annotated_regions" boxes. Not automatic on purpose: updating
-      any layer makes neuroglancer rebuild all of them, which drops the draw
-      tool you have selected and can lose a stroke you just painted. Click this
-      when you want to see where you have been, not while you are painting.
-    </small>
+    <small class="form-text text-muted d-block mt-1">Not while painting: it drops the selected draw tool.</small>
   </div>
 
   <!-- Good regions: rehearsal anchors -->
   <div class="mb-2">
     <button type="button" class="btn btn-outline-success" id="markGoodRegionBtn"
-            title="Record the area currently on screen as one the model already handles well">
+            title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
       Mark This View as Good
     </button>
     <span id="goodRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
@@ -97,13 +87,7 @@
             title="Remove all good regions from this session">
       Clear
     </button>
-    <small class="form-text text-muted d-block mt-1">
-      Navigate until the screen shows output you are happy with, then click.
-      Marks one model output patch, the same size as an annotation crop.
-      Training holds the model to what it already predicts there, while your
-      scribbles correct it elsewhere &mdash; and any scribble you draw inside a
-      good region wins over that. Shown as the "good_regions" layer.
-    </small>
+    <small class="form-text text-muted d-block mt-1">Marks the patch on screen as already right.</small>
   </div>
 
   <!-- Save action -->
@@ -111,11 +95,7 @@
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
       Save Annotations to Disk
     </button>
-    <small class="form-text text-muted d-block mt-1">
-      Persists in-progress annotations from MinIO to disk. Painted regions are
-      automatically outlined as bounding boxes in the viewer (toggle via the
-      "annotated_regions" layer).
-    </small>
+    <small class="form-text text-muted d-block mt-1">Copies the annotations from MinIO to disk.</small>
   </div>
 
   <!-- Load Crops from YAML Modal -->
@@ -242,20 +222,18 @@
   <div class="card-body">
     <!-- Optional: Manual checkpoint path override -->
     <div class="mb-3">
-      <label for="checkpointPath" class="form-label">
+      <label for="checkpointPath" class="form-label" title="The base model checkpoint to finetune from. Left empty, it is taken from the model's configuration or script.">
         Checkpoint Path (Optional)
         <span class="badge bg-secondary">Advanced</span>
       </label>
       <input type="text" id="checkpointPath" class="form-control" placeholder="Leave empty to auto-detect from model config">
-      <small class="text-muted">
-        Override the base model checkpoint to finetune from. If left empty, the system will attempt to extract it from the model configuration or script.
-      </small>
+      <small class="text-muted">Empty: taken from the model config.</small>
     </div>
 
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="loraRank" class="form-label">LoRA Rank</label>
+          <label for="loraRank" class="form-label" title="Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change it. Rank 0 trains the whole model instead of an adapter: on the mito affinity UNet it was faster per step and lower in memory than rank 64, and exports full weights (~3 GB) rather than a ~100 MB adapter. Switching between 0 and a LoRA rank needs a new job, not a restart.">LoRA Rank</label>
           <select id="loraRank" class="form-select">
             <option value="4">4 (Fast, lower capacity)</option>
             <option value="8">8 (Balanced)</option>
@@ -263,14 +241,14 @@
             <option value="64" selected>64 (Very high capacity) - Recommended</option>
             <option value="0">0 (Full finetune: every parameter, no adapter)</option>
           </select>
-          <small class="text-muted">Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change this. Rank 0 trains the whole model instead of an adapter: on the mito affinity UNet it was faster per step and lower in memory than rank 64, and exports full weights (~3 GB) rather than a ~100 MB adapter. Switching between 0 and a LoRA rank needs a new job, not a restart.</small>
+          <small class="text-muted">Higher = more capacity. 0 = full finetune.</small>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
           <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="50" step="1">
-          <small class="text-muted">Typical range: 10-20 epochs</small>
+          <small class="text-muted">Usually 10–20.</small>
         </div>
       </div>
     </div>
@@ -287,7 +265,7 @@
             <option value="16">16</option>
             <option value="32">32</option>
           </select>
-          <small class="text-muted">Higher = faster but uses more GPU memory</small>
+          <small class="text-muted">Higher = faster, more GPU memory.</small>
         </div>
       </div>
       <div class="col-md-6">
@@ -302,7 +280,7 @@
             <option value="0.01">1e-2 (Very Aggressive)</option>
             <option value="0.1">1e-1 (Extremely Aggressive)</option>
           </select>
-          <small class="text-muted">LoRA typically uses higher learning rates</small>
+          <small class="text-muted">1e-4 suits LoRA.</small>
         </div>
       </div>
     </div>
@@ -310,7 +288,7 @@
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="patchesPerEpoch" class="form-label">
+          <label for="patchesPerEpoch" class="form-label" title="Blank keeps the manifest's value. 0 picks it from the number of painted chunks. A positive value caps the random patches per epoch.">
             Patches per Epoch
             <span class="badge bg-secondary">YAML override</span>
           </label>
@@ -322,15 +300,12 @@
             step="1"
             placeholder="YAML/default"
           />
-          <small class="text-muted">
-            Blank keeps the manifest value. 0 uses auto. A positive value
-            caps random samples per epoch.
-          </small>
+          <small class="text-muted">Blank = manifest's, 0 = auto.</small>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="rehearsalFraction" class="form-label">
+          <label for="rehearsalFraction" class="form-label" title="The share of training patches drawn from regions you marked good, where the model is held to what it already predicts.">
             Good-Region Rehearsal
             <span class="badge bg-secondary">Advanced</span>
           </label>
@@ -342,10 +317,7 @@
             <option value="0.5">50%</option>
             <option value="0.75">75%</option>
           </select>
-          <small class="text-muted" id="rehearsalFractionHint">
-            Share of training patches drawn from regions you marked good,
-            where the model is held to what it already predicts.
-          </small>
+          <small class="text-muted" id="rehearsalFractionHint">Share of patches from good regions.</small>
         </div>
       </div>
     </div>
@@ -361,10 +333,10 @@
             <option value="dice">Dice</option>
             <option value="combined">Combined (Dice + BCE)</option>
           </select>
-          <small class="text-muted">Margin is recommended for sparse annotations</small>
+          <small class="text-muted">Margin suits scribbles.</small>
         </div>
         <div class="mb-3" id="marginGroup">
-          <label for="marginValue" class="form-label">
+          <label for="marginValue" class="form-label" title="Smaller = stricter, more learning signal. Predictions outside [margin, 1 - margin] get no gradient.">
             Margin
             <span class="badge bg-secondary">margin loss only</span>
           </label>
@@ -377,15 +349,12 @@
             max="0.5"
             step="0.05"
           />
-          <small class="text-muted">
-            Smaller = stricter (more learning signal). Predictions outside
-            <code>[margin, 1-margin]</code> get zero gradient.
-          </small>
+          <small class="text-muted">Smaller = stricter.</small>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="distillationLambda" class="form-label">
+          <label for="distillationLambda" class="form-label" title="Keeps the model close to its original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight mostly cancels the correction you are making.">
             Distillation Weight
           </label>
           <select id="distillationLambda" class="form-select">
@@ -400,7 +369,7 @@
             <option value="5.0">5.0</option>
             <option value="10.0">10.0</option>
           </select>
-          <small class="text-muted">Keeps model close to original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight here mostly cancels out the correction you are making.</small>
+          <small class="text-muted">Keeps the model near its original output. Keep it small.</small>
         </div>
       </div>
     </div>
@@ -415,10 +384,10 @@
             <option value="unlabeled" selected>Unlabeled voxels only</option>
             <option value="all">All voxels</option>
           </select>
-          <small class="text-muted">Where to apply distillation loss</small>
+          <small class="text-muted">Where distillation applies.</small>
         </div>
         <div class="mb-3">
-          <label for="labelSmoothing" class="form-label">
+          <label for="labelSmoothing" class="form-label" title="Softens hard 0/1 targets to [s/2, 1 - s/2]. Set 0 for clean annotations where you want sharp 0/1 output.">
             Label Smoothing
           </label>
           <input
@@ -430,36 +399,28 @@
             max="0.5"
             step="0.01"
           />
-          <small class="text-muted">
-            Softens hard 0/1 targets to [s/2, 1-s/2]. Default 0.1.
-            Set to 0 for clean annotations where you want sharp 0/1 outputs.
-          </small>
+          <small class="text-muted">0 for sharp 0/1 output.</small>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
           <div class="form-check mt-4">
             <input class="form-check-input" type="checkbox" id="balanceClasses" checked>
-            <label class="form-check-label" for="balanceClasses">
+            <label class="form-check-label" for="balanceClasses" title="Weights foreground and background equally in the loss whatever the ratio of your scribbles, which stops foreground overprediction.">
               Balance fg/bg classes
             </label>
           </div>
-          <small class="text-muted">Weight fg and bg equally in loss regardless of scribble ratio. Prevents foreground overprediction.</small>
+          <small class="text-muted">Weights fg and bg equally.</small>
         </div>
         <div class="mb-3">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="augment">
-            <label class="form-check-label" for="augment">
+            <label class="form-check-label" for="augment" title="Random flips, XY rotations, brightness and noise, on top of the patch-centre jitter that is always applied. Off by default: augmentation earns its keep when a run sees the same patches many times over, so a short correction run mostly just gets noisier gradients.">
               Augmentation
             </label>
           </div>
           <small class="text-muted">
-            Random flips, XY rotations, brightness and noise, on top of the
-            patch-center jitter that is always applied. Off by default:
-            augmentation earns its keep when a run sees the same patches many
-            times over, so a short correction run mostly just gets noisier
-            gradients.
-            <span id="augmentAdvice" class="d-block mt-1"></span>
+            <span id="augmentAdvice" class="d-block"></span>
           </small>
         </div>
       </div>
@@ -484,7 +445,7 @@
       <input class="form-check-input" type="checkbox" id="autoServeCheck" checked>
       <label class="form-check-label" for="autoServeCheck">
         Auto-load model after training
-        <small class="text-muted">(Automatically start inference server and add to Neuroglancer)</small>
+        <small class="text-muted">(serves it and adds the layer)</small>
       </label>
     </div>
 

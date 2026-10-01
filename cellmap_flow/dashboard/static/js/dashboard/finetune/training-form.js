@@ -132,24 +132,19 @@ function updateAugmentAdvice() {
   if (!epochs || !batch || patches === null || Number.isNaN(patches) || patches <= 0) {
     // Blank/auto patches-per-epoch resolves inside the dataset from the
     // populated-chunk count, so the step total is not knowable here.
-    advice.textContent =
-      "Set Patches per Epoch to estimate whether augmentation is worth it.";
-    advice.className = "d-block mt-1 text-muted";
+    advice.textContent = "Off by default; set Patches per Epoch for advice.";
+    advice.className = "d-block text-muted";
     return;
   }
 
   const steps = epochs * Math.ceil(patches / batch);
   const views = epochs; // each patch is revisited once per epoch
   if (steps < 200) {
-    advice.textContent =
-      `~${steps} gradient steps: too few for augmentation to help. ` +
-      `Raise epochs or patches per epoch first.`;
-    advice.className = "d-block mt-1 text-warning";
+    advice.textContent = `~${steps} steps: too few for it to help.`;
+    advice.className = "d-block text-warning";
   } else {
-    advice.textContent =
-      `~${steps} gradient steps, each patch seen ~${views}x: ` +
-      `augmentation is worth enabling.`;
-    advice.className = "d-block mt-1 text-success";
+    advice.textContent = `~${steps} steps, each patch seen ~${views}x: worth enabling.`;
+    advice.className = "d-block text-success";
   }
 }
 
