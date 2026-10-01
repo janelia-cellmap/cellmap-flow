@@ -16,8 +16,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import launch
+from cellmap_flow.jobs.settings import launcher_settings
 
 BSUB_ANSWER = "Job <4242> is submitted to queue <gpu_a100>.\n"
 
@@ -109,8 +110,7 @@ SERVER_COMMAND = """cellmap_flow serve --model '{"type":"script","script_path":"
 
 def test_a_server_submission(monkeypatch, tmp_path, log_dir):
     rec = Recorder(monkeypatch, tmp_path)
-    g.walltime = "12:00"
-    g.jobs = []
+    launcher_settings().walltime = "12:00"
 
     launch.start_hosts(
         SERVER_COMMAND, queue="gpu_a100", charge_group="grp", job_name="mito model",
@@ -250,8 +250,8 @@ PIPELINE = {
 def test_the_blockwise_master_submission(monkeypatch, tmp_path):
     from cellmap_flow.dashboard.app import app
 
-    g.blockwise_tasks_dir = str(tmp_path / "tasks")
-    g.walltime = "12:00"
+    get_session().blockwise_tasks_dir = str(tmp_path / "tasks")
+    launcher_settings().walltime = "12:00"
     rec = Recorder(monkeypatch, tmp_path)
 
     body = app.test_client().post(
@@ -280,7 +280,6 @@ def test_the_blockwise_master_submission(monkeypatch, tmp_path):
 
 def test_a_local_server_run(monkeypatch, tmp_path, log_dir):
     rec = Recorder(monkeypatch, tmp_path)
-    g.jobs = []
 
     job = launch.start_hosts(SERVER_COMMAND, job_name="mito model", local=True, wait_for_host=False)
 

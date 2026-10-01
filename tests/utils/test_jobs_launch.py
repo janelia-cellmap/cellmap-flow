@@ -18,11 +18,11 @@ import numpy as np
 import pytest
 from click.testing import CliRunner
 
-from cellmap_flow.globals import g
 from cellmap_flow.jobs import launch
-from cellmap_flow.jobs.launch import start_hosts
+from cellmap_flow.jobs.launch import start_hosts, started_jobs
 from cellmap_flow.jobs.lsf import BsubTimeoutError
 from cellmap_flow.jobs.ready import READY_ENV
+from cellmap_flow.jobs.settings import LauncherSettings, launcher_settings
 from cellmap_flow.jobs.spec import JobStartError, JobStatus
 from tests.utils.serving_helpers import write_raw
 
@@ -63,7 +63,7 @@ class Case(NamedTuple):
 
 
 CASES = {
-    # The queue it landed on is the job's: g.queue stays what the next submission asks for.
+    # The queue it landed on is the job's: the saved queue stays what the next submission asks for.
     "falls-back-to-another-queue": Case({"gpu_h100": dict(status=P), "gpu_a100": dict(host="http://node:1")},
                                         "gpu_a100", ["gpu_h100", "gpu_a100"], ["gpu_h100"]),
     # A GPU server must not start on a login or submit node instead.
@@ -103,23 +103,24 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
     monkeypatch.setattr(launch, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
     monkeypatch.setattr(launch, "gpu_queue_candidates",
                         lambda preferred, cycle=True: [preferred] + [q for q in QUEUES if q != preferred])
-    g.jobs, g.queue, g.charge_group = [], "gpu_h100", "saved_group"
+    settings = launcher_settings()
+    settings.queue, settings.charge_group = "gpu_h100", "saved_group"
 
     with caplog.at_level(logging.ERROR, logger=launch.logger.name):
         if isinstance(result, tuple):
             with pytest.raises(result[0], match=result[1]) as raised:
                 start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
-            assert g.jobs == []
+            assert started_jobs() == []
             if result[0] is JobStartError:  # a dashboard thread's exception only reaches stderr
                 assert str(raised.value) in caplog.text
         else:
             job = start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
             expected = local if result == "local" else jobs[result]
-            assert job is expected and job.host and g.jobs == [job]
+            assert job is expected and job.host and started_jobs() == [job]
             assert job.queue == (None if result == "local" else result)
     assert calls == submitted + (["local"] if result == "local" or "local" in killed else [])
     assert [j.job_id for j in [*jobs.values(), local] if isinstance(j, FakeJob) and j.killed] == killed
-    assert (g.queue, g.charge_group) == ("gpu_h100", "saved_group")
+    assert (settings.queue, settings.charge_group) == ("gpu_h100", "saved_group")
     if case == "running-but-still-loading":
         assert jobs["gpu_h100"].waits == 2, "it was given time to load its model"
 
@@ -134,9 +135,8 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
         return "Job <4242> is submitted to queue <gpu_h100>.\n"
 
     fake_lsf.answers.update(bjobs=[(255, "", "Job <m> is not found\n")], bsub=bsub)
-    g.jobs = []
     job = start_hosts("serve", queue="gpu_h100", job_name="m", cycle_queues=False)
-    assert job.host == "http://10.1.2.3:8123" and g.jobs == [job]
+    assert job.host == "http://10.1.2.3:8123" and started_jobs() == [job]
     assert fake_lsf.commands() == ["which", "bjobs", "bsub"], "no bpeek, and no bjobs for the job itself"
 
 
@@ -148,7 +148,7 @@ def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():
     assert outcome == [False], "off the main thread it leaves the handlers alone"
 
     job = FakeJob("1")
-    g.jobs = [job]
+    started_jobs().append(job)
     with pytest.raises(SystemExit) as exited:
         launch.cleanup_handler(signal.SIGTERM, None)
     assert job.killed and exited.value.code == 128 + signal.SIGTERM, "not 0, as if the run had succeeded"
@@ -161,7 +161,7 @@ def _cellmap_flow_infer(monkeypatch, tmp_path, order):
     monkeypatch.setattr(infer, "install_cleanup_handlers", lambda: order.append("install"))
     monkeypatch.setattr(infer, "start_hosts", lambda *a, **k: order.append("run"))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
-    monkeypatch.setattr(type(g), "save_server_config", lambda self: None)
+    monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     result = CliRunner().invoke(main.cli, ["infer", "script", "-s", "/s.py", "-d", str(tmp_path)])
     assert result.exit_code == 0, result.output + repr(result.exception)
 

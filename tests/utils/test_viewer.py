@@ -14,8 +14,8 @@ import neuroglancer
 import numpy as np
 import pytest
 
-from cellmap_flow.globals import g
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.process_chain import process_chain
 from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer
 
 
@@ -179,14 +179,14 @@ FLAT = np.zeros((16, 16, 16), np.uint8)
     pytest.param(FLAT, [MinMaxNormalizer(0, 255)], (-1, 1), id="through-a-float-chain"),
 ])
 def test_a_single_arrays_contrast_is_sampled_or_its_dtypes(raw_zarr, data, input_norms, contrast):
-    g.input_norms = input_norms
+    process_chain().input_norms = input_norms
     assert _contrast(get_raw_layer(raw_zarr(data))) == contrast
 
 
 def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     ids = np.arange(64, dtype=np.uint64).reshape(4, 4, 4)
     path = raw_zarr(ids, offset=(80, 40, 40), name="ids")
-    g.input_norms = [MinMaxNormalizer(0, 63)]
+    process_chain().input_norms = [MinMaxNormalizer(0, 63)]
     layer = get_raw_layer(path, segmentation=True, disable_meshes=True)
     assert layer.to_json()["type"] == "segmentation" and _placement(layer)[1] == [10.0, 5.0, 5.0]
     assert _source(layer)["subsources"] == {"meshes": False}
