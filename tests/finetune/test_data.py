@@ -210,15 +210,17 @@ def janelia_raw(tmp_path, ome_zarr):
     return ome_zarr(tmp_path / "raw.zarr", *levels, chunks=(8, 8, 8))
 
 
-def _paired_dataset(tmp_path, raw, output_size, **kw):
-    """A volume planned over ``raw`` for a model of that output size, and a dataset over both."""
+def _paired_dataset(tmp_path, raw, output_size, voxel_sizes=((8.0,) * 3, (16.0,) * 3), **kw):
+    """A volume planned over ``raw`` for a model of that output size, twice
+    that input size, and these (input, output) voxel sizes, and a dataset over both."""
+    input_voxel_size, output_voxel_size = voxel_sizes
     model = SimpleNamespace(input_shape=[2 * output_size] * 3, output_shape=[output_size] * 3,
-                            input_voxel_size=(8.0,) * 3, output_voxel_size=(16.0,) * 3)
+                            input_voxel_size=input_voxel_size, output_voxel_size=output_voxel_size)
     path = create_volume_zarr(str(tmp_path / "vol.zarr"), plan_volume(raw, model), dataset_path=raw, model_name="m")
     return path, lambda: VirtualPatchDataset(
         volume_zarr_path=path, raw_dataset_path=raw, input_size_voxels=(2 * output_size,) * 3,
-        output_size_voxels=(output_size,) * 3, input_voxel_size_nm=(8.0,) * 3,
-        output_voxel_size_nm=(16.0,) * 3, patches_per_epoch=1, jitter_voxels=(0, 0, 0), **kw)
+        output_size_voxels=(output_size,) * 3, input_voxel_size_nm=input_voxel_size,
+        output_voxel_size_nm=output_voxel_size, patches_per_epoch=1, jitter_voxels=(0, 0, 0), **kw)
 
 
 @pytest.mark.parametrize("output_size", [pytest.param(2, id="even output size"),
@@ -233,6 +235,25 @@ def test_a_label_is_paired_with_the_raw_it_covers(tmp_path, janelia_raw, output_
     z0 = 5 - int(np.argwhere(ann[0].numpy() == 2)[0][0])  # where the patch starts, in annotation voxels
     # Annotation voxel z covers raw voxels 2z and 2z + 1, which hold 2z + 1 and 2z + 2.
     assert raw[0, :, 0, 0].tolist() == list(range(2 * z0 + 1, 2 * z0 + 2 * output_size + 1))
+
+
+@pytest.mark.parametrize("voxel_size, translation", [
+    pytest.param((5.24, 4.0, 4.0), (2.62, 2.0, 2.0), id="5.24 nm z, corner 0"),
+    pytest.param((10.48, 8.0, 8.0), (1.24, 0.0, 0.0), id="10.48 nm z, corner -4"),
+])
+def test_a_fractional_voxel_size_reads_the_whole_raw_patch_around_its_labels(tmp_path, ome_zarr,
+                                                                             voxel_size, translation):
+    """The raw was read through a whole-nm Roi, which truncated its edge and
+    shape: the patch came out a voxel short, starting a voxel early."""
+    z = np.arange(1, 33, dtype=np.uint8)[:, None, None]
+    raw = ome_zarr(tmp_path / "raw.zarr", ("s0", np.broadcast_to(z, (32,) * 3).copy(), voxel_size, translation))
+    path, dataset = _paired_dataset(tmp_path, raw, 2, voxel_sizes=(voxel_size, voxel_size))
+    zarr.open_group(path, mode="r+")["annotation/s0"][16, 16, 16] = 2
+    raw_patch, ann = dataset()[0]
+    z0 = 16 - int(np.argwhere(ann[0].numpy() == 2)[0][0])  # where the label patch starts
+    # Raw voxel z holds z + 1; the volume is on the raw's grid, and the raw
+    # patch has one voxel of context either side of the label patch.
+    assert raw_patch[0, :, 0, 0].tolist() == list(range(z0, z0 + 4))
 
 
 def test_a_good_region_patch_is_whole_voxels_paired_with_its_raw(tmp_path, janelia_raw):

@@ -152,9 +152,18 @@ class PatchReader:
 
         Read with ``normalize=False``, so no process-wide norms apply;
         ``normalize`` applies the session's own afterwards.
+
+        The patch is a box of raw voxels: ``input_size`` of them, from the
+        one the patch's lower edge falls in (Grid.world_to_box's rule). It
+        used to go through a whole-nm Roi, whose Coordinate truncated the
+        edge and the shape, so at 5.24 nm or 10.48 nm the patch came out a
+        voxel short and started a voxel early. Where the edge is whole nm
+        on a whole-nm grid (the 8 and 16 nm levels) both give the same box.
         """
         from cellmap_flow.image_data_interface import ImageDataInterface
-        from funlib.geometry import Coordinate, Roi
+        from cellmap_flow.io.geometry import Box
+        from cellmap_flow.io.metadata import snap_integral
+        from cellmap_flow.io.source import read_padded
 
         if self._raw_idi is None:
             self._raw_idi = ImageDataInterface(
@@ -162,13 +171,17 @@ class PatchReader:
                 voxel_size=self.input_voxel_size,
                 normalize=False,
             )
+        raw_voxel_size = np.asarray(self._raw_idi.voxel_size, dtype=float)
+        raw_corner_nm = np.asarray(self._raw_idi.offset, dtype=float)
         centre_nm = self.corner_nm + centre_voxels * self.output_voxel_size
-        read_shape_nm = self.input_size * self.input_voxel_size
-        roi = Roi(
-            offset=Coordinate(centre_nm - read_shape_nm / 2),
-            shape=Coordinate(read_shape_nm),
-        )
-        return self._raw_idi.to_ndarray_ts(roi)
+        lower_edge_nm = centre_nm - self.input_size * raw_voxel_size / 2
+        # snap_integral: float noise (39.9999999 voxels) counts as the whole
+        # number it is.
+        begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size))
+        box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in self.input_size))
+        # .ts is the selected channel, unnormalized (normalize=False); out of
+        # the array is padded with 0, as to_ndarray_ts pads.
+        return read_padded(self._raw_idi.ts, box)
 
     def normalize(self, raw: np.ndarray) -> np.ndarray:
         """``raw`` through the session's normalizers, in order, as apply_norms() does for inference."""
