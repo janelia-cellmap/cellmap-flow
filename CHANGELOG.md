@@ -142,6 +142,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
     - a neuroglancer-precomputed volume with several scales, such as `gs://…` datasets, is shown as its multi-resolution pyramid, so zooming out reads coarse levels and auto-contrast samples one. It used to show only full resolution;
     - a precomputed path's scale is its last `/s<N>`. A path like `/groups/scicompsoft/…/s0` was cut at the first `/s` and crashed;
     - a read that lies wholly outside the array returns padding, as a partly outside one does. It used to raise `IndexError`.
+    - `ImageDataInterface(volume, voxel_size=…)` on a precomputed volume reads the scale chosen for that voxel size, as for a zarr or N5 pyramid, instead of relabelling scale 0; `closest_raw_scale` answers for a precomputed volume instead of returning None. The scale is chosen from one read of the volume's `info`, so opening a `gs://` volume at a voxel size takes about 0.1 s;
+    - a single raw array whose contrast cannot be sampled is shown over its dtype's range (0–255 for uint8, 0–65535 for uint16) instead of always [-1, 1];
+    - a pyramid level whose voxel size is not a power-of-two multiple of the finest level's on every axis (a 12 nm level of an 8 nm pyramid, say) is left out of the raw layer with a warning. It used to be served in place of another level. The finest level is always shown;
+    - neuroglancer can zoom the raw layer out 64× past a pyramid's coarsest level, downsampled on the fly as for a single array, so a one-level pyramid is no longer drawn at full resolution when zoomed out.
   - **Model configs:**
     - a Fly model given only one of `input_size`/`output_size` is refused with a message asking for the other. It used to reset both to 178/56;
     - a model config without a `name` falls back to float32 output instead of raising;
@@ -176,6 +180,10 @@ One pull request carries the whole cleanup: bug fixes in place, dead-code remova
 Phase 4 will be added here as it lands.
 
 ### Behaviour-change commits
+- `bb1b71a` neuroglancer may zoom out 64x past a pyramid's coarsest level
+- `fbc65b3` a pyramid level that is not a power-of-two downsampling is left out
+- `c61d440` a single array's contrast falls back to its dtype's range
+- `c4321de` a precomputed volume is read at the scale for the voxel size asked
 - `e286362` load_config refuses a YAML that is not a path
 - `d1c632c` a model's channels given as one string name one channel
 - `1bf82c7` the server is announced from what the monitor has read
