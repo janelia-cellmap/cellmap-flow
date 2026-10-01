@@ -159,6 +159,24 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
     )
 
 
+@pytest.mark.parametrize("geometry, offsets", [
+    pytest.param(SimpleNamespace(channels="mito_aff"), "[[1, 0, 0]]", id="one channel, named by a string"),
+    pytest.param(SimpleNamespace(channel_names=("x_aff", "y_aff")), "[[1, 0, 0], [0, 1, 0]]",
+                 id="a ModelGeometry's channel names"),
+])
+def test_an_affinity_model_is_told_by_its_channel_names(submit, tmp_path, monkeypatch, geometry, offsets):
+    """For a model whose script names no offsets. A string was iterated letter
+    by letter, and a ModelGeometry's channel_names were not read: both
+    trained as binary."""
+    from cellmap_flow.models import geometry_cache
+
+    (tmp_path / "plain.py").write_text("model = None\n")
+    g.models_config = [_Script("m", str(tmp_path / "plain.py"))]
+    monkeypatch.setattr(geometry_cache, "resolve_model_geometry", lambda name, config: geometry)
+    job = submit()
+    assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", offsets)
+
+
 @pytest.mark.parametrize("dashboards, request_data, billed", [
     pytest.param("my_lab", {}, "my_lab", id="the dashboard's"),
     pytest.param("my_lab", {"charge_group": "other_lab"}, "other_lab", id="the request's"),

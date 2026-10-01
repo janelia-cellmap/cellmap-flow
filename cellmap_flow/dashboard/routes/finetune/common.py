@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import NamedTuple
 
 import zarr
@@ -9,6 +10,7 @@ import zarr
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
+from cellmap_flow.models.geometry import channel_names_of
 
 logger = logging.getLogger(__name__)
 
@@ -200,15 +202,16 @@ def autodetect_output_type(model_config, output_type, offsets):
                 )
 
         if resolved_output_type is None:
+            # Read as channel_names_of reads them: a string is one name. They
+            # were iterated as they came, so a single "x_aff" channel was the
+            # letters "x", "_", "a"... and never an affinity model.
             channels = None
             try:
                 if hasattr(model_config, "_load_metadata"):
                     meta = model_config._load_metadata()
-                    channels = meta.get("channels_names")
-                elif getattr(model_config, "_config", None) is not None and hasattr(
-                    model_config._config, "channels"
-                ):
-                    channels = model_config._config.channels
+                    channels = channel_names_of(SimpleNamespace(channels_names=meta.get("channels_names")))
+                elif getattr(model_config, "_config", None) is not None:
+                    channels = channel_names_of(model_config._config)
             except Exception:
                 pass
 
@@ -225,9 +228,7 @@ def autodetect_output_type(model_config, output_type, offsets):
                     geometry = resolve_model_geometry(
                         getattr(model_config, "name", None), model_config
                     )
-                    channels = getattr(geometry, "channels", None) or getattr(
-                        geometry, "channels_names", None
-                    )
+                    channels = channel_names_of(geometry)
                 except Exception as e:
                     logger.debug(f"Could not resolve channels for autodetect: {e}")
 
